@@ -824,6 +824,9 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
         assert expected.index.name == "grouping_column"
         expected.index = expected.index.astype(agg_dtypes["grouping_column"])
         del agg_dtypes["grouping_column"]
+        for name, dtype in agg_dtypes.items():
+            if pd.api.types.is_integer_dtype(dtype):
+                expected[name] = expected[name].fillna(0)
         expected = expected.astype(agg_dtypes)
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     received = lib.read(symbol, query_builder=q).data
@@ -835,6 +838,9 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
         print(
             f"""Original df:\n{df}\nwith dtypes:\n{df.dtypes}\naggs dict:\n{aggs_dict}"""
             f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
+            f"""\n{df.dtypes}"""
+            f"""\n{expected.dtypes}"""
+            f"""\n{received.dtypes}"""
         )
         raise e
 

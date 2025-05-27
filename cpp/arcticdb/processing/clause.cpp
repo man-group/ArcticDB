@@ -467,7 +467,11 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                                 opt_input_column.emplace(std::move(column_with_strings));
                             }
                         }
-                        agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                        if (opt_input_column) {
+                            // The column is missing from the segment. Do not perform any aggregation and leave it to
+                            // the NullValueReducer to take care of the default values.
+                            agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                        }
                     }
                 });
         } else {
@@ -527,7 +531,7 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
         agg_data.add_data_type(input_column_type);
         const DataType output_column_type = agg_data.get_output_data_type();
         stream_desc.add_scalar_field(output_column_type, output_column_name);
-        const VariantRawValue& default_value = agg_data.get_default_value(processing_config_.dynamic_schema_);
+        const VariantRawValue& default_value = agg_data.get_default_value();
         if (!std::holds_alternative<std::monostate>(default_value)) {
             output_schema.set_default_value_for_column(output_column_name, default_value);
         }

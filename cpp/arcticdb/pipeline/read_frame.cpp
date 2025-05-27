@@ -741,9 +741,9 @@ public:
                 column_.default_initialize_rows(start_row, num_rows, false, default_value_);
             }
             pos_ = current_pos + sz_to_advance;
-        }
-        else
+        } else {
             pos_ += sz_to_advance;
+        }
     }
 
     void finalize() {

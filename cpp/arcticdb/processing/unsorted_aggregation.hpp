@@ -82,7 +82,7 @@ public:
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-    VariantRawValue get_default_value(bool dynamic_schema);
+    VariantRawValue get_default_value();
 
 private:
 
@@ -99,7 +99,7 @@ public:
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-    VariantRawValue get_default_value(bool dynamic_schema);
+    VariantRawValue get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -114,7 +114,7 @@ public:
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-    VariantRawValue get_default_value(bool dynamic_schema);
+    VariantRawValue get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -131,7 +131,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
-    VariantRawValue get_default_value(bool dynamic_schema);
+    VariantRawValue get_default_value();
 private:
 
     struct Fraction
@@ -156,7 +156,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
-    VariantRawValue get_default_value(bool dynamic_schema);
+    VariantRawValue get_default_value();
 private:
 
     std::vector<uint64_t> aggregated_;
@@ -172,7 +172,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-    VariantRawValue get_default_value(bool dynamic_schema);
+    VariantRawValue get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -191,7 +191,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-    VariantRawValue get_default_value(bool dynamic_schema);
+    VariantRawValue get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;

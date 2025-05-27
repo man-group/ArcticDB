@@ -188,7 +188,7 @@ namespace arcticdb {
                                                             "Expected right_size <= left_size in has_valid_common_type");
         }
 
-        auto target_size = entity::SizeBits(uint8_t(std::max(left_size, right_size)) + 1);
+        const auto target_size = static_cast<entity::SizeBits>(static_cast<uint8_t>(std::max(left_size, right_size)) + 1);
         if (target_size < entity::SizeBits::COUNT) {
             return std::make_optional<entity::TypeDescriptor>(combine_data_type(entity::ValueType::INT, target_size), dimension);
         } else {

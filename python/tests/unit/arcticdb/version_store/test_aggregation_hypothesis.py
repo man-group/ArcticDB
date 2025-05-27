@@ -125,8 +125,8 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1):
         # https://github.com/man-group/ArcticDB/blob/67d2bbe530f96a0aa5412f479e123da480ba2d99/cpp/arcticdb/processing/unsorted_aggregation.cpp#L319
         # The output type must be the largest common type of all segments. If it's an integer, the default is 0. With
         # Arrow, it'll be Arrow's missing value.
-        "min": float,
-        "max": float,
+        "min": df.dtypes["agg_column"],
+        "max": df.dtypes["agg_column"],
     }
     generic_named_aggregation_test(
         lib,

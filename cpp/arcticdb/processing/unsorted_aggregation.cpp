@@ -173,7 +173,7 @@ DataType SumAggregatorData::get_output_data_type() {
     return *output_type_;
 }
 
-VariantRawValue SumAggregatorData::get_default_value(bool) {
+VariantRawValue SumAggregatorData::get_default_value() {
     return details::visit_type(get_output_data_type(), []<typename TD>(TD) -> VariantRawValue {
         return typename TD::raw_type{0};
     });
@@ -331,10 +331,10 @@ namespace
                         *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
                     } else {
                         if constexpr(T == Extremum::MAX) {
-                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::lowest();
+                            *it = in_ptr->written_ ? in_ptr->value_ : typename col_type_info::RawType{0};
                         } else {
                             // T == Extremum::MIN
-                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::max();
+                            *it = in_ptr->written_ ? in_ptr->value_ : typename col_type_info::RawType{0};
                         }
                     }
                 }
@@ -371,7 +371,7 @@ SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name
     return finalize_impl<Extremum::MAX>(output_column_name, unique_values, aggregated_, data_type_);
 }
 
-VariantRawValue MaxAggregatorData::get_default_value(bool) {
+VariantRawValue MaxAggregatorData::get_default_value() {
     return {};
 }
 
@@ -402,7 +402,7 @@ SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name
     return finalize_impl<Extremum::MIN>(output_column_name, unique_values, aggregated_, data_type_);
 }
 
-VariantRawValue MinAggregatorData::get_default_value(bool) {
+VariantRawValue MinAggregatorData::get_default_value() {
     return {};
 }
 
@@ -463,7 +463,7 @@ double MeanAggregatorData::Fraction::to_double() const
     return denominator_ == 0 ? std::numeric_limits<double>::quiet_NaN(): numerator_ / static_cast<double>(denominator_);
 }
 
-VariantRawValue MeanAggregatorData::get_default_value(bool) {
+VariantRawValue MeanAggregatorData::get_default_value() {
     return {};
 }
 /***********************
@@ -503,7 +503,7 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
     return res;
 }
 
-VariantRawValue CountAggregatorData::get_default_value(bool) {
+VariantRawValue CountAggregatorData::get_default_value() {
     return {};
 }
 
@@ -566,7 +566,7 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
     return res;
 }
 
-VariantRawValue FirstAggregatorData::get_default_value(bool) {
+VariantRawValue FirstAggregatorData::get_default_value() {
     return {};
 }
 
@@ -627,7 +627,7 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
     return res;
 }
 
-VariantRawValue LastAggregatorData::get_default_value(bool) {
+VariantRawValue LastAggregatorData::get_default_value() {
     return {};
 }
 
