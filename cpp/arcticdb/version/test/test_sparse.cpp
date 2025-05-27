@@ -15,6 +15,7 @@
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/python/python_types.hpp>
 #include <arcticdb/util/native_handler.hpp>
 
 struct SparseTestStore : arcticdb::TestStore {
@@ -87,7 +88,7 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
@@ -179,7 +180,7 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
@@ -230,7 +231,7 @@ TEST_F(SparseTestStore, DenseToSparse) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
@@ -278,9 +279,10 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     read_options.set_incompletes(true);
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
-    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();;
+    const auto& frame = read_result.frame_data.frame();
+    apply_global_refcounts(handler_data, OutputFormat::PANDAS);
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<PyObject*>(0, 1);
@@ -292,8 +294,7 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     ASSERT_EQ(val2.value()[0], char{0});
 
     auto val3 = frame.scalar_at<PyObject*>(1, 1);
-    auto none = py::none{};
-    ASSERT_EQ(val3.value(), none.ptr());
+    ASSERT_TRUE(is_py_none(val3.value()));
     auto val4 = frame.string_at(1, 2);
     ASSERT_EQ(val4, "six");
 }
@@ -333,7 +334,7 @@ TEST_F(SparseTestStore, Multiblock) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
@@ -386,7 +387,7 @@ TEST_F(SparseTestStore, Segment) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
@@ -446,7 +447,7 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
@@ -507,7 +508,7 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     read_query->columns = {"time", "first"};
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
     ASSERT_EQ(frame.row_count(), num_rows);
@@ -563,7 +564,7 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = IndexRange(timestamp{3000}, timestamp{6999});
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame =read_result.frame_data.frame();;
 
@@ -617,7 +618,7 @@ TEST_F(SparseTestStore, Compact) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = get_type_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
     const auto& frame = read_result.frame_data.frame();
 
@@ -675,8 +676,9 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
-    auto handler_data = get_type_handler_data(OutputFormat::PANDAS);
-    auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
+    auto read_result = test_store_->read_dataframe_version(stream_id, VersionQuery{}, read_query, read_options, handler_data);
+    apply_global_refcounts(handler_data, OutputFormat::PANDAS);
     const auto& frame = read_result.frame_data.frame();
     ASSERT_EQ(frame.row_count(), num_rows);
 
@@ -692,8 +694,7 @@ TEST_F(SparseTestStore, CompactWithStrings) {
         ASSERT_EQ(val2.value()[0], char{0});
 
         auto val3 = frame.scalar_at<PyObject*>(i + 1, 1);
-        auto none = py::none{};
-        ASSERT_EQ(val3.value(), none.ptr());
+        ASSERT_TRUE(is_py_none(val3.value()));
 
         auto val4 = frame.string_at(i + 1, 2);
 

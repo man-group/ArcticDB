@@ -107,7 +107,7 @@ struct NativeTensor {
     }
 
     [[nodiscard]] auto nbytes() const { return nbytes_; }
-    [[nodiscard]] auto ndim() const { return ndim_; }
+    [[nodiscard]] int ndim() const { return ndim_; }
     [[nodiscard]] auto strides(size_t pos) const { return strides_[pos]; }
     [[nodiscard]] const auto* strides() const { return strides_.data(); };
     [[nodiscard]] auto shape(size_t pos) const { return shapes_[pos]; }

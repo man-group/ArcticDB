@@ -16,29 +16,9 @@
 
 namespace arcticdb {
 
-/// @brief Generate numpy.dtype object from ArcticDB type descriptor
-/// The dtype is used as type specifier for numpy arrays stored as column elements
-/// @note There is special handling for ArcticDB's empty type
-/// When numpy creates an empty array its type is float64. We want to mimic this because:
-/// i) There is no equivalent to empty value
-/// ii) We want input dataframes to be exact match of the output and that includes the type
-
-
-static inline PyObject** fill_with_none(PyObject** ptr_dest, size_t count, SpinLock& spin_lock) {
-    auto none = GilSafePyNone::instance();
-    for(auto i = 0U; i < count; ++i)
-        *ptr_dest++ = none->ptr();
-
-    spin_lock.lock();
-    for(auto i = 0U; i < count; ++i)
-        Py_INCREF(none->ptr());
-    spin_lock.unlock();
-    return ptr_dest;
-}
-
-static inline PyObject** fill_with_none(ChunkedBuffer& buffer, size_t offset, size_t count, SpinLock& spin_lock) {
+static PyObject** fill_with_none(ChunkedBuffer& buffer, size_t offset, size_t count, PythonHandlerData& handler_data) {
     auto dest = buffer.ptr_cast<PyObject*>(offset, count * sizeof(PyObject*));
-    return fill_with_none(dest, count, spin_lock);
+    return python_util::fill_with_none(dest, count, handler_data);
 }
 
 void PythonEmptyHandler::handle_type(
@@ -120,8 +100,8 @@ void PythonEmptyHandler::default_initialize(
         size_t byte_size,
         const DecodePathData&,
         std::any& any) const {
-    auto& handler_data = get_handler_data(any);
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data.spin_lock());
+    auto& handler_data = cast_handler_data(any);
+    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data);
 }
 
 void PythonBoolHandler::handle_type(
@@ -164,16 +144,16 @@ void PythonBoolHandler::convert_type(
     util::check(dest_data != nullptr, "Got null destination pointer");
     auto ptr_dest = reinterpret_cast<PyObject**>(dest_data);
     if (sparse_map.has_value()) {
-        auto& handler_data = get_handler_data(any);
+        auto& handler_data = cast_handler_data(any);
         ARCTICDB_TRACE(log::codec(), "Bool handler using a sparse map");
         unsigned last_row = 0u;
         for (auto en = sparse_map->first(); en < sparse_map->end(); ++en, ++last_row) {
             const auto current_pos = *en;
-            ptr_dest = fill_with_none(ptr_dest, current_pos - last_row, handler_data.spin_lock());
+            ptr_dest = python_util::fill_with_none(ptr_dest, current_pos - last_row, handler_data);
             last_row = current_pos;
             *ptr_dest++ = py::bool_(static_cast<bool>(*ptr_src++)).release().ptr();
         }
-        fill_with_none(ptr_dest, mapping.num_rows_ - last_row, handler_data.spin_lock());
+        python_util::fill_with_none(ptr_dest, mapping.num_rows_ - last_row, handler_data);
     } else {
         ARCTICDB_TRACE(log::codec(), "Bool handler didn't find a sparse map. Assuming dense array.");
         std::transform(ptr_src, ptr_src + num_bools, ptr_dest, [](uint8_t value) {
@@ -191,8 +171,8 @@ TypeDescriptor PythonBoolHandler::output_type(const TypeDescriptor&) const {
 }
 
 void PythonBoolHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any) const {
-    auto& handler_data = get_handler_data(any);
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data.spin_lock());
+    auto& handler_data = cast_handler_data(any);
+    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data);
 }
 
 void PythonStringHandler::handle_type(
@@ -242,7 +222,7 @@ void PythonStringHandler::convert_type(
         const std::shared_ptr<StringPool>& string_pool) const {
     auto dest_data = dest_column.bytes_at(mapping.offset_bytes_, mapping.num_rows_ * sizeof(PyObject*));
     auto ptr_dest = reinterpret_cast<PyObject**>(dest_data);
-    DynamicStringReducer string_reducer{shared_data, get_handler_data(handler_data), ptr_dest, mapping.num_rows_};
+    DynamicStringReducer string_reducer{shared_data, cast_handler_data(handler_data), ptr_dest, mapping.num_rows_};
     string_reducer.reduce(source_column, mapping.source_type_desc_, mapping.dest_type_desc_, mapping.num_rows_, *string_pool, source_column.opt_sparse_map());
     string_reducer.finalize();
 }
@@ -256,8 +236,8 @@ TypeDescriptor PythonStringHandler::output_type(const TypeDescriptor& input_type
 }
 
 void PythonStringHandler::default_initialize(ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any) const {
-    auto& handler_data = get_handler_data(any);
-    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data.spin_lock());
+    auto& handler_data = cast_handler_data(any);
+    fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data);
 }
 
 [[nodiscard]] static inline py::dtype generate_python_dtype(const TypeDescriptor &td, stride_t type_byte_size) {
@@ -325,8 +305,8 @@ void PythonArrayHandler::convert_type(
 
     auto column_data = source_column.data();
     if (source_column.is_sparse()) {
-        auto& handler_data = get_handler_data(any);
-        python_util::prefill_with_none(ptr_dest, mapping.num_rows_, source_column.sparse_map().count(), handler_data.spin_lock());
+        auto& handler_data = cast_handler_data(any);
+        python_util::prefill_with_none(ptr_dest, mapping.num_rows_, source_column.sparse_map().count(), handler_data);
 
         auto en = sparse_map->first();
 
@@ -373,8 +353,8 @@ int PythonArrayHandler::type_size() const {
 }
 
 void PythonArrayHandler::default_initialize(ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData&, std::any& any) const {
-    auto& handler_data = get_handler_data(any);
-    fill_with_none(buffer, offset, byte_size / type_size(), handler_data.spin_lock());
+    auto& handler_data = cast_handler_data(any);
+    fill_with_none(buffer, offset, byte_size / type_size(), handler_data);
 }
 
 } //namespace arcticdb

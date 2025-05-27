@@ -33,7 +33,7 @@ template <typename Derived> const Derived* BaseIndex<Derived>::derived() const {
 }
 
 template <typename Derived> BaseIndex<Derived>::operator IndexDescriptorImpl() const {
-    return {Derived::field_count(), Derived::type()};
+    return {Derived::type(), Derived::field_count()};
 }
 
 template <typename Derived> FieldRef BaseIndex<Derived>::field(size_t) const {

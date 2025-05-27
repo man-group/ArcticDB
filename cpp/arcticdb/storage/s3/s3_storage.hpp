@@ -71,7 +71,7 @@ class S3Storage : public Storage, AsyncStorage {
 
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) override;
 
-    ObjectSizes do_get_object_sizes(KeyType key_type, const std::string& prefix) override final;
+    void do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) final;
 
     bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
 
@@ -249,9 +249,35 @@ inline Aws::Client::ClientConfiguration get_proxy_config(Aws::Http::Scheme endpo
         return Aws::Client::ClientConfiguration();
     }
 }
+// Since aws-sdk-cpp >= 1.11.486, it has turned on checksum integrity check `x-amz-checksum-mode: enabled`
+// This feature is not supported in many s3 implementations. SDK with this feature ON will reject responses from
+// s3 implementations that do not provide checksum, which leads to storage exception in arcticdb
+// Update environment variable before import arcticdb_ext to disable checksum validation
+inline void configure_s3_checksum_validation() {
+    const char* response_checksum = std::getenv("AWS_RESPONSE_CHECKSUM_VALIDATION");
+    const char* request_checksum = std::getenv("AWS_REQUEST_CHECKSUM_CALCULATION");
+    
+    if ((response_checksum && std::string(response_checksum) == "when_supported") || 
+        (request_checksum && std::string(request_checksum) == "when_supported")) {
+        log::storage().warn("S3 Checksum validation has been specifically enabled by user. "
+                            "If endpoint doesn't support it, 1. incorrect objects could be silently written "
+                            "2. Endpoint response will be rejected by SDK and lead to storage exception in arcticdb");
+    }
+    else {
+#ifdef _WIN32
+        _putenv_s("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required");
+        _putenv_s("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required");
+#else
+        setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required", 1);
+        setenv("AWS_REQUEST_CHECKSUM_CALCULATION", "when_required", 1);
+#endif
+    }
+}
 
 template<typename ConfigType>
-auto get_s3_config(const ConfigType& conf) {
+auto get_s3_config_and_set_env_var(const ConfigType& conf) {
+    configure_s3_checksum_validation();
+
     auto endpoint_scheme = conf.https() ? Aws::Http::Scheme::HTTPS : Aws::Http::Scheme::HTTP;
     Aws::Client::ClientConfiguration client_configuration = get_proxy_config(endpoint_scheme);
     client_configuration.scheme = endpoint_scheme;

@@ -133,4 +133,18 @@ bool is_timeseries_index(const IndexDescriptorImpl& index_desc) {
     return index_desc.type() == IndexDescriptor::Type::TIMESTAMP || index_desc.type() == IndexDescriptor::Type::EMPTY;
 }
 
+uint32_t required_fields_count(
+        const StreamDescriptor& stream_desc,
+        const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta) {
+    if (norm_meta.has_value() && norm_meta->has_df() && norm_meta->df().common().has_multi_index()) {
+        // The field count in the norm metadata is one less than the actual number of levels in the multiindex
+        // See index_norm.field_count = len(index.levels) - 1 in _normalization.py::_PandasNormalizer::_index_to_records
+        return norm_meta->df().common().multi_index().field_count() + 1;
+    } else if (norm_meta.has_value() && norm_meta->has_series() && norm_meta->series().common().has_multi_index()) {
+        return norm_meta->series().common().multi_index().field_count() + 2;
+    } else {
+        return stream_desc.index().field_count() + ((norm_meta.has_value() && norm_meta->has_series()) ? 1 : 0);
+    }
+}
+
 } //namespace arcticdb::pipelines::index

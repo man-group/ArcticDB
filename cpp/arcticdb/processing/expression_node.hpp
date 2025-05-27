@@ -52,6 +52,12 @@ struct ColumnWithStrings {
         column_name_(col_name) {
     }
 
+    ColumnWithStrings(std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
+            column_(std::move(column)),
+            string_pool_(std::move(string_pool)),
+            column_name_(col_name) {
+    }
+
     ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
         column_(std::make_shared<Column>(std::move(col))),
         string_pool_(std::move(string_pool)),
@@ -82,9 +88,12 @@ struct BitSetTag{};
  * Basic AST node.
  */
 struct ExpressionNode {
+    VariantNode condition_;
     VariantNode left_;
     VariantNode right_;
     OperationType operation_type_;
+
+    ExpressionNode(VariantNode condition, VariantNode left, VariantNode right, OperationType op);
 
     ExpressionNode(VariantNode left, VariantNode right, OperationType op);
 

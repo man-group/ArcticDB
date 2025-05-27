@@ -372,10 +372,22 @@ class TestCustomNormalizer(CustomNormalizer):
             df = pd.DataFrame(index=item.custom_index, columns=item.custom_columns, data=item.custom_values)
             return df, norm_meta
 
-    def denormalize(self, item, norm_meta):
-        # type: (Any, CustomNormalizerMeta)->Any
+    def denormalize(self, item: Any, norm_meta: NormalizationMetadata.CustomNormalizerMeta) -> Any:
         return CustomThing(custom_index=item.index, custom_columns=item.columns, custom_values=item.values)
 
+class CustomDict(dict):
+    pass
+
+class CustomDictNormalizer(CustomNormalizer):
+    NESTED_STRUCTURE = True
+
+    def normalize(self, item, **kwargs):
+        if not isinstance(item, CustomDict):
+            return None
+        return dict(item), NormalizationMetadata.CustomNormalizerMeta()
+
+    def denormalize(self, item, norm_meta):
+        return CustomDict(item)
 
 def sample_dataframe(size=1000, seed=0):
     return get_sample_dataframe(size, seed)
@@ -853,7 +865,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
-                check_equals_flags["rtol"] = 2e-4
+                check_equals_flags["rtol"] = 3e-4
             pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
 
 

@@ -47,7 +47,7 @@ from arcticdb.util.test import (
 )
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
-
+from arcticdb.version_store._store import resolve_defaults
 
 @pytest.fixture()
 def symbol():
@@ -1677,13 +1677,13 @@ def test_library_deletion_lmdb(basic_store):
 def test_resolve_defaults(basic_store_factory):
     lib = basic_store_factory()
     proto_cfg = lib._lib_cfg.lib_desc.version.write_options
-    assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False) is False
+    assert resolve_defaults("recursive_normalizers", proto_cfg, False) is False
     os.environ["recursive_normalizers"] = "True"
-    assert lib.resolve_defaults("recursive_normalizers", proto_cfg, False, uppercase=False) is True
+    assert resolve_defaults("recursive_normalizers", proto_cfg, False, uppercase=False) is True
 
     lib2 = basic_store_factory(dynamic_strings=True, reuse_name=True)
     proto_cfg = lib2._lib_cfg.lib_desc.version.write_options
-    assert lib2.resolve_defaults("dynamic_strings", proto_cfg, False) is True
+    assert resolve_defaults("dynamic_strings", proto_cfg, False) is True
     del os.environ["recursive_normalizers"]
 
 

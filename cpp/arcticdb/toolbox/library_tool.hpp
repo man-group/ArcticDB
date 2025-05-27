@@ -34,7 +34,7 @@ class LibraryTool {
 public:
     explicit LibraryTool(std::shared_ptr<storage::Library> lib);
 
-    ReadResult read(const VariantKey& key);
+    ReadResult read(const VariantKey& key, std::any& handler_data, OutputFormat output_format);
 
     Segment read_to_segment(const VariantKey& key);
 

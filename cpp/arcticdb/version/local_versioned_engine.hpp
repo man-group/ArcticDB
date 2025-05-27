@@ -47,7 +47,6 @@ struct IndexKeyAndUpdateInfo{
 struct KeySizesInfo {
     size_t count;
     size_t compressed_size; // bytes
-    size_t uncompressed_size; // bytes
 };
 
 folly::Future<folly::Unit> delete_trees_responsibly(
@@ -289,7 +288,7 @@ public:
         bool prune_previous_versions,
         bool upsert);
 
-    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys);
+    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys, std::any& handler_data);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,
@@ -297,6 +296,14 @@ public:
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
         std::any& handler_data);
+
+    MultiSymbolReadOutput batch_read_and_join_internal(
+            const std::vector<StreamId>& stream_ids,
+            const std::vector<VersionQuery>& version_queries,
+            std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+            const ReadOptions& read_options,
+            std::vector<std::shared_ptr<Clause>>&& clauses,
+            std::any& handler_data);
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids,
@@ -380,6 +387,8 @@ public:
         const WriteOptions& write_options);
 
     std::vector<storage::ObjectSizes> scan_object_sizes();
+
+    std::vector<storage::ObjectSizes> scan_object_sizes_for_stream(const StreamId& stream_id);
 
     std::unordered_map<StreamId, std::unordered_map<KeyType, KeySizesInfo>> scan_object_sizes_by_stream();
 

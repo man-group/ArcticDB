@@ -40,10 +40,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           init-shell: >-
             bash
           cache-environment: true
@@ -124,10 +124,10 @@ jobs:
         uses: SimenB/github-actions-cpu-cores@v1.1.0
         id: cpu-cores
 
-      - name: Install Conda environment from environment_unix.yml
+      - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.0
         with:
-          environment-file: environment_unix.yml
+          environment-file: environment-dev.yml
           environment-name: arcticdb
           init-shell: >-
             bash

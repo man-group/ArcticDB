@@ -124,7 +124,7 @@ struct StreamDescriptor {
 
     explicit StreamDescriptor(const StreamId& id) {
         set_id(id);
-        set_index({0, IndexDescriptor::Type::ROWCOUNT});
+        set_index({IndexDescriptor::Type::ROWCOUNT, 0});
     }
 
     void add_scalar_field(DataType data_type, std::string_view name) {
@@ -274,10 +274,12 @@ struct StreamDescriptor {
 };
 
 struct OutputSchema {
-    arcticdb::proto::descriptors::NormalizationMetadata norm_metadata_;
+    proto::descriptors::NormalizationMetadata norm_metadata_;
+
+    OutputSchema() = default;
 
     OutputSchema(StreamDescriptor stream_descriptor,
-                 arcticdb::proto::descriptors::NormalizationMetadata norm_metadata):
+                 proto::descriptors::NormalizationMetadata norm_metadata):
             norm_metadata_(std::move(norm_metadata)),
             stream_descriptor_(std::move(stream_descriptor)) {};
 

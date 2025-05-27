@@ -276,7 +276,11 @@ inline void ReliableStorageLockGuard::cleanup_on_lost_lock() {
 inline ReliableStorageLockGuard::~ReliableStorageLockGuard() {
     extend_lock_heartbeat_.shutdown();
     if (acquired_lock_.has_value()) {
-        lock_.free_lock(acquired_lock_.value());
+        try {
+            lock_.free_lock(acquired_lock_.value());
+        } catch (const std::exception& e) {
+            log::lock().error("Failed to free lock: {}", e.what());
+        }
     }
 }
 

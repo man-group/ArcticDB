@@ -162,11 +162,13 @@ class LibraryTool(LibraryToolImpl):
 
     def normalize_dataframe_with_nvs_defaults(self, df : pd.DataFrame):
         # TODO: Have a unified place where we resolve all the normalization parameters and use that here.
+
+        from arcticdb.version_store._store import resolve_defaults
         # Currently all these parameters are resolved in various places throughout the _store.py. This can result in
         # different defaults for different operations which is not desirable.
         write_options = self._nvs._lib_cfg.lib_desc.version.write_options
-        dynamic_schema = self._nvs.resolve_defaults("dynamic_schema", write_options, False)
-        empty_types = self._nvs.resolve_defaults("empty_types", write_options, False)
+        dynamic_schema = resolve_defaults("dynamic_schema", write_options, False)
+        empty_types = resolve_defaults("empty_types", write_options, False)
         dynamic_strings = self._nvs._resolve_dynamic_strings({})
         return normalize_dataframe(df, dynamic_schema=dynamic_schema, empty_types=empty_types, dynamic_strings=dynamic_strings)
 

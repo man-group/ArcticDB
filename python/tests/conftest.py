@@ -70,6 +70,7 @@ from .util.mark import (
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
+import arcticdb.toolbox.query_stats as query_stats
 
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -101,7 +102,9 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     pid = os.getpid()
     thread_id = threading.get_ident()
-    return f"{name}.{random.randint(0, 9999999)}_{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}_{uuid.uuid4()}"
+    # There is limit to the name length, and note that without 
+    # the dot (.) in the name mongo will not work!
+    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"
 
 
 @pytest.fixture
@@ -164,6 +167,13 @@ def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Generator[Library, No
 )
 def lmdb_library_static_dynamic(request):
     yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture
+def lmdb_library_factory(lmdb_storage, lib_name):
+    def f(library_options: LibraryOptions = LibraryOptions()):
+        return lmdb_storage.create_arctic().create_library(lib_name, library_options=library_options)
+    return f
 
 
 # ssl is enabled by default to maximize test coverage as ssl is enabled most of the times in real world
@@ -646,17 +656,17 @@ def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
 
 
 @pytest.fixture
-def s3_store_factory(lib_name, s3_storage) -> NativeVersionStore:
+def s3_store_factory(lib_name, s3_storage) -> Callable[..., NativeVersionStore]:
     return s3_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> NativeVersionStore:
+def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Callable[..., NativeVersionStore]:
     return s3_no_ssl_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def mock_s3_store_with_error_simulation_factory(lib_name, mock_s3_storage_with_error_simulation) -> NativeVersionStore:
+def mock_s3_store_with_error_simulation_factory(lib_name, mock_s3_storage_with_error_simulation) -> Callable[..., NativeVersionStore]:
     return mock_s3_storage_with_error_simulation.create_version_store_factory(lib_name)
 
 
@@ -666,17 +676,22 @@ def real_s3_store_factory(lib_name, real_s3_storage) -> Callable[..., NativeVers
 
 
 @pytest.fixture
+def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Callable[..., NativeVersionStore]:
+    return nfs_backed_s3_storage.create_version_store_factory(lib_name)
+
+
+@pytest.fixture
 def real_gcp_store_factory(lib_name, real_gcp_storage) -> Callable[..., NativeVersionStore]:
     return real_gcp_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> NativeVersionStore:
+def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> Callable[..., NativeVersionStore]:
     return real_s3_sts_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def azure_store_factory(lib_name, azurite_storage) -> NativeVersionStore:
+def azure_store_factory(lib_name, azurite_storage) -> Callable[..., NativeVersionStore]:
     return azurite_storage.create_version_store_factory(lib_name)
 
 
@@ -728,6 +743,18 @@ def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exce
 
 
 @pytest.fixture
+def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory):
+    return nfs_backed_s3_store_factory(dynamic_strings=True)
+
+
+@pytest.fixture
+def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return nfs_backed_s3_store_factory(dynamic_strings=True, 
+                                       encoding_version=int(EncodingVersion.V2), name=library_name)
+
+
+@pytest.fixture
 def s3_version_store_v1(s3_store_factory):
     return s3_store_factory(dynamic_strings=True)
 
@@ -758,8 +785,31 @@ def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version)
     elif encoding_version == EncodingVersion.V2:
         return s3_version_store_v2
     else:
-        raise ValueError(f"Unexoected encoding version: {encoding_version}")
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
 
+
+@pytest.fixture
+def nfs_backed_s3_version_store_dynamic_schema_v1(nfs_backed_s3_store_factory):
+    return nfs_backed_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, lib_name):
+    library_name = lib_name + "_v2"
+    return nfs_backed_s3_store_factory(
+        dynamic_strings=True, dynamic_schema=True, encoding_version=int(EncodingVersion.V2), name=library_name
+    )
+
+
+@pytest.fixture
+def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version):
+    if encoding_version == EncodingVersion.V1:
+        return nfs_backed_s3_version_store_v1
+    elif encoding_version == EncodingVersion.V2:
+        return nfs_backed_s3_version_store_v2
+    else:
+        raise ValueError(f"Unexpected encoding version: {encoding_version}")
+    
 
 @pytest.fixture(scope="function")
 def mongo_version_store(mongo_store_factory):
@@ -770,6 +820,7 @@ def mongo_version_store(mongo_store_factory):
     scope="function",
     params=[
         pytest.param("s3_store_factory", marks=SIM_S3_TESTS_MARK),
+        pytest.param("nfs_backed_s3_store_factory", marks=SIM_NFS_TESTS_MARK),
         pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
@@ -1217,6 +1268,8 @@ def lmdb_version_store_static_and_dynamic(request):
         pytest.param("s3_version_store_v1", marks=SIM_S3_TESTS_MARK),
         pytest.param("s3_version_store_v2", marks=SIM_S3_TESTS_MARK),
         pytest.param("in_memory_version_store", marks=MEM_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_v1", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_v2", marks=SIM_NFS_TESTS_MARK),
         pytest.param("azure_version_store", marks=AZURE_TESTS_MARK),
         pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
@@ -1236,6 +1289,8 @@ def object_and_mem_and_lmdb_version_store(request):
     params=(
         pytest.param("lmdb_version_store_dynamic_schema_v1", marks=LMDB_TESTS_MARK),
         pytest.param("lmdb_version_store_dynamic_schema_v2", marks=LMDB_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_dynamic_schema_v1", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("nfs_backed_s3_version_store_dynamic_schema_v2", marks=SIM_NFS_TESTS_MARK),
         pytest.param("s3_version_store_dynamic_schema_v1", marks=SIM_S3_TESTS_MARK),
         pytest.param("s3_version_store_dynamic_schema_v2", marks=SIM_S3_TESTS_MARK),
         pytest.param("in_memory_version_store_dynamic_schema", marks=MEM_TESTS_MARK),
@@ -1335,3 +1390,10 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
         pytest.skip("LMDB storage backed has a bug in versions before 5.0.0 which leads to flaky segfaults")
 
     yield old_venv, arctic_uri
+
+    
+@pytest.fixture
+def clear_query_stats():
+    yield
+    query_stats.disable()
+    query_stats.reset_stats()

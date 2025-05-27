@@ -9,18 +9,15 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
-#include <arcticdb/util/gil_safe_py_none.hpp>
 
 namespace arcticdb {
 
-inline PythonHandlerData& get_handler_data(std::any& any) {
+inline PythonHandlerData& cast_handler_data(std::any& any) {
     return std::any_cast<PythonHandlerData&>(any);
 }
 
@@ -98,15 +95,14 @@ private:
     std::pair<size_t, size_t> write_strings_to_destination(
         size_t num_rows,
         const Column& source_column,
-        std::shared_ptr<py::none>& none,
-        const ankerl::unordered_dense::map<entity::position_t, PyObject*> py_strings,
+        const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings,
         const std::optional<util::BitSet>& sparse_map) {
         std::pair<size_t, size_t> counts;
         if(sparse_map) {
-            prefill_with_none(ptr_dest_, num_rows, 0, handler_data_.spin_lock(), python_util::IncrementRefCount::OFF);
-            counts = write_strings_to_column_sparse(num_rows, source_column, none, py_strings, *sparse_map);
+            prefill_with_none(ptr_dest_, num_rows, 0, handler_data_, python_util::IncrementRefCount::OFF);
+            counts = write_strings_to_column_sparse(num_rows, source_column, py_strings, *sparse_map);
         } else {
-            counts = write_strings_to_column_dense(num_rows, source_column, none, py_strings);
+            counts = write_strings_to_column_dense(num_rows, source_column, py_strings);
         }
         return counts;
     }
@@ -124,10 +120,9 @@ private:
         auto py_strings = assign_python_strings<StringCreator>(unique_counts, has_type_conversion, string_pool);
 
         ARCTICDB_SUBSAMPLE(WriteStringsToColumn, 0)
-        auto none = GilSafePyNone::instance();
-        auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, none, py_strings, sparse_map);
-        increment_none_refcount(none_count, none);
-        increment_nan_refcount(nan_count);
+        auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, py_strings, sparse_map);
+        handler_data_.increment_none_refcount(none_count);
+        handler_data_.increment_nan_refcount(nan_count);
     }
 
     ankerl::unordered_dense::map<entity::position_t, PyObject*> get_allocated_strings(
@@ -177,10 +172,9 @@ private:
                 }
             }
         }
-        auto none = GilSafePyNone::instance();
-        auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, none, allocated, source_column.opt_sparse_map());
-        increment_none_refcount(none_count, none);
-        increment_nan_refcount(nan_count);
+        auto [none_count, nan_count] = write_strings_to_destination(num_rows, source_column, allocated, source_column.opt_sparse_map());
+        handler_data_.increment_none_refcount(none_count);
+        handler_data_.increment_nan_refcount(nan_count);
     }
 
     template<typename StringCreator>
@@ -206,24 +200,9 @@ private:
         return py_strings;
     }
 
-    void increment_none_refcount(size_t none_count, std::shared_ptr<py::none>& none) {
-        util::check(none, "Got null pointer to py::none in increment_none_refcount");
-        std::lock_guard lock(handler_data_.spin_lock());
-        for(auto i = 0u; i < none_count; ++i) {
-            Py_INCREF(none->ptr());
-        }
-    }
-
-    void increment_nan_refcount(size_t none_count) {
-        std::lock_guard lock(handler_data_.spin_lock());
-        for(auto i = 0u; i < none_count; ++i)
-            Py_INCREF(handler_data_.py_nan_->ptr());
-    }
-
     std::pair<size_t, size_t> write_strings_to_column_dense(
             size_t ,
             const Column& source_column,
-            const std::shared_ptr<py::none>& none,
             const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings) {
         auto data = source_column.data();
         auto src = data.cbegin<ScalarTagType<DataTypeTag<DataType::UINT64>>, IteratorType::REGULAR, IteratorDensity::DENSE>();
@@ -233,10 +212,10 @@ private:
         for (; src != end; ++src, ++ptr_dest_, ++row_) {
             const auto offset = *src;
             if(offset == not_a_string()) {
-                *ptr_dest_ = none->ptr();
+                *ptr_dest_ = Py_None;
                 ++none_count;
             } else if (offset == nan_placeholder()) {
-                *ptr_dest_ = handler_data_.py_nan_->ptr();
+                *ptr_dest_ = handler_data_.non_owning_nan_handle();
                 ++nan_count;
             } else {
                 *ptr_dest_ = py_strings.at(offset);
@@ -248,7 +227,6 @@ private:
     std::pair<size_t, size_t> write_strings_to_column_sparse(
         size_t num_rows,
         const Column& source_column,
-        const std::shared_ptr<py::none>& none,
         const ankerl::unordered_dense::map<entity::position_t, PyObject*>& py_strings,
         const util::BitSet& sparse_map
     ) {
@@ -261,10 +239,10 @@ private:
         while(en != en_end) {
             const auto offset = *src;
             if(offset == not_a_string()) {
-                ptr_dest_[*en] = none->ptr();
+                ptr_dest_[*en] = Py_None;
                 ++none_count;
             } else if (offset == nan_placeholder()) {
-                ptr_dest_[*en] = handler_data_.py_nan_->ptr();
+                ptr_dest_[*en] = handler_data_.non_owning_nan_handle();
                 ++nan_count;
             } else {
                 ptr_dest_[*en] = py_strings.at(offset);
@@ -288,7 +266,7 @@ private:
 
 
     template<typename StringCreator>
-    inline void process_string_views_for_type(
+    void process_string_views_for_type(
         size_t num_rows,
         const Column& source_column,
         bool has_type_conversion,
