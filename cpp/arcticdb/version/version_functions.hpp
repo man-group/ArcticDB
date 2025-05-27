@@ -182,7 +182,9 @@ inline version_store::TombstoneVersionResult tombstone_versions(
         }
     }
 
-    version_map->write_tombstones(store, version_ids, stream_id, entry, creation_ts);
+    util::check(res.keys_to_delete.size() == version_ids.size(), "Expected {} tombstone keys, got {}", version_ids.size(), res.keys_to_delete.size());
+
+    version_map->write_tombstones(store, res.keys_to_delete, stream_id, entry, creation_ts);
 
     if (version_map->validate())
         entry->validate();

@@ -580,7 +580,8 @@ std::shared_ptr<VersionMapEntry> write_versions(
                 break;
             }
             case VersionChainOperation::Type::TOMBSTONE: {
-                version_map->write_tombstones(store, {*version_id_opt}, id, entry);
+                auto key = atom_key_with_version(id, *version_id_opt, *version_id_opt);
+                version_map->write_tombstones(store, {key}, id, entry);
                 break;
             }
             case VersionChainOperation::Type::TOMBSTONE_ALL: {
@@ -685,7 +686,8 @@ TEST(VersionMap, FollowingVersionChainWithCaching){
             LoadStrategy{LoadType::NOT_LOADED, LoadObjective::INCLUDE_DELETED},
             __FUNCTION__);
     // We delete the only undeleted key
-    version_map->write_tombstones(store, {VersionId{1}}, id, entry, timestamp{4});
+    auto key = atom_key_with_version(id, 1, 1);
+    version_map->write_tombstones(store, {key}, id, entry, timestamp{4});
 
     // LATEST should still be cached, but the cached entry now needs to have no undeleted keys
     check_loads_versions(LoadStrategy{LoadType::LATEST, LoadObjective::INCLUDE_DELETED}, 2, 0);
@@ -913,7 +915,8 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAfterLoad) {
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-2)}));
 
     // When - we delete version 1 and reload
-    version_map->write_tombstones(store, {VersionId{1}}, id, entry);
+    auto key = atom_key_with_version(id, 1, 1);
+    version_map->write_tombstones(store, {key}, id, entry);
 
     // Now when the cached version is deleted, we should invalidate the cache for load parameters which look for undeleted.
     ASSERT_FALSE(version_map->has_cached_entry(id, LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}));
@@ -976,7 +979,8 @@ TEST(VersionMap, CacheInvalidationWithTombstoneAllAfterLoad) {
         validate_load_strategy(LoadStrategy{LoadType::DOWNTO, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(-3)}, is_loaded_to_0, is_loaded_to_0 ? 3 : 0);
 
         // When - we delete version 2
-        auto tombstone_key = version_map->write_tombstones(store, {VersionId{2}}, id, entry);
+        auto key = atom_key_with_version(id, 2, 2);
+        auto tombstone_key = version_map->write_tombstones(store, {key}, id, entry);
 
         // We should not invalidate the cache because the version we loaded to is still undeleted
         validate_load_strategy(LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}, true, is_loaded_to_0 ? 3 : 2);
@@ -1080,7 +1084,8 @@ TEST(VersionMap, CompactionUpdateCache) {
         auto key = atom_key_with_version(id, i, i);
         version_map->write_version(store, key, std::nullopt);
         if (i%3 == 0) {
-            version_map->write_tombstones(store, {VersionId{static_cast<uint64_t>(i)}}, id, entry);
+            auto key = atom_key_with_version(id, i, i);
+            version_map->write_tombstones(store, {key}, id, entry);
         }
     }
     assert_keys_in_entry_and_store(entry, 15, 20, 3);

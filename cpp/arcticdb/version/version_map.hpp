@@ -571,30 +571,30 @@ public:
 
     AtomKey write_tombstones(
         std::shared_ptr<Store> store,
-        const std::unordered_set<VersionId>& versions,
+        const std::vector<AtomKey>& keys,
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
-        auto tombstone_key = write_tombstones_internal(store, versions, stream_id, entry, creation_ts);
+        auto tombstone_key = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
         write_symbol_ref(store, tombstone_key, std::nullopt, entry->head_.value());
         return tombstone_key;
     }
 
     AtomKey write_tombstones_internal(
             std::shared_ptr<Store> store,
-            const std::unordered_set<VersionId>& versions,
+            const std::vector<AtomKey>& keys,
             const StreamId& stream_id,
             const std::shared_ptr<VersionMapEntry>& entry,
             const std::optional<timestamp>& creation_ts=std::nullopt) {
         static const bool should_log_individual_tombstones = ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(versions.size() > 0, "No version ids to write tombstone for");
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(keys.size() > 0, "No version ids to write tombstone for");
         if (validate_)
             entry->validate();
 
         const auto ts = creation_ts.value_or(store->current_timestamp());
         std::vector<AtomKey> tombstones;
-        std::transform(versions.begin(), versions.end(), std::back_inserter(tombstones),
-            [&](const VersionId& v) { return index_to_tombstone(v, stream_id, ts); });
+        std::transform(keys.begin(), keys.end(), std::back_inserter(tombstones),
+            [&](const AtomKey& k) { return index_to_tombstone(k.version_id(), stream_id, ts); });
 
         // sort the tombstone in descending order
         std::sort(tombstones.begin(), tombstones.end(), [](const AtomKey& a, const AtomKey& b) {
