@@ -1,3 +1,5 @@
+from collections import namedtuple
+
 import pandas as pd
 import pytest
 import numpy as np
@@ -10,6 +12,7 @@ from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
+from arcticdb_ext.version_store import NoSuchVersionException
 
 
 class AlmostAList(list):
@@ -54,6 +57,7 @@ def test_recursively_written_data(basic_store, read):
         recursive_sym = "sym_recursive" + str(idx)
         pickled_sym = "sym_pickled" + str(idx)
         recursive_write_vit = basic_store.write(recursive_sym, sample, recursive_normalizers=True)
+        assert recursive_write_vit.version == 0
         pickled_write_vit = basic_store.write(pickled_sym, sample)  # pickled writes
         recursive_vit = read(basic_store, recursive_sym)
         pickled_vit = read(basic_store, pickled_sym)
@@ -62,11 +66,16 @@ def test_recursively_written_data(basic_store, read):
         equals(pickled_vit.data, recursive_vit.data)
         assert recursive_vit.symbol == recursive_sym
         assert pickled_vit.symbol == pickled_sym
+        assert recursive_vit.version == 0
         assert_vit_equals_except_data(recursive_write_vit, recursive_vit)
         assert_vit_equals_except_data(pickled_write_vit, pickled_vit)
         assert basic_store.get_info(recursive_sym)["type"] != "pickled"
         assert basic_store.get_info(pickled_sym)["type"] == "pickled"
 
+        recursive_write_vit = basic_store.write(recursive_sym, sample, recursive_normalizers=True)
+        assert recursive_write_vit.version == 1
+        recursive_vit = read(basic_store, recursive_sym)
+        assert recursive_vit.version == 1
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
@@ -88,6 +97,15 @@ def test_recursively_written_data_with_metadata(basic_store, read):
         assert read_vit.metadata == metadata
         assert_vit_equals_except_data(read_vit, write_vit)
         assert basic_store.get_info(sym)["type"] != "pickled"
+
+        metadata = {"something": 2, "else": 1}
+        write_vit = basic_store.write(sym, sample, metadata=metadata, recursive_normalizers=True)
+        assert write_vit.version == 1
+        assert write_vit.metadata == metadata
+        read_vit = read(basic_store, sym)
+        assert read_vit.symbol == sym
+        assert read_vit.metadata == metadata
+        assert read_vit.version == 1
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
@@ -194,6 +212,124 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
             m.setattr(arcticdb.version_store._normalization, "_MAX_RECURSIVE_METASTRUCT", 1)
             lib.write(sym, data, recursive_normalizers=True)
     assert "recursive" in str(e.value).lower()
+
+
+def test_tuple(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = ("abc", df, {"ghi": df})
+
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+    assert actual_data[0] == "abc"
+    pd.testing.assert_frame_equal(actual_data[1], df)
+    pd.testing.assert_frame_equal(actual_data[2]["ghi"], df)
+
+
+DataFrameHolder = namedtuple("DataFrameHolder", ["contents"])
+
+
+def test_namedtuple_gets_pickled(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+
+    lib.write("sym", DataFrameHolder(df))
+
+    assert lib.get_info("sym")["type"] == "pickled"
+    assert_frame_equal(lib.read("sym").data.contents, df)
+
+    lib.write("sym", [DataFrameHolder(df)])
+    assert lib.get_info("sym")["type"] == "pickled"
+    assert_frame_equal(lib.read("sym").data[0].contents, df)
+
+
+class SomeClass:
+    pass
+
+
+def test_something_we_cannot_normalize_just_gets_pickled(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib.write("sym", [SomeClass()])
+    assert lib.get_info("sym")["type"] == "pickled"
+
+
+@pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
+def test_key_names(lmdb_version_store_v1, key):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {key: df}
+
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+    assert key in actual_data
+    pd.testing.assert_frame_equal(actual_data[key], df)
+
+    assert lib.read("sym").version == 0
+
+
+def test_data_layout(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    df_two = pd.DataFrame({"q": [4, 5, 6]})
+    data = {"k": df, "l": [1, 2, 3], "m": {"n": "o", "p": df_two}, "p": df}
+
+    lib.write("sym", data, recursive_normalizers=True)
+    lib.write("sym", data, recursive_normalizers=True, prune_previous_version=False)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+    pd.testing.assert_frame_equal(actual_data["k"], df)
+    pd.testing.assert_frame_equal(actual_data["p"], df)
+    assert actual_data["l"] == [1, 2, 3]
+    assert actual_data["m"]["n"] == "o"
+    pd.testing.assert_frame_equal(actual_data["m"]["p"], df_two)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 2
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 2
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    assert len(index_keys) == 6
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert len(data_keys) == 6
+
+    assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.VERSION, "sym")) == 2
+    assert len(lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")) == 2
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, "sym")) == 0
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[1]
+    assert multi_key.version_id == 1
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 3
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__k"
+    contents = segment.iloc[1].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__m__p"
+    contents = segment.iloc[2].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__p"
+
+    # Check that we cannot read the fake index keys
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym__k")
+
+    # Check that keys are cleaned up when we delete
+    lib.write("sym", data, recursive_normalizers=True, prune_previous_version=True)
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 4
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 3
+
 
 class TestRecursiveNormalizersCompat:
     def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):

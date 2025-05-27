@@ -108,3 +108,21 @@ def test_recursive_normalizers_blns(lmdb_version_store):
     lib.write(symbol, dict, recursive_normalizers=True)
     vit = lib.read(symbol)
     assert_dicts_of_dfs_equal(dict, vit.data)
+
+
+def test_recursive_normalizers_blns_in_keys(lmdb_version_store):
+    lib = lmdb_version_store
+    strings = read_strings()
+    symbol = "blnd_recursive_in_keys"
+    df = pd.DataFrame({"a": [1, 2, 3]})
+
+    for s in strings:
+        dict = {s: df}
+        try:
+            lib.write(symbol, dict, recursive_normalizers=True)
+        except:
+            # We just want to check that we can read anything we can write, so just skip anything we can't write
+            continue
+        vit = lib.read(symbol)
+        assert s in vit.data
+        pd.testing.assert_frame_equal(dict[s], vit.data[s])
