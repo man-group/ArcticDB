@@ -162,10 +162,15 @@ inline version_store::TombstoneVersionResult tombstone_versions(
     // to defer the check to delete_tree() (instead of reloading in case eager delete is disabled).
     version_store::TombstoneVersionResult res(entry->empty());
     auto latest_key = entry->get_first_index(true).first;
+    std::vector<AtomKey> index_keys_to_tombstone;
 
     for (auto version_id: version_ids) {
+        bool found = false;
         get_matching_prev_and_next_versions(entry, version_id,
-                [&res](auto& matching){res.keys_to_delete.push_back(matching);},
+                [&res, &found](auto& matching){
+                    res.keys_to_delete.push_back(matching);
+                    found = true;
+                },
                 [&res](auto& prev){res.could_share_data.emplace(prev);},
                 [&res](auto& next){res.could_share_data.emplace(next);},
             is_live_index_type_key // Entry could be cached with deleted keys even if LOAD_UNDELETED
@@ -179,12 +184,25 @@ inline version_store::TombstoneVersionResult tombstone_versions(
             if (!latest_key || latest_key->version_id() < version_id)
                 util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
                         stream_id, version_id);
+
+            // If the version is not found, we are trying to tombstone a version that doesn't exist
+            // this can happen in case of DR sync
+            if (!found) {
+                index_keys_to_tombstone.emplace_back(
+                    atom_key_builder()
+                        .version_id(version_id)
+                        .creation_ts(creation_ts.value_or(store->current_timestamp()))
+                        .content_hash(3)
+                        .start_index(4)
+                        .end_index(5)
+                        .build(stream_id, KeyType::TABLE_INDEX));
+            }
         }
     }
 
-    util::check(res.keys_to_delete.size() == version_ids.size(), "Expected {} index keys to be marked for deletion, got {}", version_ids.size(), res.keys_to_delete.size());
-
-    version_map->write_tombstones(store, res.keys_to_delete, stream_id, entry, creation_ts);
+    index_keys_to_tombstone.insert(index_keys_to_tombstone.end(), res.keys_to_delete.begin(), res.keys_to_delete.end());
+    util::check(index_keys_to_tombstone.size() == version_ids.size(), "Expected {} index keys to be marked for deletion, got {}", version_ids.size(), index_keys_to_tombstone.size());
+    version_map->write_tombstones(store, index_keys_to_tombstone, stream_id, entry, creation_ts);
 
     if (version_map->validate())
         entry->validate();
