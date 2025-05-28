@@ -976,21 +976,19 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
     const ReadOptions& read_options
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
-
-    OutputSchema schema = create_initial_output_schema(*pipeline_context);
-    if (pipeline_context->rows_ > 0) {
-        for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
-            schema = clause->modify_schema(std::move(schema));
-        }
-    }
-    auto&& [descriptor, norm_meta, default_values] = schema.release();
-    pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
-    pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
-        std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
-    pipeline_context->default_values_ = std::forward<decltype(default_values)>(default_values);
-
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager](std::vector<EntityId>&& processed_entity_ids) {
+            .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
+                OutputSchema schema = create_initial_output_schema(*pipeline_context);
+                if (pipeline_context->rows_ > 0) {
+                    for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
+                        schema = clause->modify_schema(std::move(schema));
+                    }
+                }
+                auto&& [descriptor, norm_meta, default_values] = schema.release();
+                pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
+                pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
+                    std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
+                pipeline_context->default_values_ = std::forward<decltype(default_values)>(default_values);
                 auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
                     std::shared_ptr<RowRange>,
                     std::shared_ptr<ColRange> >(*component_manager, processed_entity_ids);
@@ -1348,7 +1346,17 @@ void copy_frame_data_to_buffer(
                 dst_ptr += row_count * sizeof(SourceType);
             }
         });
-    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion)) {
+    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion) ||
+               (src_column.type().data_type() == DataType::UINT64 && dst_column.type().data_type() == DataType::INT64)) {
+        // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type between
+        // these types. This means that the second condition cannot happen during a regular read. The processing
+        // pipeline, however, can produce a set of segments where some are int64 and other uint64. This can happen in
+        // the sum aggregation (both for unsorted aggregations and resampling). Because we promote the sum type to the
+        // largest type of the respective category. E.g., we have int8 and uint8. Dynamic schema will allow this, and
+        // the global type descriptor will be int16. However, when segments are processed on their own int8 -> int64 and
+        // uint8 -> int64. We have decided to allow this and assign a common type of int64 (done in the modify_schema
+        // procedure). This is what pyarrow does as well. Because of the above, we allow here copying uint64 buffer in
+        // an int64 buffer.
         details::visit_type(dst_column.type().data_type() ,[&src_data, &dst_ptr, &src_column, &type_promotion_error_msg] (auto dest_desc_tag) {
             using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
             auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);

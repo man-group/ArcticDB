@@ -961,3 +961,15 @@ def equals(x, y):
 def is_pytest_running():
     """Check if code is currently running as part of a pytest test."""
     return "PYTEST_CURRENT_TEST" in os.environ
+
+
+def common_sum_aggregation_dtype(left, right):
+    if pd.api.types.is_signed_integer_dtype(left) and pd.api.types.is_signed_integer_dtype(right):
+        return np.int64
+    elif pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right):
+        return np.uint64
+    elif ((pd.api.types.is_signed_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right)) or
+          (pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_signed_integer_dtype(right))):
+        return np.int64
+    else:
+        return np.float64

@@ -14,7 +14,7 @@ import hypothesis.strategies as st
 import pytest
 import numpy as np
 
-from arcticdb.util.test import generic_named_aggregation_test
+from arcticdb.util.test import generic_named_aggregation_test, common_sum_aggregation_dtype
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     supported_numeric_dtypes,
@@ -124,6 +124,8 @@ def larget_common_type(left, right):
             int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
             if right.itemsize >= 8:
                 return None
+            elif left.itemsize > right.itemsize:
+                return left
             return int_dtypes[right.itemsize * 2]
     elif pd.api.types.is_unsigned_integer_dtype(left):
         if pd.api.types.is_float_dtype(right):
@@ -134,8 +136,9 @@ def larget_common_type(left, right):
             int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
             if left.itemsize >= 8:
                 return None
-            else:
-                return int_dtypes[left.itemsize * 2]
+            elif right.itemsize > left.itemsize:
+                return right
+            return int_dtypes[left.itemsize * 2]
     return None
 
 @st.composite
@@ -160,22 +163,20 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
     agg_column_dtypes = [df['agg_column'].dtype for df in dfs if 'agg_column' in df.columns]
     common_agg_type = functools.reduce(larget_common_type, agg_column_dtypes) if len(agg_column_dtypes) > 0 else None
     assume(any('grouping_column' in df.columns for df in dfs) and common_agg_type is not None)
-    print("===========================")
-    print([df.dtypes for df in dfs])
-    print(common_agg_type)
-    print("===========================")
+
+    common_sum_type = functools.reduce(common_sum_aggregation_dtype, agg_column_dtypes)
     lib = lmdb_version_store_dynamic_schema_v1
     symbol = "test_aggregation_numeric_dynamic"
     lib.delete(symbol)
     for df in dfs:
         lib.append(symbol, df)
     required_types = {
-        #"mean": np.float64,
-        "sum": common_agg_type,
+        "mean": np.float64,
+        "sum": common_sum_type,
         "grouping_column": object,
-        #"count": np.uint64,
-        #"min": common_agg_type,
-        #"max": common_agg_type,
+        "count": np.uint64,
+        "min": common_agg_type,
+        "max": common_agg_type,
     }
 
     generic_named_aggregation_test(
@@ -184,68 +185,16 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
         pd.concat(dfs),
         "grouping_column",
         {
-            #"mean": ("agg_column", "mean"),
+            "mean": ("agg_column", "mean"),
             "sum": ("agg_column", "sum"),
-            #"min": ("agg_column", "min"),
-            #"max": ("agg_column", "max"),
-            #"count": ("agg_column", "count"),
+            "min": ("agg_column", "min"),
+            "max": ("agg_column", "max"),
+            "count": ("agg_column", "count"),
             # Uncomment when un-feature flagged
             # "first": ("agg_column", "first")
             # "last": ("agg_column", "last"),
         },
         agg_dtypes=required_types
-    )
-
-def test_aggregation_missing_in_middle(lmdb_version_store_dynamic_schema_v1):
-    lib = lmdb_version_store_dynamic_schema_v1
-    sym = "test_aggregation_missing_in_middle"
-    #dfs = [
-    #    pd.DataFrame({"agg_column": [0.0, 0.0]}),
-    #    pd.DataFrame({"grouping_column": ["123"]}),
-    #    pd.DataFrame({"grouping_column": ["1"], "agg_column": [0]})
-    #]
-
-    #dfs = [
-    #    pd.DataFrame({"grouping_column": ["0"]}),
-    #    pd.DataFrame({"grouping_column": ["00"], "agg_column": np.array([1], np.uint16)})
-    #]
-
-    dfs = [
-        pd.DataFrame({"agg_column": np.array([0.0], np.float64)}),
-        pd.DataFrame({"grouping_column": ["0"], "agg_column": np.array([0], np.int8)}),
-        pd.DataFrame({"grouping_column": ["0"], "agg_column": np.array([0], np.uint64)})
-    ]
-
-    #dfs = [
-    #    pd.DataFrame({"agg_column": np.array([1], np.int8)}),
-    #    pd.DataFrame({"grouping_column": ["0"], "agg_column": np.array([1], np.uint8)})
-    #]
-
-    for df in dfs:
-        lmdb_version_store_dynamic_schema_v1.append(sym, df)
-
-    required_types = {
-        #"mean": np.float64,
-        "sum": np.int16,
-        "grouping_column": object,
-        #"count": np.uint64,
-        #"min": common_agg_type,
-        #"max": np.uint16
-    }
-
-    generic_named_aggregation_test(
-        lib,
-        sym,
-        pd.concat(dfs),
-        "grouping_column",
-        {
-            #"mean": ("agg_column", "mean"),
-            "sum": ("agg_column", "sum"),
-            #"min": ("agg_column", "min"),
-            #"max": ("agg_column", "max"),
-            #"count": ("agg_column", "count"),
-        },
-        #agg_dtypes=required_types
     )
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked

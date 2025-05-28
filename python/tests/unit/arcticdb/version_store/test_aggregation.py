@@ -12,9 +12,7 @@ from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
-from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic
-from arcticdb.config import set_log_level
-from arcticdb_ext.log import flush_all
+from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic, common_sum_aggregation_dtype
 
 pytestmark = pytest.mark.pipeline
 
@@ -487,3 +485,53 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
     )
     lib.append(symbol, append_df)
     generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
+
+@pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
+@pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
+@pytest.mark.parametrize("first_group", ["0", "1"])
+@pytest.mark.parametrize("second_group", ["0", "1"])
+def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype, first_group, second_group):
+    """
+    Sum aggregation promotes to the largest type of the respective category. int -> int64, uint -> uint64, float -> float64
+    Dynamic schema allows mixin int and uint. In the case of sum aggregation, this will require mixing uint64 and int64
+    in the end segment, and those do not have a common type. In that case we use int64 (pyarrow does the same). In this
+    test we test all configurations of dtypes and grouping options (same group vs different group)
+    """
+    lib = lmdb_version_store_dynamic_schema_v1
+    df1 = pd.DataFrame({"grouping_column": [first_group], "to_sum": np.array([1], first_dtype)})
+    df2 = pd.DataFrame({"grouping_column": [second_group], "to_sum": np.array([1], second_dtype)})
+    lib.append("sym", df1)
+    if ((pd.api.types.is_signed_integer_dtype(first_dtype) and second_dtype == np.uint64) or
+        (first_dtype == np.uint64 and pd.api.types.is_signed_integer_dtype(second_dtype))):
+        with pytest.raises(SchemaException):
+            lib.append("sym", df2)
+    else:
+        lib.append("sym", df2)
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"to_sum": "sum"})
+        data = lib.read("sym", query_builder=q).data
+        expected_type = common_sum_aggregation_dtype(first_dtype, second_dtype)
+        assert np.dtype(data["to_sum"].dtype) == np.dtype(expected_type)
+
+@pytest.mark.parametrize("extremum", ["min", "max"])
+@pytest.mark.parametrize("dtype", [np.int32, np.float32])
+def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1, extremum, dtype):
+    """
+    Test that a sparse column will be backfilled with the correct values.
+    d1 will be skipped because there is no grouping colum, df2 will form the first row which. The first row is sparse
+    because the aggregation column is missing, d2 will be the second row which will be dense and not backfilled.
+    """
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "sym"
+    df1 = pd.DataFrame({"agg_column": np.array([0.0, 0.0], dtype)})
+    df2 = pd.DataFrame({"grouping_column": ["0"]})
+    df3 = pd.DataFrame({"grouping_column": ["00"], "agg_column": np.array([0], dtype)})
+    for df in [df1, df2, df3]:
+        lib.append(sym, df)
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"agg_column": extremum})
+    data = lib.read("sym", query_builder=q).data
+    default_value = 0 if dtype == np.int32 else np.nan
+    expected = pd.DataFrame({"agg_column": np.array([default_value, 0], dtype)}, index=["0", "00"])
+    expected.index.name = "grouping_column"
+    assert_frame_equal(data, expected)
