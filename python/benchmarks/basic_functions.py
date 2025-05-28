@@ -320,7 +320,7 @@ class ModificationFunctions:
 
         # Used by time_delete_multiple_versions
         for i in range(1000):
-            self.lib.write("sym", pd.DataFrame(), prune_previous_versions=False)
+            self.lib.write("sym_delete_multiple", pd.DataFrame(), prune_previous_versions=False)
 
     def teardown(self, lad: LargeAppendDataModify, rows):
         # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
@@ -357,7 +357,7 @@ class ModificationFunctions:
         self.lib.delete("sym")
 
     def time_delete_multiple_versions(self, lad: LargeAppendDataModify, rows):
-        self.lib.delete("sym", list(range(100)))
+        self.lib.delete("sym_delete_multiple", list(range(100)))
 
     def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):
         self.lib_short_wide.delete("short_wide_sym")
