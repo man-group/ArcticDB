@@ -387,8 +387,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
             ColumnWithStrings col = std::get<ColumnWithStrings>(partitioning_column);
             details::visit_type(
                 col.column_->type().data_type(),
-                [&row_slice, &grouping_map, &next_group_id, &aggregators_data, &string_pool, &col,
-                        &num_unique, &grouping_data_type, this](auto data_type_tag) {
+                [&, this](auto data_type_tag) {
                     using col_type_info = ScalarTypeInfo<decltype(data_type_tag)>;
                     grouping_data_type = col_type_info::data_type;
                     // Faster to initialise to zero (missing value group) and use raw ptr than repeated calls to emplace_back

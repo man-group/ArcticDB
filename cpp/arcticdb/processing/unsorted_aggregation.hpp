@@ -104,6 +104,7 @@ private:
 
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
+    util::BitMagic sparse_map_;
 };
 
 class MinAggregatorData : private AggregatorDataBase
@@ -119,6 +120,7 @@ private:
 
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
+    util::BitMagic sparse_map_;
 };
 
 class MeanAggregatorData : private AggregatorDataBase

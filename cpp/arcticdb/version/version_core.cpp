@@ -976,22 +976,24 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
     const ReadOptions& read_options
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
+
+    OutputSchema schema = create_initial_output_schema(*pipeline_context);
+    if (pipeline_context->rows_ > 0) {
+        for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
+            schema = clause->modify_schema(std::move(schema));
+        }
+    }
+    auto&& [descriptor, norm_meta, default_values] = schema.release();
+    pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
+    pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
+        std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
+    pipeline_context->default_values_ = std::forward<decltype(default_values)>(default_values);
+
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
+            .thenValue([component_manager](std::vector<EntityId>&& processed_entity_ids) {
                 auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
                     std::shared_ptr<RowRange>,
                     std::shared_ptr<ColRange> >(*component_manager, processed_entity_ids);
-                OutputSchema schema = create_initial_output_schema(*pipeline_context);
-                if (pipeline_context->rows_ > 0) {
-                    for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
-                        schema = clause->modify_schema(std::move(schema));
-                    }
-                }
-                auto&& [descriptor, norm_meta, default_values] = schema.release();
-                pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
-                pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
-                    std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
-                pipeline_context->default_values_ = std::forward<decltype(default_values)>(default_values);
                 return collect_segments(std::move(proc));
             });
 }

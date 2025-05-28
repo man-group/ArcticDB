@@ -17,9 +17,7 @@ void ProcessingUnit::apply_filter(
     auto filter_down_stringpool = optimisation == PipelineOptimisation::MEMORY;
 
     for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
-        auto seg = filter_segment(*segment,
-                                  bitset,
-                                  filter_down_stringpool);
+        auto seg = filter_segment(*segment, bitset, filter_down_stringpool);
         auto num_rows = seg.is_null() ? 0 : seg.row_count();
         auto& row_range = row_ranges_->at(idx);
         row_range = std::make_shared<pipelines::RowRange>(row_range->first, row_range->first + num_rows);

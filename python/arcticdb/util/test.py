@@ -841,6 +841,7 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
             f"""\n{df.dtypes}"""
             f"""\n{expected.dtypes}"""
             f"""\n{received.dtypes}"""
+            f"""\n{agg_dtypes}"""
         )
         raise e
 

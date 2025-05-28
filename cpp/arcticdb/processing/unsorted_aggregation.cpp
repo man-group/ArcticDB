@@ -254,49 +254,69 @@ namespace
         }
     };
 
+    std::shared_ptr<Column> create_output_column(TypeDescriptor td, util::BitMagic&& sparse_map, size_t unique_values) {
+        sparse_map.resize(unique_values);
+        const size_t num_set_rows = sparse_map.count();
+        const bool column_is_dense = num_set_rows == sparse_map.size();
+        if (column_is_dense) {
+            auto col = std::make_shared<Column>(td, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+            col->set_row_data(unique_values - 1);
+            return col;
+        } else {
+            auto col = std::make_shared<Column>(td, num_set_rows, AllocationType::PRESIZED, Sparsity::PERMITTED);
+            col->set_sparse_map(std::move(sparse_map));
+            col->set_row_data(unique_values - 1);
+            return col;
+        }
+    }
+
     template <Extremum T>
     void aggregate_impl(
         const std::optional<ColumnWithStrings>& input_column,
-        const std::vector<size_t>& groups,
+        const std::vector<size_t>& row_to_group,
         size_t unique_values,
         std::vector<uint8_t>& aggregated,
-        std::optional<DataType>& data_type
+        std::optional<DataType>& data_type,
+        util::BitMagic& sparse_map
     ) {
         if(data_type.has_value() && *data_type != DataType::EMPTYVAL && input_column.has_value()) {
-            details::visit_type(*data_type, [&aggregated, &input_column, unique_values, &groups] (auto global_tag) {
+            details::visit_type(*data_type, [&] (auto global_tag) {
                 using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
                 using GlobalRawType = typename global_type_info::RawType;
                 if constexpr(!is_sequence_type(global_type_info::data_type)) {
                     using MaybeValueType = MaybeValue<GlobalRawType, T>;
                     auto prev_size = aggregated.size() / sizeof(MaybeValueType);
                     aggregated.resize(sizeof(MaybeValueType) * unique_values);
+                    sparse_map.resize(unique_values);
                     auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
                     std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValueType{});
-                    details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
+                    details::visit_type(input_column->column_->type().data_type(), [&] (auto col_tag) {
                         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                         using ColRawType = typename col_type_info::RawType;
                         if constexpr(!is_sequence_type(col_type_info::data_type)) {
-                            Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&groups, &out_ptr](auto enumerating_it) {
-                                auto& val = out_ptr[groups[enumerating_it.idx()]];
+                            Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&](auto row) {
+                                auto& group_entry = out_ptr[row_to_group[row.idx()]];
                                 if constexpr(std::is_floating_point_v<ColRawType>) {
-                                    const auto& curr = GlobalRawType(enumerating_it.value());
-                                    if (!val.written_ || std::isnan(static_cast<ColRawType>(val.value_))) {
-                                        val.value_ = curr;
-                                        val.written_ = true;
+                                    const auto& curr = GlobalRawType(row.value());
+                                    if (!group_entry.written_ || std::isnan(static_cast<ColRawType>(group_entry.value_))) {
+                                        group_entry.value_ = curr;
+                                        group_entry.written_ = true;
+                                        sparse_map.set(row_to_group[row.idx()]);
                                     } else if (!std::isnan(static_cast<ColRawType>(curr))) {
                                         if constexpr(T == Extremum::MAX) {
-                                            val.value_ = std::max(val.value_, curr);
+                                            group_entry.value_ = std::max(group_entry.value_, curr);
                                         } else {
-                                            val.value_ = std::min(val.value_, curr);
+                                            group_entry.value_ = std::min(group_entry.value_, curr);
                                         }
                                     }
                                 } else {
                                     if constexpr(T == Extremum::MAX) {
-                                        val.value_ = std::max(val.value_, GlobalRawType(enumerating_it.value()));
+                                        group_entry.value_ = std::max(group_entry.value_, GlobalRawType(row.value()));
                                     } else {
-                                        val.value_ = std::min(val.value_, GlobalRawType(enumerating_it.value()));
+                                        group_entry.value_ = std::min(group_entry.value_, GlobalRawType(row.value()));
                                     }
-                                    val.written_ = true;
+                                    sparse_map.set(row_to_group[row.idx()]);
+                                    group_entry.written_ = true;
                                 }
                             });
                         } else {
@@ -313,32 +333,28 @@ namespace
             const ColumnName& output_column_name,
             size_t unique_values,
             std::vector<uint8_t>& aggregated,
-            std::optional<DataType>& data_type
+            std::optional<DataType>& data_type,
+            util::BitMagic&& sparse_map
     ) {
         SegmentInMemory res;
         if(!aggregated.empty()) {
             const TypeDescriptor column_type = make_scalar_type(data_type.value());
-            auto col = std::make_shared<Column>(column_type, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-            auto column_data = col->data();
-            col->set_row_data(unique_values - 1);
-            res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
+            sparse_map.resize(unique_values);
+            std::shared_ptr<Column> col = create_output_column(column_type, std::move(sparse_map), unique_values);
             details::visit_type(*data_type, [&] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 using MaybeValueType = MaybeValue<typename col_type_info::RawType, T>;
-                auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
-                for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
+                const std::span<const MaybeValueType> group_values{reinterpret_cast<const MaybeValueType*>(aggregated.data()), aggregated.size() / sizeof(MaybeValueType)};
+                Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                    const bool has_value = group_values[row.idx()].written_;
                     if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                        *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
+                        row.value() = has_value ? group_values[row.idx()].value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
                     } else {
-                        if constexpr(T == Extremum::MAX) {
-                            *it = in_ptr->written_ ? in_ptr->value_ : typename col_type_info::RawType{0};
-                        } else {
-                            // T == Extremum::MIN
-                            *it = in_ptr->written_ ? in_ptr->value_ : typename col_type_info::RawType{0};
-                        }
+                        row.value() = has_value ? group_values[row.idx()].value_ : typename col_type_info::RawType{0};
                     }
-                }
+                });
             });
+            res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
         }
         return res;
     }
@@ -363,12 +379,12 @@ DataType MaxAggregatorData::get_output_data_type() {
 
 void MaxAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
-    aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_);
+    aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_, sparse_map_);
 }
 
 SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values)
 {
-    return finalize_impl<Extremum::MAX>(output_column_name, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MAX>(output_column_name, unique_values, aggregated_, data_type_, std::move(sparse_map_));
 }
 
 VariantRawValue MaxAggregatorData::get_default_value() {
@@ -394,12 +410,12 @@ DataType MinAggregatorData::get_output_data_type() {
 
 void MinAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
-    aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_);
+    aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_, sparse_map_);
 }
 
 SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values)
 {
-    return finalize_impl<Extremum::MIN>(output_column_name, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MIN>(output_column_name, unique_values, aggregated_, data_type_, std::move(sparse_map_));
 }
 
 VariantRawValue MinAggregatorData::get_default_value() {

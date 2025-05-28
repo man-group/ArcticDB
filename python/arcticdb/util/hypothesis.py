@@ -109,7 +109,7 @@ string_strategy = st.text(
 
 
 @st.composite
-def dataframe_strategy(draw, column_strategies):
+def dataframe_strategy(draw, column_strategies, min_size=0):
     cols = []
     for column_strat in column_strategies:
         dtype = draw(column_strat.dtype_strategy)
@@ -125,7 +125,7 @@ def dataframe_strategy(draw, column_strategies):
                 max_value=max_value,
             )
         cols.append(column(column_strat.name, dtype=dtype, elements=elements))
-    return draw(data_frames(cols, index=range_indexes()))
+    return draw(data_frames(cols, index=range_indexes(min_size=min_size)))
 
 
 @st.composite

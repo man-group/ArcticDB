@@ -793,23 +793,23 @@ struct ReduceColumnTask : async::BaseTask {
         const auto field_type = frame_field.type().data_type();
         auto &column = frame_.column(static_cast<position_t>(column_index_));
         const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
-
         const auto column_data = slice_map_->columns_.find(frame_field.name());
+        const auto& name = frame_field.name();
+        const VariantRawValue default_value = [&]() -> VariantRawValue {
+            if (auto it = context_->default_values_.find(std::string(name)); it != context_->default_values_.end()) {
+                return it->second;
+            }
+            return {};
+        }();
+
         if(dynamic_schema && column_data == slice_map_->columns_.end()) {
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(read_options_.output_format(), column.type()); handler) {
                 handler->default_initialize(column.buffer(), 0, frame_.row_count() * handler->type_size(), shared_data_, handler_data_);
             } else {
-                column.default_initialize_rows(0, frame_.row_count(), false);
+                column.default_initialize_rows(0, frame_.row_count(), false, default_value);
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema) {
-                const auto& name = frame_field.name();
-                const VariantRawValue default_value = [&]() -> VariantRawValue {
-                    if (auto it = context_->default_values_.find(std::string(name)); it != context_->default_values_.end()) {
-                        return it->second;
-                    }
-                    return {};
-                }();
                 NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format(), default_value};
                 for (const auto &row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};
