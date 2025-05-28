@@ -19,6 +19,7 @@ cmake_policy(POP)
 
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
+find_package(sparrow CONFIG REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Folly REQUIRED)
 find_package(Gflags REQUIRED)
@@ -689,6 +690,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        sparrow::sparrow
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
@@ -998,7 +1000,8 @@ if(${TEST})
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
             python/python_handlers.cpp
-)
+            arrow/test/test_sparrow.cpp
+    )
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
