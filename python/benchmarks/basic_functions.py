@@ -319,9 +319,8 @@ class ModificationFunctions:
         self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]
 
         # Used by time_delete_multiple_versions
-        df = self.init_dfs[rows]
         for i in range(1000):
-            self.lib.write("sym", df, prune_previous_versions=False)
+            self.lib.write("sym", pd.DataFrame(), prune_previous_versions=False)
 
     def teardown(self, lad: LargeAppendDataModify, rows):
         # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
