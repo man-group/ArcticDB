@@ -537,7 +537,6 @@ set(arcticdb_srcs
         arrow/arrow_utils.cpp
         arrow/arrow_output_frame.cpp
         arrow/arrow_handlers.hpp
-        arrow/include_sparrow.hpp
         arrow/array_from_block.hpp
         arrow/arrow_handlers.cpp
         pipeline/read_query.hpp

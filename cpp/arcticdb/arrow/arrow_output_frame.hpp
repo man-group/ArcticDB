@@ -6,9 +6,8 @@
  */
 #pragma once
 
-#include <arcticdb/arrow/arrow_utils.hpp>
-
-#include <arcticdb/arrow/include_sparrow.hpp>
+#include <sparrow/sparrow.hpp>
+#include <sparrow/record_batch.hpp>
 
 #include <vector>
 #include <memory>

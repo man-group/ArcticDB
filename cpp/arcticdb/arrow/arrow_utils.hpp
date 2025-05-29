@@ -6,12 +6,9 @@
  */
 #pragma once
 
-#include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/util/preprocess.hpp>
-#include <arcticdb/arrow/include_sparrow.hpp>
+#include <sparrow/record_batch.hpp>
 
-#include <string_view>
 #include <vector>
 
 namespace arcticdb {
@@ -20,24 +17,6 @@ class SegmentInMemory;
 struct FrameAndDescriptor;
 struct DecodePathData;
 class Column;
-
-struct ArrowReadResult {
-
-    ArrowReadResult() = default;
-
-    ArrowReadResult(
-        VersionedItem versioned_item,
-        ArrowOutputFrame&& frame_data,
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta) :
-        versioned_item_(std::move(versioned_item)),
-        frame_(std::move(frame_data)),
-        user_meta_(std::move(user_meta)) {
-    }
-
-    VersionedItem versioned_item_;
-    ArrowOutputFrame frame_;
-    arcticdb::proto::descriptors::UserDefinedMetadata user_meta_;
-};
 
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment);
 

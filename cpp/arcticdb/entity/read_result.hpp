@@ -14,6 +14,7 @@
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/pipeline/pandas_output_frame.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 
 #include <vector>

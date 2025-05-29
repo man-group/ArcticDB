@@ -12,6 +12,7 @@
 #include <arcticdb/arrow/array_from_block.hpp>
 
 
+// TODO: Rework these tests. Use our methods `arrow_arrays_from_column` etc to verify layout is as expected
 std::vector<sparrow::array> make_array_list(const std::size_t data_size)
 {
     std::uint16_t* data = new std::uint16_t[data_size];

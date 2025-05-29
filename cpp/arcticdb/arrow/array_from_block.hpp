@@ -6,10 +6,9 @@
  */
 #pragma once
 
-#include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
-#include <arcticdb/arrow/include_sparrow.hpp>
+#include <sparrow/sparrow.hpp>
 #include <sparrow/layout/primitive_layout/primitive_data_access.hpp>
 
 namespace arcticdb {

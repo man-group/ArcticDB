@@ -7,12 +7,9 @@
 
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/array_from_block.hpp>
-#include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 
-#include <arcticdb/arrow/include_sparrow.hpp>
-
-#include <span>
+#include <sparrow/record_batch.hpp>
 
 namespace arcticdb {
 
