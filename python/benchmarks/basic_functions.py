@@ -319,7 +319,7 @@ class ModificationFunctions:
         self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]
 
         # Used by time_delete_multiple_versions
-        for i in range(1000):
+        for i in range(100):
             self.lib.write("sym_delete_multiple", pd.DataFrame(), prune_previous_versions=False)
 
     def teardown(self, lad: LargeAppendDataModify, rows):
@@ -357,7 +357,7 @@ class ModificationFunctions:
         self.lib.delete("sym")
 
     def time_delete_multiple_versions(self, lad: LargeAppendDataModify, rows):
-        self.lib.delete("sym_delete_multiple", list(range(100)))
+        self.lib.delete("sym_delete_multiple", list(range(99)))
 
     def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):
         self.lib_short_wide.delete("short_wide_sym")
