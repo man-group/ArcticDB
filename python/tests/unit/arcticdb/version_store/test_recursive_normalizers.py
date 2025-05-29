@@ -1,9 +1,11 @@
+import datetime
 from collections import namedtuple
 
 import pandas as pd
 import pytest
 import numpy as np
 import arcticdb
+from arcticdb import QueryBuilder
 from arcticdb.util.test import equals
 from arcticdb.flattener import Flattener
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -214,10 +216,12 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
     assert "recursive" in str(e.value).lower()
 
 
-def test_tuple(lmdb_version_store_v1):
+@pytest.mark.parametrize("sequence_type", (tuple, list))
+def test_sequences_data_layout(lmdb_version_store_v1, sequence_type):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = ("abc", df, {"ghi": df})
+    data = sequence_type(data)
 
     lib.write("sym", data, recursive_normalizers=True)
     assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
@@ -226,6 +230,45 @@ def test_tuple(lmdb_version_store_v1):
     assert actual_data[0] == "abc"
     pd.testing.assert_frame_equal(actual_data[1], df)
     pd.testing.assert_frame_equal(actual_data[2]["ghi"], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    assert [i.id for i in index_keys] == ['sym__1', "sym__2__ghi"]
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert len(data_keys) == 2
+
+    assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.VERSION, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, "sym")) == 0
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 2
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1"
+    contents = segment.iloc[1].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__2__ghi"
+
+    # Check that we cannot read the fake index keys
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym__1")
+
+    # Check that keys are cleaned up when we delete
+    lib.delete("sym")
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 2
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
 
 
 DataFrameHolder = namedtuple("DataFrameHolder", ["contents"])
@@ -269,6 +312,58 @@ def test_key_names(lmdb_version_store_v1, key):
     pd.testing.assert_frame_equal(actual_data[key], df)
 
     assert lib.read("sym").version == 0
+
+
+def test_read_asof(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+
+    df_one = pd.DataFrame({"d": [1, 2, 3]})
+    data_one = {"k": df_one}
+    lib.write("sym", data_one, recursive_normalizers=True)
+
+    df_two = pd.DataFrame({"d": [4, 5, 6]})
+    data_two = {"k": df_two}
+    lib.write("sym", data_two, recursive_normalizers=True)
+
+    vit = lib.read("sym")
+    assert vit.version == 1
+    pd.testing.assert_frame_equal(vit.data["k"], df_two)
+
+    vit = lib.read("sym", as_of=0)
+    assert vit.version == 0
+    pd.testing.assert_frame_equal(vit.data["k"], df_one)
+
+
+def test_unsupported_queries(lmdb_version_store_v1):
+    """Test how we fail with queries that we do not support over recursively normalized data."""
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {"sym": df}
+
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    # These queries fail with a numpy internals error
+    lib.read("sym", date_range=(None, None))
+    lib.read("sym", date_range=(datetime.date(2011, 1, 1), None))
+
+    # These queries succeed but give wrong results - we should raise in these cases, at least in the external API
+    qb = QueryBuilder()
+    qb = qb.date_range((None, None))
+    lib.read("sym", query_builder=qb)
+
+    qb = QueryBuilder()
+    qb = qb.date_range((datetime.date(2011, 1, 1), None))
+    lib.read("sym", query_builder=qb)
+
+    qb = QueryBuilder()
+    qb = qb[qb.d < 2]
+    lib.read("sym", query_builder=qb)
+
+    lib.read("sym", row_range=(0, 2))
+
+    lib.read("sym", columns=["e"])
+    lib.read("sym", columns=["d"])
 
 
 def test_data_layout(lmdb_version_store_v1):
@@ -322,13 +417,21 @@ def test_data_layout(lmdb_version_store_v1):
     with pytest.raises(NoSuchVersionException):
         lib.read("sym__k")
 
-    # Check that keys are cleaned up when we delete
+    # Check that keys are cleaned up when we prune
     lib.write("sym", data, recursive_normalizers=True, prune_previous_version=True)
     assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
     assert len(lt.find_keys(KeyType.VERSION)) == 4
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 3
+
+    # Check that keys are cleaned up when we delete
+    lib.delete("sym")
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 5
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 0
+    assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
 
 
 class TestRecursiveNormalizersCompat:
