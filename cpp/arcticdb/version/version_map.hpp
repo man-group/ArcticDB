@@ -579,11 +579,11 @@ public:
         write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
         if(log_changes_) {
             if (should_log_individual_tombstones) {
-                for (const auto& key : tombstones) {
+                for (const auto& key : tombstone_keys) {
                     log_tombstone(store, stream_id, key.version_id());
                 }
             } else {
-                log_tombstone(store, stream_id, tombstone_version_id);
+                log_tombstone(store, stream_id, tombstone_keys.front().version_id());
             }
         }
         
