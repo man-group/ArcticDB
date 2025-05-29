@@ -13,6 +13,7 @@
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
@@ -43,6 +44,7 @@ enum class OperationType : uint8_t {
     GE,
     ISIN,
     ISNOTIN,
+    REGEX_MATCH,
     // Boolean
     AND,
     OR,
@@ -72,6 +74,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(GE)
         TO_STR(ISIN)
         TO_STR(ISNOTIN)
+        TO_STR(REGEX_MATCH)
         TO_STR(AND)
         TO_STR(OR)
         TO_STR(XOR)
@@ -513,6 +516,16 @@ bool operator()(int64_t t, uint64_t u) const {
 }
 };
 
+struct RegexMatchOperator {
+template<typename T, typename U>
+bool operator()(T, U) const {
+    util::raise_rte("RegexMatchOperator does not support {} and {}", typeid(T).name(), typeid(U).name());
+}
+bool operator()(entity::position_t offset, const ankerl::unordered_dense::set<position_t>& offset_set) const {
+    return offset_set.contains(offset);
+}
+};
+
 struct MembershipOperator {
 protected:
     template<typename U>
@@ -799,6 +812,17 @@ struct formatter<arcticdb::IsNotInOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::IsNotInOperator, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "NOT IN");
+    }
+};
+
+template<>
+struct formatter<arcticdb::RegexMatchOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::RegexMatchOperator, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "REGEX MATCH");
     }
 };
 

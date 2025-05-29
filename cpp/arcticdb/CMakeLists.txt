@@ -741,6 +741,7 @@ if(${ARCTICDB_USING_CONDA})
 else()
 
     list (APPEND arcticdb_core_libraries
+        unofficial::pcre::pcre32
         unofficial::pcre::pcre
         msgpackc-cxx
         EnTT::EnTT
@@ -821,6 +822,7 @@ set(arcticdb_python_srcs
         stream/python_bindings.cpp
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
+        util/python_bindings.cpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
         python/python_handlers.hpp
@@ -1097,7 +1099,9 @@ if(${TEST})
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp
+            processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp
+            processing/test/benchmark_common.cpp
             processing/test/benchmark_ternary.cpp
             version/test/benchmark_write.cpp)
 

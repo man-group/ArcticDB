@@ -8,14 +8,8 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <memory>
-#include <random>
-
-#include <benchmark/benchmark.h>
-
-#include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/processing/operation_dispatch_ternary.hpp>
+#include <arcticdb/processing/test/benchmark_common.hpp>
 
 using namespace arcticdb;
 
