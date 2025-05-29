@@ -458,6 +458,20 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(lmdb_version_store_v1
     generic_filter_test(lib, symbol, q, expected)
 
 
+def test_abc(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_filter_numeric_membership_mixing_int64_and_uint64"
+    signed = np.int32(-1)
+    df, vals = pd.DataFrame({"a": [_uint64_max]}), [signed]
+    lib.write(symbol, df)
+
+    q = QueryBuilder()
+    # vals = ["abc"]
+    q = q[q["a"].isin(vals)]
+    expected = df[df["a"].isin(vals)]
+    generic_filter_test(lib, symbol, q, expected)
+
+
 def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_filter_nones_and_nans_retained_in_string_column"

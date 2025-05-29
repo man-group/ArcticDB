@@ -232,6 +232,14 @@ class ExpressionNode:
 
     def notnull(self):
         return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
+    
+    def regex_match(self, pattern: str):
+        if isinstance(pattern, str):
+            return self._apply(pattern, _OperationType.REGEX_MATCH)
+        else:
+            raise ArcticNativeException(
+                f"'regex_match' filtering only accepts str as pattern, {type(pattern)} is given"
+            )
 
     def __str__(self):
         return self.get_name()

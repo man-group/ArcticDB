@@ -159,6 +159,8 @@ VariantData dispatch_binary(const VariantData& left, const VariantData& right, O
             return visit_binary_membership(left, right, IsInOperator{});
         case OperationType::ISNOTIN:
             return visit_binary_membership(left, right, IsNotInOperator{});
+        case OperationType::REGEX_MATCH:
+            return visit_regex_match_membership(left, right, IsRegexMatchOperator{});
         case OperationType::AND:
         case OperationType::OR:
         case OperationType::XOR:

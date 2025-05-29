@@ -135,6 +135,20 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
 }
 
 template<typename Func>
+VariantData visit_regex_match_membership(const VariantData &left, const VariantData &right, Func &&func) {
+    if (std::holds_alternative<EmptyResult>(left))
+        return EmptyResult{};
+}
+
+template <typename Func>
+VariantData regex_match_comparator(const ColumnWithStrings& left, const ColumnWithStrings& right, Func&& func) {
+    if (is_empty_type(left.column_->type().data_type()) || is_empty_type(right.column_->type().data_type())) {
+        return EmptyResult{};
+    }
+    return EmptyResult{};
+}
+
+template<typename Func>
 VariantData visit_binary_membership(const VariantData &left, const VariantData &right, Func &&func) {
     if (std::holds_alternative<EmptyResult>(left))
         return EmptyResult{};

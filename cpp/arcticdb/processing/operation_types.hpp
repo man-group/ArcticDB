@@ -43,6 +43,7 @@ enum class OperationType : uint8_t {
     GE,
     ISIN,
     ISNOTIN,
+    REGEX_MATCH,
     // Boolean
     AND,
     OR,
@@ -72,6 +73,7 @@ inline std::string_view operation_type_to_str(const OperationType ot) {
         TO_STR(GE)
         TO_STR(ISIN)
         TO_STR(ISNOTIN)
+        TO_STR(REGEX_MATCH)
         TO_STR(AND)
         TO_STR(OR)
         TO_STR(XOR)
@@ -610,6 +612,13 @@ bool operator()(T t, const ankerl::unordered_dense::set<U>& u) const {
     return !u.contains(t);
 }
 #endif
+};
+
+struct IsRegexMatchOperator: MembershipOperator {
+    template<typename T, typename U>
+    bool operator()(T t, U u) const {
+        return true;
+    }
 };
 
 } //namespace arcticdb
