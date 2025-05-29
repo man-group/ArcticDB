@@ -108,10 +108,11 @@ class ChunkedBufferImpl {
 
     void reserve(size_t size) {
         if(size > 0) {
-            if (size > DefaultBlockSize) {
+//            if (size > DefaultBlockSize) {
                 handle_transition_to_irregular();
-            }
-            add_block(std::max(size, DefaultBlockSize), 0UL);
+//            }
+//            add_block(std::max(size, DefaultBlockSize), 0UL);
+            add_block(size, 0UL);
         }
     }
 
