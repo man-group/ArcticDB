@@ -3146,7 +3146,7 @@
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read": {
-        "code": "class AWSReadWrite:\n    def peakmem_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def peakmem_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read",
         "param_names": [
             "num_rows"
@@ -3157,14 +3157,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e04deb54f97f7355dce0b38a876194a40e7b5e7958bd73f8c0b3b8bf4622dc03"
+        "version": "c436e3cebb9a81f0da0811660379af68f7e37386ff7308f0335b8da2aa7c7a39"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_column_float": {
-        "code": "class AWSReadWrite:\n    def peakmem_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_column_float",
         "param_names": [
             "num_rows"
@@ -3175,14 +3175,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "bf0ea11770889a9223dda5c33febc4ea4c6ff36604343c675f29ba0b13b53289"
+        "version": "02c7dc5d307f2a51c5c0b06a6eabcb995d6d1c7284e7ec13b5ddd1c09708a429"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_columns_all_types": {
-        "code": "class AWSReadWrite:\n    def peakmem_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_columns_all_types",
         "param_names": [
             "num_rows"
@@ -3193,14 +3193,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b683f55556760bbd1654f15ac849af6cc72f67f39b4be34b72afd0cc5524f267"
+        "version": "4af1848b410358f8cc6a84f19959da413af1fbd26739f1b4d6a876cd7a57c5b7"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_date_ranges_last20_percent_rows": {
-        "code": "class AWSReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_date_ranges_last20_percent_rows",
         "param_names": [
             "num_rows"
@@ -3211,14 +3211,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "afa6a9dc69fd66ce92c34dd1a95b31a1af5a82482ed0701348d6bfb1217e8f14"
+        "version": "ef4141674082ac8b2539a30b0e9a53a81e4458a1c192321b3bfdf29db9c868ed"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_write": {
-        "code": "class AWSReadWrite:\n    def peakmem_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def peakmem_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_write",
         "param_names": [
             "num_rows"
@@ -3229,14 +3229,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b836fd861807b978ecfa16ed82b1444140cdbf6697d20e1b45f6647ac1cc2a01"
+        "version": "9c41826c7b163079c17f035e99fb37dbf2471634d90085fcd2928df708e9bd3d"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_write_staged": {
-        "code": "class AWSReadWrite:\n    def peakmem_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def peakmem_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_write_staged",
         "param_names": [
             "num_rows"
@@ -3247,14 +3247,14 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "dd3bd3c0421edc9a119028b6f8f9e2cd96571c59e661e835e1c6510ce132bf31"
+        "version": "90a4460ed2b4d12a11059e084c3efe87adb2366c7e55596815d0bc2ca74b747d"
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read": {
-        "code": "class AWSReadWrite:\n    def time_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def time_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWriteWithQueryStats.time_read",
         "number": 3,
@@ -3270,15 +3270,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "5042dbf390b29cf223f45b6297294f0b3fa23ab947819b8b8e1f1a4380430103",
+        "version": "7ab370d9454e103f9ef11d6c481538b2314cfb39f221a9876dcb5bf8e2033c1d",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read_with_column_float": {
-        "code": "class AWSReadWrite:\n    def time_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def time_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWriteWithQueryStats.time_read_with_column_float",
         "number": 3,
@@ -3294,15 +3294,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "516c7862ab3387010b73b6778ff1b6b8b941d0ab066ebdcb6fce5327a5aa0bf8",
+        "version": "eae3999ef9fe535a1dd71e5a571f4bbf892ef27337268460793a46c29fea403b",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read_with_columns_all_types": {
-        "code": "class AWSReadWrite:\n    def time_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def time_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWriteWithQueryStats.time_read_with_columns_all_types",
         "number": 3,
@@ -3318,15 +3318,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "bb665886ad396ed459c4de4aba8c6f986c880c6bc541eba7361d2fab796e497e",
+        "version": "abff3f4f32ff85e3ae873c4e701c961fca54d13bae9851625a65917cecbf631c",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read_with_date_ranges_last20_percent_rows": {
-        "code": "class AWSReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWriteWithQueryStats.time_read_with_date_ranges_last20_percent_rows",
         "number": 3,
@@ -3342,15 +3342,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d9918245c875aa857f83a392ed8d5e1e91c114cea99e59eb7fc5c303f772b1d1",
+        "version": "0f07e42a90f202d418f80a62b50d8c28916810a1540a61e9db1a823d22a61c78",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_write": {
-        "code": "class AWSReadWrite:\n    def time_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def time_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWriteWithQueryStats.time_write",
         "number": 3,
@@ -3366,15 +3366,15 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d99d3dc5331075af38f297839fe4c1299116465c5f997433c219857f9de18f94",
+        "version": "a0ce089ee4c17531d1d4f271f01713c7f568eb7e78bdb3e41a4bb828fcf7baac",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_write_staged": {
-        "code": "class AWSReadWrite:\n    def time_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\nclass AWSReadWrite:\n    def setup_cache(self):\n        '''\n        In setup_cache we only populate the persistent libraries if they are missing.\n        '''\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info() # Logs info about ArcticURI - do always use last",
+        "code": "class AWSReadWrite:\n    def time_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, storage_info, num_rows):\n        super().setup(storage_info, num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
         "min_run_count": 1,
         "name": "real_read_write.AWSReadWriteWithQueryStats.time_write_staged",
         "number": 3,
@@ -3390,11 +3390,11 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:78",
+        "setup_cache_key": "real_read_write:227",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "a723bc4acf1b0a76bbfdb64b8416664fbac5d464cc249338e55ea3e81c6b4b07",
+        "version": "acc182e6280c764bd0ab18c6d3197f692d694d2126e44fd457383394f344a410",
         "warmup_time": 0
     },
     "real_read_write.AWSWideDataFrameTests.peakmem_read": {
