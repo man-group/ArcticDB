@@ -192,6 +192,52 @@ def test_data_directly_msgpackable(basic_store):
     assert basic_store.get_info("s")["type"] == "pickled"
 
 
+def test_data_that_can_be_serialized_already(lmdb_version_store_v1):
+    """Check that we save data normally when possible even if `recursive_normalizers` is True`"""
+    # Given
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": [0]})
+
+    # When
+    lib.write("sym", df, recursive_normalizers=True)
+
+    # Then
+    assert lib.get_info("sym")["type"] == "pandasdf"
+    assert_frame_equal(lib.read("sym").data, df)
+    lt = lib.library_tool()
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
+
+
+@pytest.mark.parametrize("pickle_on_failure", (True, False))
+@pytest.mark.parametrize("type", ("dict", "list"))
+def test_recursive_normalizers_not_set(lmdb_version_store_v1, type, pickle_on_failure):
+    """Check what happens when we need recursive normalizers but it is not set."""
+    # Given
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": [0]})
+    if type == "dict":
+        data = {"key": df}
+    else:
+        assert type == "list"
+        data = [df]
+
+    # When
+    lib.write("sym", data, recursive_normalizers=False, pickle_on_failure=pickle_on_failure)
+
+    # Then
+    assert lib.get_info("sym")["type"] == "pickled"  # pickle_on_failure=False not respected: Monday 8083916814
+
+    result = lib.read("sym").data
+    if type == "dict":
+        assert_frame_equal(result["key"], df)
+    else:
+        assert len(result) == 1
+        assert_frame_equal(result[0], df)
+
+    lt = lib.library_tool()
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
+
+
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
 @pytest.mark.storage
 def test_really_large_symbol_for_recursive_data(basic_store, read):
