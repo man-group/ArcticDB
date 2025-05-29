@@ -18,6 +18,8 @@ struct FrameAndDescriptor;
 struct DecodePathData;
 class Column;
 
+std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::string_view name);
+
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment);
 
 std::vector<std::string> names_from_segment(const SegmentInMemory& segment);

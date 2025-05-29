@@ -37,7 +37,7 @@ sparrow::primitive_array<T> create_primitive_array(
 }
 
 template <>
-sparrow::primitive_array<bool> create_primitive_array(
+inline sparrow::primitive_array<bool> create_primitive_array(
         bool* data_ptr,
         size_t data_size,
         std::optional<sparrow::validity_bitmap>& validity_bitmap) {

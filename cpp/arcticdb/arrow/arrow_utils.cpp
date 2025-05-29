@@ -10,10 +10,12 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 
 #include <sparrow/record_batch.hpp>
+#include <span>
 
 namespace arcticdb {
 
-void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>& vec, std::string_view name) {
+std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::string_view name) {
+    std::vector<sparrow::array> vec;
     auto column_data = column.data();
     vec.reserve(column.num_blocks());
 
@@ -28,6 +30,7 @@ void arrow_arrays_from_column(const Column& column, std::vector<sparrow::array>&
             }
         }
     });
+    return vec;
 }
 
 std::vector<std::string> names_from_segment(const SegmentInMemory& segment) {
@@ -53,11 +56,10 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
     util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
     for (auto i = 0UL; i < num_columns; ++i) {
-        std::vector<sparrow::array> column_arrays;
         auto& column = segment.column(static_cast<position_t>(i));
         util::check(column.num_blocks() == column_blocks, "Non-standard column block number: {} != {}", column.num_blocks(), column_blocks);
 
-        arrow_arrays_from_column(column, column_arrays, segment.field(i).name());
+        auto column_arrays = arrow_arrays_from_column(column, segment.field(i).name());
 
         for(auto block_idx = 0UL; block_idx < column_blocks; ++block_idx) {
             util::check(block_idx < output->size(), "Block index overflow {} > {}", block_idx, output->size());
