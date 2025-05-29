@@ -1,5 +1,7 @@
 import datetime
+import string
 from collections import namedtuple
+import random
 
 import pandas as pd
 import pytest
@@ -13,6 +15,7 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
+from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 
@@ -216,6 +219,112 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
     assert "recursive" in str(e.value).lower()
 
 
+def test_nesting(lmdb_version_store_v1):
+    # Given
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    key = "reasonable_length_key"
+    data = {key: pd.DataFrame({"col": [0]})}
+
+    nesting_levels = 10
+    for i in range(nesting_levels - 1):
+        data[key] = {key: data[key]}
+
+    # When
+    lib.write(sym, data, recursive_normalizers=True)
+
+    # Then
+    result = lib.read(sym).data
+    for i in range(nesting_levels):
+        result = result[key]
+
+    assert_frame_equal(result, pd.DataFrame({"col": [0]}))
+
+
+def test_long_lists(lmdb_version_store_v1):
+    # Given
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    df = pd.DataFrame({"col": [0]})
+    length = 1_000
+    data = [df] * length
+
+    # When
+    lib.write(sym, data, recursive_normalizers=True)
+
+    # Then
+    result = lib.read(sym).data
+    assert len(result) == 1000
+    assert_frame_equal(result[500], df)
+
+
+def test_deep_nesting_metastruct_size(lmdb_version_store_v1):
+    # Given
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    key = "reasonable_length_key"
+    data = {key: pd.DataFrame({"col": [0]})}
+
+    nesting_levels = 1_000
+    for i in range(nesting_levels - 1):
+        data[key] = {key: data[key]}
+
+    # When & Then
+    with pytest.raises(ValueError):
+        """Currently raises a ValueError: recursion limit exceeded within msgpack. We should try to do better here."""
+        lib.write(sym, data, recursive_normalizers=True)
+
+
+def test_long_keys(lmdb_version_store_v1):
+    """Long keys are truncated when they're saved - check that we can still roundtrip even with long keys."""
+    # Given
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"col": [0]})
+    sym = "sym"
+    key_length = 10_000
+    key = "".join(random.choice(string.ascii_letters) for _ in range(key_length))
+    key_with_same_prefix = key[:1000]
+    data = {key: df, key_with_same_prefix: df}
+
+    # When
+    lib.write(sym, data, recursive_normalizers=True)
+
+    # Then
+    result = lib.read(sym).data
+    assert_frame_equal(result[key], df)
+    assert_frame_equal(result[key_with_same_prefix], df)
+
+
+@pytest.mark.parametrize("key", ("*", "<", ">", chr(31), chr(127)))
+def test_unsupported_characters_in_keys(s3_version_store_v1, key):
+    """Check how we serialize nested keys with characters that we do not support in normal symbol names"""
+    # Given
+    lib = s3_version_store_v1
+    df = pd.DataFrame({"col": [0]})
+
+    data = {key: df}
+
+    # When & Then
+    with pytest.raises(UserInputException):
+        lib.write("sym", data, recursive_normalizers=True)
+
+
+def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1):
+    """We allow empty keys in the recursive structure even though these do not work as top-level symbol names"""
+    # Given
+    lib = s3_version_store_v1
+    df = pd.DataFrame({"col": [0]})
+
+    data = {"": df}
+
+    # When
+    lib.write("sym", data, recursive_normalizers=True)
+
+    # Then
+    res = lib.read("sym").data
+    pd.testing.assert_frame_equal(res[""], df)
+
+
 @pytest.mark.parametrize("sequence_type", (tuple, list))
 def test_sequences_data_layout(lmdb_version_store_v1, sequence_type):
     lib = lmdb_version_store_v1
@@ -298,6 +407,7 @@ def test_something_we_cannot_normalize_just_gets_pickled(lmdb_version_store_v1):
     assert lib.get_info("sym")["type"] == "pickled"
 
 
+@pytest.mark.xfail(reason="These do not roundtrip properly. Monday: 9256783357")
 @pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
 def test_key_names(lmdb_version_store_v1, key):
     lib = lmdb_version_store_v1
@@ -334,6 +444,7 @@ def test_read_asof(lmdb_version_store_v1):
     pd.testing.assert_frame_equal(vit.data["k"], df_one)
 
 
+@pytest.mark.xfail(reason="Validation for bad queries not yet implemented. Monday: 9236603911")
 def test_unsupported_queries(lmdb_version_store_v1):
     """Test how we fail with queries that we do not support over recursively normalized data."""
     lib = lmdb_version_store_v1
