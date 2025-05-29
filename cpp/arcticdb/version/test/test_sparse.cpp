@@ -88,9 +88,9 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<uint32_t>(0, 1);
@@ -180,9 +180,9 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<uint32_t>(0, 1);
@@ -231,9 +231,9 @@ TEST_F(SparseTestStore, DenseToSparse) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
 
     ASSERT_EQ(frame.row_count(), 7);
@@ -281,7 +281,7 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     read_query->row_filter = universal_range();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();
+    const auto& frame = std::get<PandasOutputFrame>(read_result.frame_data).frame();
     apply_global_refcounts(handler_data, OutputFormat::PANDAS);
 
     ASSERT_EQ(frame.row_count(), 2);
@@ -334,9 +334,9 @@ TEST_F(SparseTestStore, Multiblock) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
@@ -387,9 +387,9 @@ TEST_F(SparseTestStore, Segment) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
@@ -447,9 +447,9 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), num_rows);
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -508,9 +508,9 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     read_query->columns = {"time", "first"};
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
     ASSERT_EQ(frame.row_count(), num_rows);
     ASSERT_EQ(frame.descriptor().field_count(), 2);
 
@@ -564,9 +564,9 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = IndexRange(timestamp{3000}, timestamp{6999});
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), 4000);
     for(size_t i = 0; i < frame.row_count(); i += 2) {
@@ -618,9 +618,9 @@ TEST_F(SparseTestStore, Compact) {
     auto read_query = std::make_shared<ReadQuery>();
     read_query->row_filter = universal_range();
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();
+    const auto& frame = std::get<PandasOutputFrame>(read_result.frame_data).frame();
 
     ASSERT_EQ(frame.row_count(), num_rows);
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -679,7 +679,7 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, VersionQuery{}, read_query, read_options, handler_data);
     apply_global_refcounts(handler_data, OutputFormat::PANDAS);
-    const auto& frame = read_result.frame_data.frame();
+    const auto& frame = std::get<PandasOutputFrame>(read_result.frame_data).frame();
     ASSERT_EQ(frame.row_count(), num_rows);
 
     for(size_t i = 0; i < num_rows; i += 2) {

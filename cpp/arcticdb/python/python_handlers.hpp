@@ -10,6 +10,7 @@
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
+#include <arcticdb/arrow/arrow_handlers.hpp>
 
 // Handlers for various non-trivial Python types,
 // that conform to the interface ITypeHandler
