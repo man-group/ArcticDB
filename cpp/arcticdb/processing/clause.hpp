@@ -360,7 +360,7 @@ struct AggregationClause {
 
 template<ResampleBoundary closed_boundary>
 struct ResampleClause {
-    using BucketGeneratorT = std::function<std::vector<timestamp>(timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, const ResampleOrigin&)>;
+    using BucketGeneratorT = std::function<std::vector<timestamp>(timestamp, timestamp, timestamp, ResampleBoundary, timestamp, const ResampleOrigin&)>;
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     ProcessingConfig processing_config_;
@@ -375,6 +375,7 @@ struct ResampleClause {
     std::string str_;
     timestamp offset_;
     ResampleOrigin origin_;
+    timestamp step_;
 
     ResampleClause() = delete;
 
@@ -384,7 +385,8 @@ struct ResampleClause {
         ResampleBoundary label_boundary,
         BucketGeneratorT&& generate_bucket_boundaries,
         timestamp offset,
-        ResampleOrigin origin);
+        ResampleOrigin origin,
+        timestamp step);
 
     [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
             std::vector<RangesAndKey>& ranges_and_keys);

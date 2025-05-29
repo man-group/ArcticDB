@@ -102,10 +102,15 @@ requires std::integral<T>
     }
 }
 
+static timestamp rule_to_ns(std::string_view rule) {
+    py::gil_scoped_acquire acquire_gil;
+    return python_util::pd_to_offset(rule);
+}
+
 std::vector<timestamp> generate_buckets(
     timestamp start,
     timestamp end,
-    std::string_view rule,
+    timestamp rule_ns,
     ResampleBoundary closed_boundary_arg,
     timestamp offset,
     const ResampleOrigin& origin
@@ -114,10 +119,6 @@ std::vector<timestamp> generate_buckets(
     if (end < start) {
         return {};
     }
-    const timestamp rule_ns = [](std::string_view rule) {
-        py::gil_scoped_acquire acquire_gil;
-        return python_util::pd_to_offset(rule);
-    }(rule);
     const auto [start_with_offset, end_with_offset] = compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset, origin);
     const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns + 1;
     std::vector<timestamp> res;
@@ -133,7 +134,8 @@ void declare_resample_clause(py::module& version) {
     const char* class_name = closed_boundary == ResampleBoundary::LEFT ? "ResampleClauseLeftClosed" : "ResampleClauseRightClosed";
     py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name)
             .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset, ResampleOrigin origin){
-                return ResampleClause<closed_boundary>(std::move(rule), label_boundary, generate_buckets, offset, std::move(origin));
+                timestamp rule_ns = rule_to_ns(rule);
+                return ResampleClause<closed_boundary>(std::move(rule), label_boundary, generate_buckets, offset, std::move(origin), rule_ns);
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,

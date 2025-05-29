@@ -553,12 +553,14 @@ ResampleClause<closed_boundary>::ResampleClause(std::string rule,
     ResampleBoundary label_boundary,
     BucketGeneratorT&& generate_bucket_boundaries,
     timestamp offset,
-    ResampleOrigin origin) :
+    ResampleOrigin origin,
+    timestamp step) :
     rule_(std::move(rule)),
     label_boundary_(label_boundary),
     generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
     offset_(offset),
-    origin_(std::move(origin)) {
+    origin_(std::move(origin)),
+    step_(step) {
     clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.index_ = KeepCurrentTopLevelIndex();
@@ -699,7 +701,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
         date_range_ = index_range;
     }
 
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, step_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         ranges_and_keys.clear();
         return {};
@@ -730,7 +732,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     }
 
     date_range_ = std::make_optional<TimestampRange>(min_start_ts, max_end_ts);
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, step_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
@@ -834,8 +836,18 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                                 }
             );
         }
-        auto aggregated_column = std::make_shared<Column>(aggregator.aggregate(input_index_columns, input_agg_columns, bucket_boundaries, *output_index_column, string_pool));
-        seg.add_column(scalar_field(aggregated_column->type().data_type(), aggregator.get_output_column_name().value), aggregated_column);
+        std::optional<Column> aggregated = aggregator.aggregate(
+            input_index_columns,
+            input_agg_columns,
+            bucket_boundaries,
+            *output_index_column,
+            string_pool,
+            label_boundary_,
+            step_
+        );
+        if (aggregated) {
+            seg.add_column(scalar_field(aggregated->type().data_type(), aggregator.get_output_column_name().value), std::make_shared<Column>(std::move(aggregated).value()));
+        }
     }
     seg.set_row_data(output_index_column->row_count() - 1);
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg), std::move(output_row_range), std::move(output_col_range)));

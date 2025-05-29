@@ -882,16 +882,18 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
 
 
 def generic_resample_test(
-    lib,
-    sym,
-    rule,
-    aggregations,
-    date_range=None,
-    closed=None,
-    label=None,
-    offset=None,
-    origin=None,
-    drop_empty_buckets_for=None,
+        lib,
+        sym,
+        rule,
+        aggregations,
+        data,
+        expected_types,
+        date_range=None,
+        closed=None,
+        label=None,
+        offset=None,
+        origin=None,
+        drop_empty_buckets_for=None
 ):
     """
     Perform a resampling in ArcticDB and compare it against the same query in Pandas.
@@ -903,7 +905,7 @@ def generic_resample_test(
     but it cannot take parameters such as origin and offset.
     """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
-    original_data = lib.read(sym, date_range=date_range).data
+    original_data = data if date_range is None else data.loc[date_range[0]:date_range[-1]]
     # Pandas 1.X needs None as the first argument to agg with named aggregators
 
     pandas_aggregations = (
@@ -926,6 +928,12 @@ def generic_resample_test(
         expected.drop(columns=["_bucket_size_"], inplace=True)
     expected = expected.reindex(columns=sorted(expected.columns))
 
+
+    for name, dtype in expected_types.items():
+        if pd.api.types.is_integer_dtype(dtype):
+            expected[name] = expected[name].fillna(0)
+    expected.astype(expected_types)
+
     q = QueryBuilder()
     if origin:
         q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
@@ -935,10 +943,16 @@ def generic_resample_test(
     received = received.reindex(columns=sorted(received.columns))
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
+
+    print("\nExpected\n")
+    print(expected)
+    print("\nActual\n")
+    print(received)
+
     if has_float_column:
         assert_dfs_approximate(expected, received)
     else:
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal(expected, received)
 
 
 def equals(x, y):
@@ -973,3 +987,49 @@ def common_sum_aggregation_dtype(left, right):
         return np.int64
     else:
         return np.float64
+
+def largest_numeric_type(dtype):
+    if pd.api.types.is_float_dtype(dtype):
+        return np.float64
+    elif pd.api.types.is_signed_integer_dtype(dtype):
+        return np.int64
+    elif pd.api.types.is_unsigned_integer_dtype(dtype):
+        return np.uint64
+    return dtype
+
+def larget_common_type(left, right):
+    if left is None or right is None:
+        return None
+    if left == right:
+        return left
+    if pd.api.types.is_float_dtype(left):
+        if pd.api.types.is_float_dtype(right):
+            return left if left.itemsize > right.itemsize else right
+        elif pd.api.types.is_integer_dtype(right):
+            return left
+        return None
+    elif pd.api.types.is_signed_integer_dtype(left):
+        if pd.api.types.is_float_dtype(right):
+            return right
+        elif pd.api.types.is_signed_integer_dtype(right):
+            return left if left.itemsize > right.itemsize else right
+        elif pd.api.types.is_unsigned_integer_dtype(right):
+            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
+            if right.itemsize >= 8:
+                return None
+            elif left.itemsize > right.itemsize:
+                return left
+            return int_dtypes[right.itemsize * 2]
+    elif pd.api.types.is_unsigned_integer_dtype(left):
+        if pd.api.types.is_float_dtype(right):
+            return right
+        elif pd.api.types.is_unsigned_integer_dtype(right):
+            return left if left.itemsize > right.itemsize else right
+        elif pd.api.types.is_signed_integer_dtype(left):
+            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
+            if left.itemsize >= 8:
+                return None
+            elif right.itemsize > left.itemsize:
+                return right
+            return int_dtypes[left.itemsize * 2]
+    return None

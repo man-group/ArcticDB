@@ -95,52 +95,6 @@ def test_aggregation_strings(lmdb_version_store_v1, df):
 # DYNAMIC SCHEMA TESTS FROM HERE #
 ##################################
 
-def largest_numeric_type(dtype):
-    if pd.api.types.is_float_dtype(dtype):
-        return np.float64
-    elif pd.api.types.is_signed_integer_dtype(dtype):
-        return np.int64
-    elif pd.api.types.is_unsigned_integer_dtype(dtype):
-        return np.uint64
-    return dtype
-
-def larget_common_type(left, right):
-    if left is None or right is None:
-        return None
-    if left == right:
-        return left
-    if pd.api.types.is_float_dtype(left):
-        if pd.api.types.is_float_dtype(right):
-            return left if left.itemsize > right.itemsize else right
-        elif pd.api.types.is_integer_dtype(right):
-            return left
-        return None
-    elif pd.api.types.is_signed_integer_dtype(left):
-        if pd.api.types.is_float_dtype(right):
-            return right
-        elif pd.api.types.is_signed_integer_dtype(right):
-            return left if left.itemsize > right.itemsize else right
-        elif pd.api.types.is_unsigned_integer_dtype(right):
-            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
-            if right.itemsize >= 8:
-                return None
-            elif left.itemsize > right.itemsize:
-                return left
-            return int_dtypes[right.itemsize * 2]
-    elif pd.api.types.is_unsigned_integer_dtype(left):
-        if pd.api.types.is_float_dtype(right):
-            return right
-        elif pd.api.types.is_unsigned_integer_dtype(right):
-            return left if left.itemsize > right.itemsize else right
-        elif pd.api.types.is_signed_integer_dtype(left):
-            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
-            if left.itemsize >= 8:
-                return None
-            elif right.itemsize > left.itemsize:
-                return right
-            return int_dtypes[left.itemsize * 2]
-    return None
-
 @st.composite
 def aggregation_dataframe_strategy(draw):
     include_grouping = draw(st.booleans())
