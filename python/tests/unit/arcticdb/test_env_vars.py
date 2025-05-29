@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 
 from unittest.mock import patch
-from arcticdb.tools import set_config_from_env_vars, _ARCTICDB_ENV_VAR_PREFIX
+from arcticdb.tools import set_config_from_env_vars, _ARCTICDB_ENV_VAR_PREFIX, _ARCTIC_NATIVE_ENV_VAR_PREFIX
 
 _MODULE = set_config_from_env_vars.__module__  # Insulate the tests from any move of the function
 
@@ -21,9 +21,10 @@ def mocks():
             yield {int: s_int, float: s_double, str: s_str}
 
 
+@pytest.mark.parametrize("prefix", [_ARCTICDB_ENV_VAR_PREFIX, _ARCTIC_NATIVE_ENV_VAR_PREFIX])
 @pytest.mark.parametrize("key, value", [("a_int", 42), ("a_float", 3.14), ("a_str", "text"), ("without_suffix", "xx")])
-def test_get_normal(key, value, mocks):
-    set_config_from_env_vars({_ARCTICDB_ENV_VAR_PREFIX + key: str(value)})
+def test_get_normal(prefix, key, value, mocks):
+    set_config_from_env_vars({prefix + key: str(value)})
     for typ, setter in mocks.items():
         if typ is type(value):
             setter.assert_called_with("a".upper() if key.startswith("a_") else "without.suffix".upper(), value)
