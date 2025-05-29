@@ -935,7 +935,7 @@ void PythonVersionStore::delete_versions(
     const std::vector<VersionId>& version_ids) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_versions");
     if (version_ids.empty()) {
-        log::version().warn("No version ids passed for delete_versions for stream {}, skipping", stream_id);
+        log::version().info("No version ids passed for delete_versions for stream {}, skipping", stream_id);
         return;
     }
 

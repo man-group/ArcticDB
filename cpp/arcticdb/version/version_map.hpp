@@ -575,12 +575,22 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
-        auto tombstone_key = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
-        write_symbol_ref(store, tombstone_key, std::nullopt, entry->head_.value());
-        return tombstone_key;
+        auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
+        write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
+        if(log_changes_) {
+            if (should_log_individual_tombstones) {
+                for (const auto& key : tombstones) {
+                    log_tombstone(store, stream_id, key.version_id());
+                }
+            } else {
+                log_tombstone(store, stream_id, tombstone_version_id);
+            }
+        }
+        
+        return tombstone_keys.front();
     }
 
-    AtomKey write_tombstones_internal(
+    std::vector<AtomKey> write_tombstones_internal(
             std::shared_ptr<Store> store,
             const std::vector<AtomKey>& keys,
             const StreamId& stream_id,
@@ -612,17 +622,8 @@ public:
             entry->tombstones_.try_emplace(key.version_id(), key);
         }
         maybe_invalidate_cached_undeleted(*entry);
-        if(log_changes_) {
-            if (should_log_individual_tombstones) {
-                for (const auto& key : tombstones) {
-                    log_tombstone(store, stream_id, key.version_id());
-                }
-            } else {
-                log_tombstone(store, stream_id, tombstone_version_id);
-            }
-        }
 
-        return tombstones.front();
+        return tombstones;
     }
 
     void remove_entry_version_keys(
