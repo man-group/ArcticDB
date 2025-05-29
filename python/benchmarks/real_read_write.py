@@ -212,8 +212,7 @@ class AWSReadWriteWithQueryStats(AWSReadWrite):
     min_run_count = 1
     warmup_time = 0
     timeout = 1200
-    param_names = ["num_rows"]
-    params = [1_000_000, 2_000_000]
+    num_rows = 2_000_000
 
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE_QUERY_STATS")
 
@@ -226,7 +225,7 @@ class AWSReadWriteWithQueryStats(AWSReadWrite):
         
     def setup_cache(self):
        super().setup_cache()
-       
+
     def setup(self, storage_info, num_rows):
         super().setup(storage_info, num_rows)
         qs.enable()
