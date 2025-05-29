@@ -575,6 +575,7 @@ public:
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
+        static const bool should_log_individual_tombstones = ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
         auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
         write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
         if(log_changes_) {
@@ -596,7 +597,6 @@ public:
             const StreamId& stream_id,
             const std::shared_ptr<VersionMapEntry>& entry,
             const std::optional<timestamp>& creation_ts=std::nullopt) {
-        static const bool should_log_individual_tombstones = ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(keys.size() > 0, "No version ids to write tombstone for");
         if (validate_)
             entry->validate();
