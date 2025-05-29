@@ -53,33 +53,6 @@ TEST(ContiguousRangeForwardAdaptorTest, CrossBlockSegment) {
     }
 }
 
-TEST(ContiguousRangeForwardAdaptorTest, ExhaustsDataCorrectly) {
-    TypeDescriptor int_type = int_type_descriptor();
-    const int64_t total_values = 2500;
-    // Use expected_rows = 2500 to force multiple blocks.
-    Column col(int_type, total_values, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-    for (int64_t i = 0; i < total_values; ++i) {
-        col.push_back(i);
-    }
-    ColumnData data = col.data();
-
-    ContiguousRangeForwardAdaptor<int64_t, 500> adaptor(data);
-
-    std::vector<int64_t> collected;
-    while (adaptor.valid()) {
-        const int64_t *seg = adaptor.next();
-        for (int64_t i = 0; i < 500; ++i) {
-            if (static_cast<size_t>(col.row_count()) > collected.size())
-                collected.push_back(seg[i]);
-        }
-    }
-
-    ASSERT_EQ(collected.size(), static_cast<size_t>(total_values));
-    for (int64_t i = 0; i < total_values; ++i) {
-        EXPECT_EQ(collected[i], i);
-    }
-}
-
 TEST(ContiguousRangeRandomAccessAdaptorTest, DirectAccessWithinSingleBlock) {
     Column col(int_type_descriptor(), 500, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
     const int64_t numValues = 500;

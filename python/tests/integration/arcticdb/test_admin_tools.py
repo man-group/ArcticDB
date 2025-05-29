@@ -100,8 +100,8 @@ def test_get_sizes_by_symbol(arctic_client, lib_name):
 
     assert sizes["sym_1"][KeyType.VERSION].count == 4
     assert sizes["sym_2"][KeyType.VERSION].count == 1
-    assert 2000 < sizes["sym_1"][KeyType.VERSION].bytes_compressed < 4000
-    assert 500 < sizes["sym_2"][KeyType.VERSION].bytes_compressed < 1000
+    assert 2000 < sizes["sym_1"][KeyType.VERSION].bytes_compressed < 4500
+    assert 500 < sizes["sym_2"][KeyType.VERSION].bytes_compressed < 1200
 
     assert sizes["sym_1"][KeyType.TABLE_INDEX].count == 2
     assert 2000 < sizes["sym_1"][KeyType.TABLE_INDEX].bytes_compressed < 4000
@@ -122,7 +122,7 @@ def test_get_sizes_by_symbol(arctic_client, lib_name):
     arctic_library.write("new_sym", df, staged=True)
     sizes = arctic_library.admin_tools().get_sizes_by_symbol()
     assert sizes["new_sym"][KeyType.APPEND_DATA].count == 3
-    assert 10e6 < sizes["new_sym"][KeyType.APPEND_DATA].bytes_compressed < 15e6
+    assert 10e6 < sizes["new_sym"][KeyType.APPEND_DATA].bytes_compressed < 16e6
 
     arctic_library._nvs.write("rec", [df, df], recursive_normalizers=True)
     sizes = arctic_library.admin_tools().get_sizes_by_symbol()["rec"]

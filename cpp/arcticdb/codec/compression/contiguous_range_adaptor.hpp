@@ -63,12 +63,13 @@ struct ContiguousRangeForwardAdaptor {
 
     const T* next() {
         util::check(block_.has_value(), "Block not set in forward adaptor");
-        if(first_) {
-            first_ = false;
-            return current();
-        }
+        //if(first_) {
+        //    first_ = false;
+        //    return current();
+        //}
 
         if(block().bytes() >= block_pos_ + t_size(size)) {
+            ARCTICDB_DEBUG(log::codec(), "Returning {} bytes at position {} block {}", t_size(size), block_pos_, block_num_);
             block_pos_ += t_size(size);
             return current();
         }
@@ -76,9 +77,10 @@ struct ContiguousRangeForwardAdaptor {
         auto required = size;
         size_t dest_offset = 0;
         while(required > 0) {
-            if(block().bytes() > t_size(block_pos_)) {
+            if(block().bytes() > block_pos_) {
                 const auto bytes_available = block().bytes() - block_pos_;
                 const auto bytes_to_copy = std::min(bytes_available, t_size(required));
+                ARCTICDB_DEBUG(log::codec(), "Copying {} bytes at position {} block {}", bytes_to_copy, block_pos_, block_num_);
                 memcpy(buffer_.data() + dest_offset, current(), bytes_to_copy);
                 required -= rows(bytes_to_copy);
                 dest_offset += rows(bytes_to_copy);

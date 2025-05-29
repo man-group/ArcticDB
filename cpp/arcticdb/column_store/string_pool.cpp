@@ -36,9 +36,12 @@ StringBlock StringBlock::clone() const {
 InsertResult StringBlock::insert(const char *str, size_t size) {
     auto bytes_required = StringHead::calc_size(size);
     auto ptr = data_.ensure_aligned_bytes(bytes_required);
-    reinterpret_cast<StringHead*>(ptr)->copy(str, size);
+    auto head = reinterpret_cast<StringHead*>(ptr);
+    head->copy(str, size);
     data_.commit();
-    return {.pos_=static_cast<position_t>(data_.cursor_pos() - bytes_required), .ptr_=ptr};
+    return {
+        .pos_=static_cast<position_t>(data_.cursor_pos() - bytes_required),
+        .ptr_=reinterpret_cast<uint8_t*>(head->data())};
 }
 
 std::string_view StringBlock::at(position_t pos) {
@@ -151,8 +154,7 @@ OffsetString StringPool::get(std::string_view s, bool deduplicate) {
     OffsetString str(result.pos_, this);
 
     if(deduplicate) {
-        //map_.insert(std::make_pair(StringType(reinterpret_cast<const char *>(result.ptr_), s.size()), str.offset()));
-        map_.insert(std::make_pair(block_.at(str.offset()), str.offset()));
+        map_.insert(std::make_pair(StringType(reinterpret_cast<const char *>(result.ptr_), s.size()), str.offset()));
     }
     return str;
 }

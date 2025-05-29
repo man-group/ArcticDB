@@ -24,12 +24,12 @@
 
 namespace arcticdb {
 
-struct ARCTICDB_PACKED DeltaSize {
+struct DeltaSize {
     uint32_t num_rows_;
 };
 
 template<typename T>
-struct ARCTICDB_PACKED DeltaHeader : public DeltaSize {
+struct DeltaHeader : public DeltaSize {
     using h = Helper<T>;
 
     uint32_t bit_width_;
