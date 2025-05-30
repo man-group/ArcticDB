@@ -9,6 +9,15 @@ import collections
 import hashlib
 import msgpack
 
+from arcticdb.exceptions import DataTooNestedException
+
+try:
+    from msgpack.fallback import DEFAULT_RECURSE_LIMIT
+except ImportError:
+    # The default as of msgpack 1.1.0 - handle the import error in case the msgpack wheel stops exporting this constant.
+    # Want to keep compatibility with a wide range of msgpack versions.
+    DEFAULT_RECURSE_LIMIT = 511
+
 from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer
@@ -129,7 +138,14 @@ class Flattener:
 
         return False
 
-    def _create_meta_structure(self, obj, sym, to_write):
+    def _create_meta_structure(self, obj, sym, to_write, depth=0, original_symbol=None):
+        if original_symbol is None:
+            original_symbol = sym  # just used for error messages
+
+        if depth > DEFAULT_RECURSE_LIMIT // 2:
+            raise DataTooNestedException(f"Symbol {original_symbol} cannot be recursively normalized as it contains more than "
+                                         f"{DEFAULT_RECURSE_LIMIT // 2} levels of nested dictionaries. This is a limitation of the msgpack serializer.")
+
         # Commit 450170d94 shows a non-recursive implementation of this function, but since `msgpack.packb` of the
         # result is itself recursive, there is little point to rewriting this function.
         item_type, iterables, normalization_info = self.derive_iterables(obj)
@@ -162,7 +178,8 @@ class Flattener:
             # Note: It's fine to not worry about the separator given we just use it to form some sort of vaguely
             # readable name in the end when the leaf node is retrieved.
             key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str(k))
-            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write))
+            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write, depth=depth + 1,
+                                                                       original_symbol=original_symbol))
 
         return meta_struct
 
