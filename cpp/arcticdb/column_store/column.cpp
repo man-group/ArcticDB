@@ -96,8 +96,8 @@ bool operator==(const Column& left, const Column& right) {
 
             if constexpr(std::is_same_v < LeftRawType, RightRawType>) {
                 for (auto i = 0u; i < left.row_count(); ++i) {
-                    auto left_val =left.scalar_at<LeftRawType>(i);
-                    auto right_val =right.scalar_at<RightRawType>(i);
+                    auto left_val = left.scalar_at<LeftRawType>(i);
+                    auto right_val = right.scalar_at<RightRawType>(i);
                     if (left_val != right_val)
                         return false;
                 }

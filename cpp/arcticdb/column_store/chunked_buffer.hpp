@@ -44,6 +44,15 @@ class ChunkedBufferImpl {
     static_assert(DefaultBlockSize >= BlockType::MinSize);
 
   public:
+
+#ifndef DEBUG_BUILD
+    using BlockVectorType = boost::container::small_vector<BlockType *, 1>;
+    using OffsetVectorType = boost::container::small_vector<size_t, 1>;
+#else
+    using BlockVectorType = std::vector<BlockType*>;
+    using OffsetVectorType = std::vector<size_t>;
+#endif
+
     constexpr static size_t block_size = DefaultBlockSize;
 
     struct Iterator {
@@ -556,13 +565,8 @@ class ChunkedBufferImpl {
 
     size_t bytes_ = 0;
     size_t regular_sized_until_ = 0;
-#ifndef DEBUG_BUILD
-    boost::container::small_vector<BlockType *, 1> blocks_;
-    boost::container::small_vector<size_t, 1> block_offsets_;
-#else
-    std::vector<BlockType*> blocks_;
-    std::vector<size_t> block_offsets_;
-#endif
+    BlockVectorType blocks_;
+    OffsetVectorType block_offsets_;
     entity::AllocationType allocation_type_ = entity::AllocationType::DYNAMIC;
 };
 

@@ -17,12 +17,14 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/codec/scanner.hpp>
 
 namespace arcticdb::storage::file {
 
 MappedFileStorage::MappedFileStorage(const LibraryPath &lib, OpenMode mode, Config conf) :
     SingleFileStorage(lib, mode),
-    config_(std::move(conf)) {
+    config_(std::move(conf)),
+    codec_(codec::default_adaptive_codec()) {
     init();
 }
 
@@ -41,14 +43,20 @@ void MappedFileStorage::init() {
     if (config_.bytes() > 0) {
         ARCTICDB_DEBUG(log::storage(), "Creating new mapped file storage at path {}", config_.path());
         multi_segment_header_.initalize(StreamId{NumericId{0}}, config_.items_count());
-        auto multi_segment_size =  max_compressed_size_dispatch(
+        SegmentScanResults encodings;
+        if(codec_.codec_type() == Codec::ADAPTIVE)
+            encodings = get_encodings(multi_segment_header_.segment());
+
+        auto multi_segment_size = max_compressed_size_dispatch(
             multi_segment_header_.segment(),
-            config_.codec_opts(),
-            EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
+            codec_,
+            EncodingVersion{static_cast<uint16_t>(config_.encoding_version())},
+            encodings);
 
         ARCTICDB_DEBUG(log::codec(), "Estimating size as {} existing bytes plus {} + {}", config_.bytes(), multi_segment_size.max_compressed_bytes_, multi_segment_size.encoded_blocks_bytes_);
         auto data_size = config_.bytes() + multi_segment_size.max_compressed_bytes_ + multi_segment_size.encoded_blocks_bytes_;
         data_size += SegmentHeader::required_bytes(multi_segment_header_.segment());
+
         StreamId id = config_.has_str_id() ? StreamId{} : NumericId{};
         data_size += entity::max_key_size(id, index_descriptor_from_proto(config_.index()));
         data_size += sizeof(KeyData);
@@ -137,9 +145,10 @@ bool MappedFileStorage::do_fast_delete() {
 
 void MappedFileStorage::do_finalize(KeyData key_data)  {
     multi_segment_header_.sort();
-    auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(),
-                                          config_.codec_opts(),
-                                          EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
+    SegmentScanResults scan_results;
+
+    const auto encoding_version = EncodingVersion{static_cast<uint16_t>(config_.encoding_version())};
+    auto header_segment = encode_dispatch(multi_segment_header_.detach_segment(), codec_, encoding_version);
     write_segment(header_segment);
     auto* pos = file_.data() + offset_;
     memcpy(pos, &key_data, sizeof(KeyData));

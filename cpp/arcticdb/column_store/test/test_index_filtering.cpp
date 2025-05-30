@@ -8,12 +8,10 @@
 #include <gtest/gtest.h>
 
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
-#include <arcticdb/codec/codec.hpp>
 
 namespace arcticdb {
 using namespace arcticdb::pipelines;

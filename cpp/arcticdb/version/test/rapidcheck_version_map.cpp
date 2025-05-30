@@ -236,8 +236,8 @@ struct GetAllVersions : rc::state::Command<Model, MapStorePair> {
 
 RC_GTEST_PROP(VersionMap, Rapidcheck, ()) {
     VersionMapModel initial_state;
-    ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
+    ScopedIntConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0);
     auto num_symbols = *rc::gen::inRange(size_t{1}, size_t{5});
     initial_state.symbols_ = *rc::gen::container<std::vector<std::string>>(num_symbols, rc::gen::nonEmpty(rc::gen::string<std::string>()));
     MapStorePair sut(false);
@@ -258,8 +258,8 @@ RC_GTEST_PROP(VersionMap, RapidcheckTombstones, ()) {
     VersionMapTombstonesModel initial_state;
     auto num_symbols = *rc::gen::inRange(size_t{1}, size_t{5});
     initial_state.symbols_ = *rc::gen::container<std::vector<std::string>>(num_symbols, rc::gen::nonEmpty(rc::gen::string<std::string>()));
-    ScopedConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
-    ScopedConfig reload_interval("VersionMap.ReloadInterval", 0);
+    ScopedIntConfig max_blocks("VersionMap.MaxVersionBlocks", 1);
+    ScopedIntConfig reload_interval("VersionMap.ReloadInterval", 0);
     MapStorePair sut(true);
     sut.map_->set_validate(true);
     rc::state::check(initial_state,

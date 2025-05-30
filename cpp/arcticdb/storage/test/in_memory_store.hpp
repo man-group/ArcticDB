@@ -388,8 +388,8 @@ public:
     }
 
     std::vector<RemoveKeyResultType> remove_keys_sync(
-            const std::vector<entity::VariantKey>& keys,
-            storage::RemoveOpts opts) override {
+        const std::vector<entity::VariantKey>& keys,
+        storage::RemoveOpts opts) override {
         std::vector<RemoveKeyResultType> output;
         for (const auto& key : keys) {
             output.emplace_back(remove_key_sync(key, opts));
@@ -399,8 +399,8 @@ public:
     }
 
     std::vector<RemoveKeyResultType> remove_keys_sync(
-            std::vector<entity::VariantKey>&& keys,
-            storage::RemoveOpts opts) override {
+        std::vector<entity::VariantKey>&& keys,
+        storage::RemoveOpts opts) override {
         std::vector<RemoveKeyResultType> output;
         for (const auto& key : keys) {
             output.emplace_back(remove_key_sync(key, opts));
@@ -535,7 +535,7 @@ protected:
     std::recursive_mutex mutex_; // Allow iterate_type() to be re-entrant
     std::unordered_map<AtomKey, std::unique_ptr<SegmentInMemory>> seg_by_atom_key_;
     std::unordered_map<RefKey, std::unique_ptr<SegmentInMemory>> seg_by_ref_key_;
-    arcticdb::proto::encoding::VariantCodec codec_;
+    BlockCodecImpl codec_ = codec::default_lz4_codec();
 };
 
 } //namespace arcticdb
