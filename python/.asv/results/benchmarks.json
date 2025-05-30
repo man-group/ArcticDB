@@ -2929,7 +2929,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2947,7 +2947,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2965,7 +2965,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -2983,7 +2983,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3001,7 +3001,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3019,7 +3019,7 @@
                 "2000000"
             ]
         ],
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3042,7 +3042,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3066,7 +3066,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3090,7 +3090,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3114,7 +3114,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3138,7 +3138,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3162,11 +3162,263 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:77",
+        "setup_cache_key": "real_read_write:78",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
         "version": "aa2c3915c2cc65992b8d64669e2bc74ccfbd4d83469b0eb253739b11211b46be",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.peakmem_read": {
+        "code": "class AWSReadWrite:\n    def peakmem_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "bcdfc7aa551bc9ae43c6bf8dbb5ea2b9b92e03e7e6da8487ac110b302443beb4"
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_column_float": {
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_column_float",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "d8263d005135750e39a3e13bd7de6702642ec7991a7dfde787b4bdba7a47125c"
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_columns_all_types": {
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_columns_all_types",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "febc2581d6ee0495f21fe39fd5b9e139ee3784074ebef2305ea52a167d60a449"
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_date_ranges_last20_percent_rows": {
+        "code": "class AWSReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_date_ranges_last20_percent_rows",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ac2ade0b551d6e6eca41a7b098855fc013f95c1ad95a97d15fcb716a99784bca"
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.peakmem_write": {
+        "code": "class AWSReadWrite:\n    def peakmem_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_write",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "ebfae974146eb06e3015c78f663185f041fecba4f2d21265a95a0f8e0b3ed114"
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.peakmem_write_staged": {
+        "code": "class AWSReadWrite:\n    def peakmem_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "name": "real_read_write.AWSReadWriteWithQueryStats.peakmem_write_staged",
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "8e0b84e936c8b20c9ab1100d19b36f06abe0690a3d42f1a121d487556d98fa66"
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.time_read": {
+        "code": "class AWSReadWrite:\n    def time_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWriteWithQueryStats.time_read",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "02de728e3f80213fda1fc979b4aaf61786cd350dc31f266000478ce15d5c04e0",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.time_read_with_column_float": {
+        "code": "class AWSReadWrite:\n    def time_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWriteWithQueryStats.time_read_with_column_float",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "e730587e51a99d028e7438d4874d1e0b1f098b49ec2773dbabf9b06d7c562315",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.time_read_with_columns_all_types": {
+        "code": "class AWSReadWrite:\n    def time_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\",\"string10\",\"bool\", \"int64\",\"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWriteWithQueryStats.time_read_with_columns_all_types",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "69b8202ed5e2e62aefd161b99db3b55667643789c66fc99599abf2649c144ab7",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.time_read_with_date_ranges_last20_percent_rows": {
+        "code": "class AWSReadWrite:\n    def time_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWriteWithQueryStats.time_read_with_date_ranges_last20_percent_rows",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "35c60f81beba373aaf062739dc364a9835f7f7bcccd9ac4ae7187f2f97a6a0c5",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.time_write": {
+        "code": "class AWSReadWrite:\n    def time_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWriteWithQueryStats.time_write",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "dc443b21285eae3a4009ce860f6d4be6cb0164245da60aad1b63ec6fecd5d4f8",
+        "warmup_time": 0
+    },
+    "real_read_write.AWSReadWriteWithQueryStats.time_write_staged": {
+        "code": "class AWSReadWrite:\n    def time_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n       super().setup_cache()",
+        "min_run_count": 1,
+        "name": "real_read_write.AWSReadWriteWithQueryStats.time_write_staged",
+        "number": 3,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "2000000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_read_write:227",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ed3fedef28f86763035af2a64963966bf6724343de519001c9ac1a4a72d84928",
         "warmup_time": 0
     },
     "real_read_write.AWSWideDataFrameTests.peakmem_read": {
@@ -3181,7 +3433,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3199,7 +3451,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3217,7 +3469,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3235,7 +3487,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3253,7 +3505,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3271,7 +3523,7 @@
                 "30000"
             ]
         ],
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -3294,7 +3546,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3318,7 +3570,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3342,7 +3594,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3366,7 +3618,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3390,7 +3642,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -3414,7 +3666,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_read_write:198",
+        "setup_cache_key": "real_read_write:199",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
