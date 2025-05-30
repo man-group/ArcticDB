@@ -12,12 +12,16 @@
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
+#include <arcticdb/util/error_code.hpp>
 
 namespace arcticdb {
 
+// entity/serialized_key.hpp expects the symbol to be <255 chars
+constexpr size_t MAX_SYMBOL_LENGTH = std::numeric_limits<uint8_t>::max() - 1;
+
 // Verifies whether a symbol_key is valid and raises UserInputException exceptions on invalid symbol names.
 // Should be used only when writing new symbols to allow for backwards compatibility with old symbols.
-void verify_symbol_key(const StreamId &symbol_key);
+[[nodiscard]] CheckOutcome verify_symbol_key(const StreamId &symbol_key);
 
 // Does strict checks on library names and raises UserInputException if it encounters an error.
 // Should be checked only when writing new libraries to allow for backwards compatibility

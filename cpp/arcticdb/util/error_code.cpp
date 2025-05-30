@@ -27,4 +27,13 @@ ErrorCodeData get_error_code_data(ErrorCode code) {
     return ErrorCodeMap::get(static_cast<int>(code));
 }
 
+Error::Error(folly::Function<void(std::string)> raiser, std::string msg)
+    : raiser_(std::move(raiser)), msg_(std::move(msg)) {
+
+}
+
+void Error::throw_error() {
+    raiser_(msg_);
+}
+
 } //namespace arcticdb
