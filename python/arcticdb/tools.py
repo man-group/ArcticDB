@@ -14,6 +14,7 @@ from arcticdb_ext import set_config_int, set_config_string, set_config_double
 
 # Setting config from environment variables. This code is used in the package __init__.py
 _ARCTICDB_ENV_VAR_PREFIX = "ARCTICDB_"
+_ARCTIC_NATIVE_ENV_VAR_PREFIX = "ARCTIC_NATIVE_"
 _TYPE_INT = "INT"
 _TYPE_FLOAT = "FLOAT"
 _TYPE_STR = "STR"
@@ -38,7 +39,9 @@ def set_config_from_env_vars(env_vars: Dict[str, str]):
     for k, v in env_vars.items():
         k = k.upper()
         start_index = None
-        if k.startswith(_ARCTICDB_ENV_VAR_PREFIX):  # 1 underscore in prefix
+        if k.startswith(_ARCTIC_NATIVE_ENV_VAR_PREFIX):  # 2 underscores in prefix
+            start_index = 2
+        elif k.startswith(_ARCTICDB_ENV_VAR_PREFIX):  # 1 underscore in prefix
             start_index = 1
 
         if start_index is not None:
