@@ -125,7 +125,7 @@ jobs:
     name: Executes asv tests checks
     timeout-minutes: 120
     runs-on: ubuntu-latest
-    container: ghcr.io/man-group/arcticdb-dev:latest
+    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
     env:
         SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
