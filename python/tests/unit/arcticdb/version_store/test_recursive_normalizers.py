@@ -577,7 +577,7 @@ def test_data_layout(lmdb_version_store_v1):
     # Check that keys are cleaned up when we prune
     lib.write("sym", data, recursive_normalizers=True, prune_previous_version=True)
     assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
-    assert len(lt.find_keys(KeyType.VERSION)) == 4
+    assert len(lt.find_keys(KeyType.VERSION)) == 3
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 3
@@ -585,7 +585,7 @@ def test_data_layout(lmdb_version_store_v1):
     # Check that keys are cleaned up when we delete
     lib.delete("sym")
     assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
-    assert len(lt.find_keys(KeyType.VERSION)) == 5
+    assert len(lt.find_keys(KeyType.VERSION)) == 4
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 0
     assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 0
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
