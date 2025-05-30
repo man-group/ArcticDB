@@ -44,6 +44,11 @@ from arcticdb_ext import (
 from packaging.version import Version
 
 
+pd.set_option('display.max_columns', None)
+pd.set_option('display.max_rows', None)
+pd.set_option('display.max_colwidth', None)
+pd.set_option('display.width', 0)
+
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
     for i in range(columns):
@@ -849,6 +854,8 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
 def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
     return df[~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)]
 
+def drop_inf(df):
+    return df[~df.isin([np.inf, -np.inf]).any(axis=1)]
 
 def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     """
@@ -862,23 +869,21 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
 
     # Drop NaN an inf values because. Pandas uses Kahan summation algorithm to improve numerical stability.
     # Thus they don't consistently overflow to infinity. Discussion: https://github.com/pandas-dev/pandas/issues/60303
-    left_no_inf_and_nan = drop_inf_and_nan(left)
-    right_no_inf_and_nan = drop_inf_and_nan(right)
+    left_no_inf = drop_inf(left)
+    right_no_inf = drop_inf(right)
 
     check_equals_flags = {"check_dtype": False}
     if PANDAS_VERSION >= Version("1.1"):
         check_equals_flags["check_freq"] = False
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
-    for col in left_no_inf_and_nan.columns:
-        if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(
-            right_no_inf_and_nan[col].dtype
-        ):
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
+    for col in left_no_inf.columns:
+        if pd.api.types.is_integer_dtype(left_no_inf[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf[col].dtype):
+            pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
                 check_equals_flags["rtol"] = 3e-4
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
+            pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
 
 
 def generic_resample_test(
@@ -900,7 +905,7 @@ def generic_resample_test(
 
     :param drop_empty_buckets_for: Will add additional aggregation column using the count aggregator. At the end of the
     aggregation query will remove all rows for which this newly added count aggregation is 0. Works only for int/uint
-    columns. There is similar function generic_resample_test_with_empty_buckets in
+    columns. There is a similar function generic_resample_test_with_empty_buckets in
     python/tests/unit/arcticdb/version_store/test_resample.py which can drop empty buckets for all types of columns,
     but it cannot take parameters such as origin and offset.
     """
@@ -928,11 +933,11 @@ def generic_resample_test(
         expected.drop(columns=["_bucket_size_"], inplace=True)
     expected = expected.reindex(columns=sorted(expected.columns))
 
-
     for name, dtype in expected_types.items():
         if pd.api.types.is_integer_dtype(dtype):
             expected[name] = expected[name].fillna(0)
-    expected.astype(expected_types)
+
+    expected = expected.astype(expected_types)
 
     q = QueryBuilder()
     if origin:
@@ -944,9 +949,9 @@ def generic_resample_test(
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
 
-    print("\nExpected\n")
+    print("\nExpected:\n")
     print(expected)
-    print("\nActual\n")
+    print("\nActual:\n")
     print(received)
 
     if has_float_column:

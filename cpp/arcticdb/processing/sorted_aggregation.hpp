@@ -39,10 +39,19 @@ struct ISortedAggregator {
         }
         void check_aggregator_supported_with_data_type(DataType data_type) const { folly::poly_call<3>(*this, data_type); };
         [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const { return folly::poly_call<4>(*this, common_input_data_type); };
+        [[nodiscard]] VariantRawValue get_default_value(DataType common_input_data_type) const {
+            return folly::poly_call<5>(*this, common_input_data_type);
+        }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::aggregate, &T::check_aggregator_supported_with_data_type, &T::generate_output_data_type>;
+    using Members = folly::PolyMembers<
+        &T::get_input_column_name,
+        &T::get_output_column_name,
+        &T::aggregate,
+        &T::check_aggregator_supported_with_data_type,
+        &T::generate_output_data_type,
+        &T::get_default_value>;
 };
 
 using SortedAggregatorInterface = folly::Poly<ISortedAggregator>;
@@ -58,7 +67,7 @@ public:
         end_ = end;
     }
 
-    bool contains(timestamp ts) const {
+    [[nodiscard]] bool contains(timestamp ts) const {
         if constexpr (closed_boundary == ResampleBoundary::LEFT) {
             return ts >= start_ && ts < end_;
         } else {
@@ -66,11 +75,11 @@ public:
             return ts > start_ && ts <= end_;
         }
     }
-    timestamp start() const {
+    [[nodiscard]] timestamp start() const {
         return start_;
     }
 
-    timestamp end() const {
+    [[nodiscard]]timestamp end() const {
         return end_;
     }
 private:
@@ -374,6 +383,7 @@ public:
 
     void check_aggregator_supported_with_data_type(DataType data_type) const;
     [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
+    [[nodiscard]] VariantRawValue get_default_value(DataType common_input_data_type) const;
 private:
     [[nodiscard]] std::optional<DataType> generate_common_input_type(const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;

@@ -1438,7 +1438,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         std::any& handler_data,
         OutputFormat output_format,
         IntToFloatConversion int_to_float_conversion) {
-    auto required_fields_count = pipelines::index::required_fields_count(pipeline_context->descriptor(),
+    const auto required_fields_count = pipelines::index::required_fields_count(pipeline_context->descriptor(),
                                                                      *pipeline_context->norm_meta_);
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;

@@ -13,7 +13,7 @@ import pytest
 
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException, UserInputException
-from arcticdb.util.test import assert_frame_equal, generic_resample_test
+from arcticdb.util.test import assert_frame_equal, generic_resample_test, largest_numeric_type
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 import itertools
@@ -886,3 +886,115 @@ def test_date_range_outside_symbol_timerange(lmdb_version_store_v1):
     received_df = lib.read(sym, query_builder=q).data
     assert not len(received_df)
     assert received_df.columns == df.columns
+
+
+class TestResampleDynamicSchema:
+
+    @pytest.mark.parametrize("label", ["left", "right"])
+    @pytest.mark.parametrize("closed", ["left", "right"])
+    @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
+    def test_aggregation_column_not_in_segment(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype):
+        rule = "10ns"
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+        df1 = pd.DataFrame({"aggregated": np.array([1, 2, 3], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(30)]))
+        df2 = pd.DataFrame({"not_aggregated": np.array([4, 5, 6], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(50), pd.Timestamp(55), pd.Timestamp(80)]))
+        df3 = pd.DataFrame({"aggregated": np.array([7, 8, 9], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(100), pd.Timestamp(120), pd.Timestamp(121)]))
+        df_list = [df1, df2, df3]
+        for df in df_list:
+            lib.append(sym, df)
+        agg = {f"{name}_{op}": (name, op) for name in ["aggregated"] for op in ALL_AGGREGATIONS}
+        expected_types = {
+            "aggregated_min": dtype,
+            "aggregated_max": dtype,
+            "aggregated_sum": largest_numeric_type(dtype),
+            "aggregated_mean": np.float64,
+            "aggregated_first": dtype,
+            "aggregated_last": dtype,
+            "aggregated_count": np.uint64,
+        }
+        generic_resample_test(
+            lib,
+            sym,
+            rule,
+            agg,
+            pd.concat(df_list),
+            expected_types,
+            label=label,
+            closed=closed,
+            # Must be int or uint column otherwise dropping of empty buckets will not work
+            drop_empty_buckets_for="_empty_bucket_tracker_")
+
+    @pytest.mark.parametrize("label", ["left", "right"])
+    @pytest.mark.parametrize("closed", ["left", "right"])
+    @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
+    def test_bucket_spans_two_segments_aggregation_column_not_in_first(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype):
+        rule='10ns'
+        df1 = pd.DataFrame({'col_0': np.array([1], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        df2 = pd.DataFrame({'col_1': np.array([2, 3], dtype)}, index=pd.to_datetime([pd.Timestamp(10), pd.Timestamp(20)]))
+        df3 = pd.DataFrame({'col_0': np.array([4, 5], dtype)}, index=pd.to_datetime([pd.Timestamp(21), pd.Timestamp(30)]))
+        df_list = [df1, df2, df3]
+
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "sym"
+        for df in df_list:
+            lib.append(sym, df)
+
+        agg = {f"{name}_{op}": (name, op) for name in ["col_0"] for op in ["sum"]}
+        expected_types = {
+            #"col_0_min": dtype,
+            #"col_0_max": dtype,
+            "col_0_sum": largest_numeric_type(dtype),
+            #"col_0_mean": np.float64,
+            #"col_0_first": dtype,
+            #"col_0_last": dtype,
+            #"col_0_count": np.uint64,
+        }
+        generic_resample_test(
+            lib,
+            sym,
+            rule,
+            agg,
+            pd.concat(df_list),
+            expected_types,
+            label=label,
+            closed=closed,
+            # Must be int or uint column otherwise dropping of empty buckets will not work
+            drop_empty_buckets_for=None)
+    @pytest.mark.parametrize("label", ["left", "right"])
+    @pytest.mark.parametrize("closed", ["left", "right"])
+    def test_bucket_spans_two_segments_aggregation_column_not_in_second(self, lmdb_version_store_dynamic_schema_v1, label, closed):
+        lib = lmdb_version_store_dynamic_schema_v1
+        dtype = np.int8
+        df1 = pd.DataFrame({"col_0": np.array([1], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        df2 = pd.DataFrame({"col_1": np.array([50], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(1)]))
+        df_list = [df1, df2]
+        rule="10ns"
+        sym = "sym"
+        for df in df_list:
+            # This column will be used to keep track of empty buckets.
+            df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
+            lib.append(sym, df)
+
+        expected_types = {
+            "col_0_min": dtype,
+            "col_0_max": dtype,
+            "col_0_sum": np.uint64,
+            "col_0_mean": np.float64,
+            "col_0_first": dtype,
+            "col_0_last": dtype
+        }
+        agg = {f"{name}_{op}": (name, op) for name in ["col_0"] for op in ALL_AGGREGATIONS}
+        generic_resample_test(
+            lib,
+            sym,
+            rule,
+            agg,
+            pd.concat(df_list),
+            expected_types,
+            origin="epoch",
+            offset=None,
+            closed=closed,
+            label=label,
+            # Must be int or uint column otherwise dropping of empty buckets will not work
+            drop_empty_buckets_for="_empty_bucket_tracker_")

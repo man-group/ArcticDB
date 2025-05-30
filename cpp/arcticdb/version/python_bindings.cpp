@@ -55,9 +55,9 @@ requires std::integral<T>
 [[nodiscard]] static std::pair<timestamp, timestamp> compute_first_last_dates(
     timestamp start,
     timestamp end,
-    timestamp rule,
-    ResampleBoundary closed_boundary_arg,
-    timestamp offset,
+    const timestamp rule,
+    const ResampleBoundary closed_boundary_arg,
+    const timestamp offset,
     const ResampleOrigin& origin
 ) {
     // Origin value formula from Pandas:
@@ -102,17 +102,12 @@ requires std::integral<T>
     }
 }
 
-static timestamp rule_to_ns(std::string_view rule) {
-    py::gil_scoped_acquire acquire_gil;
-    return python_util::pd_to_offset(rule);
-}
-
 std::vector<timestamp> generate_buckets(
-    timestamp start,
-    timestamp end,
-    timestamp rule_ns,
-    ResampleBoundary closed_boundary_arg,
-    timestamp offset,
+    const timestamp start,
+    const timestamp end,
+    const timestamp rule_ns,
+    const ResampleBoundary closed_boundary_arg,
+    const timestamp offset,
     const ResampleOrigin& origin
 ) {
     // e.g. Can happen if date range specified does not overlap with the time range covered by the symbol
@@ -134,7 +129,8 @@ void declare_resample_clause(py::module& version) {
     const char* class_name = closed_boundary == ResampleBoundary::LEFT ? "ResampleClauseLeftClosed" : "ResampleClauseRightClosed";
     py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name)
             .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset, ResampleOrigin origin){
-                timestamp rule_ns = rule_to_ns(rule);
+                debug::check<ErrorCode::E_ASSERTION_FAILURE>(PyGILState_Check(), "GIL must be held");
+                const timestamp rule_ns = python_util::pd_to_offset(rule);
                 return ResampleClause<closed_boundary>(std::move(rule), label_boundary, generate_buckets, offset, std::move(origin), rule_ns);
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)

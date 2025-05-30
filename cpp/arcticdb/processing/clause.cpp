@@ -579,6 +579,7 @@ void ResampleClause<closed_boundary>::set_component_manager(std::shared_ptr<Comp
 template<ResampleBoundary closed_boundary>
 OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& output_schema) const {
     check_is_timeseries(output_schema.stream_descriptor(), "Resample");
+    output_schema.clear_default_values();
     check_column_presence(output_schema, *clause_info_.input_columns_, "Resample");
     const auto& input_stream_desc = output_schema.stream_descriptor();
     StreamDescriptor stream_desc(input_stream_desc.id());
@@ -592,6 +593,10 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
         agg.check_aggregator_supported_with_data_type(input_column_type);
         auto output_column_type = agg.generate_output_data_type(input_column_type);
         stream_desc.add_scalar_field(output_column_type, output_column_name);
+        const VariantRawValue& default_value = agg.get_default_value(input_column_type);
+        if (!std::holds_alternative<std::monostate>(default_value)) {
+            output_schema.set_default_value_for_column(output_column_name, default_value);
+        }
     }
     output_schema.set_stream_descriptor(std::move(stream_desc));
 
@@ -612,7 +617,6 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
         mutable_index->set_name(name);
         mutable_index->set_fake_name(fake_name);
     }
-    output_schema.clear_default_values();
     return output_schema;
 }
 
@@ -821,6 +825,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
         input_agg_columns.reserve(row_slices.size());
         for (auto& row_slice: row_slices) {
+            std::cout<<fmt::format("Aggregator input: {} aggregator output: {}\n", aggregator.get_input_column_name(), aggregator.get_output_column_name());
             auto variant_data = row_slice.get(aggregator.get_input_column_name());
             util::variant_match(variant_data,
                                 [&input_agg_columns](const ColumnWithStrings& column_with_strings) {

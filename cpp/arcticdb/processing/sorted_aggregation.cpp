@@ -135,12 +135,30 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                         const timestamp last_index_value = *(input_index.begin<IndexTDT>() + (input_index.row_count() - 1));
                         while (row_to_write < output_index_column.row_count()) {
                             const timestamp label_correction = label == ResampleBoundary::RIGHT ? step : 0;
-                            const timestamp output_index_value = *(output_index_column.begin<IndexTDT>() + row_to_write) - label_correction;
-                            if (output_index_value < last_index_value + (closed_boundary == ResampleBoundary::RIGHT)) {
+                            // The values in the output index column are different based on the label (left or right)
+                            // if the label is right, they will contain the right end of the interval. We need to
+                            // check how many intervals were started.
+                            const timestamp interval_start = *(output_index_column.begin<IndexTDT>() + row_to_write) - label_correction;
+                            if (interval_start < last_index_value + (closed_boundary == ResampleBoundary::RIGHT)) {
+                                if (bucket_has_values) {
+                                    res.set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
+                                    bucket_has_values = false;
+                                }
                                 ++row_to_write;
                             } else {
                                 break;
                             }
+                        }
+                        size_t bucket_start_index = (last_index_value - bucket_boundaries.front()) / step;
+                        if (bucket_boundaries[bucket_start_index] == last_index_value && closed_boundary == ResampleBoundary::RIGHT) {
+                            --bucket_start_index;
+                        }
+                        if (bucket_start_index < bucket_boundaries.size() - 1) {
+                            bucket_start_it = bucket_boundaries.begin() + bucket_start_index;
+                            bucket_end_it = bucket_start_it + 1;
+                            current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
+                        } else {
+                            reached_end_of_buckets = true;
                         }
                     }
                 }
@@ -151,6 +169,18 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
             }
         }
     );
+
+    std::cout<<"Result\n";
+    details::visit_type(
+        res.type().data_type(),
+        [&](auto tag) {
+            using info = ScalarTypeInfo<decltype(tag)>;
+            Column::for_each_enumerated<typename info::TDT>(res, [&](auto row) {
+                std::cout<<"index: "<<row.idx()<<std::endl;
+                std::cout<<"data: "<<row.value()<<std::endl;
+            });
+        });
+
     return res;
 }
 
@@ -203,6 +233,17 @@ DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_outpu
         output_type = DataType::UINT64;
     }
     return output_type;
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+VariantRawValue SortedAggregator<aggregation_operator, closed_boundary>::get_default_value(const DataType common_input_data_type) const {
+    if constexpr (aggregation_operator == AggregationOperator::SUM) {
+        return details::visit_type(generate_output_data_type(common_input_data_type), [&](auto tag) -> VariantRawValue {
+           return typename decltype(tag)::raw_type{0};
+        });
+    } else {
+        return {};
+    }
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>

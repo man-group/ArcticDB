@@ -19,6 +19,7 @@
 #include <arcticdb/util/flatten_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
 // Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign in folly/Memory.h
 #ifdef __APPLE__
@@ -729,14 +730,14 @@ public:
     );
 
     template <typename input_tdt, typename functor>
-    requires std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag> && std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>
     static void for_each(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
         std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
     }
 
     template <typename input_tdt, typename functor>
-    requires std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag> && std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
     static void for_each_enumerated(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
         if (input_column.is_sparse()) {
@@ -749,7 +750,7 @@ public:
     }
 
     template <typename input_tdt, typename output_tdt, typename functor>
-    requires std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag> && std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
         initialise_output_column(input_column, output_column);
@@ -762,16 +763,10 @@ public:
         );
     }
 
-    template<
-            typename left_input_tdt,
-            typename right_input_tdt,
-            typename output_tdt,
-            typename functor>
-    requires std::is_invocable_r_v<
-            typename output_tdt::DataTypeTag::raw_type,
-            functor,
-            typename left_input_tdt::DataTypeTag::raw_type,
-            typename right_input_tdt::DataTypeTag::raw_type>
+    template<typename left_input_tdt, typename right_input_tdt, typename output_tdt, typename functor>
+    requires util::instantiation_of<left_input_tdt, TypeDescriptorTag> &&
+             util::instantiation_of<right_input_tdt, TypeDescriptorTag> &&
+             std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
@@ -831,6 +826,7 @@ public:
     }
 
     template <typename input_tdt, std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
                           bool sparse_missing_value_output,
@@ -854,6 +850,7 @@ public:
             typename left_input_tdt,
             typename right_input_tdt,
             std::relation<typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type> functor>
+    requires util::instantiation_of<left_input_tdt, TypeDescriptorTag> && util::instantiation_of<right_input_tdt, TypeDescriptorTag>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,
