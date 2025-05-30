@@ -348,7 +348,7 @@ def test_delete_over_time(lib_name, storage_bucket):
 
         iters = 10
 
-        # make sure that the delete that the delete make constant number of operations
+        # make sure that the delete makes a constant number of operations
         for i in range(iters):
             lib.write("s", data=create_df())
             qs.reset_stats()
@@ -378,6 +378,7 @@ def test_wrute_and_prune_previous_over_time(lib_name, storage_bucket):
 
         iters = 10
 
+        # make sure that the write and prune makes a constant number of operations
         for i in range(iters):
             lib.write("s", data=create_df(), prune_previous=True)
             stats = qs.get_query_stats()
