@@ -130,7 +130,8 @@ class Flattener:
         return False
 
     def _create_meta_structure(self, obj, sym, to_write):
-        # TODO: convert to non recursive and remove to_write from func arguments to not rely on external state.
+        # Commit 450170d94 shows a non-recursive implementation of this function, but since `msgpack.packb` of the
+        # result is itself recursive, there is little point to rewriting this function.
         item_type, iterables, normalization_info = self.derive_iterables(obj)
         shortened_symbol = sym
         meta_struct = {
