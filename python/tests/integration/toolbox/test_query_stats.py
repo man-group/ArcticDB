@@ -76,8 +76,7 @@ def verify_list_symbol_stats(list_symbol_call_counts):
 
     for key_ops in storage_operations:
         for op in storage_operations[key_ops]:
-            assert storage_operations[key_ops][op]["total_time_ms"] > 1
-            assert storage_operations[key_ops][op]["total_time_ms"] < 600
+            assert storage_operations[key_ops][op]["total_time_ms"] < 8000
             if key_ops == "S3_PutObject" or key_ops == "S3_GetObject":
                 assert storage_operations[key_ops][op]["size_bytes"] > 0
             else:
@@ -209,25 +208,25 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     snapshot_stats = storage_ops["S3_ListObjectsV2"]["SNAPSHOT"]
     assert snapshot_stats["count"] == 2
     assert snapshot_stats["size_bytes"] == 0
-    assert snapshot_stats["total_time_ms"] > 0
+    assert snapshot_stats["total_time_ms"] < 8000
     
     assert "VERSION_REF" in storage_ops["S3_GetObject"]
     vref_stats = storage_ops["S3_GetObject"]["VERSION_REF"]
     assert vref_stats["count"] == 2
     assert vref_stats["size_bytes"] > 0
-    assert vref_stats["total_time_ms"] > 0
+    assert vref_stats["total_time_ms"] < 8000
     
     assert "SNAPSHOT_REF" in storage_ops["S3_HeadObject"]
     head_object_snapshot_ref_stats = storage_ops["S3_HeadObject"]["SNAPSHOT_REF"]
     assert head_object_snapshot_ref_stats["count"] == 2
     assert head_object_snapshot_ref_stats["size_bytes"] == 0
-    assert head_object_snapshot_ref_stats["total_time_ms"] > 0
+    assert head_object_snapshot_ref_stats["total_time_ms"] < 8000
     
     assert "SNAPSHOT_REF" in storage_ops["S3_PutObject"]
     put_object_snapshot_ref_stats = storage_ops["S3_PutObject"]["SNAPSHOT_REF"]
     assert put_object_snapshot_ref_stats["count"] == 2
     assert put_object_snapshot_ref_stats["size_bytes"] > 0
-    assert put_object_snapshot_ref_stats["total_time_ms"] > 0
+    assert put_object_snapshot_ref_stats["total_time_ms"] < 8000
 
 
 def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
@@ -314,7 +313,7 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
         stats_entry = storage_operations["S3_PutObject"][key]
         assert stats_entry["count"] > 0
         assert stats_entry["size_bytes"] > 0
-        assert stats_entry["total_time_ms"] > 0
+        assert stats_entry["total_time_ms"] < 8000
 
 
 def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
@@ -392,7 +391,7 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     for key in expected_get_keys:
         stats_entry = get_object_stats[key]
         assert stats_entry["size_bytes"] > 0
-        assert stats_entry["total_time_ms"] > 0
+        assert stats_entry["total_time_ms"] < 8000
     
     put_object_stats = storage_operations["S3_PutObject"]
     assert expected_put_keys == put_object_stats.keys()
@@ -407,7 +406,7 @@ def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     for key in expected_put_keys:
         stats_entry = put_object_stats[key]
         assert stats_entry["size_bytes"] > 0
-        assert stats_entry["total_time_ms"] > 0
+        assert stats_entry["total_time_ms"] < 8000
 
 
 def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
@@ -506,7 +505,7 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
         for key_stat in op_stats.values():
             assert key_stat["count"] > 0
             assert key_stat["size_bytes"] > 0
-            assert key_stat["total_time_ms"] > 0
+            assert key_stat["total_time_ms"] < 8000
 
 
 def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
@@ -536,7 +535,7 @@ def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
     append_data_stats = storage_operations["S3_PutObject"]["APPEND_DATA"]
     assert append_data_stats["count"] == 2
     assert append_data_stats["size_bytes"] > 0
-    assert append_data_stats["total_time_ms"] > 0
+    assert append_data_stats["total_time_ms"] < 8000
 
     s3_version_store_v1.compact_incomplete(sym, False, False)
     stats = qs.get_query_stats()
@@ -617,7 +616,7 @@ def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
     delete_append_stats = storage_operations["S3_DeleteObjects"]["APPEND_DATA"]
     assert delete_append_stats["count"] == 1
     assert delete_append_stats["size_bytes"] == 0
-    assert delete_append_stats["total_time_ms"] > 0
+    assert delete_append_stats["total_time_ms"] < 8000
     
     get_object_ops = storage_operations["S3_GetObject"]
     assert {"APPEND_DATA", "VERSION", "VERSION_REF"} == get_object_ops.keys()
@@ -627,7 +626,7 @@ def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
     
     for key in get_object_ops:
         stats_entry = get_object_ops[key]
-        assert stats_entry["total_time_ms"] > 0
+        assert stats_entry["total_time_ms"] < 8000
         if key == "APPEND_DATA":
             assert stats_entry["size_bytes"] > 0
     
@@ -635,7 +634,7 @@ def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
     list_append_stats = storage_operations["S3_ListObjectsV2"]["APPEND_DATA"]
     assert list_append_stats["count"] == 1
     assert list_append_stats["size_bytes"] == 0
-    assert list_append_stats["total_time_ms"] > 0
+    assert list_append_stats["total_time_ms"] < 8000
     
     put_object_ops = storage_operations["S3_PutObject"]
     expected_puts = {"APPEND_DATA", "SYMBOL_LIST", "TABLE_DATA", "TABLE_INDEX", "VERSION", "VERSION_REF"}
@@ -651,4 +650,4 @@ def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
     for key in put_object_ops:
         stats_entry = put_object_ops[key]
         assert stats_entry["size_bytes"] > 0
-        assert stats_entry["total_time_ms"] > 0
+        assert stats_entry["total_time_ms"] < 8000

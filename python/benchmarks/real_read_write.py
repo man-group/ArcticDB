@@ -13,6 +13,7 @@ import pandas as pd
 from arcticdb.options import LibraryOptions
 from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
 from arcticdb.util.utils import DFGenerator, DataRangeUtils, TimestampNumber
+import arcticdb.toolbox.query_stats as qs
 from benchmarks.common import AsvBase
 
 
@@ -200,3 +201,37 @@ class AWSWideDataFrameTests(AWSReadWrite):
         # must implement setup_cache
         super().setup_cache()
 
+
+class AWSReadWriteWithQueryStats(AWSReadWrite):
+    """
+    This class inherits from AWSReadWrite and always runs with query_stats enabled
+    """
+    rounds = 1
+    number = 3 # invokes 3 times the test runs between each setup-teardown 
+    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    min_run_count = 1
+    warmup_time = 0
+    timeout = 1200
+    param_names = ["num_rows"]
+    params = [1_000_000, 2_000_000]
+
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE_QUERY_STATS")
+
+    def get_library_manager(self) -> TestLibraryManager:
+        return AWSReadWriteWithQueryStats.library_manager
+    
+    def get_population_policy(self) -> LibraryPopulationPolicy:
+        lpp = LibraryPopulationPolicy(self.get_logger(), AllColumnTypesGenerator()).set_parameters(AWSReadWriteWithQueryStats.params)
+        return lpp
+        
+    def setup_cache(self):
+       super().setup_cache()
+
+    def setup(self, num_rows):
+        super().setup(num_rows)
+        qs.enable()
+
+    def teardown(self, num_rows):
+        qs.disable()
+        qs.reset_stats()
+        super().teardown(num_rows)
