@@ -15,6 +15,7 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.exceptions import DataTooNestedException
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
@@ -305,7 +306,7 @@ def test_long_lists(lmdb_version_store_v1):
     assert_frame_equal(result[500], df)
 
 
-def test_deep_nesting_metastruct_size(lmdb_version_store_v1):
+def test_deep_nesting_metastruct_size_over_limit(lmdb_version_store_v1):
     # Given
     lib = lmdb_version_store_v1
     sym = "sym"
@@ -317,10 +318,28 @@ def test_deep_nesting_metastruct_size(lmdb_version_store_v1):
         data[key] = {key: data[key]}
 
     # When & Then
-    """Raises a ValueError: recursion limit exceeded within msgpack. This is a limitation of msgpack that we can't
-    do much about, short of writing our own msgpack serializer."""
-    with pytest.raises(ValueError):
+    with pytest.raises(DataTooNestedException, match=r"^Symbol sym cannot be recursively normalized.*255 levels.*"):
         lib.write(sym, data, recursive_normalizers=True)
+
+
+def test_deep_nesting_metastruct_size_under_limit(lmdb_version_store_v1):
+    # Given
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    key = "reasonable_length_key"
+    data = {key: pd.DataFrame({"col": [0]})}
+
+    nesting_levels = 255
+    for i in range(nesting_levels - 1):
+        data[key] = {key: data[key]}
+
+    lib.write(sym, data, recursive_normalizers=True)
+
+    res = lib.read(sym).data
+    for i in range(nesting_levels):
+        res = res[key]
+
+    assert_frame_equal(res, pd.DataFrame({"col": [0]}))
 
 
 def test_long_keys(lmdb_version_store_v1):
