@@ -30,3 +30,7 @@ class MismatchingLibraryOptions(ArcticException):
 
 class LmdbOptionsError(ArcticException):
     pass
+
+
+class DataTooNestedException(UserInputException):
+    pass
