@@ -15,8 +15,7 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.exceptions import DataTooNestedException
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 
@@ -474,21 +473,62 @@ def test_something_we_cannot_normalize_just_gets_pickled(lmdb_version_store_v1):
     assert lib.get_info("sym")["type"] == "pickled"
 
 
-@pytest.mark.xfail(reason="These do not roundtrip properly. Monday: 9256783357")
 @pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
-def test_key_names(lmdb_version_store_v1, key):
+def test_double_underscore_names_validated_against(lmdb_version_store_v1, key):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {key: df}
 
+    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key {key} while writing symbol sym$"):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
+
+
+def test_nested_double_underscore_names_validated_against(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {"a": {"__a": df}}
+
+    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key __a while writing symbol sym$"):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
+
+
+def test_double_underscores_in_lists_ok(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+
+    data = ["a__", "__a", "a__b", "__a__b", df, "a__b__", df, {"a": df}]
+
     lib.write("sym", data, recursive_normalizers=True)
-    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
 
-    actual_data = lib.read("sym").data
-    assert key in actual_data
-    pd.testing.assert_frame_equal(actual_data[key], df)
+    res = lib.read("sym").data
 
-    assert lib.read("sym").version == 0
+    assert res[0] == "a__"
+    assert res[1] == "__a"
+    assert res[2] == "a__b"
+    assert res[3] == "__a__b"
+    assert_frame_equal(res[4], df)
+    assert res[5] == "a__b__"
+    assert_frame_equal(res[6], df)
+    assert_frame_equal(res[7]["a"], df)
+
+
+@pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
+def test_double_underscores_in_dict_in_list_not_ok(lmdb_version_store_v1, key):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = [df, {key: df}]
+
+    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key {key} while writing symbol sym$"):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
 
 
 def test_read_asof(lmdb_version_store_v1):
