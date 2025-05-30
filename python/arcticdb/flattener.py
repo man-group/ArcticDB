@@ -22,12 +22,12 @@ from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer
 from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNormalizer
+import arcticdb_ext.stream as adb_stream
 
 
 class Flattener:
     # Probably a bad idea given the dict key could have this, fine for now as write does not allow this symbol anyways.
     SEPARATOR = "__"
-    MAX_KEY_LENGTH = 100
 
     def __init__(self):
         self.custom_normalizer = get_custom_normalizer(False)
@@ -46,7 +46,9 @@ class Flattener:
 
     def compact_v1(self, symbol):
         hash_length = 12
-        if len(symbol) < self.MAX_KEY_LENGTH:
+        if adb_stream.is_symbol_key_valid(symbol):
+            # If the key is something we consider valid just save it for debuggability's sake
+            # The validity check includes a constraint on length
             return symbol
 
         try:
@@ -55,8 +57,14 @@ class Flattener:
             convert = symbol
 
         tokens = symbol.split(self.SEPARATOR)
-        vaguely_readable_name = "_".join([token[-3:] for token in tokens])[: (self.MAX_KEY_LENGTH - hash_length)]
+        santized_tokens = []
+        for t in tokens:
+            if adb_stream.is_symbol_key_valid(t):
+                santized_tokens.append(t)
+            else:
+                santized_tokens.append("XXX")
 
+        vaguely_readable_name = "_".join([token[-3:] for token in santized_tokens])[: (adb_stream.MAX_SYMBOL_LENGTH - hash_length)]
         shortened_hash = str(int(hashlib.sha256(convert).hexdigest(), 16) % 10**hash_length)
         return "{}_{}".format(vaguely_readable_name, shortened_hash)
 
