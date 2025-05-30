@@ -10,6 +10,8 @@ import time
 from typing import List
 from arcticdb import Arctic
 from arcticdb.version_store.library import WritePayload, ReadRequest
+from arcticdb.util.test import config_context
+
 import pandas as pd
 
 from benchmarks.common import *
