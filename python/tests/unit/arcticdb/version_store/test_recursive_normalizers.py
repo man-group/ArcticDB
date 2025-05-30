@@ -225,7 +225,8 @@ def test_recursive_normalizers_not_set(lmdb_version_store_v1, type, pickle_on_fa
     lib.write("sym", data, recursive_normalizers=False, pickle_on_failure=pickle_on_failure)
 
     # Then
-    assert lib.get_info("sym")["type"] == "pickled"  # pickle_on_failure=False not respected: Monday 8083916814
+    assert lib.get_info("sym")["type"] == "pickled"  # pickle_on_failure just controls what happens if we
+    # try to normalize a type we natively support (like a dataframe) but it contains data we don't support
 
     result = lib.read("sym").data
     if type == "dict":
@@ -311,13 +312,14 @@ def test_deep_nesting_metastruct_size(lmdb_version_store_v1):
     key = "reasonable_length_key"
     data = {key: pd.DataFrame({"col": [0]})}
 
-    nesting_levels = 1_000
+    nesting_levels = 256
     for i in range(nesting_levels - 1):
         data[key] = {key: data[key]}
 
     # When & Then
+    """Raises a ValueError: recursion limit exceeded within msgpack. This is a limitation of msgpack that we can't
+    do much about, short of writing our own msgpack serializer."""
     with pytest.raises(ValueError):
-        """Currently raises a ValueError: recursion limit exceeded within msgpack. We should try to do better here."""
         lib.write(sym, data, recursive_normalizers=True)
 
 

@@ -9,7 +9,6 @@ from arcticdb.flattener import Flattener
 
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticdb.version_store._custom_normalizers import (
-    CustomNormalizer,
     register_normalizer,
     clear_registered_normalizers,
 )
