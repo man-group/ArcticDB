@@ -293,13 +293,27 @@ public:
                 key.id(),
                 LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY},
                 __FUNCTION__);
-        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry);
+        auto [_, result] = tombstone_from_key_or_all_internal(store, key.id(), previous_key, entry, false);
 
-        auto previous_index = do_write(store, key, entry);
+        std::vector<AtomKey> keys_to_write;
+        std::optional<AtomKey> tombstone_all_key;
+        if (!result.empty()) {
+            auto first_key_to_tombstone = previous_key ? previous_key : entry->get_first_index(false).first;
+            tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
+            entry->try_set_tombstone_all(tombstone_all_key.value());
+            keys_to_write.push_back(tombstone_all_key.value());
+        }
+        keys_to_write.push_back(key);
+
+        auto previous_index = do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
         write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
 
-        if (log_changes_)
+        maybe_invalidate_cached_undeleted(*entry);
+        if (log_changes_) {
+            if (tombstone_all_key)
+                log_tombstone_all(store, tombstone_all_key.value().id(), tombstone_all_key.value().version_id());
             log_write(store, key.id(), key.version_id());
+        }
 
         return result;
     }
@@ -373,26 +387,31 @@ public:
         std::swap(*entry, *new_entry);
     }
 
-    VariantKey journal_single_key(
-            std::shared_ptr<StreamSink> store,
-            const AtomKey &key,
+    VariantKey journal_key(
+            std::shared_ptr<Store> store,
+            const VersionId& version_id,
+            const StreamId& stream_id,
+            std::span<const AtomKey> keys,
             std::optional<AtomKey> prev_journal_key) {
         ARCTICDB_SAMPLE(WriteJournalEntry, 0)
-        ARCTICDB_DEBUG(log::version(), "Version map writing version for key {}", key);
+        ARCTICDB_DEBUG(log::version(), "Version map writing version for keys {}", keys);
 
         VariantKey journal_key;
-        IndexAggregator<RowCountIndex> journal_agg(key.id(), [&store, &journal_key, &key](auto &&segment) {
+        IndexAggregator<RowCountIndex> journal_agg(stream_id, [&store, &journal_key, &version_id, &stream_id](auto &&segment) {
             stream::StreamSink::PartialKey pk{
                     KeyType::VERSION,
-                    key.version_id(),
-                    key.id(),
+                    version_id,
+                    stream_id,
                     IndexValue(NumericIndex{0}),
                     IndexValue(NumericIndex{0})
             };
 
             journal_key = store->write_sync(pk, std::forward<decltype(segment)>(segment));
         });
-        journal_agg.add_key(key);
+
+        for (const auto& key : keys) {
+            journal_agg.add_key(key);
+        }
         if (prev_journal_key)
             journal_agg.add_key(*prev_journal_key);
 
@@ -513,27 +532,98 @@ public:
         std::shared_ptr<Store> store,
         const AtomKey &key,
         const std::shared_ptr<VersionMapEntry> &entry) {
+        return do_write(store, key.version_id(), key.id(), std::span{&key, 1}, entry);
+    }
+
+    std::optional<AtomKey> do_write(
+        std::shared_ptr<Store> store,
+        const VersionId& version_id,
+        const StreamId& stream_id,
+        const std::span<const AtomKey>& keys,
+        const std::shared_ptr<VersionMapEntry> &entry) {
         if (validate_)
             entry->validate();
+        
+        auto atom_journal_key = to_atom(journal_key(store, version_id, stream_id, keys, entry->head_));
 
-        storage::check<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(key.type() != KeyType::TABLE_INDEX || !entry->head_.has_value() || key.version_id() > entry->head_->version_id(),
+        bool has_index_key = false;
+        auto original_head = entry->head_;
+        if (original_head.has_value()) {
+            entry->unshift_key(*original_head);
+        }
+
+        for (auto it = keys.rbegin(); it != keys.rend(); ++it) {
+            const auto& key = *it;
+            if (key.type() == KeyType::TABLE_INDEX) {
+                util::check(!has_index_key, "There should be at most one index key in the list of keys when trying to write an entry to the store, keys: {}", fmt::format("{}", keys));
+                has_index_key = true;
+                storage::check<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(!original_head.has_value() || key.version_id() > original_head->version_id(),
                     "Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {}. This is most likely due to parallel writes to the same symbol, which is not supported.",
-                    key.version_id(), entry->head_ ? entry->head_->version_id() : VariantId{""});
-        auto journal_key = to_atom(std::move(journal_single_key(store, key, entry->head_)));
-        write_to_entry(entry, key, journal_key);
+                    key.version_id(), original_head ? original_head->version_id() : VariantId{""});
+            }
+
+            write_to_entry(entry, key, atom_journal_key);
+        }
+
         auto previous_index = entry->get_second_undeleted_index();
         return previous_index;
     }
 
-    AtomKey write_tombstone(
+    AtomKey write_tombstones(
         std::shared_ptr<Store> store,
-        const std::variant<AtomKey, VersionId>& key,
+        const std::vector<AtomKey>& keys,
         const StreamId& stream_id,
         const std::shared_ptr<VersionMapEntry>& entry,
         const std::optional<timestamp>& creation_ts=std::nullopt) {
-        auto tombstone = write_tombstone_internal(store, key, stream_id, entry, creation_ts);
-        write_symbol_ref(store, tombstone, std::nullopt, entry->head_.value());
-        return tombstone;
+        static const bool should_log_individual_tombstones = ConfigsMap::instance()->get_int("VersionMap.LogIndividualTombstones", 1);
+        auto tombstone_keys = write_tombstones_internal(store, keys, stream_id, entry, creation_ts);
+        write_symbol_ref(store, tombstone_keys.front(), std::nullopt, entry->head_.value());
+        if(log_changes_) {
+            if (should_log_individual_tombstones) {
+                for (const auto& key : tombstone_keys) {
+                    log_tombstone(store, stream_id, key.version_id());
+                }
+            } else {
+                log_tombstone(store, stream_id, tombstone_keys.front().version_id());
+            }
+        }
+        
+        return tombstone_keys.front();
+    }
+
+    std::vector<AtomKey> write_tombstones_internal(
+            std::shared_ptr<Store> store,
+            const std::vector<AtomKey>& keys,
+            const StreamId& stream_id,
+            const std::shared_ptr<VersionMapEntry>& entry,
+            const std::optional<timestamp>& creation_ts=std::nullopt) {
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(keys.size() > 0, "No version ids to write tombstone for");
+        if (validate_)
+            entry->validate();
+
+        const auto ts = creation_ts.value_or(store->current_timestamp());
+        std::vector<AtomKey> tombstones;
+        std::transform(keys.begin(), keys.end(), std::back_inserter(tombstones),
+            [&](const AtomKey& k) { return index_to_tombstone(k.version_id(), stream_id, ts); });
+
+        // sort the tombstone in descending order
+        std::sort(tombstones.begin(), tombstones.end(), [](const AtomKey& a, const AtomKey& b) {
+            return a.version_id() > b.version_id();
+        });
+
+        // It doesn't matter which version id we use here
+        // as long as it is one of the version ids in the keys
+        // tombstone keys use already existing version ids instead of creating new ones
+        // It IS important that we log with the same version id as the tombstone key
+        // for backwards compatibility with older replication logic
+        auto tombstone_version_id = tombstones.front().version_id();
+        do_write(store, tombstone_version_id, stream_id, std::span{tombstones}, entry);
+        for (const auto& key : tombstones) {
+            entry->tombstones_.try_emplace(key.version_id(), key);
+        }
+        maybe_invalidate_cached_undeleted(*entry);
+
+        return tombstones;
     }
 
     void remove_entry_version_keys(
@@ -669,9 +759,6 @@ private:
         const std::shared_ptr<VersionMapEntry>& entry,
         const AtomKey& key,
         const AtomKey& journal_key) const {
-        if (entry->head_)
-            entry->unshift_key(entry->head_.value());
-
         entry->unshift_key(key);
         entry->head_ = journal_key;
 
@@ -938,7 +1025,8 @@ private:
             std::shared_ptr<Store> store,
             const StreamId& stream_id,
             std::optional<AtomKey> first_key_to_tombstone = std::nullopt,
-            std::shared_ptr<VersionMapEntry> entry = nullptr) {
+            std::shared_ptr<VersionMapEntry> entry = nullptr,
+            bool should_write_to_storage = true) {
         if (!entry) {
             entry = check_reload(
                     store,
@@ -961,7 +1049,7 @@ private:
         const auto& latest_version = entry->get_first_index(true).first;
         const VersionId version_id = latest_version ? latest_version->version_id() : 0;
 
-        if (!output.empty()) {
+        if (!output.empty() && should_write_to_storage) {
             auto tombstone_key = write_tombstone_all_key_internal(store, first_key_to_tombstone.value(), entry);
             if(log_changes_) {
                 log_tombstone_all(store, stream_id, tombstone_key.version_id());
@@ -988,27 +1076,6 @@ private:
         do_write(store, tombstone_key, entry);
         maybe_invalidate_cached_undeleted(*entry);
         return tombstone_key;
-    }
-
-    AtomKey write_tombstone_internal(
-            std::shared_ptr<Store> store,
-            const std::variant<AtomKey, VersionId>& key,
-            const StreamId& stream_id,
-            const std::shared_ptr<VersionMapEntry>& entry,
-            const std::optional<timestamp>& creation_ts=std::nullopt) {
-        if (validate_)
-            entry->validate();
-
-        auto tombstone = util::variant_match(key, [&stream_id, store, &creation_ts](const auto &k){
-            return index_to_tombstone(k, stream_id, creation_ts.value_or(store->current_timestamp()));
-        });
-        do_write(store, tombstone,  entry);
-        entry->tombstones_.try_emplace(tombstone.version_id(), tombstone);
-        maybe_invalidate_cached_undeleted(*entry);
-        if(log_changes_)
-            log_tombstone(store, tombstone.id(), tombstone.version_id());
-
-        return tombstone;
     }
 };
 

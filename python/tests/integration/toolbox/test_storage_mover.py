@@ -108,7 +108,10 @@ def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_li
 
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Numpy strings are not implemented for Windows")
-def test_storage_mover_symbol_tree(arctidb_native_local_lib_cfg_extra, arctidb_native_local_lib_cfg, lib_name):
+@pytest.mark.parametrize("versions_to_delete", [0, [0, 1]])
+def test_storage_mover_symbol_tree(
+    arctidb_native_local_lib_cfg_extra, arctidb_native_local_lib_cfg, lib_name, versions_to_delete
+):
     col_per_group = 5
     row_per_segment = 10
     local_lib_cfg = arctidb_native_local_lib_cfg(lib_name)
@@ -120,11 +123,19 @@ def test_storage_mover_symbol_tree(arctidb_native_local_lib_cfg_extra, arctidb_n
 
     lmdb_version_store_symbol_list.write("symbol", sample_dataframe(), metadata="yolo")
     lmdb_version_store_symbol_list.write("symbol", sample_dataframe(), metadata="yolo2")
-    lmdb_version_store_symbol_list.write("snapshot_test", 1)
+    if isinstance(versions_to_delete, list):
+        lmdb_version_store_symbol_list.write("snapshot_test", 0)
+        lmdb_version_store_symbol_list.write("snapshot_test", 1)
+    else:
+        lmdb_version_store_symbol_list.write("snapshot_test", 1)
+
     lmdb_version_store_symbol_list.snapshot("my_snap")
     lmdb_version_store_symbol_list.snapshot("my_snap2")
     lmdb_version_store_symbol_list.snapshot("snapshot_test", 2)
-    lmdb_version_store_symbol_list.delete_version("snapshot_test", 0)
+    if isinstance(versions_to_delete, list):
+        lmdb_version_store_symbol_list.delete_versions("snapshot_test", versions_to_delete)
+    else:
+        lmdb_version_store_symbol_list.delete_version("snapshot_test", versions_to_delete)
     lmdb_version_store_symbol_list.write("pickled", {"a": 1}, metadata="cantyolo", pickle_on_failure=True)
     lmdb_version_store_symbol_list.write("pickled", {"b": 1}, metadata="cantyolo2", pickle_on_failure=True)
     lmdb_version_store_symbol_list.write("pickled", {"c": 1}, metadata="yoloded", pickle_on_failure=True)

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -22,6 +23,9 @@ df0 = pd.DataFrame(
 )
 df1 = pd.DataFrame(
     {"col_0": ["c", "d"], "col_1": [3, 4], "col_2": [8, 7]}, index=pd.date_range("2000-01-03", periods=2)
+)
+df2 = pd.DataFrame(
+    {"col_0": ["e", "f"], "col_1": [5, 6], "col_2": [10, 9]}, index=pd.date_range("2000-01-05", periods=2)
 )
 
 
@@ -540,6 +544,21 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store):
         expected_count = 1
         assert_column_stats_key_count()
 
+    def test_delete_versions():
+        nonlocal expected_count
+        lib.write(sym, df0)
+        create_stats()
+        assert_column_stats_key_count()
+        lib.append(sym, df1)
+        create_stats()
+        assert_column_stats_key_count()
+        lib.append(sym, df2)
+        create_stats()
+        assert_column_stats_key_count()
+        lib.delete_versions(sym, [0, 1])
+        expected_count = 1
+        assert_column_stats_key_count()
+
     def test_delete_snapshot():
         nonlocal expected_count
         lib.write(sym, df0)
@@ -618,6 +637,7 @@ def test_column_stats_object_deleted_with_index_key(lmdb_version_store):
     for test in [
         test_delete,
         test_delete_version,
+        test_delete_versions,
         test_delete_snapshot,
         test_add_to_snapshot,
         test_remove_from_snapshot,

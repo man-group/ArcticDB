@@ -147,45 +147,68 @@ inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
     return result;
 }
 
-inline version_store::TombstoneVersionResult tombstone_version(
+inline version_store::TombstoneVersionResult tombstone_versions(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    VersionId version_id,
-    bool allow_tombstoning_beyond_latest_version=false,
+    const std::unordered_set<VersionId>& version_ids,
     const std::optional<timestamp>& creation_ts=std::nullopt) {
-    ARCTICDB_DEBUG(log::version(), "Tombstoning version {} for stream {}", version_id, stream_id);
+    ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
+
     LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
     auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
     // Might as well do the previous/next version check while we find the required version_id.
     // But if entry is empty, it's possible the load failed (since iterate_on_failure=false above), so set the flag
     // to defer the check to delete_tree() (instead of reloading in case eager delete is disabled).
     version_store::TombstoneVersionResult res(entry->empty());
-    get_matching_prev_and_next_versions(entry, version_id,
-            [&res](auto& matching){res.keys_to_delete.push_back(matching);},
-            [&res](auto& prev){res.could_share_data.emplace(prev);},
-            [&res](auto& next){res.could_share_data.emplace(next);},
+    auto latest_key = entry->get_first_index(true).first;
+    std::vector<AtomKey> index_keys_to_tombstone;
+
+    for (auto version_id: version_ids) {
+        bool found = false;
+        get_matching_prev_and_next_versions(entry, version_id,
+                [&res, &found](auto& matching){
+                    res.keys_to_delete.push_back(matching);
+                    found = true;
+                },
+                [&res](auto& prev){res.could_share_data.emplace(prev);},
+                [&res](auto& next){res.could_share_data.emplace(next);},
             is_live_index_type_key // Entry could be cached with deleted keys even if LOAD_UNDELETED
             );
 
-    if (res.keys_to_delete.empty()) {
         // It is possible to have a tombstone key without a corresponding index_key
         // This scenario can happen in case of DR sync
         if (entry->is_tombstoned(version_id)) {
             util::raise_rte("Version {} for symbol {} is already deleted", version_id, stream_id);
         } else {
-            if (!allow_tombstoning_beyond_latest_version) {
-                auto latest_key = get_latest_version(store, version_map, stream_id).first;
-                if (!latest_key || latest_key->version_id() < version_id)
-                    util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
-                            stream_id, version_id);
-            }
-            // We will write a tombstone key even when the index_key is not found
-            version_map->write_tombstone(store, version_id, stream_id, entry, creation_ts);
+            if (!latest_key || latest_key->version_id() < version_id)
+                util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
+                        stream_id, version_id);
         }
-    } else {
-        version_map->write_tombstone(store, res.keys_to_delete[0], stream_id, entry, creation_ts);
+
+
+        // This should never happen but we are keeping it for backwards compatibility
+        if (!found) {
+            log::version().debug("Trying to tombstone version {} for symbol {} that is not in the version map", version_id, stream_id);
+            res.keys_to_delete.emplace_back(
+                atom_key_builder()
+                    .version_id(version_id)
+                    .creation_ts(creation_ts.value_or(store->current_timestamp()))
+                    .content_hash(3)
+                    .start_index(4)
+                    .end_index(5)
+                    .build(stream_id, KeyType::TABLE_INDEX));
+        }
     }
+
+    util::check(
+        res.keys_to_delete.size() == version_ids.size(),
+        "Expected {} index keys to be marked for deletion, got {} keys: {}",
+        version_ids.size(), 
+        res.keys_to_delete.size(), 
+        fmt::format("{}", res.keys_to_delete)
+    );
+    version_map->write_tombstones(store, res.keys_to_delete, stream_id, entry, creation_ts);
 
     if (version_map->validate())
         entry->validate();

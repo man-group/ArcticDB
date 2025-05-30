@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 import datetime
 import os
@@ -156,8 +157,13 @@ class SymbolDescription(NamedTuple):
 
     def __eq__(self, other):
         # Needed as NaT != NaT
-        date_range_fields_equal = (self.date_range[0] == other.date_range[0] or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))) and \
-                                  (self.date_range[1] == other.date_range[1] or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1])))
+        date_range_fields_equal = (
+            self.date_range[0] == other.date_range[0]
+            or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))
+        ) and (
+            self.date_range[1] == other.date_range[1]
+            or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1]))
+        )
         if date_range_fields_equal:
             non_date_range_fields = [field for field in self._fields if field != "date_range"]
             return all(getattr(self, field) == getattr(other, field) for field in non_date_range_fields)
@@ -311,14 +317,14 @@ class ReadInfoRequest(NamedTuple):
         res += ")"
         return res
 
-class UpdatePayload:
 
+class UpdatePayload:
     def __init__(
         self,
         symbol: str,
         data: NormalizableType,
         metadata: Any = None,
-        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
     ):
         self.symbol = symbol
         self.data = data
@@ -326,11 +332,14 @@ class UpdatePayload:
         self.date_range = date_range
 
     def __repr__(self):
-        return(
-            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
-            f", metadata={self.metadata}" if self.metadata is not None else ""
-            f", date_range={self.date_range}" if self.date_range is not None else ""
+        return (
+            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata}"
+            if self.metadata is not None
+            else f", date_range={self.date_range}"
+            if self.date_range is not None
+            else ""
         )
+
 
 class LazyDataFrame(QueryBuilder):
     """
@@ -354,10 +363,11 @@ class LazyDataFrame(QueryBuilder):
     # Actual read and processing happens here
     >>> df = lazy_df.collect().data
     """
+
     def __init__(
-            self,
-            lib: "Library",
-            read_request: ReadRequest,
+        self,
+        lib: "Library",
+        read_request: ReadRequest,
     ):
         if read_request.query_builder is None:
             super().__init__()
@@ -437,9 +447,10 @@ class LazyDataFrameCollection(QueryBuilder):
     # Actual read and processing happens here
     >>> res = lazy_dfs.collect()
     """
+
     def __init__(
-            self,
-            lazy_dataframes: List[LazyDataFrame],
+        self,
+        lazy_dataframes: List[LazyDataFrame],
     ):
         """
         Gather a list of `LazyDataFrame`s into a single object that can be collected together.
@@ -452,7 +463,7 @@ class LazyDataFrameCollection(QueryBuilder):
         lib_set = {lazy_dataframe.lib for lazy_dataframe in lazy_dataframes}
         check(
             len(lib_set) in [0, 1],
-            f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}"
+            f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}",
         )
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
@@ -495,7 +506,13 @@ class LazyDataFrameCollection(QueryBuilder):
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
-        return "LazyDataFrameCollection(" + str(self._lazy_dataframes) + (" | " if len(query_builder_repr) else "") + query_builder_repr + ")"
+        return (
+            "LazyDataFrameCollection("
+            + str(self._lazy_dataframes)
+            + (" | " if len(query_builder_repr) else "")
+            + query_builder_repr
+            + ")"
+        )
 
     def __repr__(self) -> str:
         return self.__str__()
@@ -671,6 +688,7 @@ class StagedDataFinalizeMethod(Enum):
     WRITE = auto()
     APPEND = auto()
 
+
 class DevTools:
     def __init__(self, nvs):
         self._nvs = nvs
@@ -700,6 +718,7 @@ class DevTools:
         symbols_set = set(symbols)
         common_prefix = os.path.commonprefix(symbols)
         self._nvs.version_store.remove_incompletes(symbols_set, common_prefix)
+
 
 class Library:
     """
@@ -761,8 +780,7 @@ class Library:
         """Enterprise library options set on this library. See also `options` for non-enterprise options."""
         write_options = self._nvs.lib_cfg().lib_desc.version.write_options
         return EnterpriseLibraryOptions(
-            replication=write_options.sync_passive.enabled,
-            background_deletion=write_options.delayed_deletes
+            replication=write_options.sync_passive.enabled, background_deletion=write_options.delayed_deletes
         )
 
     def stage(
@@ -771,7 +789,7 @@ class Library:
         data: NormalizableType,
         validate_index=True,
         sort_on_index=False,
-        sort_columns: List[str] = None
+        sort_columns: List[str] = None,
     ):
         """
         Write a staged data chunk to storage, that will not be visible until finalize_staged_data is called on
@@ -799,7 +817,8 @@ class Library:
             sort_on_index=sort_on_index,
             sort_columns=sort_columns,
             norm_failure_options_msg="Failed to normalize data. It is inadvisable to pickle staged data"
-                                     " as it will not be possible to finalize it.")
+            " as it will not be possible to finalize it.",
+        )
 
     def write(
         self,
@@ -909,7 +928,7 @@ class Library:
             parallel=staged,
             validate_index=validate_index,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
-                                     "(such as date_range filtering and column selection) will not work on pickled data.",
+            "(such as date_range filtering and column selection) will not work on pickled data.",
         )
 
     def write_pickle(
@@ -1057,8 +1076,8 @@ class Library:
             validate_index=validate_index,
             throw_on_error=throw_on_error,
             norm_failure_options_msg="Using write_pickle_batch will allow the object to be written. However, many "
-                                     "operations (such as date_range filtering and column selection) will not work on "
-                                     "pickled data.",
+            "operations (such as date_range filtering and column selection) will not work on "
+            "pickled data.",
         )
 
     def write_pickle_batch(
@@ -1269,7 +1288,7 @@ class Library:
 
         The update will split the first and last segments in the storage that intersect with 'data'. Therefore, frequent
         calls to update might lead to data fragmentation (see the example below).
-        
+
         Parameters
         ----------
         symbol
@@ -1452,8 +1471,8 @@ class Library:
         mode: Optional[Union[StagedDataFinalizeMethod, str]] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
-        validate_index = True,
-        delete_staged_data_on_failure: bool = False
+        validate_index=True,
+        delete_staged_data_on_failure: bool = False,
     ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
@@ -1491,11 +1510,11 @@ class Library:
             are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
             last index value in the previous version.
         delete_staged_data_on_failure : bool, default=False
-            Determines the handling of staged data when an exception occurs during the execution of the 
+            Determines the handling of staged data when an exception occurs during the execution of the
             ``finalize_staged_data`` function.
 
             - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
-            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+            - If set to False, the staged data will be retained and will be used in subsequent calls to
               ``finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
@@ -1551,8 +1570,13 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        if mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"] and mode is not None:
-            raise ArcticInvalidApiUsageException("mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'")
+        if (
+            mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"]
+            and mode is not None
+        ):
+            raise ArcticInvalidApiUsageException(
+                "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
+            )
 
         return self._nvs.compact_incomplete(
             symbol,
@@ -1561,7 +1585,7 @@ class Library:
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
-            delete_staged_data_on_failure=delete_staged_data_on_failure
+            delete_staged_data_on_failure=delete_staged_data_on_failure,
         )
 
     def sort_and_finalize_staged_data(
@@ -1570,7 +1594,7 @@ class Library:
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
-        delete_staged_data_on_failure: bool = False
+        delete_staged_data_on_failure: bool = False,
     ) -> VersionedItem:
         """
         Sorts and merges all staged data, making it available for reads. This differs from `finalize_staged_data` in that it
@@ -1586,7 +1610,7 @@ class Library:
 
         If the symbol does not exist both ``StagedDataFinalizeMethod.APPEND`` and ``StagedDataFinalizeMethod.WRITE`` will create it.
 
-        Calling ``sort_and_finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use 
+        Calling ``sort_and_finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use
         ``get_staged_symbols`` to check if there are staged segments for the symbol.
 
         Calling ``sort_and_finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
@@ -1607,11 +1631,11 @@ class Library:
             Optional metadata to persist along with the symbol.
 
         delete_staged_data_on_failure : bool, default=False
-            Determines the handling of staged data when an exception occurs during the execution of the 
+            Determines the handling of staged data when an exception occurs during the execution of the
             `sort_and_finalize_staged_data` function.
 
             - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
-            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+            - If set to False, the staged data will be retained and will be used in subsequent calls to
               ``sort_and_finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
@@ -1670,7 +1694,7 @@ class Library:
             normalize_metadata(metadata),
             mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
-            delete_staged_data_on_failure=delete_staged_data_on_failure
+            delete_staged_data_on_failure=delete_staged_data_on_failure,
         )
         return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
 
@@ -1698,7 +1722,7 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-        lazy: bool = False
+        lazy: bool = False,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1795,7 +1819,7 @@ class Library:
                 columns=columns,
                 query_builder=query_builder,
                 implement_read_index=True,
-                iterate_snapshots_if_tombstoned=False
+                iterate_snapshots_if_tombstoned=False,
             )
 
     def read_batch(
@@ -1920,7 +1944,7 @@ class Library:
                             row_range=row_ranges[idx],
                             columns=columns[idx],
                             query_builder=q,
-                        )
+                        ),
                     )
                 )
             return LazyDataFrameCollection(lazy_dataframes)
@@ -2105,10 +2129,10 @@ class Library:
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
     def write_metadata(
-            self,
-            symbol: str,
-            metadata: Any,
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        metadata: Any,
+        prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
         Write metadata under the specified symbol name to this library. The data will remain unchanged.
@@ -2139,7 +2163,9 @@ class Library:
         return self._nvs.write_metadata(symbol, metadata, prune_previous_version=prune_previous_versions)
 
     def write_metadata_batch(
-        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions: bool = False,
+        self,
+        write_metadata_payloads: List[WriteMetadataPayload],
+        prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
@@ -2267,8 +2293,7 @@ class Library:
         if isinstance(versions, int):
             versions = (versions,)
 
-        for v in versions:
-            self._nvs.delete_version(symbol, v)
+        self._nvs.delete_versions(symbol, versions)
 
     def prune_previous_versions(self, symbol):
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
@@ -2281,10 +2306,10 @@ class Library:
         self._nvs.prune_previous_versions(symbol)
 
     def delete_data_in_range(
-            self,
-            symbol: str,
-            date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
+        prune_previous_versions: bool = False,
     ):
         """Delete data within the given date range, creating a new version of ``symbol``.
 
@@ -2459,12 +2484,12 @@ class Library:
         }
 
     def head(
-            self,
-            symbol: str,
-            n: int = 5,
-            as_of: Optional[AsOf] = None,
-            columns: List[str] = None,
-            lazy: bool = False,
+        self,
+        symbol: str,
+        n: int = 5,
+        as_of: Optional[AsOf] = None,
+        columns: List[str] = None,
+        lazy: bool = False,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
@@ -2511,11 +2536,11 @@ class Library:
 
     def tail(
         self,
-            symbol: str,
-            n: int = 5,
-            as_of: Optional[Union[int, str]] = None,
-            columns: List[str] = None,
-            lazy: bool = False,
+        symbol: str,
+        n: int = 5,
+        as_of: Optional[Union[int, str]] = None,
+        columns: List[str] = None,
+        lazy: bool = False,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.
@@ -2724,10 +2749,10 @@ class Library:
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
     def defragment_symbol_data(
-            self,
-            symbol: str,
-            segment_size: Optional[int] = None,
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        segment_size: Optional[int] = None,
+        prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).

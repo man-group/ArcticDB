@@ -3,6 +3,7 @@ Copyright 2023 Man Group Operations Limited
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 from pandas.testing import assert_frame_equal
@@ -142,6 +143,55 @@ def test_de_dup_with_delete(basic_store_factory):
 
 
 @pytest.mark.storage
+def test_de_dup_with_delete_multiple(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
+    symbol = "test_de_dup_with_delete_multiple"
+
+    num_elements = 100
+
+    idx1 = np.arange(0, num_elements)
+    d1 = {"x": np.arange(0, num_elements, dtype=np.int64)}
+    df1 = pd.DataFrame(data=d1, index=idx1)
+    lib.write(symbol, df1)
+    vit = lib.read(symbol)
+    assert_frame_equal(vit.data, df1)
+
+    assert len(get_data_keys(lib, symbol)) == num_elements / 2
+
+    idx2 = np.arange(num_elements, 2 * num_elements)
+    d2 = {"x": np.arange(num_elements, 2 * num_elements, dtype=np.int64)}
+    df2 = pd.DataFrame(data=d2, index=idx2)
+    new_df = pd.concat([df1, df2])
+    lib.write(symbol, new_df)
+    assert_frame_equal(lib.read(symbol).data, new_df)
+
+    assert len(get_data_keys(lib, symbol)) == num_elements
+
+    idx3 = np.arange(2 * num_elements, 3 * num_elements)
+    d3 = {"x": np.arange(2 * num_elements, 3 * num_elements, dtype=np.int64)}
+    df3 = pd.DataFrame(data=d3, index=idx3)
+    final_df = pd.concat([df2, df3])
+    lib.write(symbol, final_df)
+    assert_frame_equal(lib.read(symbol).data, final_df)
+    assert_frame_equal(lib.read(symbol, as_of=1).data, new_df)
+    assert_frame_equal(lib.read(symbol, as_of=0).data, df1)
+
+    # This won't be de-duped as the there is data overlap but the start_index and end_index dont match for segments
+    assert len(get_data_keys(lib, symbol)) == 2 * num_elements
+
+    lib.delete_versions(symbol, [1, 2])
+    assert_frame_equal(lib.read(symbol).data, df1)
+    with pytest.raises(NoDataFoundException):
+        lib.read(symbol, as_of=1)
+    with pytest.raises(NoDataFoundException):
+        lib.read(symbol, as_of=2)
+
+    lib.write(symbol, final_df, prune_previous_version=True)
+    assert_frame_equal(lib.read(symbol).data, final_df)
+    assert len(get_data_keys(lib, symbol)) == num_elements
+
+
+@pytest.mark.storage
 def test_de_dup_with_snapshot(basic_store_factory):
     lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_with_snapshot"
@@ -180,6 +230,45 @@ def test_de_dup_with_snapshot(basic_store_factory):
     assert_frame_equal(lib.read(symbol, as_of="my_snap").data, new_df)
 
     lib.delete_version(symbol, 2)
+    assert_frame_equal(lib.read(symbol, as_of="my_snap").data, new_df)
+
+
+@pytest.mark.storage
+def test_de_dup_with_snapshot_multiple_deletions(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
+    symbol = "test_de_dup_with_snapshot_multiple_deletions"
+
+    num_elements = 100
+
+    idx1 = np.arange(0, num_elements)
+    d1 = {"x": np.arange(0, num_elements, dtype=np.int64)}
+    df1 = pd.DataFrame(data=d1, index=idx1)
+    lib.write(symbol, df1)
+    vit = lib.read(symbol)
+    assert_frame_equal(vit.data, df1)
+
+    assert len(get_data_keys(lib, symbol)) == num_elements / 2
+
+    idx2 = np.arange(num_elements, 2 * num_elements)
+    d2 = {"x": np.arange(num_elements, 2 * num_elements, dtype=np.int64)}
+    df2 = pd.DataFrame(data=d2, index=idx2)
+    new_df = pd.concat([df1, df2])
+    lib.write(symbol, new_df)
+    assert_frame_equal(lib.read(symbol).data, new_df)
+
+    assert len(get_data_keys(lib, symbol)) == num_elements
+
+    lib.snapshot("my_snap")
+
+    idx3 = np.arange(2 * num_elements, 3 * num_elements)
+    d3 = {"x": np.arange(2 * num_elements, 3 * num_elements, dtype=np.int64)}
+    df3 = pd.DataFrame(data=d3, index=idx3)
+    final_df = pd.concat([new_df, df3])
+    lib.write(symbol, final_df)
+
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
+
+    lib.delete_versions(symbol, [0, 2])
     assert_frame_equal(lib.read(symbol, as_of="my_snap").data, new_df)
 
 
@@ -226,6 +315,65 @@ def test_de_dup_with_tombstones(basic_store_factory):
 
     lib.delete_version(symbol, 3)
     lib.delete_version(symbol, 2)
+    assert_frame_equal(lib.read(symbol).data, new_df)
+    assert_frame_equal(lib.read(symbol, as_of=0).data, df1)
+    with pytest.raises(NoDataFoundException):
+        lib.read(symbol, as_of=3)
+    with pytest.raises(NoDataFoundException):
+        lib.read(symbol, as_of=2)
+
+    # tomstones deletes data (it doesn't delete data when delayed deletes is on)
+    assert len(get_data_keys(lib, symbol)) == num_elements
+
+    lib.write(symbol, final_df, prune_previous_version=True)
+    assert_frame_equal(lib.read(symbol).data, final_df)
+
+    # won't dedup with the tombstoned version
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
+
+
+@pytest.mark.storage
+def test_de_dup_with_tombstones_multiple(basic_store_factory):
+    lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True)
+    symbol = "test_de_dup_with_tombstones_multiple"
+
+    num_elements = 100
+
+    idx1 = np.arange(0, num_elements)
+    d1 = {"x": np.arange(0, num_elements, dtype=np.int64)}
+    df1 = pd.DataFrame(data=d1, index=idx1)
+    lib.write(symbol, df1)
+    vit = lib.read(symbol)
+    assert_frame_equal(vit.data, df1)
+
+    assert len(get_data_keys(lib, symbol)) == num_elements / 2
+
+    idx2 = np.arange(num_elements, 2 * num_elements)
+    d2 = {"x": np.arange(num_elements, 2 * num_elements, dtype=np.int64)}
+    df2 = pd.DataFrame(data=d2, index=idx2)
+    new_df = pd.concat([df1, df2])
+    lib.write(symbol, new_df)
+    assert_frame_equal(lib.read(symbol).data, new_df)
+
+    assert len(get_data_keys(lib, symbol)) == num_elements
+
+    idx3 = np.arange(2 * num_elements, 3 * num_elements)
+    d3 = {"x": np.arange(2 * num_elements, 3 * num_elements, dtype=np.int64)}
+    df3 = pd.DataFrame(data=d3, index=idx3)
+    final_df = pd.concat([df1, df2, df3])
+    lib.write(symbol, final_df)
+    assert_frame_equal(lib.read(symbol).data, final_df)
+    assert_frame_equal(lib.read(symbol, as_of=1).data, new_df)
+    assert_frame_equal(lib.read(symbol, as_of=0).data, df1)
+
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
+
+    lib.write(symbol, final_df)
+
+    # complete de-dup
+    assert len(get_data_keys(lib, symbol)) == 3 * num_elements / 2
+
+    lib.delete_versions(symbol, [3, 2])
     assert_frame_equal(lib.read(symbol).data, new_df)
     assert_frame_equal(lib.read(symbol, as_of=0).data, df1)
     with pytest.raises(NoDataFoundException):
@@ -452,6 +600,49 @@ def test_dedup_multi_keys(basic_store_factory):
     comp_dict(data1, lib.read(symbol, 1).data)
 
     lib.delete_version(symbol, 0)
+
+    comp_dict(data3, lib.read(symbol).data)
+    comp_dict(data1, lib.read(symbol, 1).data)
+
+    lib.delete_version(symbol, 1)
+
+    comp_dict(data3, lib.read(symbol).data)
+
+
+@pytest.mark.storage
+def test_dedup_multi_keys_multiple_deletions(basic_store_factory):
+    lib = basic_store_factory(
+        column_group_size=2, segment_row_size=2, de_duplication=True, use_tombstones=True, snapshot_dedup=True
+    )
+    symbol = "test_dedup_multi_keys_multiple_deletions"
+    num_elements = 100
+
+    data1 = {"e": np.arange(num_elements), "f": np.arange(2 * num_elements), "g": None}
+
+    lib.write(symbol, data=data1, metadata="realyolo2", recursive_normalizers=True)
+
+    assert len(get_multi_data_keys(lib, symbol)) == 3 * num_elements / 2
+
+    lib.write(symbol, data=data1, metadata="realyolo2", recursive_normalizers=True)
+    comp_dict(data1, lib.read(symbol).data)
+    # complete de-dup
+    assert len(get_multi_data_keys(lib, symbol)) == 3 * num_elements / 2
+
+    data2 = {"e": np.arange(2 * num_elements)}
+    lib.write(symbol, data=data2, metadata="realyolo2", recursive_normalizers=True)
+    comp_dict(data2, lib.read(symbol).data)
+
+    # complete de-dup, "e" matches with "f"
+    assert len(get_multi_data_keys(lib, symbol)) == 3 * num_elements / 2
+
+    data3 = {"e": np.arange(4 * num_elements), "f": np.arange(3 * num_elements)}
+    lib.write(symbol, data=data3, metadata="realyolo2", recursive_normalizers=True)
+    comp_dict(data3, lib.read(symbol).data)
+
+    # partial de-dup
+    assert len(get_multi_data_keys(lib, symbol)) == 3 * num_elements
+
+    lib.delete_versions(symbol, [2, 0])
 
     comp_dict(data3, lib.read(symbol).data)
     comp_dict(data1, lib.read(symbol, 1).data)

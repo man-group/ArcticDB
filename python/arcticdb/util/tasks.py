@@ -63,9 +63,17 @@ def delete_specific_version(lib, symbol=None):
             undeleted_versions[sym] = version_list
     if len(undeleted_versions) > 0:
         symbol = random.choice(list(undeleted_versions.keys()))
-        version = random.choice(undeleted_versions[symbol])
-        lib.delete_version(symbol, version)
-        return f"Deleted version {version} of symbol {symbol}"
+        # delete N versions
+        versions = undeleted_versions[symbol]
+        version_to_delete = random.sample(versions, random.randint(1, len(versions)))
+        try:
+            lib.delete_versions(symbol, version_to_delete)
+            return f"Deleted versions {version_to_delete} of symbol {symbol}"
+        except Exception as e:
+            log.storage.error(
+                "Deleting versions {} of symbol {} failed due to: {}".format(version_to_delete, symbol, e)
+            )
+            raise e
 
     return "No versions to delete"
 
@@ -202,7 +210,7 @@ def run_scenario(func, lib, with_snapshots, verbose):
             lib.snapshot(rand_id + "snapshot" + datetime.utcnow().isoformat())
             # clean up old snapshots - more than 3 hours old
             for s in lib.list_snapshots():
-                t = datetime.strptime(s[len(rand_id):], "snapshot%Y-%m-%dT%H:%M:%S.%f")
+                t = datetime.strptime(s[len(rand_id) :], "snapshot%Y-%m-%dT%H:%M:%S.%f")
                 if (datetime.utcnow() - t).seconds > 60 * 60 * 3:
                     lib.delete_snapshot(s)
     except Exception as e:
