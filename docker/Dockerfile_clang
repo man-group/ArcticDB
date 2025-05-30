@@ -4,7 +4,7 @@ RUN dnf update -y
 RUN dnf remove -y 'gcc-toolset-*'
 # Looks like clang depends on the gcc-toolset-13, so try to install the libatomic-devel from there
 RUN dnf install -y zip flex bison clang llvm lldb gcc-toolset-13-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
-unzip tar epel-release jq wget libcurl-devel git-lfs \
+unzip tar epel-release jq wget libcurl-devel git-lfs autoconf \
 python3.11-devel python3.11-pip perl-IPC-Cmd
 
 RUN dnf groupinstall -y 'Development Tools'

@@ -41,7 +41,7 @@ dependencies:
   - azure-identity-cpp
   - azure-storage-blobs-cpp
   - fmt
-  - folly==2023.09.25.00
+  - folly==2025.04.14.00
   - unordered_dense
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
