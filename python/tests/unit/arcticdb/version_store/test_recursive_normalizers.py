@@ -18,6 +18,7 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
+import arcticdb_ext.stream as adb_stream
 
 
 class AlmostAList(list):
@@ -247,7 +248,7 @@ def test_really_large_symbol_for_recursive_data(basic_store, read):
     write_vit = basic_store.write(sym, data, recursive_normalizers=True)
     fl = Flattener()
     metastruct, to_write = fl.create_meta_structure(data, "s" * 100)
-    assert len(list(to_write.keys())[0]) < fl.MAX_KEY_LENGTH
+    assert len(list(to_write.keys())[0]) < adb_stream.MAX_SYMBOL_LENGTH
     read_vit = read(basic_store, sym)
     equals(read_vit.data, data)
     assert read_vit.symbol == sym
@@ -370,9 +371,61 @@ def test_unsupported_characters_in_keys(s3_version_store_v1, key):
 
     data = {key: df}
 
-    # When & Then
-    with pytest.raises(UserInputException):
-        lib.write("sym", data, recursive_normalizers=True)
+    # When
+    lib.write("sym", data, recursive_normalizers=True)
+
+    # Then
+    res = lib.read("sym").data
+    assert_frame_equal(res[key], df)
+
+    lt = lib.library_tool()
+    multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
+    segment = lt.read_to_dataframe(multi_keys[0])
+    assert segment.shape[0] == 1
+    contents = segment.iloc[0].to_dict()
+    stream_id = contents["stream_id"].decode()
+
+    assert stream_id.startswith("sym_XXX_")
+
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    assert len(index_keys) == 1
+    segment = lt.read_to_dataframe(index_keys[0])
+    contents = segment.iloc[0].to_dict()
+    stream_id = contents["stream_id"].decode()
+    assert stream_id.startswith("sym_XXX_")
+
+
+@pytest.mark.parametrize("key", ("*", "<", ">", chr(31), chr(127)))
+def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key):
+    """Check how we serialize nested keys with characters that we do not support in normal symbol names"""
+    # Given
+    lib = s3_version_store_v1
+    df = pd.DataFrame({"col": [0]})
+    data = {"blah": {key: df}}
+
+    # When
+    lib.write("sym", data, recursive_normalizers=True)
+
+    # Then
+    res = lib.read("sym").data
+
+    assert_frame_equal(res["blah"][key], df)
+
+    lt = lib.library_tool()
+    multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
+    segment = lt.read_to_dataframe(multi_keys[0])
+    assert segment.shape[0] == 1
+    contents = segment.iloc[0].to_dict()
+    stream_id = contents["stream_id"].decode()
+
+    assert stream_id.startswith("sym_lah_XXX_")
+
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    assert len(index_keys) == 1
+    segment = lt.read_to_dataframe(index_keys[0])
+    contents = segment.iloc[0].to_dict()
+    stream_id = contents["stream_id"].decode()
+    assert stream_id.startswith("sym_lah_XXX_")
 
 
 def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1):
