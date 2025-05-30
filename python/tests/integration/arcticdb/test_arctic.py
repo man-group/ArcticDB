@@ -47,7 +47,7 @@ from ...util.mark import (
     SSL_TESTS_MARK,
     SSL_TEST_SUPPORTED,
     FORK_SUPPORTED,
-    ARCTICDB_USING_CONDA
+    ARCTICDB_USING_CONDA,
 )
 
 logger = logging.getLogger(__name__)
@@ -560,15 +560,31 @@ def test_do_not_prune_previous_versions_by_default(arctic_library):
 
 
 @pytest.mark.storage
-def test_delete_version(arctic_library):
+@pytest.mark.parametrize("versions", [1, (1, 2)])
+def test_delete_version(arctic_library, versions):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("symbol", df, metadata={"very": "interesting"})
     lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
     lib.write("symbol", df, metadata={"tres": "interessant"}, prune_previous_versions=False)
-    lib.delete("symbol", versions=(1, 2))
-    assert lib["symbol"].version == 0
-    assert lib["symbol"].metadata == {"very": "interesting"}
+    lib.delete("symbol", versions=versions)
+    if isinstance(versions, int):
+        assert lib["symbol"].version == 2
+        assert lib["symbol"].metadata == {"tres": "interessant"}
+    else:
+        assert lib["symbol"].version == 0
+        assert lib["symbol"].metadata == {"very": "interesting"}
+
+
+@pytest.mark.storage
+def test_delete_version_empty(arctic_library):
+    lib = arctic_library
+    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+    lib.write("symbol", df, metadata={"very": "interesting"})
+    lib.write("symbol", df, metadata={"muy": "interesante"}, prune_previous_versions=False)
+    lib.write("symbol", df, metadata={"tres": "interessant"}, prune_previous_versions=False)
+    lib.delete("symbol", versions=[])
+    assert len(lib.list_versions("symbol")) == 3
 
 
 @pytest.mark.storage
@@ -661,10 +677,58 @@ def test_delete_version_that_does_not_exist(arctic_library):
     with pytest.raises(InternalException):
         lib.delete("symbol", versions=0)
 
+    # symbol does not exist
+    with pytest.raises(InternalException):
+        lib.delete("symbol", versions=[1, 2])
+
     # version does not exist
     lib.write("symbol", pd.DataFrame())
     with pytest.raises(InternalException):
         lib.delete("symbol", versions=1)
+
+    lib.write("symbol", pd.DataFrame(), prune_previous_versions=False)
+    lib.delete("symbol", versions=0)
+
+    # the version is already deleted
+    with pytest.raises(InternalException):
+        lib.delete("symbol", versions=0)
+
+    # one of the versions is already deleted
+    with pytest.raises(InternalException):
+        lib.delete("symbol", versions=[0, 1])
+
+    lib.delete("symbol", versions=1)
+
+    # symbol does not exist
+    with pytest.raises(InternalException):
+        lib.delete("symbol", versions=1)
+
+    with pytest.raises(InternalException):
+        lib.delete("symbol", versions=[2, 3])
+
+
+@pytest.mark.storage
+def test_delete_version_after_tombstone_all(arctic_library):
+    lib = arctic_library
+    lib.write("symbol_tombstone_all", pd.DataFrame())
+    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=True)  # should write a tombstone_all
+    lib.write("symbol_tombstone_all", pd.DataFrame(), prune_previous_versions=False)  # should NOT write a tombstone_all
+    assert len(lib.list_versions("symbol_tombstone_all")) == 2
+    assert len(lib.list_symbols()) == 1
+
+    with pytest.raises(InternalException):
+        lib.delete("symbol_tombstone_all", versions=[0])
+
+    with pytest.raises(InternalException):
+        lib.delete("symbol_tombstone_all", versions=[0, 1])
+
+    with pytest.raises(InternalException):
+        lib.delete("symbol_tombstone_all", versions=[0, 1, 2])
+
+    lib.delete("symbol_tombstone_all", versions=[1, 2])
+
+    assert len(lib.list_versions("symbol_tombstone_all")) == 0
+    assert len(lib.list_symbols()) == 0
 
 
 @pytest.mark.storage
@@ -1348,26 +1412,38 @@ def create_library(uri, lib_name):
 
 # moto will reject any checksum-enabled requests. Below test is to make sure the env var hack works in multiprocessing
 @pytest.mark.parametrize(
-    "multiprocess", [
+    "multiprocess",
+    [
         "spawn",
         pytest.param("fork", marks=FORK_SUPPORTED),
         pytest.param("forkserver", marks=FORK_SUPPORTED),
-    ]
+    ],
 )
 def test_s3_checksum_off_by_env_var(s3_storage, lib_name, multiprocess):
     create_library(s3_storage.arctic_uri, lib_name)
     spawn_context = multiprocessing.get_context(multiprocess)
     processes = []
     for i in range(2):
-        p = spawn_context.Process(target=create_library, args=(s3_storage.arctic_uri, f"{lib_name}_{i}", ))
+        p = spawn_context.Process(
+            target=create_library,
+            args=(
+                s3_storage.arctic_uri,
+                f"{lib_name}_{i}",
+            ),
+        )
         processes.append(p)
         p.start()
     for p in processes:
         p.join()
 
 
-@pytest.mark.skipif(not ARCTICDB_USING_CONDA, reason="aws sdk on pypi is pinned at version which doesn't turn on checksumming by default")
-@pytest.mark.skip(reason="aws sdk is stuck at 1.11.449 on conda CI due to libarrow pin, which doesn't run checksumming by default")
+@pytest.mark.skipif(
+    not ARCTICDB_USING_CONDA,
+    reason="aws sdk on pypi is pinned at version which doesn't turn on checksumming by default",
+)
+@pytest.mark.skip(
+    reason="aws sdk is stuck at 1.11.449 on conda CI due to libarrow pin, which doesn't run checksumming by default"
+)
 def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
     with pytest.raises(Exception):
