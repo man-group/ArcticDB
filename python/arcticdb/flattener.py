@@ -129,53 +129,47 @@ class Flattener:
 
         return False
 
+    def _create_meta_structure(self, obj, sym, to_write):
+        # TODO: convert to non recursive and remove to_write from func arguments to not rely on external state.
+        item_type, iterables, normalization_info = self.derive_iterables(obj)
+        shortened_symbol = sym
+        meta_struct = {
+            "type": item_type,
+            "leaf": False,
+            "symbol": shortened_symbol,
+            "__version__": 1,
+            "sub_keys": None,
+            "data": None,
+            "normalization_info": normalization_info,
+        }
+
+        serialized_as_primitive = self.try_serialize_as_primitive(obj)
+        if serialized_as_primitive:
+            meta_struct["leaf"] = True
+            meta_struct["data"] = serialized_as_primitive
+
+            return meta_struct
+
+        if not iterables:
+            # Use the shortened name for the actual writes to avoid having obscenely large key sizes.
+            to_write[self.compact_v1(sym)] = obj
+            meta_struct["leaf"] = True
+            return meta_struct
+
+        meta_struct["sub_keys"] = []
+        for k, v in iterables:
+            # Note: It's fine to not worry about the separator given we just use it to form some sort of vaguely
+            # readable name in the end when the leaf node is retrieved.
+            key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str(k))
+            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write))
+
+        return meta_struct
+
     def create_meta_structure(self, obj, sym):
-        # Stack for iterative DFS: each item is (obj, sym, parent_meta_struct, parent_key_index)
-        stack = []
-        # The root node doesn't have a parent, so parent_meta_struct and parent_key_index are None
-        stack.append((obj, sym, None, None))
-        # Collects all writes to be performed
-        to_write = {}
+        to_write = dict()
+        meta_struct = self._create_meta_structure(obj, sym, to_write)
 
-        result_meta_struct = None
-
-        while stack:
-            current_obj, current_sym, parent_meta_struct, parent_key_index = stack.pop()
-            item_type, iterables, normalization_info = self.derive_iterables(current_obj)
-            meta_struct = {
-                "type": item_type,
-                "leaf": False,
-                "symbol": current_sym,
-                "__version__": 1,
-                "sub_keys": None,
-                "data": None,
-                "normalization_info": normalization_info,
-            }
-            # Link this meta_struct into its parent if it has one
-            if parent_meta_struct is not None:
-                parent_meta_struct["sub_keys"][parent_key_index] = meta_struct
-
-            if result_meta_struct is None:
-                result_meta_struct = meta_struct
-
-            serialized_as_primitive = self.try_serialize_as_primitive(current_obj)
-            if serialized_as_primitive:
-                meta_struct["leaf"] = True
-                meta_struct["data"] = serialized_as_primitive
-                continue
-
-            if not iterables:
-                to_write[self.compact_v1(current_sym)] = current_obj
-                meta_struct["leaf"] = True
-                continue
-
-            meta_struct["sub_keys"] = [None] * len(iterables)
-            # Push children to stack (in reverse so sub_keys are filled in order)
-            for idx, (k, v) in reversed(list(enumerate(iterables))):
-                key_till_now = "{}{}{}".format(current_sym, self.SEPARATOR, str(k))
-                stack.append((v, key_till_now, meta_struct, idx))
-
-        return result_meta_struct, to_write
+        return meta_struct, to_write
 
     def is_named_tuple_class(self, class_obj):
         return tuple in getattr(class_obj, "__bases__", [])
