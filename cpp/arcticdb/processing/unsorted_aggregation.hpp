@@ -10,10 +10,19 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
-#include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 
 namespace arcticdb {
+
+enum class AggregationType {
+    MIN,
+    MAX,
+    SUM,
+    COUNT,
+    MEAN,
+    FIRST,
+    LAST
+};
 
 class MinMaxAggregatorData
 {
@@ -72,7 +81,8 @@ public:
     void add_data_type(DataType data_type);
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
-    SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
+    VariantRawValue get_default_value(bool dynamic_schema);
 
 private:
 
@@ -89,7 +99,7 @@ public:
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    VariantRawValue get_default_value(bool dynamic_schema);
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -104,7 +114,7 @@ public:
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    VariantRawValue get_default_value(bool dynamic_schema);
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -121,7 +131,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
-
+    VariantRawValue get_default_value(bool dynamic_schema);
 private:
 
     struct Fraction
@@ -146,7 +156,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
-
+    VariantRawValue get_default_value(bool dynamic_schema);
 private:
 
     std::vector<uint64_t> aggregated_;
@@ -162,7 +172,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    VariantRawValue get_default_value(bool dynamic_schema);
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -181,7 +191,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    VariantRawValue get_default_value(bool dynamic_schema);
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -206,6 +216,25 @@ public:
     [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
     [[nodiscard]] AggregatorData get_aggregator_data() const { return AggregatorData(); }
+    [[nodiscard]] constexpr AggregationType get_aggregation_type() const {
+        if constexpr (std::is_same_v<AggregatorData, SumAggregatorData>) {
+            return AggregationType::SUM;
+        } else if constexpr (std::is_same_v<AggregatorData, MinAggregatorData>) {
+            return AggregationType::MIN;
+        } else if constexpr (std::is_same_v<AggregatorData, MaxAggregatorData>) {
+            return AggregationType::MAX;
+        } else if constexpr (std::is_same_v<AggregatorData, MeanAggregatorData>) {
+            return AggregationType::MEAN;
+        } else if constexpr (std::is_same_v<AggregatorData, CountAggregatorData>) {
+            return AggregationType::COUNT;
+        } else if constexpr (std::is_same_v<AggregatorData, FirstAggregatorData>) {
+            return AggregationType::FIRST;
+        } else if constexpr (std::is_same_v<AggregatorData, LastAggregatorData>) {
+            return AggregationType::LAST;
+        } else {
+            static_assert(sizeof(AggregatorData) == 0, "Unknown aggregator");
+        }
+    }
 
 private:
 

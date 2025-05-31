@@ -703,6 +703,7 @@ class NullValueReducer {
     DecodePathData shared_data_;
     std::any& handler_data_;
     const OutputFormat output_format_;
+    VariantRawValue default_value_;
 
 public:
     NullValueReducer(
@@ -711,14 +712,16 @@ public:
         SegmentInMemory frame,
         DecodePathData shared_data,
         std::any& handler_data,
-        OutputFormat output_format) :
+        OutputFormat output_format,
+        VariantRawValue default_value = {}) :
             column_(column),
             context_(context),
             frame_(std::move(frame)),
             pos_(frame_.offset()),
             shared_data_(std::move(shared_data)),
             handler_data_(handler_data),
-            output_format_(output_format){
+            output_format_(output_format),
+            default_value_(default_value){
     }
 
     [[nodiscard]] static size_t cursor(const PipelineContextRow &context_row) {
@@ -735,7 +738,7 @@ public:
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
             } else {
-                column_.default_initialize_rows(start_row, num_rows, false);
+                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
             }
             pos_ = current_pos + sz_to_advance;
         }
@@ -744,8 +747,8 @@ public:
     }
 
     void finalize() {
-        auto total_rows = frame_.row_count();
-        auto end =  frame_.offset() + total_rows;
+        const auto total_rows = frame_.row_count();
+        const auto end =  frame_.offset() + total_rows;
         if(pos_ != end) {
             util::check(pos_ < end, "Overflow in finalize {} > {}", pos_, end);
             const auto num_rows = end - pos_;
@@ -753,7 +756,7 @@ public:
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
             } else {
-                column_.default_initialize_rows(start_row, num_rows, false);
+                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
             }
         }
     }
@@ -800,7 +803,14 @@ struct ReduceColumnTask : async::BaseTask {
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema) {
-                NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format()};
+                const auto& name = frame_field.name();
+                const VariantRawValue default_value = [&]() -> VariantRawValue {
+                    if (auto it = context_->default_values_.find(std::string(name)); it != context_->default_values_.end()) {
+                        return it->second;
+                    }
+                    return {};
+                }();
+                NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format(), default_value};
                 for (const auto &row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};
                     null_reducer.reduce(context_row);

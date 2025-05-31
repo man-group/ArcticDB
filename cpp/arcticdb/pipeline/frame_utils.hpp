@@ -8,13 +8,11 @@
 #pragma once
 
 #include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
-#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -25,6 +23,10 @@
 #include <arcticdb/util/flatten_utils.hpp>
 
 namespace arcticdb {
+
+namespace pipelines::index {
+    struct IndexSegmentReader;
+}
 
 inline size_t get_first_string_size(const pipelines::PipelineContextRow& context_row, ChunkedBuffer &src, std::size_t first_row_in_frame) {
     auto offset = first_context_row(context_row.slice_and_key(), first_row_in_frame);
