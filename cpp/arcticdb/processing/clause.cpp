@@ -783,7 +783,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // slice is being computed by the call to process dealing with the row slices above these. Otherwise, this call
     // should do it
     const auto& front_slice = row_slices.front();
-    bool responsible_for_first_overlapping_bucket = front_slice.entity_fetch_count_->at(0) == 1;
+    const bool responsible_for_first_overlapping_bucket = front_slice.entity_fetch_count_->at(0) == 1;
     // Find the iterators into bucket_boundaries_ of the start of the first and the end of the last bucket this call to process is
     // responsible for calculating
     // All segments in a given row slice contain the same index column, so just grab info from the first one
@@ -792,12 +792,12 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // Resampling only makes sense for timestamp indexes
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");
-    auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
+    const auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
     // If there is only one row slice, then the last index value of interest is just the last index value for this row
     // slice. If there is more than one, then the first index value from the second row slice must be used to calculate
     // the buckets of interest, due to an old bug in update. See test_compatibility.py::test_compat_resample_updated_data
     // for details
-    auto last_ts = row_slices.size() == 1 ? first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value():
+    const auto last_ts = row_slices.size() == 1 ? first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value():
             row_slices.back().segments_->at(0)->column(0).scalar_at<timestamp>(0).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     if (bucket_boundaries.size() < 2) {
@@ -808,7 +808,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     for (const auto& row_slice: row_slices) {
         input_index_columns.emplace_back(row_slice.segments_->at(0)->column_ptr(0));
     }
-    auto output_index_column = generate_output_index_column(input_index_columns, bucket_boundaries);
+    const auto output_index_column = generate_output_index_column(input_index_columns, bucket_boundaries);
     // Bucket boundaries can be wider than the date range specified by the user, narrow the first and last buckets here if necessary
     bucket_boundaries.front() = std::max(bucket_boundaries.front(), date_range_->first - (closed_boundary == ResampleBoundary::RIGHT ? 1 : 0));
     bucket_boundaries.back() = std::min(bucket_boundaries.back(), date_range_->second + (closed_boundary == ResampleBoundary::LEFT ? 1 : 0));
@@ -825,7 +825,6 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
         std::vector<std::optional<ColumnWithStrings>> input_agg_columns;
         input_agg_columns.reserve(row_slices.size());
         for (auto& row_slice: row_slices) {
-            std::cout<<fmt::format("Aggregator input: {} aggregator output: {}\n", aggregator.get_input_column_name(), aggregator.get_output_column_name());
             auto variant_data = row_slice.get(aggregator.get_input_column_name());
             util::variant_match(variant_data,
                                 [&input_agg_columns](const ColumnWithStrings& column_with_strings) {
@@ -841,6 +840,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                                 }
             );
         }
+        std::cout<<fmt::format("Output column name: {}\n", aggregator.get_output_column_name());
         std::optional<Column> aggregated = aggregator.aggregate(
             input_index_columns,
             input_agg_columns,

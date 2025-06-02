@@ -38,6 +38,10 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                                                           StringPool& string_pool,
                                                                           const ResampleBoundary label,
                                                                           const timestamp step) const {
+    for (auto b : bucket_boundaries) {
+        std::cout<<b<<" ";
+    }
+    std::cout<<std::endl;
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     const auto common_input_type = generate_common_input_type(input_agg_columns);
     if (!common_input_type.has_value()) {
@@ -49,6 +53,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
         AllocationType::DYNAMIC,
         Sparsity::PERMITTED
     );
+    std::cout<<fmt::format("Input agg size: {}, output index size: {}", input_agg_columns.size(), output_index_column.row_count())<<std::endl;
     position_t row_to_write = 0;
     details::visit_type(
         res.type().data_type(),
@@ -132,33 +137,29 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                         // many buckets this column covers and advance row_to_write that many times. Since we know that
                         // no aggregation is performed, it's enough to check the last index value of this column.
                         const Column& input_index = *input_index_columns[idx];
-                        const timestamp last_index_value = *(input_index.begin<IndexTDT>() + (input_index.row_count() - 1));
+                        const timestamp last_index_value = *input_index.scalar_at<IndexTDT::DataTypeTag::raw_type>(input_index.row_count() - 1);
                         while (row_to_write < output_index_column.row_count()) {
-                            const timestamp label_correction = label == ResampleBoundary::RIGHT ? step : 0;
-                            // The values in the output index column are different based on the label (left or right)
-                            // if the label is right, they will contain the right end of the interval. We need to
-                            // check how many intervals were started.
-                            const timestamp interval_start = *(output_index_column.begin<IndexTDT>() + row_to_write) - label_correction;
-                            if (interval_start < last_index_value + (closed_boundary == ResampleBoundary::RIGHT)) {
+                            auto output_index_it = output_index_column.begin<IndexTDT>() + row_to_write;
+                            const timestamp output_bucket_start = *output_index_it - ((label == ResampleBoundary::RIGHT)*step);
+                            const Bucket<closed_boundary> bucket(output_bucket_start, output_bucket_start + step);
+                            if (bucket.contains(last_index_value)) {
+                                break;
+                            } else if (index_value_past_end_of_bucket(last_index_value, bucket.end())) {
                                 if (bucket_has_values) {
                                     res.set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
-                                    bucket_has_values = false;
                                 }
                                 ++row_to_write;
-                            } else {
-                                break;
                             }
                         }
-                        size_t bucket_start_index = (last_index_value - bucket_boundaries.front()) / step;
-                        if (bucket_boundaries[bucket_start_index] == last_index_value && closed_boundary == ResampleBoundary::RIGHT) {
-                            --bucket_start_index;
+
+                        while (bucket_end_it != bucket_boundaries_end && index_value_past_end_of_bucket(last_index_value, *bucket_end_it)) {
+                            ++bucket_start_it;
+                            ++bucket_end_it;
                         }
-                        if (bucket_start_index < bucket_boundaries.size() - 1) {
-                            bucket_start_it = bucket_boundaries.begin() + bucket_start_index;
-                            bucket_end_it = bucket_start_it + 1;
-                            current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
-                        } else {
+                        if (bucket_end_it == bucket_boundaries_end) {
                             reached_end_of_buckets = true;
+                        } else {
+                            current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
                         }
                     }
                 }
@@ -169,18 +170,6 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
             }
         }
     );
-
-    std::cout<<"Result\n";
-    details::visit_type(
-        res.type().data_type(),
-        [&](auto tag) {
-            using info = ScalarTypeInfo<decltype(tag)>;
-            Column::for_each_enumerated<typename info::TDT>(res, [&](auto row) {
-                std::cout<<"index: "<<row.idx()<<std::endl;
-                std::cout<<"data: "<<row.value()<<std::endl;
-            });
-        });
-
     return res;
 }
 

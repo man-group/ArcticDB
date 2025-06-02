@@ -40,9 +40,22 @@ def date(draw, min_date, max_date, unit="ns"):
 
 
 @st.composite
-def dataframe(draw, column_names, column_dtypes, min_date, max_date):
+def dataframe(draw, column_names, column_dtypes, min_date, max_date, dynamic_schema=False):
     index = hs_pd.indexes(elements=date(min_date=min_date, max_date=max_date), min_size=1)
-    columns = [hs_pd.column(name=name, dtype=dtype) for (name, dtype) in zip(column_names, column_dtypes)]
+    #columns = [hs_pd.column(name=name, dtype=dtype) for (name, dtype) in zip(column_names, column_dtypes)]
+    columns = []
+    for name, dtype in zip(column_names, column_dtypes):
+        if pd.api.types.is_integer_dtype(dtype):
+            # There are two reasons to cap int size:
+            # 1. To avoid overflows (happens usually when the dtype is 64bit and sum aggregator is used)
+            # 2. When dynamic schema is used. If we use pd.concat([df1, df2]) on two dataframes which are dynamic
+            #    schema segments, the columns which are missing in either df will become float64 in the result (so that
+            #    the missing values can be NaN), however, if int64 is used some values won't be represented correctly
+            #    and the test will fail.
+            min_value = 0 if pd.api.types.is_unsigned_integer_dtype(dtype) else -2**31
+            columns.append(hs_pd.column(name=name, elements=st.integers(min_value=min_value, max_value=2**31 - 1), dtype=dtype))
+        else:
+            columns.append(hs_pd.column(name=name, dtype=dtype))
     result = draw(hs_pd.data_frames(columns, index=index))
     result.sort_index(inplace=True)
     return result
@@ -126,7 +139,7 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
 @st.composite
 def dynamic_schema_column_list(draw):
     all_column_names = [f"col_{i}" for i in range(10)]
-    segment_count = draw(st.integers(min_value=1, max_value=2))
+    segment_count = draw(st.integers(min_value=1, max_value=10))
     segment_ranges = sorted(draw(st.lists(date(min_date=MIN_DATE, max_date=MAX_DATE, unit="s"), unique=True, min_size=segment_count+1, max_size=segment_count+1)))
     segments = []
     dtypes = [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64]
@@ -144,7 +157,9 @@ def expected_aggregation_type(aggregation, column_type):
         return np.uint64
     elif aggregation == "mean":
         return np.float64
-    elif aggregation in ["min", "max", "first", "last", "sum"]:
+    elif aggregation == "sum":
+        return largest_numeric_type(column_type)
+    elif aggregation in ["min", "max", "first", "last"]:
         return column_type
     else:
         raise Exception(f"Unknown aggregation type: {aggregation}. Column type {column_type}.")
@@ -153,14 +168,21 @@ def expected_aggregation_type(aggregation, column_type):
 @given(
     df_list=dynamic_schema_column_list(),
     rule=rule(),
-    #origin=origin(),
-    #offset=offset()
+    origin=origin(),
+    offset=offset()
 )
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, rule):
+def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, rule, origin, offset):
+    common_types = {}
+    for df in df_list:
+        for col in df.columns:
+            if col not in common_types:
+                common_types[col] = df[col].dtype
+            else:
+                common_types[col] = larget_common_type(common_types[col], df[col].dtype)
+    # TODO: Create a custom strategy for picking dtypes instead of filtering in the test
+    assume(all(v is not None for v in common_types.values()))
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-    origin = "epoch"
-    offset = None
     print(f"Rule: {rule}, Origin: {origin}, Offset: {offset}")
     lib = lmdb_version_store_dynamic_schema_v1
     lib.version_store.clear()
@@ -179,7 +201,7 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
         df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
         lib.append(sym, df)
 
-    aggregations = ["min"]
+    aggregations = ALL_AGGREGATIONS
     agg = {f"{name}_{op}": (name, op) for name in merged_column_types for op in aggregations}
     expected_types = {f"{name}_{op}": expected_aggregation_type(op, merged_column_types[name]) for name in merged_column_types for op in aggregations}
     print(agg)
@@ -212,11 +234,12 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
                     return
 
 def test_test(lmdb_version_store_dynamic_schema_v1):
-    df1 = pd.DataFrame({"col_0": np.array([1], dtype=np.int8)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
-    df2 = pd.DataFrame({"col_1": np.array([50], dtype=np.int8)}, index=pd.DatetimeIndex([pd.Timestamp(1)]))
-    df_list = [df1, df2]
+    df1 = pd.DataFrame({"col_0": np.array([0, 0], dtype=np.int8)}, index=pd.to_datetime([pd.Timestamp(0),pd.Timestamp(1)]))
+    df2 = pd.DataFrame({"col_1": np.array([0], dtype=np.int8)}, index=pd.to_datetime([pd.Timestamp(2)]))
+    df3 = pd.DataFrame({"col_0": np.array([0], dtype=np.int8)}, index=pd.to_datetime([pd.Timestamp(3)]))
+    df_list = [df1, df2, df3]
     rule="10ns"
-    origin="epoch"
+    origin="start"
     offset=None
 
     lib = lmdb_version_store_dynamic_schema_v1
@@ -230,32 +253,25 @@ def test_test(lmdb_version_store_dynamic_schema_v1):
             else:
                 merged_column_types[column] = larget_common_type(merged_column_types[column], df[column].dtype)
         # This column will be used to keep track of empty buckets.
-        df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
+        df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=np.uint64)
         lib.append(sym, df)
 
-    expected_types = {f"{name}_{op}": expected_aggregation_type(op, merged_column_types[name]) for name in merged_column_types for op in ALL_AGGREGATIONS}
-    agg = {f"{name}_{op}": (name, op) for name in merged_column_types for op in ALL_AGGREGATIONS}
-    for closed in ["left"]:
+    expected_types = {f"{name}_{op}": expected_aggregation_type(op, merged_column_types[name]) for name in merged_column_types for op in ["count"]}
+    print(expected_types)
+
+    agg = {f"{name}_{op}": (name, op) for name in merged_column_types for op in ["count"]}
+    for closed in ["right"]:
         for label in ["left"]:
-            try:
-                generic_resample_test(
-                    lib,
-                    sym,
-                    rule,
-                    agg,
-                    pd.concat(df_list),
-                    expected_types,
-                    origin=origin,
-                    offset=offset,
-                    closed=closed,
-                    label=label,
-                    # Must be int or uint column otherwise dropping of empty buckets will not work
-                    drop_empty_buckets_for="_empty_bucket_tracker_")
-            except ValueError as pandas_error:
-                # This is to avoid a bug in pandas related to how end an end_day work. It's possible that when end/end_day are used
-                # the first value of the data frame to be outside the computed resampling range. In arctic this is not a problem
-                # as we allow this by design.
-                if str(pandas_error) != "Values falls before first bin":
-                    raise pandas_error
-                else:
-                    return
+            generic_resample_test(
+                lib,
+                sym,
+                rule,
+                agg,
+                pd.concat(df_list),
+                expected_types,
+                origin=origin,
+                offset=offset,
+                closed=closed,
+                label=label,
+                # Must be int or uint column otherwise dropping of empty buckets will not work
+                drop_empty_buckets_for="_empty_bucket_tracker_")

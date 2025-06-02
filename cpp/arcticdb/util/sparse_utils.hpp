@@ -47,8 +47,7 @@ void densify_buffer_using_bitmap(const util::BitSet &block_bitset, arcticdb::Chu
 }
 
 template <typename RawType>
-inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uint8_t *dense_ptr,
-                                             uint8_t *sparse_ptr) {
+void expand_dense_buffer_using_bitmap(const BitMagic &bv, const uint8_t *dense_ptr, uint8_t *sparse_ptr) {
     auto en = bv.first();
     auto en_end = bv.end();
     auto element_sz = sizeof(RawType);
@@ -69,7 +68,7 @@ inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uin
 
 template <typename TagType>
 requires util::instantiation_of<TagType, TypeDescriptorTag>
-void default_initialize(uint8_t* data, size_t bytes) {
+void default_initialize(uint8_t* data, const size_t bytes) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
     constexpr auto data_type = TagType::DataTypeTag::data_type;
@@ -87,7 +86,7 @@ void default_initialize(uint8_t* data, size_t bytes) {
 
 template <typename TagType>
 requires util::instantiation_of<TagType, TypeDescriptorTag>
-void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, DecodePathData shared_data, std::any& handler_data) {
+void default_initialize(ChunkedBuffer& buffer, size_t offset, const size_t bytes, DecodePathData shared_data, std::any& handler_data) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
     constexpr auto type = static_cast<TypeDescriptor>(TagType{});
@@ -117,14 +116,22 @@ void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, Deco
     }
 }
 
+
+/// Initialize a buffer either using a custom default value or using a predefined default value for the type
+/// @param[in] default_value Variant holding either a value of the raw type for the type tag or std::monostate
 template <typename TagType>
 requires util::instantiation_of<TagType, TypeDescriptorTag>
-void initialize(uint8_t* data, size_t bytes, const VariantRawValue& default_value) {
+void initialize(uint8_t* data, const size_t bytes, const VariantRawValue& default_value) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     if (auto* val = std::get_if<RawType>(&default_value)) {
-        const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
+        const auto num_rows = bytes / sizeof(RawType);
         std::fill_n(reinterpret_cast<RawType*>(data), num_rows, *val);
     } else {
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+            std::holds_alternative<std::monostate>(default_value),
+            "When initializing a buffer the default must hold either the raw type for the buffer, meaning the buffer"
+            "has a custom default value or std::monostate meaning that a predefined value for the raw type must be"
+            "used. Holding any other type is most likely an error.");
         default_initialize<TagType>(data, bytes);
     }
 }
