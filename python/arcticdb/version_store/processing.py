@@ -237,7 +237,7 @@ class ExpressionNode:
         if isinstance(pattern, str):
             return self._apply(pattern, _OperationType.REGEX_MATCH)
         else:
-            raise ArcticNativeException(
+            raise UserInputException(
                 f"'regex_match' filtering only accepts str as pattern, {type(pattern)} is given"
             )
 
