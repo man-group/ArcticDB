@@ -129,7 +129,7 @@ public:
 
     template<typename T>
     T *ptr_cast(position_t pos, size_t required_bytes) {
-        return const_cast<T *>( const_cast<const CursoredBuffer *>( this)->ptr_cast<T>(pos, required_bytes));
+        return const_cast<T*>(const_cast<const CursoredBuffer*>(this)->ptr_cast<T>(pos, required_bytes));
     }
 
     [[nodiscard]] bool empty() const {

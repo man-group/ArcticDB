@@ -13,13 +13,11 @@
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/util/type_traits.hpp>
 #include <arcticdb/column_store/column_data.hpp>
-
 #include <arcticdb/column_store/chunked_buffer.hpp>
 
 #include <bitmagic/bmserial.h>
-
-#include <cstdint>
 
 
 namespace arcticdb::util {
@@ -70,6 +68,7 @@ inline void expand_dense_buffer_using_bitmap(const util::BitMagic &bv, const uin
 }
 
 template <typename TagType>
+requires util::instantiation_of<TagType, TypeDescriptorTag>
 void default_initialize(uint8_t* data, size_t bytes) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
@@ -87,6 +86,7 @@ void default_initialize(uint8_t* data, size_t bytes) {
 }
 
 template <typename TagType>
+requires util::instantiation_of<TagType, TypeDescriptorTag>
 void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, DecodePathData shared_data, std::any& handler_data) {
     using RawType = typename TagType::DataTypeTag::raw_type;
     const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
@@ -114,6 +114,18 @@ void default_initialize(ChunkedBuffer& buffer, size_t offset, size_t bytes, Deco
                 type_descriptor
             );
         }
+    }
+}
+
+template <typename TagType>
+requires util::instantiation_of<TagType, TypeDescriptorTag>
+void initialize(uint8_t* data, size_t bytes, const VariantRawValue& default_value) {
+    using RawType = typename TagType::DataTypeTag::raw_type;
+    if (auto* val = std::get_if<RawType>(&default_value)) {
+        const auto num_rows ARCTICDB_UNUSED = bytes / sizeof(RawType);
+        std::fill_n(reinterpret_cast<RawType*>(data), num_rows, *val);
+    } else {
+        default_initialize<TagType>(data, bytes);
     }
 }
 

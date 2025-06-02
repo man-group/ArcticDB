@@ -288,7 +288,7 @@ void decode_or_expand(
             ChunkedBuffer sparse{bytes};
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
+            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
                 util::default_initialize<TagType>(dest, dest_bytes);
@@ -299,7 +299,7 @@ void decode_or_expand(
             const auto &ndarray = encoded_field_info.ndarray();
             if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
                 ARCTICDB_TRACE(log::version(), "Default initializing as only have {} bytes of {}", bytes, dest_bytes);
-                source_type_desc.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
+                source_type_desc.visit_tag([dest, bytes, dest_bytes](auto tdt) {
                     using TagType = decltype(tdt);
                     util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
                 });

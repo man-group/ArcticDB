@@ -1298,7 +1298,8 @@ void copy_frame_data_to_buffer(
         DecodePathData shared_data,
         std::any& handler_data,
         OutputFormat output_format,
-        IntToFloatConversion int_to_float_conversion) {
+        IntToFloatConversion int_to_float_conversion,
+        const VariantRawValue default_value) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -1307,7 +1308,7 @@ void copy_frame_data_to_buffer(
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
     auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
-    auto total_size = dst_rawtype_size * num_rows;
+    const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
 
     auto src_data = src_column.data();
@@ -1321,14 +1322,14 @@ void copy_frame_data_to_buffer(
         handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
-            util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
+            util::initialize<decltype(dst_desc_tag)>(dst_ptr, total_size, default_value);
         });
     // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
     } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion)) {
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
-            util::default_initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size);
-            auto typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
+            typename dst_type_info::RawType* typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
+            util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
             details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
                 Column::for_each_enumerated<typename src_type_info::TDT>(src_column, [typed_dst_ptr](auto enumerating_it) {
@@ -1386,6 +1387,7 @@ struct CopyToBufferTask : async::BaseTask {
     std::any& handler_data_;
     OutputFormat output_format_;
     IntToFloatConversion int_to_float_conversion_;
+    std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment,
@@ -1395,7 +1397,8 @@ struct CopyToBufferTask : async::BaseTask {
             DecodePathData shared_data,
             std::any& handler_data,
             OutputFormat output_format,
-            IntToFloatConversion int_to_float_conversion) :
+            IntToFloatConversion int_to_float_conversion,
+            std::shared_ptr<PipelineContext> pipeline_context) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
         frame_slice_(std::move(frame_slice)),
@@ -1403,7 +1406,8 @@ struct CopyToBufferTask : async::BaseTask {
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
         output_format_(output_format),
-        int_to_float_conversion_(int_to_float_conversion){
+        int_to_float_conversion_(int_to_float_conversion),
+        pipeline_context_(std::move(pipeline_context)){
     }
 
     folly::Unit operator()() {
@@ -1412,19 +1416,47 @@ struct CopyToBufferTask : async::BaseTask {
         const auto& fields = source_segment_.descriptor().fields();
         // Skip the "true" index fields (i.e. those stored in every column slice) if we are not in the first column slice
         for (size_t idx = first_col_slice ? 0 : get_index_field_count(source_segment_); idx < fields.size(); ++idx) {
-            // First condition required to avoid underflow when substracting one unsigned value from another
+            // First condition required to avoid underflow when subtracting one unsigned value from another
             if (required_fields_count_ >= first_col && idx < required_fields_count_ - first_col) {
                 // This is a required column in the output. The name in source_segment_ may not match that in target_segment_
                 // e.g. If 2 timeseries are joined that had differently named indexes
-                copy_frame_data_to_buffer(target_segment_, idx + first_col, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_, int_to_float_conversion_);
+                copy_frame_data_to_buffer(
+                    target_segment_,
+                    idx + first_col,
+                    source_segment_,
+                    idx,
+                    frame_slice_.row_range,
+                    shared_data_,
+                    handler_data_,
+                    output_format_,
+                    int_to_float_conversion_,
+                    {});
             } else {
                 // All other columns use names to match the source with the destination
                 const auto& field = fields.at(idx);
                 const auto& field_name = field.name();
                 auto frame_loc_opt = target_segment_.column_index(field_name);
-                if (!frame_loc_opt)
+                if (!frame_loc_opt) {
                     continue;
-                copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_, int_to_float_conversion_);
+                }
+                const VariantRawValue default_Value = [&]() -> VariantRawValue {
+                    const auto it = pipeline_context_->default_values_.find(std::string{field_name});
+                    if (it != pipeline_context_->default_values_.end()) {
+                        return it->second;
+                    }
+                    return {};
+                }();
+                copy_frame_data_to_buffer(
+                    target_segment_,
+                    *frame_loc_opt,
+                    source_segment_,
+                    idx,
+                    frame_slice_.row_range,
+                    shared_data_,
+                    handler_data_,
+                    output_format_,
+                    int_to_float_conversion_,
+                    default_Value);
             }
         }
         return folly::Unit{};
@@ -1454,7 +1486,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 shared_data,
                 handler_data,
                 output_format,
-                int_to_float_conversion}));
+                int_to_float_conversion,
+                pipeline_context}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
 }

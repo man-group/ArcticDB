@@ -160,7 +160,7 @@ void Column::unsparsify(size_t num_rows) {
     if(!sparse_map_)
         return;
 
-    type_.visit_tag([this, num_rows] (const auto tdt) {
+    type_.visit_tag([this, num_rows] (auto tdt) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
@@ -379,18 +379,14 @@ void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ens
             using RawType = typename T::DataTypeTag::raw_type;
             const auto bytes = (num_rows * sizeof(RawType));
 
-            if (ensure_alloc)
+            if (ensure_alloc) {
                 data_.ensure<uint8_t>(bytes);
-
-            auto type_ptr = data_.ptr_cast<RawType>(start_pos, bytes);
-            if (auto* default_ptr = std::get_if<RawType>(&default_value)) {
-                std::fill_n(type_ptr, num_rows, *default_ptr);
-            } else {
-                util::default_initialize<T>(reinterpret_cast<uint8_t *>(type_ptr), bytes);
             }
-
-            if (ensure_alloc)
+            auto type_ptr = data_.ptr_cast<RawType>(start_pos, bytes);
+            util::initialize<T>(reinterpret_cast<uint8_t*>(type_ptr), bytes, default_value);
+            if (ensure_alloc) {
                 data_.commit();
+            }
 
             last_logical_row_ += static_cast<ssize_t>(num_rows);
             last_physical_row_ += static_cast<ssize_t>(num_rows);
