@@ -50,7 +50,7 @@ jobs:
         id: create_docs_tag
         run: |
             DOCS_TAG_NAME=v${{ steps.tag_name.outputs.tag }}-docs
-            git tag $DOCS_TAG_NAME
+            git tag --force $DOCS_TAG_NAME
             git push --force origin $DOCS_TAG_NAME
 
   build-docs:
