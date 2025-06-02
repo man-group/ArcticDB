@@ -160,7 +160,7 @@ VariantData dispatch_binary(const VariantData& left, const VariantData& right, O
         case OperationType::ISNOTIN:
             return visit_binary_membership(left, right, IsNotInOperator{});
         case OperationType::REGEX_MATCH:
-            return visit_regex_match_membership(left, right, IsRegexMatchOperator{});
+            return visit_regex_match_membership(left, right);
         case OperationType::AND:
         case OperationType::OR:
         case OperationType::XOR:
@@ -168,6 +168,68 @@ VariantData dispatch_binary(const VariantData& left, const VariantData& right, O
         default:
             util::raise_rte("Unknown operation {}", int(operation));
     }
+}
+
+VariantData regex_match_membership(const ColumnWithStrings& column_with_strings, const Value& val) {
+    if (is_empty_type(column_with_strings.column_->type().data_type())) {
+        return EmptyResult{};
+    }
+    util::BitSet output_bitset;
+    details::visit_type(column_with_strings.column_->type().data_type(), [&](auto col_tag) {
+        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+        details::visit_type(val.type().data_type(), [&](auto val_tag) {
+            using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
+            if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
+                std::optional<std::string> utf32_string;
+                std::string value_string;
+                if constexpr(is_fixed_string_type(col_type_info::data_type)) {
+                    auto width = column_with_strings.get_fixed_width_string_size();
+                    if (width.has_value()) {
+                        utf32_string = ascii_to_padded_utf32(std::string_view(*val.str_data(), val.len()), *width);
+                        if (utf32_string.has_value()) {
+                            value_string = *utf32_string;
+                        }
+                    }
+                } else {
+                    value_string = std::string(*val.str_data(), val.len());
+                }
+                auto offset_set = column_with_strings.string_pool_->get_regex_match_offsets_for_column(value_string, *column_with_strings.column_);
+                Column::transform<typename col_type_info::TDT>(
+                        *column_with_strings.column_,
+                        output_bitset,
+                        false,
+                        [&offset_set](auto input_value) -> bool {
+                    auto offset = static_cast<entity::position_t>(input_value);
+                    return offset_set.contains(offset);
+                });
+            } else {
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid comparison {}",
+                                binary_operation_with_types_to_string(
+                                        column_with_strings.column_name_,
+                                        column_with_strings.column_->type(),
+                                        "REGEX MATCH",
+                                        val.to_string<typename val_type_info::RawType>(),
+                                        val.type()));
+            }
+        });
+    });
+    ARCTICDB_DEBUG(log::version(), "Filtered column of size {} down to {} bits", column_with_strings.column_->last_row() + 1, output_bitset.count());
+
+    return VariantData{std::move(output_bitset)};
+}
+
+VariantData visit_regex_match_membership(const VariantData &left, const VariantData &right) {
+    if (std::holds_alternative<EmptyResult>(left))
+        return EmptyResult{};
+    return std::visit(util::overload {
+        [&] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
+            return transform_to_placeholder(regex_match_membership(l, *r));
+        },
+        [](const auto &, const auto&) -> VariantData {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Regex match membership operations must be Column/Value");
+            return EmptyResult{};
+        }
+        }, left, right);
 }
 
 }

@@ -614,13 +614,6 @@ bool operator()(T t, const ankerl::unordered_dense::set<U>& u) const {
 #endif
 };
 
-struct IsRegexMatchOperator: MembershipOperator {
-    template<typename T, typename U>
-    bool operator()(T t, U u) const {
-        return true;
-    }
-};
-
 } //namespace arcticdb
 
 namespace fmt {

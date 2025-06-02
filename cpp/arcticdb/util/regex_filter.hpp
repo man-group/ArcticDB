@@ -88,7 +88,7 @@ public:
     results_((pattern_.capturing_groups() + 1) * 3, 0) {
     }
 
-    bool match(const std::string& text) {
+    bool match(std::string_view text) {
         ResultsType res = ::pcre_exec(pattern_.handle(), extra_, text.data(), static_cast<int>(text.size()), 0, options_, &results_[0], static_cast<int>(results_.size()));
         util::check(res >= 0 || res == PCRE_ERROR_NOMATCH, "Invalid result in regex compile with pattern {} and text {}: {}", pattern_.text(), text, res);
         return res > 0;
