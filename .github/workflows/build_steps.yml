@@ -361,7 +361,13 @@ jobs:
 
       - name: Run test
         run: |
-          prlimit --nofile=1000000 -- build_tooling/parallel_test.sh tests/${{matrix.type}}
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            echo "Running Windows-specific tasks"
+            build_tooling/parallel_test.sh tests/${{matrix.type}}
+          else
+            echo "Running tasks for other OS"
+            prlimit --nofile=1000000 -- build_tooling/parallel_test.sh tests/${{matrix.type}}
+          fi
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
@@ -369,6 +375,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
+          RUNNER_OS: ${{ runner.os }}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
