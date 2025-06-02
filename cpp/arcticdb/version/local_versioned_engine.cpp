@@ -723,7 +723,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
     auto write_options = get_write_options();
-    write_options.sparsify_floats |= sparsify_floats;
+    write_options.sparsify_floats = sparsify_floats;
     auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
 
     auto versioned_item = write_dataframe_impl(
