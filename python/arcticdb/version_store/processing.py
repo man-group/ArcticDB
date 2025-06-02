@@ -57,6 +57,7 @@ from arcticdb_ext.version_store import (
 )
 from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
 from arcticdb_ext.version_store import OperationType as _OperationType
+from arcticdb_ext.util import RegexPattern as _RegexPattern
 
 COLUMN = "COLUMN"
 
@@ -235,6 +236,7 @@ class ExpressionNode:
     
     def regex_match(self, pattern: str):
         if isinstance(pattern, str):
+            _RegexPattern(pattern)  # Validate the regex pattern
             return self._apply(pattern, _OperationType.REGEX_MATCH)
         else:
             raise UserInputException(
