@@ -205,7 +205,7 @@ def test_lazy_regex_match(lmdb_library, sym):
     lib = lmdb_library
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
+            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
         )
     lib.write(sym, df)
 
