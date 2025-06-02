@@ -17,12 +17,15 @@
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/python/python_utils.hpp>
+#include <arcticdb/python/python_handler_data.hpp>
 
 namespace py = pybind11;
 
-namespace arcticdb::python_util {
+namespace arcticdb {
+    struct PythonHandlerData;
+}
 
-void increment_none_refcount(size_t amount, SpinLock& lock);
+namespace arcticdb::python_util {
 
 class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
   PYBIND11_OBJECT_DEFAULT(PyRowRef, py::tuple, PyTuple_Check)
@@ -95,24 +98,19 @@ class ARCTICDB_VISIBILITY_HIDDEN PyRowRef : public py::tuple {
     RowRef row_ref_;
 };
 
-enum IncrementRefCount {
+enum class IncrementRefCount {
     ON,
     OFF
 };
 
-inline void prefill_with_none(
+void prefill_with_none(
     PyObject** ptr_dest,
     size_t num_rows,
     size_t sparse_count,
-    SpinLock& spin_lock,
-    IncrementRefCount inc_ref_count = IncrementRefCount::ON) {
-    std::fill_n(ptr_dest, num_rows, Py_None);
+    PythonHandlerData& python_handler_data,
+    IncrementRefCount inc_ref_count = IncrementRefCount::ON);
 
-    if(inc_ref_count == IncrementRefCount::ON) {
-        auto none_count = num_rows - sparse_count;
-        python_util::increment_none_refcount(none_count, spin_lock);
-    }
-}
+PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& handler_data);
 
 template<typename Msg>
 py::object pb_to_python(const Msg & out){
@@ -241,7 +239,7 @@ class PyTimestampRange {
     timestamp end_;
 };
 
-inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r) {
+inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::pair<std::any&, OutputFormat>* const handler) {
     auto ret = std::move(r);
     py::list lst;
     for (auto &res: ret) {
@@ -249,7 +247,9 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
             res,
             [&lst] (ReadResult& read_result) {
                 auto pynorm = python_util::pb_to_python(read_result.norm_meta);
-                auto pyuser_meta = python_util::pb_to_python(read_result.user_meta);
+                util::check(std::holds_alternative<proto::descriptors::UserDefinedMetadata>(read_result.user_meta),
+                        "Expected single user metadata in adapt_read_dfs, received vector");
+                auto pyuser_meta = python_util::pb_to_python(std::get<proto::descriptors::UserDefinedMetadata>(read_result.user_meta));
                 auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
                 lst.append(py::make_tuple(read_result.item, std::move(read_result.frame_data), pynorm, pyuser_meta, multi_key_meta,
                                           read_result.multi_keys));
@@ -258,6 +258,9 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                 lst.append(data_error);
             }
         );
+    }
+    if (handler) {
+        apply_global_refcounts(handler->first, handler->second);
     }
     return lst;
 }

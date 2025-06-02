@@ -193,7 +193,7 @@ void S3StorageTool::delete_bucket(const std::string& prefix) {
 
 S3StorageTool::S3StorageTool(const Config &conf) :
     s3_api_(S3ApiInstance::instance()),
-    s3_client_(get_aws_credentials(conf), get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false),
+    s3_client_(get_aws_credentials(conf), get_s3_config_and_set_env_var(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false),
     bucket_name_(conf.bucket_name()) {
     std::locale locale{ std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);

@@ -331,7 +331,7 @@ static void encode_encoded_fields(
     std::ptrdiff_t pos = 0;
     auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts);
     ARCTICDB_TRACE(log::codec(), "Estimated max buffer requirement: {}", max_compressed_size);
-    const auto preamble = segment_header.required_bytes(in_mem_seg);
+    const auto preamble = SegmentHeader::required_bytes(in_mem_seg);
     auto out_buffer = std::make_shared<Buffer>(max_compressed_size + encoded_buffer_size, preamble);
     ARCTICDB_TRACE(log::codec(), "Encoding descriptor: {}", in_mem_seg.descriptor());
 

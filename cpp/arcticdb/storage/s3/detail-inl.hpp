@@ -17,6 +17,7 @@
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>
@@ -132,17 +133,22 @@ void do_write_impl(
     KeyBucketizer&& bucketizer) {
     ARCTICDB_SAMPLE(S3StorageWrite, 0)
 
-    auto key_type_dir = key_type_folder(root_folder, key_seg.key_type());
+    auto key_type = key_seg.key_type();
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     ARCTICDB_TRACE(log::storage(), "S3 key_type_folder is {}", key_type_dir);
 
     ARCTICDB_SUBSAMPLE(S3StorageWriteValues, 0)
     auto& k = key_seg.variant_key();
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
     auto seg = key_seg.segment_ptr();
+    auto segment_size = seg->calculate_size();
 
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
     auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
-    if (!put_object_result.is_success()) {
+    if (put_object_result.is_success()) {
+        query_stats::add(query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size);
+    } else {
         auto& error = put_object_result.get_error();
         // No DuplicateKeyException is thrown because S3 overwrites the given key if it already exists.
         raise_s3_exception(error, s3_object_name);
@@ -170,15 +176,18 @@ KeySegmentPair do_read_impl(
 	    KeyDecoder&& key_decoder,
         ReadKeyOpts opts) {
     ARCTICDB_SAMPLE(S3StorageRead, 0)
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
+    auto key_type = variant_key_type(variant_key);
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_GetObject, key_type);
     auto get_object_result = s3_client.get_object(s3_object_name, bucket_name);
     auto unencoded_key = key_decoder(std::move(variant_key));
 
     if (get_object_result.is_success()) {
         ARCTICDB_SUBSAMPLE(S3StorageVisitSegment, 0)
-        return {VariantKey{unencoded_key}, std::move(get_object_result.get_output())};
-        ARCTICDB_DEBUG(log::storage(), "Read key {}: {}", variant_key_type(unencoded_key), variant_key_view(unencoded_key));
+        auto segment = std::move(get_object_result.get_output());
+        query_stats::add(query_stats::TaskType::S3_GetObject, key_type, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
+        return {VariantKey{unencoded_key}, std::move(segment)};
     } else {
         auto& error = get_object_result.get_error();
         raise_if_unexpected_error(error, s3_object_name);
@@ -204,16 +213,24 @@ folly::Future<KeySegmentPair> do_async_read_impl(
     KeyBucketizer&& bucketizer,
     KeyDecoder&& key_decoder,
     ReadKeyOpts) {
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(variant_key));
+    auto key_type = variant_key_type(variant_key);
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, variant_key), variant_key);
-    return s3_client.get_object_async(s3_object_name, bucket_name).thenValue([vk=std::move(variant_key), decoder=std::forward<KeyDecoder>(key_decoder)] (auto&& result) mutable -> KeySegmentPair {
-        if(result.is_success()) {
-            return KeySegmentPair(std::move(vk), std::move(result.get_output()));
-	}
-        else {
-	    auto unencoded_key = decoder(std::move(vk));	
-            raise_s3_exception(result.get_error(), fmt::format("{}", unencoded_key));
-	}
+    return s3_client.get_object_async(s3_object_name, bucket_name).thenValue([
+            vk=std::move(variant_key), 
+            decoder=std::forward<KeyDecoder>(key_decoder),
+            key_type,
+            start = std::chrono::steady_clock::now()
+        ] (auto&& result) mutable -> KeySegmentPair {
+            auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_GetObjectAsync, key_type, start);
+            if(result.is_success()) {
+                auto segment = std::move(result.get_output());
+                query_stats::add(query_stats::TaskType::S3_GetObjectAsync, key_type, query_stats::StatType::SIZE_BYTES, segment.calculate_size());
+                return KeySegmentPair(std::move(vk), std::move(segment));
+            } else {
+                auto unencoded_key = decoder(std::move(vk));	
+                raise_s3_exception(result.get_error(), fmt::format("{}", unencoded_key));
+            }
     });
 }
 
@@ -281,6 +298,7 @@ void do_remove_impl(
                 to_delete.emplace_back(std::move(s3_object_name));
 
                 if (to_delete.size() == delete_object_limit || k.index + 1 == group.size()) {
+                    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects, group.key());
                     auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
                     if (delete_object_result.is_success()) {
                         ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects, one of which with key '{}'",
@@ -380,14 +398,19 @@ void do_write_if_none_impl(
                 S3ClientInterface &s3_client,
                 KeyBucketizer &&bucketizer) {
             ARCTICDB_SAMPLE(S3StorageWriteIfNone, 0)
-            auto key_type_dir = key_type_folder(root_folder, kv.key_type());
+            auto key_type = kv.key_type();
+            auto key_type_dir = key_type_folder(root_folder, key_type);
             auto &k = kv.variant_key();
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
             auto& seg = *kv.segment_ptr();
+            auto segment_size = seg.calculate_size();
 
+            auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
             auto put_object_result = s3_client.put_object(s3_object_name, seg, bucket_name, PutHeader::IF_NONE_MATCH);
 
-            if (!put_object_result.is_success()) {
+            if (put_object_result.is_success()) {
+                query_stats::add(query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size);
+            } else {
                 auto& error = put_object_result.get_error();
                 raise_s3_exception(error, s3_object_name);
             }
@@ -466,12 +489,12 @@ bool do_iterate_type_impl(
 
     auto continuation_token = std::optional<std::string>();
     do {
+        auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_ListObjectsV2, key_type);
         auto list_objects_result = s3_client.list_objects(path_info.key_prefix_, bucket_name, continuation_token);
         if (list_objects_result.is_success()) {
             auto& output = list_objects_result.get_output();
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
-
             for (auto& s3_object_name : output.s3_object_names) {
                 auto key = s3_object_name.substr(path_info.path_to_key_size_);
                 ARCTICDB_TRACE(log::version(), "Got object_list: {}, key: {}", s3_object_name, key);
@@ -560,9 +583,11 @@ bool do_key_exists_impl(
     const S3ClientInterface& s3_client,
     KeyBucketizer&& b
 ) {
-    auto key_type_dir = key_type_folder(root_folder, variant_key_type(key));
+    auto key_type = variant_key_type(key);
+    auto key_type_dir = key_type_folder(root_folder, key_type);
     auto s3_object_name = object_path(b.bucketize(key_type_dir, key), key);
 
+    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_HeadObject, key_type);
     auto head_object_result = s3_client.head_object(
         s3_object_name,
         bucket_name);

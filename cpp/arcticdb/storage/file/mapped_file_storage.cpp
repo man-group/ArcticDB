@@ -41,12 +41,17 @@ void MappedFileStorage::init() {
     if (config_.bytes() > 0) {
         ARCTICDB_DEBUG(log::storage(), "Creating new mapped file storage at path {}", config_.path());
         multi_segment_header_.initalize(StreamId{NumericId{0}}, config_.items_count());
-        auto data_size = config_.bytes() + max_compressed_size_dispatch(multi_segment_header_.segment(),
+        auto multi_segment_size =  max_compressed_size_dispatch(
+            multi_segment_header_.segment(),
             config_.codec_opts(),
-            EncodingVersion{
-            static_cast<uint16_t>(config_.encoding_version())}).max_compressed_bytes_;
+            EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
+
+        ARCTICDB_DEBUG(log::codec(), "Estimating size as {} existing bytes plus {} + {}", config_.bytes(), multi_segment_size.max_compressed_bytes_, multi_segment_size.encoded_blocks_bytes_);
+        auto data_size = config_.bytes() + multi_segment_size.max_compressed_bytes_ + multi_segment_size.encoded_blocks_bytes_;
+        data_size += SegmentHeader::required_bytes(multi_segment_header_.segment());
         StreamId id = config_.has_str_id() ? StreamId{} : NumericId{};
         data_size += entity::max_key_size(id, index_descriptor_from_proto(config_.index()));
+        data_size += sizeof(KeyData);
         file_.create_file(config_.path(), data_size);
     } else {
         ARCTICDB_DEBUG(log::storage(), "Opening existing mapped file storage at path {}", config_.path());
@@ -76,6 +81,7 @@ uint64_t MappedFileStorage::get_data_offset(const Segment& seg) {
 }
 
 uint64_t MappedFileStorage::write_segment(Segment& segment) {
+    (void)segment.calculate_size();
     auto offset = get_data_offset(segment);
     auto* data = file_.data() + offset;
     ARCTICDB_SUBSAMPLE(FileStorageMemCpy, 0)
@@ -135,10 +141,12 @@ void MappedFileStorage::do_finalize(KeyData key_data)  {
                                           config_.codec_opts(),
                                           EncodingVersion{static_cast<uint16_t>(config_.encoding_version())});
     write_segment(header_segment);
-    auto pos = reinterpret_cast<KeyData*>(file_.data() + offset_);
-    *pos = key_data;
+    auto* pos = file_.data() + offset_;
+    memcpy(pos, &key_data, sizeof(KeyData));
+    auto size [[maybe_unused]] = reinterpret_cast<KeyData*>(pos)->key_size_;
     ARCTICDB_DEBUG(log::storage(), "Finalizing mapped file, writing key data {}", *pos);
     offset_ += sizeof(KeyData);
+    util::check(offset_ < file_.bytes(), "File overflow, predicted size {} > actual size {}", offset_, file_.bytes());
     file_.truncate(offset_);
 }
 

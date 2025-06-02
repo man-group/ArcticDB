@@ -10,12 +10,13 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
-#include <arcticdb/toolbox/library_tool.hpp>
-#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/version/symbol_list.hpp>
+#include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/util/storage_lock.hpp>
 #include <arcticdb/util/reliable_storage_lock.hpp>
+#include <arcticdb/toolbox/library_tool.hpp>
+#include <arcticdb/toolbox/query_stats.hpp>
 #include <arcticdb/toolbox/storage_mover.hpp>
 
 namespace arcticdb::toolbox::apy {
@@ -63,7 +64,10 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .def("batch_key_exists", &LibraryTool::batch_key_exists, py::call_guard<SingleThreadMutexHolder>())
             .def("read_to_read_result",
              [&](LibraryTool& lt, const VariantKey& key){
-                 return adapt_read_df(lt.read(key));
+                 constexpr OutputFormat output_format = OutputFormat::PANDAS;
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
+                 return adapt_read_df(lt.read(key, handler_data, output_format), &handler);
              },
              "Read the most recent dataframe from the store")
              .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
@@ -148,6 +152,24 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .def("lock_timeout", &StorageLockWrapper::lock_timeout)
             .def("try_lock", &StorageLockWrapper::try_lock)
             ;
-}
 
+    using namespace arcticdb::query_stats;
+    auto query_stats_module = tools.def_submodule("query_stats", "Query stats functionality");
+    
+    query_stats_module.def("reset_stats", []() { 
+        QueryStats::instance()->reset_stats(); 
+    });
+    query_stats_module.def("enable", []() { 
+        QueryStats::instance()->enable(); 
+    });
+    query_stats_module.def("disable", []() { 
+        QueryStats::instance()->disable(); 
+    });
+    query_stats_module.def("is_enabled", []() { 
+        return QueryStats::instance()->is_enabled(); 
+    });
+    query_stats_module.def("get_stats", [](){ 
+        return QueryStats::instance()->get_stats(); 
+    });
+}
 } // namespace arcticdb::toolbox::apy

@@ -19,6 +19,14 @@ auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
     };
 }
 
+template<ResampleBoundary resample_boundary>
+ResampleClause<resample_boundary> generate_resample_clause(ResampleBoundary label_boundary, std::vector<timestamp>&& bucket_boundaries) {
+    ResampleClause<resample_boundary> res{"dummy", label_boundary, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0};
+    ProcessingConfig processing_config{false, 0, IndexDescriptor::Type::TIMESTAMP};
+    res.set_processing_config(processing_config);
+    return res;
+}
+
 TEST(Resample, StructureForProcessingBasic) {
     // Bucket boundaries such that the first processing unit does not need any rows from the second row slice
     // No column slicing
@@ -33,7 +41,7 @@ TEST(Resample, StructureForProcessingBasic) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    ResampleClause<ResampleBoundary::LEFT> resample_clause{ "dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 1500, 2500, 2999}), 0, 0 };
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 1500, 2500, 2999});
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -61,7 +69,7 @@ TEST(Resample, StructureForProcessingColumnSlicing) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{top_right, bottom_left, bottom_right, top_left};
 
-    ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 1500, 2500, 2999}), 0, 0};
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 1500, 2500, 2999});
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 4);
     ASSERT_EQ(ranges_and_keys[0], top_left);
@@ -86,7 +94,7 @@ TEST(Resample, StructureForProcessingOverlap) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 2500, 2999}), 0, 0};
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 2500, 2999});
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -113,7 +121,7 @@ TEST(Resample, StructureForProcessingSubsumed) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, middle, top};
 
-    ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 4500}), 0, 0};
+    auto resample_clause = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 4500});
     auto proc_unit_ids = resample_clause.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 3);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -138,7 +146,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     // Insert into vector "out of order" to ensure structure_for_processing reorders correctly
     std::vector<RangesAndKey> ranges_and_keys{bottom, top};
 
-    ResampleClause<ResampleBoundary::LEFT> resample_clause_left{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 2000, 2500, 2999}), 0, 0};
+    auto resample_clause_left = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {1, 500, 2000, 2500, 2999});
     auto proc_unit_ids = resample_clause_left.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -146,7 +154,7 @@ TEST(Resample, StructureForProcessingExactBoundary) {
     std::vector<std::vector<size_t>> expected_proc_unit_ids_left{{0}, {1}};
     ASSERT_EQ(expected_proc_unit_ids_left, proc_unit_ids);
 
-    ResampleClause<ResampleBoundary::RIGHT> resample_clause_right{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({1, 500, 2000, 2500, 2999}), 0, 0};
+    auto resample_clause_right = generate_resample_clause<ResampleBoundary::RIGHT>(ResampleBoundary::LEFT, {1, 500, 2000, 2500, 2999});
     proc_unit_ids = resample_clause_right.structure_for_processing(ranges_and_keys);
     ASSERT_EQ(ranges_and_keys.size(), 2);
     ASSERT_EQ(ranges_and_keys[0], top);
@@ -157,8 +165,8 @@ TEST(Resample, StructureForProcessingExactBoundary) {
 
 TEST(Resample, FindBuckets) {
     // Enough bucket boundaries to test all the interesting cases
-    ResampleClause<ResampleBoundary::LEFT> resample_left("left", ResampleBoundary::LEFT, generate_bucket_boundaries({0, 10, 20, 30, 40}), 0, 0);
-    ResampleClause<ResampleBoundary::RIGHT> resample_right("right", ResampleBoundary::RIGHT, generate_bucket_boundaries({0, 10, 20, 30, 40}), 0, 0);
+    auto resample_left = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {0, 10, 20, 30, 40});
+    auto resample_right = generate_resample_clause<ResampleBoundary::RIGHT>(ResampleBoundary::RIGHT, {0, 10, 20, 30, 40});
 
     resample_left.bucket_boundaries_ = resample_left.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::LEFT, 0, 0);
     resample_right.bucket_boundaries_ = resample_right.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::RIGHT, 0, 0);
@@ -221,7 +229,7 @@ TEST(Resample, FindBuckets) {
 TEST(Resample, ProcessOneSegment) {
     auto component_manager = std::make_shared<ComponentManager>();
 
-    ResampleClause<ResampleBoundary::LEFT> resample("dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({-1, 2, 5}), 0, 0);
+    auto resample = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {-1, 2, 5});
     resample.bucket_boundaries_ = resample.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::LEFT, 0, 0);
     resample.date_range_ = {0, 5};
     resample.set_component_manager(component_manager);
@@ -266,7 +274,7 @@ TEST(Resample, ProcessOneSegment) {
 TEST(Resample, ProcessMultipleSegments) {
     auto component_manager = std::make_shared<ComponentManager>();
 
-    ResampleClause<ResampleBoundary::LEFT> resample("dummy", ResampleBoundary::LEFT, generate_bucket_boundaries({-15, -5, 5, 6, 25, 35, 45, 46, 55, 65}), 0, 0);
+    auto resample = generate_resample_clause<ResampleBoundary::LEFT>(ResampleBoundary::LEFT, {-15, -5, 5, 6, 25, 35, 45, 46, 55, 65});
     resample.bucket_boundaries_ = resample.generate_bucket_boundaries_(0, 0, "dummy", ResampleBoundary::LEFT, 0, 0);
     resample.date_range_ = {0, 51};
     resample.set_component_manager(component_manager);

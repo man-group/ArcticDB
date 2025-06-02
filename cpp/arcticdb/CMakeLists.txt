@@ -258,6 +258,7 @@ set(arcticdb_srcs
         processing/component_manager.hpp
         processing/operation_dispatch.hpp
         processing/operation_dispatch_binary.hpp
+        processing/operation_dispatch_ternary.hpp
         processing/operation_dispatch_unary.hpp
         processing/operation_types.hpp
         processing/signed_unsigned_comparison.hpp
@@ -269,6 +270,7 @@ set(arcticdb_srcs
         processing/expression_node.hpp
         processing/query_planner.hpp
         processing/sorted_aggregation.hpp
+        processing/ternary_utils.hpp
         processing/unsorted_aggregation.hpp
         storage/async_storage.hpp
         storage/constants.hpp
@@ -333,6 +335,7 @@ set(arcticdb_srcs
         stream/stream_writer.hpp
         toolbox/library_tool.hpp
         toolbox/storage_mover.hpp
+        toolbox/query_stats.hpp
         util/allocator.hpp
         util/allocation_tracing.hpp
         util/bitset.hpp
@@ -471,6 +474,7 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
         processing/unsorted_aggregation.cpp
@@ -506,6 +510,7 @@ set(arcticdb_srcs
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp
         toolbox/library_tool.cpp
+        toolbox/query_stats.cpp
         util/allocator.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
@@ -937,6 +942,7 @@ if(${TEST})
             processing/test/test_component_manager.cpp
             processing/test/test_expression.cpp
             processing/test/test_filter_and_project_sparse.cpp
+            processing/test/test_join_schemas.cpp
             processing/test/test_type_promotion.cpp
             processing/test/test_operation_dispatch.cpp
             processing/test/test_output_schema_aggregator_types.cpp
@@ -1073,6 +1079,7 @@ if(${TEST})
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_clause.cpp
+            processing/test/benchmark_ternary.cpp
             version/test/benchmark_write.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})

@@ -695,10 +695,11 @@ void PythonVersionStore::drop_column_stats_version(
 
 ReadResult PythonVersionStore::read_column_stats_version(
     const StreamId& stream_id,
-    const VersionQuery& version_query) {
+    const VersionQuery& version_query,
+    std::any& handler_data) {
     ARCTICDB_SAMPLE(ReadColumnStats, 0)
     auto [versioned_item, frame_and_descriptor] = read_column_stats_version_internal(stream_id, version_query);
-    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, OutputFormat::PANDAS);
+    return read_result_from_single_frame(frame_and_descriptor, versioned_item.key_, handler_data, OutputFormat::PANDAS);
 }
 
 ColumnStats PythonVersionStore::get_column_stats_info_version(
@@ -779,8 +780,8 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-    const ReadOptions& read_options) {
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+    const ReadOptions& read_options,
+    std::any& handler_data) {
 
     auto read_versions_or_errors = batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
@@ -809,8 +810,24 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
     bool prune_previous_versions,
     bool upsert
 ) {
-    auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
-    return batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
+        auto frames = create_input_tensor_frames(stream_ids, items, norms, user_metas, cfg().write_options().empty_types());
+        return batch_update_internal(stream_ids, std::move(frames), update_qeries, prune_previous_versions, upsert);
+    }
+
+ReadResult PythonVersionStore::batch_read_and_join(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<VersionQuery>& version_queries,
+    std::vector<std::shared_ptr<ReadQuery>>& read_queries,
+    const ReadOptions& read_options,
+    std::vector<std::shared_ptr<Clause>>&& clauses,
+    std::any& handler_data) {
+    auto versions_and_frame = batch_read_and_join_internal(stream_ids, version_queries, read_queries, read_options, std::move(clauses), handler_data);
+    return create_python_read_result(
+            versions_and_frame.versioned_items_,
+            read_options.output_format(),
+            std::move(versions_and_frame.frame_and_descriptor_),
+            std::move(versions_and_frame.metadatas_)
+            );
 }
 
 void PythonVersionStore::delete_snapshot(const SnapshotId& snap_name) {
@@ -905,12 +922,25 @@ std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones (
 
 } // namespace
 
+// Kept for backwards compatibility
 void PythonVersionStore::delete_version(
         const StreamId& stream_id,
         VersionId version_id) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_version");
-    auto result = ::arcticdb::tombstone_version(store(), version_map(), stream_id, version_id);
+    delete_versions(stream_id, {version_id});
+}
 
+void PythonVersionStore::delete_versions(
+    const StreamId& stream_id,
+    const std::vector<VersionId>& version_ids) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_versions");
+    if (version_ids.empty()) {
+        log::version().info("No version ids passed for delete_versions for stream {}, skipping", stream_id);
+        return;
+    }
+
+    std::unordered_set<VersionId> version_ids_set(version_ids.begin(), version_ids.end());
+    auto result = ::arcticdb::tombstone_versions(store(), version_map(), stream_id, version_ids_set);
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
         delete_tree(result.keys_to_delete, result);
     }
@@ -1100,7 +1130,9 @@ std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_r
 
 ReadResult PythonVersionStore::read_index(
     const StreamId& stream_id,
-    const VersionQuery& version_query
+    const VersionQuery& version_query,
+    OutputFormat output_format,
+    std::any& handler_data
     ) {
     ARCTICDB_SAMPLE(ReadIndex, 0)
 
@@ -1109,7 +1141,7 @@ ReadResult PythonVersionStore::read_index(
         throw NoDataFoundException(fmt::format("read_index: version not found for symbol '{}'", stream_id));
 
     auto res = read_index_impl(store(), *version);
-    return read_result_from_single_frame(res, version->key_, OutputFormat::PANDAS);
+    return read_result_from_single_frame(res, version->key_, handler_data, output_format);
 }
 
 std::vector<AtomKey> PythonVersionStore::get_version_history(const StreamId& stream_id) {
@@ -1175,9 +1207,10 @@ ReadResult read_dataframe_from_file(
         const StreamId &stream_id,
         const std::string& path,
         const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options) {
+        const ReadOptions& read_options,
+        std::any& handler_data) {
 
-    auto handler_data = get_type_handler_data(read_options.output_format());
+    auto release_gil = std::make_unique<py::gil_scoped_release>();
     auto opt_version_and_frame = read_dataframe_from_file_internal(
         stream_id,
         path,
