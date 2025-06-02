@@ -383,6 +383,4 @@ def test_wrute_and_prune_previous_over_time(lib_name, storage_bucket):
             lib.write("s", data=create_df(), prune_previous=True)
             stats = qs.get_query_stats()
             qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == (expected_ops + 2), visualize_stats_diff(
-                base_stats, stats
-            )
+            assert sum_all_operations(stats) == base_ops_count == expected_ops, visualize_stats_diff(base_stats, stats)
