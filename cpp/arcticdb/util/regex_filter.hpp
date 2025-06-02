@@ -62,7 +62,8 @@ public:
 private:
     void compile_regex() {
         handle_ = ::pcre_compile2(text_.data(), options_, &error_, &help_, &offset_, table_);
-        util::check(handle_ != nullptr, "Error {} compiling regex {}: {}", error_, text_, help_);
+        // Should be safe to assume regex pattern must be user input
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(handle_ != nullptr, "Error {} compiling regex {}: {}", error_, text_, help_);
         auto result = get_capturing_groups();
         if(result != 0) {
             handle_ = nullptr;

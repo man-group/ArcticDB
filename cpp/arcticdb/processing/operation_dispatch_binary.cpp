@@ -198,7 +198,7 @@ VariantData regex_match_membership(const ColumnWithStrings& column_with_strings,
                         *column_with_strings.column_,
                         output_bitset,
                         false,
-                        [&offset_set](auto input_value) -> bool {
+                        [&offset_set](auto input_value) {
                     auto offset = static_cast<entity::position_t>(input_value);
                     return offset_set.contains(offset);
                 });
@@ -219,15 +219,16 @@ VariantData regex_match_membership(const ColumnWithStrings& column_with_strings,
 }
 
 VariantData visit_regex_match_membership(const VariantData &left, const VariantData &right) {
-    if (std::holds_alternative<EmptyResult>(left))
+    if (std::holds_alternative<EmptyResult>(left)) {
         return EmptyResult{};
+    }
     return std::visit(util::overload {
-        [&] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
+        [] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) {
             return transform_to_placeholder(regex_match_membership(l, *r));
         },
         [](const auto &, const auto&) -> VariantData {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Regex match membership operations must be Column/Value");
-            return EmptyResult{};
+            return VariantData{EmptyResult{}};
         }
         }, left, right);
 }
