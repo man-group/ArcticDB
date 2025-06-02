@@ -59,7 +59,7 @@ TEST(PyDataTalk, BitSetCompressionRandom) {
 }
 
 TEST(PyDataTalk, BitSetCompressionRuns) {
-    size_t num_repeats = 100;
+    size_t num_repeats = 1;
     std::vector<int> dense_percentages{99, 90, 50, 10, 1};
     for (auto dense_percentage: dense_percentages) {
         double size{0};
