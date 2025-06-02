@@ -6,59 +6,90 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from arcticdb.util.environment_setup import GeneralSetupSymbolsVersionsSnapshots, Storage
+import time
+from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library, populate_library_if_missing
+from benchmarks.common import AsvBase
 
-class AWSListSymbols:
+
+class AWSListSymbols(AsvBase):
+    """
+    The primary purpose of this test is to measure the complete time 
+    the list_symbol takes to complete on a symbol without a cache.
+    That would be maximum time the user would wait, and we have to track it
+    """
 
     rounds = 1
-    number = 3 # invoke X times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    number = 1 # invoke X times the test runs between each setup-teardown 
+    repeat = 3 # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
     timeout = 1200
-
     
-    SETUP_CLASS = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_SYMBOLS")
-        .set_with_metadata_for_each_version()
-        .set_with_snapshot_for_each_version()
-        .set_params([500, 1000]))
-        #.set_params([10, 20])) # For test purposes 
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_SYMBOLS")
+    library_type = LibraryType.PERSISTENT
 
-    params = SETUP_CLASS.get_parameter_list()
+    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition 
+    #       may already exist. This means that symbols there will be having having different number
+    #       of rows than what you defined in the test. To resolve this problem check with documentation:
+    #           https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Real-storage-tests
+    params = [500, 1000]
     param_names = ["num_syms"]
 
+    number_columns = 2
+    number_rows = 2
+
+    def get_library_manager(self) -> TestLibraryManager:
+        return AWSListSymbols.library_manager
+    
+    def get_population_policy(self) -> LibraryPopulationPolicy:
+        lpp = LibraryPopulationPolicy(None) # Tone down logging during creation of structure
+        # parameters will be set on demand during iterations
+        lpp.use_auto_increment_index()
+        return lpp
+
     def setup_cache(self):
-        aws_setup = AWSListSymbols.SETUP_CLASS
-        if aws_setup.check_ok():
-            aws_setup.clear_symbols_cache()
-        else:
-            aws_setup.setup_all()
-        info = aws_setup.get_storage_info()
-        # NOTE: use only logger defined by setup class
-        aws_setup.logger().info(f"storage info object: {info}")
-        return info
+        assert AWSListSymbols.number == 1, "There must be always one test between setup and tear down"
+        self.get_library_manager().log_info() # Always log the ArcticURIs 
 
-    def setup(self, storage_info, num_syms):
-        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)
-        self.lib = self.aws.get_library(num_syms)
+    def setup_library(self):
+        num_rows = AWSListSymbols.number_rows
+        manager = self.get_library_manager()
+        policy = self.get_population_policy()
+        for number_symbols in AWSListSymbols.params:
+            start = time.time()
+            policy.set_parameters([num_rows] * number_symbols, AWSListSymbols.number_columns)
+            if not manager.has_library(AWSListSymbols.library_type, number_symbols):
+                populate_library(manager, policy, AWSListSymbols.library_type, number_symbols)
+                self.get_logger().info(f"Generated {number_symbols} with {num_rows} each for {time.time()- start}")
+            else:
+                self.get_logger().info(f"Library already exists, population skipped")        
+    
+    def setup(self, num_syms):
+        self.setup_library()
+        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)
+        self.test_counter = 1
+        symbols_list = self.lib.list_symbols()
+        assert num_syms == len(symbols_list), f"The library contains expected number of symbols {symbols_list}"
+        self.lib._nvs.version_store._clear_symbol_list_keys() # clear cache
 
-    def time_list_symbols(self, storage_info, num_syms):
+    def time_list_symbols(self, num_syms):
+        assert self.test_counter == 1, "Test executed only once in setup-teardown cycle" 
         self.lib.list_symbols()
+        self.test_counter += 1
 
-    def time_has_symbol_nonexisting(self, storage_info, num_syms):
+    def time_has_symbol_nonexisting(self, num_syms):
+        assert self.test_counter == 1, "Test executed only once in setup-teardown cycle" 
         self.lib.has_symbol("250_sym")        
+        self.test_counter += 1
 
-    def peakmem_list_symbols(self, storage_info, num_syms):
+    def peakmem_list_symbols(self, num_syms):
+        assert self.test_counter == 1, "Test executed only once in setup-teardown cycle" 
         self.lib.list_symbols()
+        self.test_counter += 1
 
-    def time_list_symbols_first_snapshot(self, storage_info, num_syms):
-        self.lib.list_symbols(self.aws.first_snapshot)
 
-    def time_list_symbols_last_snapshot(self, storage_info, num_syms):
-        self.lib.list_symbols(self.aws.last_snapshot)
-
-class AWSVersionSymbols:
+class AWSVersionSymbols(AsvBase):
 
     rounds = 1
     number = 3 # invoke X times the test runs between each setup-teardown 
@@ -68,39 +99,92 @@ class AWSVersionSymbols:
 
     timeout = 1200
 
-    SETUP_CLASS = (GeneralSetupSymbolsVersionsSnapshots(storage=Storage.AMAZON, prefix="LIST_VERSIONS")
-        .set_mean_number_versions_per_sym(35) # change to lower for testing
-        .set_max_number_versions(50) # number versions is approx = num_syms * mean_number_versions
-        .set_with_metadata_for_each_version()
-        .set_with_snapshot_for_each_version()
-        .set_params([25, 50])) # for test purposes: .set_params([5, 6]))
+    library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="LIST_VERSIONS")
+    library_type = LibraryType.PERSISTENT
 
-    params = SETUP_CLASS.get_parameter_list()
+    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition 
+    #       may already exist. This means that symbols there will be having having different number
+    #       of rows than what you defined in the test. To resolve this problem check with documentation:
+    #           https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Real-storage-tests
+    params = [25, 50]
     param_names = ["num_syms"]
 
+    number_columns = 2
+    number_rows = 2
+
+    mean_number_versions_per_symbol = 5
+
+    def get_library_manager(self) -> TestLibraryManager:
+        return AWSVersionSymbols.library_manager
+    
+    def get_population_policy(self) -> LibraryPopulationPolicy:
+        lpp = LibraryPopulationPolicy(None) # Tone down creation of structure
+        # parameters will be set on demand during iterations
+        lpp.use_auto_increment_index()
+        lpp.generate_versions(versions_max=int(1.5 * AWSVersionSymbols.mean_number_versions_per_symbol), 
+                              mean=AWSVersionSymbols.mean_number_versions_per_symbol)
+        lpp.generate_metadata().generate_snapshots()
+        return lpp
+
     def setup_cache(self):
-        aws = AWSVersionSymbols.SETUP_CLASS.setup_environment() 
-        info = aws.get_storage_info()
-        # NOTE: use only logger defined by setup class
-        aws.logger().info(f"storage info object: {info}")
-        return info
+        num_rows = AWSListSymbols.number_rows
+        manager = self.get_library_manager()
+        policy = self.get_population_policy()
+        last_snapshot_names_dict = {}
+        for number_symbols in AWSVersionSymbols.params:
+            start = time.time()
+            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)
+            if not manager.has_library(AWSListSymbols.library_type, number_symbols):
+                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)
+                self.get_logger().info(f"Generated {number_symbols} with {num_rows} each for {time.time()- start}")
+            else:
+                self.get_logger().info(f"Library already exists, population skipped")
+            # Getting one snapshot - the last
+            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)
+            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]
+            last_snapshot_names_dict[number_symbols] = snapshot_name
+        manager.log_info() # Always log the ArcticURIs 
+        return last_snapshot_names_dict
+    
+    def setup(self, last_snapshot_names_dict, num_syms):
+        self.population_policy = self.get_population_policy()
+        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)
+        self.test_counter = 1
+        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms
+        self.get_logger().info(f"Library {str(self.lib)}")
+        symbols_list = self.lib.list_symbols()
+        assert num_syms == len(symbols_list), f"The library contains expected number of symbols {symbols_list}"
+        mes = f"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})"
+        assert (expected_num_versions - 1) >= len(symbols_list), mes
+        assert last_snapshot_names_dict[num_syms] is not None
 
-    def setup(self, storage_info, num_syms):
-        self.aws = GeneralSetupSymbolsVersionsSnapshots.from_storage_info(storage_info)
-        self.lib = self.aws.get_library(num_syms)
-
-    def time_list_versions(self, storage_info, num_syms):
+    def time_list_versions(self, last_snapshot_names_dict, num_syms):
         self.lib.list_versions()
 
-    def time_list_versions_latest_only(self, storage_info, num_syms):
+    def time_list_versions_latest_only(self, last_snapshot_names_dict, num_syms):
         self.lib.list_versions(latest_only=True)        
 
-    def time_list_versions_skip_snapshots(self, storage_info, num_syms):
-        self.lib.list_versions(skip_snapshots=self.aws.last_snapshot)        
+    def time_list_versions_skip_snapshots(self, last_snapshot_names_dict, num_syms):
+        self.lib.list_versions(skip_snapshots=True)        
 
-    def time_list_versions_snapshot(self, storage_info, num_syms):
-        self.lib.list_versions(snapshot=self.aws.last_snapshot)        
+    def time_list_versions_latest_only_and_skip_snapshots(self, last_snapshot_names_dict, num_syms):
+        self.lib.list_versions(latest_only=True, skip_snapshots=True)        
 
-    def peakmem_list_versions(self, storage_info, num_syms):
+    def time_list_versions_snapshot(self, last_snapshot_names_dict, num_syms):
+        self.lib.list_versions(snapshot=last_snapshot_names_dict[num_syms])        
+
+    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):
         self.lib.list_versions()
+
+    def time_list_snapshots(self, last_snapshot_names_dict, num_syms):
+        self.lib.list_snapshots()
+    
+    def time_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):
+        self.lib.list_snapshots(load_metadata=False)
+
+    def peakmem_list_snapshots(self, last_snapshot_names_dict, num_syms):
+        self.lib.list_snapshots()
+    
+    def peakmem_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):
+        self.lib.list_snapshots(load_metadata=False)
 

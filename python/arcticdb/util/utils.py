@@ -708,7 +708,7 @@ class DFGenerator:
             string_sizes =  [10] * num_cols
         if seed is not None:
             np.random.seed(seed=seed)
-            random.seed(seed=seed)
+            random.seed(seed)
         data = [[random_string(string_sizes[col]) 
                  for col in range(num_cols)] 
                  for _ in range(num_rows)]

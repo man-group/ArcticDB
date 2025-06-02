@@ -277,6 +277,7 @@ jobs:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      real_tests_storage_type: ${{inputs.persistent_storage || 'no'}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -340,7 +341,8 @@ jobs:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
       - name: Set persistent storage variables
-        if: inputs.persistent_storage != 'no'
+        # Should be executed for all persistent storages but not for LMDB
+        if: ${{ env.real_tests_storage_type != 'no' }} 
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -350,8 +352,8 @@ jobs:
           persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
         
-      - name: Set s3 sts persistent storage variables for Windows
-        if: inputs.persistent_storage != 'no' && matrix.os == 'windows'
+      - name: Set s3 sts AWS S3 variables for Windows
+        if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }} 
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -376,9 +378,10 @@ jobs:
           path: ${{env.LOCALAPPDATA}}/CrashDumps/
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
-      - name: Remove AWS testing account and credentials
-        if: always() && inputs.persistent_storage == 'true' && matrix.os == 'windows'
+      - name: Remove AWS S3 testing account and credentials and STS roles
+        if: ${{ always() && env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         run: |
+          echo "env.real_tests_storage_type: [${{ env.real_tests_storage_type }}]"
           python -c "
           from arcticdb.storage_fixtures.s3 import real_s3_sts_clean_up
           real_s3_sts_clean_up('${ARCTICDB_REAL_S3_STS_TEST_USERNAME}', '${ARCTICDB_REAL_S3_STS_TEST_ROLE}', '${ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME}')

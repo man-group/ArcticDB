@@ -114,30 +114,6 @@ struct Value {
         *str_data() = data;
     }
 
-    void assign_utf32_string(const char* chr, size_t len) {
-        len_ = len * UNICODE_WIDTH;
-        auto data = new char[len_ + 1];
-        memset(data, 0, len_ + 1);
-        auto pos = data;
-        for (auto c = 0u; c < len; ++c) {
-            *pos = *chr++;
-            pos += UNICODE_WIDTH;
-        }
-        *str_data() = data;
-    }
-
-    void assign_padded_utf32_string(const char* chr, size_t len, size_t buffer_len) {
-        len_ = std::max(len * UNICODE_WIDTH, buffer_len);
-        auto data = new char[len_ + 1];
-        memset(data, 0, len_);
-        auto pos = data;
-        for (auto c = 0u; c < len; ++c) {
-            *pos = *chr++;
-            pos += UNICODE_WIDTH;
-        }
-        *str_data() = data;
-    }
-
     template<typename RawType>
     std::string to_string() const {
         if (has_sequence_type()) {
@@ -161,14 +137,6 @@ struct Value {
         return TypeDescriptor {data_type_, Dimension::Dim0};
     }
 };
-
-inline Value convert_to_utf32(const Value& other) {
-    Value output;
-    util::check(other.has_sequence_type(), "Can't convert value of non-sequence type to utf32");
-    output.assign_utf32_string(*other.str_data(), other.len());
-    output.data_type_ = DataType::UTF_FIXED64;
-    return output;
-}
 
 template<typename T>
 Value construct_value(T val) {
@@ -201,13 +169,6 @@ inline Value construct_string_value(const std::string& str) {
     Value value;
     value.data_type_ = DataType::UTF_DYNAMIC64;
     value.assign_string(str);
-    return value;
-}
-
-inline Value construct_string_value_from_char(const char* c, size_t len, DataType data_type) {
-    Value value;
-    value.data_type_ = data_type;
-    value.assign_string(c, len);
     return value;
 }
 

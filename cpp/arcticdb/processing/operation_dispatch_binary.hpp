@@ -79,7 +79,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
 
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, IsNotInOperator>;
-    details::visit_type(column_with_strings.column_->type().data_type(),[&] (auto col_tag) {
+    details::visit_type(column_with_strings.column_->type().data_type(),[&, sparse_missing_value_output] (auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
         details::visit_type(value_set.base_type().data_type(), [&] (auto val_set_tag) {
             using val_set_type_info = ScalarTypeInfo<decltype(val_set_tag)>;
@@ -105,7 +105,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
             } else if constexpr (is_bool_type(col_type_info::data_type) && is_bool_type(val_set_type_info::data_type)) {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Binary membership '{}' not implemented for bools", func);
             } else if constexpr (is_numeric_type(col_type_info::data_type) && is_numeric_type(val_set_type_info::data_type)) {
-                using WideType = typename type_arithmetic_promoted_type<typename col_type_info::RawType,typename val_set_type_info::RawType, std::remove_reference_t<Func>>::type;
+                using WideType = typename binary_operation_promoted_type<typename col_type_info::RawType,typename val_set_type_info::RawType, std::remove_reference_t<Func>>::type;
                 auto typed_value_set = value_set.get_set<WideType>();
                 Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
@@ -158,7 +158,7 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
 
-    details::visit_type(left.column_->type().data_type(), [&](auto left_tag) {
+    details::visit_type(left.column_->type().data_type(), [&, sparse_missing_value_output](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
         details::visit_type(right.column_->type().data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
@@ -212,7 +212,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
     util::BitSet output_bitset;
     constexpr auto sparse_missing_value_output = std::is_same_v<std::remove_reference_t<Func>, NotEqualsOperator>;
 
-    details::visit_type(column_with_strings.column_->type().data_type(), [&](auto col_tag) {
+    details::visit_type(column_with_strings.column_->type().data_type(), [&, sparse_missing_value_output](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
@@ -245,10 +245,12 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 });
             } else if constexpr ((is_numeric_type(col_type_info::data_type) && is_numeric_type(val_type_info::data_type)) ||
                                  (is_bool_type(col_type_info::data_type) && is_bool_type(val_type_info::data_type))) {
+                using ColType = typename col_type_info::RawType;
+                using ValType = typename val_type_info::RawType;
                 using comp = std::conditional_t<arguments_reversed,
-                                                typename arcticdb::Comparable<typename val_type_info::RawType, typename col_type_info::RawType>,
-                                                typename arcticdb::Comparable<typename col_type_info::RawType, typename val_type_info::RawType>>;
-                auto value = static_cast<typename comp::right_type>(*reinterpret_cast<const typename val_type_info::RawType *>(val.data_));
+                                                typename arcticdb::Comparable<ValType, ColType>,
+                                                typename arcticdb::Comparable<ColType, ValType>>;
+                auto value = static_cast<typename comp::right_type>(*reinterpret_cast<const ValType *>(val.data_));
                 Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
@@ -326,7 +328,7 @@ VariantData binary_operator(const Value& left, const Value& right, Func&& func) 
             }
             auto right_value = *reinterpret_cast<const typename right_type_info::RawType*>(right.data_);
             auto left_value = *reinterpret_cast<const typename left_type_info::RawType*>(left.data_);
-            using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<Func>>::type;
+            using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<Func>>::type;
             output_value->data_type_ = data_type_from_raw_type<TargetType>();
             *reinterpret_cast<TargetType*>(output_value->data_) = func.apply(left_value, right_value);
         });
@@ -354,7 +356,7 @@ VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrin
                                         right.column_name_,
                                         right.column_->type()));
             }
-            using TargetType = typename type_arithmetic_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
+            using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
             Column::transform<typename left_type_info::TDT, typename right_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
@@ -393,7 +395,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                                         arguments_reversed));
             }
             auto raw_value = *reinterpret_cast<const typename val_type_info::RawType*>(val.data_);
-            using TargetType = typename type_arithmetic_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
+            using TargetType = typename binary_operation_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             if constexpr(arguments_reversed) {
                 column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_);
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();

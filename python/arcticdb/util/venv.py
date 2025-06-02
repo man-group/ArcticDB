@@ -5,9 +5,13 @@ import shutil
 import subprocess
 import tempfile
 import venv
+import pandas as pd
+import numpy as np
+
 
 from typing import Dict, List, Optional, Union
 
+from arcticdb_ext.exceptions import StorageException
 from packaging.version import Version
 from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.arctic import Arctic
@@ -100,6 +104,7 @@ class VenvArctic:
         self.venv = venv
         self.uri = uri
         self.init_storage()
+        self.parquet = False # True is for parquet format False is for CSV
 
     def add_traceability_prints(self, python_commands):
         """
@@ -117,17 +122,48 @@ class VenvArctic:
         """
         Prepares the dataframe parquet files and the python script to be run from within the venv.
         """
+
+        def get_column_dtypes(df: pd.DataFrame) -> dict:
+            """
+            Returns a dictionary mapping column names to their data types in the DataFrame.
+            """
+            return df.dtypes.astype(str).to_dict()
+
         if dfs is None:
             dfs = {}
 
         with tempfile.TemporaryDirectory() as dir:
             df_load_commands = []
-            for df_name, df_value in dfs.items():
-                parquet_file = os.path.join(dir, f"{df_name}.parquet")
-                df_value.to_parquet(parquet_file)
-                df_load_commands.append(
-                    f"{df_name} = pd.read_parquet({repr(parquet_file)})"
-                )
+            index_load_commands = []
+            for df_name, df_val in dfs.items():
+                # For each dataframe we are writing we create a deep copy which we pass
+                df: pd.DataFrame = df_val.copy(deep=True)
+                if self.parquet:
+                    file = os.path.join(dir, f"{df_name}.parquet")
+                    df.to_parquet(file)
+                    command = f"{df_name} = pd.read_parquet({repr(file)})"
+                else: 
+                    # CSV format does not preserve metadata of DatetimeIndex and RangeIndex
+                    # Therefore after the load from CSV we have to reconstruct the index metadata
+                    # so that dataframes become fully equal
+                    file = os.path.join(dir, f"{df_name}.gz")
+                    df.to_csv(file, index=True)
+                    dtypes_dict = get_column_dtypes(df)
+                    if df.index is not None:
+                        if isinstance(df.index, pd.DatetimeIndex) and np.issubdtype(df.index.dtype, np.datetime64):
+                            index_load_commands.append(f"{df_name}.index.freq = {repr(df.index.freqstr)}")
+                        elif isinstance(df.index, pd.RangeIndex):
+                            index_load_commands = [ 
+                                                   f"{df_name}.index.start = {df.index.start}",
+                                                   f"{df_name}.index.stop = {df.index.stop}",
+                                                   f"{df_name}.index.step = {df.index.step}",
+                                                ]
+                        else:
+                            index_load_commands
+                        command = f"{df_name} = pd.read_csv({repr(file)}, dtype={dtypes_dict}, parse_dates=True, index_col=0)"
+                    else:
+                        command = f"{df_name} = pd.read_csv({repr(file)}, dtype={dtypes_dict}, parse_dates=True)"
+                df_load_commands.append(command)
 
             python_commands = (
                 [
@@ -137,6 +173,7 @@ class VenvArctic:
                     f"ac = Arctic({repr(self.uri)})",
                 ]
                 + df_load_commands
+                + index_load_commands
                 + python_commands
             )
 
@@ -161,10 +198,6 @@ class VenvArctic:
     def get_library(self, lib_name: str) -> "VenvLib":
         return VenvLib(self, lib_name, create_if_not_exists=False)
 
-    def cleanup(self):
-        ac = Arctic(self.uri)
-        for lib in ac.list_libraries():
-            ac.delete_library(lib)
 
 class VenvLib:
     def __init__(self, arctic, lib_name, create_if_not_exists=True):
@@ -184,6 +217,9 @@ class VenvLib:
 
     def write(self, sym: str, df) -> None:
         return self.execute([f"lib.write('{sym}', df)"], {"df": df})
+
+    def update(self, sym: str, df, date_range: str):
+        return self.execute([f"lib.update('{sym}', df, date_range={date_range})"], {"df": df})
 
     def assert_read(self, sym: str, df) -> None:
         python_commands = [
@@ -215,3 +251,52 @@ class CurrentVersion:
         unset_config_int("VersionMap.ReloadInterval")
         del self.lib
         del self.ac
+
+
+class CompatLibrary:
+    """
+    Responsible for creating and cleaning up a library (or multiple libraries) when writing compatibility tests.
+
+    Usually the library cleanup is managed by pytest fixtures, but it is hard to do so for compatibility tests because
+    they are responsible for maintaining their own arctic instances across several processes. As long as libraries
+    within the test are wrapped in a CompatLibrary cleanup will be dealt with.
+    """
+    def __init__(self, old_venv : Venv, uri : str, lib_names : Union[str, List[str]], create_with_current_version=False):
+        self.old_venv = old_venv
+        self.uri = uri
+        self.lib_names = lib_names if isinstance(lib_names, list) else [lib_names]
+        assert len(self.lib_names) > 0
+        self.create_with_current_version = create_with_current_version
+
+    def __enter__(self):
+        for lib_name in self.lib_names:
+            if self.create_with_current_version:
+                ac = Arctic(self.uri)
+                ac.create_library(lib_name)
+                del ac
+            else:
+                old_ac = self.old_venv.create_arctic(self.uri)
+                old_ac.create_library(lib_name)
+
+        self.old_ac = self.old_venv.create_arctic(self.uri)
+        self.old_libs = {lib_name : self.old_ac.get_library(lib_name) for lib_name in self.lib_names}
+        self.old_lib = self.old_libs[self.lib_names[0]]
+        return self
+
+    def current_version(self):
+        return CurrentVersion(self.uri, self.lib_names[0])
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        ac = Arctic(self.uri)
+        for lib_name in self.lib_names:
+            try:
+                ac.delete_library(lib_name)
+            except StorageException as e:
+                if self.uri.startswith("lmdb"):
+                    # For lmdb on windows sometimes the venv process keeps a dangling reference to the library for some
+                    # time. Since we use temporary directories for lmdb it's fine to not retry because the temporary
+                    # directory will be cleaned up in the end of the pytest process.
+                    logger.info(f"Failed to delete an lmdb library due to a Storage Exception: {e}")
+                else:
+                    raise
+        del ac

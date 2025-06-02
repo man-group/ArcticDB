@@ -121,8 +121,8 @@ inline folly::Future<VersionedItem> index_and_version(
         std::move(time_series),
         std::move(slice_and_keys),
         IndexPartialKey{stream_id, version_id},
-        store).thenValue([] (auto&& version_key) {
-            return VersionedItem(to_atom(std::move(version_key)));
+        store).thenValue([] (AtomKey&& version_key) {
+            return VersionedItem(std::move(version_key));
         });
 }
 
@@ -139,5 +139,17 @@ TimeseriesDescriptor get_merged_tsd(
     const std::shared_ptr<pipelines::InputTensorFrame>& new_frame);
 
 [[nodiscard]] bool is_timeseries_index(const IndexDescriptorImpl& index_desc);
+
+// If NormalizationMetadata is not provided, or specifies the return type is not a Series or DataFrame, returns the
+// index field count from the stream descriptor.
+// Otherwise, the behaviour depends on whether the data has a multiindex, and whether or not the data is a Series.
+// - DataFrame + non multiindex = index field count from the stream descriptor
+// - DataFrame + multiindex = number of levels in the multiindex
+// - Series + non multiindex = index field count from the stream descriptor PLUS ONE. This is to handle joins of Series
+//   with different names, which are stored as dataframes with different column names internally.
+// - Series + multiindex = number of levels in the multiindex PLUS ONE for the same reason as above
+uint32_t required_fields_count(
+        const StreamDescriptor& stream_desc,
+        const std::optional<proto::descriptors::NormalizationMetadata>& norm_meta = std::nullopt);
 
 } //namespace arcticdb::pipelines::index

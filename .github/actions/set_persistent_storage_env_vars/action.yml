@@ -4,7 +4,7 @@ inputs:
   bucket:            {default: 'arcticdb-ci-test-bucket-02', type: string, description: The name of the S3 bucket that we will test against}
   bucket_gcp:        {default: 'arcticdb-github', type: string, description: The name of the GCP bucket that we will test against}
   endpoint:          {default: 'https://s3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
-  endpoint_gcp:      {default: 'gcpxml://storage.googleapis.com', type: string, description: The address of the GCP endpoint}
+  endpoint_gcp:      {default: 'https://storage.googleapis.com', type: string, description: The address of the GCP endpoint}
   region:            {default: 'eu-west-1', type: string, description: The S3 region of the bucket}
   aws_access_key:    {required: true, type: string, description: The value for the AWS Access key}      
   aws_secret_key:    {required: true, type: string, description: The value for the AWS Secret key}
@@ -42,9 +42,12 @@ runs:
         echo "ARCTICDB_REAL_S3_SECRET_KEY=${{ inputs.aws_secret_key }}" >> $GITHUB_ENV
         ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX=$(shuf -i 0-999 -n 1)_$(date -u +'%Y-%m-%dT%H_%M_%S_%6N')
         echo "ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX=${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
-        echo "ARCTICDB_REAL_S3_STS_TEST_USERNAME=gh_sts_test_user_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
-        echo "ARCTICDB_REAL_S3_STS_TEST_ROLE=gh_sts_test_role_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
-        echo "ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME=gh_sts_test_policy_name_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
+        ## This name prefix (ARCTICDB_REAL_S3_STS_PREFIX) is connected to another cleanup process at:
+        ## python/utils/s3_roles_delete.py (make sure to synchronize changes)
+        echo "ARCTICDB_REAL_S3_STS_PREFIX=gh_sts_test" >> $GITHUB_ENV
+        echo "ARCTICDB_REAL_S3_STS_TEST_USERNAME=${ARCTICDB_REAL_S3_STS_PREFIX}_user_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
+        echo "ARCTICDB_REAL_S3_STS_TEST_ROLE=${ARCTICDB_REAL_S3_STS_PREFIX}_role_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
+        echo "ARCTICDB_REAL_S3_STS_TEST_POLICY_NAME=${ARCTICDB_REAL_S3_STS_PREFIX}_policy_name_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
 
         # GCP Specific
         echo "ARCTICDB_REAL_GCP_ACCESS_KEY=${{ inputs.gcp_access_key }}" >> $GITHUB_ENV

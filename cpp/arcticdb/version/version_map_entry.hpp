@@ -388,9 +388,9 @@ struct VersionMapEntry {
             auto it = std::find_if(keys_.begin(), keys_.end(), [&](auto k) {
                 return head_.value() == k;
             });
-            util::check(it == keys_.end(), "If keys are present head should be set");
+            util::check(it == keys_.end(), "Head should not be in the keys list as this is causing a duplication, head {}, keys {}", fmt::format("{}", head_.value()), fmt::format("{}", keys_));
         } else {
-            util::check(keys_.empty(), "Head should be set when there are keys");
+            util::check(keys_.empty(), "Head should be set when there are keys, keys: {}", fmt::format("{}", keys_));
         }
     }
 
@@ -417,7 +417,7 @@ struct VersionMapEntry {
             return;
         check_is_index_or_tombstone(keys_[0]);
         check_ordering();
-        util::check(deque_is_unique(keys_), "Keys deque is not unique");
+        util::check(deque_is_unique(keys_), "Keys deque is not unique, keys: {}", fmt::format("{}", keys_));
         check_head();
         check_stream_id();
     }

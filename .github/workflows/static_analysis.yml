@@ -38,9 +38,11 @@
 
         - name: Get CMake
           uses: lukka/get-cmake@latest
+          with:
+            cmakeVersion: '^3.31.6' # Uses the most recent 3.x.x version (regardless of full version spec)
 
         - name: CMake configure
-          uses: lukka/run-cmake@v10.8
+          uses: lukka/run-cmake@v10
           env:
             CC: "gcc-10"
             CXX: "g++-10"

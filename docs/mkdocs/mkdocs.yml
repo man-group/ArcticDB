@@ -100,8 +100,10 @@ nav:
     - Parallel Writes: 'tutorials/parallel_writes.md'
     - Snapshots: 'tutorials/snapshots.md'
     - Metadata: 'tutorials/metadata.md'
-    - In-memory backends: 'tutorials/lmdb_and_in_memory.md'
+    - In-memory Backends: 'tutorials/lmdb_and_in_memory.md'
     - Data Organisation Guide: 'tutorials/data_organisation.md'
+    - Library Sizes: 'tutorials/library_sizes.md'
+    - Statistics: 'tutorials/query_stats.md'
   - Storage Guides:
     - Getting started with AWS S3: 'aws.md'
     - Library Permissions with AWS S3: 'aws_permissions.md'
@@ -121,6 +123,7 @@ nav:
   - LazyDataFrame Notebook: 'notebooks/ArcticDB_demo_lazydataframe.ipynb'
   - Querybuilder Notebook: 'notebooks/ArcticDB_demo_querybuilder.ipynb'
   - Resample Notebook: 'notebooks/ArcticDB_demo_resample.ipynb'
+  - Symbol Concat Notebook: 'notebooks/ArcticDB_demo_concat.ipynb'
   - AWS Blockchain Notebook: 'notebooks/ArcticDB_aws_public_blockchain.ipynb'
   - Snapshots Notebook: 'notebooks/ArcticDB_demo_snapshots.ipynb'
   - Equity Analytics Notebook: 'notebooks/ArcticDB_demo_equity_analytics.ipynb'
@@ -131,10 +134,12 @@ nav:
   - Arctic: 'api/arctic.md'
   - Arctic URI: 'api/arctic_uri.md'
   - Library: 'api/library.md'
-  - Library related objects: 'api/library_types.md'
+  - Library Related Objects: 'api/library_types.md'
   - DataFrame Processing Operations API: 'api/processing.md'
   - Exceptions: 'api/exceptions.md'
   - Config: 'api/config.md'
+  - Admin Tools: 'api/admin_tools.md'
+  - Query Stats: 'api/query_stats.md'
 
 exclude_docs: |
   *.py

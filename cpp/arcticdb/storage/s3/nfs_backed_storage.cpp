@@ -128,7 +128,7 @@ NfsBackedStorage::NfsBackedStorage(const LibraryPath &library_path, OpenMode mod
         log::storage().warn("Using Mock S3 storage for NfsBackedStorage");
         s3_client_ = std::make_unique<s3::MockS3Client>();
     } else {
-        s3_client_ = std::make_unique<s3::S3ClientImpl>(s3::get_aws_credentials(conf), s3::get_s3_config(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
+        s3_client_ = std::make_unique<s3::S3ClientImpl>(s3::get_aws_credentials(conf), s3::get_s3_config_and_set_env_var(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
     }
 
     if (conf.prefix().empty()) {
@@ -184,7 +184,7 @@ KeySegmentPair NfsBackedStorage::do_read(VariantKey&& variant_key, ReadKeyOpts o
 
 void NfsBackedStorage::do_remove(VariantKey&& variant_key, RemoveOpts) {
     auto enc = encode_object_id(variant_key);
-    std::array<VariantKey, 1> arr{std::move(variant_key)};
+    std::array<VariantKey, 1> arr{std::move(enc)};
     s3::detail::do_remove_impl(std::span(arr), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
@@ -197,27 +197,28 @@ void NfsBackedStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts)
     s3::detail::do_remove_impl(std::span(enc), root_folder_, bucket_name_, *s3_client_, NfsBucketizer{});
 }
 
-static std::string prefix_handler(const std::string& prefix, const std::string& key_type_dir, const KeyDescriptor&, KeyType key_type) {
-    std::string new_prefix;
-    if(!prefix.empty()) {
-        uint32_t id = get_id_bucket(encode_item<StreamId, StringId, NumericId>(StringId{prefix}, is_ref_key_class(key_type)));
-        new_prefix = fmt::format("{:03}", id);
-    }
-
-    return !prefix.empty() ? fmt::format("{}/{}", key_type_dir, new_prefix) : key_type_dir;
+// signature needs to match PrefixHandler in s3_storage.hpp
+static std::string iter_prefix_handler(const std::string&, const std::string& key_type_dir, const KeyDescriptor&, KeyType) {
+    // The prefix handler is not used for filtering (done in func below)
+    // so we just return the key type dir
+    return key_type_dir;
 }
 
 bool NfsBackedStorage::do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix) {
+    // We need this filtering here instead of a regex like in s3/azure
+    // because we are doing sharding through subdirectories
+    // and the prefix might be partial(e.g. "sym_" instead of "sym_123")
+    // so it cannot be hashed to the correct shard
     const IterateTypePredicate func = [&v = visitor, prefix=prefix] (VariantKey&& k) {
         auto key = unencode_object_id(k);
-        if(prefix.empty() || variant_key_id(key) == StreamId{prefix}) {
+        if(prefix.empty() || variant_key_view(key).find(prefix) != std::string::npos) {
           return v(std::move(key));
         } else {
           return false;
         }
     };
 
-    return s3::detail::do_iterate_type_impl(key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
+    return s3::detail::do_iterate_type_impl(key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, iter_prefix_handler, prefix);
 }
 
 bool NfsBackedStorage::do_key_exists(const VariantKey& key) {
@@ -229,8 +230,18 @@ bool NfsBackedStorage::supports_object_size_calculation() const {
     return true;
 }
 
-ObjectSizes NfsBackedStorage::do_get_object_sizes(KeyType key_type, const std::string& prefix) {
-    return s3::detail::do_calculate_sizes_for_type_impl(key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, prefix_handler, prefix);
+void NfsBackedStorage::do_visit_object_sizes(KeyType key_type, const std::string& prefix, const ObjectSizesVisitor& visitor) {
+    const ObjectSizesVisitor func = [&v = visitor, prefix=prefix] (const VariantKey& k, CompressedSize size) {
+        auto key = unencode_object_id(k);
+        if (prefix.empty() || variant_key_view(key).find(prefix) != std::string::npos) {
+            v(key, size);
+        } else {
+            return;
+        }
+    };
+
+    s3::detail::do_visit_object_sizes_for_type_impl(
+        key_type, root_folder_, bucket_name_, *s3_client_, NfsBucketizer{}, iter_prefix_handler, prefix, func);
 }
 
 } //namespace arcticdb::storage::nfs_backed

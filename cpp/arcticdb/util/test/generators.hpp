@@ -171,12 +171,10 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
     sparse_floats_2->set_scalar<double>(5, 5.0);
     sparse_floats_2->set_scalar<double>(9, nan);
 
-    // Dense float column values are just 10*idx
-    for (auto idx = 0; idx < 7; idx++) {
-        dense_floats_1->set_scalar<double>(idx, 10.0 * static_cast<double>(idx));
-    }
+    // Dense float column values are just idx or zero so some are equal and some are not
     for (auto idx = 0; idx < 15; idx++) {
-        dense_floats_2->set_scalar<double>(idx, 10.0 * static_cast<double>(idx));
+        dense_floats_1->set_scalar<double>(idx, static_cast<double>(idx));
+        dense_floats_2->set_scalar<double>(idx, idx % 2 == 0 ? static_cast<double>(idx) : double(0.0));
     }
 
     // Sparse bool column goes missing, true, missing, false
@@ -190,6 +188,11 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
     seg.add_column(scalar_field(sparse_bools->type().data_type(), "sparse_bools"), sparse_bools);
 
     // 1 less than the number of rows in the largest column
+    sparse_floats_1->set_row_data(14);
+    sparse_floats_2->set_row_data(14);
+    dense_floats_1->set_row_data(14);
+    dense_floats_2->set_row_data(14);
+    sparse_bools->set_row_data(14);
     seg.set_row_id(14);
     return seg;
 }
