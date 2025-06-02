@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import copy
+from dataclasses import dataclass
 import datetime
 import os
 import sys
@@ -82,6 +83,52 @@ from packaging.version import Version
 IS_WINDOWS = sys.platform == "win32"
 
 
+def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+    """
+    Precedence: existing_value > kwargs > env > proto_cfg > global_default
+
+    Parameters
+    ----------
+    param_name: str
+    proto_cfg
+        Gets the param_name attribute of this object
+        Most often is `self._write_options()` for the Protobuf write_options.
+    global_default
+        FUTURE: store this in a central location
+    existing_value:
+        The value already supplied to the caller
+    uppercase
+        If true (default), will look for `param_name.upper()` in OS environment variables; otherwise, the original
+        case.
+    kwargs
+        For passing through the caller's kwargs in which we look for `param_name`
+        *Deprecating: use `existing_value`*
+    """
+
+    if existing_value is not None:
+        return existing_value
+
+    param_value = kwargs.get(param_name)
+    if param_value is not None:
+        return param_value
+
+    env_name = param_name.upper() if uppercase else param_name
+    env_value = os.getenv(env_name)
+    if env_value is not None:
+        return env_value not in ("", "0") and not env_value.lower().startswith("f")
+
+    try:
+        if proto_cfg is not None:
+            config_value = getattr(proto_cfg, param_name)
+            if config_value is not None:
+                return config_value
+
+    except AttributeError:
+        pass
+
+    return global_default
+
+
 # auto_attribs=True breaks Cython-ising this code. As a result must manually create attr.ib instances.
 @attr.s(slots=True, auto_attribs=False)
 class VersionedItem:
@@ -123,6 +170,24 @@ class VersionedItem:
     def __iter__(self):  # Backwards compatible with the old NamedTuple implementation
         warnings.warn("Don't iterate VersionedItem. Use attrs.astuple() explicitly", SyntaxWarning, stacklevel=2)
         return iter(attr.astuple(self))
+
+
+@dataclass
+class VersionedItemWithJoin:
+    """
+    Return type for operations that join multiple symbols together to produce a single output DataFrame.
+
+    Attributes
+    ----------
+    versions: List[VersionedItem]
+        The individual version information about the symbols that were joined together.
+        The data field of these versioned items will be None.
+    data: Any
+        The joined together data.
+    """
+
+    versions: List[VersionedItem]
+    data: Any
 
 
 def _env_config_from_lib_config(lib_cfg, env):
@@ -264,8 +329,8 @@ class NativeVersionStore:
         self._native_cfg = native_cfg
 
     @classmethod
-    def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE):
-        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode)
+    def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
+        lib = cls.create_lib_from_lib_config(lib_cfg, env, open_mode, native_cfg)
         return cls(library=lib, lib_cfg=lib_cfg, env=env, open_mode=open_mode)
 
     @staticmethod
@@ -363,10 +428,10 @@ class NativeVersionStore:
         norm_failure_options_msg="",
         **kwargs,
     ):
-        dynamic_schema = self.resolve_defaults(
+        dynamic_schema = resolve_defaults(
             "dynamic_schema", self._lib_cfg.lib_desc.version.write_options, False, **kwargs
         )
-        empty_types = self.resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
+        empty_types = resolve_defaults("empty_types", self._lib_cfg.lib_desc.version.write_options, False)
         try:
             udm = normalize_metadata(metadata)
             opt_custom = self._custom_normalizer.normalize(dataframe)
@@ -433,55 +498,15 @@ class NativeVersionStore:
                     metadata=metadata,
                     data=None,
                     host=self.env,
-                    timestamp=vit_composite.timestamp
+                    timestamp=vit_composite.timestamp,
                 )
-
-    def _write_options(self):
-        return self._lib_cfg.lib_desc.version.write_options
 
     @staticmethod
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
-        """
-        Precedence: existing_value > kwargs > env > proto_cfg > global_default
+        return resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs)
 
-        Parameters
-        ----------
-        param_name: str
-        proto_cfg
-            Gets the param_name attribute of this object
-            Most often is `self._write_options()` for the Protobuf write_options.
-        global_default
-            FUTURE: store this in a central location
-        existing_value:
-            The value already supplied to the caller
-        uppercase
-            If true (default), will look for `param_name.upper()` in OS environment variables; otherwise, the original
-            case.
-        kwargs
-            For passing through the caller's kwargs in which we look for `param_name`
-            *Deprecating: use `existing_value`*
-        """
-
-        if existing_value is not None:
-            return existing_value
-
-        param_value = kwargs.get(param_name)
-        if param_value is not None:
-            return param_value
-
-        env_name = param_name.upper() if uppercase else param_name
-        env_value = os.getenv(env_name)
-        if env_value is not None:
-            return env_value not in ("", "0") and not env_value.lower().startswith("f")
-
-        try:
-            config_value = getattr(proto_cfg, param_name)
-            if config_value is not None:
-                return config_value
-        except AttributeError:
-            pass
-
-        return global_default
+    def _write_options(self):
+        return self._lib_cfg.lib_desc.version.write_options
 
     def stage(
         self,
@@ -584,17 +609,17 @@ class NativeVersionStore:
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
 
-        pickle_on_failure = self.resolve_defaults(
+        pickle_on_failure = resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
-        recursive_normalizers = self.resolve_defaults(
+        recursive_normalizers = resolve_defaults(
             "recursive_normalizers", proto_cfg, global_default=False, uppercase=False, **kwargs
         )
-        parallel = self.resolve_defaults("parallel", proto_cfg, global_default=False, uppercase=False, **kwargs)
-        incomplete = self.resolve_defaults("incomplete", proto_cfg, global_default=False, uppercase=False, **kwargs)
+        parallel = resolve_defaults("parallel", proto_cfg, global_default=False, uppercase=False, **kwargs)
+        incomplete = resolve_defaults("incomplete", proto_cfg, global_default=False, uppercase=False, **kwargs)
 
         # TODO remove me when dynamic strings is the default everywhere
         if parallel:
@@ -630,7 +655,6 @@ class NativeVersionStore:
             coerce_columns,
             norm_failure_options_msg,
         )
-        # TODO: allow_sparse for write_parallel / recursive normalizers as well.
         if isinstance(item, NPDDataFrame):
             if parallel or incomplete:
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
@@ -646,7 +670,7 @@ class NativeVersionStore:
 
     def _resolve_dynamic_strings(self, kwargs):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        dynamic_strings = self.resolve_defaults("dynamic_strings", proto_cfg, global_default=True, **kwargs)
+        dynamic_strings = resolve_defaults("dynamic_strings", proto_cfg, global_default=True, **kwargs)
         if IS_WINDOWS:
             # Fixed size strings not implemented yet for Windows as Py_UNICODE_SIZE is 2 whereas on Linux it is 4
             if not dynamic_strings:
@@ -739,7 +763,7 @@ class NativeVersionStore:
         coerce_columns = kwargs.get("coerce_columns", None)
 
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
@@ -838,10 +862,10 @@ class NativeVersionStore:
         update_query = _PythonVersionStoreUpdateQuery()
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        dynamic_schema = self.resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
+        dynamic_schema = resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
         coerce_columns = kwargs.get("coerce_columns", None)
 
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
@@ -866,10 +890,7 @@ class NativeVersionStore:
             return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _apply_date_range_to_update_query(
-        self,
-        data: TimeSeriesType,
-        date_range: Optional[DateRangeInput],
-        update_query: _PythonVersionStoreUpdateQuery
+        self, data: TimeSeriesType, date_range: Optional[DateRangeInput], update_query: _PythonVersionStoreUpdateQuery
     ) -> TimeSeriesType:
         """
         Parameters
@@ -898,19 +919,22 @@ class NativeVersionStore:
         metadata_vector: List[Any],
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
         prune_previous_version: bool = None,
-        upsert: bool = False
+        upsert: bool = False,
     ):
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
-            data_vector[i] = self._apply_date_range_to_update_query(data_vector[i], date_range_vector[i], update_queries[i])
+            data_vector[i] = self._apply_date_range_to_update_query(
+                data_vector[i], date_range_vector[i], update_queries[i]
+            )
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         # Batch update is available only via V2 Library API. Dynamic Strings are always on in it
         dynamic_strings = True
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
-            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update)
+            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update
+        )
         cxx_versioned_items = self.version_store.batch_update(
             symbols, items, norm_metas, udms, update_queries, prune_previous_version, upsert
         )
@@ -1115,6 +1139,125 @@ class NativeVersionStore:
                 vitem = self._post_process_dataframe(read_result, read_query, implement_read_index)
                 versioned_items.append(vitem)
         return versioned_items
+
+    def batch_read_and_join(
+        self,
+        symbols: List[str],
+        query_builder: QueryBuilder,
+        as_ofs: Optional[List[VersionQueryInput]] = None,
+        date_ranges: Optional[List[Optional[DateRangeInput]]] = None,
+        row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
+        columns: Optional[List[List[str]]] = None,
+        per_symbol_query_builders: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
+        **kwargs,
+    ) -> VersionedItemWithJoin:
+        """
+        Reads multiple symbols in a batch fashion, and then joins them together using the first clause in the
+        `query_builder` argument. If there are subsequent clauses in the `query_builder` argument, then these are
+        applied to the joined data.
+
+        Parameters
+        ----------
+        symbols: `List[str]`
+            List of symbols to read
+        query_builder: `QueryBuilder`
+            The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
+            individual dataframes, and will be applied to the joined data.
+        as_ofs: `Optional[List[VersionQueryInput]]`, default=None
+            List of version queries. See documentation of `read` method for more details.
+            i-th entry corresponds to i-th element of `symbols`.
+        date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
+            List of date ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
+            List of row ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        columns: `List[List[str]]`, default=None
+            Which columns to return for a dataframe.
+            i-th entry restricts columns for the i-th element in `symbols`.
+        per_symbol_query_builders: `Optional[Union[QueryBuilder, List[QueryBuilder]]]`, default=None
+            Either a single QueryBuilder object to apply to all the symbols before they are joined, or a list of
+            QueryBuilder objects of the same length as the symbols list.
+            For more information see the documentation for the QueryBuilder class.
+            i-th entry corresponds to i-th element of `symbols`.
+
+        Examples
+        --------
+
+        Join 2 symbols together without any pre or post processing.
+
+        >>> df0 = pd.DataFrame(
+            {
+                "col1": [0.5],
+                "col2": [1],
+            },
+            index=[pd.Timestamp("2025-01-01")],
+        )
+        >>> df1 = pd.DataFrame(
+            {
+                "col3": ["hello"],
+                "col2": [2],
+            },
+            index=[pd.Timestamp("2025-01-02")],
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("outer")
+        >>> lib.write("symbol0", df0)
+        >>> lib.write("symbol1", df1)
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col1     col2     col3
+            2025-01-01 00:00:00     0.5        1     None
+            2025-01-02 00:00:00     NaN        2  "hello"
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("inner")
+        >>> lib.batch_read_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col2
+            2025-01-01 00:00:00       1
+            2025-01-02 00:00:00       2
+
+        Returns
+        -------
+        VersionedItemWithJoin
+            Contains a .data field with the joined together data, and a list of VersionedItem objects describing the
+            version number, metadata, etc., of the symbols that were joined together.
+
+        Raises
+        -------
+        UserInputException
+            * If the first clause in `query_builder` is not a multi-symbol join
+            * If any subsequent clauses in `query_builder` are not single-symbol clauses
+            * If any of the specified symbols are recursively normalized
+        MissingDataException
+            * If a symbol or the version of symbol specified in as_ofs does not exist or has been deleted
+        SchemaException
+            * If the schema of symbols to be joined are incompatible. Examples of incompatible schemas include:
+                * Trying to join a Series to a DataFrame
+                * Different index types, including MultiIndexes with different numbers of levels
+                * Incompatible column types e.g. joining a string column to an integer column
+        """
+        implement_read_index = kwargs.get("implement_read_index", False)
+        if columns:
+            columns = [self._resolve_empty_columns(c, implement_read_index) for c in columns]
+        version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
+        # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
+        per_symbol_query_builders = copy.deepcopy(per_symbol_query_builders)
+        # Needed to force date_range and row_range arguments to go through the read_and_process path rather than the
+        # direct read path if no explicit query is provided for a symbol
+        force_ranges_to_queries = True
+        read_queries = self._get_read_queries(
+            len(symbols), date_ranges, row_ranges, columns, per_symbol_query_builders, force_ranges_to_queries
+        )
+        read_options = self._get_read_options(**kwargs)
+        return self._adapt_read_res(
+            ReadResult(
+                *self.version_store.batch_read_and_join(
+                    symbols, version_queries, read_queries, read_options, query_builder.clauses
+                )
+            )
+        )
 
     def batch_read_metadata(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None, **kwargs
@@ -1330,7 +1473,7 @@ class NativeVersionStore:
         dynamic_strings: bool,
         pickle_on_failure: bool,
         norm_failure_msg: str,
-        operation_supports_categoricals: bool=False
+        operation_supports_categoricals: bool = False,
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
@@ -1340,7 +1483,8 @@ class NativeVersionStore:
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(
-                symbols[idx], data_vector[idx], operation_supports_categoricals=operation_supports_categoricals)
+                symbols[idx], data_vector[idx], operation_supports_categoricals=operation_supports_categoricals
+            )
 
         udms = []
         items = []
@@ -1372,11 +1516,11 @@ class NativeVersionStore:
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = self.resolve_defaults(
+        pickle_on_failure = resolve_defaults(
             "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
         )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
@@ -1388,7 +1532,7 @@ class NativeVersionStore:
             dynamic_strings,
             pickle_on_failure,
             norm_failure_options_msg,
-            operation_supports_categoricals=True
+            operation_supports_categoricals=True,
         )
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
@@ -1399,7 +1543,7 @@ class NativeVersionStore:
         self, symbols: List[str], metadata_vector: List[Any], prune_previous_version, throw_on_error
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         normalized_meta = [normalize_metadata(metadata_vector[idx]) for idx in range(len(symbols))]
@@ -1516,12 +1660,13 @@ class NativeVersionStore:
         **kwargs,
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
-            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append)
+            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append
+        )
         write_if_missing = kwargs.get("write_if_missing", True)
         cxx_versioned_items = self.version_store.batch_append(
             symbols,
@@ -1535,11 +1680,7 @@ class NativeVersionStore:
         )
         return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
 
-    def _convert_cxx_batch_results_to_python(
-        self,
-        cxx_versioned_items,
-        metadata_vector
-    ):
+    def _convert_cxx_batch_results_to_python(self, cxx_versioned_items, metadata_vector):
         results = []
         for idx, result in enumerate(cxx_versioned_items):
             if isinstance(result, DataError):
@@ -1651,6 +1792,7 @@ class NativeVersionStore:
         row_ranges: Optional[List[Optional[Tuple[int, int]]]],
         columns: Optional[List[List[str]]],
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]],
+        force_ranges_to_queries: bool = False,
     ):
         read_queries = []
 
@@ -1697,6 +1839,9 @@ class NativeVersionStore:
             if query_builder is not None:
                 query = copy.deepcopy(query_builder) if isinstance(query_builder, QueryBuilder) else query_builder[idx]
 
+            if query is None and force_ranges_to_queries:
+                query = QueryBuilder()
+
             read_query = self._get_read_query(
                 date_range=date_range,
                 row_range=row_range,
@@ -1713,12 +1858,10 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        read_options.set_dynamic_schema(
-            self.resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
-        )
-        read_options.set_set_tz(self.resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
-        read_options.set_allow_sparse(self.resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
-        read_options.set_incompletes(self.resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
+        read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
+        read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
+        read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
+        read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
         return read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
@@ -1823,13 +1966,16 @@ class NativeVersionStore:
         )
 
         if read_options.output_format == OutputFormat.ARROW:
-            vit, frame, meta = self.version_store.read_dataframe_version_arrow(symbol, version_query, read_query, read_options)
+            vit, frame, meta = self.version_store.read_dataframe_version_arrow(
+                symbol, version_query, read_query, read_options
+            )
             import pyarrow as pa
+
             record_batches = []
             for i in range(frame.num_blocks):
                 arrays = []
                 for arr, schema in zip(frame.arrays, frame.schemas):
-                    print("Arr: {} Schema: {}".format(arr, schema));
+                    print("Arr: {} Schema: {}".format(arr, schema))
                     arrays.append(pa.Array._import_from_c(arr[i], schema[i]))
 
                 record_batches.append(pa.RecordBatch.from_arrays(arrays, names=frame.names))
@@ -2112,7 +2258,7 @@ class NativeVersionStore:
         VersionedItem
             The data attribute will be None.
         """
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata)
@@ -2148,21 +2294,40 @@ class NativeVersionStore:
 
         return index_columns
 
-    def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
+    def _adapt_read_res(self, read_result: ReadResult) -> Union[VersionedItem, VersionedItemWithJoin]:
         frame_data = FrameData.from_cpp(read_result.frame_data)
-        meta = denormalize_user_metadata(read_result.udm, self._normalizer)
         data = self._normalizer.denormalize(frame_data, read_result.norm)
         if read_result.norm.HasField("custom"):
             data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
-        return VersionedItem(
-            symbol=read_result.version.symbol,
-            library=self._library.library_path,
-            data=data,
-            version=read_result.version.version,
-            metadata=meta,
-            host=self.env,
-            timestamp=read_result.version.timestamp,
-        )
+
+        if isinstance(read_result.version, list):
+            versions = []
+            for idx in range(len(read_result.version)):
+                versions.append(
+                    VersionedItem(
+                        symbol=read_result.version[idx].symbol,
+                        library=self._library.library_path,
+                        data=None,
+                        version=read_result.version[idx].version,
+                        metadata=denormalize_user_metadata(read_result.udm[idx], self._normalizer),
+                        host=self.env,
+                        timestamp=read_result.version[idx].timestamp,
+                    )
+                )
+            return VersionedItemWithJoin(
+                versions=versions,
+                data=data,
+            )
+        else:
+            return VersionedItem(
+                symbol=read_result.version.symbol,
+                library=self._library.library_path,
+                data=data,
+                version=read_result.version.version,
+                metadata=denormalize_user_metadata(read_result.udm, self._normalizer),
+                host=self.env,
+                timestamp=read_result.version.timestamp,
+            )
 
     def list_versions(
         self,
@@ -2428,14 +2593,14 @@ class NativeVersionStore:
         """
         if date_range is not None:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
-            dynamic_schema = self.resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
+            dynamic_schema = resolve_defaults("dynamic_schema", proto_cfg, False, **kwargs)
             # All other methods use prune_previous_version, but also support prune_previous_versions here in case
             # anyone is relying on it
             prune_previous_versions = _assume_false("prune_previous_versions", kwargs)
             if prune_previous_versions:
                 prune_previous_version = True
             else:
-                prune_previous_version = self.resolve_defaults(
+                prune_previous_version = resolve_defaults(
                     "prune_previous_version", proto_cfg, global_default=False, **kwargs
                 )
             update_query = _PythonVersionStoreUpdateQuery()
@@ -2457,6 +2622,19 @@ class NativeVersionStore:
             Version to be deleted.
         """
         self.version_store.delete_version(symbol, version_num)
+
+    def delete_versions(self, symbol: str, versions: List[int]):
+        """
+        Delete the given versions of this symbol.
+
+        Parameters
+        ----------
+        symbol : `str`
+            Symbol name.
+        versions : `List[int]`
+            Versions to be deleted.
+        """
+        self.version_store.delete_versions(symbol, versions)
 
     def prune_previous_versions(self, symbol: str):
         """
@@ -2789,6 +2967,9 @@ class NativeVersionStore:
 
     def lib_cfg(self):
         return self._lib_cfg
+    
+    def lib_native_cfg(self):
+        return self._native_cfg
 
     def open_mode(self):
         return self._open_mode
@@ -2981,7 +3162,7 @@ class NativeVersionStore:
         """
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata)
@@ -3084,7 +3265,7 @@ class NativeVersionStore:
 
         # All other methods use prune_previous_version, but also support prune_previous_versions here in case
         # anyone is relying on it
-        prune_previous_version = self.resolve_defaults(
+        prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_versions, **kwargs
         )
 
@@ -3104,3 +3285,16 @@ class NativeVersionStore:
 
     def library_tool(self) -> LibraryTool:
         return LibraryTool(self.library(), self)
+
+
+def resolve_dynamic_strings(kwargs):
+    dynamic_strings = resolve_defaults("dynamic_strings", None, global_default=True, **kwargs)
+    if IS_WINDOWS:
+        # Fixed size strings not implemented yet for Windows as Py_UNICODE_SIZE is 2 whereas on Linux it is 4
+        if not dynamic_strings:
+            log.debug(
+                "Windows only supports dynamic_strings=True, using dynamic strings despite configuration or kwarg"
+            )
+        dynamic_strings = True
+
+    return dynamic_strings

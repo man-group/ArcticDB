@@ -24,12 +24,11 @@
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
-#include <arcticdb/util/spinlock.hpp>
 #include <arcticdb/pipeline/string_reducers.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
 
 #include <ankerl/unordered_dense.h>
-#include <folly/gen/Base.h>
+
 
 namespace arcticdb::pipelines {
 
@@ -40,16 +39,11 @@ namespace arcticdb::pipelines {
   |i||_||_|    contain the relevant index, but we only want to count it once per grid row.
 
  */
-void mark_index_slices(
-    const std::shared_ptr<PipelineContext>& context,
-    bool dynamic_schema,
-    bool column_groups) {
+void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(
         context->slice_and_keys_,
-        dynamic_schema,
         true,
-        context->incompletes_after_,
-        column_groups).value();
+        context->incompletes_after_).value();
 }
 
 StreamDescriptor get_filtered_descriptor(StreamDescriptor&& descriptor, OutputFormat output_format, const std::shared_ptr<FieldCollection>& filter_columns) {

@@ -872,3 +872,15 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q.resample('1min').agg({"col_min":("col", "min")})
     assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
+
+
+def test_date_range_outside_symbol_timerange(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_date_range_outside_symbol_timerange"
+    df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2025-01-01", periods=10))
+    lib.write(sym, df)
+    # Date range after time range
+    q = QueryBuilder().date_range((pd.Timestamp("2025-02-01"), pd.Timestamp("2025-02-02"))).resample('1min').agg({"col": "sum"})
+    received_df = lib.read(sym, query_builder=q).data
+    assert not len(received_df)
+    assert received_df.columns == df.columns

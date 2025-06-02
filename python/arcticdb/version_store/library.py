@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 import datetime
 import os
@@ -22,13 +23,14 @@ from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
-from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, OutputFormat
 import pandas as pd
 import numpy as np
 import logging
 from arcticdb.version_store._normalization import normalize_metadata
+from arcticdb.version_store.admin_tools import AdminTools
 
 logger = logging.getLogger(__name__)
 
@@ -155,8 +157,13 @@ class SymbolDescription(NamedTuple):
 
     def __eq__(self, other):
         # Needed as NaT != NaT
-        date_range_fields_equal = (self.date_range[0] == other.date_range[0] or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))) and \
-                                  (self.date_range[1] == other.date_range[1] or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1])))
+        date_range_fields_equal = (
+            self.date_range[0] == other.date_range[0]
+            or (np.isnat(self.date_range[0]) and np.isnat(other.date_range[0]))
+        ) and (
+            self.date_range[1] == other.date_range[1]
+            or (np.isnat(self.date_range[1]) and np.isnat(other.date_range[1]))
+        )
         if date_range_fields_equal:
             non_date_range_fields = [field for field in self._fields if field != "date_range"]
             return all(getattr(self, field) == getattr(other, field) for field in non_date_range_fields)
@@ -310,14 +317,14 @@ class ReadInfoRequest(NamedTuple):
         res += ")"
         return res
 
-class UpdatePayload:
 
+class UpdatePayload:
     def __init__(
         self,
         symbol: str,
         data: NormalizableType,
         metadata: Any = None,
-        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
+        date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
     ):
         self.symbol = symbol
         self.data = data
@@ -325,11 +332,14 @@ class UpdatePayload:
         self.date_range = date_range
 
     def __repr__(self):
-        return(
-            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
-            f", metadata={self.metadata}" if self.metadata is not None else ""
-            f", date_range={self.date_range}" if self.date_range is not None else ""
+        return (
+            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata}"
+            if self.metadata is not None
+            else f", date_range={self.date_range}"
+            if self.date_range is not None
+            else ""
         )
+
 
 class LazyDataFrame(QueryBuilder):
     """
@@ -353,10 +363,11 @@ class LazyDataFrame(QueryBuilder):
     # Actual read and processing happens here
     >>> df = lazy_df.collect().data
     """
+
     def __init__(
-            self,
-            lib: "Library",
-            read_request: ReadRequest,
+        self,
+        lib: "Library",
+        read_request: ReadRequest,
     ):
         if read_request.query_builder is None:
             super().__init__()
@@ -436,9 +447,10 @@ class LazyDataFrameCollection(QueryBuilder):
     # Actual read and processing happens here
     >>> res = lazy_dfs.collect()
     """
+
     def __init__(
-            self,
-            lazy_dataframes: List[LazyDataFrame],
+        self,
+        lazy_dataframes: List[LazyDataFrame],
     ):
         """
         Gather a list of `LazyDataFrame`s into a single object that can be collected together.
@@ -451,7 +463,7 @@ class LazyDataFrameCollection(QueryBuilder):
         lib_set = {lazy_dataframe.lib for lazy_dataframe in lazy_dataframes}
         check(
             len(lib_set) in [0, 1],
-            f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}"
+            f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}",
         )
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
@@ -494,10 +506,158 @@ class LazyDataFrameCollection(QueryBuilder):
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
-        return "LazyDataFrameCollection(" + str(self._lazy_dataframes) + (" | " if len(query_builder_repr) else "") + query_builder_repr + ")"
+        return (
+            "LazyDataFrameCollection("
+            + str(self._lazy_dataframes)
+            + (" | " if len(query_builder_repr) else "")
+            + query_builder_repr
+            + ")"
+        )
 
     def __repr__(self) -> str:
         return self.__str__()
+
+
+class LazyDataFrameAfterJoin(QueryBuilder):
+    """
+    Lazy dataframe implementation, allowing chains of queries to be added before the reads and join are actually
+    executed.
+    Returned by joining methods such as `adb.concat`.
+
+    See Also
+    --------
+    QueryBuilder for supported querying operations.
+
+    Examples
+    --------
+
+    >>>
+    # Specify that we want symbols "test0" and "test1"
+    >>> lazy_dfs = lib.read_batch(["test0", "test1"], lazy=True)
+    # Perform a joining operation
+    >>> lazy_df_after_join = adb.concat(lazy_dfs)
+    # Create a new column through a projection operation on the joined data
+    >>> lazy_df_after_join["new_col"] = lazy_df_after_join["col1"] + lazy_df_after_join["col2"]
+    # Actual batch read, join, and subsequent processing happens here
+    >>> df = lazy_df_after_join.collect().data
+    """
+    def __init__(
+            self,
+            lazy_dataframes: LazyDataFrameCollection,
+            join: QueryBuilder,
+    ):
+        super().__init__()
+        self._lazy_dataframes = lazy_dataframes
+        self.then(join)
+
+    def collect(self) -> VersionedItemWithJoin:
+        """
+        Read the data and execute any queries applied to this object since the join method.
+
+        Returns
+        -------
+        VersionedItemWithJoin
+            Contains a .data field with the joined together data, and a list of VersionedItem objects describing the
+            version number, metadata, etc., of the symbols that were joined together.
+        """
+        if not len(self._lazy_dataframes._lazy_dataframes):
+            return []
+        else:
+            lib = self._lazy_dataframes._lib
+            return lib.read_batch_and_join(self._lazy_dataframes._read_requests(), self)
+
+    def __str__(self) -> str:
+        query_builder_repr = super().__str__()
+        return f"LazyDataFrameAfterJoin({self._lazy_dataframes._lazy_dataframes} | {query_builder_repr})"
+
+    def __repr__(self) -> str:
+        return self.__str__()
+
+
+def concat(
+        lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
+        join: str = "outer",
+) -> LazyDataFrameAfterJoin:
+    """
+    Concatenate a list of symbols together.
+
+    Parameters
+    ----------
+    join : str, default="outer"
+        Whether the columns of the input symbols should be inner or outer joined. Supported inputs are "inner" and
+        "outer".
+        * inner - Only columns present in ALL the input symbols will be present in the returned DataFrame.
+        * outer - Columns present in ANY of the input symbols will be present in the returned DataFrame. Columns
+          that are present in some input symbols but not in others will be backfilled according to their type using
+          the same rules as with dynamic schema.
+
+    Returns
+    -------
+    LazyDataFrameAfterJoin
+        Lazy DataFrame representing the joined data, to which further processing operations can be chained.
+
+    Raises
+    -------
+    ArcticNativeException
+        The join argument is not one of "inner" or "outer"
+
+    Examples
+    --------
+    Join 2 symbols together without any pre or post processing.
+
+    >>> df0 = pd.DataFrame(
+        {
+            "col1": [0.5],
+            "col2": [1],
+        },
+        index=[pd.Timestamp("2025-01-01")],
+    )
+    >>> df1 = pd.DataFrame(
+        {
+            "col3": ["hello"],
+            "col2": [2],
+        },
+        index=[pd.Timestamp("2025-01-02")],
+    )
+    >>> lib.write("symbol0", df0)
+    >>> lib.write("symbol1", df1)
+    >>> lazy_dfs = lib.read_batch(["symbol0", "symbol1"], lazy=True)
+    >>> adb.concat(lazy_dfs, join="outer").collect().data
+
+                               col1     col2     col3
+        2025-01-01 00:00:00     0.5        1     None
+        2025-01-02 00:00:00     NaN        2  "hello"
+
+    Join 2 symbols together with both some per-symbol processing prior to the join, and some further processing after
+    the join.
+
+    >>> df0 = pd.DataFrame(
+        {
+            "col": [0, 1, 2, 3, 4],
+        },
+        index=pd.date_range("2025-01-01", freq="min", periods=5),
+    )
+    >>> df1 = pd.DataFrame(
+        {
+            "col": [5, 6, 7, 8, 9],
+        },
+        index=pd.date_range("2025-01-01T00:05:00", freq="min" periods=5),
+    )
+    >>> lib.write("symbol0", df0)
+    >>> lib.write("symbol1", df1)
+    >>> lazy_df0, lazy_df1 = lib.read_batch(["symbol0", "symbol1"], lazy=True).split()
+    >>> lazy_df0 = lazy_df0[lazy_df0["col"] <= 2]
+    >>> lazy_df1 = lazy_df1[lazy_df1["col"] <= 6]
+    >>> lazy_df = adb.concat([lazy_df0, lazy_df1])
+    >>> lazy_df = lazy_df.resample("10min").agg({"col": "sum"})
+    >>> lazy_df.collect().data
+
+                                col
+        2025-01-01 00:00:00      14
+    """
+    if not isinstance(lazy_dataframes, LazyDataFrameCollection):
+        lazy_dataframes = LazyDataFrameCollection(lazy_dataframes)
+    return LazyDataFrameAfterJoin(lazy_dataframes, QueryBuilder().concat(join))
 
 
 def col(name: str) -> ExpressionNode:
@@ -528,6 +688,7 @@ class StagedDataFinalizeMethod(Enum):
     WRITE = auto()
     APPEND = auto()
 
+
 class DevTools:
     def __init__(self, nvs):
         self._nvs = nvs
@@ -557,6 +718,7 @@ class DevTools:
         symbols_set = set(symbols)
         common_prefix = os.path.commonprefix(symbols)
         self._nvs.version_store.remove_incompletes(symbols_set, common_prefix)
+
 
 class Library:
     """
@@ -618,8 +780,7 @@ class Library:
         """Enterprise library options set on this library. See also `options` for non-enterprise options."""
         write_options = self._nvs.lib_cfg().lib_desc.version.write_options
         return EnterpriseLibraryOptions(
-            replication=write_options.sync_passive.enabled,
-            background_deletion=write_options.delayed_deletes
+            replication=write_options.sync_passive.enabled, background_deletion=write_options.delayed_deletes
         )
 
     def stage(
@@ -628,7 +789,7 @@ class Library:
         data: NormalizableType,
         validate_index=True,
         sort_on_index=False,
-        sort_columns: List[str] = None
+        sort_columns: List[str] = None,
     ):
         """
         Write a staged data chunk to storage, that will not be visible until finalize_staged_data is called on
@@ -656,7 +817,8 @@ class Library:
             sort_on_index=sort_on_index,
             sort_columns=sort_columns,
             norm_failure_options_msg="Failed to normalize data. It is inadvisable to pickle staged data"
-                                     " as it will not be possible to finalize it.")
+            " as it will not be possible to finalize it.",
+        )
 
     def write(
         self,
@@ -766,7 +928,7 @@ class Library:
             parallel=staged,
             validate_index=validate_index,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
-                                     "(such as date_range filtering and column selection) will not work on pickled data.",
+            "(such as date_range filtering and column selection) will not work on pickled data.",
         )
 
     def write_pickle(
@@ -914,8 +1076,8 @@ class Library:
             validate_index=validate_index,
             throw_on_error=throw_on_error,
             norm_failure_options_msg="Using write_pickle_batch will allow the object to be written. However, many "
-                                     "operations (such as date_range filtering and column selection) will not work on "
-                                     "pickled data.",
+            "operations (such as date_range filtering and column selection) will not work on "
+            "pickled data.",
         )
 
     def write_pickle_batch(
@@ -1126,7 +1288,7 @@ class Library:
 
         The update will split the first and last segments in the storage that intersect with 'data'. Therefore, frequent
         calls to update might lead to data fragmentation (see the example below).
-        
+
         Parameters
         ----------
         symbol
@@ -1309,8 +1471,8 @@ class Library:
         mode: Optional[Union[StagedDataFinalizeMethod, str]] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
-        validate_index = True,
-        delete_staged_data_on_failure: bool = False
+        validate_index=True,
+        delete_staged_data_on_failure: bool = False,
     ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
@@ -1348,11 +1510,11 @@ class Library:
             are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
             last index value in the previous version.
         delete_staged_data_on_failure : bool, default=False
-            Determines the handling of staged data when an exception occurs during the execution of the 
+            Determines the handling of staged data when an exception occurs during the execution of the
             ``finalize_staged_data`` function.
 
             - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
-            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+            - If set to False, the staged data will be retained and will be used in subsequent calls to
               ``finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
@@ -1408,8 +1570,13 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        if mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"] and mode is not None:
-            raise ArcticInvalidApiUsageException("mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'")
+        if (
+            mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"]
+            and mode is not None
+        ):
+            raise ArcticInvalidApiUsageException(
+                "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
+            )
 
         return self._nvs.compact_incomplete(
             symbol,
@@ -1418,7 +1585,7 @@ class Library:
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
-            delete_staged_data_on_failure=delete_staged_data_on_failure
+            delete_staged_data_on_failure=delete_staged_data_on_failure,
         )
 
     def sort_and_finalize_staged_data(
@@ -1427,7 +1594,7 @@ class Library:
         mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
-        delete_staged_data_on_failure: bool = False
+        delete_staged_data_on_failure: bool = False,
     ) -> VersionedItem:
         """
         Sorts and merges all staged data, making it available for reads. This differs from `finalize_staged_data` in that it
@@ -1443,7 +1610,7 @@ class Library:
 
         If the symbol does not exist both ``StagedDataFinalizeMethod.APPEND`` and ``StagedDataFinalizeMethod.WRITE`` will create it.
 
-        Calling ``sort_and_finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use 
+        Calling ``sort_and_finalize_staged_data`` without having staged data for the symbol will throw ``UserInputException``. Use
         ``get_staged_symbols`` to check if there are staged segments for the symbol.
 
         Calling ``sort_and_finalize_staged_data`` if any of the staged segments contains NaT in its index will throw ``SortingException``.
@@ -1464,11 +1631,11 @@ class Library:
             Optional metadata to persist along with the symbol.
 
         delete_staged_data_on_failure : bool, default=False
-            Determines the handling of staged data when an exception occurs during the execution of the 
+            Determines the handling of staged data when an exception occurs during the execution of the
             `sort_and_finalize_staged_data` function.
 
             - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
-            - If set to False, the staged data will be retained and will be used in subsequent calls to 
+            - If set to False, the staged data will be retained and will be used in subsequent calls to
               ``sort_and_finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
@@ -1527,7 +1694,7 @@ class Library:
             normalize_metadata(metadata),
             mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
-            delete_staged_data_on_failure=delete_staged_data_on_failure
+            delete_staged_data_on_failure=delete_staged_data_on_failure,
         )
         return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
 
@@ -1555,7 +1722,7 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-        lazy: bool = False
+        lazy: bool = False,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1652,7 +1819,7 @@ class Library:
                 columns=columns,
                 query_builder=query_builder,
                 implement_read_index=True,
-                iterate_snapshots_if_tombstoned=False
+                iterate_snapshots_if_tombstoned=False,
             )
 
     def read_batch(
@@ -1777,7 +1944,7 @@ class Library:
                             row_range=row_ranges[idx],
                             columns=columns[idx],
                             query_builder=q,
-                        )
+                        ),
                     )
                 )
             return LazyDataFrameCollection(lazy_dataframes)
@@ -1793,6 +1960,124 @@ class Library:
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
+
+    def read_batch_and_join(
+            self,
+            symbols: List[ReadRequest],
+            query_builder: QueryBuilder,
+    ) -> VersionedItemWithJoin:
+        """
+        Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
+        argument. If there are subsequent clauses in the `query_builder` argument, then these are applied to the joined
+        data.
+
+        Parameters
+        ----------
+        symbols : List[Union[str, ReadRequest]]
+            List of symbols to read.
+
+        query_builder: QueryBuilder
+            The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
+            individual dataframes, and will be applied to the joined data.
+
+        Returns
+        -------
+        VersionedItemWithJoin
+            Contains a .data field with the joined together data, and a list of VersionedItem objects describing the
+            version number, metadata, etc., of the symbols that were joined together.
+
+        Raises
+        ------
+        UserInputException
+            * If the first clause in `query_builder` is not a multi-symbol join
+            * If any subsequent clauses in `query_builder` are not single-symbol clauses
+            * If any of the specified symbols are recursively normalized
+        MissingDataException
+            * If a symbol or the version of symbol specified in as_ofs does not exist or has been deleted
+        SchemaException
+            * If the schema of symbols to be joined are incompatible. Examples of incompatible schemas include:
+                * Trying to join a Series to a DataFrame
+                * Different index types, including MultiIndexes with different numbers of levels
+                * Incompatible column types e.g. joining a string column to an integer column
+
+        Examples
+        --------
+        Join 2 symbols together without any pre or post processing.
+
+        >>> df0 = pd.DataFrame(
+            {
+                "col1": [0.5],
+                "col2": [1],
+            },
+            index=[pd.Timestamp("2025-01-01")],
+        )
+        >>> df1 = pd.DataFrame(
+            {
+                "col3": ["hello"],
+                "col2": [2],
+            },
+            index=[pd.Timestamp("2025-01-02")],
+        )
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("outer")
+        >>> lib.write("symbol0", df0)
+        >>> lib.write("symbol1", df1)
+        >>> lib.read_batch_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col1     col2     col3
+            2025-01-01 00:00:00     0.5        1     None
+            2025-01-02 00:00:00     NaN        2  "hello"
+
+        >>> q = adb.QueryBuilder()
+        >>> q = q.concat("inner")
+        >>> lib.read_batch_and_join(["symbol0", "symbol1"], query_builder=q).data
+
+                                   col2
+            2025-01-01 00:00:00       1
+            2025-01-02 00:00:00       2
+        """
+        symbol_strings = []
+        as_ofs = []
+        date_ranges = []
+        row_ranges = []
+        columns = []
+        per_symbol_query_builders = []
+
+        def handle_read_request(s_):
+            symbol_strings.append(s_.symbol)
+            as_ofs.append(s_.as_of)
+            date_ranges.append(s_.date_range)
+            row_ranges.append(s_.row_range)
+            columns.append(s_.columns)
+            per_symbol_query_builders.append(s_.query_builder)
+
+        def handle_symbol(s_):
+            symbol_strings.append(s_)
+            for l_ in (as_ofs, date_ranges, row_ranges, columns, per_symbol_query_builders):
+                l_.append(None)
+
+        for s in symbols:
+            if isinstance(s, str):
+                handle_symbol(s)
+            elif isinstance(s, ReadRequest):
+                handle_read_request(s)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the symbols argument s=[{s}] type(s)=[{type(s)}]. Only [str] and"
+                    " [ReadRequest] are supported."
+                )
+
+        return self._nvs.batch_read_and_join(
+            symbol_strings,
+            query_builder,
+            as_ofs,
+            date_ranges,
+            row_ranges,
+            columns,
+            per_symbol_query_builders,
+            implement_read_index=True,
+            iterate_snapshots_if_tombstoned=False,
+        )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
         """
@@ -1844,10 +2129,10 @@ class Library:
         return self._nvs._batch_read_metadata_to_versioned_items(symbol_strings, as_ofs, include_errors_and_none_meta)
 
     def write_metadata(
-            self,
-            symbol: str,
-            metadata: Any,
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        metadata: Any,
+        prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
         Write metadata under the specified symbol name to this library. The data will remain unchanged.
@@ -1878,7 +2163,9 @@ class Library:
         return self._nvs.write_metadata(symbol, metadata, prune_previous_version=prune_previous_versions)
 
     def write_metadata_batch(
-        self, write_metadata_payloads: List[WriteMetadataPayload], prune_previous_versions: bool = False,
+        self,
+        write_metadata_payloads: List[WriteMetadataPayload],
+        prune_previous_versions: bool = False,
     ) -> List[Union[VersionedItem, DataError]]:
         """
         Write metadata to multiple symbols in a batch fashion. This is more efficient than making multiple `write_metadata` calls
@@ -2006,8 +2293,7 @@ class Library:
         if isinstance(versions, int):
             versions = (versions,)
 
-        for v in versions:
-            self._nvs.delete_version(symbol, v)
+        self._nvs.delete_versions(symbol, versions)
 
     def prune_previous_versions(self, symbol):
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
@@ -2020,10 +2306,10 @@ class Library:
         self._nvs.prune_previous_versions(symbol)
 
     def delete_data_in_range(
-            self,
-            symbol: str,
-            date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
+        prune_previous_versions: bool = False,
     ):
         """Delete data within the given date range, creating a new version of ``symbol``.
 
@@ -2198,12 +2484,12 @@ class Library:
         }
 
     def head(
-            self,
-            symbol: str,
-            n: int = 5,
-            as_of: Optional[AsOf] = None,
-            columns: List[str] = None,
-            lazy: bool = False,
+        self,
+        symbol: str,
+        n: int = 5,
+        as_of: Optional[AsOf] = None,
+        columns: List[str] = None,
+        lazy: bool = False,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
@@ -2250,11 +2536,11 @@ class Library:
 
     def tail(
         self,
-            symbol: str,
-            n: int = 5,
-            as_of: Optional[Union[int, str]] = None,
-            columns: List[str] = None,
-            lazy: bool = False,
+        symbol: str,
+        n: int = 5,
+        as_of: Optional[Union[int, str]] = None,
+        columns: List[str] = None,
+        lazy: bool = False,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.
@@ -2463,10 +2749,10 @@ class Library:
         return self._nvs.is_symbol_fragmented(symbol, segment_size)
 
     def defragment_symbol_data(
-            self,
-            symbol: str,
-            segment_size: Optional[int] = None,
-            prune_previous_versions: bool = False,
+        self,
+        symbol: str,
+        segment_size: Optional[int] = None,
+        prune_previous_versions: bool = False,
     ) -> VersionedItem:
         """
         Compacts fragmented segments by merging row-sliced segments (https://docs.arcticdb.io/technical/on_disk_storage/#data-layer).
@@ -2533,3 +2819,7 @@ class Library:
     def name(self):
         """The name of this library."""
         return self._nvs.name()
+
+    def admin_tools(self):
+        """Administrative utilities that operate on this library."""
+        return AdminTools(self._nvs)

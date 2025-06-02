@@ -5,24 +5,25 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import time
 from typing import List
 from arcticdb import Arctic
 from arcticdb.version_store.library import WritePayload, ReadRequest
 import pandas as pd
 
-from .common import *
+from benchmarks.common import *
 
 
 # Common parameters between BasicFunctions and ModificationFunctions
 WIDE_DF_ROWS = 5_000
 WIDE_DF_COLS = 30_000
 # We use larger dataframes for non-batch methods
-PARAMS = ([1_000_000, 1_500_000])
+PARAMS = [1_000_000, 1_500_000]
 PARAM_NAMES = ["rows"]
 BATCH_PARAMS = ([25_000, 50_000], [500, 1000])
 BATCH_PARAM_NAMES = ["rows", "num_symbols"]
-DATE_RANGE = pd.date_range("2022-12-31", "2023-01-01")
+DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
@@ -52,9 +53,7 @@ class BasicFunctions:
         lib = self.ac.create_library(lib_name)
         lib.write(
             "short_wide_sym",
-            generate_random_floats_dataframe(
-                BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS
-            ),
+            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),
         )
 
     def teardown(self, rows):
@@ -69,9 +68,7 @@ class BasicFunctions:
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
 
         self.df = generate_pseudo_random_dataframe(rows)
-        self.df_short_wide = generate_random_floats_dataframe(
-            BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS
-        )
+        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)
 
         self.lib = self.ac[get_prewritten_lib_name(rows)]
         self.fresh_lib = self.get_fresh_lib()
@@ -136,6 +133,7 @@ class BatchBasicFunctions:
     DATE_RANGE = DATE_RANGE
     params = BATCH_PARAMS
     param_names = BATCH_PARAM_NAMES
+
     def setup_cache(self):
         self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)
         rows_values, num_symbols_values = BatchBasicFunctions.params
@@ -187,52 +185,46 @@ class BatchBasicFunctions:
     def peakmem_read_batch(self, rows, num_symbols):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
-        
+
     def time_read_batch_with_columns(self, rows, num_symbols):
         COLS = ["value"]
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
     def peakmem_read_batch_with_columns(self, rows, num_symbols):
         COLS = ["value"]
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", columns=COLS) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
-
     def time_read_batch_with_date_ranges(self, rows, num_symbols):
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE)
-            for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
 
     def peakmem_read_batch_with_date_ranges(self, rows, num_symbols):
-        read_reqs = [
-            ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE)
-            for sym in range(num_symbols)
-        ]
+        read_reqs = [ReadRequest(f"{sym}_sym", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]
         self.lib.read_batch(read_reqs)
+
 
 def get_time_at_fraction_of_df(fraction, rows):
     end_time = pd.Timestamp("1/1/2023")
-    time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction-1)))
+    time_delta = pd.tseries.offsets.DateOffset(seconds=round(rows * (fraction - 1)))
     return end_time + time_delta
 
+
 from shutil import copytree, rmtree
+
+
 class ModificationFunctions:
     """
     Modification functions (update, append, delete) need a different setup/teardown process, thus we place them in a
     separate group.
     """
+
     rounds = 1
-    number = 1 # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
+    number = 1  # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
     repeat = 3
-    warmup_time=0
-    
+    warmup_time = 0
+
     timeout = 6000
     ARCTIC_DIR = "modification_functions"
     ARCTIC_DIR_ORIGINAL = "modification_functions_original"
@@ -245,13 +237,13 @@ class ModificationFunctions:
 
     class LargeAppendDataModify:
         """
-            This class will hold a cache of append large dataframes
-            The purpose of this cache is to create dataframes
-            which timestamps are sequenced over time so that 
-            overlap does not occur
+        This class will hold a cache of append large dataframes
+        The purpose of this cache is to create dataframes
+        which timestamps are sequenced over time so that
+        overlap does not occur
         """
 
-        def __init__(self, num_rows_list:List[int], number_elements:int):
+        def __init__(self, num_rows_list: List[int], number_elements: int):
             self.df_append_large = {}
             self.df_append_short_wide = {}
             start_time = time.time()
@@ -259,13 +251,15 @@ class ModificationFunctions:
                 print("Generating dataframe with rows: ", rows)
                 lst = list()
                 lst_saw = list()
-                for n in range(number_elements+1):
+                for n in range(number_elements + 1):
                     print("Generating dataframe no: ", n)
-                    
-                    df = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(2*(n+1), rows))
+
+                    df = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(2 * (n + 1), rows))
                     df_saw = generate_random_floats_dataframe_with_index(
-                        ModificationFunctions.WIDE_DF_ROWS, ModificationFunctions.WIDE_DF_COLS, "s", 
-                        get_time_at_fraction_of_df(2*(n+1), rows=ModificationFunctions.WIDE_DF_ROWS)
+                        ModificationFunctions.WIDE_DF_ROWS,
+                        ModificationFunctions.WIDE_DF_COLS,
+                        "s",
+                        get_time_at_fraction_of_df(2 * (n + 1), rows=ModificationFunctions.WIDE_DF_ROWS),
                     )
 
                     lst.append(df)
@@ -278,7 +272,6 @@ class ModificationFunctions:
             print("APPEND LARGE cache generation took (s) :", time.time() - start_time)
 
     def setup_cache(self):
-
         self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)
         rows_values = ModificationFunctions.params
 
@@ -312,9 +305,8 @@ class ModificationFunctions:
         return lad
 
     def setup(self, lad: LargeAppendDataModify, rows):
-
         self.df_update_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(0.5, rows))
-        self.df_update_half = generate_pseudo_random_dataframe(rows//2, "s", get_time_at_fraction_of_df(0.75, rows))
+        self.df_update_half = generate_pseudo_random_dataframe(rows // 2, "s", get_time_at_fraction_of_df(0.75, rows))
         self.df_update_upsert = generate_pseudo_random_dataframe(rows, "s", get_time_at_fraction_of_df(1.5, rows))
         self.df_append_single = generate_pseudo_random_dataframe(1, "s", get_time_at_fraction_of_df(1.1, rows))
 
@@ -326,6 +318,9 @@ class ModificationFunctions:
         self.lib = self.ac[get_prewritten_lib_name(rows)]
         self.lib_short_wide = self.ac[get_prewritten_lib_name(ModificationFunctions.WIDE_DF_ROWS)]
 
+        # Used by time_delete_multiple_versions
+        for i in range(100):
+            self.lib.write("sym_delete_multiple", pd.DataFrame(), prune_previous_versions=False)
 
     def teardown(self, lad: LargeAppendDataModify, rows):
         # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
@@ -336,30 +331,33 @@ class ModificationFunctions:
         del self.ac
 
     def time_update_single(self, lad: LargeAppendDataModify, rows):
-        self.lib.update(f"sym", self.df_update_single)
+        self.lib.update("sym", self.df_update_single)
 
     def time_update_half(self, lad: LargeAppendDataModify, rows):
-        self.lib.update(f"sym", self.df_update_half)
+        self.lib.update("sym", self.df_update_half)
 
     def time_update_upsert(self, lad: LargeAppendDataModify, rows):
-        self.lib.update(f"sym", self.df_update_upsert, upsert=True)
+        self.lib.update("sym", self.df_update_upsert, upsert=True)
 
     def time_update_short_wide(self, lad: LargeAppendDataModify, rows):
         self.lib_short_wide.update("short_wide_sym", self.df_update_short_wide)
 
     def time_append_single(self, lad: LargeAppendDataModify, rows):
-        self.lib.append(f"sym", self.df_append_single)
+        self.lib.append("sym", self.df_append_single)
 
     def time_append_large(self, lad: LargeAppendDataModify, rows):
         large: pd.DataFrame = lad.df_append_large[rows].pop(0)
-        self.lib.append(f"sym", large)
+        self.lib.append("sym", large)
 
     def time_append_short_wide(self, lad: LargeAppendDataModify, rows):
         large: pd.DataFrame = lad.df_append_short_wide[rows].pop(0)
         self.lib_short_wide.append("short_wide_sym", large)
 
     def time_delete(self, lad: LargeAppendDataModify, rows):
-        self.lib.delete(f"sym")
+        self.lib.delete("sym")
+
+    def time_delete_multiple_versions(self, lad: LargeAppendDataModify, rows):
+        self.lib.delete("sym_delete_multiple", list(range(99)))
 
     def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):
         self.lib_short_wide.delete("short_wide_sym")

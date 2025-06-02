@@ -1,14 +1,18 @@
 name: Check for master failure
 on:
   workflow_run:
-    workflows: ["Build and Test", "Build with conda", "Build with analysis tools", "Coverity Static Analysis"]
+    workflows: ["Build and Test", "Build with conda", "Build with analysis tools", "Coverity Static Analysis", "Installation Tests Execution"]
     types: [completed]
-    branches: [master]
 
 jobs:
   on-failure:
     runs-on: ubuntu-latest
-    if: github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out'
+    # This condition aims to include scheduled workflow failures which does not appear on Slack. The reason is that they might not carry head_branch info
+    if: |
+      (github.event.workflow_run.conclusion == 'failure' || 
+       github.event.workflow_run.conclusion == 'timed_out') &&
+      (github.event.workflow_run.head_branch == 'master' || 
+       github.event.workflow_run.head_branch == '')
     steps:
       - uses: ravsamhq/notify-slack-action@be814b201e233b2dc673608aa46e5447c8ab13f2
         with:
