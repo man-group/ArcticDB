@@ -609,6 +609,16 @@ class DFGenerator:
         self.__data[name] = list
         self.__types[name] = dtype
         return self
+    
+    def add_const_col(self, name: str, contant_value: ArcticTypes ) -> 'DFGenerator':
+        self.__data[name] = [contant_value] * self.__size
+        self.__types[name] = type(contant_value)
+        return self
+        
+    def add_auto_inc_col(self, name: str, initial_value: np.uint64 ) -> 'DFGenerator':
+        self.__data[name] = list(range(initial_value, initial_value + self.__size))
+        self.__types[name] = np.uint64
+        return self
 
     def add_timestamp_index(self, name_col:str, freq:Union[str , timedelta , pd.Timedelta , pd.DateOffset], 
                             start_time: pd.Timestamp = pd.Timestamp(0)) -> 'DFGenerator':
