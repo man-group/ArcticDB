@@ -8,13 +8,13 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/5.7.0/notebooks/ArcticDB_demo_resample/">
+        <link rel="canonical" href="https://docs.arcticdb.io/5.7.0/notebooks/ArcticDB_demo_concat/">
       
       
-        <link rel="prev" href="../ArcticDB_demo_querybuilder/">
+        <link rel="prev" href="../ArcticDB_demo_resample/">
       
       
-        <link rel="next" href="../ArcticDB_demo_concat/">
+        <link rel="next" href="../ArcticDB_aws_public_blockchain/">
       
       
       <link rel="icon" href="../../images/ArcticDB Logo.svg">
@@ -22,7 +22,7 @@
     
     
       
-        <title>Resample Notebook - ArcticDB</title>
+        <title>Symbol Concat Notebook - ArcticDB</title>
       
     
     
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#arcticdb-resample-demo" class="md-skip">
+        <a href="#arcticdb-concat-demo" class="md-skip">
           Skip to content
         </a>
       
@@ -129,7 +129,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Resample Notebook
+              Symbol Concat Notebook
             
           </span>
         </div>
@@ -1277,6 +1277,29 @@
                 
   
   
+  
+  
+    <li class="md-nav__item">
+      <a href="../ArcticDB_demo_resample/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Resample Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
     
   
   
@@ -1294,7 +1317,7 @@
   
   
   <span class="md-ellipsis">
-    Resample Notebook
+    Symbol Concat Notebook
     
   </span>
   
@@ -1307,7 +1330,7 @@
   
   
   <span class="md-ellipsis">
-    Resample Notebook
+    Symbol Concat Notebook
     
   </span>
   
@@ -1348,38 +1371,104 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#1-simple-resample" class="md-nav__link">
+  <a href="#1-simple-concat" class="md-nav__link">
     <span class="md-ellipsis">
-      1. Simple Resample
+      1. Simple Concat
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#2-multiple-aggregators-per-column" class="md-nav__link">
+  <a href="#2-concat-with-pre-and-post-processing" class="md-nav__link">
     <span class="md-ellipsis">
-      2. Multiple Aggregators per Column
+      2. Concat with pre and post processing
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#3-processing-pipeline-chaining-operations" class="md-nav__link">
+  <a href="#3-inner-joins" class="md-nav__link">
     <span class="md-ellipsis">
-      3. Processing Pipeline: Chaining Operations
+      3. Inner Joins
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="3. Inner Joins">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#use-inner-join-to-retain-only-columns-present-in-all-input-symbols" class="md-nav__link">
+    <span class="md-ellipsis">
+      Use inner join to retain only columns present in all input symbols
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#types-are-promoted-to-a-valid-common-type-where-possible-or-an-exception-is-thrown-if-not" class="md-nav__link">
+    <span class="md-ellipsis">
+      Types are promoted to a valid common type where possible, or an exception is thrown if not
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#4-outer-joins" class="md-nav__link">
+    <span class="md-ellipsis">
+      4. Outer Joins
     </span>
   </a>
   
 </li>
       
         <li class="md-nav__item">
-  <a href="#4-example-ohlc-open-high-low-close-bars" class="md-nav__link">
+  <a href="#5-permissiveness" class="md-nav__link">
     <span class="md-ellipsis">
-      4. Example: OHLC (Open High Low Close) Bars
+      5. Permissiveness
     </span>
   </a>
+  
+    <nav class="md-nav" aria-label="5. Permissiveness">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#range-indexes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Range indexes
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#joining-series-together-will-maintain-the-name-if-it-is-the-same-between-all-of-the-input-symbols-and-return-an-unnamed-series-otherwise" class="md-nav__link">
+    <span class="md-ellipsis">
+      Joining Series together will maintain the name if it is the same between all of the input symbols, and return an unnamed Series otherwise
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#similarly-joining-timeseries-together-will-maintain-the-index-name-if-it-is-the-same-between-all-of-the-input-symbols-and-return-a-dataframe-with-an-unnamed-index-otherwise" class="md-nav__link">
+    <span class="md-ellipsis">
+      Similarly, joining timeseries together will maintain the index name if it is the same between all of the input symbols, and return a dataframe with an unnamed index otherwise
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
   
 </li>
       
@@ -1396,29 +1485,6 @@
   
 </nav>
       
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../ArcticDB_demo_concat/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Symbol Concat Notebook
-    
-  </span>
-  
-
-      </a>
     </li>
   
 
@@ -1817,8 +1883,8 @@
                 
 
 <p>
-<h1>ArcticDB_demo_resample</h1>
-<a href="https://github.com/man-group/ArcticDB/blob/v5.7.0/docs/mkdocs/docs/notebooks/ArcticDB_demo_resample.ipynb">
+<h1>ArcticDB_demo_concat</h1>
+<a href="https://github.com/man-group/ArcticDB/blob/v5.7.0/docs/mkdocs/docs/notebooks/ArcticDB_demo_concat.ipynb">
     <span class="twemoji">
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
             <title>github</title>
@@ -1830,7 +1896,7 @@
 </a>
 |
 <a
-    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/v5.7.0/docs/mkdocs/docs/notebooks/ArcticDB_demo_resample.ipynb">
+    href="https://colab.research.google.com/github/man-group/ArcticDB/blob/v5.7.0/docs/mkdocs/docs/notebooks/ArcticDB_demo_concat.ipynb">
     <span class="twemoji">
         <svg viewBox="0 0 24 24" preserveAspectRatio="xMidYMid meet" focusable="false" width="977" height="602"
             style="height: 28px; width: 28px;">
@@ -2346,14 +2412,12 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="arcticdb-resample-demo">ArcticDB Resample Demo<a class="anchor-link" href="#arcticdb-resample-demo">¶</a></h1><p>This demo notebook showcases the high-performance resample capability of ArcticDB.</p>
+<h1 id="arcticdb-concat-demo">ArcticDB Concat Demo<a class="anchor-link" href="#arcticdb-concat-demo">¶</a></h1><p>This demo notebook showcases the first symbol joining capability within ArcticDB, concatenation.</p>
 <p>This is what you need to know about it:</p>
 <ul>
 <li>It runs on-the-fly as part of the read</li>
-<li>This makes it much more efficient than Pandas on large datasets</li>
-<li>The usage is similar to the Pandas resample function</li>
-<li>You can apply multiple aggregators to each column</li>
-<li>It can be used for downsampling high frequency data and generating "bar" data (see example 4)</li>
+<li>The usage and results are similar to the Pandas concat function (although not identical, differences are highlighted below)</li>
+<li>Processing before and after the concat operation are parallelised like all other processing in ArcticDB, leading to potentially large performance improvements compared to concatenating and processing in Pandas</li>
 </ul>
 </div>
 </div>
@@ -2402,7 +2466,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-2">
@@ -2433,7 +2497,7 @@ import arcticdb as adb</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-3">
@@ -2447,10 +2511,10 @@ import arcticdb as adb</div>
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># object store</span>
-<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_resample"</span><span class="p">)</span>
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="s2">"lmdb://arcticdb_concat"</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-3"># object store
-arctic = adb.Arctic("lmdb://arcticdb_resample")</div>
+arctic = adb.Arctic("lmdb://arcticdb_concat")</div>
 </div>
 </div>
 </div>
@@ -2462,7 +2526,7 @@ arctic = adb.Arctic("lmdb://arcticdb_resample")</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-4">
@@ -2476,10 +2540,10 @@ arctic = adb.Arctic("lmdb://arcticdb_resample")</div>
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># library</span>
-<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">'resample'</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">'concat'</span><span class="p">,</span> <span class="n">create_if_missing</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-4"># library
-lib = arctic.get_library('resample', create_if_missing=True)</div>
+lib = arctic.get_library('concat', create_if_missing=True)</div>
 </div>
 </div>
 </div>
@@ -2493,7 +2557,7 @@ lib = arctic.get_library('resample', create_if_missing=True)</div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h2 id="create-some-data">Create Some Data<a class="anchor-link" href="#create-some-data">¶</a></h2><ul>
-<li>timeseries with 12,000,000 rows and a 1-second index</li>
+<li>3 symbols, each with 10,000,000 rows</li>
 <li>int, float, string columns</li>
 <li>write the data into ArcticDB</li>
 </ul>
@@ -2506,7 +2570,7 @@ lib = arctic.get_library('resample', create_if_missing=True)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-5">
@@ -2519,33 +2583,37 @@ lib = arctic.get_library('resample', create_if_missing=True)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># data for resampling</span>
-<span class="n">index</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">date_range</span><span class="p">(</span><span class="s2">"1990-01-01"</span><span class="p">,</span> <span class="n">periods</span><span class="o">=</span><span class="mi">12_000_000</span><span class="p">,</span> <span class="n">freq</span><span class="o">=</span><span class="s2">"s"</span><span class="p">)</span>
-<span class="n">int_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint64</span><span class="p">)</span>
-<span class="n">float_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">95.</span><span class="p">,</span> <span class="mf">105.</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)),</span> <span class="mi">3</span><span class="p">)</span>
-<span class="n">letters</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'a'</span><span class="p">,</span><span class="s1">'b'</span><span class="p">,</span><span class="s1">'c'</span><span class="p">,</span><span class="s1">'d'</span><span class="p">,</span><span class="s1">'e'</span><span class="p">,</span><span class="s1">'f'</span><span class="p">,</span><span class="s1">'g'</span><span class="p">]</span>
-<span class="n">mkt_data</span> <span class="o">=</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
-    <span class="n">index</span><span class="o">=</span><span class="n">index</span><span class="p">,</span>
-    <span class="n">data</span><span class="o">=</span><span class="p">{</span>
-        <span class="s2">"id"</span><span class="p">:</span> <span class="n">int_data</span><span class="p">,</span>
-        <span class="s2">"price"</span><span class="p">:</span> <span class="n">float_data</span><span class="p">,</span>
-        <span class="s2">"category"</span><span class="p">:</span> <span class="p">(</span><span class="n">letters</span><span class="o">*</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)</span><span class="o">//</span><span class="nb">len</span><span class="p">(</span><span class="n">letters</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))[:</span><span class="nb">len</span><span class="p">(</span><span class="n">index</span><span class="p">)]</span>
-    <span class="p">}</span>
-<span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># data for concatenating</span>
+<span class="n">num_symbols</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">rows_per_symbol</span> <span class="o">=</span> <span class="mi">10_000_000</span>
+<span class="n">dfs</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_symbols</span><span class="p">):</span>
+    <span class="n">int_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">rows_per_symbol</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)</span>
+    <span class="n">float_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">round</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">uniform</span><span class="p">(</span><span class="mf">95.</span><span class="p">,</span> <span class="mf">105.</span><span class="p">,</span> <span class="n">rows_per_symbol</span><span class="p">),</span> <span class="mi">3</span><span class="p">)</span>
+    <span class="n">letters</span> <span class="o">=</span> <span class="p">[</span><span class="s1">'a'</span><span class="p">,</span><span class="s1">'b'</span><span class="p">,</span><span class="s1">'c'</span><span class="p">,</span><span class="s1">'d'</span><span class="p">,</span><span class="s1">'e'</span><span class="p">,</span><span class="s1">'f'</span><span class="p">,</span><span class="s1">'g'</span><span class="p">]</span>
+    <span class="n">dfs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">(</span>
+        <span class="p">{</span>
+            <span class="s2">"int"</span><span class="p">:</span> <span class="n">int_data</span><span class="p">,</span>
+            <span class="s2">"float"</span><span class="p">:</span> <span class="n">float_data</span><span class="p">,</span>
+            <span class="s2">"string"</span><span class="p">:</span> <span class="p">(</span><span class="n">letters</span><span class="o">*</span><span class="p">(</span><span class="n">rows_per_symbol</span><span class="o">//</span><span class="nb">len</span><span class="p">(</span><span class="n">letters</span><span class="p">)</span> <span class="o">+</span> <span class="mi">1</span><span class="p">))[:</span><span class="n">rows_per_symbol</span><span class="p">]</span>
+        <span class="p">}</span>
+    <span class="p">))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-5"># data for resampling
-index = pd.date_range("1990-01-01", periods=12_000_000, freq="s")
-int_data = np.arange(len(index), dtype=np.uint64)
-float_data = np.round(np.random.uniform(95., 105., len(index)), 3)
-letters = ['a','b','c','d','e','f','g']
-mkt_data = pd.DataFrame(
-    index=index,
-    data={
-        "id": int_data,
-        "price": float_data,
-        "category": (letters*(len(index)//len(letters) + 1))[:len(index)]
-    }
-)</div>
+<div class="clipboard-copy-txt" id="cell-5"># data for concatenating
+num_symbols = 3
+rows_per_symbol = 10_000_000
+dfs = []
+for _ in range(num_symbols):
+    int_data = np.arange(rows_per_symbol, dtype=np.int64)
+    float_data = np.round(np.random.uniform(95., 105., rows_per_symbol), 3)
+    letters = ['a','b','c','d','e','f','g']
+    dfs.append(pd.DataFrame(
+        {
+            "int": int_data,
+            "float": float_data,
+            "string": (letters*(rows_per_symbol//len(letters) + 1))[:rows_per_symbol]
+        }
+    ))</div>
 </div>
 </div>
 </div>
@@ -2557,7 +2625,7 @@ mkt_data = pd.DataFrame(
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-6">
@@ -2570,11 +2638,11 @@ mkt_data = pd.DataFrame(
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># view the first 10 rows of the data</span>
-<span class="n">mkt_data</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># view the first 10 rows of one of the dataframes</span>
+<span class="n">dfs</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">10</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-6"># view the first 10 rows of the data
-mkt_data.head(10)</div>
+<div class="clipboard-copy-txt" id="cell-6"># view the first 10 rows of one of the dataframes
+dfs[0].head(10)</div>
 </div>
 </div>
 </div>
@@ -2584,7 +2652,7 @@ mkt_data.head(10)</div>
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[6]:</div>
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[5]:</div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
 <div>
 <style scoped="">
@@ -2604,70 +2672,70 @@ mkt_data.head(10)</div>
 <thead>
 <tr style="text-align: right;">
 <th></th>
-<th>id</th>
-<th>price</th>
-<th>category</th>
+<th>int</th>
+<th>float</th>
+<th>string</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<th>1990-01-01 00:00:00</th>
+<th>0</th>
 <td>0</td>
-<td>95.176</td>
+<td>104.832</td>
 <td>a</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:01</th>
+<th>1</th>
 <td>1</td>
-<td>97.872</td>
+<td>102.837</td>
 <td>b</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:02</th>
+<th>2</th>
 <td>2</td>
-<td>104.930</td>
+<td>99.950</td>
 <td>c</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:03</th>
+<th>3</th>
 <td>3</td>
-<td>103.573</td>
+<td>96.403</td>
 <td>d</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:04</th>
+<th>4</th>
 <td>4</td>
-<td>97.052</td>
+<td>97.400</td>
 <td>e</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:05</th>
+<th>5</th>
 <td>5</td>
-<td>103.435</td>
+<td>96.681</td>
 <td>f</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:06</th>
+<th>6</th>
 <td>6</td>
-<td>99.339</td>
+<td>103.064</td>
 <td>g</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:07</th>
+<th>7</th>
 <td>7</td>
-<td>103.358</td>
+<td>103.962</td>
 <td>a</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:08</th>
+<th>8</th>
 <td>8</td>
-<td>104.301</td>
+<td>96.208</td>
 <td>b</td>
 </tr>
 <tr>
-<th>1990-01-01 00:00:09</th>
+<th>9</th>
 <td>9</td>
-<td>104.651</td>
+<td>103.464</td>
 <td>c</td>
 </tr>
 </tbody>
@@ -2684,7 +2752,7 @@ mkt_data.head(10)</div>
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-7">
@@ -2697,13 +2765,17 @@ mkt_data.head(10)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># write the data into ArcticDB</span>
-<span class="n">sym</span> <span class="o">=</span> <span class="s1">'market_data'</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">mkt_data</span><span class="p">)</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">symbols</span> <span class="o">=</span> <span class="p">[</span><span class="sa">f</span><span class="s2">"sym_</span><span class="si">{</span><span class="n">idx</span><span class="si">}</span><span class="s2">"</span> <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_symbols</span><span class="p">)]</span>
+<span class="n">write_payloads</span> <span class="o">=</span> <span class="p">[]</span>
+<span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">num_symbols</span><span class="p">):</span>
+    <span class="n">write_payloads</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">adb</span><span class="o">.</span><span class="n">WritePayload</span><span class="p">(</span><span class="n">symbols</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="n">dfs</span><span class="p">[</span><span class="n">idx</span><span class="p">],</span> <span class="p">{</span><span class="s2">"my_metadata"</span><span class="p">:</span> <span class="n">idx</span><span class="p">}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write_batch</span><span class="p">(</span><span class="n">write_payloads</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-7"># write the data into ArcticDB
-sym = 'market_data'
-lib.write(sym, mkt_data)</div>
+<div class="clipboard-copy-txt" id="cell-7">symbols = [f"sym_{idx}" for idx in range(num_symbols)]
+write_payloads = []
+for idx in range(num_symbols):
+    write_payloads.append(adb.WritePayload(symbols[idx], dfs[idx], {"my_metadata": idx}))
+lib.write_batch(write_payloads)</div>
 </div>
 </div>
 </div>
@@ -2713,9 +2785,11 @@ lib.write(sym, mkt_data)</div>
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[7]:</div>
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[6]:</div>
 <div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
-<pre>VersionedItem(symbol='market_data', library='resample', data=n/a, version=0, metadata=None, host='LMDB(path=~/arcticdb_resample)', timestamp=1718958796318913629)</pre>
+<pre>[VersionedItem(symbol='sym_0', library='concat', data=n/a, version=0, metadata={'my_metadata': 0}, host='LMDB(path=/users/is/aowens/source/man.arcticdb/arcticdb_link/docs/mkdocs/docs/notebooks/arcticdb_concat)', timestamp=1747838164380813504),
+ VersionedItem(symbol='sym_1', library='concat', data=n/a, version=0, metadata={'my_metadata': 1}, host='LMDB(path=/users/is/aowens/source/man.arcticdb/arcticdb_link/docs/mkdocs/docs/notebooks/arcticdb_concat)', timestamp=1747838164360824925),
+ VersionedItem(symbol='sym_2', library='concat', data=n/a, version=0, metadata={'my_metadata': 2}, host='LMDB(path=/users/is/aowens/source/man.arcticdb/arcticdb_link/docs/mkdocs/docs/notebooks/arcticdb_concat)', timestamp=1747838164349127827)]</pre>
 </div>
 </div>
 </div>
@@ -2728,23 +2802,17 @@ lib.write(sym, mkt_data)</div>
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="1-simple-resample">1. Simple Resample<a class="anchor-link" href="#1-simple-resample">¶</a></h2><ul>
-<li>Resample to 1-minute</li>
-<li>Use different aggregators</li>
-<li>Resample can be thought of as a time-based groupby</li>
-<li>The groups are all the rows within a time interval</li>
-<li>Run also in Pandas to compare performance and results</li>
-</ul>
+<h2 id="1-simple-concat">1. Simple Concat<a class="anchor-link" href="#1-simple-concat">¶</a></h2><p>Concatenate the symbols together without any additional arguments or processing</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=c05c6a38-5326-407d-9588-8c562c5f0f66">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c05c6a38-5326-407d-9588-8c562c5f0f66">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-8">
@@ -2757,25 +2825,50 @@ lib.write(sym, mkt_data)</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># frequency and aggregator params</span>
-<span class="n">freq1</span> <span class="o">=</span> <span class="s1">'1min'</span>
-<span class="n">aggs1</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'max'</span><span class="p">,</span> <span class="s1">'price'</span><span class="p">:</span> <span class="s1">'last'</span><span class="p">,</span> <span class="s1">'category'</span><span class="p">:</span> <span class="s1">'count'</span><span class="p">}</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">(</span><span class="n">symbols</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">lazy_df</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+<span class="nb">type</span><span class="p">(</span><span class="n">result</span><span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-8"># frequency and aggregator params
-freq1 = '1min'
-aggs1 = {'id': 'max', 'price': 'last', 'category': 'count'}</div>
+<div class="clipboard-copy-txt" id="cell-8">lazy_dfs = lib.read_batch(symbols, lazy=True)
+lazy_df = adb.concat(lazy_dfs)
+result = lazy_df.collect()
+type(result)</div>
 </div>
 </div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[7]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>arcticdb.version_store._store.VersionedItemWithJoin</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=00fca57a-06c7-4745-b69a-9e35d34e3da0">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p>The resulting object contains the version information and metadata associated with the symbol-version pairs that have been concatenated together</p>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=1829312c-24ee-4da7-959d-a5465456fdcc">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=918c0086-09cd-4870-a3f7-8e37a466eea9">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-9">
@@ -2788,17 +2881,9 @@ aggs1 = {'id': 'max', 'price': 'last', 'category': 'count'}</div>
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="c1"># create the resample query and apply it on the read</span>
-<span class="n">market_data_1min_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">freq1</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">aggs1</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
-<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">market_data_1min_df</span><span class="p">))</span>
-<span class="n">market_data_1min_df</span><span class="o">.</span><span class="n">tail</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">result</span><span class="o">.</span><span class="n">versions</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-9">%%time
-# create the resample query and apply it on the read
-market_data_1min_df = lib.read(sym, lazy=True).resample(freq1).agg(aggs1).collect().data
-print(len(market_data_1min_df))
-market_data_1min_df.tail()</div>
+<div class="clipboard-copy-txt" id="cell-9">result.versions[1]</div>
 </div>
 </div>
 </div>
@@ -2807,15 +2892,56 @@ market_data_1min_df.tail()</div>
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>200000
-CPU times: user 684 ms, sys: 251 ms, total: 935 ms
-Wall time: 171 ms
-</pre>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[8]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='sym_1', library='concat', data=n/a, version=0, metadata={'my_metadata': 1}, host='LMDB(path=/users/is/aowens/source/man.arcticdb/arcticdb_link/docs/mkdocs/docs/notebooks/arcticdb_concat)', timestamp=1747838164360824925)</pre>
 </div>
 </div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=f00cd258-2515-473c-b9d1-b28c26b18e8f">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p>The <code>data</code> field of the returned object contains the concatenated dataframe (note there are 30 million rows in the output)</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=be09f37f-46f4-487c-8522-9a7833d2f4b7">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-10">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">result</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-10">result.data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
 <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[9]:</div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
@@ -2837,52 +2963,100 @@ Wall time: 171 ms
 <thead>
 <tr style="text-align: right;">
 <th></th>
-<th>id</th>
-<th>price</th>
-<th>category</th>
+<th>int</th>
+<th>float</th>
+<th>string</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<th>1990-05-19 21:15:00</th>
-<td>11999759</td>
-<td>104.106</td>
-<td>60</td>
+<th>0</th>
+<td>0</td>
+<td>104.832</td>
+<td>a</td>
 </tr>
 <tr>
-<th>1990-05-19 21:16:00</th>
-<td>11999819</td>
-<td>104.456</td>
-<td>60</td>
+<th>1</th>
+<td>1</td>
+<td>102.837</td>
+<td>b</td>
 </tr>
 <tr>
-<th>1990-05-19 21:17:00</th>
-<td>11999879</td>
-<td>95.570</td>
-<td>60</td>
+<th>2</th>
+<td>2</td>
+<td>99.950</td>
+<td>c</td>
 </tr>
 <tr>
-<th>1990-05-19 21:18:00</th>
-<td>11999939</td>
-<td>103.967</td>
-<td>60</td>
+<th>3</th>
+<td>3</td>
+<td>96.403</td>
+<td>d</td>
 </tr>
 <tr>
-<th>1990-05-19 21:19:00</th>
-<td>11999999</td>
-<td>97.899</td>
-<td>60</td>
+<th>4</th>
+<td>4</td>
+<td>97.400</td>
+<td>e</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>29999995</th>
+<td>9999995</td>
+<td>97.799</td>
+<td>f</td>
+</tr>
+<tr>
+<th>29999996</th>
+<td>9999996</td>
+<td>97.431</td>
+<td>g</td>
+</tr>
+<tr>
+<th>29999997</th>
+<td>9999997</td>
+<td>99.988</td>
+<td>a</td>
+</tr>
+<tr>
+<th>29999998</th>
+<td>9999998</td>
+<td>96.992</td>
+<td>b</td>
+</tr>
+<tr>
+<th>29999999</th>
+<td>9999999</td>
+<td>98.456</td>
+<td>c</td>
 </tr>
 </tbody>
 </table>
+<p>30000000 rows × 3 columns</p>
 </div>
 </div>
 </div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ee67ab07-02e4-4d9e-965f-0c63b115f94d">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="2-concat-with-pre-and-post-processing">2. Concat with pre and post processing<a class="anchor-link" href="#2-concat-with-pre-and-post-processing">¶</a></h2><p>Perform processing operations both before and after the concatenation. See the <code>LazyDataFrame</code> demo notebook for more explanation of the available operations and how to apply different pre-processing to each symbol</p>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c8bfcc79-8cd6-4b13-aca9-cf52f4c56042">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=75a6d64c-4ad9-4ce4-ae7e-56b9da636b78">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -2890,7 +3064,7 @@ Wall time: 171 ms
 <div class="jp-InputPrompt jp-InputArea-prompt">In [10]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-10">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-11">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -2900,19 +3074,17 @@ Wall time: 171 ms
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="c1"># read the full data set and resample in Pandas</span>
-<span class="n">full_df</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">)</span><span class="o">.</span><span class="n">data</span>
-<span class="n">market_data_1min_pd_df</span> <span class="o">=</span> <span class="n">full_df</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">freq1</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">aggs1</span><span class="p">)</span>
-<span class="nb">print</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">market_data_1min_pd_df</span><span class="p">))</span>
-<span class="n">market_data_1min_pd_df</span><span class="o">.</span><span class="n">tail</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">(</span><span class="n">symbols</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lazy_dfs</span><span class="p">[</span><span class="n">lazy_dfs</span><span class="p">[</span><span class="s2">"string"</span><span class="p">]</span> <span class="o">!=</span> <span class="s2">"a"</span><span class="p">]</span>
+<span class="n">lazy_df</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span>
+<span class="n">lazy_df</span><span class="p">[</span><span class="s2">"new_col"</span><span class="p">]</span> <span class="o">=</span> <span class="n">lazy_df</span><span class="p">[</span><span class="s2">"float"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">2</span>
+<span class="n">lazy_df</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-10">%%time
-# read the full data set and resample in Pandas
-full_df = lib.read(sym).data
-market_data_1min_pd_df = full_df.resample(freq1).agg(aggs1)
-print(len(market_data_1min_pd_df))
-market_data_1min_pd_df.tail()</div>
+<div class="clipboard-copy-txt" id="cell-11">lazy_dfs = lib.read_batch(symbols, lazy=True)
+lazy_dfs = lazy_dfs[lazy_dfs["string"] != "a"]
+lazy_df = adb.concat(lazy_dfs)
+lazy_df["new_col"] = lazy_df["float"] * 2
+lazy_df.collect().data</div>
 </div>
 </div>
 </div>
@@ -2921,15 +3093,6 @@ market_data_1min_pd_df.tail()</div>
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>200000
-CPU times: user 1.6 s, sys: 401 ms, total: 2 s
-Wall time: 1.15 s
-</pre>
-</div>
-</div>
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
 <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[10]:</div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
@@ -2951,44 +3114,93 @@ Wall time: 1.15 s
 <thead>
 <tr style="text-align: right;">
 <th></th>
-<th>id</th>
-<th>price</th>
-<th>category</th>
+<th>int</th>
+<th>float</th>
+<th>string</th>
+<th>new_col</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<th>1990-05-19 21:15:00</th>
-<td>11999759</td>
-<td>104.106</td>
-<td>60</td>
+<th>0</th>
+<td>1</td>
+<td>102.837</td>
+<td>b</td>
+<td>205.674</td>
 </tr>
 <tr>
-<th>1990-05-19 21:16:00</th>
-<td>11999819</td>
-<td>104.456</td>
-<td>60</td>
+<th>1</th>
+<td>2</td>
+<td>99.950</td>
+<td>c</td>
+<td>199.900</td>
 </tr>
 <tr>
-<th>1990-05-19 21:17:00</th>
-<td>11999879</td>
-<td>95.570</td>
-<td>60</td>
+<th>2</th>
+<td>3</td>
+<td>96.403</td>
+<td>d</td>
+<td>192.806</td>
 </tr>
 <tr>
-<th>1990-05-19 21:18:00</th>
-<td>11999939</td>
-<td>103.967</td>
-<td>60</td>
+<th>3</th>
+<td>4</td>
+<td>97.400</td>
+<td>e</td>
+<td>194.800</td>
 </tr>
 <tr>
-<th>1990-05-19 21:19:00</th>
-<td>11999999</td>
-<td>97.899</td>
-<td>60</td>
+<th>4</th>
+<td>5</td>
+<td>96.681</td>
+<td>f</td>
+<td>193.362</td>
+</tr>
+<tr>
+<th>...</th>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+<td>...</td>
+</tr>
+<tr>
+<th>25714279</th>
+<td>9999994</td>
+<td>96.815</td>
+<td>e</td>
+<td>193.630</td>
+</tr>
+<tr>
+<th>25714280</th>
+<td>9999995</td>
+<td>97.799</td>
+<td>f</td>
+<td>195.598</td>
+</tr>
+<tr>
+<th>25714281</th>
+<td>9999996</td>
+<td>97.431</td>
+<td>g</td>
+<td>194.862</td>
+</tr>
+<tr>
+<th>25714282</th>
+<td>9999998</td>
+<td>96.992</td>
+<td>b</td>
+<td>193.984</td>
+</tr>
+<tr>
+<th>25714283</th>
+<td>9999999</td>
+<td>98.456</td>
+<td>c</td>
+<td>196.912</td>
 </tr>
 </tbody>
 </table>
+<p>25714284 rows × 4 columns</p>
 </div>
 </div>
 </div>
@@ -2996,57 +3208,41 @@ Wall time: 1.15 s
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e83c9467-e0d4-447c-bf1e-2ff91bb724ad">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=69efe863-3799-460d-a40e-fed258149b47">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="2-multiple-aggregators-per-column">2. Multiple Aggregators per Column<a class="anchor-link" href="#2-multiple-aggregators-per-column">¶</a></h2><ul>
-<li>Similar to NamedAgg in Pandas</li>
-<li>Downsample to 5-minute frequency</li>
-<li>Apply both max and last aggregators to the price column</li>
-<li>For multiple aggregators, the syntax is <code>output_column_name: (input_column_name: aggregator)</code></li>
+<h2 id="3-inner-joins">3. Inner Joins<a class="anchor-link" href="#3-inner-joins">¶</a></h2><ul>
+<li>In the examples above, all of the input dataframes have the same column names and dtypes, and no arguments have been provided to <code>adb.concat</code> beyond the list of lazy dataframes to be concatenated.</li>
+<li><code>adb.concat</code> takes an additional argument <code>join</code>, which should be one of <code>"inner"</code> or <code>"outer"</code> (default is <code>"outer"</code>), which dictates whether to take the intersection (inner) or union (outer) of columns from the input symbols.</li>
+<li>If the dtypes of columns being joined together do not match exactly, then type promotion to a common type will occur if such a type exists.</li>
 </ul>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=70d3765a-f8c8-4cf3-beaa-2cc7a469b358">
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ea1c25c8-0ec6-4636-86e3-cffc78618d52">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="use-inner-join-to-retain-only-columns-present-in-all-input-symbols">Use inner join to retain only columns present in <strong>all</strong> input symbols<a class="anchor-link" href="#use-inner-join-to-retain-only-columns-present-in-all-input-symbols">¶</a></h3><ul>
+<li>Only columns <code>b</code> and <code>c</code> are present in all of the input symbols</li>
+<li>The ordering of the output columns is taken from the first symbol (<code>inner_0</code> in this case)</li>
+</ul>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=aa24cbba-a59a-4eb5-9f7d-231bd00a57ec">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
 <div class="jp-InputPrompt jp-InputArea-prompt">In [11]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="CodeMirror cm-s-jupyter">
-<div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-11">
-<div>
-<span class="notice" hidden="">Copied!</span>
-<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
-<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
-<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
-</svg>
-</div>
-</clipboard-copy>
-</div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">freq2</span> <span class="o">=</span> <span class="s1">'5min'</span>
-<span class="n">aggs2</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'max'</span><span class="p">,</span> <span class="s1">'price_last'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span> <span class="p">,</span><span class="s1">'last'</span><span class="p">),</span> <span class="s1">'price_count'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span> <span class="p">,</span><span class="s1">'count'</span><span class="p">),</span> <span class="s1">'category'</span><span class="p">:</span> <span class="s1">'first'</span><span class="p">}</span>
-</pre></div>
-<div class="clipboard-copy-txt" id="cell-11">freq2 = '5min'
-aggs2 = {'id': 'max', 'price_last': ('price' ,'last'), 'price_count': ('price' ,'count'), 'category': 'first'}</div>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8c31ec4b-8454-469d-8e31-8fefd0059bac">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-12">
@@ -3059,11 +3255,17 @@ aggs2 = {'id': 'max', 'price_last': ('price' ,'last'), 'price_count': ('price' ,
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">freq2</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">aggs2</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"inner_0"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">"c"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="s2">"d"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">]}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"inner_1"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"c"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="s2">"e"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"inner_2"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"f"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s2">"b"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s2">"c"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="s2">"d"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">]}))</span>
+<span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"inner_0"</span><span class="p">,</span> <span class="s2">"inner_1"</span><span class="p">,</span> <span class="s2">"inner_2"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">,</span> <span class="n">join</span><span class="o">=</span><span class="s2">"inner"</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-12">%%time
-lib.read(sym, lazy=True).resample(freq2).agg(aggs2).collect().data</div>
+<div class="clipboard-copy-txt" id="cell-12">lib.write("inner_0", pd.DataFrame({"a": [0], "b": [0], "c": [0], "d": [0]}))
+lib.write("inner_1", pd.DataFrame({"c": [1], "b": [1], "e": [1]}))
+lib.write("inner_2", pd.DataFrame({"f": [2], "b": [2], "c": [2], "d": [0]}))
+lazy_dfs = lib.read_batch(["inner_0", "inner_1", "inner_2"], lazy=True)
+adb.concat(lazy_dfs, join="inner").collect().data</div>
 </div>
 </div>
 </div>
@@ -3072,16 +3274,8 @@ lib.read(sym, lazy=True).resample(freq2).agg(aggs2).collect().data</div>
 <div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>CPU times: user 1.07 s, sys: 415 ms, total: 1.49 s
-Wall time: 151 ms
-</pre>
-</div>
-</div>
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[12]:</div>
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[11]:</div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
 <div>
 <style scoped="">
@@ -3101,93 +3295,28 @@ Wall time: 151 ms
 <thead>
 <tr style="text-align: right;">
 <th></th>
-<th>id</th>
-<th>category</th>
-<th>price_count</th>
-<th>price_last</th>
+<th>b</th>
+<th>c</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<th>1990-01-01 00:00:00</th>
-<td>299</td>
-<td>a</td>
-<td>300</td>
-<td>102.172</td>
+<th>0</th>
+<td>0</td>
+<td>0</td>
 </tr>
 <tr>
-<th>1990-01-01 00:05:00</th>
-<td>599</td>
-<td>g</td>
-<td>300</td>
-<td>101.450</td>
+<th>1</th>
+<td>1</td>
+<td>1</td>
 </tr>
 <tr>
-<th>1990-01-01 00:10:00</th>
-<td>899</td>
-<td>f</td>
-<td>300</td>
-<td>96.718</td>
-</tr>
-<tr>
-<th>1990-01-01 00:15:00</th>
-<td>1199</td>
-<td>e</td>
-<td>300</td>
-<td>96.345</td>
-</tr>
-<tr>
-<th>1990-01-01 00:20:00</th>
-<td>1499</td>
-<td>d</td>
-<td>300</td>
-<td>98.955</td>
-</tr>
-<tr>
-<th>...</th>
-<td>...</td>
-<td>...</td>
-<td>...</td>
-<td>...</td>
-</tr>
-<tr>
-<th>1990-05-19 20:55:00</th>
-<td>11998799</td>
-<td>d</td>
-<td>300</td>
-<td>100.277</td>
-</tr>
-<tr>
-<th>1990-05-19 21:00:00</th>
-<td>11999099</td>
-<td>c</td>
-<td>300</td>
-<td>103.596</td>
-</tr>
-<tr>
-<th>1990-05-19 21:05:00</th>
-<td>11999399</td>
-<td>b</td>
-<td>300</td>
-<td>96.182</td>
-</tr>
-<tr>
-<th>1990-05-19 21:10:00</th>
-<td>11999699</td>
-<td>a</td>
-<td>300</td>
-<td>99.911</td>
-</tr>
-<tr>
-<th>1990-05-19 21:15:00</th>
-<td>11999999</td>
-<td>g</td>
-<td>300</td>
-<td>97.899</td>
+<th>2</th>
+<td>2</td>
+<td>2</td>
 </tr>
 </tbody>
 </table>
-<p>40000 rows × 4 columns</p>
 </div>
 </div>
 </div>
@@ -3195,27 +3324,23 @@ Wall time: 151 ms
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=82ee0316-73a6-41e0-92c6-04c22cc449bb">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=954352fa-0dc0-4857-a1d0-121aef72c8b1">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="3-processing-pipeline-chaining-operations">3. Processing Pipeline: Chaining Operations<a class="anchor-link" href="#3-processing-pipeline-chaining-operations">¶</a></h2><ul>
-<li>Downsample to 2.5-minutes frequency</li>
-<li>Group the resampled data by the category column</li>
-<li>Aggregate the category groups using mean</li>
-</ul>
+<h3 id="types-are-promoted-to-a-valid-common-type-where-possible-or-an-exception-is-thrown-if-not">Types are promoted to a valid common type where possible, or an exception is thrown if not<a class="anchor-link" href="#types-are-promoted-to-a-valid-common-type-where-possible-or-an-exception-is-thrown-if-not">¶</a></h3>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8d597ad7-56e7-4d11-830b-e77e0b3671f6">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=030bd429-3242-4a49-a1d5-a28728e45434">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [12]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
 <clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-13">
@@ -3228,11 +3353,152 @@ Wall time: 151 ms
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="s1">'2min30s'</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'min'</span><span class="p">,</span> <span class="s1">'category'</span><span class="p">:</span> <span class="s1">'first'</span><span class="p">})</span><span class="o">.</span><span class="n">groupby</span><span class="p">(</span><span class="s1">'category'</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">({</span><span class="s1">'id'</span><span class="p">:</span> <span class="s1">'mean'</span><span class="p">})</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"type_promotion_uint16"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint16</span><span class="p">)}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"type_promotion_int16"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int16</span><span class="p">)}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"type_promotion_int64"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int64</span><span class="p">)}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"type_promotion_float64"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">4</span><span class="p">,</span> <span class="mi">5</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"type_promotion_str"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"a"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"hello"</span><span class="p">]}))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-13">%%time
-lib.read(sym, lazy=True).resample('2min30s').agg({'id': 'min', 'category': 'first'}).groupby('category').agg({'id': 'mean'}).collect().data</div>
+<div class="clipboard-copy-txt" id="cell-13">lib.write("type_promotion_uint16", pd.DataFrame({"a": np.arange(0, 1, dtype=np.uint16)}))
+lib.write("type_promotion_int16", pd.DataFrame({"a": np.arange(3, 4, dtype=np.int16)}))
+lib.write("type_promotion_int64", pd.DataFrame({"a": np.arange(4, 5, dtype=np.int64)}))
+lib.write("type_promotion_float64", pd.DataFrame({"a": np.arange(4, 5, dtype=np.float64)}))
+lib.write("type_promotion_str", pd.DataFrame({"a": ["hello"]}))</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[12]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='type_promotion_str', library='concat', data=n/a, version=0, metadata=None, host='LMDB(path=/users/is/aowens/source/man.arcticdb/arcticdb_link/docs/mkdocs/docs/notebooks/arcticdb_concat)', timestamp=1747838174944854293)</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a8006d6a-d976-46b5-b53e-4402b9c7cc8f">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [13]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-14">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># int32 can represent all of the values in both the uint16 and int16 dtypes</span>
+<span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"type_promotion_uint16"</span><span class="p">,</span> <span class="s2">"type_promotion_int16"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-14"># int32 can represent all of the values in both the uint16 and int16 dtypes
+lazy_dfs = lib.read_batch(["type_promotion_uint16", "type_promotion_int16"], lazy=True)
+adb.concat(lazy_dfs).collect().data["a"].dtype</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[13]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>dtype('int32')</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=a9e031be-ecc2-444e-83d9-0deacfd5d335">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [14]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-15">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># float64 cannot represent all of the values in the int64 dtype, but it is the best we can do</span>
+<span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"type_promotion_int64"</span><span class="p">,</span> <span class="s2">"type_promotion_float64"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-15"># float64 cannot represent all of the values in the int64 dtype, but it is the best we can do
+lazy_dfs = lib.read_batch(["type_promotion_int64", "type_promotion_float64"], lazy=True)
+adb.concat(lazy_dfs).collect().data["a"].dtype</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>dtype('float64')</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=bb1ae630-fa59-41f1-a5a7-21a9413f28ef">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-16">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># There is no sensible type we can use to combine string and numeric columns, so we throw in this case</span>
+<span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"type_promotion_int64"</span><span class="p">,</span> <span class="s2">"type_promotion_str"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="k">try</span><span class="p">:</span>
+    <span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">"a"</span><span class="p">]</span><span class="o">.</span><span class="n">dtype</span>
+<span class="k">except</span> <span class="n">adb</span><span class="o">.</span><span class="n">exceptions</span><span class="o">.</span><span class="n">SchemaException</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">e</span><span class="p">)</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-16"># There is no sensible type we can use to combine string and numeric columns, so we throw in this case
+lazy_dfs = lib.read_batch(["type_promotion_int64", "type_promotion_str"], lazy=True)
+try:
+    adb.concat(lazy_dfs).collect().data["a"].dtype
+except adb.exceptions.SchemaException as e:
+    print(e)</div>
 </div>
 </div>
 </div>
@@ -3244,13 +3510,73 @@ lib.read(sym, lazy=True).resample('2min30s').agg({'id': 'min', 'category': 'firs
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>CPU times: user 1.12 s, sys: 309 ms, total: 1.43 s
-Wall time: 183 ms
+<pre>E_DESCRIPTOR_MISMATCH No common type between INT64 and UTF_DYNAMIC64 when joining schemas
 </pre>
 </div>
 </div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=a3c2cb74-8550-4d77-87fa-f7936bd5281b">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="4-outer-joins">4. Outer Joins<a class="anchor-link" href="#4-outer-joins">¶</a></h2><ul>
+<li>Used to retain all columns present in <strong>any</strong> input symbols</li>
+<li>The same type promotion rules apply with outer joins as with inner joins</li>
+<li>The order of the columns in the output is according to when the column is first seen in the input. i.e. all of the columns from the first symbol (in the same order as in the first symbol) will be first, then any columns that appear in the second symbol but not in the first symbol (in the same order as they appear in the second symbol), and so on.</li>
+<li>Missing columns are backfilled with the same type-specific values as with dynamic schema:<ul>
+<li>strings: None</li>
+<li>floats: NaN</li>
+<li>integers: 0</li>
+</ul>
+</li>
+</ul>
+<p>Note that the behaviour with integers is different to Pandas, which changes the type of the column to <code>float64</code> and then fills in the missing values with NaNs</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=5f2c0ebd-56d2-4ca8-8719-768c1edbe880">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-17">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"missing_columns_0"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"string"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"hello"</span><span class="p">],</span> <span class="s2">"float"</span><span class="p">:</span> <span class="p">[</span><span class="mf">0.5</span><span class="p">],</span> <span class="s2">"int"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">]}))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"missing_columns_1"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"another string"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"goodbye"</span><span class="p">],</span> <span class="s2">"another float"</span><span class="p">:</span> <span class="p">[</span><span class="mf">1.5</span><span class="p">],</span> <span class="s2">"another int"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]}))</span>
+<span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"missing_columns_0"</span><span class="p">,</span> <span class="s2">"missing_columns_1"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">,</span> <span class="n">join</span><span class="o">=</span><span class="s2">"outer"</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-17">lib.write("missing_columns_0", pd.DataFrame({"string": ["hello"], "float": [0.5], "int": [0]}))
+lib.write("missing_columns_1", pd.DataFrame({"another string": ["goodbye"], "another float": [1.5], "another int": [1]}))
+lazy_dfs = lib.read_batch(["missing_columns_0", "missing_columns_1"], lazy=True)
+adb.concat(lazy_dfs, join="outer").collect().data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[14]:</div>
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[16]:</div>
 <div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
 <div>
 <style scoped="">
@@ -3270,41 +3596,32 @@ Wall time: 183 ms
 <thead>
 <tr style="text-align: right;">
 <th></th>
-<th>id</th>
-</tr>
-<tr>
-<th>category</th>
-<th></th>
+<th>string</th>
+<th>float</th>
+<th>int</th>
+<th>another string</th>
+<th>another float</th>
+<th>another int</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<th>a</th>
-<td>5999700.0</td>
+<th>0</th>
+<td>hello</td>
+<td>0.5</td>
+<td>0</td>
+<td>None</td>
+<td>NaN</td>
+<td>0</td>
 </tr>
 <tr>
-<th>b</th>
-<td>5999925.0</td>
-</tr>
-<tr>
-<th>d</th>
-<td>5999850.0</td>
-</tr>
-<tr>
-<th>e</th>
-<td>6000075.0</td>
-</tr>
-<tr>
-<th>f</th>
-<td>5999775.0</td>
-</tr>
-<tr>
-<th>g</th>
-<td>6000000.0</td>
-</tr>
-<tr>
-<th>c</th>
-<td>6000150.0</td>
+<th>1</th>
+<td>None</td>
+<td>NaN</td>
+<td>0</td>
+<td>goodbye</td>
+<td>1.5</td>
+<td>1</td>
 </tr>
 </tbody>
 </table>
@@ -3315,104 +3632,31 @@ Wall time: 183 ms
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=d3a9268e-f843-4bd6-a2f2-b4f51b50f0ce">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=72c77b97-4f93-410f-bfaa-8a1600936b6e">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="4-example-ohlc-open-high-low-close-bars">4. Example: OHLC (Open High Low Close) Bars<a class="anchor-link" href="#4-example-ohlc-open-high-low-close-bars">¶</a></h2><ul>
-<li>Downsample to 5-minute frequency</li>
-<li>Use multiple aggregators on the price column</li>
-<li>This is a simple example of how to convert tick data to OHLC bar data</li>
-</ul>
+<h2 id="5-permissiveness">5. Permissiveness<a class="anchor-link" href="#5-permissiveness">¶</a></h2><p>Where possible, we allow joining symbols together whenever it is sensible to do so.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=5e1bccab-77a9-42fa-9c33-60486498355f">
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=eb29765b-7980-4548-8a20-3998447c4161">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [15]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="CodeMirror cm-s-jupyter">
-<div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-14">
-<div>
-<span class="notice" hidden="">Copied!</span>
-<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
-<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
-<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
-</svg>
-</div>
-</clipboard-copy>
-</div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">freq_ohlc</span> <span class="o">=</span> <span class="s1">'5min'</span>
-<span class="n">agg_ohlc</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">'open'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'first'</span><span class="p">),</span>
-    <span class="s1">'high'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'max'</span><span class="p">),</span>
-    <span class="s1">'low'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'min'</span><span class="p">),</span>
-    <span class="s1">'close'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'price'</span><span class="p">,</span> <span class="s1">'last'</span><span class="p">)</span>
-<span class="p">}</span>
-</pre></div>
-<div class="clipboard-copy-txt" id="cell-14">freq_ohlc = '5min'
-agg_ohlc = {
-    'open': ('price', 'first'),
-    'high': ('price', 'max'),
-    'low': ('price', 'min'),
-    'close': ('price', 'last')
-}</div>
-</div>
-</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="range-indexes">Range indexes<a class="anchor-link" href="#range-indexes">¶</a></h3><p>When concatenating two or more range indexed dataframes together, Pandas will convert to an <code>Int64Index</code> unless the <code>start/step/stop</code> values of the input dataframes all line up.</p>
+<p>However most data in ArcticDB with a <code>RangeIndex</code> isn't really indexed at all, it is just the default applied by Pandas if no explicit index is provided. In addition <code>Int64Index</code> is not an internally supported index type. Therefore, concatenating range indexed symbols together will always produce a range index in ArcticDB.</p>
+<p>Different step values will be respected if they match across all symbols being concatenated, with the start value being taken from the first symbol:</p>
 </div>
 </div>
 </div>
 </div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=5a5abb8e-2de9-48a9-a0a7-7bd044a8064f">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [16]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="CodeMirror cm-s-jupyter">
-<div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-15">
-<div>
-<span class="notice" hidden="">Copied!</span>
-<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
-<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
-<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
-</svg>
-</div>
-</clipboard-copy>
-</div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="o">%%</span><span class="n">time</span>
-<span class="n">ohlc_5min_bars</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">sym</span><span class="p">,</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">resample</span><span class="p">(</span><span class="n">freq_ohlc</span><span class="p">)</span><span class="o">.</span><span class="n">agg</span><span class="p">(</span><span class="n">agg_ohlc</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
-</pre></div>
-<div class="clipboard-copy-txt" id="cell-15">%%time
-ohlc_5min_bars = lib.read(sym, lazy=True).resample(freq_ohlc).agg(agg_ohlc).collect().data</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>CPU times: user 1.26 s, sys: 492 ms, total: 1.75 s
-Wall time: 118 ms
-</pre>
-</div>
-</div>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=25d0d145-5f93-45ab-86ca-12e34c2be8c6">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=84f670cb-b687-451e-9685-99bcd6e094f3">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -3420,7 +3664,7 @@ Wall time: 118 ms
 <div class="jp-InputPrompt jp-InputArea-prompt">In [17]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="CodeMirror cm-s-jupyter">
 <div class="zeroclipboard-container">
-<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-16">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-18">
 <div>
 <span class="notice" hidden="">Copied!</span>
 <svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
@@ -3430,9 +3674,11 @@ Wall time: 118 ms
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">ohlc_5min_bars</span><span class="o">.</span><span class="n">head</span><span class="p">()</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write_batch</span><span class="p">([</span><span class="n">adb</span><span class="o">.</span><span class="n">WritePayload</span><span class="p">(</span><span class="s2">"range_indexed_0"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">RangeIndex</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">2</span><span class="p">))),</span> <span class="n">adb</span><span class="o">.</span><span class="n">WritePayload</span><span class="p">(</span><span class="s2">"range_indexed_1"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">RangeIndex</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">4</span><span class="p">,</span> <span class="mi">2</span><span class="p">)))])</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"range_indexed_0"</span><span class="p">,</span> <span class="s2">"range_indexed_1"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-16">ohlc_5min_bars.head()</div>
+<div class="clipboard-copy-txt" id="cell-18">lib.write_batch([adb.WritePayload("range_indexed_0", pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(3, 7, 2))), adb.WritePayload("range_indexed_1", pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)))])
+adb.concat(lib.read_batch(["range_indexed_0", "range_indexed_1"], lazy=True)).collect().data</div>
 </div>
 </div>
 </div>
@@ -3462,47 +3708,473 @@ Wall time: 118 ms
 <thead>
 <tr style="text-align: right;">
 <th></th>
-<th>close</th>
-<th>low</th>
-<th>high</th>
-<th>open</th>
+<th>col</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<th>1990-01-01 00:00:00</th>
-<td>102.172</td>
-<td>95.076</td>
-<td>104.992</td>
-<td>95.176</td>
+<th>3</th>
+<td>0</td>
 </tr>
 <tr>
-<th>1990-01-01 00:05:00</th>
-<td>101.450</td>
-<td>95.008</td>
-<td>104.999</td>
-<td>98.520</td>
+<th>5</th>
+<td>1</td>
 </tr>
 <tr>
-<th>1990-01-01 00:10:00</th>
-<td>96.718</td>
-<td>95.053</td>
-<td>104.990</td>
-<td>103.959</td>
+<th>7</th>
+<td>2</td>
 </tr>
 <tr>
-<th>1990-01-01 00:15:00</th>
-<td>96.345</td>
-<td>95.070</td>
-<td>104.969</td>
-<td>95.878</td>
+<th>9</th>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=7e0a26c9-ecef-43ed-a621-4b76bc85d51b">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p>Otherwise, a warning is logged, and the resulting dataframe has a <code>RangeIndex</code> with start 0 and step 1:</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=33134809-4854-4c94-b419-b59934af49be">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [18]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-19">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write_batch</span><span class="p">([</span><span class="n">adb</span><span class="o">.</span><span class="n">WritePayload</span><span class="p">(</span><span class="s2">"range_indexed_2"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">RangeIndex</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="mi">7</span><span class="p">,</span> <span class="mi">2</span><span class="p">))),</span> <span class="n">adb</span><span class="o">.</span><span class="n">WritePayload</span><span class="p">(</span><span class="s2">"range_indexed_3"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">RangeIndex</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">6</span><span class="p">,</span> <span class="mi">3</span><span class="p">)))])</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"range_indexed_2"</span><span class="p">,</span> <span class="s2">"range_indexed_3"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-19">lib.write_batch([adb.WritePayload("range_indexed_2", pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(3, 7, 2))), adb.WritePayload("range_indexed_3", pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 6, 3)))])
+adb.concat(lib.read_batch(["range_indexed_2", "range_indexed_3"], lazy=True)).collect().data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>20250521 15:36:22.789909 2742407 W arcticdb | Mismatching RangeIndexes being combined, setting to start=0, step=1
+</pre>
+</div>
+</div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[18]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>col</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>0</th>
+<td>0</td>
 </tr>
 <tr>
-<th>1990-01-01 00:20:00</th>
-<td>98.955</td>
-<td>95.011</td>
-<td>104.983</td>
-<td>103.538</td>
+<th>1</th>
+<td>1</td>
+</tr>
+<tr>
+<th>2</th>
+<td>2</td>
+</tr>
+<tr>
+<th>3</th>
+<td>3</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=001b98b7-ff89-489b-9851-6a69f7c3752d">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="joining-series-together-will-maintain-the-name-if-it-is-the-same-between-all-of-the-input-symbols-and-return-an-unnamed-series-otherwise">Joining Series together will maintain the name if it is the same between all of the input symbols, and return an unnamed Series otherwise<a class="anchor-link" href="#joining-series-together-will-maintain-the-name-if-it-is-the-same-between-all-of-the-input-symbols-and-return-an-unnamed-series-otherwise">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8e48c990-be0f-4c56-b8ba-cb2f919404e3">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [19]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-20">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"series_0"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="mi">0</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">"Name 0"</span><span class="p">))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"series_1"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="mi">1</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">"Name 0"</span><span class="p">))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"series_2"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">Series</span><span class="p">([</span><span class="mi">2</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s2">"Name 2"</span><span class="p">))</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-20">lib.write("series_0", pd.Series([0], name="Name 0"))
+lib.write("series_1", pd.Series([1], name="Name 0"))
+lib.write("series_2", pd.Series([2], name="Name 2"))</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[19]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='series_2', library='concat', data=n/a, version=0, metadata=None, host='LMDB(path=/users/is/aowens/source/man.arcticdb/arcticdb_link/docs/mkdocs/docs/notebooks/arcticdb_concat)', timestamp=1747838184226956243)</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=fd3a54b1-cdac-4b51-a51f-3fdd7fc0eacb">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [20]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-21">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"series_0"</span><span class="p">,</span> <span class="s2">"series_1"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-21">lazy_dfs = lib.read_batch(["series_0", "series_1"], lazy=True)
+adb.concat(lazy_dfs).collect().data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[20]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>0    0
+1    1
+Name: Name 0, dtype: int64</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=5f6fe9c1-d327-45fd-ad6e-a38de78ccb2e">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [21]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-22">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"series_0"</span><span class="p">,</span> <span class="s2">"series_1"</span><span class="p">,</span> <span class="s2">"series_2"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-22">lazy_dfs = lib.read_batch(["series_0", "series_1", "series_2"], lazy=True)
+adb.concat(lazy_dfs).collect().data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[21]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>0    0
+1    1
+2    2
+dtype: int64</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=6287fc42-4972-4357-912d-f3b9808cea0a">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h3 id="similarly-joining-timeseries-together-will-maintain-the-index-name-if-it-is-the-same-between-all-of-the-input-symbols-and-return-a-dataframe-with-an-unnamed-index-otherwise">Similarly, joining timeseries together will maintain the index name if it is the same between all of the input symbols, and return a dataframe with an unnamed index otherwise<a class="anchor-link" href="#similarly-joining-timeseries-together-will-maintain-the-index-name-if-it-is-the-same-between-all-of-the-input-symbols-and-return-a-dataframe-with-an-unnamed-index-otherwise">¶</a></h3>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=c698bcdd-a6cb-4ad6-93d0-e87987fc4ec9">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [22]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-23">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"timeseries_0"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">0</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2025-01-01"</span><span class="p">)],</span> <span class="n">name</span><span class="o">=</span><span class="s2">"timestamp"</span><span class="p">)))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"timeseries_1"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">1</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2025-01-01"</span><span class="p">)],</span> <span class="n">name</span><span class="o">=</span><span class="s2">"timestamp"</span><span class="p">)))</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">"timeseries_2"</span><span class="p">,</span> <span class="n">pd</span><span class="o">.</span><span class="n">DataFrame</span><span class="p">({</span><span class="s2">"col"</span><span class="p">:</span> <span class="p">[</span><span class="mi">2</span><span class="p">]},</span> <span class="n">index</span><span class="o">=</span><span class="n">pd</span><span class="o">.</span><span class="n">DatetimeIndex</span><span class="p">([</span><span class="n">pd</span><span class="o">.</span><span class="n">Timestamp</span><span class="p">(</span><span class="s2">"2025-01-01"</span><span class="p">)])))</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-23">lib.write("timeseries_0", pd.DataFrame({"col": [0]}, index=pd.DatetimeIndex([pd.Timestamp("2025-01-01")], name="timestamp")))
+lib.write("timeseries_1", pd.DataFrame({"col": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2025-01-01")], name="timestamp")))
+lib.write("timeseries_2", pd.DataFrame({"col": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2025-01-01")])))</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[22]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>VersionedItem(symbol='timeseries_2', library='concat', data=n/a, version=0, metadata=None, host='LMDB(path=/users/is/aowens/source/man.arcticdb/arcticdb_link/docs/mkdocs/docs/notebooks/arcticdb_concat)', timestamp=1747838187224125234)</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=abf44692-52cc-434e-a979-f804c9f0725b">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [23]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-24">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"timeseries_0"</span><span class="p">,</span> <span class="s2">"timeseries_1"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-24">lazy_dfs = lib.read_batch(["timeseries_0", "timeseries_1"], lazy=True)
+adb.concat(lazy_dfs).collect().data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[23]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>col</th>
+</tr>
+<tr>
+<th>timestamp</th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>2025-01-01</th>
+<td>0</td>
+</tr>
+<tr>
+<th>2025-01-01</th>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=7860100f-e685-4898-acb6-343b0e494c6e">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [24]:</div><div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="CodeMirror cm-s-jupyter">
+<div class="zeroclipboard-container">
+<clipboard-copy ,="" aria-label="Copy to Clipboard" for="cell-25">
+<div>
+<span class="notice" hidden="">Copied!</span>
+<svg aria-hidden="true" class="clipboard-copy-icon" data-view-component="true" height="20" version="1.1" viewbox="0 0 16 16" width="20">
+<path d="M0 6.75C0 5.784.784 5 1.75 5h1.5a.75.75 0 010 1.5h-1.5a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-1.5a.75.75 0 011.5 0v1.5A1.75 1.75 0 019.25 16h-7.5A1.75 1.75 0 010 14.25v-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+<path d="M5 1.75C5 .784 5.784 0 6.75 0h7.5C15.216 0 16 .784 16 1.75v7.5A1.75 1.75 0 0114.25 11h-7.5A1.75 1.75 0 015 9.25v-7.5zm1.75-.25a.25.25 0 00-.25.25v7.5c0 .138.112.25.25.25h7.5a.25.25 0 00.25-.25v-7.5a.25.25 0 00-.25-.25h-7.5z" fill="currentColor" fill-rule="evenodd"></path>
+</svg>
+</div>
+</clipboard-copy>
+</div>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="n">lazy_dfs</span> <span class="o">=</span> <span class="n">lib</span><span class="o">.</span><span class="n">read_batch</span><span class="p">([</span><span class="s2">"timeseries_0"</span><span class="p">,</span> <span class="s2">"timeseries_1"</span><span class="p">,</span> <span class="s2">"timeseries_2"</span><span class="p">],</span> <span class="n">lazy</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+<span class="n">adb</span><span class="o">.</span><span class="n">concat</span><span class="p">(</span><span class="n">lazy_dfs</span><span class="p">)</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span><span class="o">.</span><span class="n">data</span>
+</pre></div>
+<div class="clipboard-copy-txt" id="cell-25">lazy_dfs = lib.read_batch(["timeseries_0", "timeseries_1", "timeseries_2"], lazy=True)
+adb.concat(lazy_dfs).collect().data</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[24]:</div>
+<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/html" tabindex="0">
+<div>
+<style scoped="">
+    .dataframe tbody tr th:only-of-type {
+        vertical-align: middle;
+    }
+
+    .dataframe tbody tr th {
+        vertical-align: top;
+    }
+
+    .dataframe thead th {
+        text-align: right;
+    }
+</style>
+<table border="1" class="dataframe">
+<thead>
+<tr style="text-align: right;">
+<th></th>
+<th>col</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<th>2025-01-01</th>
+<td>0</td>
+</tr>
+<tr>
+<th>2025-01-01</th>
+<td>1</td>
+</tr>
+<tr>
+<th>2025-01-01</th>
+<td>2</td>
 </tr>
 </tbody>
 </table>
@@ -3519,12 +4191,11 @@ Wall time: 118 ms
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="conclusion">Conclusion<a class="anchor-link" href="#conclusion">¶</a></h2><p>We have demonstrated the following about the ArcticDB resample feature:</p>
+<h2 id="conclusion">Conclusion<a class="anchor-link" href="#conclusion">¶</a></h2><p>We have demonstrated the following about the ArcticDB concat feature:</p>
 <ul>
-<li>Easy to use, especially if you already resample in Pandas</li>
-<li>Very high performance - in particular much faster than reading all the data then resampling in Pandas</li>
+<li>Easy to use, especially if you already concat in Pandas</li>
 <li>Can be combined with other query functions to build processing pipelines</li>
-<li>Can be used to generate timeseries bars</li>
+<li>When more query functions are applied post-concat, will be more performant than Pandas due to ArcticDB's parallel processing implementation</li>
 </ul>
 </div>
 </div>
