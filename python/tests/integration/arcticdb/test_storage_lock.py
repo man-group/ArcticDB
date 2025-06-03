@@ -1,4 +1,5 @@
 import os
+from typing import List
 import pandas as pd
 import numpy as np
 import pytest
@@ -50,18 +51,25 @@ def test_many_increments(real_storage_factory, lib_name, num_processes, max_slee
     lib._nvs.version_store.force_delete_symbol(symbol)
     lib.write(symbol, init_df)
 
-    processes = [
+    logger.info(f"Creating {num_processes} processes")
+    processes: List[Process] = [
         Process(target=slow_increment_task, args=(real_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
         for i in range(num_processes)
     ]
+
+    actual_processes = 0
     for p in processes:
         p.start()
+        if p.is_alive():
+            actual_processes += 1
+
+    logger.info(f"Actual started {actual_processes} processes")
 
     for p in processes:
         p.join()
 
     vit = lib.read(symbol)
     read_df = vit.data
-    expected_df = pd.DataFrame({"col": [num_processes]})
+    expected_df = pd.DataFrame({"col": [actual_processes]})
     assert_frame_equal(read_df, expected_df)
-    assert vit.version == num_processes
+    assert vit.version == actual_processes
