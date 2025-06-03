@@ -84,9 +84,11 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
 
-# silence warnings about mark.storage
+# silence warnings about custom markers
 def pytest_configure(config):
     config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
+    config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
+    config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
 
 
 if platform.system() == "Linux":
