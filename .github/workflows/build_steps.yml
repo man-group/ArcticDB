@@ -363,12 +363,12 @@ jobs:
         run: |
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
-            eval "$ARCTICDB_PYTEST_ARGS"
             python -m pip  install pytest-repeat
             python -m pip  insstal setuptools 
             python -m pip  install setuptools 
             python -m pip  install wheel
             python setup.py protoc --build-lib python
+            eval "$ARCTICDB_PYTEST_ARGS"
           else
             build_tooling/parallel_test.sh tests/${{matrix.type}}
           fi
