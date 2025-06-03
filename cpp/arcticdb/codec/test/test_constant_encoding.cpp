@@ -21,7 +21,7 @@ TEST(ConstantEncoding, Basic) {
     std::vector<uint8_t> output(*estimated_size);
     auto column_data = from_vector(data, make_scalar_type(DataType::UINT32));
     auto bytes = encoder.compress(column_data.data_, reinterpret_cast<uint32_t*>(output.data()), *estimated_size);
-    ASSERT_EQ(bytes, 12);
+    ASSERT_EQ(bytes, 16);
     std::vector<uint32_t> decompressed(data.size());
     auto result = ConstantDecompressor<InputType>::decompress(output.data(), decompressed.data());
     ASSERT_EQ(result.uncompressed_, data.size() * sizeof(InputType));

@@ -33,7 +33,7 @@ struct ConstantCompressor {
             ++pos;
         } while (pos != end);
 
-        return sizeof(ConstantCompressData<T>);
+        return compressed_size();
     }
 
     static size_t compressed_size() {
@@ -48,7 +48,7 @@ struct ConstantCompressor {
         auto *state = reinterpret_cast<ConstantCompressData<T> *>(output);
         state->size_ = num_rows;
         state->value_ = *data.buffer().ptr_cast<T>(0, sizeof(T));
-        util::check(expected_bytes == sizeof(ConstantCompressData<T>), "Unexpected output size in constant compression: {} != {}", expected_bytes, sizeof(ConstantCompressData<T>));
+        util::check(expected_bytes == compressed_size(), "Unexpected output size in constant compression: {} != {}", expected_bytes, sizeof(ConstantCompressData<T>));
         return header_size_in_t<ConstantCompressData<T>, T>() * sizeof(T);
     }
 };
