@@ -8,15 +8,12 @@ from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothes
 from arcticdb.util.test import generic_resample_test, larget_common_type, largest_numeric_type
 from arcticdb.util._versions import IS_PANDAS_TWO
 
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', None)
-pd.set_option('display.max_colwidth', None)
-pd.set_option('display.width', 0)
-
 COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 MIN_DATE = np.datetime64('1969-01-01')
 MAX_DATE = np.datetime64('2000-01-01')
+
+pytestmark = pytest.mark.pipeline
 
 @st.composite
 def date(draw, min_date, max_date, unit="ns"):

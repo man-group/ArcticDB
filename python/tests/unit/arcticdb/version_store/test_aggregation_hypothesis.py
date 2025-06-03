@@ -14,7 +14,7 @@ import hypothesis.strategies as st
 import pytest
 import numpy as np
 
-from arcticdb.util.test import generic_named_aggregation_test, common_sum_aggregation_dtype
+from arcticdb.util.test import generic_named_aggregation_test, common_sum_aggregation_dtype, larget_common_type
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     supported_numeric_dtypes,
