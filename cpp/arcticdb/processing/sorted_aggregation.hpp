@@ -33,9 +33,8 @@ struct ISortedAggregator {
                                        const std::vector<timestamp>& bucket_boundaries,
                                        const Column& output_index_column,
                                        StringPool& string_pool,
-                                       ResampleBoundary label,
-                                       timestamp step) const {
-            return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, bucket_boundaries, output_index_column, string_pool, label, step);
+                                       ResampleBoundary label) const {
+            return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, bucket_boundaries, output_index_column, string_pool, label);
         }
         void check_aggregator_supported_with_data_type(DataType data_type) const { folly::poly_call<3>(*this, data_type); };
         [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const { return folly::poly_call<4>(*this, common_input_data_type); };
@@ -378,8 +377,7 @@ public:
                                    const std::vector<timestamp>& bucket_boundaries,
                                    const Column& output_index_column,
                                    StringPool& string_pool,
-                                   ResampleBoundary label,
-                                   timestamp step) const;
+                                   ResampleBoundary label) const;
 
     void check_aggregator_supported_with_data_type(DataType data_type) const;
     [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;

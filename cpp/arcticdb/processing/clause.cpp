@@ -847,8 +847,7 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
             bucket_boundaries,
             *output_index_column,
             string_pool,
-            label_boundary_,
-            step_
+            label_boundary_
         );
         if (aggregated) {
             seg.add_column(scalar_field(aggregated->type().data_type(), aggregator.get_output_column_name().value), std::make_shared<Column>(std::move(aggregated).value()));

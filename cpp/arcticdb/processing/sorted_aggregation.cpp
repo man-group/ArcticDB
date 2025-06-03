@@ -36,12 +36,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                                                           const std::vector<timestamp>& bucket_boundaries,
                                                                           const Column& output_index_column,
                                                                           StringPool& string_pool,
-                                                                          const ResampleBoundary label,
-                                                                          const timestamp step) const {
-    for (auto b : bucket_boundaries) {
-        std::cout<<b<<" ";
-    }
-    std::cout<<std::endl;
+                                                                          const ResampleBoundary label) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     const auto common_input_type = generate_common_input_type(input_agg_columns);
     if (!common_input_type.has_value()) {
@@ -53,7 +48,6 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
         AllocationType::DYNAMIC,
         Sparsity::PERMITTED
     );
-    std::cout<<fmt::format("Input agg size: {}, output index size: {}", input_agg_columns.size(), output_index_column.row_count())<<std::endl;
     position_t row_to_write = 0;
     details::visit_type(
         res.type().data_type(),
@@ -136,22 +130,22 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                         // buckets resulting from the index values of this column will be empty. We need to check how
                         // many buckets this column covers and advance row_to_write that many times. Since we know that
                         // no aggregation is performed, it's enough to check the last index value of this column.
+                        // Note: The output index can contain fewer buckets than the buckets represented by
+                        // bucket_boundaries. Because if no data falls inside a bucket, we omit if from the result.
                         const Column& input_index = *input_index_columns[idx];
                         const timestamp last_index_value = *input_index.scalar_at<IndexTDT::DataTypeTag::raw_type>(input_index.row_count() - 1);
-                        while (row_to_write < output_index_column.row_count()) {
-                            auto output_index_it = output_index_column.begin<IndexTDT>() + row_to_write;
-                            const timestamp output_bucket_start = *output_index_it - ((label == ResampleBoundary::RIGHT)*step);
-                            const Bucket<closed_boundary> bucket(output_bucket_start, output_bucket_start + step);
-                            if (bucket.contains(last_index_value)) {
-                                break;
-                            } else if (index_value_past_end_of_bucket(last_index_value, bucket.end())) {
-                                if (bucket_has_values) {
-                                    res.set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
-                                }
-                                ++row_to_write;
+                        // Check how many rows of the index must be skipped
+                        auto next_output_index_it = output_index_column.begin<IndexTDT>() + row_to_write + (label == ResampleBoundary::LEFT);
+                        while (next_output_index_it != output_index_column.end<IndexTDT>() && *next_output_index_it < last_index_value + (closed_boundary == ResampleBoundary::LEFT)) {
+                            if (bucket_has_values) {
+                                res.set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
+                                bucket_has_values = false;
                             }
+                            ++row_to_write;
+                            ++next_output_index_it;
                         }
 
+                        // Check how many buckets must be skipped.
                         while (bucket_end_it != bucket_boundaries_end && index_value_past_end_of_bucket(last_index_value, *bucket_end_it)) {
                             ++bucket_start_it;
                             ++bucket_end_it;
