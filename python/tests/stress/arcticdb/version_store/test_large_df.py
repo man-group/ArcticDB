@@ -102,15 +102,8 @@ def test_write_read_time_large_df(lmdb_version_store_big_map):
 
     assert lib.get_num_rows(symbol) == total_rows
 
-    read_start = time.time()
     df_read = lib.read(symbol)
-    read_time = time.time() - read_start
-    rows_per_second = total_rows / read_time
-
-   # assert_frame_equal(df_read.head(5), df.head(5))
-    #assert df_read.index.is_monotonic_increasing
-
-    print(f"Write time: {write_time:.2f} seconds, Read time: {read_time:.2f} seconds, Rows/Second read: {rows_per_second:.2f}")
+    assert_frame_equal(df_read.head(5), df.head(5))
 
 
 

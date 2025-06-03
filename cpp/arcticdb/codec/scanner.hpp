@@ -230,6 +230,13 @@ inline void select_encoding_for_column(const ColumnData& column_data, EncodingSc
         result.max_compressed_bytes_ += encodings_set[0].estimated_size_;
         result.uncompressed_bytes_ += encodings_set[0].original_size_;
     }
+
+   if (column_data.bit_vector() != nullptr && column_data.bit_vector()->count() > 0)   {
+        bm::serializer<util::BitMagic>::statistics_type stat{};
+        column_data.bit_vector()->calc_stat(&stat);
+        result.uncompressed_bytes_ += stat.memory_used;
+        result.max_compressed_bytes_ += stat.max_serialize_mem;
+    }
 }
 
 inline void resolve_encodings_for_column(const ColumnData& column_data, position_t column_index, SegmentScanResults& column_encodings, SizeResult& result) {
