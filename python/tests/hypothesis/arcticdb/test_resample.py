@@ -54,8 +54,12 @@ def dataframe(draw, column_names, column_dtypes, min_date, max_date, dynamic_sch
             #    and the test will fail.
             min_value = 0 if pd.api.types.is_unsigned_integer_dtype(dtype) else -2**31
             columns.append(hs_pd.column(name=name, elements=st.integers(min_value=min_value, max_value=2**31 - 1), dtype=dtype))
-        else:
-            columns.append(hs_pd.column(name=name, dtype=dtype))
+        elif pd.api.types.is_float_dtype(dtype):
+            # The column will still be of the specified dtype (float32 or float36), but by asking hypothesis to generate
+            # 16-bit floats, we reduce the way of overflows. Pandas use Kahan summation which can sometimes can yield
+            # a different result for overflows. Passing min_value and max_value will disable generation of NaN, -inf and
+            # inf, which are supposed to work and have to be tested.
+            columns.append(hs_pd.column(name=name, elements=st.floats(width=16), dtype=dtype))
     result = draw(hs_pd.data_frames(columns, index=index))
     result.sort_index(inplace=True)
     return result
@@ -164,6 +168,16 @@ def expected_aggregation_type(aggregation, column_type):
     else:
         raise Exception(f"Unknown aggregation type: {aggregation}. Column type {column_type}.")
 
+
+def compute_common_type_for_columns_in_df_list(df_list):
+    common_types = {}
+    for df in df_list:
+        for col in df.columns:
+            if col not in common_types:
+                common_types[col] = df[col].dtype
+            else:
+                common_types[col] = larget_common_type(common_types[col], df[col].dtype)
+    return common_types
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(
     df_list=dynamic_schema_column_list(),
@@ -173,40 +187,17 @@ def expected_aggregation_type(aggregation, column_type):
 )
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
 def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, rule, origin, offset):
-    common_types = {}
-    for df in df_list:
-        for col in df.columns:
-            if col not in common_types:
-                common_types[col] = df[col].dtype
-            else:
-                common_types[col] = larget_common_type(common_types[col], df[col].dtype)
-    # TODO: Create a custom strategy for picking dtypes instead of filtering in the test
-    assume(all(v is not None for v in common_types.values()))
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-    print(f"Rule: {rule}, Origin: {origin}, Offset: {offset}")
+    common_column_types = compute_common_type_for_columns_in_df_list(df_list)
+    assume(all(col_type is not None for col_type in common_column_types.values()))
     lib = lmdb_version_store_dynamic_schema_v1
     lib.version_store.clear()
     sym = "sym"
-    merged_column_types = {}
-    print("=================================================")
     for df in df_list:
-        for column in df.columns:
-            if column not in merged_column_types:
-                merged_column_types[column] = np.dtype(df[column].dtype)
-            else:
-                merged_column_types[column] = larget_common_type(merged_column_types[column], np.dtype(df[column].dtype))
-        print(df)
-        print(df.dtypes)
         # This column will be used to keep track of empty buckets.
         df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
         lib.append(sym, df)
-
-    aggregations = ALL_AGGREGATIONS
-    agg = {f"{name}_{op}": (name, op) for name in merged_column_types for op in aggregations}
-    expected_types = {f"{name}_{op}": expected_aggregation_type(op, merged_column_types[name]) for name in merged_column_types for op in aggregations}
-    print(agg)
-    print(expected_types)
-    print("=================================================")
+    agg = {f"{name}_{op}": (name, op) for name in common_column_types for op in ALL_AGGREGATIONS}
+    expected_types = {f"{name}_{op}": expected_aggregation_type(op, common_column_types[name]) for name in common_column_types for op in ALL_AGGREGATIONS}
     for closed in ["left", "right"]:
         for label in ["left", "right"]:
             try:
@@ -232,46 +223,3 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
                     raise pandas_error
                 else:
                     return
-
-def test_test(lmdb_version_store_dynamic_schema_v1):
-    df1 = pd.DataFrame({"col_0": np.array([0, 0], dtype=np.int8)}, index=pd.to_datetime([pd.Timestamp(0),pd.Timestamp(1)]))
-    df2 = pd.DataFrame({"col_1": np.array([0], dtype=np.int8)}, index=pd.to_datetime([pd.Timestamp(2)]))
-    df3 = pd.DataFrame({"col_0": np.array([0], dtype=np.int8)}, index=pd.to_datetime([pd.Timestamp(3)]))
-    df_list = [df1, df2, df3]
-    rule="10ns"
-    origin="start"
-    offset=None
-
-    lib = lmdb_version_store_dynamic_schema_v1
-    lib.version_store.clear()
-    sym = "sym"
-    merged_column_types = {}
-    for df in df_list:
-        for column in df.columns:
-            if column not in merged_column_types:
-                merged_column_types[column] = np.dtype(df[column].dtype)
-            else:
-                merged_column_types[column] = larget_common_type(merged_column_types[column], df[column].dtype)
-        # This column will be used to keep track of empty buckets.
-        df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=np.uint64)
-        lib.append(sym, df)
-
-    expected_types = {f"{name}_{op}": expected_aggregation_type(op, merged_column_types[name]) for name in merged_column_types for op in ["count"]}
-    print(expected_types)
-
-    agg = {f"{name}_{op}": (name, op) for name in merged_column_types for op in ["count"]}
-    for closed in ["right"]:
-        for label in ["left"]:
-            generic_resample_test(
-                lib,
-                sym,
-                rule,
-                agg,
-                pd.concat(df_list),
-                expected_types,
-                origin=origin,
-                offset=offset,
-                closed=closed,
-                label=label,
-                # Must be int or uint column otherwise dropping of empty buckets will not work
-                drop_empty_buckets_for="_empty_bucket_tracker_")

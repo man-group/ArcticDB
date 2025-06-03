@@ -949,11 +949,6 @@ def generic_resample_test(
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
 
-    print("\nExpected:\n")
-    print(expected)
-    print("\nActual:\n")
-    print(received)
-
     if has_float_column:
         assert_dfs_approximate(expected, received)
     else:

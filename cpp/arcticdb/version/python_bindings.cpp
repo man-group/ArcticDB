@@ -103,17 +103,21 @@ requires std::integral<T>
 }
 
 std::vector<timestamp> generate_buckets(
-    const timestamp start,
-    const timestamp end,
-    const timestamp rule_ns,
-    const ResampleBoundary closed_boundary_arg,
-    const timestamp offset,
+    timestamp start,
+    timestamp end,
+    std::string_view rule,
+    ResampleBoundary closed_boundary_arg,
+    timestamp offset,
     const ResampleOrigin& origin
 ) {
     // e.g. Can happen if date range specified does not overlap with the time range covered by the symbol
     if (end < start) {
         return {};
     }
+    const timestamp rule_ns = [](std::string_view rule) {
+        py::gil_scoped_acquire acquire_gil;
+        return python_util::pd_to_offset(rule);
+    }(rule);
     const auto [start_with_offset, end_with_offset] = compute_first_last_dates(start, end, rule_ns, closed_boundary_arg, offset, origin);
     const auto bucket_boundary_count = (end_with_offset - start_with_offset) / rule_ns + 1;
     std::vector<timestamp> res;
@@ -129,9 +133,7 @@ void declare_resample_clause(py::module& version) {
     const char* class_name = closed_boundary == ResampleBoundary::LEFT ? "ResampleClauseLeftClosed" : "ResampleClauseRightClosed";
     py::class_<ResampleClause<closed_boundary>, std::shared_ptr<ResampleClause<closed_boundary>>>(version, class_name)
             .def(py::init([](std::string rule, ResampleBoundary label_boundary, timestamp offset, ResampleOrigin origin){
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(PyGILState_Check(), "GIL must be held");
-                const timestamp rule_ns = python_util::pd_to_offset(rule);
-                return ResampleClause<closed_boundary>(std::move(rule), label_boundary, generate_buckets, offset, std::move(origin), rule_ns);
+                return ResampleClause<closed_boundary>(std::move(rule), label_boundary, generate_buckets, offset, std::move(origin));
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,
@@ -140,6 +142,7 @@ void declare_resample_clause(py::module& version) {
             })
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
+
 
 void register_bindings(py::module &version, py::exception<arcticdb::ArcticException>& base_exception) {
 

@@ -553,14 +553,12 @@ ResampleClause<closed_boundary>::ResampleClause(std::string rule,
     ResampleBoundary label_boundary,
     BucketGeneratorT&& generate_bucket_boundaries,
     timestamp offset,
-    ResampleOrigin origin,
-    timestamp step) :
+    ResampleOrigin origin) :
     rule_(std::move(rule)),
     label_boundary_(label_boundary),
     generate_bucket_boundaries_(std::move(generate_bucket_boundaries)),
     offset_(offset),
-    origin_(std::move(origin)),
-    step_(step) {
+    origin_(std::move(origin)) {
     clause_info_.input_structure_ = ProcessingStructure::TIME_BUCKETED;
     clause_info_.can_combine_with_column_selection_ = false;
     clause_info_.index_ = KeepCurrentTopLevelIndex();
@@ -705,7 +703,7 @@ std::vector<std::vector<size_t>> ResampleClause<closed_boundary>::structure_for_
         date_range_ = index_range;
     }
 
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, step_, closed_boundary, offset_, origin_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         ranges_and_keys.clear();
         return {};
@@ -736,7 +734,7 @@ std::vector<std::vector<EntityId>> ResampleClause<closed_boundary>::structure_fo
     }
 
     date_range_ = std::make_optional<TimestampRange>(min_start_ts, max_end_ts);
-    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, step_, closed_boundary, offset_, origin_);
+    bucket_boundaries_ = generate_bucket_boundaries_(date_range_->first, date_range_->second, rule_, closed_boundary, offset_, origin_);
     if (bucket_boundaries_.size() < 2) {
         return {};
     }
