@@ -125,6 +125,7 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                     sym,
                     rule,
                     agg,
+                    df,
                     origin=origin,
                     offset=offset,
                     closed=closed,
@@ -132,8 +133,8 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                     # Must be int or uint column otherwise dropping of empty buckets will not work
                     drop_empty_buckets_for="col_uint")
             except ValueError as pandas_error:
-                # This is to avoid a bug in pandas related to how end an end_day work. It's possible that when end/end_day are used
-                # the first value of the data frame to be outside the computed resampling range. In arctic this is not a problem
+                # This is to avoid a bug in pandas related to how end an end_day work. It's possible that when end/end_day is used,
+                # the first value of the data frame to be outside the computed resampling range. In the arctic, this is not a problem
                 # as we allow this by design.
                 if str(pandas_error) != "Values falls before first bin":
                     raise pandas_error
@@ -201,20 +202,19 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
     for closed in ["left", "right"]:
         for label in ["left", "right"]:
             try:
-                print(f"closed: {closed}, label: {label}")
                 generic_resample_test(
                     lib,
                     sym,
                     rule,
                     agg,
                     pd.concat(df_list),
-                    expected_types,
                     origin=origin,
                     offset=offset,
                     closed=closed,
                     label=label,
                     # Must be int or uint column otherwise dropping of empty buckets will not work
-                    drop_empty_buckets_for="_empty_bucket_tracker_")
+                    drop_empty_buckets_for="_empty_bucket_tracker_",
+                    expected_types=expected_types)
             except ValueError as pandas_error:
                 # This is to avoid a bug in pandas related to how end an end_day work. It's possible that when end/end_day are used
                 # the first value of the data frame to be outside the computed resampling range. In arctic this is not a problem

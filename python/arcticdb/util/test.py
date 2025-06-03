@@ -892,13 +892,13 @@ def generic_resample_test(
         rule,
         aggregations,
         data,
-        expected_types,
         date_range=None,
         closed=None,
         label=None,
         offset=None,
         origin=None,
-        drop_empty_buckets_for=None
+        drop_empty_buckets_for=None,
+        expected_types=None,
 ):
     """
     Perform a resampling in ArcticDB and compare it against the same query in Pandas.
@@ -933,11 +933,11 @@ def generic_resample_test(
         expected.drop(columns=["_bucket_size_"], inplace=True)
     expected = expected.reindex(columns=sorted(expected.columns))
 
-    for name, dtype in expected_types.items():
-        if pd.api.types.is_integer_dtype(dtype):
-            expected[name] = expected[name].fillna(0)
-
-    expected = expected.astype(expected_types)
+    if expected_types:
+        for name, dtype in expected_types.items():
+            if pd.api.types.is_integer_dtype(dtype):
+                expected[name] = expected[name].fillna(0)
+        expected = expected.astype(expected_types)
 
     q = QueryBuilder()
     if origin:
