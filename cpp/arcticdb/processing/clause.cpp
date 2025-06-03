@@ -838,7 +838,6 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
                                 }
             );
         }
-        std::cout<<fmt::format("Output column name: {}\n", aggregator.get_output_column_name());
         std::optional<Column> aggregated = aggregator.aggregate(
             input_index_columns,
             input_agg_columns,
