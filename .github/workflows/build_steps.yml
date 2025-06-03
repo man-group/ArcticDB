@@ -364,7 +364,6 @@ jobs:
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
-            python -m pip  insstal setuptools 
             python -m pip  install setuptools 
             python -m pip  install wheel
             python setup.py protoc --build-lib python
