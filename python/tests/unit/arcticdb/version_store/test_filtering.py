@@ -1352,8 +1352,13 @@ def test_filter_regex_match_basic(lmdb_version_store_v1, sym):
 
     q2 = QueryBuilder()
     q2 = q2[q2["a"].regex_match(pattern_a) & q2["c"].regex_match(pattern_c2)]
-    expected = df[df.a.str.contains(pattern_a) & df.c.astype(str).str.contains(pattern_c2)]
-    assert_frame_equal(lib.read(sym, query_builder=q2).data, expected)
+    expected2 = df[df.a.str.contains(pattern_a) & df.c.astype(str).str.contains(pattern_c2)]
+    assert_frame_equal(lib.read(sym, query_builder=q2).data, expected2)
+
+    q2_alt = QueryBuilder()
+    q2_alt = q2_alt[q2_alt["a"].regex_match(pattern_a)]
+    q2_alt = q2_alt[q2_alt["c"].regex_match(pattern_c2)]
+    assert_frame_equal(lib.read(sym, query_builder=q2_alt).data, expected2)
 
 
 def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym):
@@ -1449,3 +1454,20 @@ def test_filter_regex_match_unicode(lmdb_version_store_v1, sym):
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     assert not expected.empty
+
+
+def test_filter_regex_match_chaining(lmdb_version_store_v1, sym):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=4),
+            data={"a": ["abc", "abcd", "aabc", "abcde"], "b": ["1", "2", "2", "1"], "c": [1, 2, 3, 4]}
+        )
+    lib.write(sym, df)
+
+    pattern = "^abc"
+    q = QueryBuilder()
+    q = q[q["a"].regex_match("^abc")].groupby("b").agg({"c": "mean"})
+
+    received = lib.read(sym, query_builder=q).data
+    expected = df[df.a.str.contains(pattern)].groupby("b").agg({"c": "mean"})
+    assert_frame_equal(received.sort_index(), expected)
