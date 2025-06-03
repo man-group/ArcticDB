@@ -31,6 +31,7 @@ enum class FailureType : int {
 static const char* failure_names[] = {
         "WRITE",
         "READ",
+        "WRITE_LOCK",
         "ITERATE",
         "DELETE",
 };
