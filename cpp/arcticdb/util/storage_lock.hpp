@@ -159,7 +159,7 @@ class StorageLock {
 
     bool try_acquire_lock(const std::shared_ptr<Store>& store) {
         auto start = ClockType::coarse_nanos_since_epoch();
-        if(!ref_key_exists(store) || !ttl_not_expired(store)) {
+        if(!ttl_not_expired(store)) {
             ts_= create_ref_key(store);
             auto lock_sleep_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
             ARCTICDB_DEBUG(log::lock(), "Waiting for {} ms, thread id: {}", lock_sleep_ms, std::this_thread::get_id());
@@ -206,12 +206,6 @@ class StorageLock {
 
     RefKey ref_key() const {
         return get_ref_key(name_);
-    }
-
-    bool ref_key_exists(const std::shared_ptr<Store>& store) {
-        auto exists = store->key_exists_sync(ref_key());
-        ARCTICDB_DEBUG(log::lock(), "Ref key exists: {}", exists ? "true" : "false");
-        return exists;
     }
 
     static void do_remove_ref_key(const std::shared_ptr<Store>& store, const StreamId& name) {
