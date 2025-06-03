@@ -89,7 +89,7 @@ def test_write_read_time_large_df(lmdb_version_store_big_map):
     symbol = "timeseries_data"
     lib = lmdb_version_store_big_map
     #total_rows = 1000000000
-    total_rows = 100000
+    total_rows = 1000000
     start_dt = pd.Timestamp("2020-01-01")
     df = pd.DataFrame({
         "bitpacked": np.random.randint(0, 5, total_rows),
@@ -103,7 +103,7 @@ def test_write_read_time_large_df(lmdb_version_store_big_map):
     assert lib.get_num_rows(symbol) == total_rows
 
     df_read = lib.read(symbol)
-    assert_frame_equal(df_read.head(5), df.head(5))
+    assert_frame_equal(df_read.data, df)
 
 
 
