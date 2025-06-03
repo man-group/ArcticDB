@@ -35,7 +35,7 @@ on:
         type: string
         default: arcticdb-dev-clang:latest
       pytest_args:
-        description: Rewrite what tests will run
+        description: Rewrite what tests will run or do your own pytest line if string starts with pytest ... (Example -- pytest -n auto -v --count=50 -x python/tests/compat)
         type: string
         default: ""
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}

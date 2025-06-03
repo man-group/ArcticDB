@@ -1,8 +1,10 @@
+import os
 import pandas as pd
 import numpy as np
 import pytest
 import sys
 
+from arcticdb.util.utils import get_logger
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
 from tests.util.mark import REAL_S3_TESTS_MARK
 
@@ -11,6 +13,7 @@ import time
 from arcticdb.util.test import assert_frame_equal
 from multiprocessing import Process
 
+logger = get_logger()
 
 one_sec = 1_000_000_000
 
@@ -18,16 +21,22 @@ one_sec = 1_000_000_000
 def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
     # We need to explicitly build the library object in each process, otherwise the s3 library doesn't get copied
     # properly between processes, and we get spurious `XAmzContentSHA256Mismatch` errors.
+    pid = os.getpid()
+    logger.info(f"Process {pid}: initiated")
     fixture = real_storage_factory.create_fixture()
     lib = fixture.create_arctic()[lib_name]
     lock = ReliableStorageLock("test_lock", lib._nvs._library, 10 * one_sec)
     lock_manager = ReliableStorageLockManager()
     lock_manager.take_lock_guard(lock)
+    logger.info(f"Process {pid}: start read")
     df = lib.read(symbol).data
+    logger.info(f"Process {pid}: previous value {df["col"][0]}")
     df["col"][0] = df["col"][0] + 1
     time.sleep(sleep_time)
     lib.write(symbol, df)
+    logger.info(f"Process {pid}: incrementing and saving value {df["col"][0]}")
     lock_manager.free_lock_guard()
+    logger.info(f"Process {pid}: completed")
 
 
 @pytest.mark.parametrize("num_processes,max_sleep", [(100, 1), (5, 20)])
