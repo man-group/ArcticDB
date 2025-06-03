@@ -17,7 +17,7 @@
 namespace arcticdb {
 
 template<typename T>
-struct ARCTICDB_PACKED ALPHeader {
+struct ALPHeader {
     uint32_t num_rows_;
     alp::Scheme scheme_;
 };

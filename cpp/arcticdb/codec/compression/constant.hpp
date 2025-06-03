@@ -11,7 +11,7 @@
 namespace arcticdb {
 
 template <typename T>
-struct ARCTICDB_PACKED ConstantCompressData {
+struct ConstantCompressData {
     uint64_t size_;
     T value_;
 };
