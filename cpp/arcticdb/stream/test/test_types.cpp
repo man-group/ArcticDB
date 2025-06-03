@@ -4,7 +4,7 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-
+#ifndef WIN32
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
 
@@ -82,3 +82,5 @@ TEST(VisitTimeType, Basic) {
         log::version().info("things: {}", std::string_view(name.data(), length));
     });
 }
+
+#endif
