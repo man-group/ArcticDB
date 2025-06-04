@@ -84,40 +84,40 @@ static void BM_single_column_projection(benchmark::State& state) {
     }
 }
 
-//static void BM_two_column_projection(benchmark::State& state) {
-//    const auto dense_percentage = state.range(0);
-//    std::optional<ColumnWithStrings> col1;
-//    std::optional<ColumnWithStrings> col2;
-//    if (dense_percentage == 100) {
-//        col1.emplace(generate_numeric_dense_column(100'000'000));
-//        col2.emplace(generate_numeric_dense_column(100'000'000));
-//    } else {
-//        col1.emplace(generate_numeric_sparse_column(100'000'000, dense_percentage));
-//        col2.emplace(generate_numeric_sparse_column(100'000'000, dense_percentage));
-//    }
-//    for (auto _ : state) {
-//        binary_operator(*col1, *col2, PlusOperator{});
-//    }
-//}
+static void BM_two_column_projection(benchmark::State& state) {
+    const auto dense_percentage = state.range(0);
+    std::optional<ColumnWithStrings> col1;
+    std::optional<ColumnWithStrings> col2;
+    if (dense_percentage == 100) {
+        col1.emplace(generate_numeric_dense_column(100'000'000));
+        col2.emplace(generate_numeric_dense_column(100'000'000));
+    } else {
+        col1.emplace(generate_numeric_sparse_column(100'000'000, dense_percentage));
+        col2.emplace(generate_numeric_sparse_column(100'000'000, dense_percentage));
+    }
+    for (auto _ : state) {
+        binary_operator(*col1, *col2, PlusOperator{});
+    }
+}
 
-//static void BM_single_column_aggregation(benchmark::State& state) {
-//    const auto dense_percentage = state.range(0);
-//    std::optional<ColumnWithStrings> col;
-//    if (dense_percentage == 100) {
-//        col.emplace(generate_numeric_dense_column(100'000'000));
-//    } else {
-//        col.emplace(generate_numeric_sparse_column(100'000'000, dense_percentage));
-//    }
-//    for (auto _ : state) {
-//        auto col_data = col->column_->data();
-//        auto begin_it = col_data.cbegin<TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>>();
-//        auto end_it = col_data.cend<TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>>();
-//        std::accumulate(begin_it, end_it, int64_t(0));
-//    }
-//}
+static void BM_single_column_aggregation(benchmark::State& state) {
+    const auto dense_percentage = state.range(0);
+    std::optional<ColumnWithStrings> col;
+    if (dense_percentage == 100) {
+        col.emplace(generate_numeric_dense_column(100'000'000));
+    } else {
+        col.emplace(generate_numeric_sparse_column(100'000'000, dense_percentage));
+    }
+    for (auto _ : state) {
+        auto col_data = col->column_->data();
+        auto begin_it = col_data.cbegin<TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>>();
+        auto end_it = col_data.cend<TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension::Dim0>>>();
+        std::accumulate(begin_it, end_it, int64_t(0));
+    }
+}
 
-BENCHMARK(BM_single_column_projection)->Args({100});
-//BENCHMARK(BM_single_column_projection)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
-//BENCHMARK(BM_two_column_projection)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
+//BENCHMARK(BM_single_column_projection)->Args({100});
+BENCHMARK(BM_single_column_projection)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
+BENCHMARK(BM_two_column_projection)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
 //BENCHMARK(BM_two_column_projection)->Args({10});
-//BENCHMARK(BM_single_column_aggregation)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
+BENCHMARK(BM_single_column_aggregation)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
