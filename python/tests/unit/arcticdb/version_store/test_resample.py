@@ -13,7 +13,14 @@ import pytest
 
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException, UserInputException
-from arcticdb.util.test import assert_frame_equal, generic_resample_test, largest_numeric_type, common_sum_aggregation_dtype
+from arcticdb.util.test import (
+    assert_frame_equal,
+    generic_resample_test,
+    largest_numeric_type,
+    common_sum_aggregation_dtype,
+    compute_common_type_for_columns_in_df_list,
+    expected_aggregation_type
+)
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 import itertools
@@ -1131,3 +1138,61 @@ class TestResampleDynamicSchema:
             expected_type = common_sum_aggregation_dtype(first_dtype, second_dtype)
             assert np.dtype(data["to_sum"].dtype) == np.dtype(expected_type)
             assert data["to_sum"][0] == 11
+
+    @pytest.mark.parametrize("label", ["left", "right"])
+    @pytest.mark.parametrize("closed", ["left", "right"])
+    def test_middle_segment_does_not_contain_column(self, lmdb_version_store_dynamic_schema_v1, label, closed):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "test_middle_segment_does_not_contain_column"
+        rule = "10ns"
+        origin = "epoch"
+        offset = None
+        df1 = pd.DataFrame(
+            {
+                "col": np.array([1], dtype=np.int8),
+                "to_resample": np.array([2], dtype=np.int8),
+            },
+            index=[pd.Timestamp(10)]
+        )
+
+        df2 = pd.DataFrame(
+            {
+                "col": np.array([-1, 3, 0, 15], dtype=np.int8)
+            },
+            index=[
+                pd.Timestamp(12),
+                pd.Timestamp(13),
+                pd.Timestamp(14),
+                pd.Timestamp(33)
+            ]
+        )
+
+        df3 = pd.DataFrame(
+            {
+                "col": np.array([2], dtype=np.int8),
+                "to_resample": np.array([4], dtype=np.uint8),
+            },
+            index=[pd.Timestamp(34)]
+        )
+        df_list = [df1, df2, df3]
+        for df in df_list:
+            # This column will be used to keep track of empty buckets.
+            df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
+            lib.append(sym, df)
+
+        columns_to_resample = ["to_resample"]
+        agg = {f"{name}_{op}": (name, op) for name in columns_to_resample for op in ALL_AGGREGATIONS}
+        expected_types = {f"{name}_{op}": expected_aggregation_type(op, df_list, name) for name in columns_to_resample for op in ALL_AGGREGATIONS}
+        generic_resample_test(
+            lib,
+            sym,
+            rule,
+            agg,
+            pd.concat(df_list),
+            origin=origin,
+            offset=offset,
+            closed=closed,
+            label=label,
+            # Must be int or uint column otherwise dropping of empty buckets will not work
+            drop_empty_buckets_for="_empty_bucket_tracker_",
+            expected_types=expected_types)

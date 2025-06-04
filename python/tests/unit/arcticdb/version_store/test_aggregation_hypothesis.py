@@ -14,7 +14,7 @@ import hypothesis.strategies as st
 import pytest
 import numpy as np
 
-from arcticdb.util.test import generic_named_aggregation_test, common_sum_aggregation_dtype, larget_common_type
+from arcticdb.util.test import generic_named_aggregation_test, common_sum_aggregation_dtype, valid_common_type
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     supported_numeric_dtypes,
@@ -115,7 +115,7 @@ def aggregation_dataframe_list_strategy(draw):
 @given(dfs=aggregation_dataframe_list_strategy())
 def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
     agg_column_dtypes = [df['agg_column'].dtype for df in dfs if 'agg_column' in df.columns]
-    common_agg_type = functools.reduce(larget_common_type, agg_column_dtypes) if len(agg_column_dtypes) > 0 else None
+    common_agg_type = functools.reduce(valid_common_type, agg_column_dtypes) if len(agg_column_dtypes) > 0 else None
     assume(any('grouping_column' in df.columns for df in dfs) and common_agg_type is not None)
 
     common_sum_type = functools.reduce(common_sum_aggregation_dtype, agg_column_dtypes)

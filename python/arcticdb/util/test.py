@@ -18,7 +18,7 @@ import string
 import random
 import time
 import attr
-from functools import wraps
+from functools import wraps, reduce
 
 try:
     from pandas.errors import UndefinedVariableError
@@ -989,6 +989,10 @@ def common_sum_aggregation_dtype(left, right):
         return np.float64
 
 def largest_numeric_type(dtype):
+    """
+    Given a dtype return a dtype of the same category (signed int, unsigned int, float) with the maximum supported by
+    ArcticDB byte size.
+    """
     if pd.api.types.is_float_dtype(dtype):
         return np.float64
     elif pd.api.types.is_signed_integer_dtype(dtype):
@@ -997,7 +1001,13 @@ def largest_numeric_type(dtype):
         return np.uint64
     return dtype
 
-def larget_common_type(left, right):
+def valid_common_type(left, right):
+    """
+    This is created to mimic the C++ has_valid_common_type function. It takes two numpy dtypes and returns a type able
+    to represent both or None otherwise.
+
+    This works only with numeric types (int, uint, float)
+    """
     if left is None or right is None:
         return None
     if left == right:
@@ -1033,3 +1043,28 @@ def larget_common_type(left, right):
                 return right
             return int_dtypes[left.itemsize * 2]
     return None
+
+def expected_aggregation_type(aggregation, df_list, column_name):
+    common_types = compute_common_type_for_columns_in_df_list(df_list)
+    if aggregation == "count":
+        return np.uint64
+    elif aggregation == "mean":
+        return np.float64
+    elif aggregation == "sum":
+        sum_column_types = [df[column_name].dtype for df in df_list if column_name in df.columns]
+        return reduce(common_sum_aggregation_dtype, sum_column_types, sum_column_types[0])
+    elif aggregation in ["min", "max", "first", "last"]:
+        return common_types[column_name]
+    else:
+        raise Exception(f"Unknown aggregation type: {aggregation}.")
+
+
+def compute_common_type_for_columns_in_df_list(df_list):
+    common_types = {}
+    for df in df_list:
+        for col in df.columns:
+            if col not in common_types:
+                common_types[col] = df[col].dtype
+            else:
+                common_types[col] = valid_common_type(common_types[col], df[col].dtype)
+    return common_types

@@ -158,7 +158,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                     }
                 }
                 // We were in the middle of aggregating a bucket when we ran out of index values
-                if (row_to_write < output_index_column.row_count()) {
+                if (row_to_write < output_index_column.row_count() && bucket_has_values) {
                     res.set_scalar(row_to_write++, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
                 }
             }

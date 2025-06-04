@@ -394,6 +394,8 @@ private:
             bucket_aggregator.push(value);
         } else if constexpr (is_sequence_type(input_data_type)) {
             bucket_aggregator.push(column_with_strings.string_at_offset(value));
+        } else {
+            static_assert(sizeof(T) == 0, "Unsupported aggregation.");
         }
     }
 

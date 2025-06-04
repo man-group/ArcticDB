@@ -5,13 +5,13 @@ from hypothesis import given, settings, assume, HealthCheck
 import hypothesis.extra.pandas as hs_pd
 import hypothesis.strategies as st
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
-from arcticdb.util.test import generic_resample_test, larget_common_type, largest_numeric_type
+from arcticdb.util.test import generic_resample_test, compute_common_type_for_columns_in_df_list, expected_aggregation_type
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 MIN_DATE = np.datetime64('1969-01-01')
-MAX_DATE = np.datetime64('2000-01-01')
+MAX_DATE = np.datetime64('1980-01-01')
 
 pytestmark = pytest.mark.pipeline
 
@@ -37,9 +37,8 @@ def date(draw, min_date, max_date, unit="ns"):
 
 
 @st.composite
-def dataframe(draw, column_names, column_dtypes, min_date, max_date, dynamic_schema=False):
+def dataframe(draw, column_names, column_dtypes, min_date, max_date):
     index = hs_pd.indexes(elements=date(min_date=min_date, max_date=max_date), min_size=1)
-    #columns = [hs_pd.column(name=name, dtype=dtype) for (name, dtype) in zip(column_names, column_dtypes)]
     columns = []
     for name, dtype in zip(column_names, column_dtypes):
         if pd.api.types.is_integer_dtype(dtype):
@@ -57,6 +56,8 @@ def dataframe(draw, column_names, column_dtypes, min_date, max_date, dynamic_sch
             # a different result for overflows. Passing min_value and max_value will disable generation of NaN, -inf and
             # inf, which are supposed to work and have to be tested.
             columns.append(hs_pd.column(name=name, elements=st.floats(width=16), dtype=dtype))
+        else:
+            columns.append(hs_pd.column(name=name, dtype=dtype))
     result = draw(hs_pd.data_frames(columns, index=index))
     result.sort_index(inplace=True)
     return result
@@ -98,6 +99,21 @@ def offset(draw):
     assume(freq_fits_in_64_bits(count=count, unit=unit))
     return result
 
+@st.composite
+def dynamic_schema_column_list(draw):
+    all_column_names = [f"col_{i}" for i in range(10)]
+    segment_count = draw(st.integers(min_value=1, max_value=10))
+    segment_ranges = sorted(draw(st.lists(date(min_date=MIN_DATE, max_date=MAX_DATE, unit="s"), unique=True, min_size=segment_count+1, max_size=segment_count+1)))
+    segments = []
+    dtypes = [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64]
+    for segment_index in range(segment_count):
+        segment_column_names = draw(st.lists(st.sampled_from(all_column_names), min_size=1, max_size=3, unique=True))
+        column_count = len(segment_column_names)
+        column_dtypes = draw(st.lists(st.sampled_from(dtypes), min_size=column_count, max_size=column_count))
+        segment_start_date = segment_ranges[segment_index]
+        segment_end_date = segment_ranges[segment_index + 1]
+        segments.append(draw(dataframe(segment_column_names, column_dtypes, segment_start_date, segment_end_date)))
+    return segments
 
 @pytest.mark.skipif(not IS_PANDAS_TWO, reason="Some resampling parameters don't exist in Pandas < 2")
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -138,44 +154,6 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                 else:
                     return
 
-@st.composite
-def dynamic_schema_column_list(draw):
-    all_column_names = [f"col_{i}" for i in range(10)]
-    segment_count = draw(st.integers(min_value=1, max_value=10))
-    segment_ranges = sorted(draw(st.lists(date(min_date=MIN_DATE, max_date=MAX_DATE, unit="s"), unique=True, min_size=segment_count+1, max_size=segment_count+1)))
-    segments = []
-    dtypes = [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64]
-    for segment_index in range(segment_count):
-        segment_column_names = draw(st.lists(st.sampled_from(all_column_names), min_size=1, max_size=3, unique=True))
-        column_count = len(segment_column_names)
-        column_dtypes = draw(st.lists(st.sampled_from(dtypes), min_size=column_count, max_size=column_count))
-        segment_start_date = segment_ranges[segment_index]
-        segment_end_date = segment_ranges[segment_index + 1]
-        segments.append(draw(dataframe(segment_column_names, column_dtypes, segment_start_date, segment_end_date)))
-    return segments
-
-def expected_aggregation_type(aggregation, column_type):
-    if aggregation == "count":
-        return np.uint64
-    elif aggregation == "mean":
-        return np.float64
-    elif aggregation == "sum":
-        return largest_numeric_type(column_type)
-    elif aggregation in ["min", "max", "first", "last"]:
-        return column_type
-    else:
-        raise Exception(f"Unknown aggregation type: {aggregation}. Column type {column_type}.")
-
-
-def compute_common_type_for_columns_in_df_list(df_list):
-    common_types = {}
-    for df in df_list:
-        for col in df.columns:
-            if col not in common_types:
-                common_types[col] = df[col].dtype
-            else:
-                common_types[col] = larget_common_type(common_types[col], df[col].dtype)
-    return common_types
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(
     df_list=dynamic_schema_column_list(),
@@ -190,12 +168,12 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
     lib = lmdb_version_store_dynamic_schema_v1
     lib.version_store.clear()
     sym = "sym"
+    agg = {f"{name}_{op}": (name, op) for name in common_column_types for op in ALL_AGGREGATIONS}
+    expected_types = {f"{name}_{op}": expected_aggregation_type(op, df_list, name) for name in common_column_types for op in ALL_AGGREGATIONS}
     for df in df_list:
         # This column will be used to keep track of empty buckets.
         df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
         lib.append(sym, df)
-    agg = {f"{name}_{op}": (name, op) for name in common_column_types for op in ALL_AGGREGATIONS}
-    expected_types = {f"{name}_{op}": expected_aggregation_type(op, common_column_types[name]) for name in common_column_types for op in ALL_AGGREGATIONS}
     for closed in ["left", "right"]:
         for label in ["left", "right"]:
             try:

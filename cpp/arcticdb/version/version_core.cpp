@@ -1338,14 +1338,23 @@ void copy_frame_data_to_buffer(
             });
         });
     } else if (trivially_compatible_types(src_column.type(), dst_column.type())) {
-        details::visit_type(src_column.type().data_type() ,[&src_data, &dst_ptr] (auto src_desc_tag) {
+        details::visit_type(src_column.type().data_type() ,[&] (auto src_desc_tag) {
             using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
             using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-            while (auto block = src_data.next<SourceTDT>()) {
-                const auto row_count = block->row_count();
-                memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
-                dst_ptr += row_count * sizeof(SourceType);
+            if (!src_column.is_sparse()) {
+                while (auto block = src_data.next<SourceTDT>()) {
+                    const auto row_count = block->row_count();
+                    memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
+                    dst_ptr += row_count * sizeof(SourceType);
+                }
+            } else {
+                util::initialize<SourceTDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
+                Column::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
+                    typed_dst_ptr[row.idx()] = row.value();
+                });
             }
+
         });
     } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion) ||
                (src_column.type().data_type() == DataType::UINT64 && dst_column.type().data_type() == DataType::INT64)) {
@@ -1358,16 +1367,25 @@ void copy_frame_data_to_buffer(
         // uint8 -> int64. We have decided to allow this and assign a common type of int64 (done in the modify_schema
         // procedure). This is what pyarrow does as well. Because of the above, we allow here copying uint64 buffer in
         // an int64 buffer.
-        details::visit_type(dst_column.type().data_type() ,[&src_data, &dst_ptr, &src_column, &type_promotion_error_msg] (auto dest_desc_tag) {
-            using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
-            details::visit_type(src_column.type().data_type() ,[&src_data, &typed_dst_ptr, &type_promotion_error_msg] (auto src_desc_tag) {
+        details::visit_type(dst_column.type().data_type() ,[&] (auto dest_desc_tag) {
+            using dst_type_info = ScalarTypeInfo<decltype(dest_desc_tag)>;
+            using DestinationRawType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+            auto typed_dst_ptr = reinterpret_cast<DestinationRawType*>(dst_ptr);
+            details::visit_type(src_column.type().data_type() ,[&] (auto src_desc_tag) {
                 using source_type_info = ScalarTypeInfo<decltype(src_desc_tag)>;
-                if constexpr(std::is_arithmetic_v<typename source_type_info::RawType> && std::is_arithmetic_v<DestinationType>) {
-                    const auto src_cend = src_data.cend<typename source_type_info::TDT>();
-                    for (auto src_it = src_data.cbegin<typename source_type_info::TDT>(); src_it != src_cend; ++src_it) {
-                        *typed_dst_ptr++ = static_cast<DestinationType>(*src_it);
+                if constexpr(std::is_arithmetic_v<typename source_type_info::RawType> && std::is_arithmetic_v<DestinationRawType>) {
+                    if (src_column.is_sparse()) {
+                        util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                        Column::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
+                            typed_dst_ptr[row.idx()] = row.value();
+                        });
+                    } else {
+                        Column::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
+                            *typed_dst_ptr = value;
+                            ++typed_dst_ptr;
+                        });
                     }
+
                 } else {
                     util::raise_rte(type_promotion_error_msg.c_str());
                 }
@@ -1439,7 +1457,7 @@ struct CopyToBufferTask : async::BaseTask {
                 if (!frame_loc_opt) {
                     continue;
                 }
-                const VariantRawValue default_Value = [&]() -> VariantRawValue {
+                const VariantRawValue default_value = [&]() -> VariantRawValue {
                     const auto it = pipeline_context_->default_values_.find(std::string{field_name});
                     if (it != pipeline_context_->default_values_.end()) {
                         return it->second;
@@ -1456,7 +1474,7 @@ struct CopyToBufferTask : async::BaseTask {
                     handler_data_,
                     output_format_,
                     int_to_float_conversion_,
-                    default_Value);
+                    default_value);
             }
         }
         return folly::Unit{};
@@ -1672,7 +1690,8 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const DecodePathData& shared_data,
         std::any& handler_data) {
-    if(!read_query->clauses_.empty()) {
+    const bool direct_read = read_query->clauses_.empty();
+    if(!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
