@@ -915,7 +915,8 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
-            processing/test/test_pydata_talk.cpp
+#            processing/test/test_pydata_talk.cpp
+            processing/test/test_filter_and_project_sparse.cpp
             util/test/gtest_main.cpp
 )
 

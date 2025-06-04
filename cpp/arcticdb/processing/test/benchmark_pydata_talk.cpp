@@ -116,8 +116,8 @@ static void BM_single_column_projection(benchmark::State& state) {
 //    }
 //}
 
-//BENCHMARK(BM_single_column_projection)->Args({90});
-BENCHMARK(BM_single_column_projection)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
+BENCHMARK(BM_single_column_projection)->Args({100});
+//BENCHMARK(BM_single_column_projection)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
 //BENCHMARK(BM_two_column_projection)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
-//BENCHMARK(BM_two_column_projection)->Args({99})->Args({90})->Args({50});
+//BENCHMARK(BM_two_column_projection)->Args({10});
 //BENCHMARK(BM_single_column_aggregation)->Args({100})->Args({99})->Args({90})->Args({50})->Args({10})->Args({1});
