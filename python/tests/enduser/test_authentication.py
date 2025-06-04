@@ -19,12 +19,14 @@ gcp_enpoint, gcp_bucket, gcp_region, gcp_access_key, gcp_secret_key, gcp_prefix,
     real_gcp_credentials(shared_path=False)
 
 
-if "amazonaws.com" in s3_endpoint.lower():
-    web_address = f"s3.{s3_region}.amazonaws.com"
-else:
-    web_address = s3_endpoint
-    if s3_endpoint is not None and "://" in s3_endpoint:
-        web_address = s3_endpoint.split("://")[1] 
+if s3_endpoint is not None:
+    if "amazonaws.com" in s3_endpoint.lower():
+        web_address = f"s3.{s3_region}.amazonaws.com"
+    else:
+        # VAST and Pure di niot have region
+        web_address = s3_endpoint
+        if "://" in s3_endpoint:
+            web_address = s3_endpoint.split("://")[1] 
     
 
 access_mark = "*access*"
