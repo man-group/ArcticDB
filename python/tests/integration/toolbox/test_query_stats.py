@@ -233,6 +233,7 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
 
 def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     qs.enable()
+    qs.reset_stats()
     s3_version_store_v1.write("a", 1)
     s3_version_store_v1.write("a", 2)
     with config_context("VersionMap.ReloadInterval", 0):
@@ -419,6 +420,7 @@ def test_query_stats_batch(s3_version_store_v1, clear_query_stats):
     df1 = pd.DataFrame({"col_0": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
 
     qs.enable()
+    qs.reset_stats()
     with config_context("VersionMap.ReloadInterval", 0):
         s3_version_store_v1.batch_write([sym1, sym2], [df0, df0])
         s3_version_store_v1.batch_read([sym1, sym2])
@@ -516,6 +518,7 @@ def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
     df_1 = pd.DataFrame({"col": [3, 4]}, index=pd.date_range("2024-01-03", periods=2))
 
     qs.enable()
+    qs.reset_stats()
     s3_version_store_v1.write(sym, df_0, parallel=True)
     s3_version_store_v1.write(sym, df_1, parallel=True)
 
