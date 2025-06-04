@@ -21,6 +21,9 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+#ifdef WIN32
+#include <intrin.h>
+#endif
 
 #ifdef __AVX2__
 
@@ -94,6 +97,23 @@ struct encoder {
 		return static_cast<ST>(tmp_encoded_value);
 	}
 
+#ifdef WIN32
+template <typename UT>
+static uint8_t count_bits(UT x) {
+    if (x == 0) {
+        return 0;
+    }
+    if constexpr (std::is_same_v<UT, uint64_t>) {
+        unsigned long index;
+        _BitScanReverse64(&index, x);
+        return 64 - index;
+    } else {
+        unsigned long index;
+        _BitScanReverse(&index, static_cast<unsigned long>(x));
+        return 32 - index;
+    }
+}
+#else
 	template <typename UT>
 	static uint8_t count_bits(UT x) {
 		if (x == 0) { return 0; }
@@ -103,6 +123,7 @@ struct encoder {
 			return 32 - __builtin_clz(x);
 		}
 	}
+#endif
 
 	template <typename ST>
 	static uint8_t count_bits(ST max, ST min) {
