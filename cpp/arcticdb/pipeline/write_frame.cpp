@@ -178,7 +178,6 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const WriteOptions& write_options,
         const BlockCodecImpl& block_codec,
         const std::shared_ptr<DeDupMap>& de_dup_map) {
-
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceFrame)
     auto slices = slice(*frame, slicing);
     if(slices.empty())

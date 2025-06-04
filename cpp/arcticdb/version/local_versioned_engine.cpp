@@ -593,12 +593,12 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
 }
 
 VersionedItem LocalVersionedEngine::update_internal(
-    const StreamId& stream_id,
-    const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    bool upsert,
-    bool dynamic_schema,
-    bool prune_previous_versions) {
+        const StreamId& stream_id,
+        const UpdateQuery& query,
+        const std::shared_ptr<InputTensorFrame>& frame,
+        bool upsert,
+        bool dynamic_schema,
+        bool prune_previous_versions) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);

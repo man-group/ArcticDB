@@ -642,9 +642,13 @@ VersionedItem PythonVersionStore::update(
         bool upsert,
         bool dynamic_schema,
         bool prune_previous_versions) {
-    return update_internal(stream_id, query,
-                           convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types()), upsert,
-                           dynamic_schema, prune_previous_versions);
+    return update_internal(
+        stream_id,
+        query,
+        convert::py_ndf_to_frame(stream_id, item, norm, user_meta, cfg().write_options().empty_types()),
+        upsert,
+        dynamic_schema,
+        prune_previous_versions);
 }
 
 VersionedItem PythonVersionStore::delete_range(

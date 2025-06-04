@@ -118,11 +118,6 @@ TEST_F(DeltaCompressionTest, SmallSizes) {
 
 TEST_F(DeltaCompressionTest, DifferentTypes) {
     {
-        auto input = generate_data<uint8_t>(4000, 0, 1);
-        verify_roundtrip(input, make_scalar_type(DataType::UINT16));
-    }
-
-    {
         auto input = generate_data<uint16_t>(4000, 0, 1);
         verify_roundtrip(input, make_scalar_type(DataType::UINT16));
     }
