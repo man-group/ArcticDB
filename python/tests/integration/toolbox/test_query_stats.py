@@ -87,6 +87,7 @@ def verify_list_symbol_stats(list_symbol_call_counts):
 def test_query_stats(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
     qs.enable()
+    qs.reset_stats()
 
     s3_version_store_v1.list_symbols()
     verify_list_symbol_stats(1)
