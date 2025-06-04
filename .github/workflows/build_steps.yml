@@ -361,12 +361,19 @@ jobs:
 
       - name: Run test
         run: |
-          if [ "$RUNNER_OS" == "Windows" ]; then
-            echo "Running Windows-specific tasks"
+          echo "Persistent Storage: ${{ inputs.persistent_storage }}"
+          echo "Running on OS: $RUNNER_OS"
+
+          if [[ "${{ inputs.persistent_storage }}" == "GCPXML" ]]; then
+            if [[ "$RUNNER_OS" == "Windows" ]]; then
+              echo "Running Windows-specific tasks"
+              build_tooling/parallel_test.sh tests/${{matrix.type}}
+            else
+              echo "Running tasks for other OS"
+              prlimit --nofile=1000000 -- build_tooling/parallel_test.sh tests/${{matrix.type}}
+            fi
+          else 
             build_tooling/parallel_test.sh tests/${{matrix.type}}
-          else
-            echo "Running tasks for other OS"
-            prlimit --nofile=1000000 -- build_tooling/parallel_test.sh tests/${{matrix.type}}
           fi
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
