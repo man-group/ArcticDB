@@ -18,7 +18,7 @@ s3_endpoint, s3_bucket, s3_region, s3_access_key, s3_secret_key, s3_prefix, s3_c
 gcp_enpoint, gcp_bucket, gcp_region, gcp_access_key, gcp_secret_key, gcp_prefix, gcp_clear = \
     real_gcp_credentials(shared_path=False)
 
-
+web_address = "<none>"
 if s3_endpoint is not None:
     if "amazonaws.com" in s3_endpoint.lower():
         web_address = f"s3.{s3_region}.amazonaws.com"
