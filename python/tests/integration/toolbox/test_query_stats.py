@@ -117,6 +117,7 @@ def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
 def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
     qs.enable()
+    qs.reset_stats()
     s3_version_store_v1.snapshot("abc")
     with config_context("VersionMap.ReloadInterval", 0):
         s3_version_store_v1.snapshot("abc2")
@@ -319,6 +320,7 @@ def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
 
 def test_query_stats_metadata(s3_version_store_v1, clear_query_stats):
     qs.enable()
+    qs.reset_stats()
     meta1 = {"meta1": 1, "arr": [1, 2, 4]}
     with config_context("VersionMap.ReloadInterval", 0):
         s3_version_store_v1.write_metadata("a", meta1)
