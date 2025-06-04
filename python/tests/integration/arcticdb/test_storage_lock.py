@@ -1,5 +1,4 @@
 import os
-from typing import List
 import pandas as pd
 import numpy as np
 import pytest
@@ -17,6 +16,8 @@ from multiprocessing import Process
 logger = get_logger()
 
 one_sec = 1_000_000_000
+
+symbol_prefix = "process_id_"
 
 
 def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
@@ -36,10 +37,14 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
     time.sleep(sleep_time)
     lib.write(symbol, df)
     logger.info(f"Process {pid}: incrementing and saving value {df['col'][0]}")
+    symbol_name = f"{symbol_prefix}{pid}"
+    lib.write(symbol_name, df)
+    logger.info(f"Process {pid}: wrote unique symbol {symbol_name}")
     lock_manager.free_lock_guard()
     logger.info(f"Process {pid}: completed")
 
-
+# NOTE: Is there is not enough memory the number of actually spawned processes
+# will be lowe. The test counts the actual processes that did really got executed
 @pytest.mark.parametrize("num_processes,max_sleep", [(100, 1), (5, 20)])
 @REAL_S3_TESTS_MARK
 @pytest.mark.storage
@@ -51,25 +56,23 @@ def test_many_increments(real_storage_factory, lib_name, num_processes, max_slee
     lib._nvs.version_store.force_delete_symbol(symbol)
     lib.write(symbol, init_df)
 
-    logger.info(f"Creating {num_processes} processes")
-    processes: List[Process] = [
+    processes = [
         Process(target=slow_increment_task, args=(real_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
         for i in range(num_processes)
     ]
-
-    actual_processes = 0
     for p in processes:
         p.start()
-        if p.is_alive():
-            actual_processes += 1
-
-    logger.info(f"Actual started {actual_processes} processes")
 
     for p in processes:
         p.join()
 
+    symbols = lib.list_symbols(regex=f"{symbol_prefix}.*")
+    num_processes_succeeded = len(symbols)
+    logger.info(f"Total number liver processes{num_processes_succeeded}")
+    logger.info(f"{symbols}")
+
     vit = lib.read(symbol)
     read_df = vit.data
-    expected_df = pd.DataFrame({"col": [actual_processes]})
+    expected_df = pd.DataFrame({"col": [num_processes_succeeded]})
     assert_frame_equal(read_df, expected_df)
-    assert vit.version == actual_processes
+    assert vit.version == num_processes_succeeded
