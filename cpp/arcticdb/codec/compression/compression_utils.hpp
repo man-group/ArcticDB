@@ -29,6 +29,7 @@ void fill_remainder_array(
     const ColumnData& input,
     size_t remainder_offset,
     size_t remainder_size) {
+    util::check(remainder_size <= alp::config::VECTOR_SIZE, "Remainder size {} too large for remainder array", remainder_size);
     const size_t start_byte = remainder_offset * sizeof(T);
     const size_t total_bytes = remainder_size * sizeof(T);
     size_t copied_bytes = 0;

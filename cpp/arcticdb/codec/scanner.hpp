@@ -92,6 +92,7 @@ inline EncodingsList viable_encodings(
     EncodingsList output;
 
     if(output.is_set(EncodingType::CONSTANT) && is_viable(EncodingType::CONSTANT, field_stats, data_type, row_count)) {
+        ARCTICDB_DEBUG(log::codec(), "Data can be compressed using constant codec");
         output.set(EncodingType::CONSTANT);
         return output;
     }
@@ -120,6 +121,7 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
     const auto row_count = column_data.row_count();
     const auto original_size = column_data.buffer().bytes();
     auto encodings_for_type = possible_encodings(data_type);
+    ARCTICDB_DEBUG(log::codec(), "Locating viable encodings for {} rows", row_count);
     auto filtered_encodings = viable_encodings(encodings_for_type, field_stats, data_type, row_count);
     EncodingScanResultSet results;
     
@@ -137,8 +139,10 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
         // Could potentially introduce a scaling factor for deterministic results vs estimated results, i.e. try
         // encodings with a guaranteed size unless the estimated size indicates it will be substantially smaller.
         if(auto exact_size = deterministic_size(type, field_stats, data_type, row_count)) {
+            ARCTICDB_DEBUG(log::codec(), "Obtained deterministic size of {} for encoding type {}", exact_size->first, type);
             results.try_emplace(create_scan_result(type, exact_size->first, speed_factor(type), original_size, true, std::move(exact_size->second)));
         } else {
+            ARCTICDB_DEBUG(log::codec(), "Estimating size for type {}", type);
             auto scan_result = estimated_size(
                 type,
                 field_stats,
@@ -151,6 +155,7 @@ inline EncodingScanResultSet predicted_optimal_encodings(ColumnData column_data)
         }
     }
 
+    ARCTICDB_TRACE(log::codec(), "Scanner sorting and returning results");
     results.sort();
     return results;
 }
@@ -260,8 +265,10 @@ inline void resolve_adaptive_encodings_size(const SegmentInMemory& seg, SegmentS
 inline SegmentScanResults get_encodings(const SegmentInMemory& seg) {
     SegmentScanResults output;
     output.reserve_values(seg.num_columns());
-    for (position_t column_index = 0; column_index < position_t(seg.num_columns()); ++column_index)
+    for (position_t column_index = 0; column_index < position_t(seg.num_columns()); ++column_index) {
+        ARCTICDB_DEBUG(log::codec(), "Finding optimal encoding for column {} with type {}", column_index, seg.descriptor().field(column_index).type());
         output.add_value(column_index, predicted_optimal_encodings(seg.column(position_t(column_index)).data()));
+    }
 
     return output;
 }

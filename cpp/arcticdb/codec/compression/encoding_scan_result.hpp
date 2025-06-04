@@ -79,6 +79,7 @@ struct EncodingScanResultSet {
     size_t members_ = 0UL;
 
     void try_emplace(const EncodingScanResult& result) {
+        ARCTICDB_TRACE(log::codec(), "Emplacing encoding scan result");
         if (members_ < MAX_ENCODINGS) {
             results_[members_++] = result;
         } else {
@@ -113,6 +114,7 @@ struct EncodingScanResultSet {
     }
 
     EncodingScanResult& operator[](size_t pos) {
+        util::check(pos  < members_, "Encoding scan result position {} greater than current size {}", pos,  members_);
         return results_[pos];
     }
 

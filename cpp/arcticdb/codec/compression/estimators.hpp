@@ -51,6 +51,7 @@ CompressionEstimate estimate_compression(
 
     const size_t num_blocks = row_count / values_per_block;
     if (num_blocks == 0) {
+        ARCTICDB_DEBUG(log::codec(), "Less than a single block, backfilling array");
         std::array<T, alp::config::VECTOR_SIZE> filled_data;
         fill_remainder_array(filled_data, data, 0, row_count);
         auto sample = analyze_block(
@@ -76,6 +77,7 @@ CompressionEstimate estimate_compression(
     samples.reserve(samples_to_take);
     const size_t block_stride = num_blocks / samples_to_take;
     ContiguousRangeRandomAccessAdaptor<T, values_per_block> adaptor{data};
+    ARCTICDB_DEBUG(log::codec(), "Sampling {} blocks with contiguous range adaptor", samples_to_take);
     for (size_t i = 0; i < samples_to_take; ++i) {
         size_t block_start = i * block_stride * values_per_block;
         auto ptr = adaptor.at(block_start);
@@ -92,6 +94,7 @@ CompressionEstimate estimate_compression(
     }
 
     const auto estimated_bytes = (total_sample_compressed_size / samples_to_take) * num_blocks;
+    ARCTICDB_DEBUG(log::codec(), "Estimated {} bytes with ALP compression", estimated_bytes);
 
     return {
         .estimated_bytes_ = estimated_bytes,
@@ -164,7 +167,8 @@ void process_alp_block(
     header->exception_count_ = exception_count;
     header->exp_ = state.exp;
     header->fac_ = state.fac;
-    alp::encoder<T>::analyze_ffor(encoded.data(), state.bit_width, header->bases());
+    typename StorageType<T>::signed_type ffor_base;
+    alp::encoder<T>::analyze_ffor(encoded.data(), state.bit_width, &ffor_base);
     header->bit_width_ = state.bit_width;
 }
 
@@ -215,6 +219,7 @@ struct ALPEstimator {
 
         switch(state_.scheme) {
         case alp::Scheme::ALP_RD: {
+            ARCTICDB_TRACE(log::codec(), "Estimating ALP_RD size for block");
             RealDoubleColumnHeader<T> column_header;
             column_header.dict_size_ = state_.actual_dictionary_size;
             column_header.bit_widths_ = {state_.right_bit_width, state_.left_bit_width};
@@ -228,6 +233,7 @@ struct ALPEstimator {
             };
         }
         case alp::Scheme::ALP: {
+            ARCTICDB_TRACE(log::codec(), "Estimating ALP size for block");
             ALPDecimalBlockHeader<T> header;
             process_alp_block(data, &header, state_);
 

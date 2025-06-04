@@ -155,9 +155,12 @@ TEST(AdaptiveCodec, ALP) {
     FieldWrapper field_wrapper{make_scalar_type(data_type), "uints"};
     seg.add_column(field_wrapper.field(), column);
     seg.set_row_data(num_rows - 1);
+    ARCTICDB_DEBUG(log::codec(), "Calculating statistics");
     seg.calculate_statistics();
+    ARCTICDB_DEBUG(log::codec(), "Getting encodings");
     auto scan_results = get_encodings(seg);
     auto codec_opts = codec::default_adaptive_codec();
+    ARCTICDB_DEBUG(log::codec(), "Figuring out max compressed size");
     [[maybe_unused]] auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(seg, codec_opts, scan_results);
     ARCTICDB_DEBUG(log::codec(), "Max compressed: {} Uncompressed: {} Encoded buffer: {}", max_compressed_size, uncompressed_size, encoded_buffer_size);
     ASSERT_EQ(scan_results.value(0).first().type_, EncodingType::ALP);

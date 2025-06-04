@@ -66,6 +66,7 @@ struct Ffor {
     }
 
     static bool is_viable(FieldStatsImpl field_stats, DataType data_type, size_t) {
+        ARCTICDB_DEBUG(log::codec(), "Assessing viability of FFOR codec");
         return TypeDescriptor{data_type, Dimension::Dim0}.visit_tag([field_stats] (auto tag) {
             using TagType = decltype(tag);
             auto range = get_range<typename TagType::DataTypeTag>(field_stats);
@@ -182,6 +183,7 @@ static_assert(Encoder<Delta>);
 
 struct Frequency {
     static bool is_viable(FieldStatsImpl field_stats, DataType data_type, size_t row_count) {
+        ARCTICDB_DEBUG(log::codec(), "Assessing viability of frequency codec");
         if (!is_integer_type(data_type) && !is_sequence_type(data_type) && !is_floating_point_type(data_type))
             return false;
 
@@ -347,6 +349,7 @@ struct BitPack {
     }
 
     static bool is_viable(FieldStatsImpl field_stats, DataType data_type, size_t) {
+        ARCTICDB_DEBUG(log::codec(), "Assessing viability of bitpack codec");
         return TypeDescriptor{data_type, Dimension::Dim0}.visit_tag([field_stats] (auto tag) -> bool {
             using TagType = decltype(tag);
             using RawType = TagType::DataTypeTag::raw_type;
@@ -415,6 +418,7 @@ static_assert(Encoder<Constant>);
 
 struct Alp {
     static bool is_viable(FieldStatsImpl, DataType data_type, size_t) {
+        ARCTICDB_DEBUG(log::codec(), "Assessing viability of ALP codec");
         return data_type == DataType::FLOAT64 || data_type == DataType::FLOAT32;
     }
 
@@ -437,6 +441,7 @@ struct Alp {
                 std::array<RawType, alp::config::VECTOR_SIZE> sample_buf;
                 auto sample_values = 0UL;
                 if(data.num_blocks() == 1) {
+                    ARCTICDB_DEBUG(log::codec(), "Estimating ALP size with a single block");
                     auto first_block = data.buffer().blocks()[0];
                     sample_values = first_block->bytes() / sizeof(RawType);
                     alp::encoder<RawType>::init(
@@ -454,9 +459,11 @@ struct Alp {
                             sample_buf.data(),
                             state);
                 } else {
+                    ARCTICDB_DEBUG(log::codec(), "Estimating ALP size with {} blocks", data.num_blocks());
                     ContiguousRangeForwardAdaptor<RawType, alp::config::VECTOR_SIZE> adaptor{data};
                     util::check(adaptor.valid(), "Unexpected invalid adaptor");
                     const auto vectors_in_first_block = (adaptor.block().bytes() / sizeof(RawType)) / alp::config::VECTOR_SIZE;
+                    ARCTICDB_DEBUG(log::codec(), "Sampling {} vectors from {} bytes", vectors_in_first_block, adaptor.block().bytes());
                     sample_values = std::max(vectors_in_first_block * alp::config::VECTOR_SIZE, alp::config::VECTOR_SIZE);
                     alp::encoder<RawType>::init(
                         adaptor.current(),
@@ -475,7 +482,6 @@ struct Alp {
                 }
 
                 ALPEstimator<RawType> estimator{state};
-
                 const auto overhead = estimator.overhead();
                 auto estimate = estimate_compression<RawType>(
                     field_stats,
