@@ -439,7 +439,7 @@ class QueryBuilder:
 
     Supported filtering operations:
 
-    * isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
+    * isna, isnull, notna, notnull and regex_match - return all rows where a specified column is/is not NaN or None. isna is
     equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
     in column types that support both (e.g. strings). For example:
         ```
@@ -459,6 +459,8 @@ class QueryBuilder:
     is equivalent to...
 
         q.isin(1, 2, 3)
+
+    regex_match accepts string as pattern and can only filter string column
 
     Boolean columns can be filtered on directly:
 
