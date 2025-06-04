@@ -6,7 +6,7 @@ import sys
 
 from arcticdb.util.utils import get_logger
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
-from tests.util.mark import REAL_S3_TESTS_MARK
+from tests.util.mark import REAL_S3_TESTS_MARK, WINDOWS
 
 import time
 
@@ -18,6 +18,8 @@ logger = get_logger()
 one_sec = 1_000_000_000
 
 symbol_prefix = "process_id_"
+
+max_processes = 30 if WINDOWS else 100
 
 
 def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
@@ -45,7 +47,7 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
 
 # NOTE: Is there is not enough memory the number of actually spawned processes
 # will be lowe. The test counts the actual processes that did really got executed
-@pytest.mark.parametrize("num_processes,max_sleep", [(100, 1), (5, 20)])
+@pytest.mark.parametrize("num_processes,max_sleep", [(max_processes, 1), (5, 20)])
 @REAL_S3_TESTS_MARK
 @pytest.mark.storage
 def test_many_increments(real_storage_factory, lib_name, num_processes, max_sleep):
