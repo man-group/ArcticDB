@@ -368,9 +368,11 @@ static void encode_encoded_fields(
     ARCTICDB_SAMPLE(EncodeSegment, 0)
     auto in_mem_seg = std::move(s);
 
+    ARCTICDB_TRACE(log::codec(), "V2 Encoding calculating statistics");
     if(ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1 || codec_opts.type_ == Codec::ADAPTIVE)
         in_mem_seg.calculate_statistics();
 
+    ARCTICDB_TRACE(log::codec(), "V2 encoding writing index descriptor");
     if(in_mem_seg.has_index_descriptor()) {
         google::protobuf::Any any;
         util::pack_to_any(in_mem_seg.index_descriptor().proto(), any);
@@ -382,8 +384,10 @@ static void encode_encoded_fields(
     segment_header.set_compacted(in_mem_seg.compacted());
 
     SegmentScanResults scan_results;
-    if(codec_opts.codec_type() == Codec::ADAPTIVE)
+    if(codec_opts.codec_type() == Codec::ADAPTIVE) {
+        ARCTICDB_TRACE(log::codec(), "V2 resolving adaptive encoding types");
         scan_results = get_encodings(in_mem_seg);
+    }
 
     std::ptrdiff_t pos = 0;
     auto [max_compressed_size, uncompressed_size, encoded_buffer_size] = max_compressed_size_v2(in_mem_seg, codec_opts, scan_results);

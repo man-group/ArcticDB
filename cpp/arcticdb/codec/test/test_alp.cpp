@@ -350,7 +350,7 @@ TEST(ALP, RoundtripALPDecimal) {
     ALPCompressor<T> compressor(std::move(compress_data));
 
     size_t num_blocks = NUM_VALUES / alp::config::VECTOR_SIZE;
-    auto col_header_sz = sizeof(ALPDecimalColumnHeader<T>);  // or use a member function if available
+    auto col_header_sz = sizeof(ALPDecimalColumnHeader<T>);
     size_t worst_block_sz = worst_case_required_alp_size<T>();
     size_t expected_bytes = sizeof(arcticdb::ALPHeader<T>) + col_header_sz + num_blocks * worst_block_sz;
 
