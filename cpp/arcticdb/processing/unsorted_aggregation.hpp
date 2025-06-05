@@ -14,16 +14,6 @@
 
 namespace arcticdb {
 
-enum class AggregationType {
-    MIN,
-    MAX,
-    SUM,
-    COUNT,
-    MEAN,
-    FIRST,
-    LAST
-};
-
 class MinMaxAggregatorData
 {
 public:

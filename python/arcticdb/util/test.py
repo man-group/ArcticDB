@@ -43,12 +43,6 @@ from arcticdb_ext import (
 )
 from packaging.version import Version
 
-
-pd.set_option('display.max_columns', None)
-pd.set_option('display.max_rows', None)
-pd.set_option('display.max_colwidth', None)
-pd.set_option('display.width', 0)
-
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
     for i in range(columns):
@@ -838,7 +832,7 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
     received = received.reindex(columns=sorted(received.columns))
     received.sort_index(inplace=True)
     try:
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal(expected, received, check_dtype=agg_dtypes is not None)
     except AssertionError as e:
         print(
             f"""Original df:\n{df}\nwith dtypes:\n{df.dtypes}\naggs dict:\n{aggs_dict}"""

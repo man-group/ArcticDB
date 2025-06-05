@@ -277,7 +277,7 @@ inline std::vector<NamedAggregator> named_aggregators_from_dict(std::unordered_m
         util::variant_match(
                 std::move(var_agg_named_agg),
                 [&] (std::string&& agg_operator) {
-                    named_aggregators.emplace_back(std::move(agg_operator), std::move(output_column_name), std::move(output_column_name));
+                    named_aggregators.emplace_back(std::move(agg_operator), output_column_name, output_column_name);
                 },
                 [&] (std::pair<std::string, std::string>&& input_col_and_agg) {
                     named_aggregators.emplace_back(std::move(input_col_and_agg.second), std::move(input_col_and_agg.first), std::move(output_column_name));

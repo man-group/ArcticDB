@@ -1247,7 +1247,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
             return collect_segments(std::move(proc));
         })
         .thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) mutable {
-            return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data, IntToFloatConversion::STRICT);
+            return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data, IntToFloatConversion::PERMISSIVE);
         })
         .thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas](SegmentInMemory&& frame) mutable {
             // Needed to force our usual backfilling behaviour when columns have been outer-joined and some are not present in all input symbols
