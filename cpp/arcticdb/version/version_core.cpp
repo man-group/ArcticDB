@@ -1297,7 +1297,7 @@ void copy_frame_data_to_buffer(
         std::any& handler_data,
         OutputFormat output_format,
         IntToFloatConversion int_to_float_conversion,
-        const VariantRawValue default_value) {
+        const std::optional<Value>& default_value) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -1453,7 +1453,7 @@ struct CopyToBufferTask : async::BaseTask {
                 if (!frame_loc_opt) {
                     continue;
                 }
-                const VariantRawValue default_value = [&]() -> VariantRawValue {
+                const std::optional<Value>& default_value = [&]() -> std::optional<Value> {
                     const auto it = pipeline_context_->default_values_.find(std::string{field_name});
                     if (it != pipeline_context_->default_values_.end()) {
                         return it->second;

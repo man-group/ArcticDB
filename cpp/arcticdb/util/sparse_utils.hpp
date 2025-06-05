@@ -16,6 +16,7 @@
 #include <arcticdb/util/type_traits.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
+#include <arcticdb/pipeline/value.hpp>
 
 #include <bitmagic/bmserial.h>
 
@@ -121,17 +122,16 @@ void default_initialize(ChunkedBuffer& buffer, size_t offset, const size_t bytes
 /// @param[in] default_value Variant holding either a value of the raw type for the type tag or std::monostate
 template <typename TagType>
 requires util::instantiation_of<TagType, TypeDescriptorTag>
-void initialize(uint8_t* data, const size_t bytes, const VariantRawValue& default_value) {
+void initialize(uint8_t* data, const size_t bytes, const std::optional<Value>& default_value) {
     using RawType = typename TagType::DataTypeTag::raw_type;
-    if (auto* val = std::get_if<RawType>(&default_value)) {
-        const auto num_rows = bytes / sizeof(RawType);
-        std::fill_n(reinterpret_cast<RawType*>(data), num_rows, *val);
-    } else {
+    if (default_value) {
         debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            std::holds_alternative<std::monostate>(default_value),
-            "When initializing a buffer the default must hold either the raw type for the buffer, meaning the buffer"
-            "has a custom default value or std::monostate meaning that a predefined value for the raw type must be"
-            "used. Holding any other type is most likely an error.");
+            default_value->descriptor() == TagType::type_descriptor(),
+            "Mismatched default value type"
+        );
+        const auto num_rows = bytes / sizeof(RawType);
+        std::fill_n(reinterpret_cast<RawType*>(data), num_rows, default_value->get<RawType>());
+    } else {
         default_initialize<TagType>(data, bytes);
     }
 }

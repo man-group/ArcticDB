@@ -8,10 +8,10 @@
 #pragma once
 
 #include <arcticdb/entity/field_collection.hpp>
-#include "arcticdb/storage/memory_layout.hpp"
-
+#include <arcticdb/storage/memory_layout.hpp>
 #include <arcticdb/entity/field_collection_proto.hpp>
 #include <arcticdb/entity/types_proto.hpp>
+#include <arcticdb/pipeline/value.hpp>
 
 #include <ankerl/unordered_dense.h>
 
@@ -316,14 +316,14 @@ struct OutputSchema {
         default_values_.clear();
     }
 
-    void set_default_value_for_column(const std::string_view name, const VariantRawValue& value) {
-        default_values_.emplace(std::string(name), value);
+    void set_default_value_for_column(std::string name, const Value& value) {
+        default_values_.emplace(std::move(name), value);
     }
 
 private:
     StreamDescriptor stream_descriptor_;
     std::optional<ankerl::unordered_dense::map<std::string, DataType>> column_types_;
-    ankerl::unordered_dense::map<std::string, VariantRawValue> default_values_;
+    ankerl::unordered_dense::map<std::string, Value> default_values_;
 };
 
 template <class IndexType>

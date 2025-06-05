@@ -173,9 +173,9 @@ DataType SumAggregatorData::get_output_data_type() {
     return *output_type_;
 }
 
-VariantRawValue SumAggregatorData::get_default_value() {
-    return details::visit_type(get_output_data_type(), []<typename TD>(TD) -> VariantRawValue {
-        return typename TD::raw_type{0};
+std::optional<Value> SumAggregatorData::get_default_value() {
+    return details::visit_type(get_output_data_type(), []<typename TD>(TD) -> std::optional<Value> {
+        return Value{typename TD::raw_type{0}, TD::data_type};
     });
 }
 
@@ -387,7 +387,7 @@ SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name
     return finalize_impl<Extremum::MAX>(output_column_name, unique_values, aggregated_, data_type_, std::move(sparse_map_));
 }
 
-VariantRawValue MaxAggregatorData::get_default_value() {
+std::optional<Value> MaxAggregatorData::get_default_value() {
     return {};
 }
 
@@ -418,7 +418,7 @@ SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name
     return finalize_impl<Extremum::MIN>(output_column_name, unique_values, aggregated_, data_type_, std::move(sparse_map_));
 }
 
-VariantRawValue MinAggregatorData::get_default_value() {
+std::optional<Value> MinAggregatorData::get_default_value() {
     return {};
 }
 
@@ -479,7 +479,7 @@ double MeanAggregatorData::Fraction::to_double() const
     return denominator_ == 0 ? std::numeric_limits<double>::quiet_NaN(): numerator_ / static_cast<double>(denominator_);
 }
 
-VariantRawValue MeanAggregatorData::get_default_value() {
+std::optional<Value> MeanAggregatorData::get_default_value() {
     return {};
 }
 /***********************
@@ -519,7 +519,7 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
     return res;
 }
 
-VariantRawValue CountAggregatorData::get_default_value() {
+std::optional<Value> CountAggregatorData::get_default_value() {
     return {};
 }
 
@@ -582,7 +582,7 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
     return res;
 }
 
-VariantRawValue FirstAggregatorData::get_default_value() {
+std::optional<Value> FirstAggregatorData::get_default_value() {
     return {};
 }
 
@@ -643,7 +643,7 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
     return res;
 }
 
-VariantRawValue LastAggregatorData::get_default_value() {
+std::optional<Value> LastAggregatorData::get_default_value() {
     return {};
 }
 

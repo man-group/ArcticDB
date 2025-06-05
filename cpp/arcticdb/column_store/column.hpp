@@ -452,7 +452,8 @@ public:
 
     void mark_absent_rows(size_t num_rows);
 
-    void default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, VariantRawValue default_value = {});
+    void default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc);
+    void default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, const std::optional<Value>& default_value);
 
     void set_row_data(size_t row_id);
 

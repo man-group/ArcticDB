@@ -38,16 +38,17 @@ struct Value {
     size_t len_ = 0;
 
     template <typename T>
-    Value(T t, DataType data_type=DataType::UNKNOWN):
+    explicit Value(T t, DataType data_type=DataType::UNKNOWN):
     data_type_(data_type) {
         *reinterpret_cast<T*>(&data_) = t;
     }
 
     void assign(const Value& other) {
-        if(is_sequence_type(other.data_type_))
+        if(is_sequence_type(other.data_type_)) {
             assign_string(*other.str_data(), other.len_);
-        else
+        } else {
             memcpy(data_, other.data_, 8);
+        }
     }
 
     Value(const Value& other) :
@@ -61,10 +62,8 @@ struct Value {
         return *this;
     }
 
-    Value& operator==(const Value& other) {
-        data_type_ = other.data_type_;
-        assign(other);
-        return *this;
+    bool operator==(const Value& other) const {
+        return data_type_ == other.data_type_ && memcmp(other.data_, data_, 8) == 0;
     }
 
     ValueIterator get_iterator() {
@@ -100,7 +99,7 @@ struct Value {
     void assign_string(const char* c, size_t len) {
         auto data = new char[len + 1];
         memcpy(data, c, len);
-        data[len] = 0;
+        data[len] = '\0';
         *str_data() = data;
         len_ = len;
     }
@@ -118,22 +117,22 @@ struct Value {
     std::string to_string() const {
         if (has_sequence_type()) {
             return "\"" + std::string(*str_data(), len()) + "\"";
-        }
-        else {
+        } else {
             return fmt::format("{}", get<RawType>());
         }
     }
 
     ~Value() {
-        if(has_sequence_type())
+        if(has_sequence_type()) {
             delete[] *str_data();
+        }
     }
 
     bool has_sequence_type() const {
         return is_sequence_type(data_type_);
     }
 
-    auto descriptor() {
+    auto descriptor() const {
         return TypeDescriptor {data_type_, Dimension::Dim0};
     }
 };

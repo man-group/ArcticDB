@@ -530,9 +530,9 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
         agg_data.add_data_type(input_column_type);
         const DataType output_column_type = agg_data.get_output_data_type();
         stream_desc.add_scalar_field(output_column_type, output_column_name);
-        const VariantRawValue& default_value = agg_data.get_default_value();
-        if (!std::holds_alternative<std::monostate>(default_value)) {
-            output_schema.set_default_value_for_column(output_column_name, default_value);
+        const std::optional<Value>& default_value = agg_data.get_default_value();
+        if (default_value) {
+            output_schema.set_default_value_for_column(output_column_name, *default_value);
         }
     }
 
@@ -591,9 +591,9 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
         agg.check_aggregator_supported_with_data_type(input_column_type);
         auto output_column_type = agg.generate_output_data_type(input_column_type);
         stream_desc.add_scalar_field(output_column_type, output_column_name);
-        const VariantRawValue& default_value = agg.get_default_value(input_column_type);
-        if (!std::holds_alternative<std::monostate>(default_value)) {
-            output_schema.set_default_value_for_column(output_column_name, default_value);
+        const std::optional<Value>& default_value = agg.get_default_value(input_column_type);
+        if (default_value) {
+            output_schema.set_default_value_for_column(output_column_name, *default_value);
         }
     }
     output_schema.set_stream_descriptor(std::move(stream_desc));

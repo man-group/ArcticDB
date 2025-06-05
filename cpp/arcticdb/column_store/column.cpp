@@ -372,7 +372,11 @@ void Column::mark_absent_rows(size_t num_rows) {
     }
 }
 
-void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, const VariantRawValue default_value) {
+void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc) {
+    default_initialize_rows(start_pos, num_rows, ensure_alloc, std::nullopt);
+}
+
+void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, const std::optional<Value>& default_value) {
     if (num_rows > 0) {
         type_.visit_tag([&,this](auto tag) {
             using T = std::decay_t<decltype(tag)>;

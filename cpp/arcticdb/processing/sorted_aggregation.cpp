@@ -219,10 +219,11 @@ DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_outpu
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-VariantRawValue SortedAggregator<aggregation_operator, closed_boundary>::get_default_value(const DataType common_input_data_type) const {
+std::optional<Value> SortedAggregator<aggregation_operator, closed_boundary>::get_default_value(const DataType common_input_data_type) const {
     if constexpr (aggregation_operator == AggregationOperator::SUM) {
-        return details::visit_type(generate_output_data_type(common_input_data_type), [&](auto tag) -> VariantRawValue {
-           return typename decltype(tag)::raw_type{0};
+        return details::visit_type(generate_output_data_type(common_input_data_type), [&](auto tag) -> std::optional<Value> {
+            using data_type_tag = decltype(tag);
+            return Value{typename data_type_tag::raw_type{0}, data_type_tag::data_type};
         });
     } else {
         return {};

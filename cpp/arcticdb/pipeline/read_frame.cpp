@@ -703,7 +703,7 @@ class NullValueReducer {
     DecodePathData shared_data_;
     std::any& handler_data_;
     const OutputFormat output_format_;
-    VariantRawValue default_value_;
+    std::optional<Value> default_value_;
 
 public:
     NullValueReducer(
@@ -713,7 +713,7 @@ public:
         DecodePathData shared_data,
         std::any& handler_data,
         OutputFormat output_format,
-        VariantRawValue default_value = {}) :
+        std::optional<Value> default_value = {}) :
             column_(column),
             context_(context),
             frame_(std::move(frame)),
@@ -795,7 +795,7 @@ struct ReduceColumnTask : async::BaseTask {
         const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
         const auto column_data = slice_map_->columns_.find(frame_field.name());
         const auto& name = frame_field.name();
-        const VariantRawValue default_value = [&]() -> VariantRawValue {
+        const std::optional<Value> default_value = [&]() -> std::optional<Value> {
             if (auto it = context_->default_values_.find(std::string(name)); it != context_->default_values_.end()) {
                 return it->second;
             }

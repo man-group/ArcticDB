@@ -73,7 +73,7 @@ namespace arcticdb {
         IntToFloatConversion int_to_to_float_conversion
     ) {
         debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            entity::is_integer_type(source.data_type()) && is_floating_point_type(target.data_type()),
+            is_integer_type(source.data_type()) && is_floating_point_type(target.data_type()),
             "Expected source to be int and target to be float got: {} {}", source, target
         );
         if (int_to_to_float_conversion == IntToFloatConversion::STRICT) {

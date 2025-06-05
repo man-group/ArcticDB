@@ -134,7 +134,7 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::optional<size_t> incompletes_after_;
     /// Used to override the default values of types when the NullValueReducer fills missing segments. For example, in
     /// the sum unordered aggregation and the sum resampling clause, the value must 0 even if the output type is float.
-    ankerl::unordered_dense::map<std::string, VariantRawValue> default_values_;
+    ankerl::unordered_dense::map<std::string, Value> default_values_;
     bool bucketize_dynamic_ = false;
 
     PipelineContextRow operator[](size_t num) {

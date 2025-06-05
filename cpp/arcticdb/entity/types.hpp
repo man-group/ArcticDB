@@ -397,20 +397,6 @@ DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(BOOL_OBJECT8, uint8_t)
 #undef DATA_TYPE_TAG
 
-using VariantRawValue = std::variant<
-    std::monostate,
-    int8_t,
-    int16_t,
-    int32_t,
-    int64_t,
-    uint8_t,
-    uint16_t,
-    uint32_t,
-    uint64_t,
-    bool,
-    float,
-    double>;
-
 enum class Dimension : uint8_t {
     Dim0 = 0,
     Dim1 = 1,
