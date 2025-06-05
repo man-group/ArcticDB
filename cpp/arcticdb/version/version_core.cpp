@@ -1415,7 +1415,6 @@ struct CopyToBufferTask : async::BaseTask {
             DecodePathData shared_data,
             std::any& handler_data,
             OutputFormat output_format,
-            IntToFloatConversion int_to_float_conversion,
             std::shared_ptr<PipelineContext> pipeline_context) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
@@ -1424,7 +1423,6 @@ struct CopyToBufferTask : async::BaseTask {
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
         output_format_(output_format),
-        int_to_float_conversion_(int_to_float_conversion),
         pipeline_context_(std::move(pipeline_context)){
     }
 
@@ -1447,7 +1445,7 @@ struct CopyToBufferTask : async::BaseTask {
                     shared_data_,
                     handler_data_,
                     output_format_,
-                    int_to_float_conversion_,
+                    IntToFloatConversion::PERMISSIVE,
                     {});
             } else {
                 // All other columns use names to match the source with the destination
@@ -1473,7 +1471,7 @@ struct CopyToBufferTask : async::BaseTask {
                     shared_data_,
                     handler_data_,
                     output_format_,
-                    int_to_float_conversion_,
+                    IntToFloatConversion::PERMISSIVE,
                     default_value);
             }
         }
@@ -1486,8 +1484,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         SegmentInMemory frame,
         std::any& handler_data,
-        OutputFormat output_format,
-        IntToFloatConversion int_to_float_conversion) {
+        OutputFormat output_format) {
     const auto required_fields_count = pipelines::index::required_fields_count(pipeline_context->descriptor(),
                                                                      *pipeline_context->norm_meta_);
     std::vector<folly::Future<folly::Unit>> copy_tasks;
@@ -1504,7 +1501,6 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 shared_data,
                 handler_data,
                 output_format,
-                int_to_float_conversion,
                 pipeline_context}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
@@ -1515,8 +1511,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<Store>& store,
         const ReadOptions& read_options,
-        std::any& handler_data,
-        IntToFloatConversion int_to_float_conversion) {
+        std::any& handler_data) {
     pipeline_context->clear_vectors();
     pipeline_context->slice_and_keys_ = std::move(items);
     adjust_slice_ranges(pipeline_context);
@@ -1531,7 +1526,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 
     const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
     auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
-    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format(), int_to_float_conversion).
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format()).
             thenValueInline([frame=std::move(frame)](auto &&) { return frame; });
 }
 
@@ -1696,7 +1691,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
         .thenValue([store, pipeline_context, &read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
-            return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data, IntToFloatConversion::PERMISSIVE);
+            return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
         });
     } else {
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)

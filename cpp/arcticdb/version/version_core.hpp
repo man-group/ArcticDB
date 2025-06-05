@@ -277,8 +277,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<Store>& store,
         const ReadOptions& read_options,
-        std::any& handler_data,
-        IntToFloatConversion int_to_float_conversion);
+        std::any& handler_data);
 
 } //namespace arcticdb::version_store
 
