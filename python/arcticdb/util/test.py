@@ -872,12 +872,26 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
     for col in left_no_inf.columns:
-        if pd.api.types.is_integer_dtype(left_no_inf[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf[col].dtype):
-            pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
-        else:
-            if PANDAS_VERSION >= Version("1.1"):
-                check_equals_flags["rtol"] = 3e-4
-            pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
+        try:
+            if pd.api.types.is_integer_dtype(left_no_inf[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf[col].dtype):
+                pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
+            else:
+                if PANDAS_VERSION >= Version("1.1"):
+                    check_equals_flags["rtol"] = 3e-4
+                pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
+        except:
+            with pd.option_context(
+                    'display.max_columns', None,
+                    'display.max_rows', None,
+                    'display.max_colwidth', None,
+                    'display.width', 0
+            ):
+                print("\nError in approximate dataframe comparison. DataFrames are different\n")
+                print("Left:\n")
+                print(left_no_inf)
+                print("Right:\n")
+                print(right_no_inf)
+                raise
 
 
 def generic_resample_test(
@@ -942,7 +956,6 @@ def generic_resample_test(
     received = received.reindex(columns=sorted(received.columns))
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
-
     if has_float_column:
         assert_dfs_approximate(expected, received)
     else:
