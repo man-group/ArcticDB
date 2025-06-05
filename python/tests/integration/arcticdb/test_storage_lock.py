@@ -19,7 +19,8 @@ one_sec = 1_000_000_000
 
 symbol_prefix = "process_id_"
 
-max_processes = 30 if WINDOWS else 100
+max_processes = 30 if WINDOWS else 100 # Too many processes will trigger out of mem on windows
+storage_lock_timeout_sec = 20 if WINDOWS else 10 # For Windows choosing longer wait for default storage lock timeout
 
 
 def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
@@ -29,7 +30,7 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
     logger.info(f"Process {pid}: initiated")
     fixture = real_storage_factory.create_fixture()
     lib = fixture.create_arctic()[lib_name]
-    lock = ReliableStorageLock("test_lock", lib._nvs._library, 10 * one_sec)
+    lock = ReliableStorageLock("test_lock", lib._nvs._library, storage_lock_timeout_sec * one_sec)
     lock_manager = ReliableStorageLockManager()
     lock_manager.take_lock_guard(lock)
     logger.info(f"Process {pid}: start read")
@@ -47,7 +48,7 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
 
 # NOTE: Is there is not enough memory the number of actually spawned processes
 # will be lowe. The test counts the actual processes that did really got executed
-@pytest.mark.parametrize("num_processes,max_sleep", [(max_processes, 1), (5, 20)])
+@pytest.mark.parametrize("num_processes,max_sleep", [(max_processes, 1), (5, 2 * storage_lock_timeout_sec)])
 @REAL_S3_TESTS_MARK
 @pytest.mark.storage
 def test_many_increments(real_storage_factory, lib_name, num_processes, max_sleep):
