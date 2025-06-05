@@ -13,11 +13,21 @@ from tests.util.storage_test import real_gcp_credentials, real_s3_credentials
 logger = get_logger()
 
 
-s3_enpoint, s3_bucket, s3_region, s3_access_key, s3_secret_key, s3_prefix, s3_clear = \
+s3_endpoint, s3_bucket, s3_region, s3_access_key, s3_secret_key, s3_prefix, s3_clear = \
     real_s3_credentials(shared_path=False)
 gcp_enpoint, gcp_bucket, gcp_region, gcp_access_key, gcp_secret_key, gcp_prefix, gcp_clear = \
     real_gcp_credentials(shared_path=False)
 
+web_address = "<none>"
+if s3_endpoint is not None:
+    if "amazonaws.com" in s3_endpoint.lower():
+        web_address = f"s3.{s3_region}.amazonaws.com"
+    else:
+        # VAST and Pure do not have region
+        web_address = s3_endpoint
+        if "://" in s3_endpoint:
+            web_address = s3_endpoint.split("://")[1] 
+    
 
 access_mark = "*access*"
 secret_mark = "*secret*"
@@ -57,23 +67,23 @@ def execute_uri_test(uri:str, expected: str, access: str, secret: str):
       
 
 @pytest.mark.parametrize("uri,expected", [
-    (f"s3://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}&secret={secret_mark}", None),
-    (f"s3s://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}&secret={secret_mark}", None),
-    (f"s3s://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}&secret={secret_mark}&path_prefix=abc", 
+    (f"s3://{web_address}:{s3_bucket}?access={access_mark}&secret={secret_mark}", None),
+    (f"s3s://{web_address}:{s3_bucket}?access={access_mark}&secret={secret_mark}", None),
+    (f"s3s://{web_address}:{s3_bucket}?access={access_mark}&secret={secret_mark}&path_prefix=abc", 
      None),
-    (f"s3s://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}&secret={secret_mark}&aws_auth=False",
+    (f"s3s://{web_address}:{s3_bucket}?access={access_mark}&secret={secret_mark}&aws_auth=False",
       None),
-    (f"s3s://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}&secret={secret_mark}&aws_auth=True", 
+    (f"s3s://{web_address}:{s3_bucket}?access={access_mark}&secret={secret_mark}&aws_auth=True", 
      "E_PERMISSION Permission error"),
-    (f"s3s://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}&secrets={secret_mark}", 
+    (f"s3s://{web_address}:{s3_bucket}?access={access_mark}&secrets={secret_mark}", 
      "Invalid S3 URI. Invalid query parameter"),
-    (f"s3://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}&secret={secret_mark}1", 
+    (f"s3://{web_address}:{s3_bucket}?access={access_mark}&secret={secret_mark}1", 
      "SignatureDoesNotMatch"),
-    (f"s3://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}1&secret={secret_mark}", 
+    (f"s3://{web_address}:{s3_bucket}?access={access_mark}1&secret={secret_mark}", 
      "InvalidAccessKeyId"),
-    (f"s3s://s3.{s3_region}.amazonaws.com:{s3_bucket}?access={access_mark}", 
+    (f"s3s://{web_address}:{s3_bucket}?access={access_mark}", 
      "AccessDenied: Access Denied for object"),
-    (f"s3://s3.{s3_region}.amazonaws.com:{s3_bucket}?secret={secret_mark}", 
+    (f"s3://{web_address}:{s3_bucket}?secret={secret_mark}", 
      "E_PERMISSION Permission error"),
 ])
 @REAL_S3_TESTS_MARK
