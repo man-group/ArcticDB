@@ -42,11 +42,10 @@ struct IGroupingAggregator {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
         [[nodiscard]] GroupingAggregatorData get_aggregator_data() const { return folly::poly_call<2>(*this); }
-        [[nodiscard]] AggregationType get_aggregation_type() const { return folly::poly_call<3>(*this); }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::get_aggregator_data, &T::get_aggregation_type>;
+    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::get_aggregator_data>;
 };
 
 using GroupingAggregator = folly::Poly<IGroupingAggregator>;

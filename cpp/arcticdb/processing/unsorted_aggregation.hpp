@@ -218,25 +218,6 @@ public:
     [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
     [[nodiscard]] AggregatorData get_aggregator_data() const { return AggregatorData(); }
-    [[nodiscard]] constexpr AggregationType get_aggregation_type() const {
-        if constexpr (std::is_same_v<AggregatorData, SumAggregatorData>) {
-            return AggregationType::SUM;
-        } else if constexpr (std::is_same_v<AggregatorData, MinAggregatorData>) {
-            return AggregationType::MIN;
-        } else if constexpr (std::is_same_v<AggregatorData, MaxAggregatorData>) {
-            return AggregationType::MAX;
-        } else if constexpr (std::is_same_v<AggregatorData, MeanAggregatorData>) {
-            return AggregationType::MEAN;
-        } else if constexpr (std::is_same_v<AggregatorData, CountAggregatorData>) {
-            return AggregationType::COUNT;
-        } else if constexpr (std::is_same_v<AggregatorData, FirstAggregatorData>) {
-            return AggregationType::FIRST;
-        } else if constexpr (std::is_same_v<AggregatorData, LastAggregatorData>) {
-            return AggregationType::LAST;
-        } else {
-            static_assert(sizeof(AggregatorData) == 0, "Unknown aggregator");
-        }
-    }
 
 private:
 
