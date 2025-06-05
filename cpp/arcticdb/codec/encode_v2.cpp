@@ -368,9 +368,10 @@ static void encode_encoded_fields(
     ARCTICDB_SAMPLE(EncodeSegment, 0)
     auto in_mem_seg = std::move(s);
 
-    ARCTICDB_TRACE(log::codec(), "V2 Encoding calculating statistics");
-    if(ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1 || codec_opts.type_ == Codec::ADAPTIVE)
+    if(ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1 || codec_opts.type_ == Codec::ADAPTIVE) {
+        ARCTICDB_TRACE(log::codec(), "V2 Encoding calculating statistics");
         in_mem_seg.calculate_statistics();
+    }
 
     ARCTICDB_TRACE(log::codec(), "V2 encoding writing index descriptor");
     if(in_mem_seg.has_index_descriptor()) {
