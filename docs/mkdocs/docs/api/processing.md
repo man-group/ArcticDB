@@ -9,4 +9,8 @@ DataFrame Processing Operations API
     options:
       inherited_members: false
 
+::: arcticdb.concat
+
 ::: arcticdb.QueryBuilder
+
+::: arcticdb.where
