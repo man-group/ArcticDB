@@ -979,10 +979,8 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
             .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
                 OutputSchema schema = create_initial_output_schema(*pipeline_context);
-                if (pipeline_context->rows_ > 0) {
-                    for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
-                        schema = clause->modify_schema(std::move(schema));
-                    }
+                for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
+                    schema = clause->modify_schema(std::move(schema));
                 }
                 auto&& [descriptor, norm_meta, default_values] = schema.release();
                 pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));

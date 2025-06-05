@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import functools
-import itertools
 
 import pandas as pd
 from hypothesis import assume, given, settings
@@ -14,13 +13,13 @@ import hypothesis.strategies as st
 import pytest
 import numpy as np
 
-from arcticdb.util.test import generic_named_aggregation_test, common_sum_aggregation_dtype, valid_common_type
+from arcticdb.util.test import generic_named_aggregation_test, valid_common_type, expected_aggregation_type
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     supported_numeric_dtypes,
     dataframe_strategy,
     column_strategy,
-    supported_string_dtypes,
+    supported_string_dtypes
 )
 
 
@@ -118,20 +117,15 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
     common_agg_type = functools.reduce(valid_common_type, agg_column_dtypes) if len(agg_column_dtypes) > 0 else None
     assume(any('grouping_column' in df.columns for df in dfs) and common_agg_type is not None)
 
-    common_sum_type = functools.reduce(common_sum_aggregation_dtype, agg_column_dtypes)
     lib = lmdb_version_store_dynamic_schema_v1
     symbol = "test_aggregation_numeric_dynamic"
     lib.delete(symbol)
     for df in dfs:
         lib.append(symbol, df)
-    required_types = {
-        "mean": np.float64,
-        "sum": common_sum_type,
-        "grouping_column": object,
-        "count": np.uint64,
-        "min": common_agg_type,
-        "max": common_agg_type,
-    }
+    aggregations = ["mean", "sum", "min", "max", "count"]
+    aggregation_column = "agg_column"
+    required_types = {agg: expected_aggregation_type(agg, dfs, aggregation_column) for agg in aggregations}
+    required_types["grouping_column"] = object
 
     generic_named_aggregation_test(
         lib,
@@ -139,14 +133,14 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
         pd.concat(dfs),
         "grouping_column",
         {
-            "mean": ("agg_column", "mean"),
-            "sum": ("agg_column", "sum"),
-            "min": ("agg_column", "min"),
-            "max": ("agg_column", "max"),
-            "count": ("agg_column", "count"),
+            "mean": (aggregation_column, "mean"),
+            "sum": (aggregation_column, "sum"),
+            "min": (aggregation_column, "min"),
+            "max": (aggregation_column, "max"),
+            "count": (aggregation_column, "count"),
             # Uncomment when un-feature flagged
-            # "first": ("agg_column", "first")
-            # "last": ("agg_column", "last"),
+            # "first": ("aggregation_column, "first")
+            # "last": (aggregation_column, "last"),
         },
         agg_dtypes=required_types
     )
