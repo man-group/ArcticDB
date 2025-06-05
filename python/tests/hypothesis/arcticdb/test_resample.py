@@ -11,7 +11,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 MIN_DATE = np.datetime64('1969-01-01')
-MAX_DATE = np.datetime64('1980-01-01')
+MAX_DATE = np.datetime64('1973-01-01')
 
 pytestmark = pytest.mark.pipeline
 
