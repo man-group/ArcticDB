@@ -2468,7 +2468,7 @@ def test_modification_methods_dont_return_input_data(basic_store, batch, method)
             pytest.skip(str(e))
 
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Test broken on MacOS (issue #692)")
+#@pytest.mark.skipif(sys.platform == "darwin", reason="Test broken on MacOS (issue #692)")
 @pytest.mark.parametrize("method", ("append", "update"))
 @pytest.mark.parametrize("num", (5, 50, 1001))
 @pytest.mark.storage
