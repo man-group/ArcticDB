@@ -135,14 +135,15 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                         const Column& input_index = *input_index_columns[idx];
                         const timestamp last_index_value = *input_index.scalar_at<IndexTDT::DataTypeTag::raw_type>(input_index.row_count() - 1);
                         // Check how many rows of the index must be skipped
-                        auto next_output_index_it = output_index_column.begin<IndexTDT>() + row_to_write + (label == ResampleBoundary::LEFT);
-                        while (next_output_index_it != output_index_column.end<IndexTDT>() && *next_output_index_it < last_index_value + (closed_boundary == ResampleBoundary::LEFT)) {
+                        auto next_output_index_row = row_to_write + (label == ResampleBoundary::LEFT);
+                        while (next_output_index_row < output_index_column.row_count() &&
+                               *output_index_column.scalar_at<timestamp>(next_output_index_row) < last_index_value + (closed_boundary == ResampleBoundary::LEFT)) {
                             if (bucket_has_values) {
                                 res.set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
                                 bucket_has_values = false;
                             }
                             ++row_to_write;
-                            ++next_output_index_it;
+                            ++next_output_index_row;
                         }
 
                         // Check how many buckets must be skipped.
