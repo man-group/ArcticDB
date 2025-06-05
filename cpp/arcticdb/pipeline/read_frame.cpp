@@ -371,32 +371,31 @@ ColumnTruncation get_truncate_range(
         const uint8_t* index_field_offset) {
     ColumnTruncation truncate_rows;
     if(read_options.output_format() == OutputFormat::ARROW) {
-    util::variant_match(read_query.row_filter,
-        [&truncate_rows, &frame, &context, &index_field, index_field_offset, encoding_version] (const IndexRange& index_range) {
-            const auto& time_range = static_cast<const TimestampRange&>(index_range);
-            const auto& slice_time_range =  context.slice_and_key().key().time_range();
-            if(contains(slice_time_range, time_range.first) || contains(slice_time_range, time_range.second)) {
-                if(context.fetch_index()) {
-                    const auto& index_column = frame.column(0);
-                    const auto& current_row_range = context.slice_and_key().slice().row_range;
-                    truncate_rows = get_truncate_range_from_index(index_column, time_range.first, time_range.second, current_row_range.first, current_row_range.second);
-            } else {
-                const auto& frame_index_desc = frame.descriptor().fields(0UL);
-                Column sink{frame_index_desc.type(), encoding_sizes::field_uncompressed_size(index_field), AllocationType::PRESIZED, Sparsity::PERMITTED};
-                std::optional<util::BitMagic> bv;
-                (void)decode_field(frame_index_desc.type(), index_field, index_field_offset, sink, bv, encoding_version);
-                truncate_rows = get_truncate_range_from_index(sink, time_range.first, time_range.second);
-            }
-        }
+        util::variant_match(read_query.row_filter,
+            [&truncate_rows, &frame, &context, &index_field, index_field_offset, encoding_version] (const IndexRange& index_range) {
+                const auto& time_range = static_cast<const TimestampRange&>(index_range);
+                const auto& slice_time_range =  context.slice_and_key().key().time_range();
+                if(contains(slice_time_range, time_range.first) || contains(slice_time_range, time_range.second)) {
+                    if(context.fetch_index()) {
+                        const auto& index_column = frame.column(0);
+                        truncate_rows = get_truncate_range_from_index(index_column, time_range.first, time_range.second);
+                    } else {
+                        const auto& frame_index_desc = frame.descriptor().fields(0UL);
+                        Column sink{frame_index_desc.type(), encoding_sizes::field_uncompressed_size(index_field), AllocationType::PRESIZED, Sparsity::PERMITTED};
+                        std::optional<util::BitMagic> bv;
+                        (void)decode_field(frame_index_desc.type(), index_field, index_field_offset, sink, bv, encoding_version);
+                        truncate_rows = get_truncate_range_from_index(sink, time_range.first, time_range.second);
+                    }
+                }
             },
-        [&context] (const RowRange& row_range) {
-            const auto& slice_row_range = context.slice_and_key().slice().row_range;
-            get_truncate_range_from_rows(row_range, slice_row_range.start(), slice_row_range.end());
-        },
-        [] (const auto&) {
-            // Do nothing
-        });
-    }
+            [&context] (const RowRange& row_range) {
+                const auto& slice_row_range = context.slice_and_key().slice().row_range;
+                get_truncate_range_from_rows(row_range, slice_row_range.start(), slice_row_range.end());
+            },
+            [] (const auto&) {
+                // Do nothing
+            });
+        }
     return truncate_rows;
 };
 
