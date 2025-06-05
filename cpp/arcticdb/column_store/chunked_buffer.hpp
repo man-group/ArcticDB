@@ -16,7 +16,7 @@
 #include <arcticdb/column_store/block.hpp>
 #include <arcticdb/util/hash.hpp>
 
-#ifdef DEBUG_BUILD
+#ifndef DEBUG_BUILD
 #include <boost/container/small_vector.hpp>
 #endif
 
