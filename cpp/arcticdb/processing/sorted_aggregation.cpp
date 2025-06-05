@@ -75,10 +75,10 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                             "Resample: Cannot aggregate column '{}' as it is sparse",
                                             get_input_column_name().value);
                                     auto index_data = input_index_column->data();
-                                    const auto index_cend = index_data.cend<IndexTDT>();
+                                    const auto index_cend = index_data.template cend<IndexTDT>();
                                     auto agg_data = agg_column.column_->data();
-                                    auto agg_it = agg_data.cbegin<typename input_type_info::TDT>();
-                                    for (auto index_it = index_data.cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
+                                    auto agg_it = agg_data.template cbegin<typename input_type_info::TDT>();
+                                    for (auto index_it = index_data.template cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
                                         if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
                                             push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
                                             bucket_has_values = true;

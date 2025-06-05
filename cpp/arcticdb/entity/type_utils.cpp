@@ -78,18 +78,13 @@ namespace arcticdb {
         );
         switch (int_to_to_float_conversion) {
             case IntToFloatConversion::STRICT: return target.get_size_bits() == entity::SizeBits::S64 || source.get_size_bits() < entity::SizeBits::S32;
-            case IntToFloatConversion::PERMISSIVE: {
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    int_to_to_float_conversion == IntToFloatConversion::PERMISSIVE,
-                    "Unknown int to float conversion option: {}", static_cast<int>(int_to_to_float_conversion)
-                );
-                return true;
-            }
+            case IntToFloatConversion::PERMISSIVE: return true;
             default: {
-                debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                     false,
                     "Unknown int to float conversion type {}",
                     static_cast<std::underlying_type_t<IntToFloatConversion>>(int_to_to_float_conversion));
+                return false;
             }
         }
     }
