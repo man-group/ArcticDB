@@ -247,12 +247,15 @@ void decode_index_field(
 void handle_truncation(
     Column& dest_column,
     const ColumnTruncation& truncate) {
-    if(dest_column.num_blocks() == 1 && truncate.start_ && truncate.end_)
+    if(dest_column.num_blocks() == 1 && truncate.start_ && truncate.end_) {
         dest_column.truncate_single_block(*truncate.start_, *truncate.end_);
-    else if(truncate.start_)
-        dest_column.truncate_first_block(*truncate.start_);
-    else if(truncate.end_)
-        dest_column.truncate_last_block(*truncate.end_);
+    }
+    else {
+        if(truncate.start_)
+            dest_column.truncate_first_block(*truncate.start_);
+        if(truncate.end_)
+            dest_column.truncate_last_block(*truncate.end_);
+    }
 }
 
 void handle_truncation(
@@ -326,39 +329,40 @@ void decode_or_expand(
         handle_truncation(dest_column, mapping);
 }
 
-template <typename IndexValueType>
-ColumnTruncation get_truncate_range_from_index(
-    const Column& column,
-    const IndexValueType& start,
-    const IndexValueType& end,
-    std::optional<int64_t> start_offset = std::nullopt,
-    std::optional<int64_t> end_offset = std::nullopt) {
-    int64_t start_row = column.search_sorted<IndexValueType>(start, false, start_offset, end_offset);
-    int64_t end_row = column.search_sorted<IndexValueType>(end, true, start_offset, end_offset);
+ColumnTruncation get_truncate_range_from_rows(
+    const RowRange& slice_range,
+    size_t row_filter_start,
+    size_t row_filter_end) {
+    util::check(row_filter_start < slice_range.end() && row_filter_end > slice_range.start(),
+        "row range filter unexpectedly got a slice with no intersection with requested row range. "
+        "Slice: {} - {}. Filter: {} - {}", slice_range.start(), slice_range.end(), row_filter_start, row_filter_end);
+
     std::optional<int64_t> truncate_start;
     std::optional<int64_t> truncate_end;
-    if((start_offset && start_row != *start_offset) || (!start_offset && start_row > 0))
-        truncate_start = start_row;
+    if(row_filter_start > slice_range.start())
+        truncate_start = row_filter_start;
 
-    if((end_offset && end_row != *end_offset) || (!end_offset && end_row < column.row_count() - 1))
-        truncate_end = end_row;
+    if(row_filter_end < slice_range.end())
+        truncate_end = row_filter_end;
 
     return {truncate_start, truncate_end};
 }
 
-std::pair<std::optional<int64_t>, std::optional<int64_t>> get_truncate_range_from_rows(
-    const RowRange& row_range,
-    size_t start_offset,
-    size_t end_offset) {
-    std::optional<int64_t> truncate_start;
-    std::optional<int64_t> truncate_end;
-    if(contains(row_range, start_offset))
-        truncate_start = start_offset;
+template <typename IndexValueType>
+ColumnTruncation get_truncate_range_from_index(
+    const Column& column,
+    const RowRange slice_range,
+    const IndexValueType& filter_start,
+    const IndexValueType& filter_end) {
+    // search_sorted expects inclusive end_col_offset
+    auto inclusive_end_col = slice_range.end() - 1;
+    auto start_row = column.search_sorted<IndexValueType>(filter_start, false, slice_range.start(), inclusive_end_col);
+    auto end_row = column.search_sorted<IndexValueType>(filter_end, true, slice_range.start(), inclusive_end_col);
+    util::check(start_row < slice_range.end() && end_row > slice_range.start(),
+        "date range filter unexpectedly got a slice with no intersection with requested date range. "
+        "Slice: {} - {}. Offsets with requested values: {} - {}", slice_range.start(), slice_range.end(), start_row, end_row);
 
-    if(contains(row_range, end_offset))
-        truncate_end = end_offset;
-
-    return std::make_pair(truncate_start, truncate_end);
+    return get_truncate_range_from_rows(slice_range, start_row, end_row);
 }
 
 ColumnTruncation get_truncate_range(
@@ -370,32 +374,39 @@ ColumnTruncation get_truncate_range(
         const EncodedFieldImpl& index_field,
         const uint8_t* index_field_offset) {
     ColumnTruncation truncate_rows;
+    const auto& slice_row_range = context.slice_and_key().slice().row_range;
+    const auto& first_row_offset = frame.offset();
+    auto column_slice_row_range = RowRange(slice_row_range.first - first_row_offset, slice_row_range.second - first_row_offset);
     if(read_options.output_format() == OutputFormat::ARROW) {
         util::variant_match(read_query.row_filter,
-            [&truncate_rows, &frame, &context, &index_field, index_field_offset, encoding_version] (const IndexRange& index_range) {
-                const auto& time_range = static_cast<const TimestampRange&>(index_range);
+            [&truncate_rows, &column_slice_row_range, &frame, &context, &index_field, index_field_offset, encoding_version] (const IndexRange& index_filter) {
+                const auto& time_filter = static_cast<const TimestampRange&>(index_filter);
                 const auto& slice_time_range =  context.slice_and_key().key().time_range();
-                if(contains(slice_time_range, time_range.first) || contains(slice_time_range, time_range.second)) {
+                // The `get_truncate_range_from_index` is O(logn). The `contains` checks serves to avoid the expensive
+                // O(logn) check for blocks in the middle of the range
+                if(contains(slice_time_range, time_filter.first) || contains(slice_time_range, time_filter.second)) {
                     if(context.fetch_index()) {
                         const auto& index_column = frame.column(0);
-                        truncate_rows = get_truncate_range_from_index(index_column, time_range.first, time_range.second);
+                        truncate_rows = get_truncate_range_from_index(index_column, column_slice_row_range, time_filter.first, time_filter.second);
                     } else {
                         const auto& frame_index_desc = frame.descriptor().fields(0UL);
                         Column sink{frame_index_desc.type(), encoding_sizes::field_uncompressed_size(index_field), AllocationType::PRESIZED, Sparsity::PERMITTED};
                         std::optional<util::BitMagic> bv;
                         (void)decode_field(frame_index_desc.type(), index_field, index_field_offset, sink, bv, encoding_version);
-                        truncate_rows = get_truncate_range_from_index(sink, time_range.first, time_range.second);
+                        truncate_rows = get_truncate_range_from_index(sink, column_slice_row_range, time_filter.first, time_filter.second);
                     }
                 }
             },
-            [&context] (const RowRange& row_range) {
-                const auto& slice_row_range = context.slice_and_key().slice().row_range;
-                get_truncate_range_from_rows(row_range, slice_row_range.start(), slice_row_range.end());
+            [&truncate_rows, &column_slice_row_range, &first_row_offset] (const RowRange& row_filter) {
+                // The row_filter is with respect to global offset. Column truncation works on column row indices.
+                auto row_filter_start = row_filter.first - first_row_offset;
+                auto row_filter_end = row_filter.second - first_row_offset;
+                truncate_rows = get_truncate_range_from_rows(column_slice_row_range, row_filter_start, row_filter_end);
             },
             [] (const auto&) {
                 // Do nothing
             });
-        }
+    }
     return truncate_rows;
 };
 

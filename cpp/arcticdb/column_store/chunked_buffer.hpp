@@ -480,7 +480,7 @@ class ChunkedBufferImpl {
         util::check(block == *blocks_.begin(), "Truncate first block position {} not within initial block", bytes);
         util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
         auto remaining_bytes = block->bytes() - bytes;
-        auto new_block = create_block(bytes, 0);
+        auto new_block = create_block(remaining_bytes, block->offset_);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
         block->abandon();
@@ -488,8 +488,8 @@ class ChunkedBufferImpl {
     }
 
     void truncate_last_block(size_t bytes) {
-        auto [block, offset, ts] = block_and_offset(bytes);
-        util::check(block == *blocks_.rbegin(), "Truncate first block position {} not within initial block", bytes);
+        auto [block, offset, ts] = block_and_offset(bytes_ - bytes);
+        util::check(block == *blocks_.rbegin(), "Truncate last block position {} not within last block", bytes);
         util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
         auto remaining_bytes = block->bytes() - bytes;
         auto new_block = create_block(remaining_bytes, block->offset_);

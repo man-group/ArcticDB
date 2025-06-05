@@ -60,7 +60,7 @@ struct RowRange : AxisRange {
 };
 
 inline bool contains(const RowRange& range, size_t row) {
-    return row >= range.first && row <= range.second;
+    return row >= range.first && row < range.second;
 }
 
  /*
