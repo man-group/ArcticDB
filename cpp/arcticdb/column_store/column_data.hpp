@@ -515,7 +515,7 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
         ankerl::unordered_dense::set<RawType> unique;
 
         if(column_data.num_blocks() == 1) {
-            ARCTICDB_TRACE(log::codec(), "Calculating numeric statistics for single block");
+            ARCTICDB_TRACE(log::codec(), "Calculating numeric statistics for single block of type {}", column_data.type());
             auto block = column_data.next<TagType>();
             const RawType* ptr = block->data();
             const size_t count = block->row_count();

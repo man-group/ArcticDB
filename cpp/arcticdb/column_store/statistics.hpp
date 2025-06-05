@@ -168,6 +168,39 @@ struct FieldStatsImpl : public FieldStats {
     }
 };
 
+template <typename T, typename = typename std::enable_if<std::is_same<T, float>::value || std::is_same<T, double>::value>::type>
+std::pair<T, T> nan_agnostic_minmax(std::span<const T> data) {
+    bool found = false;
+    T min_val = std::numeric_limits<T>::quiet_NaN();
+    T max_val = std::numeric_limits<T>::quiet_NaN();
+    for (const T& val : data) {
+        if (std::isnan(val))
+            continue;
+        if (!found) {
+            found = true;
+            min_val = val;
+            max_val = val;
+        } else {
+            if (val < min_val)
+                min_val = val;
+            if (max_val < val)
+                max_val = val;
+        }
+    }
+    return {min_val, max_val};
+}
+
+template <typename T>
+std::pair<T, T> get_min_max(std::span<T> data) {
+    if constexpr (std::is_floating_point_v<T>) {
+        return nan_agnostic_minmax(data);
+    } else {
+        auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
+        return {*col_min, *col_max};
+    }
+}
+
+
 template <typename T>
 FieldStatsImpl generate_numeric_statistics(
     std::span<const T> data,
@@ -175,7 +208,7 @@ FieldStatsImpl generate_numeric_statistics(
     if(data.empty())
         return FieldStatsImpl{};
 
-    auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
+    auto [col_min, col_max] = get_min_max(data);
 
     for(auto val : data) {
         unique.emplace(val);
@@ -183,7 +216,7 @@ FieldStatsImpl generate_numeric_statistics(
 
     auto sorted_value = std::is_sorted(std::begin(data), std::end(data)) ? SortedValue::ASCENDING : SortedValue::UNKNOWN;
 
-    FieldStatsImpl field_stats(*col_min, *col_max, unique.size(), UniqueCountType::PRECISE, sorted_value);
+    FieldStatsImpl field_stats(col_min, col_max, unique.size(), UniqueCountType::PRECISE, sorted_value);
     return field_stats;
 }
 
