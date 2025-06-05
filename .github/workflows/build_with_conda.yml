@@ -69,8 +69,7 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
-        if: |
-          always() && ${{ inputs.run_cpp_tests || true }}
+        if: ${{ inputs.run_cpp_tests || true }}
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
@@ -78,8 +77,7 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
       - name: Run C++ Tests
-        if: |
-          always() && ${{ inputs.run_cpp_tests || true }}
+        if: ${{ inputs.run_cpp_tests || true }}
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
@@ -168,8 +166,7 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
-        if: |
-          always() && ${{ inputs.run_cpp_tests || true }}
+        if: ${{ inputs.run_cpp_tests || true }}
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
@@ -177,8 +174,7 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
       - name: Run C++ Tests
-        if: |
-          always() && ${{ inputs.run_cpp_tests || true }}
+        if: ${{ inputs.run_cpp_tests || true }}
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
