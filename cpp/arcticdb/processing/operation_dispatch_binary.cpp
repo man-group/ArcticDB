@@ -180,19 +180,7 @@ VariantData regex_match_membership(const ColumnWithStrings& column_with_strings,
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
-                std::optional<std::string> utf32_string;
-                std::string value_string;
-                if constexpr(is_fixed_string_type(col_type_info::data_type)) {
-                    auto width = column_with_strings.get_fixed_width_string_size();
-                    if (width.has_value()) {
-                        utf32_string = ascii_to_padded_utf32(std::string_view(*val.str_data(), val.len()), *width);
-                        if (utf32_string.has_value()) {
-                            value_string = *utf32_string;
-                        }
-                    }
-                } else {
-                    value_string = std::string(*val.str_data(), val.len());
-                }
+                std::string value_string = get_string_from_value_type(column_with_strings, val);
                 auto offset_set = column_with_strings.string_pool_->get_regex_match_offsets_for_column(value_string, *column_with_strings.column_);
                 Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
@@ -231,6 +219,25 @@ VariantData visit_regex_match_membership(const VariantData &left, const VariantD
             return VariantData{EmptyResult{}};
         }
         }, left, right);
+}
+
+std::string get_string_from_value_type(const ColumnWithStrings& column_with_strings, const Value& val) {
+    std::string value_string;
+    details::visit_type(column_with_strings.column_->type().data_type(), [&](auto col_tag) {
+        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+        if constexpr(is_fixed_string_type(col_type_info::data_type)) {
+            auto width = column_with_strings.get_fixed_width_string_size();
+            if (width.has_value()) {
+                std::optional<std::string> utf32_string = ascii_to_padded_utf32(std::string_view(*val.str_data(), val.len()), *width);
+                if (utf32_string.has_value()) {
+                    value_string = *utf32_string;
+                }
+            }
+        } else {
+            value_string = std::string(*val.str_data(), val.len());
+        }
+    });
+    return value_string;
 }
 
 }

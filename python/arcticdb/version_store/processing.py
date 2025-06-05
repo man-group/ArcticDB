@@ -460,7 +460,7 @@ class QueryBuilder:
 
         q.isin(1, 2, 3)
 
-    regex_match accepts string as pattern and can only filter string column
+    regex_match accepts string as pattern and can only filter string columns
 
     Boolean columns can be filtered on directly:
 
