@@ -1178,7 +1178,7 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
 
 def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
-    symbol = "test_filter_column_not_present_static"
+    symbol = "test_filter_column_not_present_dynamic"
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2), dtype="int64")
     q = QueryBuilder()
     q = q[q["b"] < 5]
