@@ -748,6 +748,7 @@ public:
                         // At least one value in the column exactly matches the input val
                         // Search to the right/left for the last/first such value
                         if (from_right) {
+                            // TODO: Fix linear binary search and add tests for it
                             while (++mid <= high && val == accessor.at(mid)) {}
                             res = mid;
                         } else {
