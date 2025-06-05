@@ -48,8 +48,9 @@ def dataframe(draw, column_names, column_dtypes, min_date, max_date):
             #    schema segments, the columns which are missing in either df will become float64 in the result (so that
             #    the missing values can be NaN), however, if int64 is used some values won't be represented correctly
             #    and the test will fail.
-            min_value = 0 if pd.api.types.is_unsigned_integer_dtype(dtype) else -2**31
-            columns.append(hs_pd.column(name=name, elements=st.integers(min_value=min_value, max_value=2**31 - 1), dtype=dtype))
+            max_bits = min(dtype.itemsize, 4) * 8 - 1 if pd.api.types.is_signed_integer_dtype(dtype) else 0
+            min_value = 0 if pd.api.types.is_unsigned_integer_dtype(dtype) else -2**max_bits-1
+            columns.append(hs_pd.column(name=name, elements=st.integers(min_value=min_value, max_value=2**max_bits - 1), dtype=dtype))
         elif pd.api.types.is_float_dtype(dtype):
             # The column will still be of the specified dtype (float32 or float36), but by asking hypothesis to generate
             # 16-bit floats, we reduce the way of overflows. Pandas use Kahan summation which can sometimes can yield
