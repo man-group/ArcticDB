@@ -3,8 +3,14 @@ name: "Build Docs on Release"
 on:
   release:
     types: [released]
-
-run-name: "Build and Publish Docs for release ${{ github.event.release.tag_name }}"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to add to the docs (e.g., v1.2.3)"
+        required: true
+env:
+  VERSION: ${{ github.event.release.tag_name || inputs.version }}
+run-name: "Build and Publish Docs for release ${{ github.event.release.tag_name || inputs.version }}"
 jobs:
   check-inputs:
     name: Check inputs
@@ -12,7 +18,7 @@ jobs:
     environment: TestPypi  # For TAGGING_TOKEN secret
     outputs:
         version: ${{ steps.tag_name.outputs.tag }}
-        latest: ${{ github.event.release.tag_name == steps.latest_tag.outputs.tag }}
+        latest: ${{ env.VERSION == steps.latest_tag.outputs.tag }}
 
     steps:
       - name: Get latest released tag
@@ -27,7 +33,7 @@ jobs:
       - name: Verify release tag
         id: tag_name
         run: |
-          TAG_NAME=${{ github.event.release.tag_name }}
+          TAG_NAME=${{ env.VERSION }}
           if [[ ! $TAG_NAME =~ ^v[0-9]+(\.[0-9]+){2}$ ]]; then
             echo "Error: Release tag name is not in the correct format. Expected: vX.Y.Z, Actual: $TAG_NAME"
             exit 1
@@ -44,8 +50,8 @@ jobs:
         id: create_docs_tag
         run: |
             DOCS_TAG_NAME=v${{ steps.tag_name.outputs.tag }}-docs
-            git tag $DOCS_TAG_NAME
-            git push origin $DOCS_TAG_NAME
+            git tag --force $DOCS_TAG_NAME
+            git push --force origin $DOCS_TAG_NAME
 
   build-docs:
     needs: check-inputs
@@ -56,5 +62,5 @@ jobs:
        contents: write
     with:
       version: ${{ needs.check-inputs.outputs.version }}
-      latest: ${{ needs.check-inputs.outputs.latest }}
+      latest: ${{ needs.check-inputs.outputs.latest == 'true' }}
       deploy: true

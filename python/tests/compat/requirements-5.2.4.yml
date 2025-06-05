@@ -1,0 +1,10 @@
+name: arcticdb
+channels:
+  - conda-forge
+dependencies:
+  # https://github.com/man-group/ArcticDB/pull/2373
+  # 5.2.4 at conda is broken and 5.2.4rc2 which should word in fact does not get installed
+  - arcticdb==5.2.5
+  - numpy<2
+  - pyarrow
+  - protobuf<6

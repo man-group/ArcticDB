@@ -1153,6 +1153,16 @@ def test_filter_date_range_pickled_symbol(request, lib_type):
         lib.read(symbol, date_range=(idx[1], idx[2]))
 
 
+def test_filter_date_range_none_none(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "sym"
+    idx = pd.date_range("2000-01-01", periods=4)
+    df = pd.DataFrame({"a": [1, 2, 3, 4]}, index=idx)
+    lib.write(symbol, df)
+    vit = lib.read(symbol, date_range=(None, None))
+    assert_frame_equal(vit.data, df)
+
+
 ##################################
 # DYNAMIC SCHEMA TESTS FROM HERE #
 ##################################
