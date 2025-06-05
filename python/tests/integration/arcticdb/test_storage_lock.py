@@ -35,7 +35,7 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
     logger.info(f"Process {pid}: start read")
     df = lib.read(symbol).data
     logger.info(f"Process {pid}: previous value {df['col'][0]}")
-    df["col"][0] = df["col"][0] + 1
+    df["col", 0] = df["col"][0] + 1
     time.sleep(sleep_time)
     lib.write(symbol, df)
     logger.info(f"Process {pid}: incrementing and saving value {df['col'][0]}")
