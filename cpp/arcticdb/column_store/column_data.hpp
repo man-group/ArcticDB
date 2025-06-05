@@ -504,16 +504,18 @@ template <typename TagType>
 FieldStatsImpl generate_column_statistics(ColumnData column_data) {
     using DataTagType = typename TagType::DataTypeTag;
     using RawType = typename DataTagType::raw_type;
-    if constexpr(is_bool_type(DataTagType::data_type))
+    if constexpr(is_bool_type(DataTagType::data_type)) {
+        ARCTICDB_TRACE(log::codec(), "Calculating bool statistics for single block");
         return generate_bool_statistics();
+    }
 
     constexpr auto data_type = TagType::DataTypeTag::data_type;
-
     if constexpr (is_numeric_type(data_type) || is_time_type(data_type)) {
         // Create shared hashmap for unique values
         ankerl::unordered_dense::set<RawType> unique;
 
         if(column_data.num_blocks() == 1) {
+            ARCTICDB_TRACE(log::codec(), "Calculating numeric statistics for single block");
             auto block = column_data.next<TagType>();
             const RawType* ptr = block->data();
             const size_t count = block->row_count();
@@ -521,6 +523,7 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
         } else {
             FieldStatsImpl stats;
             bool first = true;
+            ARCTICDB_TRACE(log::codec(), "Calculating statistics for {} blocks", column_data.num_blocks());
             while (auto block = column_data.next<TagType>()) {
                 const RawType* ptr = block->data();
                 const size_t count = block->row_count();
@@ -541,6 +544,7 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
         ankerl::unordered_dense::set<uint64_t> unique;
 
         if(column_data.num_blocks() == 1) {
+            ARCTICDB_TRACE(log::codec(), "Calculating sequence statistics for single block");
             auto block = column_data.next<TagType>();
             const RawType* ptr = block->data();
             const size_t count = block->row_count();
@@ -548,6 +552,7 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
         } else {
             FieldStatsImpl stats;
             bool first = true;
+            ARCTICDB_TRACE(log::codec(), "Calculating statistics for {} blocks", column_data.num_blocks());
             while (auto block = column_data.next<TagType>()) {
                 const RawType* ptr = block->data();
                 const size_t count = block->row_count();
@@ -566,6 +571,7 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
     } else {
         util::raise_rte("Cannot generate statistics for data type");
     }
+    ARCTICDB_TRACE(log::codec(), "Finished generating statistics");
 }
 
 }
