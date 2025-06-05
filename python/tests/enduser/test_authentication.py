@@ -23,7 +23,7 @@ if s3_endpoint is not None:
     if "amazonaws.com" in s3_endpoint.lower():
         web_address = f"s3.{s3_region}.amazonaws.com"
     else:
-        # VAST and Pure di niot have region
+        # VAST and Pure does not have region
         web_address = s3_endpoint
         if "://" in s3_endpoint:
             web_address = s3_endpoint.split("://")[1] 
