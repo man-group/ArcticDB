@@ -111,9 +111,9 @@ jobs:
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
-            python -m pip  install setuptools 
-            python -m pip  install wheel
-            python setup.py protoc --build-lib python
+            # Remove protobuf folders so that execution is done through those on the wheel
+            rm -rf python/arcticc
+            rm -rf python/arcticdb/proto
             eval "$ARCTICDB_PYTEST_ARGS"
           else
             cd python
@@ -197,9 +197,9 @@ jobs:
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
-            python -m pip  install setuptools 
-            python -m pip  install wheel
-            python setup.py protoc --build-lib python
+            # Remove protobuf folders so that execution is done through those on the wheel
+            rm -rf python/arcticc
+            rm -rf python/arcticdb/proto
             eval "$ARCTICDB_PYTEST_ARGS"
           else
             cd python
