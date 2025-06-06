@@ -257,7 +257,7 @@ class ExpressionNode:
         return self.name
 
 
-def where(condition: Any, left: Any, right: Any):
+def where(condition: Any, left: Any, right: Any) -> ExpressionNode:
     """
     Ternary operator choosing from the left expression where condition is true, and from the right expression where
     it is false. Similar to numpy.where, or the Python statement `left if condition else right`.
@@ -273,7 +273,7 @@ def where(condition: Any, left: Any, right: Any):
         create a new column, then this must be either an expression producing a column, or a value. See examples below
         for both use cases.
     right: Any
-        See left.
+        The expression to select where condition is false.
 
     Returns
     -------
