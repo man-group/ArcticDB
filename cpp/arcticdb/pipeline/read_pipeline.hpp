@@ -157,9 +157,7 @@ inline std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_funct
     bool dynamic_schema,
     bool column_groups) {
     using namespace arcticdb::pipelines::index;
-    if(!dynamic_schema || column_groups) {
-        get_column_bitset_in_context(query, pipeline_context);
-    }
+    get_column_bitset_in_context(query, pipeline_context);
     return build_read_query_filters<ContainerType>(pipeline_context, query.row_filter, dynamic_schema, column_groups);
 }
 
