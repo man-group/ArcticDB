@@ -736,7 +736,7 @@ class DataFrameNormalizer(_PandasNormalizer):
 
     def __init__(self, *args, **kwargs):
         super(DataFrameNormalizer, self).__init__(*args, **kwargs)
-        self._skip_df_consolidation = os.getenv("SKIP_DF_CONSOLIDATION") is not None
+        self._skip_df_consolidation = IS_PANDAS_TWO and os.getenv("SKIP_DF_CONSOLIDATION") is not None
 
     def df_without_consolidation(self, columns, index, item, n_indexes, data):
         """

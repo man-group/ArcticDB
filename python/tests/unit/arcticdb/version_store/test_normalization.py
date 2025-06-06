@@ -1060,3 +1060,18 @@ def test_required_field_inclusion(version_store_factory, dynamic_schema, segment
         received_data = lib.read(sym, columns=["col3"], query_builder=q).data
         expected_df = expected_df.drop(columns=["col1", "col2"])
         assert_frame_equal(expected_df, received_data)
+
+
+@pytest.mark.parametrize("skip_df_consolidation", [True, False])
+def test_pandas_consolidation(lmdb_version_store_v1, skip_df_consolidation):
+    lib = lmdb_version_store_v1
+    sym = "test_pandas_consolidation"
+    lib._normalizer.df._skip_df_consolidation = skip_df_consolidation
+    # Two columns of the same type can be consolidated
+    df = pd.DataFrame({"col1": np.arange(5), "col2": np.arange(5, 10)})
+    lib.write(sym, df)
+    read_df = lib.read(sym).data
+    if skip_df_consolidation and IS_PANDAS_TWO:
+        assert len(read_df._mgr.blocks) == 2
+    else:
+        assert len(read_df._mgr.blocks) == 1
