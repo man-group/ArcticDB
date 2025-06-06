@@ -202,7 +202,7 @@ GitHub output [here](https://github.com/man-group/ArcticDB/pkgs/container/cibuil
 Setting up Linux
 ----------------
 The codebase and build system can work with any reasonably recent Linux distribution with at least
-GCC 8 (10+ recommended) and CMake 3.12 (these instructions assume 3.21+).
+GCC 11 and CMake 3.12 (these instructions assume 3.21+).
 
 A development install of Python 3.6+ (with `libpython.a` or `.so` and full headers) is also necessary.
 See [pybind11 configuration](#pybind11-configuration).
@@ -216,8 +216,8 @@ already have `mongod` available.
 ### Dependencies by distro
 | Distro | Versions reported to work | Packages |
 |---|---|---|
-| Ubuntu | 20.04, 22.04 | build-essential g++-10 libpcre3-dev libsasl2-dev libsodium-dev libkrb5-dev libcurl4-openssl-dev python3-dev |
-| Centos | 7 | devtoolset-10-gcc-c++ openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel python3-devel |
+| Ubuntu | 20.04, 22.04 | build-essential g++-11 libpcre3-dev libsasl2-dev libsodium-dev libkrb5-dev libcurl4-openssl-dev python3-dev |
+| Centos | 7 | devtoolset-11-gcc-c++ openssl-devel cyrus-sasl-devel devtoolset-11-libatomic-devel libcurl-devel python3-devel |
 
 Setting up Windows
 ------------------
