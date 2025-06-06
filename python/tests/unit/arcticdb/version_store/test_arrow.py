@@ -21,8 +21,10 @@ def test_basic(lmdb_version_store_v1):
 
 
 # TODO: Do this fix during normalization in frontend PR
-def fix_timeseries_index(df):
+def fix_timeseries_index(df, set_index=False):
     df["index"] = df["index"].apply(lambda x : pd.Timestamp(x))
+    if set_index:
+        df = df.set_index("index")
     return df
 
 
@@ -130,9 +132,10 @@ def test_all_types(lmdb_version_store_v1):
     assert_frame_equal(result, df)
 
 
+@pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 3), (3, 75), (4, 32), (0, 99), (7, 56)])
-def test_date_range(lmdb_version_store_v1, start_offset, end_offset):
-    lib = lmdb_version_store_v1
+def test_date_range(version_store_factory, segment_row_size, start_offset, end_offset):
+    lib = version_store_factory(segment_row_size=segment_row_size)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100), columns=['x'])
     sym = "arrow_date_test"
@@ -143,12 +146,32 @@ def test_date_range(lmdb_version_store_v1, start_offset, end_offset):
 
     date_range = (query_start_ts, query_end_ts)
     data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
-    df = data_closed_table.to_pandas()
-    df = df.set_index('index')
-    assert query_start_ts == pd.Timestamp(df.index[0])
-    assert query_end_ts == pd.Timestamp(df.index[-1])
+    df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
+    assert query_start_ts == df.index[0]
+    assert query_end_ts == df.index[-1]
     assert df['x'].iloc[0] == start_offset
     assert df['x'].iloc[-1] == end_offset
+
+
+@pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
+@pytest.mark.parametrize("start_offset,end_offset", [(2, 4), (3, 76), (4, 33), (0, 100), (7, 57)])
+def test_row_range(version_store_factory, segment_row_size, start_offset, end_offset):
+    lib = version_store_factory(segment_row_size=segment_row_size)
+    initial_timestamp = pd.Timestamp("2019-01-01")
+    df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100), columns=['x'])
+    sym = "arrow_date_test"
+    lib.write(sym, df)
+
+    row_range = (start_offset, end_offset)
+    data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
+
+    start_ts = initial_timestamp + pd.DateOffset(start_offset)
+    end_ts = initial_timestamp + pd.DateOffset(end_offset-1)
+    assert start_ts == df.index[0]
+    assert end_ts == df.index[-1]
+    assert df['x'].iloc[0] == start_offset
+    assert df['x'].iloc[-1] == end_offset-1
 
 
 def test_with_querybuilder(lmdb_version_store_v1):

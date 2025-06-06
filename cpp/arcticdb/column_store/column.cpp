@@ -590,20 +590,17 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
     return output;
 }
 
-void Column::truncate_first_block(size_t row) {
+void Column::truncate_first_block(size_t start_row) {
     if(!is_sparse()) {
-        auto bytes = data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL)  * row;
+        auto bytes = start_row * data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
         data_.buffer().truncate_first_block(bytes);
     }
 }
 
-void Column::truncate_last_block(size_t row) {
+void Column::truncate_last_block(size_t end_row) {
     if(!is_sparse()) {
         const auto column_row_count = row_count();
-        if(row < static_cast<size_t>(column_row_count))
-            return;
-
-        auto bytes = data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL)  * (column_row_count - row);
+        auto bytes = (column_row_count - end_row) * data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
         data_.buffer().truncate_last_block(bytes);
     }
 }
