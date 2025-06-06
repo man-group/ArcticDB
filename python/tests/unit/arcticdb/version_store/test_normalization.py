@@ -44,6 +44,8 @@ from arcticdb.version_store._normalization import (
     NPDDataFrame,
 )
 from arcticdb.version_store._common import TimeFrame
+from arcticdb.version_store._store import NativeVersionStore
+from arcticdb.version_store.library import Library
 from arcticdb.util.test import (
     CustomThing,
     TestCustomNormalizer,
@@ -1062,17 +1064,17 @@ def test_required_field_inclusion(version_store_factory, dynamic_schema, segment
         assert_frame_equal(expected_df, received_data)
 
 
-@pytest.mark.parametrize("skip_df_consolidation", [True, False])
-def test_pandas_consolidation(lmdb_version_store_v1, skip_df_consolidation):
-    lib = lmdb_version_store_v1
-    sym = "test_pandas_consolidation"
-    if skip_df_consolidation:
-        lib._normalizer.df.set_skip_df_consolidation()
-    # Two columns of the same type can be consolidated
-    df = pd.DataFrame({"col1": np.arange(5), "col2": np.arange(5, 10)})
-    lib.write(sym, df)
-    read_df = lib.read(sym).data
-    if skip_df_consolidation and IS_PANDAS_TWO:
-        assert len(read_df._mgr.blocks) == 2
-    else:
-        assert len(read_df._mgr.blocks) == 1
+@pytest.mark.parametrize("env_var_set", [True, False])
+def test_pandas_consolidation_v1(version_store_factory, monkeypatch, env_var_set):
+    if env_var_set:
+        monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
+    lib = version_store_factory()
+    assert lib._normalizer.df._skip_df_consolidation == (env_var_set and IS_PANDAS_TWO)
+
+
+@pytest.mark.parametrize("env_var_set", [True, False])
+def test_pandas_consolidation_v2(lmdb_library_factory, monkeypatch, env_var_set):
+    if env_var_set:
+        monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
+    lib = lmdb_library_factory()
+    assert lib._nvs._normalizer.df._skip_df_consolidation == IS_PANDAS_TWO
