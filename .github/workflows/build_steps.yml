@@ -361,7 +361,16 @@ jobs:
 
       - name: Run test
         run: |
-          build_tooling/parallel_test.sh tests/${{matrix.type}}
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+            echo "Run custom pytest command"
+            python -m pip  install pytest-repeat
+            python -m pip  install setuptools 
+            python -m pip  install wheel
+            python setup.py protoc --build-lib python
+            eval "$ARCTICDB_PYTEST_ARGS"
+          else
+            build_tooling/parallel_test.sh tests/${{matrix.type}}
+          fi
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
