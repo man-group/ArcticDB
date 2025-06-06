@@ -113,7 +113,7 @@ void check_column_presence(OutputSchema& output_schema, const std::unordered_set
     schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(first_missing == required_columns.end(),
             "{}Clause requires column '{}' to exist in input data",
             clause_name,
-            *first_missing
+            first_missing == required_columns.end() ? "" : *first_missing
     );
 }
 

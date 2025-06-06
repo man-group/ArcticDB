@@ -851,7 +851,7 @@ def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
 def drop_inf(df):
     return df[~df.isin([np.inf, -np.inf]).any(axis=1)]
 
-def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
+def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame, check_dtype=False):
     """
     Checks if integer columns are exactly the same. For float columns checks if they are approximately the same.
     We can't guarantee the same order of operations for the floats thus numerical errors might appear.
@@ -866,7 +866,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     left_no_inf = drop_inf(left)
     right_no_inf = drop_inf(right)
 
-    check_equals_flags = {"check_dtype": False}
+    check_equals_flags = {"check_dtype": check_dtype}
     if PANDAS_VERSION >= Version("1.1"):
         check_equals_flags["check_freq"] = False
     if PANDAS_VERSION >= Version("1.2"):
@@ -881,16 +881,18 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
                 pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
         except:
             with pd.option_context(
-                    'display.max_columns', None,
-                    'display.max_rows', None,
-                    'display.max_colwidth', None,
-                    'display.width', 0
+                'display.max_columns', None,
+                'display.max_rows', None,
+                'display.max_colwidth', None,
+                'display.width', 0
             ):
                 print("\nError in approximate dataframe comparison. DataFrames are different\n")
                 print("Left:\n")
                 print(left_no_inf)
+                print(left_no_inf.dtypes)
                 print("Right:\n")
                 print(right_no_inf)
+                print(right_no_inf.dtypes)
                 raise
 
 
@@ -956,10 +958,11 @@ def generic_resample_test(
     received = received.reindex(columns=sorted(received.columns))
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
+    check_dtype = expected_types is not None
     if has_float_column:
-        assert_dfs_approximate(expected, received)
+        assert_dfs_approximate(expected, received, check_dtype=check_dtype)
     else:
-        assert_frame_equal(expected, received)
+        assert_frame_equal(expected, received, check_dtype=check_dtype)
 
 
 def equals(x, y):
@@ -1008,6 +1011,15 @@ def largest_numeric_type(dtype):
         return np.uint64
     return dtype
 
+def common_float_int_type(float_dtype, int_dtype):
+    # We don't support float16
+    float_dtype = np.dtype(float_dtype)
+    int_dtype = np.dtype(int_dtype)
+    assert float_dtype.itemsize >= 4
+    if int_dtype.itemsize <= 2:
+        return float_dtype
+    return np.float64
+
 def valid_common_type(left, right):
     """
     This is created to mimic the C++ has_valid_common_type function. It takes two numpy dtypes and returns a type able
@@ -1017,17 +1029,19 @@ def valid_common_type(left, right):
     """
     if left is None or right is None:
         return None
+    left = np.dtype(left)
+    right = np.dtype(right)
     if left == right:
         return left
     if pd.api.types.is_float_dtype(left):
         if pd.api.types.is_float_dtype(right):
             return left if left.itemsize > right.itemsize else right
         elif pd.api.types.is_integer_dtype(right):
-            return left
+            return common_float_int_type(left, right)
         return None
     elif pd.api.types.is_signed_integer_dtype(left):
         if pd.api.types.is_float_dtype(right):
-            return right
+            return common_float_int_type(right, left)
         elif pd.api.types.is_signed_integer_dtype(right):
             return left if left.itemsize > right.itemsize else right
         elif pd.api.types.is_unsigned_integer_dtype(right):
@@ -1039,10 +1053,10 @@ def valid_common_type(left, right):
             return int_dtypes[right.itemsize * 2]
     elif pd.api.types.is_unsigned_integer_dtype(left):
         if pd.api.types.is_float_dtype(right):
-            return right
+            return common_float_int_type(right, left)
         elif pd.api.types.is_unsigned_integer_dtype(right):
             return left if left.itemsize > right.itemsize else right
-        elif pd.api.types.is_signed_integer_dtype(left):
+        elif pd.api.types.is_signed_integer_dtype(right):
             int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
             if left.itemsize >= 8:
                 return None
@@ -1071,7 +1085,23 @@ def compute_common_type_for_columns_in_df_list(df_list):
     for df in df_list:
         for col in df.columns:
             if col not in common_types:
-                common_types[col] = df[col].dtype
+                common_types[col] = np.dtype(df[col].dtype)
             else:
-                common_types[col] = valid_common_type(common_types[col], df[col].dtype)
+                common_types[col] = valid_common_type(common_types[col], np.dtype(df[col].dtype))
+    return common_types
+
+def compute_common_type_for_columns(segment_columns: List[dict]):
+    """
+    Takes a list of column/dtype dictionaries where each element of the list is a dictionary describing a segment. The
+    keys of the dictionary are column names and the values are dtypes. A column is allowed to be missing from some
+    segments. Returns a dictionary where the keys are column names and values are combined dtype. If a value is none
+    this means that there are two segments holding a column with incompatible dtypes.
+    """
+    common_types = {}
+    for columns in segment_columns:
+        for name, dtype in columns.items():
+            if name not in common_types:
+                common_types[name] = np.dtype(dtype)
+            else:
+                common_types[name] = valid_common_type(common_types[name], np.dtype(dtype))
     return common_types

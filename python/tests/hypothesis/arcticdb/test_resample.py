@@ -5,7 +5,12 @@ from hypothesis import given, settings, assume, HealthCheck
 import hypothesis.extra.pandas as hs_pd
 import hypothesis.strategies as st
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
-from arcticdb.util.test import generic_resample_test, compute_common_type_for_columns_in_df_list, expected_aggregation_type
+from arcticdb.util.test import (
+    generic_resample_test,
+    compute_common_type_for_columns_in_df_list,
+    expected_aggregation_type,
+    compute_common_type_for_columns
+)
 from arcticdb.util._versions import IS_PANDAS_TWO
 
 COLUMN_DTYPE = ["float", "int", "uint"]
@@ -108,10 +113,13 @@ def dynamic_schema_column_list(draw):
     segment_ranges = sorted(draw(st.lists(date(min_date=MIN_DATE, max_date=MAX_DATE, unit="s"), unique=True, min_size=segment_count+1, max_size=segment_count+1)))
     segments = []
     dtypes = [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64]
+    columns_per_segment = [draw(st.lists(st.sampled_from(all_column_names), min_size=1, max_size=3, unique=True)) for _ in range(segment_count)]
+    dtypes_per_segment = [draw(st.lists(st.sampled_from(dtypes), min_size=len(cols), max_size=len(cols))) for cols in columns_per_segment]
+    column_dtype_per_segment = [{name: dtype for name, dtype in zip(columns_per_segment[i], dtypes_per_segment[i])} for i in range(segment_count)]
+    assume(all(col_type is not None for col_type in compute_common_type_for_columns(column_dtype_per_segment).values()))
     for segment_index in range(segment_count):
-        segment_column_names = draw(st.lists(st.sampled_from(all_column_names), min_size=1, max_size=3, unique=True))
-        column_count = len(segment_column_names)
-        column_dtypes = draw(st.lists(st.sampled_from(dtypes), min_size=column_count, max_size=column_count))
+        segment_column_names = columns_per_segment[segment_index]
+        column_dtypes = dtypes_per_segment[segment_index]
         segment_start_date = segment_ranges[segment_index]
         segment_end_date = segment_ranges[segment_index + 1]
         segments.append(draw(dataframe(segment_column_names, column_dtypes, segment_start_date, segment_end_date)))
@@ -152,9 +160,15 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                 # the first value of the data frame to be outside the computed resampling range. In the arctic, this is not a problem
                 # as we allow this by design.
                 if str(pandas_error) != "Values falls before first bin":
-                    raise pandas_error
+                    raise
                 else:
                     return
+            except RuntimeError as pandas_error:
+                # This is a bug in pandas one that should be fixed in Pandas 2
+                if str(pandas_error) == "empty group with uint64_t" and not IS_PANDAS_TWO:
+                    return
+                else:
+                    raise
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(
@@ -166,7 +180,6 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
 def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, rule, origin, offset):
     common_column_types = compute_common_type_for_columns_in_df_list(df_list)
-    assume(all(col_type is not None for col_type in common_column_types.values()))
     lib = lmdb_version_store_dynamic_schema_v1
     lib.version_store.clear()
     sym = "sym"
@@ -176,6 +189,7 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
         # This column will be used to keep track of empty buckets.
         df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
         lib.append(sym, df)
+
     for closed in ["left", "right"]:
         for label in ["left", "right"]:
             try:
@@ -197,6 +211,12 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
                 # the first value of the data frame to be outside the computed resampling range. In arctic this is not a problem
                 # as we allow this by design.
                 if str(pandas_error) != "Values falls before first bin":
-                    raise pandas_error
+                    raise
                 else:
                     return
+            except RuntimeError as pandas_error:
+                # This is a bug in pandas one that should be fixed in Pandas 2
+                if str(pandas_error) == "empty group with uint64_t" and not IS_PANDAS_TWO:
+                    return
+                else:
+                    raise

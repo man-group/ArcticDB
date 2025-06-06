@@ -983,7 +983,7 @@ class TestResampleDynamicSchema:
         expected_types = {
             "col_0_min": dtype,
             "col_0_max": dtype,
-            "col_0_sum": np.uint64,
+            "col_0_sum": np.int64,
             "col_0_mean": np.float64,
             "col_0_first": dtype,
             "col_0_last": dtype,

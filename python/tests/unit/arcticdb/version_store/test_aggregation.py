@@ -316,10 +316,12 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
     q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
 
     lib.write("symbol", df)
-    res = lib.read("symbol", query_builder=q)
-    df = pd.DataFrame({"to_mean": (1.1 + 1.4 + 2.5) / 3, "to_max": [2.5]}, index=["group_1"])
+    res = lib.read("symbol", query_builder=q).data
+    res.sort_index(axis=1, inplace=True)
+    df = pd.DataFrame({"to_max": [2.5], "to_mean": [(1.1 + 1.4 + 2.5) / 3]}, index=["group_1"])
     df.index.rename("grouping_column", inplace=True)
-    assert_frame_equal(res.data, df)
+    df.sort_index(axis=1, inplace=True)
+    assert_frame_equal(res, df)
 
 
 ##################################
