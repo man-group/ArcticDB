@@ -1066,7 +1066,7 @@ def test_required_field_inclusion(version_store_factory, dynamic_schema, segment
 def test_pandas_consolidation(lmdb_version_store_v1, skip_df_consolidation):
     lib = lmdb_version_store_v1
     sym = "test_pandas_consolidation"
-    lib._normalizer.df._skip_df_consolidation = skip_df_consolidation
+    lib._normalizer.df._skip_df_consolidation = IS_PANDAS_TWO and skip_df_consolidation
     # Two columns of the same type can be consolidated
     df = pd.DataFrame({"col1": np.arange(5), "col2": np.arange(5, 10)})
     lib.write(sym, df)
