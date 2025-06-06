@@ -24,6 +24,7 @@ from arcticdb.version_store.library import Library
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 GCP_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
+AZURE_BLOB_STORAGE_DEFAULT_CONTAINER = 'arcticdb-asv-real-storage'
 
 
 class GitHubSanitizingHandler(logging.StreamHandler):
@@ -85,6 +86,7 @@ class Storage(Enum):
     AMAZON = 1
     LMDB = 2
     GOOGLE = 3
+    AZURE = 4
 
 
 class StorageSpace(Enum):
@@ -138,6 +140,11 @@ class StorageSetup:
             cls._gcp_secret = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
             cls._gcp_access = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
             cls._gcp_bucket = GCP_S3_DEFAULT_BUCKET
+
+            # Azure initialization
+            cls._azure_account_name = os.getenv("ARCTICDB_REAL_AZURE_ACCOUNT_NAME")
+            cls._azure_account_key = os.getenv("ARCTICDB_REAL_AZURE_ACCOUNT_KEY")
+            cls._azure_container = AZURE_BLOB_STORAGE_DEFAULT_CONTAINER
    
     @classmethod
     def get_machine_id(cls):
@@ -183,6 +190,8 @@ class StorageSetup:
             s = cls._gcp_secret
             a = cls._gcp_access
             return f"gcpxml://storage.googleapis.com:{cls._gcp_bucket}?access={a}&secret={s}&path_prefix={prefix}"
+        elif storage == Storage.AZURE:
+            return f"azure://{AZURE_BLOB_STORAGE_DEFAULT_CONTAINER}?account_name={cls._azure_account_name}&account_key={cls._azure_account_key}&path_prefix={prefix}"
         else:
             raise Exception("Unsupported storage type :", storage)
 
