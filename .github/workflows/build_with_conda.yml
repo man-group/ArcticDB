@@ -108,10 +108,11 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
-          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            echo "Run custom pytest command"
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS"
+            echo "Run custom pytest command: $command"
             python -m pip  install pytest-repeat
-            eval "$ARCTICDB_PYTEST_ARGS"
+            eval "$command"
           else
             cd python
             python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests $ARCTICDB_PYTEST_ARGS
@@ -192,9 +193,10 @@ jobs:
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            echo "Run custom pytest command"
+            command="python -m $ARCTICDB_PYTEST_ARGS"
+            echo "Run custom pytest command: $command"
             python -m pip  install pytest-repeat
-            eval "$ARCTICDB_PYTEST_ARGS"
+            eval "$command"
           else
             cd python
             python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} tests $ARCTICDB_PYTEST_ARGS
