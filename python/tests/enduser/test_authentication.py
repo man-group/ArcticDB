@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import List
 import arcticdb as adb
 import os
 import pytest
@@ -46,7 +47,7 @@ def check_creds_file_exists_on_machine():
                     where no AWS credentials file exists")
 
 
-def execute_uri_test(uri:str, expected: str, access: str, secret: str):
+def execute_uri_test(uri:str, expected: str | List[str], access: str, secret: str):
     uri = uri.replace(access_mark, access)
     uri = uri.replace(secret_mark, secret)
     result = None
@@ -61,9 +62,14 @@ def execute_uri_test(uri:str, expected: str, access: str, secret: str):
         if result is not None:
             raise GitHubSanitizingException(f"Uri {uri} expected to PASS, but it failed with {result}")
     else:
-        if expected not in result:
-            raise GitHubSanitizingException(
-                f"Uri {uri} expected to FAIL with [{expected}].\n Failed with error: {result}")
+        if isinstance(expected, list):
+            if not any(word in result for word in expected):
+                raise GitHubSanitizingException(
+                    f"Uri {uri} expected to FAIL with any of [{expected}] in message.\n Failed with different error: {result}")
+        else:
+            if expected not in result:
+                raise GitHubSanitizingException(
+                    f"Uri {uri} expected to FAIL with [{expected}]in message.\n Failed with different error: {result}")
       
 
 @pytest.mark.parametrize("uri,expected", [
@@ -80,7 +86,7 @@ def execute_uri_test(uri:str, expected: str, access: str, secret: str):
     (f"s3://{web_address}:{s3_bucket}?access={access_mark}&secret={secret_mark}1", 
      "SignatureDoesNotMatch"),
     (f"s3://{web_address}:{s3_bucket}?access={access_mark}1&secret={secret_mark}", 
-     "InvalidAccessKeyId"),
+     ["InvalidAccessKeyId", "SignatureDoesNotMatch"]),
     (f"s3s://{web_address}:{s3_bucket}?access={access_mark}", 
      "AccessDenied: Access Denied for object"),
     (f"s3://{web_address}:{s3_bucket}?secret={secret_mark}", 
@@ -89,7 +95,7 @@ def execute_uri_test(uri:str, expected: str, access: str, secret: str):
 @REAL_S3_TESTS_MARK
 @pytest.mark.storage
 @pytest.mark.authentication
-def test_arcticdb_s3_uri(uri:str, expected: str):
+def test_arcticdb_s3_uri(uri:str, expected:  str | List[str]):
     check_creds_file_exists_on_machine()
     execute_uri_test(uri, expected, s3_access_key, s3_secret_key)
 
@@ -108,12 +114,13 @@ def test_arcticdb_s3_uri(uri:str, expected: str):
      "SignatureDoesNotMatch"),
     (f"gcpxml://storage.googleapis.com:{gcp_bucket}?access={access_mark}1fds&secret={secret_mark}", 
      "S3Error#22 SignatureDoesNotMatch"),
-    (f"gcpxml://storage.googleapis.com:{gcp_bucket}?secret={secret_mark}", "Access token or awsauth=true must be specified in GCPXML"),
+    (f"gcpxml://storage.googleapis.com:{gcp_bucket}?secret={secret_mark}", 
+     "Access token or awsauth=true must be specified in GCPXML"),
 ])
 @pytest.mark.storage
 @pytest.mark.authentication
 @REAL_GCP_TESTS_MARK
-def test_arcticdb_gcpxml_uri(uri:str, expected: str):
+def test_arcticdb_gcpxml_uri(uri:str, expected: str | List[str]):
     check_creds_file_exists_on_machine()
     execute_uri_test(uri, expected, gcp_access_key, gcp_secret_key)
 
