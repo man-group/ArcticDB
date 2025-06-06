@@ -81,6 +81,12 @@ struct TransformBatchResultsFlags {
     bool convert_no_data_found_to_key_not_found_{false};
 };
 
+
+/// Used by batch_[append/update/read/append] methods to process the individual results of a batch query.
+/// @param stream_ids i-th element of stream_ids corresponds to i-th element of batch_request_versions
+/// @param flags Flags that control the exception handling on batch operations
+/// @param version_queries i-th element corresponds to the i-th element of batch_request_versions. Use to record the
+///     version query in the DataError for a batch read request
 template<typename ResultValueType>
 std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_throw(
     std::vector<folly::Try<ResultValueType>>&& batch_request_versions,
