@@ -23,7 +23,6 @@ using TimestampRange = std::pair<timestamp, timestamp>;
 using NumericIndex = timestamp;
 using StringIndex = std::string;
 using UnsignedIndex = uint64_t;
-//using IndexValue = std::variant<NumericIndex, StringIndex>;
 using IndexValue = std::variant<NumericIndex, StringIndex, UnsignedIndex>;
 
 /** The IndexValue variant holds NumericIndex=timestamp=int64_t but is also used to store sizes up to uint64, so needs
