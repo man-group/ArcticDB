@@ -466,6 +466,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("GE", OperationType::GE)
             .value("ISIN", OperationType::ISIN)
             .value("ISNOTIN", OperationType::ISNOTIN)
+            .value("REGEX_MATCH", OperationType::REGEX_MATCH)
             .value("AND", OperationType::AND)
             .value("OR", OperationType::OR)
             .value("XOR", OperationType::XOR)

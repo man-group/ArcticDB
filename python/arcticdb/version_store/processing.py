@@ -57,6 +57,7 @@ from arcticdb_ext.version_store import (
 )
 from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
 from arcticdb_ext.version_store import OperationType as _OperationType
+from arcticdb_ext.util import RegexPattern as _RegexPattern
 
 COLUMN = "COLUMN"
 
@@ -232,6 +233,15 @@ class ExpressionNode:
 
     def notnull(self):
         return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
+    
+    def regex_match(self, pattern: str):
+        if isinstance(pattern, str):
+            _RegexPattern(pattern)  # Validate the regex pattern
+            return self._apply(pattern, _OperationType.REGEX_MATCH)
+        else:
+            raise UserInputException(
+                f"'regex_match' filtering only accepts str as pattern, {type(pattern)} is given"
+            )
 
     def __str__(self):
         return self.get_name()
@@ -429,7 +439,7 @@ class QueryBuilder:
 
     Supported filtering operations:
 
-    * isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
+    * isna, isnull, notna, notnull and regex_match - return all rows where a specified column is/is not NaN or None. isna is
     equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
     in column types that support both (e.g. strings). For example:
         ```
@@ -449,6 +459,8 @@ class QueryBuilder:
     is equivalent to...
 
         q.isin(1, 2, 3)
+
+    regex_match accepts string as pattern and can only filter string columns
 
     Boolean columns can be filtered on directly:
 

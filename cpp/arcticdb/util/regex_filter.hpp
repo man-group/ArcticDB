@@ -62,7 +62,8 @@ public:
 private:
     void compile_regex() {
         handle_ = ::pcre_compile2(text_.data(), options_, &error_, &help_, &offset_, table_);
-        util::check(handle_ != nullptr, "Error {} compiling regex {}: {}", error_, text_, help_);
+        // Should be safe to assume regex pattern must be user input
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(handle_ != nullptr, "Error {} compiling regex {}: {}", error_, text_, help_);
         auto result = get_capturing_groups();
         if(result != 0) {
             handle_ = nullptr;
@@ -88,7 +89,7 @@ public:
     results_((pattern_.capturing_groups() + 1) * 3, 0) {
     }
 
-    bool match(const std::string& text) {
+    bool match(std::string_view text) {
         ResultsType res = ::pcre_exec(pattern_.handle(), extra_, text.data(), static_cast<int>(text.size()), 0, options_, &results_[0], static_cast<int>(results_.size()));
         util::check(res >= 0 || res == PCRE_ERROR_NOMATCH, "Invalid result in regex compile with pattern {} and text {}: {}", pattern_.text(), text, res);
         return res > 0;

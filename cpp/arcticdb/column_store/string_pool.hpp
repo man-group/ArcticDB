@@ -174,8 +174,9 @@ class StringPool {
 
     py::buffer_info as_buffer_info() const;
 
-    std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column);
-    ankerl::unordered_dense::set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column);
+    std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column) const;
+    ankerl::unordered_dense::set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) const;
+    ankerl::unordered_dense::set<position_t> get_regex_match_offsets_for_column(std::string_view str, const Column& column) const;
   private:
     MapType map_;
     mutable StringBlock block_;
