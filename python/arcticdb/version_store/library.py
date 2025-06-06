@@ -750,8 +750,7 @@ class Library:
         """
         self.arctic_instance_desc = arctic_instance_description
         self._nvs = nvs
-        if IS_PANDAS_TWO:
-            self._nvs._normalizer.df._skip_df_consolidation = True
+        self._nvs._normalizer.df.set_skip_df_consolidation()
         self._dev_tools = DevTools(nvs)
 
     def __repr__(self):
