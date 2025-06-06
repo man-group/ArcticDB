@@ -880,9 +880,13 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 if e.response["Error"]["Code"] != "NoSuchBucket" and not is_win_37:
                     raise e
         else:
-            requests.post(
-                self._iam_endpoint + "/moto-api/reset", verify=False
-            )  # If CA cert verify fails, it will take ages for this line to finish
+            try:
+                requests.post(
+                    self._iam_endpoint + "/moto-api/reset", verify=False
+                )  # If CA cert verify fails, it will take ages for this line to finish
+            except Exception:
+                # We clean bucket at session level so failure here does not matter
+                pass            
             self._iam_admin = None
 
 
