@@ -81,18 +81,18 @@ struct TransformBatchResultsFlags {
     bool convert_no_data_found_to_key_not_found_{false};
 };
 
+
 /// Used by batch_[append/update/read/append] methods to process the individual results of a batch query.
-/// @param throw_on_error The V1 Library API aborts on the first exception while V2 processes everything and converts
-///     exceptions to DataError
 /// @param stream_ids i-th element of stream_ids corresponds to i-th element of batch_request_versions
-/// @param versoin_queries i-th element corresponds to the i-th element of batch_request_versions. Use to record the
-///     the version query in the DataError for a batch read request
+/// @param flags Flags that control the exception handling on batch operations
+/// @param version_queries i-th element corresponds to the i-th element of batch_request_versions. Use to record the
+///     version query in the DataError for a batch read request
 template<typename ResultValueType>
 std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_throw(
     std::vector<folly::Try<ResultValueType>>&& batch_request_versions,
     std::span<const StreamId> stream_ids,
     TransformBatchResultsFlags flags,
-    std::span<const VersionQuery> versoin_queries = {}
+    std::span<const VersionQuery> version_queries = {}
 ) {
     std::vector<std::variant<ResultValueType, DataError>> result;
     result.reserve(batch_request_versions.size());
@@ -106,15 +106,15 @@ std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_t
             if (flags.throw_on_error_ && (!is_missing_version_exception || throw_on_missing_symbol)) {
                 version_or_exception.throwUnlessValue();
             } else {
-                DataError data_error = versoin_queries.empty() ?
-                    DataError(stream_ids[idx], exception.what().toStdString()) :
-                    DataError(stream_ids[idx], exception.what().toStdString(), versoin_queries[idx].content_);
+                DataError data_error = version_queries.empty() ?
+                                       DataError(stream_ids[idx], exception.what().toStdString()) :
+                                       DataError(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
                 if (exception.template is_compatible_with<NoSuchVersionException>()) {
                     data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
                 } else if (exception.template is_compatible_with<storage::KeyNotFoundException>()) {
                     data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
                 } else if(flags.convert_no_data_found_to_key_not_found_ &&
-                        exception.template is_compatible_with<storage::NoDataFoundException>()) {
+                    exception.template is_compatible_with<storage::NoDataFoundException>()) {
                     data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
                 }
                 result.emplace_back(std::move(data_error));
@@ -506,7 +506,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
         descriptor_futures.emplace_back(
             get_descriptor_async(std::move(opt_index_key_fut), stream_ids[idx], version_queries[idx]));
     }
-    auto descriptors = collectAll(descriptor_futures).get();
+    auto descriptors = folly::collectAll(descriptor_futures).get();
     TransformBatchResultsFlags flags;
     flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
@@ -1486,6 +1486,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             })
         );
     }
+
     auto append_versions = folly::collectAll(append_versions_futs).get();
     TransformBatchResultsFlags flags;
     flags.throw_on_error_ = throw_on_error;
@@ -1507,43 +1508,43 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
         update_versions_futs.push_back(
             std::move(stream_update_info_fut)
-            .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
-                auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
-                auto write_options = get_write_options();
-                if (update_info.previous_index_key_.has_value()) {
-                    const bool dynamic_schema = cfg().write_options().dynamic_schema();
-                    const bool empty_types = cfg().write_options().empty_types();
-                    index_key_fut = async_update_impl(
-                        store(),
-                        update_info,
-                        update_query,
-                        std::move(frame),
-                        std::move(write_options),
-                        dynamic_schema,
-                        empty_types);
-                } else {
-                    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-                        upsert,
-                        "Cannot update non-existent symbol {}."
-                        "Using \"upsert=True\" will create create the symbol instead of throwing this exception.",
-                        stream_id);
-                    index_key_fut = async_write_dataframe_impl(
-                        store(),
-                        0,
-                        std::move(frame),
-                        std::move(write_options),
-                        std::make_shared<DeDupMap>(),
-                        false,
-                        true);
-                }
-                return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
-                    return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
-                });
-            })
-            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
-                auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
-            })
+                .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
+                    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+                    auto write_options = get_write_options();
+                    if (update_info.previous_index_key_.has_value()) {
+                        const bool dynamic_schema = cfg().write_options().dynamic_schema();
+                        const bool empty_types = cfg().write_options().empty_types();
+                        index_key_fut = async_update_impl(
+                            store(),
+                            update_info,
+                            update_query,
+                            std::move(frame),
+                            std::move(write_options),
+                            dynamic_schema,
+                            empty_types);
+                    } else {
+                        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                            upsert,
+                            "Cannot update non-existent symbol {}."
+                            "Using \"upsert=True\" will create create the symbol instead of throwing this exception.",
+                            stream_id);
+                        index_key_fut = async_write_dataframe_impl(
+                            store(),
+                            0,
+                            std::move(frame),
+                            std::move(write_options),
+                            std::make_shared<DeDupMap>(),
+                            false,
+                            true);
+                    }
+                    return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
+                        return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                    });
+                })
+                .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
+                    auto&& [index_key, update_info] = index_key_and_update_info;
+                    return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
+                })
         );
     }
 
