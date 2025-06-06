@@ -890,8 +890,8 @@ folly::Future<folly::Unit> delete_trees_responsibly(
             auto min_versions = min_versions_for_each_stream(orig_keys_to_delete);
             for (const auto& min : min_versions) {
                 auto load_strategy = load_type == LoadType::DOWNTO
-                        ? LoadStrategy{load_type, LoadObjective::INCLUDE_DELETED, static_cast<SignedVersionId>(min.second)}
-                        : LoadStrategy{load_type, LoadObjective::INCLUDE_DELETED};
+                        ? LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY, static_cast<SignedVersionId>(min.second)}
+                        : LoadStrategy{load_type, LoadObjective::UNDELETED_ONLY};
                 const auto entry = version_map->check_reload(store, min.first, load_strategy, __FUNCTION__);
                 entry_map.try_emplace(std::move(min.first), entry);
             }
