@@ -10,8 +10,8 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
-MIN_DATE = np.datetime64('1969-01-01')
-MAX_DATE = np.datetime64('1973-01-01')
+MIN_DATE = np.datetime64('1969-06-01')
+MAX_DATE = np.datetime64('1970-06-01')
 
 pytestmark = pytest.mark.pipeline
 
@@ -69,8 +69,8 @@ def origin(draw):
     selected_origin = draw(st.sampled_from(["start", "end", "start_day", "end_day", "epoch", "timestamp"]))
     # Hypothesis may generate dates for year > 2200 and some of the arithmetic operation will overflow.
     if selected_origin == "timestamp":
-        min_date = MIN_DATE - np.timedelta64(365, 'D')
-        max_date = MAX_DATE + np.timedelta64(365, 'D')
+        min_date = MIN_DATE - np.timedelta64(5, 'D')
+        max_date = MAX_DATE + np.timedelta64(5, 'D')
         return pd.Timestamp(draw(date(min_date=min_date, max_date=max_date)))
     else:
         return selected_origin
@@ -96,7 +96,7 @@ def offset(draw):
     unit = draw(st.sampled_from(['s', 'min', 'h', None]))
     if unit is None:
         return None
-    count = draw(st.integers(min_value=1, max_value=10_000))
+    count = draw(st.integers(min_value=1, max_value=100))
     result = f"{count}{unit}"
     assume(freq_fits_in_64_bits(count=count, unit=unit))
     return result

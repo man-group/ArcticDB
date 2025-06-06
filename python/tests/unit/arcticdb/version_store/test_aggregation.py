@@ -524,14 +524,16 @@ def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store
     lib = lmdb_version_store_dynamic_schema_v1
     sym = "sym"
     df1 = pd.DataFrame({"agg_column": np.array([0.0, 0.0], dtype)})
-    df2 = pd.DataFrame({"grouping_column": ["0"]})
-    df3 = pd.DataFrame({"grouping_column": ["00"], "agg_column": np.array([0], dtype)})
+    df2 = pd.DataFrame({"grouping_column": ["a"]})
+    df3 = pd.DataFrame({"grouping_column": ["b"], "agg_column": np.array([0], dtype)})
     for df in [df1, df2, df3]:
         lib.append(sym, df)
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"agg_column": extremum})
     data = lib.read("sym", query_builder=q).data
+    data = data.sort_index()
     default_value = 0 if dtype == np.int32 else np.nan
-    expected = pd.DataFrame({"agg_column": np.array([default_value, 0], dtype)}, index=["0", "00"])
+    expected = pd.DataFrame({"agg_column": np.array([default_value, 0], dtype)}, index=["a", "b"])
     expected.index.name = "grouping_column"
+    expected = expected.sort_index()
     assert_frame_equal(data, expected)
