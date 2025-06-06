@@ -851,7 +851,7 @@ def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
 def drop_inf(df):
     return df[~df.isin([np.inf, -np.inf]).any(axis=1)]
 
-def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
+def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame, check_dtype=False):
     """
     Checks if integer columns are exactly the same. For float columns checks if they are approximately the same.
     We can't guarantee the same order of operations for the floats thus numerical errors might appear.
@@ -866,7 +866,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     left_no_inf = drop_inf(left)
     right_no_inf = drop_inf(right)
 
-    check_equals_flags = {"check_dtype": False}
+    check_equals_flags = {"check_dtype": check_dtype}
     if PANDAS_VERSION >= Version("1.1"):
         check_equals_flags["check_freq"] = False
     if PANDAS_VERSION >= Version("1.2"):
@@ -956,10 +956,11 @@ def generic_resample_test(
     received = received.reindex(columns=sorted(received.columns))
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
+    check_dtype = expected_types is not None
     if has_float_column:
-        assert_dfs_approximate(expected, received)
+        assert_dfs_approximate(expected, received, check_dtype=check_dtype)
     else:
-        assert_frame_equal(expected, received)
+        assert_frame_equal(expected, received, check_dtype=check_dtype)
 
 
 def equals(x, y):

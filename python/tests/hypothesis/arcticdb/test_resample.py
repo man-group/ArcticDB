@@ -10,7 +10,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 
 COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
-MIN_DATE = np.datetime64('1969-06-01')
+MIN_DATE = np.datetime64('1969-12-01')
 MAX_DATE = np.datetime64('1970-06-01')
 
 pytestmark = pytest.mark.pipeline
@@ -152,9 +152,15 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                 # the first value of the data frame to be outside the computed resampling range. In the arctic, this is not a problem
                 # as we allow this by design.
                 if str(pandas_error) != "Values falls before first bin":
-                    raise pandas_error
+                    raise
                 else:
                     return
+            except RuntimeError as pandas_error:
+                # This is a bug in pandas one that should be fixed in Pandas 2
+                if str(pandas_error) == "empty group with uint64_t" and not IS_PANDAS_TWO:
+                    return
+                else:
+                    raise
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(
@@ -197,6 +203,12 @@ def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, 
                 # the first value of the data frame to be outside the computed resampling range. In arctic this is not a problem
                 # as we allow this by design.
                 if str(pandas_error) != "Values falls before first bin":
-                    raise pandas_error
+                    raise
                 else:
                     return
+            except RuntimeError as pandas_error:
+                # This is a bug in pandas one that should be fixed in Pandas 2
+                if str(pandas_error) == "empty group with uint64_t" and not IS_PANDAS_TWO:
+                    return
+                else:
+                    raise
