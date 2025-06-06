@@ -899,7 +899,7 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     return add_schema_check(pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config);
 }
 
-OutputSchema create_initial_output_schema(const PipelineContext& pipeline_context) {
+static OutputSchema create_initial_output_schema(const PipelineContext& pipeline_context) {
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(pipeline_context.norm_meta_,
                                                     "Normalization metadata should not be missing during read_and_process");
     if (pipeline_context.overall_column_bitset_) {
@@ -917,6 +917,14 @@ OutputSchema create_initial_output_schema(const PipelineContext& pipeline_contex
         };
     }
     return OutputSchema{std::move(pipeline_context.descriptor()), *pipeline_context.norm_meta_};
+}
+
+static OutputSchema generate_output_schema(const PipelineContext& pipeline_context, std::span<std::shared_ptr<Clause>> clauses) {
+    OutputSchema output_schema = create_initial_output_schema(pipeline_context);
+    for (const auto& clause: clauses) {
+        output_schema = clause->modify_schema(std::move(output_schema));
+    }
+    return output_schema;
 }
 
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
@@ -978,10 +986,7 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
             .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
-                OutputSchema schema = create_initial_output_schema(*pipeline_context);
-                for (const std::shared_ptr<Clause> &clause: read_query->clauses_) {
-                    schema = clause->modify_schema(std::move(schema));
-                }
+                OutputSchema schema = generate_output_schema(*pipeline_context, read_query->clauses_);
                 auto&& [descriptor, norm_meta, default_values] = schema.release();
                 pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
                 pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
@@ -2281,20 +2286,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
 
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
 
-    StreamDescriptor output_stream_descriptor;
-    if (read_query->columns.has_value()) {
-        output_stream_descriptor = StreamDescriptor(
-                pipeline_context->descriptor().id(),
-                pipeline_context->descriptor().index(),
-                std::make_shared<FieldCollection>(pipeline_context->filter_columns_->clone()));
-    } else {
-        output_stream_descriptor = pipeline_context->descriptor().clone();
-    }
-    OutputSchema output_schema(std::move(output_stream_descriptor), *pipeline_context->norm_meta_);
-    for (const auto& clause: read_query->clauses_) {
-        output_schema = clause->modify_schema(std::move(output_schema));
-    }
-
+    OutputSchema output_schema = generate_output_schema(*pipeline_context, read_query->clauses_);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)

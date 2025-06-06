@@ -163,9 +163,7 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
 }
 
 OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
-    if (first_missing_column(output_schema, *clause_info_.input_columns_) != clause_info_.input_columns_->end()) {
-        return output_schema;
-    }
+    check_column_presence(output_schema, *clause_info_.input_columns_, "Filter");
     auto root_expr = expression_context_->expression_nodes_.get_value(expression_context_->root_node_name_.value);
     std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_, output_schema.column_types());
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset");

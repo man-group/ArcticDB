@@ -15,11 +15,9 @@ import pytest
 from pytz import timezone
 import random
 import string
-import sys
 
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,
     config_context,
@@ -1194,23 +1192,23 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1)
     q = q[q["b"] < 5]
 
     lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
+    with pytest.raises(SchemaException):
+        vit = lib.read(symbol, query_builder=q)
 
-    if (not IS_NUMPY_TWO) and (IS_PANDAS_TWO and sys.platform.startswith("win32")):
-        # Pandas 2.0.0 changed the behavior of Index creation from numpy arrays:
-        # "Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
-        # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,
-        # where it previously would have been int64 even on 32-bit systems.
-        # Instantiating Index using a list of numbers will still return 64bit dtypes,
-        # e.g. Index([1, 2, 3]) will have a int64 dtype, which is the same as previously."
-        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#index-can-now-hold-numpy-numeric-dtypes
-        index_dtype = "int32"
-    else:
-        index_dtype = "int64"
+def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_filter_column_not_present_dynamic"
+    df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2), dtype="int64")
+    lib.write(symbol, df)
 
-    expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Index([], dtype=index_dtype))
-    assert_frame_equal(vit.data, expected)
+    df = pd.DataFrame({"b": [1, 10]}, index=np.arange(2), dtype="int64")
+    lib.append(symbol, df)
 
+    q = QueryBuilder()
+    q = q[q["b"] < 5]
+
+    result = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(result, pd.DataFrame({"a": [0], "b": [1]}))
 
 def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
