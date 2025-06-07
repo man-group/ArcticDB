@@ -704,15 +704,15 @@ struct FieldWrapper {
         mutable_field().set(type, name);
     }
 
-    const Field &field() const {
+    [[nodiscard]] const Field &field() const {
         return *reinterpret_cast<const Field *>(data_.data());
     }
 
-    const TypeDescriptor& type() const {
+    [[nodiscard]] const TypeDescriptor& type() const {
         return field().type();
     }
 
-    const std::string_view name() const {
+    [[nodiscard]] std::string_view name() const {
         return field().name();
     }
 

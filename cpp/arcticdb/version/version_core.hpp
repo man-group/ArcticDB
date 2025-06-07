@@ -77,12 +77,12 @@ struct MultiSymbolReadOutput {
 };
 
 VersionedItem write_dataframe_impl(
-    const std::shared_ptr<Store>& store,
+   const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     const WriteOptions& options,
-    const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-    bool allow_sparse = false,
+    const BlockCodecImpl& block_codec,
     bool validate_index = false
 );
 
@@ -90,10 +90,11 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
     const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<DeDupMap> &de_dup_map,
     const WriteOptions& options,
-    const std::shared_ptr<DeDupMap>& de_dup_map,
-    bool allow_sparse,
+    const BlockCodecImpl& block_codec,
     bool validate_index
+
 );
 
 folly::Future<AtomKey> async_append_impl(
@@ -101,34 +102,32 @@ folly::Future<AtomKey> async_append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index,
-    bool empty_types);
+    const BlockCodecImpl& block_codec,
+    bool validate_index);
 
 VersionedItem append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index,
-    bool empty_types);
+    const BlockCodecImpl& block_codec,
+    bool validate_index);
 
 VersionedItem update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types);
+    const WriteOptions& options,
+    BlockCodecImpl block_codec);
 
 folly::Future<AtomKey> async_update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types);
+    const WriteOptions& options,
+    BlockCodecImpl block_codec);
 
 VersionedItem delete_range_impl(
     const std::shared_ptr<Store>& store,

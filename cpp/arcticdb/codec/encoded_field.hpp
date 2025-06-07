@@ -27,8 +27,8 @@ constexpr std::string_view codec_type_to_string(Codec codec) {
         return "LZ4";
     case Codec::ZSTD:
         return "ZSTD";
-    case Codec::PFOR:
-        return "PFOR";
+    case Codec::ADAPTIVE:
+        return "ADAPTIVE";
     case Codec::PASS:
         return "PASS";
     default:
@@ -42,64 +42,63 @@ struct BlockCodecImpl : public BlockCodec {
     }
 
     [[nodiscard]] Codec codec_type() const {
-        return codec_;
+        return type_;
     }
 
     [[nodiscard]] const uint8_t* data() const {
         return &data_[0];
     }
 
-    BlockCodecImpl() {
-        memset(data(), 0, DataSize);
-    }
+    BlockCodecImpl() = default;
 
     ZstdCodec *mutable_zstd() {
-        codec_ = Codec::ZSTD;
+        type_ = Codec::ZSTD;
         auto zstd = new(data()) ZstdCodec{};
         return zstd;
     }
 
     Lz4Codec *mutable_lz4() {
-        codec_ = Codec::LZ4;
+        type_ = Codec::LZ4;
         auto lz4 = new(data()) Lz4Codec{};
         return lz4;
     }
 
-    PforCodec *mutable_pfor() {
-        codec_ = Codec::PFOR;
-        auto pfor = new(data()) PforCodec{};
-        return pfor;
+    AdaptiveCodec *mutable_adaptive() {
+        type_ = Codec::ADAPTIVE;
+        auto adaptive = new(data()) AdaptiveCodec{};
+        return adaptive;
     }
 
     PassthroughCodec *mutable_passthrough() {
-        codec_ = Codec::PASS;
+        type_ = Codec::PASS;
         auto pass = new(data()) PassthroughCodec{};
         return pass;
     }
 
     [[nodiscard]] const ZstdCodec& zstd() const {
-        util::check(codec_ == Codec::ZSTD, "Not a zstd codec");
+        util::check(type_ == Codec::ZSTD, "Not a zstd codec");
         return *reinterpret_cast<const ZstdCodec*>(data());
     }
 
     [[nodiscard]] const Lz4Codec& lz4() const {
-        util::check(codec_ == Codec::LZ4, "Not an lz4 codec");
+        util::check(type_ == Codec::LZ4, "Not an lz4 codec");
         return *reinterpret_cast<const Lz4Codec*>(data());
     }
 
-    [[nodiscard]] const PforCodec& pfor() const {
-        util::check(codec_ == Codec::PFOR, "Not a pfor codec");
-        return *reinterpret_cast<const PforCodec*>(data());
+    [[nodiscard]] const AdaptiveCodec& adaptive() const {
+        util::check(type_ == Codec::ADAPTIVE, "Not an adaptive codec");
+        return *reinterpret_cast<const AdaptiveCodec*>(data());
     }
 
     [[nodiscard]] const PassthroughCodec& passthrough() const {
-        util::check(codec_ == Codec::PASS, "Not a passthrough codec");
+        util::check(type_ == Codec::PASS, "Not a passthrough codec");
         return *reinterpret_cast<const PassthroughCodec*>(data());
     }
 
     template<class CodecType>
     explicit BlockCodecImpl(const CodecType &codec) {
-        codec_ = CodecType::type;
+        type_ = CodecType::type;
+        static_assert(sizeof(CodecType) == encoding_size);
         memcpy(data_, &codec, encoding_size);
     }
 };
@@ -112,7 +111,7 @@ struct EncodedBlock : Block {
     EncodedBlock() = default;
 
     [[nodiscard]] bool has_codec() const {
-        return codecs_[0].codec_ != Codec::PASS;
+        return codec_.type_ != Codec::PASS;
     }
 
     [[nodiscard]] auto encoder_version() const {
@@ -120,7 +119,7 @@ struct EncodedBlock : Block {
     }
 
     [[nodiscard]] auto codec() const {
-        return *reinterpret_cast<const BlockCodecImpl*>(&codecs_[0]);
+        return *reinterpret_cast<const BlockCodecImpl*>(&codec_);
     }
 
     void set_in_bytes(uint32_t bytes) {
@@ -152,7 +151,7 @@ struct EncodedBlock : Block {
     }
 
     BlockCodecImpl *mutable_codec() {
-        return reinterpret_cast<BlockCodecImpl*>(&codecs_[0]);
+        return reinterpret_cast<BlockCodecImpl*>(&codec_);
     }
 };
 
@@ -323,6 +322,14 @@ struct EncodedFieldImpl : public EncodedField {
             return blocks()[(n * 2) + 1];
     }
 
+    [[nodiscard]] EncodedBlock& shapes(size_t n) {
+        return const_cast<EncodedBlock&>(const_cast<const EncodedFieldImpl*>(this)->shapes(n));
+    }
+
+    [[nodiscard]] EncodedBlock& values(size_t n) {
+        return const_cast<EncodedBlock&>(const_cast<const EncodedFieldImpl*>(this)->values(n));
+    }
+
     [[nodiscard]] EncodedBlockCollection shapes() const {
         return {*this, true};
     }
@@ -335,7 +342,7 @@ struct EncodedFieldImpl : public EncodedField {
         size_t shapes_count = 0;
         for(const auto& shape : shapes()) {
             util::check(shape.is_shape_, "Expected shape to have is_shape_set");
-            util::check(shape.codecs_[0].codec_ != Codec::UNKNOWN, "Unknown shape codec");
+            util::check(shape.codec_.type_ != Codec::UNKNOWN, "Unknown shape codec");
             ++shapes_count;
         }
         util::check(shapes_count == static_cast<size_t>(shapes_size()), "Shape size mismatch: {} != {}", shapes_count, shapes_size());
@@ -356,11 +363,11 @@ struct EncodedFieldImpl : public EncodedField {
     }
 
     [[nodiscard]] int shapes_size() const {
-        return shapes_count_;
+        return static_cast<int>(shapes_count_);
     }
 
     [[nodiscard]] int values_size() const {
-        return values_count_;
+        return static_cast<int>(values_count_);
     }
 
     void set_sparse_map_bytes(uint32_t bytes) {
@@ -371,7 +378,7 @@ struct EncodedFieldImpl : public EncodedField {
         stats_ = stats;
     }
 
-    FieldStats get_statistics() const {
+    [[nodiscard]] FieldStats get_statistics() const {
         return stats_;
     }
 
@@ -454,12 +461,12 @@ struct formatter<arcticdb::EncodedFieldImpl> {
 
         fmt::format_to(ctx.out(), "Shapes: {}\n", field.shapes_size());
         for(const auto& shape : field.shapes()) {
-            fmt::format_to(ctx.out(), "\tCodec: {} in_bytes: {}, out_bytes {}\n", arcticdb::codec_type_to_string(shape.codecs_[0].codec_), shape.in_bytes(), shape.out_bytes());
+            fmt::format_to(ctx.out(), "\tCodec: {} in_bytes: {}, out_bytes {}\n", arcticdb::codec_type_to_string(shape.codec_.type_), shape.in_bytes(), shape.out_bytes());
         }
 
         fmt::format_to(ctx.out(), "Values: {}\n", field.values_size());
         for(const auto& value : field.values()) {
-            fmt::format_to(ctx.out(), "\tCodec: {} in_bytes: {}, out_bytes {}\n", arcticdb::codec_type_to_string(value.codecs_[0].codec_), value.in_bytes(), value.out_bytes());
+            fmt::format_to(ctx.out(), "\tCodec: {} in_bytes: {}, out_bytes {}\n", arcticdb::codec_type_to_string(value.codec_.type_), value.in_bytes(), value.out_bytes());
         }
         return fmt::format_to(ctx.out(), "\n");
     }

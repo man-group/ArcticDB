@@ -44,7 +44,7 @@ TEST_P(LocalStorageTestSuite, CoreFunctions) {
       k = ac::entity::atom_key_builder().gen_id(1).build<ac::entity::KeyType::TABLE_DATA>(NumericId{999});
 
   auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
-  auto codec_opts = proto::encoding::VariantCodec();
+  auto codec_opts = codec::default_passthrough_codec();
   auto segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
   arcticdb::storage::KeySegmentPair kv(k, std::move(segment));
 
@@ -70,7 +70,7 @@ TEST_P(LocalStorageTestSuite, CoreFunctions) {
   ASSERT_TRUE(executed);
 
   segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
-  codec_opts = proto::encoding::VariantCodec();
+  codec_opts = codec::default_passthrough_codec();
   segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
   arcticdb::storage::KeySegmentPair update_kv(k, std::move(segment));
 
@@ -117,9 +117,9 @@ TEST_P(LocalStorageTestSuite, Strings) {
   any.PackFrom(metadata.proto());
   s.set_metadata(std::move(any));
 
-  arcticdb::proto::encoding::VariantCodec opt;
+  BlockCodecImpl opt;
   auto lz4ptr = opt.mutable_lz4();
-  lz4ptr->set_acceleration(1);
+  lz4ptr->acceleration_ = 1;
   Segment seg = encode_dispatch(s.clone(), opt, EncodingVersion::V1);
 
   auto environment_name = as::EnvironmentName{"res"};

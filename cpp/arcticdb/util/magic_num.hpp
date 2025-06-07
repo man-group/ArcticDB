@@ -52,7 +52,7 @@ struct SmallMagicNum {
     }
 
 private:
-    volatile uint16_t magic_ = Magic;
+    uint16_t magic_ = Magic;
 };
 
 template <typename MagicNumType>

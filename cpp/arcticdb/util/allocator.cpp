@@ -213,7 +213,6 @@ namespace arcticdb {
 #else
         std::free(p);
         free_count_of<TracingPolicy, ClockType>().increment(1);
-        maybe_trim();
 #endif
     }
 

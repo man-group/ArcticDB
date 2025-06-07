@@ -103,7 +103,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(9002, E_ZSDT_ENCODING) \
     ERROR_CODE(9003, E_LZ4_ENCODING)  \
     ERROR_CODE(9004, E_INPUT_TOO_LARGE) \
-    ERROR_CODE(9005, E_ENCODING_VERSION_MISMATCH)
+    ERROR_CODE(9005, E_ENCODING_VERSION_MISMATCH) \
+    ERROR_CODE(9006, E_ENCODING_OVERFLOW)
 
 enum class ErrorCode : detail::BaseType {
 #define ERROR_CODE(code, Name, ...) Name = code,
@@ -183,6 +184,7 @@ using CodecException = ArcticCategorizedException<ErrorCategory::CODEC>;
 using AtomicOperationFailedException = ArcticSpecificException<ErrorCode::E_ATOMIC_OPERATION_FAILED>;
 using UnsupportedAtomicOperationException = ArcticSpecificException<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>;
 using NotImplementedException = ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>;
+using CompressionOverflowException = ArcticSpecificException<ErrorCode::E_ENCODING_OVERFLOW>;
 
 template<ErrorCode error_code>
 [[noreturn]] void throw_error(const std::string& msg) {
@@ -259,6 +261,10 @@ template<>
     throw ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>(msg);
 }
 
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_ENCODING_OVERFLOW>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_ENCODING_OVERFLOW>(msg);
+}
 }
 
 namespace fmt {

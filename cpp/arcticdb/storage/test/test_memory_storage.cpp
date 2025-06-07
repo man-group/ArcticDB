@@ -25,7 +25,7 @@ TEST(InMemory, ReadTwice) {
     };
 
     auto test_frame =  get_test_frame<stream::TimeseriesIndex>(symbol, fields, num_rows, start_val);
-    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false, false, false);
+    version_store.write_versioned_dataframe_internal(symbol, std::move(test_frame.frame_), false);
 
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();

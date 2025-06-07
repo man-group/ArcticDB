@@ -90,7 +90,7 @@ std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::mater
         for (size_t row_idx = 0;
              row_idx < num_keys_;
              ++row_idx, ++version_it, ++creation_ts_it, ++content_hash_it, ++index_start_it, ++index_end_it, ++key_types_it) {
-            res.emplace_back(*version_it, *creation_ts_it, *content_hash_it, KeyType(*key_types_it), *index_start_it, *index_end_it);
+             res.emplace_back(*version_it, *creation_ts_it, *content_hash_it, KeyType(*key_types_it), *index_start_it, *index_end_it);
         }
         return res;
     } else {

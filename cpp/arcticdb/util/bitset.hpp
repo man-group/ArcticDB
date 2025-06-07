@@ -32,4 +32,36 @@ using BitIndex = bm::bvector<>::rs_index_type;
 constexpr bm::bvector<>::size_type bv_size(uint64_t val) {
     return static_cast<bm::bvector<>::size_type>(val);
 }
+
+// adapted from bm_algo.h
+template <typename Func>
+struct BitVisitorFunctor {
+    Func func_;
+    uint64_t rank_ = 0;
+
+    BitVisitorFunctor(Func&& func) :
+        func_(func) {
+    }
+
+    using size_type = util::BitSetSizeType;
+
+    int add_bits(
+        size_type offset,
+        const unsigned char* bits,
+        unsigned size) {
+        for (unsigned i = 0; i < size; ++i) {
+            func_(offset + bits[i], rank_);
+            ++rank_;
+        }
+        return 0;
+    }
+
+    int add_range(size_type offset, size_type size) {
+        for (size_type i = 0; i < size; ++i){
+            func_(offset + i, rank_);
+            ++rank_;
+        }
+        return 0;
+    }
+};
 }

@@ -32,5 +32,5 @@ TEST(Append, OutOfOrder) {
     auto& seg = sink.segments_[0];
 
     SegmentToInputFrameAdapter frame(std::move(seg));
-    engine.write_versioned_dataframe_internal("symbol", std::move(frame.input_frame_), false, false, false);
+    engine.write_versioned_dataframe_internal("symbol", std::move(frame.input_frame_), false);
 }

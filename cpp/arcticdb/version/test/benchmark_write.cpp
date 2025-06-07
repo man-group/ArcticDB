@@ -54,7 +54,7 @@ struct LMDBStore {
     auto sym = "symbol";
     auto key = RefKey(sym, KeyType::APPEND_REF);
     auto segment_in_memory = get_test_timeseries_frame(sym, num_rows, 0).segment_;
-    auto codec_opts = proto::encoding::VariantCodec();
+    auto codec_opts = codec::default_lz4_codec();
     auto segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
 
     auto lmdb = LMDBStore(use_mock);

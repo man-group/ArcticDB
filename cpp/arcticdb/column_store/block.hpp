@@ -128,6 +128,7 @@ struct MemBlock {
     [[nodiscard]] uint8_t *end() const { return const_cast<uint8_t*>(&data()[bytes_]); }
 
     [[nodiscard]] size_t free_space() const {
+        magic_.check();
         arcticdb::util::check(bytes_ <= capacity_, "Block overflow: {} > {}", bytes_, capacity_);
         return capacity_ - bytes_;
     }

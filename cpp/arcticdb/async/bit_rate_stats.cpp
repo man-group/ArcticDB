@@ -1,6 +1,5 @@
 #include "bit_rate_stats.hpp"
 
-#include <folly/Likely.h>
 
 #include "log/log.hpp"
 #include "util/format_bytes.hpp"

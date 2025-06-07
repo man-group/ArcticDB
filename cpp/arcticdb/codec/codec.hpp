@@ -23,17 +23,17 @@ using ShapesBlockTDT = entity::TypeDescriptorTag<entity::DataTypeTag<entity::Dat
 
 Segment encode_dispatch(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
+    const BlockCodecImpl& codec_opts,
     EncodingVersion encoding_version);
 
 Segment encode_v2(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts
+    const BlockCodecImpl& codec_opts
 );
 
 Segment encode_v1(
     SegmentInMemory&& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec& codec_opts
+    const BlockCodecImpl& codec_opts
 );
 
 void decode_v1(const Segment& segment,
@@ -49,8 +49,9 @@ void decode_v2(const Segment& segment,
 
 SizeResult max_compressed_size_dispatch(
     const SegmentInMemory& in_mem_seg,
-    const arcticdb::proto::encoding::VariantCodec &codec_opts,
-    EncodingVersion encoding_version);
+    const BlockCodecImpl& codec_opts,
+    EncodingVersion encoding_version,
+    SegmentScanResults& encodings);
 
 EncodedFieldCollection decode_encoded_fields(
     const SegmentHeader& hdr,

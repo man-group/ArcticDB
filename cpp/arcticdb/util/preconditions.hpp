@@ -49,13 +49,14 @@ struct Raise {
         }
         if constexpr(error_category == ErrorCategory::INTERNAL)
             log::root().error(msg);
+
         throw_error<code>(msg);
     }
 };
 
 template<typename T>
 concept Testable = requires(T a) {
-    !a;  // contextual conversion of a to bool must be possible
+    !a;  // contextual conversion of 'a' to bool must be possible
 };
 
 template<ErrorCode code, ErrorCategory error_category>

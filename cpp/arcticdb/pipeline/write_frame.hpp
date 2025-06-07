@@ -24,14 +24,14 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::stream;
 
 struct WriteToSegmentTask : public async::BaseTask {
-
     std::shared_ptr<InputTensorFrame> frame_;
     const FrameSlice slice_;
     const SlicingPolicy slicing_;
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)> partial_key_gen_;
     size_t slice_num_for_column_;
     Index index_;
-    bool sparsify_floats_;
+    WriteOptions write_options_;
+    BlockCodecImpl block_codec_;
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
@@ -41,7 +41,8 @@ struct WriteToSegmentTask : public async::BaseTask {
         folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
         size_t slice_num_for_column,
         Index index,
-        bool sparsify_floats);
+        WriteOptions write_options,
+        BlockCodecImpl block_codec);
 
     std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator()();
 };
@@ -51,8 +52,9 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const SlicingPolicy &slicing,
         IndexPartialKey&& partial_key,
         const std::shared_ptr<stream::StreamSink> &sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-        bool allow_sparse = false
+        const WriteOptions& write_options,
+        const BlockCodecImpl& block_codec,
+        const std::shared_ptr<DeDupMap>& de_dup_map
 );
 
 int64_t write_window_size();
@@ -67,22 +69,25 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         bool sparsify_floats);
 
 folly::Future<entity::AtomKey> write_frame(
-    IndexPartialKey &&key,
+    IndexPartialKey&& key,
     const std::shared_ptr<InputTensorFrame>& frame,
     const SlicingPolicy &slicing,
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-    bool allow_sparse = false
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
+    const WriteOptions& write_options,
+    const BlockCodecImpl& block_codec
 );
 
 folly::Future<entity::AtomKey> append_frame(
-        IndexPartialKey&& key,
-        const std::shared_ptr<InputTensorFrame>& frame,
-        const SlicingPolicy& slicing,
-        index::IndexSegmentReader &index_segment_reader,
-        const std::shared_ptr<Store>& store,
-        bool dynamic_schema,
-        bool ignore_sort_order
+    IndexPartialKey&& key,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    const SlicingPolicy& slicing,
+    index::IndexSegmentReader& index_segment_reader,
+    const std::shared_ptr<Store>& store,
+    const WriteOptions& write_options,
+    const BlockCodecImpl& block_codec,
+    bool ignore_sort_order
+
 );
 
 enum class AffectedSegmentPart {

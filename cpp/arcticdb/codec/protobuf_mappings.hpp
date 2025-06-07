@@ -14,11 +14,6 @@
 
 namespace arcticdb {
 
-template <typename T, typename U>
-void copy_codec(T& out_codec, const U& in_codec) {
-    out_codec.MergeFrom(in_codec);
-}
-
 inline void copy_codec(ZstdCodec& codec, const arcticdb::proto::encoding::VariantCodec::Zstd& zstd) {
     codec.level_ = zstd.level();
     codec.is_streaming_ = zstd.is_streaming();
@@ -32,11 +27,23 @@ inline void copy_codec(PassthroughCodec&, const arcticdb::proto::encoding::Varia
     // No data in passthrough
 }
 
+inline void copy_codec(arcticdb::proto::encoding::VariantCodec::Zstd& zstd, const ZstdCodec& codec) {
+    zstd.set_level(codec.level_);
+    zstd.set_is_streaming(codec.is_streaming_);
+}
+
+inline void copy_codec(arcticdb::proto::encoding::VariantCodec::Lz4& lz4, const Lz4Codec& codec) {
+    lz4.set_acceleration(codec.acceleration_);
+}
+
+inline void copy_codec(arcticdb::proto::encoding::VariantCodec::Passthrough&, const PassthroughCodec&) {
+    // No data in passthrough
+}
+
 [[nodiscard]] inline arcticdb::proto::encoding::VariantCodec::CodecCase codec_case(Codec codec) {
     switch (codec) {
     case Codec::ZSTD:return arcticdb::proto::encoding::VariantCodec::kZstd;
     case Codec::LZ4:return arcticdb::proto::encoding::VariantCodec::kLz4;
-    case Codec::PFOR:return arcticdb::proto::encoding::VariantCodec::kTp4;
     case Codec::PASS:return arcticdb::proto::encoding::VariantCodec::kPassthrough;
     default:util::raise_rte("Unknown codec");
     }
@@ -75,5 +82,7 @@ size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHe
 EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding::SegmentHeader& hdr);
 
 void copy_encoded_fields_to_proto(const EncodedFieldCollection& fields, arcticdb::proto::encoding::SegmentHeader& hdr);
+
+void codec_from_proto(const arcticdb::proto::encoding::VariantCodec& input_codec, BlockCodecImpl& output_codec);
 
 } //namespace arcticdb

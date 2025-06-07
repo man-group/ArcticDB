@@ -363,7 +363,7 @@ TEST(Clause, Split) {
 TEST(Clause, Merge) {
     using namespace arcticdb;
     const auto seg_size = 30;
-    ScopedConfig max_blocks("Merge.SegmentSize", seg_size);
+    ScopedIntConfig max_blocks("Merge.SegmentSize", seg_size);
     auto component_manager = std::make_shared<ComponentManager>();
 
     const auto num_segs = 4;

@@ -15,28 +15,32 @@
 
 namespace arcticdb {
 
+void codec_from_proto(const arcticdb::proto::encoding::VariantCodec& input_codec, BlockCodecImpl& output_codec) {
+    switch (input_codec.codec_case()) {
+    case arcticdb::proto::encoding::VariantCodec::kZstd: {
+        set_codec(input_codec.zstd(), *output_codec.mutable_zstd());
+        break;
+    }
+    case arcticdb::proto::encoding::VariantCodec::kLz4: {
+        set_codec(input_codec.lz4(), *output_codec.mutable_lz4());
+        break;
+    }
+    case arcticdb::proto::encoding::VariantCodec::kPassthrough : {
+        set_codec(input_codec.passthrough(), *output_codec.mutable_passthrough());
+        break;
+    }
+    default:
+        util::raise_rte("Unrecognized_codec");
+    }
+}
+
 void block_from_proto(const arcticdb::proto::encoding::Block& input, EncodedBlock& output, bool is_shape) {
     output.set_in_bytes(input.in_bytes());
     output.set_out_bytes(input.out_bytes());
     output.set_hash(input.hash());
     output.set_encoder_version(static_cast<uint16_t>(input.encoder_version()));
     output.is_shape_ = is_shape;
-    switch (input.codec().codec_case()) {
-    case arcticdb::proto::encoding::VariantCodec::kZstd: {
-        set_codec(input.codec().zstd(), *output.mutable_codec()->mutable_zstd());
-        break;
-    }
-    case arcticdb::proto::encoding::VariantCodec::kLz4: {
-        set_codec(input.codec().lz4(), *output.mutable_codec()->mutable_lz4());
-        break;
-    }
-    case arcticdb::proto::encoding::VariantCodec::kPassthrough : {
-        set_codec(input.codec().passthrough(), *output.mutable_codec()->mutable_passthrough());
-        break;
-    }
-    default:
-        util::raise_rte("Unrecognized_codec");
-    }
+    codec_from_proto(input.codec(), *output.mutable_codec());
 }
 
 void proto_from_block(const EncodedBlock& input, arcticdb::proto::encoding::Block& output) {
@@ -45,7 +49,7 @@ void proto_from_block(const EncodedBlock& input, arcticdb::proto::encoding::Bloc
     output.set_hash(input.hash());
     output.set_encoder_version(input.encoder_version());
 
-    switch (input.codec().codec_) {
+    switch (input.codec().type_) {
     case Codec::ZSTD: {
         set_zstd(input.codec().zstd(), *output.mutable_codec()->mutable_zstd());
         break;

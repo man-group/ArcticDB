@@ -207,8 +207,7 @@ TEST_F(LMDBStorageTestBase, WriteMapFullError) {
     arcticdb::entity::AtomKey k = arcticdb::entity::atom_key_builder().gen_id(0).build<arcticdb::entity::KeyType::VERSION>("sym");
 
     auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 40000, 0).segment_;
-    auto codec_opts = proto::encoding::VariantCodec();
-    auto segment = encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
+    auto segment = encode_dispatch(std::move(segment_in_memory), codec::default_passthrough_codec(), arcticdb::EncodingVersion::V2);
     arcticdb::storage::KeySegmentPair kv(k, std::move(segment));
 
     ASSERT_THROW({

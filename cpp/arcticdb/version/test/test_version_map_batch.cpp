@@ -273,7 +273,7 @@ TEST_F(VersionMapBatchStore, CombinedQueries) {
 
 TEST_F(VersionMapBatchStore, SpecificVersionsShouldCopyInput) {
     SKIP_WIN("Exceeds LMDB map size");
-    ScopedConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
+    ScopedIntConfig sc("VersionMap.ReloadInterval", std::numeric_limits<int64_t>::max());
     auto store = test_store_->_test_get_store();
     auto version_map = std::make_shared<VersionMap>();
     std::string symbol = "symbol";

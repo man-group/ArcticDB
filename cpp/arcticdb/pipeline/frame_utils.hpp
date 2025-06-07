@@ -58,13 +58,6 @@ TimeseriesDescriptor make_timeseries_descriptor(
     bool bucketize_dynamic
     );
 
-TimeseriesDescriptor timseries_descriptor_from_index_segment(
-    size_t total_rows,
-    pipelines::index::IndexSegmentReader&& index_segment_reader,
-    std::optional<AtomKey>&& prev_key,
-    bool bucketize_dynamic
-    );
-
 TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
     const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
     std::optional<AtomKey>&& prev_key,
@@ -174,12 +167,8 @@ void set_integral_scalar_type(
         bool sparsify_floats) {
     constexpr auto dt = TagType::DataTypeTag::data_type;
     auto ptr = tensor.template ptr_cast<RawType>(row);
-    if (sparsify_floats) {
-        if constexpr (is_floating_point_type(dt)) {
-            agg.set_sparse_block(col, ptr, rows_to_write);
-        } else {
-            util::raise_rte("sparse currently supported for floating point columns only.");
-        }
+    if (is_floating_point_type(dt) && sparsify_floats) {
+        agg.set_sparse_block(col, ptr, rows_to_write);
     } else {
         const auto c_style = util::is_cstyle_array<RawType>(tensor);
         if (c_style) {

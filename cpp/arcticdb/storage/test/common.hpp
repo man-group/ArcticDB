@@ -21,7 +21,7 @@ inline VariantKey get_test_key(const std::string& name, entity::KeyType key_type
 
 inline Segment get_test_segment() {
     auto segment_in_memory = get_test_frame<arcticdb::stream::TimeseriesIndex>("symbol", {}, 10, 0).segment_;
-    auto codec_opts = proto::encoding::VariantCodec();
+    auto codec_opts = codec::default_passthrough_codec();
     return encode_dispatch(std::move(segment_in_memory), codec_opts, arcticdb::EncodingVersion::V2);
 }
 
