@@ -6,10 +6,15 @@
  */
 
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/processing/aggregation_utils.hpp>
+#include <arcticdb/entity/types.hpp>
 
 #include <cmath>
+#include <ranges>
 
 namespace arcticdb {
+
+namespace ranges = std::ranges;
 
 void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
     details::visit_type(input_column.column_->type().data_type(), [&] (auto col_tag) {
@@ -43,10 +48,10 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
         details::visit_type(min_->data_type_, [&output_column_names, &seg, that = this](auto col_tag) {
             using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
             auto min_col = std::make_shared<Column>(make_scalar_type(that->min_->data_type_), Sparsity::PERMITTED);
-            min_col->template push_back<RawType>(that->min_->get<RawType>());
+            min_col->push_back<RawType>(that->min_->get<RawType>());
 
             auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), Sparsity::PERMITTED);
-            max_col->template push_back<RawType>(that->max_->get<RawType>());
+            max_col->push_back<RawType>(that->max_->get<RawType>());
 
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);
@@ -61,17 +66,20 @@ template<typename T, typename T2=void>
 struct OutputType;
 
 template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_floating_point_type(InputType::DataTypeTag::data_type)>> {
+requires (is_floating_point_type(InputType::DataTypeTag::data_type))
+struct OutputType <InputType> {
     using type = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
 };
 
 template <typename InputType>
-struct OutputType <InputType, typename std::enable_if_t<is_unsigned_type(InputType::DataTypeTag::data_type)>> {
+requires (is_unsigned_type(InputType::DataTypeTag::data_type))
+struct OutputType <InputType> {
     using type = ScalarTagType<DataTypeTag<DataType::UINT64>>;
 };
 
 template <typename InputType>
-struct OutputType<InputType, typename std::enable_if_t<is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type)>> {
+requires (is_signed_type(InputType::DataTypeTag::data_type) && is_integer_type(InputType::DataTypeTag::data_type))
+struct OutputType<InputType> {
     using type = ScalarTagType<DataTypeTag<DataType::INT64>>;
 };
 
@@ -165,6 +173,12 @@ DataType SumAggregatorData::get_output_data_type() {
     return *output_type_;
 }
 
+std::optional<Value> SumAggregatorData::get_default_value() {
+    return details::visit_type(get_output_data_type(), []<typename TD>(TD) -> std::optional<Value> {
+        return Value{typename TD::raw_type{0}, TD::data_type};
+    });
+}
+
 void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     details::visit_type(get_output_data_type(), [&input_column, unique_values, &groups, this] (auto global_tag) {
         using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
@@ -240,49 +254,69 @@ namespace
         }
     };
 
+    std::shared_ptr<Column> create_output_column(TypeDescriptor td, util::BitMagic&& sparse_map, size_t unique_values) {
+        sparse_map.resize(unique_values);
+        const size_t num_set_rows = sparse_map.count();
+        const bool column_is_dense = num_set_rows == sparse_map.size();
+        if (column_is_dense) {
+            auto col = std::make_shared<Column>(td, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+            col->set_row_data(unique_values - 1);
+            return col;
+        } else {
+            auto col = std::make_shared<Column>(td, num_set_rows, AllocationType::PRESIZED, Sparsity::PERMITTED);
+            col->set_sparse_map(std::move(sparse_map));
+            col->set_row_data(unique_values - 1);
+            return col;
+        }
+    }
+
     template <Extremum T>
     void aggregate_impl(
         const std::optional<ColumnWithStrings>& input_column,
-        const std::vector<size_t>& groups,
+        const std::vector<size_t>& row_to_group,
         size_t unique_values,
         std::vector<uint8_t>& aggregated,
-        std::optional<DataType>& data_type
+        std::optional<DataType>& data_type,
+        util::BitMagic& sparse_map
     ) {
         if(data_type.has_value() && *data_type != DataType::EMPTYVAL && input_column.has_value()) {
-            details::visit_type(*data_type, [&aggregated, &input_column, unique_values, &groups] (auto global_tag) {
+            details::visit_type(*data_type, [&] (auto global_tag) {
                 using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
                 using GlobalRawType = typename global_type_info::RawType;
                 if constexpr(!is_sequence_type(global_type_info::data_type)) {
                     using MaybeValueType = MaybeValue<GlobalRawType, T>;
                     auto prev_size = aggregated.size() / sizeof(MaybeValueType);
                     aggregated.resize(sizeof(MaybeValueType) * unique_values);
+                    sparse_map.resize(unique_values);
                     auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
                     std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValueType{});
-                    details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
+                    details::visit_type(input_column->column_->type().data_type(), [&] (auto col_tag) {
                         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                         using ColRawType = typename col_type_info::RawType;
                         if constexpr(!is_sequence_type(col_type_info::data_type)) {
-                            Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&groups, &out_ptr](auto enumerating_it) {
-                                auto& val = out_ptr[groups[enumerating_it.idx()]];
+                            Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&](auto row) {
+                                auto& group_entry = out_ptr[row_to_group[row.idx()]];
                                 if constexpr(std::is_floating_point_v<ColRawType>) {
-                                    const auto& curr = GlobalRawType(enumerating_it.value());
-                                    if (!val.written_ || std::isnan(static_cast<ColRawType>(val.value_))) {
-                                        val.value_ = curr;
-                                        val.written_ = true;
+                                    const auto& curr = GlobalRawType(row.value());
+                                    if (!group_entry.written_ || std::isnan(static_cast<ColRawType>(group_entry.value_))) {
+                                        group_entry.value_ = curr;
+                                        group_entry.written_ = true;
+                                        sparse_map.set(row_to_group[row.idx()]);
                                     } else if (!std::isnan(static_cast<ColRawType>(curr))) {
                                         if constexpr(T == Extremum::MAX) {
-                                            val.value_ = std::max(val.value_, curr);
+                                            group_entry.value_ = std::max(group_entry.value_, curr);
                                         } else {
-                                            val.value_ = std::min(val.value_, curr);
+                                            group_entry.value_ = std::min(group_entry.value_, curr);
                                         }
                                     }
                                 } else {
                                     if constexpr(T == Extremum::MAX) {
-                                        val.value_ = std::max(val.value_, GlobalRawType(enumerating_it.value()));
+                                        group_entry.value_ = std::max(group_entry.value_, GlobalRawType(row.value()));
                                     } else {
-                                        val.value_ = std::min(val.value_, GlobalRawType(enumerating_it.value()));
+                                        group_entry.value_ = std::min(group_entry.value_, GlobalRawType(row.value()));
                                     }
-                                    val.written_ = true;
+                                    sparse_map.set(row_to_group[row.idx()]);
+                                    group_entry.written_ = true;
                                 }
                             });
                         } else {
@@ -297,59 +331,30 @@ namespace
     template <Extremum T>
     SegmentInMemory finalize_impl(
             const ColumnName& output_column_name,
-            bool dynamic_schema,
             size_t unique_values,
             std::vector<uint8_t>& aggregated,
-            std::optional<DataType>& data_type
+            std::optional<DataType>& data_type,
+            util::BitMagic&& sparse_map
     ) {
         SegmentInMemory res;
         if(!aggregated.empty()) {
-            constexpr auto dynamic_schema_data_type = DataType::FLOAT64;
-            using DynamicSchemaTDT = ScalarTagType<DataTypeTag<dynamic_schema_data_type>>;
-            const TypeDescriptor column_type = make_scalar_type(dynamic_schema ? dynamic_schema_data_type: data_type.value());
-            auto col = std::make_shared<Column>(column_type, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-            auto column_data = col->data();
-            col->set_row_data(unique_values - 1);
-            res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
+            const TypeDescriptor column_type = make_scalar_type(data_type.value());
+            sparse_map.resize(unique_values);
+            std::shared_ptr<Column> col = create_output_column(column_type, std::move(sparse_map), unique_values);
             details::visit_type(*data_type, [&] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 using MaybeValueType = MaybeValue<typename col_type_info::RawType, T>;
-                if(dynamic_schema) {
-                    if constexpr (dynamic_schema_data_type != col_type_info::data_type && is_integer_type(col_type_info::data_type)) {
-                        log::message().warn(
-                            "The column \"{}\" of type {} is a result of a {} aggregation and the library is configured"
-                            " to use dynamic schema. ArcticDB will promote the type to {} so that if a grouping bucket "
-                            "is empty, it will be assigned a value of NaN. This behavior will be deprecated with the "
-                            "release of ArcticDB v6.0.0 and will change as follows. If Arrow output format is used, "
-                            "empty grouping buckets will be use Arrow's missing value. If numpy output format is used "
-                            "all missing data will be backfilled with 0.",
-                            output_column_name.value, col_type_info::data_type, T == Extremum::MIN ? "MIN" : "MAX", dynamic_schema_data_type);
+                const std::span<const MaybeValueType> group_values{reinterpret_cast<const MaybeValueType*>(aggregated.data()), aggregated.size() / sizeof(MaybeValueType)};
+                Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                    const bool has_value = group_values[row.idx()].written_;
+                    if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                        row.value() = has_value ? group_values[row.idx()].value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
+                    } else {
+                        row.value() = has_value ? group_values[row.idx()].value_ : typename col_type_info::RawType{0};
                     }
-                    auto prev_size = aggregated.size() / sizeof(MaybeValueType);
-                    auto new_size = sizeof(MaybeValueType) * unique_values;
-                    aggregated.resize(new_size);
-                    auto in_ptr = reinterpret_cast<MaybeValueType *>(aggregated.data());
-                    std::fill(in_ptr + prev_size, in_ptr + unique_values, MaybeValueType{});
-                    for (auto it = column_data.begin<DynamicSchemaTDT>(); it != column_data.end<DynamicSchemaTDT>(); ++it, ++in_ptr) {
-                        *it = in_ptr->written_ ? static_cast<double>(in_ptr->value_)
-                                               : std::numeric_limits<double>::quiet_NaN();
-                    }
-                } else {
-                    auto in_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
-                    for (auto it = column_data.begin<typename col_type_info::TDT>(); it != column_data.end<typename col_type_info::TDT>(); ++it, ++in_ptr) {
-                        if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                            *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
-                        } else {
-                            if constexpr(T == Extremum::MAX) {
-                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::lowest();
-                            } else {
-                                // T == Extremum::MIN
-                                *it = in_ptr->written_ ? in_ptr->value_ : std::numeric_limits<typename col_type_info::RawType>::max();
-                            }
-                        }
-                    }
-                }
+                });
             });
+            res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
         }
         return res;
     }
@@ -374,12 +379,16 @@ DataType MaxAggregatorData::get_output_data_type() {
 
 void MaxAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
-    aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_);
+    aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_, sparse_map_);
 }
 
-SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values)
+SegmentInMemory MaxAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values)
 {
-    return finalize_impl<Extremum::MAX>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MAX>(output_column_name, unique_values, aggregated_, data_type_, std::move(sparse_map_));
+}
+
+std::optional<Value> MaxAggregatorData::get_default_value() {
+    return {};
 }
 
 /*********************
@@ -401,12 +410,16 @@ DataType MinAggregatorData::get_output_data_type() {
 
 void MinAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
-    aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_);
+    aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_, sparse_map_);
 }
 
-SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values)
+SegmentInMemory MinAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values)
 {
-    return finalize_impl<Extremum::MIN>(output_column_name, dynamic_schema, unique_values, aggregated_, data_type_);
+    return finalize_impl<Extremum::MIN>(output_column_name, unique_values, aggregated_, data_type_, std::move(sparse_map_));
+}
+
+std::optional<Value> MinAggregatorData::get_default_value() {
+    return {};
 }
 
 /**********************
@@ -466,6 +479,9 @@ double MeanAggregatorData::Fraction::to_double() const
     return denominator_ == 0 ? std::numeric_limits<double>::quiet_NaN(): numerator_ / static_cast<double>(denominator_);
 }
 
+std::optional<Value> MeanAggregatorData::get_default_value() {
+    return {};
+}
 /***********************
  * CountAggregatorData *
  ***********************/
@@ -501,6 +517,10 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
         memcpy(ptr, aggregated_.data(), sizeof(uint64_t)*unique_values);
     }
     return res;
+}
+
+std::optional<Value> CountAggregatorData::get_default_value() {
+    return {};
 }
 
 /***********************
@@ -550,16 +570,20 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
 SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if(!aggregated_.empty()) {
-        details::visit_type(*data_type_, [that=this, &res, &output_column_name, unique_values] (auto col_tag) {
+        details::visit_type(*data_type_, [this, &res, &output_column_name, unique_values] (auto col_tag) {
             using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(RawType)* unique_values);
-            auto col = std::make_shared<Column>(make_scalar_type(that->data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-            memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
-            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
+            aggregated_.resize(sizeof(RawType)* unique_values);
+            auto col = std::make_shared<Column>(make_scalar_type(data_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+            memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
+            res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
         });
     }
     return res;
+}
+
+std::optional<Value> FirstAggregatorData::get_default_value() {
+    return {};
 }
 
 /***********************
@@ -617,6 +641,10 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
         });
     }
     return res;
+}
+
+std::optional<Value> LastAggregatorData::get_default_value() {
+    return {};
 }
 
 } //namespace arcticdb

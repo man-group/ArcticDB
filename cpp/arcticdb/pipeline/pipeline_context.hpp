@@ -11,15 +11,13 @@
 
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/bitset.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 
 #include <boost/iterator_adaptors.hpp>
-
+#include <ranges>
 #include <memory>
 
 namespace arcticdb::pipelines {
-
+namespace ranges = std::ranges;
 struct PipelineContext;
 
 struct PipelineContextRow {
@@ -134,6 +132,9 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     std::optional<SegmentInMemory> multi_key_;
     std::vector<unsigned char> compacted_;
     std::optional<size_t> incompletes_after_;
+    /// Used to override the default values of types when the NullValueReducer fills missing segments. For example, in
+    /// the sum unordered aggregation and the sum resampling clause, the value must 0 even if the output type is float.
+    ankerl::unordered_dense::map<std::string, Value> default_values_;
     bool bucketize_dynamic_ = false;
 
     PipelineContextRow operator[](size_t num) {
@@ -141,18 +142,14 @@ struct PipelineContext : public std::enable_shared_from_this<PipelineContext> {
     }
 
     size_t last_row() const {
-        if (slice_and_keys_.empty())
+        if (slice_and_keys_.empty()) {
             return 0;
-        else{
-            if (bucketize_dynamic_){
-                size_t max_row = 0;
-                std::for_each(slice_and_keys_.begin(), slice_and_keys_.end(), [&max_row](const auto &sk){
-                    max_row = std::max(max_row, sk.slice_.row_range.second);
-                });
-                return max_row;
-            }
-            else
+        } else {
+            if (bucketize_dynamic_) {
+                return ranges::max(slice_and_keys_, {}, [](const auto &sk){ return sk.slice_.row_range.second;}).slice_.row_range.second;
+            } else {
                 return slice_and_keys_.rbegin()->slice_.row_range.second;
+            }
         }
     }
 

@@ -18,7 +18,7 @@ import string
 import random
 import time
 import attr
-from functools import wraps
+from functools import wraps, reduce
 
 try:
     from pandas.errors import UndefinedVariableError
@@ -42,7 +42,6 @@ from arcticdb_ext import (
     unset_config_string,
 )
 from packaging.version import Version
-
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
@@ -817,19 +816,31 @@ def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
+def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, agg_dtypes=None):
     expected = df.groupby(grouping_column).agg(None, **aggs_dict)
     expected = expected.reindex(columns=sorted(expected.columns))
+    if agg_dtypes is not None:
+        assert expected.index.name == "grouping_column"
+        expected.index = expected.index.astype(agg_dtypes["grouping_column"])
+        del agg_dtypes["grouping_column"]
+        for name, dtype in agg_dtypes.items():
+            if pd.api.types.is_integer_dtype(dtype):
+                expected[name] = expected[name].fillna(0)
+        expected = expected.astype(agg_dtypes)
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     received = lib.read(symbol, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
     received.sort_index(inplace=True)
     try:
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal(expected, received, check_dtype=agg_dtypes is not None)
     except AssertionError as e:
         print(
             f"""Original df:\n{df}\nwith dtypes:\n{df.dtypes}\naggs dict:\n{aggs_dict}"""
             f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
+            f"""\n{df.dtypes}"""
+            f"""\n{expected.dtypes}"""
+            f"""\n{received.dtypes}"""
+            f"""\n{agg_dtypes}"""
         )
         raise e
 
@@ -837,8 +848,10 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
 def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
     return df[~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)]
 
+def drop_inf(df):
+    return df[~df.isin([np.inf, -np.inf]).any(axis=1)]
 
-def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
+def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame, check_dtype=False):
     """
     Checks if integer columns are exactly the same. For float columns checks if they are approximately the same.
     We can't guarantee the same order of operations for the floats thus numerical errors might appear.
@@ -850,48 +863,62 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
 
     # Drop NaN an inf values because. Pandas uses Kahan summation algorithm to improve numerical stability.
     # Thus they don't consistently overflow to infinity. Discussion: https://github.com/pandas-dev/pandas/issues/60303
-    left_no_inf_and_nan = drop_inf_and_nan(left)
-    right_no_inf_and_nan = drop_inf_and_nan(right)
+    left_no_inf = drop_inf(left)
+    right_no_inf = drop_inf(right)
 
-    check_equals_flags = {"check_dtype": False}
+    check_equals_flags = {"check_dtype": check_dtype}
     if PANDAS_VERSION >= Version("1.1"):
         check_equals_flags["check_freq"] = False
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
-    for col in left_no_inf_and_nan.columns:
-        if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(
-            right_no_inf_and_nan[col].dtype
-        ):
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
-        else:
-            if PANDAS_VERSION >= Version("1.1"):
-                check_equals_flags["rtol"] = 3e-4
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
+    for col in left_no_inf.columns:
+        try:
+            if pd.api.types.is_integer_dtype(left_no_inf[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf[col].dtype):
+                pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
+            else:
+                if PANDAS_VERSION >= Version("1.1"):
+                    check_equals_flags["rtol"] = 3e-4
+                pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
+        except:
+            with pd.option_context(
+                    'display.max_columns', None,
+                    'display.max_rows', None,
+                    'display.max_colwidth', None,
+                    'display.width', 0
+            ):
+                print("\nError in approximate dataframe comparison. DataFrames are different\n")
+                print("Left:\n")
+                print(left_no_inf)
+                print("Right:\n")
+                print(right_no_inf)
+                raise
 
 
 def generic_resample_test(
-    lib,
-    sym,
-    rule,
-    aggregations,
-    date_range=None,
-    closed=None,
-    label=None,
-    offset=None,
-    origin=None,
-    drop_empty_buckets_for=None,
+        lib,
+        sym,
+        rule,
+        aggregations,
+        data,
+        date_range=None,
+        closed=None,
+        label=None,
+        offset=None,
+        origin=None,
+        drop_empty_buckets_for=None,
+        expected_types=None,
 ):
     """
     Perform a resampling in ArcticDB and compare it against the same query in Pandas.
 
     :param drop_empty_buckets_for: Will add additional aggregation column using the count aggregator. At the end of the
     aggregation query will remove all rows for which this newly added count aggregation is 0. Works only for int/uint
-    columns. There is similar function generic_resample_test_with_empty_buckets in
+    columns. There is a similar function generic_resample_test_with_empty_buckets in
     python/tests/unit/arcticdb/version_store/test_resample.py which can drop empty buckets for all types of columns,
     but it cannot take parameters such as origin and offset.
     """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
-    original_data = lib.read(sym, date_range=date_range).data
+    original_data = data if date_range is None else data.loc[date_range[0]:date_range[-1]]
     # Pandas 1.X needs None as the first argument to agg with named aggregators
 
     pandas_aggregations = (
@@ -914,6 +941,12 @@ def generic_resample_test(
         expected.drop(columns=["_bucket_size_"], inplace=True)
     expected = expected.reindex(columns=sorted(expected.columns))
 
+    if expected_types:
+        for name, dtype in expected_types.items():
+            if pd.api.types.is_integer_dtype(dtype):
+                expected[name] = expected[name].fillna(0)
+        expected = expected.astype(expected_types)
+
     q = QueryBuilder()
     if origin:
         q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
@@ -923,10 +956,11 @@ def generic_resample_test(
     received = received.reindex(columns=sorted(received.columns))
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
+    check_dtype = expected_types is not None
     if has_float_column:
-        assert_dfs_approximate(expected, received)
+        assert_dfs_approximate(expected, received, check_dtype=check_dtype)
     else:
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal(expected, received, check_dtype=check_dtype)
 
 
 def equals(x, y):
@@ -949,3 +983,96 @@ def equals(x, y):
 def is_pytest_running():
     """Check if code is currently running as part of a pytest test."""
     return "PYTEST_CURRENT_TEST" in os.environ
+
+
+def common_sum_aggregation_dtype(left, right):
+    if pd.api.types.is_signed_integer_dtype(left) and pd.api.types.is_signed_integer_dtype(right):
+        return np.int64
+    elif pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right):
+        return np.uint64
+    elif ((pd.api.types.is_signed_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right)) or
+          (pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_signed_integer_dtype(right))):
+        return np.int64
+    else:
+        return np.float64
+
+def largest_numeric_type(dtype):
+    """
+    Given a dtype return a dtype of the same category (signed int, unsigned int, float) with the maximum supported by
+    ArcticDB byte size.
+    """
+    if pd.api.types.is_float_dtype(dtype):
+        return np.float64
+    elif pd.api.types.is_signed_integer_dtype(dtype):
+        return np.int64
+    elif pd.api.types.is_unsigned_integer_dtype(dtype):
+        return np.uint64
+    return dtype
+
+def valid_common_type(left, right):
+    """
+    This is created to mimic the C++ has_valid_common_type function. It takes two numpy dtypes and returns a type able
+    to represent both or None otherwise.
+
+    This works only with numeric types (int, uint, float)
+    """
+    if left is None or right is None:
+        return None
+    if left == right:
+        return left
+    if pd.api.types.is_float_dtype(left):
+        if pd.api.types.is_float_dtype(right):
+            return left if left.itemsize > right.itemsize else right
+        elif pd.api.types.is_integer_dtype(right):
+            return left
+        return None
+    elif pd.api.types.is_signed_integer_dtype(left):
+        if pd.api.types.is_float_dtype(right):
+            return right
+        elif pd.api.types.is_signed_integer_dtype(right):
+            return left if left.itemsize > right.itemsize else right
+        elif pd.api.types.is_unsigned_integer_dtype(right):
+            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
+            if right.itemsize >= 8:
+                return None
+            elif left.itemsize > right.itemsize:
+                return left
+            return int_dtypes[right.itemsize * 2]
+    elif pd.api.types.is_unsigned_integer_dtype(left):
+        if pd.api.types.is_float_dtype(right):
+            return right
+        elif pd.api.types.is_unsigned_integer_dtype(right):
+            return left if left.itemsize > right.itemsize else right
+        elif pd.api.types.is_signed_integer_dtype(left):
+            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
+            if left.itemsize >= 8:
+                return None
+            elif right.itemsize > left.itemsize:
+                return right
+            return int_dtypes[left.itemsize * 2]
+    return None
+
+def expected_aggregation_type(aggregation, df_list, column_name):
+    common_types = compute_common_type_for_columns_in_df_list(df_list)
+    if aggregation == "count":
+        return np.uint64
+    elif aggregation == "mean":
+        return np.float64
+    elif aggregation == "sum":
+        sum_column_types = [df[column_name].dtype for df in df_list if column_name in df.columns]
+        return reduce(common_sum_aggregation_dtype, sum_column_types, sum_column_types[0])
+    elif aggregation in ["min", "max", "first", "last"]:
+        return common_types[column_name]
+    else:
+        raise Exception(f"Unknown aggregation type: {aggregation}.")
+
+
+def compute_common_type_for_columns_in_df_list(df_list):
+    common_types = {}
+    for df in df_list:
+        for col in df.columns:
+            if col not in common_types:
+                common_types[col] = df[col].dtype
+            else:
+                common_types[col] = valid_common_type(common_types[col], df[col].dtype)
+    return common_types
