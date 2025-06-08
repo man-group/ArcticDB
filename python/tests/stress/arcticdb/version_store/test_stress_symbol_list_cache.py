@@ -1,64 +1,57 @@
 import os
-
-import pandas as pd
-import numpy as np
-import pytest
-import sys
-
-from arcticdb_ext import set_config_int
-from tests.util.mark import REAL_S3_TESTS_MARK
-
 import time
-
 from multiprocessing import Process, Queue
 
+import pandas as pd
+import pytest
+from arcticdb_ext import set_config_int
+
+from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
+from arcticdb_ext.storage import KeyType
+
+from python.arcticdb.config import set_log_level
 
 one_sec = 1_000_000_000
 
 
-def write_symbols_worker(real_s3_storage_factory, lib_name, result_queue, run_time, step_symbol_id, first_symbol_id):
-    fixture = real_s3_storage_factory.create_fixture()
-    lib = fixture.create_arctic()[lib_name]
+def write_symbols_worker(lib, result_queue):
     df = pd.DataFrame({"col": [1, 2, 3]})
-    cnt = 0
-    start_time = time.time()
-    while time.time() - start_time < run_time:
-        id = cnt * step_symbol_id + first_symbol_id
-        lib.write(f"sym_{id}", df)
-        cnt += 1
+    id = os.getpid()
+    sym = f"sym_{id}"
+    lib.write(sym, df)
+    result_queue.put(id)
 
-    result_queue.put((first_symbol_id, cnt))
-
-
-def compact_symbol_list_worker(real_s3_storage_factory, lib_name, run_time):
-    # Decrease the lock wait times to make lock failures more likely
-    set_config_int("StorageLock.WaitMs", 1)
-    # Trigger symbol list compaction on every list_symbols call
-    set_config_int("SymbolList.MaxDelta", 1)
-    fixture = real_s3_storage_factory.create_fixture()
-    lib = fixture.create_arctic()[lib_name]
-
-    start_time = time.time()
-    while time.time() - start_time < run_time:
-        lib.list_symbols()
+@pytest.fixture(params=[
+    #(0, 0, 0)
+    #(0.1, 10, 50)  # (prob, min_ms, max_ms)
+    #(0.5, 700, 1500)
+    (0.5, 1100, 1700)
+])
+def slow_writing_library(request, real_s3_storage, lib_name):
+    write_slowdown_prob, write_slowdown_min_ms, write_slowdown_max_ms = request.param
+    arctic = real_s3_storage.create_arctic()
+    cfg = arctic._library_adapter.get_library_config(lib_name, LibraryOptions(), EnterpriseLibraryOptions())
+    cfg.lib_desc.version.failure_sim.write_slowdown_prob = write_slowdown_prob
+    cfg.lib_desc.version.failure_sim.slow_down_min_ms = write_slowdown_min_ms
+    cfg.lib_desc.version.failure_sim.slow_down_max_ms = write_slowdown_max_ms
+    arctic._library_manager.write_library_config(cfg, lib_name)
+    yield arctic.get_library(lib_name)
+    arctic.delete_library(lib_name)
 
 #@REAL_S3_TESTS_MARK
-@pytest.mark.parametrize("num_writers, num_compactors", [(2, 10), (10, 100)])
-def test_stress_only_add_v0(real_s3_storage_factory, lib_name, num_writers, num_compactors):
-    run_time = 60
-    fixture = real_s3_storage_factory.create_fixture()
-    ac = fixture.create_arctic()
-    ac.delete_library(lib_name) # To make sure we have a clean slate
-    lib = ac.create_library(lib_name)
+@pytest.mark.parametrize("num_writers, num_compactors", [(2, 10)])
+def test_stress_only_add_v0(slow_writing_library, lib_name, num_writers, num_compactors):
+    set_config_int("SymbolList.MaxDelta", 1) # Trigger symbol list compaction on every list_symbols call
+    set_log_level(specific_log_levels={"lock": "DEBUG"})
     results_queue = Queue()
 
     writers = [
-        Process(target=write_symbols_worker, args=(real_s3_storage_factory, lib_name, results_queue, run_time, num_writers, i))
+        Process(target=write_symbols_worker, args=(slow_writing_library, results_queue))
         for i in range(num_writers)
     ]
 
     compactors = [
-        Process(target=compact_symbol_list_worker, args=(real_s3_storage_factory, lib_name, run_time))
+        Process(target=slow_writing_library.list_symbols)
         for i in range(num_compactors)
     ]
 
@@ -69,13 +62,18 @@ def test_stress_only_add_v0(real_s3_storage_factory, lib_name, num_writers, num_
 
     for p in processes:
         p.join()
+        if p.exitcode != 0:
+            raise RuntimeError(f"Process {p.pid} failed with exit code {p.exitcode}")
 
     expected_symbol_list = set()
 
     while not results_queue.empty():
-        first_id, cnt = results_queue.get()
-        expected_symbol_list.update([f"sym_{first_id + i*num_writers}" for i in range(cnt)])
+        expected_symbol_list.add(f"sym_{results_queue.get()}")
 
-    result_symbol_list = set(lib.list_symbols())
+    result_symbol_list = set(slow_writing_library.list_symbols())
     assert len(result_symbol_list) == len(expected_symbol_list)
     assert result_symbol_list == expected_symbol_list
+
+    lt = slow_writing_library._dev_tools.library_tool()
+    compacted_keys = lt.find_keys_for_id(KeyType.SYMBOL_LIST, "__symbols__")
+    assert len(compacted_keys) == 1
