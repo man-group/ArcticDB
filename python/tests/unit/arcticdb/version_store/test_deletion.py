@@ -12,6 +12,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.tasks import append_small_df, snapshot_new_name, append_small_df_and_prune_previous, delete_snapshot
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import ManualClockVersionStore
@@ -175,6 +176,20 @@ def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, s
     lib.delete(sym)
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
     assert len(data_keys) == 0
+
+
+def test_delete_snapshot_after_prune_previous(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+    append_small_df(lib, sym)  # v0
+    snapshot_new_name(lib, "snap")
+    append_small_df(lib, sym)  # v1
+    append_small_df_and_prune_previous(lib, sym)  # v2
+    pre_delete_snapshot = lib.read(sym).data
+    delete_snapshot(lib, "snap")
+    post_delete_snapshot = lib.read(sym).data
+    assert_frame_equal(pre_delete_snapshot, post_delete_snapshot)
+    assert_frame_equal(pre_delete_snapshot, lib.read(sym, as_of=2).data)
 
 
 @pytest.mark.parametrize("delete_order", [[0, 1, 2], [1, 0, 2], [0, 2, 1], [1, 2, 0], [2, 0, 1], [2, 1, 0]])

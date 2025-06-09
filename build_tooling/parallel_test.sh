@@ -17,6 +17,7 @@ MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")"
 cd $PARALLEL_TEST_ROOT
 
 export ARCTICDB_RAND_SEED=$RANDOM
+export ARCTICDB_VersionMap_ReloadInterval_int=$VERSION_MAP_RELOAD_INTERVAL
 
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
