@@ -319,6 +319,6 @@ class AWSDeleteTestsFewLarge(AsvBase):
 
     def time_delete_over_time(self, cache, num_rows):
         with config_context("VersionMap.ReloadInterval", 0):
-            for i in range(100):
+            for i in range(25):
                 self.lib.write("delete_over_time", pd.DataFrame())
                 self.lib.delete("delete_over_time")
