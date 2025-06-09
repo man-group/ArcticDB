@@ -110,8 +110,10 @@ jobs:
           export ARCTICDB_RAND_SEED=$RANDOM
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
-            echo "Run custom pytest command: $command"
             python -m pip  install pytest-repeat
+            python -m pip  install setuptools
+            python -m pip  install wheel
+            echo "Run custom pytest command: $command"
             eval "$command"
           else
             cd python
