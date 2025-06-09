@@ -26,7 +26,7 @@ def write_small_df(lib, symbol):
 
 
 def write_small_df_and_prune_previous(lib, symbol):
-    return lib.write(symbol, sample_dataframe(size=3, seed=None), prune_previous=True)
+    return lib.write(symbol, sample_dataframe(size=3, seed=None), prune_previous_version=True)
 
 
 def append_small_df(lib, symbol):
@@ -34,7 +34,7 @@ def append_small_df(lib, symbol):
 
 
 def append_small_df_and_prune_previous(lib, symbol):
-    return lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True, prune_previous=True)
+    return lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True, prune_previous_version=True)
 
 
 def delete_symbol(lib, symbol=None):
