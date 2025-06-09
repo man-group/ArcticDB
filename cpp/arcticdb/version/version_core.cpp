@@ -28,6 +28,8 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/util/format_date.hpp>
+
 #include <ranges>
 
 namespace arcticdb::version_store {
@@ -1262,9 +1264,9 @@ static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<Pi
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 !last_existing_index_value.has_value() || key.start_time() >= *last_existing_index_value,
                 "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
-                date_and_time(key.start_time()),
+                util::format_timestamp(key.start_time()),
                 // Should never reach "" but the standard mandates that all function arguments are evaluated
-                last_existing_index_value ? date_and_time(*last_existing_index_value) : ""
+                last_existing_index_value ? util::format_timestamp(*last_existing_index_value) : ""
             );
             auto [_, inserted] = unique_timestamp_ranges.emplace(key.start_time(), key.end_time());
             // This is correct because incomplete segments aren't column sliced
@@ -1273,7 +1275,7 @@ static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<Pi
                     // -1 as end_time is stored as 1 greater than the last index value in the segment
                     inserted || key.end_time() -1 == key.start_time(),
                     "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
-                    date_and_time(key.start_time()), date_and_time(key.end_time()));
+                    util::format_timestamp(key.start_time()), util::format_timestamp(key.end_time()));
         }
 
         for (auto it = unique_timestamp_ranges.begin(); it != unique_timestamp_ranges.end(); it++) {
@@ -1283,10 +1285,11 @@ static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<Pi
                         // -1 as end_time is stored as 1 greater than the last index value in the segment
                         next_it->first >= it->second - 1,
                         "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): ({}, {}) intersects ({}, {})",
-                        date_and_time(it->first),
-                        date_and_time(it->second - 1),
-                        date_and_time(next_it->first),
-                        date_and_time(next_it->second - 1));
+                        util::format_timestamp(it->first),
+                        util::format_timestamp(it->second - 1),
+                        util::format_timestamp(next_it->first),
+                        util::format_timestamp(next_it->second - 1)
+                );
             }
         }
     }
@@ -1903,8 +1906,8 @@ VersionedItem sort_merge_impl(
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     last_index_on_disc <= incomplete_start,
                     "Cannot append staged segments to existing data as incomplete segment contains index value {} < existing data {}",
-                    date_and_time(incomplete_start),
-                    date_and_time(last_index_on_disc)
+                    util::format_timestamp(incomplete_start),
+                    util::format_timestamp(last_index_on_disc)
                 );
             }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);

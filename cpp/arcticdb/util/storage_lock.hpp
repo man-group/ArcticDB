@@ -13,6 +13,7 @@
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>
+#include <arcticdb/util/format_date.hpp>
 
 #include <fmt/std.h>
 #include <mutex>
@@ -163,7 +164,12 @@ class StorageLock {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
                 mutex_.unlock();
-                throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms. Lock held since {} (UTC)", name_, total_wait, date_and_time(*read_ts))};
+                throw StorageLockTimeout{fmt::format(
+                        "Storage lock {} timeout out after {} ms. Lock held since {} (UTC)",
+                        name_,
+                        total_wait,
+                        util::format_timestamp(*read_ts)
+                )};
             }
         }
         ts_ = create_ref_key(store);

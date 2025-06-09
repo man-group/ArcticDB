@@ -10,15 +10,20 @@
 #include <arcticdb/util/format_date.hpp>
 
 TEST(FormatDate, ZeroTs) {
-    using namespace arcticdb;
-    ASSERT_EQ("1970-01-01 00:00:00.0", util::format_timestamp(0));
+    ASSERT_EQ("1970-01-01 00:00:00.000000000", arcticdb::util::format_timestamp(0));
+}
+
+TEST(FormatDate, PrependZero) {
+    ASSERT_EQ("2025-06-09 08:06:09.000000000", arcticdb::util::format_timestamp(1749456369000000000));
+    ASSERT_EQ("2025-06-09 08:06:09.000000001", arcticdb::util::format_timestamp(1749456369000000000 + 1));
+    ASSERT_EQ("2025-06-09 00:00:00.000000000", arcticdb::util::format_timestamp(1749427200000000000));
+}
+
+TEST(FormatDate, PreEpoch) {
+    ASSERT_EQ("1969-12-31 23:59:59.999999999", arcticdb::util::format_timestamp(-1));
+    ASSERT_EQ("1969-12-31 23:59:59.000000000", arcticdb::util::format_timestamp(-1'000'000'000));
 }
 
 TEST(FormatDate, April2821) {
-    using namespace arcticdb;
-#ifdef __linux__
-    ASSERT_EQ("2021-04-28 16:11:35.213", util::format_timestamp(1619626295213000000));
-#else
-    ASSERT_EQ("2021-04-28 16:11:35.0", util::format_timestamp(1619626295213000000));
-#endif
+    ASSERT_EQ("2021-04-28 16:11:35.213000000", arcticdb::util::format_timestamp(1619626295213000000));
 }
