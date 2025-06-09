@@ -8,7 +8,7 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/5.7.0/api/library/">
+        <link rel="canonical" href="https://docs.arcticdb.io/5.8.0/api/library/">
       
       
         <link rel="prev" href="../arctic_uri/">
@@ -725,6 +725,29 @@
   
   <span class="md-ellipsis">
     Library Sizes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../tutorials/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Statistics
     
   </span>
   
@@ -2107,6 +2130,29 @@
   
   <span class="md-ellipsis">
     Admin Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Query Stats
     
   </span>
   
@@ -3733,11 +3779,11 @@ last index value in the previous version.</p>
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Determines the handling of staged data when an exception occurs during the execution of the 
+                <p>Determines the handling of staged data when an exception occurs during the execution of the
 <code>finalize_staged_data</code> function.</p>
 <ul>
 <li>If set to True, all staged data for the specified symbol will be deleted if an exception occurs.</li>
-<li>If set to False, the staged data will be retained and will be used in subsequent calls to 
+<li>If set to False, the staged data will be retained and will be used in subsequent calls to
   <code>finalize_staged_data</code>.</li>
 </ul>
 <p>To manually delete staged data, use the <code>delete_staged_data</code> function.</p>
@@ -5893,7 +5939,7 @@ than the index of the last row in the existing data.</p>
 and must match the existing data if mode is <code>StagedDataFinalizeMethod.APPEND</code>. For more information about schema options see
 documentation for <code>arcticdb.LibraryOptions.dynamic_schema</code></p>
 <p>If the symbol does not exist both <code>StagedDataFinalizeMethod.APPEND</code> and <code>StagedDataFinalizeMethod.WRITE</code> will create it.</p>
-<p>Calling <code>sort_and_finalize_staged_data</code> without having staged data for the symbol will throw <code>UserInputException</code>. Use 
+<p>Calling <code>sort_and_finalize_staged_data</code> without having staged data for the symbol will throw <code>UserInputException</code>. Use
 <code>get_staged_symbols</code> to check if there are staged segments for the symbol.</p>
 <p>Calling <code>sort_and_finalize_staged_data</code> if any of the staged segments contains NaT in its index will throw <code>SortingException</code>.</p>
 
@@ -5989,11 +6035,11 @@ new timeseries. Append collects the staged data and appends them to the latest v
             </td>
             <td class="doc-param-details">
               <div class="doc-md-description">
-                <p>Determines the handling of staged data when an exception occurs during the execution of the 
+                <p>Determines the handling of staged data when an exception occurs during the execution of the
 <code>sort_and_finalize_staged_data</code> function.</p>
 <ul>
 <li>If set to True, all staged data for the specified symbol will be deleted if an exception occurs.</li>
-<li>If set to False, the staged data will be retained and will be used in subsequent calls to 
+<li>If set to False, the staged data will be retained and will be used in subsequent calls to
   <code>sort_and_finalize_staged_data</code>.</li>
 </ul>
 <p>To manually delete staged data, use the <code>delete_staged_data</code> function.</p>

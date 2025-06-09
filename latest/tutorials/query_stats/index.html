@@ -8,28 +8,28 @@
       
       
       
-        <link rel="canonical" href="https://docs.arcticdb.io/5.8.0/aws_permissions/">
+        <link rel="canonical" href="https://docs.arcticdb.io/5.8.0/tutorials/query_stats/">
       
       
-        <link rel="prev" href="../aws/">
+        <link rel="prev" href="../library_sizes/">
       
       
-        <link rel="next" href="../azure/">
+        <link rel="next" href="../../aws/">
       
       
-      <link rel="icon" href="../images/ArcticDB Logo.svg">
+      <link rel="icon" href="../../images/ArcticDB Logo.svg">
       <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.14">
     
     
       
-        <title>Library Permissions with AWS S3 - ArcticDB</title>
+        <title>Statistics - ArcticDB</title>
       
     
     
-      <link rel="stylesheet" href="../assets/stylesheets/main.342714a4.min.css">
+      <link rel="stylesheet" href="../../assets/stylesheets/main.342714a4.min.css">
       
         
-        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.06af60db.min.css">
       
       
 
@@ -48,15 +48,15 @@
       
     
     
-      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
     
-      <link rel="stylesheet" href="../stylesheets/extra.css">
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
     
-      <link rel="stylesheet" href="../stylesheets/material.css">
+      <link rel="stylesheet" href="../../stylesheets/material.css">
     
-      <link rel="stylesheet" href="../stylesheets/mkdocstrings-python.css">
+      <link rel="stylesheet" href="../../stylesheets/mkdocstrings-python.css">
     
-    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
     
       
 
@@ -80,7 +80,7 @@
     <div data-md-component="skip">
       
         
-        <a href="#dynamic-library-permissions-with-articdb-on-aws-s3" class="md-skip">
+        <a href="#query-statistics" class="md-skip">
           Skip to content
         </a>
       
@@ -95,12 +95,12 @@
             <div class="md-banner__inner md-grid md-typeset">
               
   You're not viewing the latest version.
-  <a href="../..">
+  <a href="../../..">
     <strong>Click here to go to latest.</strong>
   </a>
 
             </div>
-            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL("../.."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
           </aside>
         
       </div>
@@ -110,9 +110,9 @@
 
 <header class="md-header" data-md-component="header">
   <nav class="md-header__inner md-grid" aria-label="Header">
-    <a href=".." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+    <a href="../.." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
       
-  <img src="../images/ArcticDB Logo.svg" alt="logo">
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
 
     </a>
     <label class="md-header__button md-icon" for="__drawer">
@@ -129,7 +129,7 @@
         <div class="md-header__topic" data-md-component="header-topic">
           <span class="md-ellipsis">
             
-              Library Permissions with AWS S3
+              Statistics
             
           </span>
         </div>
@@ -216,7 +216,7 @@
     
     
       <li class="md-tabs__item">
-        <a href=".." class="md-tabs__link">
+        <a href="../.." class="md-tabs__link">
           
   
   
@@ -247,7 +247,7 @@
     
     
       <li class="md-tabs__item md-tabs__item--active">
-        <a href="../tutorials/fundamentals/" class="md-tabs__link">
+        <a href="../fundamentals/" class="md-tabs__link">
           
   
   
@@ -270,7 +270,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../notebooks/ArcticDB_demo_lmdb/" class="md-tabs__link">
+        <a href="../../notebooks/ArcticDB_demo_lmdb/" class="md-tabs__link">
           
   
   
@@ -290,7 +290,7 @@
     
     
       <li class="md-tabs__item">
-        <a href="../api/" class="md-tabs__link">
+        <a href="../../api/" class="md-tabs__link">
           
   
   
@@ -326,9 +326,9 @@
 
 <nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
   <label class="md-nav__title" for="__drawer">
-    <a href=".." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+    <a href="../.." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
       
-  <img src="../images/ArcticDB Logo.svg" alt="logo">
+  <img src="../../images/ArcticDB Logo.svg" alt="logo">
 
     </a>
     ArcticDB
@@ -398,7 +398,7 @@
   
   
     <li class="md-nav__item">
-      <a href=".." class="md-nav__link">
+      <a href="../.." class="md-nav__link">
         
   
   
@@ -421,7 +421,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../history/" class="md-nav__link">
+      <a href="../../history/" class="md-nav__link">
         
   
   
@@ -444,7 +444,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../faq/" class="md-nav__link">
+      <a href="../../faq/" class="md-nav__link">
         
   
   
@@ -467,7 +467,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../licensing/" class="md-nav__link">
+      <a href="../../licensing/" class="md-nav__link">
         
   
   
@@ -542,6 +542,8 @@
                 
   
   
+    
+  
   
   
     
@@ -557,11 +559,11 @@
       
     
     
-    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
       
         
         
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" checked>
         
           
           <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="">
@@ -577,7 +579,7 @@
             <span class="md-nav__icon md-icon"></span>
           </label>
         
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="true">
           <label class="md-nav__title" for="__nav_2_1">
             <span class="md-nav__icon md-icon"></span>
             Tutorials
@@ -591,7 +593,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/fundamentals/" class="md-nav__link">
+      <a href="../fundamentals/" class="md-nav__link">
         
   
   
@@ -614,7 +616,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/parallel_writes/" class="md-nav__link">
+      <a href="../parallel_writes/" class="md-nav__link">
         
   
   
@@ -637,7 +639,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/snapshots/" class="md-nav__link">
+      <a href="../snapshots/" class="md-nav__link">
         
   
   
@@ -660,7 +662,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/metadata/" class="md-nav__link">
+      <a href="../metadata/" class="md-nav__link">
         
   
   
@@ -683,7 +685,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/lmdb_and_in_memory/" class="md-nav__link">
+      <a href="../lmdb_and_in_memory/" class="md-nav__link">
         
   
   
@@ -706,7 +708,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/data_organisation/" class="md-nav__link">
+      <a href="../data_organisation/" class="md-nav__link">
         
   
   
@@ -729,114 +731,12 @@
   
   
     <li class="md-nav__item">
-      <a href="../tutorials/library_sizes/" class="md-nav__link">
+      <a href="../library_sizes/" class="md-nav__link">
         
   
   
   <span class="md-ellipsis">
     Library Sizes
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../tutorials/query_stats/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Statistics
-    
-  </span>
-  
-
-      </a>
-    </li>
-  
-
-              
-            
-          </ul>
-        </nav>
-      
-    </li>
-  
-
-              
-            
-              
-                
-  
-  
-    
-  
-  
-  
-    
-    
-    
-    
-      
-      
-        
-          
-          
-        
-      
-    
-    
-    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
-      
-        
-        
-        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" checked>
-        
-          
-          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="">
-            
-  
-  
-  <span class="md-ellipsis">
-    Storage Guides
-    
-  </span>
-  
-
-            <span class="md-nav__icon md-icon"></span>
-          </label>
-        
-        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="true">
-          <label class="md-nav__title" for="__nav_2_2">
-            <span class="md-nav__icon md-icon"></span>
-            Storage Guides
-          </label>
-          <ul class="md-nav__list" data-md-scrollfix>
-            
-              
-                
-  
-  
-  
-  
-    <li class="md-nav__item">
-      <a href="../aws/" class="md-nav__link">
-        
-  
-  
-  <span class="md-ellipsis">
-    Getting started with AWS S3
     
   </span>
   
@@ -868,7 +768,7 @@
   
   
   <span class="md-ellipsis">
-    Library Permissions with AWS S3
+    Statistics
     
   </span>
   
@@ -881,7 +781,7 @@
   
   
   <span class="md-ellipsis">
-    Library Permissions with AWS S3
+    Statistics
     
   </span>
   
@@ -904,28 +804,28 @@
     <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
       
         <li class="md-nav__item">
-  <a href="#goal" class="md-nav__link">
+  <a href="#basic-usage" class="md-nav__link">
     <span class="md-ellipsis">
-      Goal
+      Basic Usage
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Basic Usage">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#using-the-context-manager" class="md-nav__link">
+    <span class="md-ellipsis">
+      Using the Context Manager
     </span>
   </a>
   
 </li>
-      
-        <li class="md-nav__item">
-  <a href="#aws-s3" class="md-nav__link">
-    <span class="md-ellipsis">
-      AWS S3
-    </span>
-  </a>
-  
-    <nav class="md-nav" aria-label="AWS S3">
-      <ul class="md-nav__list">
         
           <li class="md-nav__item">
-  <a href="#setting-up-the-permissions-policy" class="md-nav__link">
+  <a href="#using-enabledisable-explicitly" class="md-nav__link">
     <span class="md-ellipsis">
-      Setting up the permissions policy
+      Using Enable/Disable Explicitly
     </span>
   </a>
   
@@ -937,9 +837,51 @@
 </li>
       
         <li class="md-nav__item">
-  <a href="#usage" class="md-nav__link">
+  <a href="#output-structure" class="md-nav__link">
     <span class="md-ellipsis">
-      Usage
+      Output Structure
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#common-use-cases" class="md-nav__link">
+    <span class="md-ellipsis">
+      Common Use Cases
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Common Use Cases">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#measure-how-many-ios-have-been-made-in-one-read" class="md-nav__link">
+    <span class="md-ellipsis">
+      Measure how many IOs have been made in one read
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#resetting-statistics" class="md-nav__link">
+    <span class="md-ellipsis">
+      Resetting Statistics
+    </span>
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#note" class="md-nav__link">
+    <span class="md-ellipsis">
+      Note
     </span>
   </a>
   
@@ -954,6 +896,60 @@
 
               
             
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Storage Guides
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            Storage Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
               
                 
   
@@ -961,7 +957,53 @@
   
   
     <li class="md-nav__item">
-      <a href="../azure/" class="md-nav__link">
+      <a href="../../aws/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting started with AWS S3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../aws_permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Library Permissions with AWS S3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../azure/" class="md-nav__link">
         
   
   
@@ -1038,7 +1080,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../technical/architecture/" class="md-nav__link">
+      <a href="../../technical/architecture/" class="md-nav__link">
         
   
   
@@ -1061,7 +1103,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../technical/on_disk_storage/" class="md-nav__link">
+      <a href="../../technical/on_disk_storage/" class="md-nav__link">
         
   
   
@@ -1084,7 +1126,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../technical/migration/" class="md-nav__link">
+      <a href="../../technical/migration/" class="md-nav__link">
         
   
   
@@ -1107,7 +1149,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../technical/contributing/" class="md-nav__link">
+      <a href="../../technical/contributing/" class="md-nav__link">
         
   
   
@@ -1130,7 +1172,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../technical/upgrade_storage/" class="md-nav__link">
+      <a href="../../technical/upgrade_storage/" class="md-nav__link">
         
   
   
@@ -1207,7 +1249,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../lib_config/" class="md-nav__link">
+      <a href="../../lib_config/" class="md-nav__link">
         
   
   
@@ -1230,7 +1272,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../runtime_config/" class="md-nav__link">
+      <a href="../../runtime_config/" class="md-nav__link">
         
   
   
@@ -1253,7 +1295,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../error_messages/" class="md-nav__link">
+      <a href="../../error_messages/" class="md-nav__link">
         
   
   
@@ -1334,7 +1376,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_lmdb/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_lmdb/" class="md-nav__link">
         
   
   
@@ -1357,7 +1399,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_lazydataframe/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_lazydataframe/" class="md-nav__link">
         
   
   
@@ -1380,7 +1422,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
         
   
   
@@ -1403,7 +1445,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_resample/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_resample/" class="md-nav__link">
         
   
   
@@ -1426,7 +1468,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_concat/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_concat/" class="md-nav__link">
         
   
   
@@ -1449,7 +1491,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
         
   
   
@@ -1472,7 +1514,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_snapshots/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_snapshots/" class="md-nav__link">
         
   
   
@@ -1495,7 +1537,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_equity_analytics/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_equity_analytics/" class="md-nav__link">
         
   
   
@@ -1518,7 +1560,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_demo_equity_options/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_demo_equity_options/" class="md-nav__link">
         
   
   
@@ -1541,7 +1583,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../notebooks/ArcticDB_billion_row_challenge/" class="md-nav__link">
+      <a href="../../notebooks/ArcticDB_billion_row_challenge/" class="md-nav__link">
         
   
   
@@ -1614,7 +1656,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/" class="md-nav__link">
+      <a href="../../api/" class="md-nav__link">
         
   
   
@@ -1637,7 +1679,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/arctic/" class="md-nav__link">
+      <a href="../../api/arctic/" class="md-nav__link">
         
   
   
@@ -1660,7 +1702,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/arctic_uri/" class="md-nav__link">
+      <a href="../../api/arctic_uri/" class="md-nav__link">
         
   
   
@@ -1683,7 +1725,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/library/" class="md-nav__link">
+      <a href="../../api/library/" class="md-nav__link">
         
   
   
@@ -1706,7 +1748,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/library_types/" class="md-nav__link">
+      <a href="../../api/library_types/" class="md-nav__link">
         
   
   
@@ -1729,7 +1771,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/processing/" class="md-nav__link">
+      <a href="../../api/processing/" class="md-nav__link">
         
   
   
@@ -1752,7 +1794,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/exceptions/" class="md-nav__link">
+      <a href="../../api/exceptions/" class="md-nav__link">
         
   
   
@@ -1775,7 +1817,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/config/" class="md-nav__link">
+      <a href="../../api/config/" class="md-nav__link">
         
   
   
@@ -1798,7 +1840,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/admin_tools/" class="md-nav__link">
+      <a href="../../api/admin_tools/" class="md-nav__link">
         
   
   
@@ -1821,7 +1863,7 @@
   
   
     <li class="md-nav__item">
-      <a href="../api/query_stats/" class="md-nav__link">
+      <a href="../../api/query_stats/" class="md-nav__link">
         
   
   
@@ -1866,154 +1908,158 @@
   
 
 
-<h1 id="dynamic-library-permissions-with-articdb-on-aws-s3">Dynamic library permissions with ArticDB on AWS S3<a class="headerlink" href="#dynamic-library-permissions-with-articdb-on-aws-s3" title="Permanent link">&para;</a></h1>
-<h2 id="goal">Goal<a class="headerlink" href="#goal" title="Permanent link">&para;</a></h2>
-<p>One of the advantages of ArcticDB is how easy it is to setup and use as a personal database.  But how can we extend this pattern to an organisation?  How can we keep it trivial to use as an individual, but allow for secure sharing of data with team-mates and groups across your organisation?  We also want this to be easy to maintain, a key challange for permissions generally.</p>
-<p>Here we model a small two team organisation, 'Acme', in AWS and create some flexible permissions that allow users and teams to create
-and use private and shared data without any per-library setup.</p>
-<ul>
-<li>Data Team<ul>
-<li>Jane</li>
-<li>Samir</li>
-</ul>
-</li>
-<li>Quant Team<ul>
-<li>Alan</li>
-<li>Diana</li>
-</ul>
-</li>
-</ul>
-<p>Each user should be able to, </p>
-<ul>
-<li>list all ArcticDB libraries (but not their content)</li>
-<li>create personal libraries that only they can read and write to</li>
-<li>create team libraries that only those in their team can read and write to</li>
-</ul>
-<p>Users will follow an ArcticDB library name convention.  The library name should one of <code>&lt;USERNAME&gt;/&lt;LIBRARY&gt;</code> or <code>&lt;TEAM&gt;/&lt;MYLIBRARY&gt;</code>, so if Jane wants to create a personal library for weather data, they would use <code>lib.create_library('jane@acme/weather')</code> (assuming the AWS S3 setup below).</p>
-<p>We can do this with path-prefix permissions in AWS S3.  Other backends, such as Minio, support path based permissioning.</p>
-<h2 id="aws-s3">AWS S3<a class="headerlink" href="#aws-s3" title="Permanent link">&para;</a></h2>
-<p>You should have a number of users setup in AWS IAM already along with a group containing all the users.  Follow the <a href="https://docs.aws.amazon.com/IAM/latest/UserGuide/getting-started.html">IAM docs</a> for help with that.</p>
-<p>For Acme we've setup four users and the users are tagged with the teams they are a member of:</p>
-<table>
-<thead>
-<tr>
-<th>aws:username</th>
-<th>aws:PrincipalTag/team</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>jane@acme</td>
-<td>data</td>
-</tr>
-<tr>
-<td>samir@acme</td>
-<td>data</td>
-</tr>
-<tr>
-<td>alan@acme</td>
-<td>quant</td>
-</tr>
-<tr>
-<td>diana@acme</td>
-<td>quant</td>
-</tr>
-</tbody>
-</table>
-<p>We've also created a user group, <code>acme</code> with all four users in.</p>
-<p>Let's create an S3 bucket for Acme, <code>acme-arcticdb</code>, using <a href="https://console.aws.amazon.com/cloudshell/">cloudshell</a>.
-<div class="highlight"><pre><span></span><code>aws<span class="w"> </span>s3<span class="w"> </span>mb<span class="w"> </span>s3://acme-arcticdb
-</code></pre></div></p>
-<h3 id="setting-up-the-permissions-policy">Setting up the permissions policy<a class="headerlink" href="#setting-up-the-permissions-policy" title="Permanent link">&para;</a></h3>
-<p>In general for read access our users will need <code>s3:ListBucket</code> and <code>s3:GetObject</code> permissions and for write access our users will additionally need <code>s3:PutObject</code> and <code>s3:DeleteObject</code>.</p>
-<p>Then setup the following access policy.  We will save this snippet to <code>policy.json</code>.
-<div class="highlight"><pre><span></span><code><span class="p">{</span>
-<span class="w">    </span><span class="nt">&quot;Version&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;2012-10-17&quot;</span><span class="p">,</span>
-<span class="w">    </span><span class="nt">&quot;Statement&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">        </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">&quot;Sid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;ListObjects&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;Effect&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Allow&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;Action&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;s3:ListBucket&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;Resource&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;arn:aws:s3:::acme-arcticdb&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;Condition&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">                </span><span class="nt">&quot;StringLike&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">{</span>
-<span class="w">                    </span><span class="nt">&quot;s3:prefix&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">                        </span><span class="s2">&quot;_arctic_cfg/*&quot;</span><span class="p">,</span>
-<span class="w">                        </span><span class="s2">&quot;${aws:username}/*&quot;</span><span class="p">,</span>
-<span class="w">                        </span><span class="s2">&quot;${aws:PrincipalTag/team}/*&quot;</span>
-<span class="w">                    </span><span class="p">]</span>
-<span class="w">                </span><span class="p">}</span>
-<span class="w">            </span><span class="p">}</span>
-<span class="w">        </span><span class="p">},</span>
-<span class="w">        </span><span class="p">{</span>
-<span class="w">            </span><span class="nt">&quot;Sid&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;PutGetDeleteObjects&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;Effect&quot;</span><span class="p">:</span><span class="w"> </span><span class="s2">&quot;Allow&quot;</span><span class="p">,</span>
-<span class="w">            </span><span class="nt">&quot;Action&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">                </span><span class="s2">&quot;s3:PutObject&quot;</span><span class="p">,</span>
-<span class="w">                </span><span class="s2">&quot;s3:GetObject&quot;</span><span class="p">,</span>
-<span class="w">                </span><span class="s2">&quot;s3:DeleteObject&quot;</span>
-<span class="w">            </span><span class="p">],</span>
-<span class="w">            </span><span class="nt">&quot;Resource&quot;</span><span class="p">:</span><span class="w"> </span><span class="p">[</span>
-<span class="w">                </span><span class="s2">&quot;arn:aws:s3:::acme-arcticdb/${aws:username}/*&quot;</span><span class="p">,</span>
-<span class="w">                </span><span class="s2">&quot;arn:aws:s3:::acme-arcticdb/${aws:PrincipalTag/team}/*&quot;</span><span class="p">,</span>
-<span class="w">                </span><span class="s2">&quot;arn:aws:s3:::acme-arcticdb/_arctic_cfg/cref/?sUt?${aws:username}/*&quot;</span><span class="p">,</span>
-<span class="w">                </span><span class="s2">&quot;arn:aws:s3:::acme-arcticdb/_arctic_cfg/cref/?sUt?${aws:PrincipalTag/team}/*&quot;</span>
-<span class="w">            </span><span class="p">]</span>
-<span class="w">        </span><span class="p">}</span>
-<span class="w">    </span><span class="p">]</span>
-<span class="p">}</span>
-</code></pre></div></p>
-<p>Create the policy in AWS.
-<div class="highlight"><pre><span></span><code>aws<span class="w"> </span>iam<span class="w"> </span>create-policy<span class="w"> </span>--policy-name<span class="w"> </span>acme-arcticdb-access<span class="w"> </span>--policy-document<span class="w"> </span>file://policy.json
-</code></pre></div></p>
-<p>Take note of the <code>Arn</code> in the output to the last command as you'll need it to attach the policy to a group
-with all your users in, for this example the group is <code>acme</code>.
-<div class="highlight"><pre><span></span><code>aws<span class="w"> </span>iam<span class="w"> </span>attach-group-policy<span class="w"> </span>--policy-arn<span class="w"> </span>&lt;ARN&gt;<span class="w"> </span>--group-name<span class="w"> </span>acme
-</code></pre></div></p>
-<p>If you intend to adapt that example policy to your own situation then please note that,</p>
-<ul>
-<li><code>acme-arcticdb</code> is the name of the bucket and will need to be replaced everywhere</li>
-<li><code>s3:ListBucket</code> is used to permission <code>ListObjectsV2</code> and needs its own section, as it applies to the bucket as a whole.  We control access to paths by checking the <code>s3:prefix</code> argument that's part of the <code>ListObjectsV2</code> request.</li>
-<li><code>Put</code>, <code>Get</code> and <code>Delete</code> can be specifed for object paths in the second section.</li>
-<li><code>_arctic_cfg/cref/*</code> is where the ArcticDB library configuration is stored and the data for each library is stored in the root of the bucket with a path that starts with the library name.</li>
-<li>By using <code>${aws:username}</code> and <code>${aws:PrincipalTag/team}</code> we've restricted library access to those with a matching AWS IAM username or a matched user 'team' tag.</li>
-</ul>
-<h4 id="security-note">Security note<a class="headerlink" href="#security-note" title="Permanent link">&para;</a></h4>
-<p>Because <code>${aws:username}</code>, <code>${aws:PrincipalTag/team}</code> and <code>_arctic_cfg</code>... are at the beginning of the path, it's important they don't contain values that can overlap. For example if you have a team called 'data' and a username for an application called 'data', they will have the same permissions, or if a username can be created that starts with <code>_arctic_cfg</code>... then that user will be able to modify all library configs.</p>
-<h2 id="usage">Usage<a class="headerlink" href="#usage" title="Permanent link">&para;</a></h2>
-<p>Jane can now list and read and write to their own libraries and team libraries, but not to others in Acme.</p>
-<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
+<h1 id="query-statistics">Query Statistics<a class="headerlink" href="#query-statistics" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>Warning</strong>: The Query Statistics API is unstable and not governed by ArcticDB's semantic versioning. It may change or be removed in future versions without notice.</p>
+</blockquote>
+<p>ArcticDB provides a Query Statistics API that allows you to collect and analyze performance metrics for operations performed on your data stores.
+This can be useful for debugging code issues and optimizing performance in applications.</p>
+<p>Currently only S3 backend is supported. Support for other storage backend is pending.</p>
+<h2 id="basic-usage">Basic Usage<a class="headerlink" href="#basic-usage" title="Permanent link">&para;</a></h2>
+<p>There are two ways to enable query statistics collection:</p>
+<h3 id="using-the-context-manager">Using the Context Manager<a class="headerlink" href="#using-the-context-manager" title="Permanent link">&para;</a></h3>
+<p>The context manager automatically enables statistics at the beginning of a block and disables them at the end.
+Please note that nested context managers is not supported:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb.toolbox.query_stats</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qs</span>
 
-<span class="c1"># jane@acme team=data</span>
-<span class="n">access</span> <span class="o">=</span> <span class="s1">&#39;&lt;REDACTED&gt;&#39;</span>
-<span class="n">secret</span> <span class="o">=</span> <span class="s1">&#39;&lt;REDACTED&gt;&#39;</span>
-<span class="n">bucket</span><span class="o">=</span><span class="s1">&#39;acme-arcticdb&#39;</span>
-<span class="n">region</span><span class="o">=</span><span class="s1">&#39;eu-west-2&#39;</span>
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="p">[</span><span class="s2">&quot;library_name&quot;</span><span class="p">]</span>
 
-<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s1">&#39;s3://s3.</span><span class="si">{</span><span class="n">region</span><span class="si">}</span><span class="s1">.amazonaws.com:</span><span class="si">{</span><span class="n">bucket</span><span class="si">}</span><span class="s1">?access=</span><span class="si">{</span><span class="n">access</span><span class="si">}</span><span class="s1">&amp;secret=</span><span class="si">{</span><span class="n">secret</span><span class="si">}</span><span class="s1">&#39;</span><span class="p">)</span>
+<span class="c1"># Collect statistics for specific operations</span>
+<span class="k">with</span> <span class="n">qs</span><span class="o">.</span><span class="n">query_stats</span><span class="p">():</span>
+    <span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">()</span>
 
-<span class="c1"># Create library as me</span>
-<span class="n">arctic</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">&#39;jane@acme/weather&#39;</span><span class="p">)</span>
-<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;jane@acme/weather&#39;</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;test&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
-
-<span class="c1"># Create library as data team</span>
-<span class="n">arctic</span><span class="o">.</span><span class="n">create_library</span><span class="p">(</span><span class="s1">&#39;data/forecast&#39;</span><span class="p">)</span>
-<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;data/forecast&#39;</span><span class="p">)</span>
-<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s1">&#39;test&#39;</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">100</span><span class="p">))</span>
-
-<span class="c1"># See all libraries</span>
-<span class="n">arctic</span><span class="o">.</span><span class="n">list_libraries</span><span class="p">()</span>
-<span class="c1"># [&#39;alan@acme/bonds&#39;, &#39;data/forecast&#39;, &#39;jane@acme/weather&#39;, &#39;quant/stocks&#39;]</span>
-
-<span class="c1"># Can&#39;t use or delete Alan or Quant team data</span>
-<span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;alan@acme/bonds&#39;</span><span class="p">)</span>
-<span class="n">arctic</span><span class="o">.</span><span class="n">get_library</span><span class="p">(</span><span class="s1">&#39;quant/stocks&#39;</span><span class="p">)</span>
-<span class="n">arctic</span><span class="o">.</span><span class="n">delete_libraru</span><span class="p">(</span><span class="s1">&#39;alan@acme/bonds&#39;</span><span class="p">)</span>
-<span class="c1"># All raise:</span>
-<span class="c1"># PermissionException: E_PERMISSION Permission error: S3Error#15 : No response body.</span>
+<span class="c1"># Get the collected statistics</span>
+<span class="n">stats</span> <span class="o">=</span> <span class="n">qs</span><span class="o">.</span><span class="n">get_query_stats</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">stats</span><span class="p">)</span>
 </code></pre></div>
+<h3 id="using-enabledisable-explicitly">Using Enable/Disable Explicitly<a class="headerlink" href="#using-enabledisable-explicitly" title="Permanent link">&para;</a></h3>
+<p>For more control, you can manually enable and disable statistics collection:</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb.toolbox.query_stats</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qs</span>
+
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="p">[</span><span class="s2">&quot;library_name&quot;</span><span class="p">]</span>
+
+<span class="c1"># Enable statistics collection</span>
+<span class="n">qs</span><span class="o">.</span><span class="n">enable</span><span class="p">()</span>
+
+<span class="c1"># Perform operations you want to measure</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;symbol&quot;</span><span class="p">)</span>
+
+<span class="c1"># Get the collected statistics</span>
+<span class="n">stats</span> <span class="o">=</span> <span class="n">qs</span><span class="o">.</span><span class="n">get_query_stats</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">stats</span><span class="p">)</span>
+
+<span class="c1"># Optionally, reset the statistics</span>
+<span class="n">qs</span><span class="o">.</span><span class="n">reset_stats</span><span class="p">()</span>
+
+<span class="c1"># Continue with more operations</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">list_symbols</span><span class="p">()</span>
+
+<span class="c1"># Get new statistics</span>
+<span class="n">stats</span> <span class="o">=</span> <span class="n">qs</span><span class="o">.</span><span class="n">get_query_stats</span><span class="p">()</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">stats</span><span class="p">)</span>
+
+<span class="c1"># Disable statistics collection when done</span>
+<span class="n">qs</span><span class="o">.</span><span class="n">disable</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="output-structure">Output Structure<a class="headerlink" href="#output-structure" title="Permanent link">&para;</a></h2>
+<p>The statistics are returned as a nested dictionary organized by:
+- Operation group (currently <code>storage_operations</code> only)
+- Task type (e.g., <code>S3_ListObjectsV2</code>, <code>S3_PutObject</code>)
+- Key type (e.g., <code>SYMBOL_LIST</code>, <code>TABLE_DATA</code>, <code>VERSION_REF</code>)</p>
+<p>Each task contains measurements like:
+- <code>count</code>: Number of times the operation was performed
+- <code>total_time_ms</code>: Total execution time in milliseconds
+- For data upload and download, additional metric <code>size_bytes</code> for the size of compressed data being transferred</p>
+<p>Example output:</p>
+<div class="highlight"><pre><span></span><code><span class="p">{</span>
+    <span class="s2">&quot;storage_operations&quot;</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">&quot;S3_DeleteObjects&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;LOCK&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">14</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;SYMBOL_LIST&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">17</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;S3_GetObject&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;LOCK&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">206</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">31</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;S3_HeadObject&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;LOCK&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">4</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;S3_ListObjectsV2&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;SYMBOL_LIST&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">35</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;VERSION_REF&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">15</span>
+            <span class="p">}</span>
+        <span class="p">},</span>
+        <span class="s2">&quot;S3_PutObject&quot;</span><span class="p">:</span> <span class="p">{</span>
+            <span class="s2">&quot;LOCK&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">103</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">15</span>
+            <span class="p">},</span>
+            <span class="s2">&quot;SYMBOL_LIST&quot;</span><span class="p">:</span> <span class="p">{</span>
+                <span class="s2">&quot;count&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span>
+                <span class="s2">&quot;size_bytes&quot;</span><span class="p">:</span> <span class="mi">308</span><span class="p">,</span>
+                <span class="s2">&quot;total_time_ms&quot;</span><span class="p">:</span> <span class="mi">15</span>
+            <span class="p">}</span>
+        <span class="p">}</span>
+    <span class="p">}</span>
+<span class="p">}</span>
+</code></pre></div>
+<h2 id="common-use-cases">Common Use Cases<a class="headerlink" href="#common-use-cases" title="Permanent link">&para;</a></h2>
+<h3 id="measure-how-many-ios-have-been-made-in-one-read">Measure how many IOs have been made in one read<a class="headerlink" href="#measure-how-many-ios-have-been-made-in-one-read" title="Permanent link">&para;</a></h3>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">adb</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">arcticdb.toolbox.query_stats</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">qs</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">pandas</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">pd</span>
+
+<span class="n">arctic</span> <span class="o">=</span> <span class="n">adb</span><span class="o">.</span><span class="n">Arctic</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;s3://</span><span class="si">{</span><span class="n">HOST</span><span class="si">}</span><span class="s2">:</span><span class="si">{</span><span class="n">BUCKET</span><span class="si">}</span><span class="s2">?access=</span><span class="si">{</span><span class="n">ACCESS</span><span class="si">}</span><span class="s2">&amp;secret=</span><span class="si">{</span><span class="n">SECRET</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+<span class="n">lib</span> <span class="o">=</span> <span class="n">arctic</span><span class="p">[</span><span class="s2">&quot;library_name&quot;</span><span class="p">]</span>
+
+<span class="c1"># Measure read performance</span>
+<span class="n">lib</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="s2">&quot;test_symbol&quot;</span><span class="p">)</span>
+<span class="n">read_stats</span> <span class="o">=</span> <span class="n">qs</span><span class="o">.</span><span class="n">get_query_stats</span><span class="p">()</span>
+</code></pre></div>
+<h2 id="resetting-statistics">Resetting Statistics<a class="headerlink" href="#resetting-statistics" title="Permanent link">&para;</a></h2>
+<p>You can clear all collected statistics using <code>reset_stats()</code>:</p>
+<div class="highlight"><pre><span></span><code><span class="n">qs</span><span class="o">.</span><span class="n">reset_stats</span><span class="p">()</span>
+</code></pre></div>
+<p>This is useful when you want to isolate statistics for specific operations or when you're done with one phase of analysis and want to start fresh.</p>
+<h2 id="note">Note<a class="headerlink" href="#note" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p>The Query Statistics feature uses a global container to store all measurements. This means statistics from all Python threads in your application will be collected in the same structure. 
+For this reason, enabling or disabling Query Statistics in multiple threads can lead to unpredictable results and should be avoided. It's best to treat Query Statistics as an application-wide setting rather than a thread-specific one.</p>
+</li>
+<li>
+<p>Running an enormous number of operations with Query Statistics enabled risks overflowing the internal counters. To avoid this issue, please reset statistics periodically or keep sessions with Query Statistics enabled relatively short.
+```</p>
+</li>
+</ol>
 
 
 
@@ -2063,10 +2109,10 @@ with all your users in, for this example the group is <code>acme</code>.
     
     
       
-      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+      <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../../assets/javascripts/workers/search.d50fe291.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
     
     
-      <script src="../assets/javascripts/bundle.13a4f30d.min.js"></script>
+      <script src="../../assets/javascripts/bundle.13a4f30d.min.js"></script>
       
     
   </body>
