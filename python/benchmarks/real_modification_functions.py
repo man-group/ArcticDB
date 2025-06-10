@@ -295,6 +295,7 @@ class AWSDeleteTestsFewLarge(AsvBase):
         self.setup_symbol(self.lib, writes_list)
         self.get_logger().info(f"Library {self.lib}")
         assert self.lib.has_symbol(self.symbol)
+        self.symbol_deleted = False
 
     def setup_symbol(self, lib: Library, writes_list: List[pd.DataFrame]):
         logger = self.get_logger()
@@ -307,14 +308,17 @@ class AWSDeleteTestsFewLarge(AsvBase):
             logger.info(f"Appended frame {frame.shape[0]}")
 
     def teardown(self, cache, num_rows):
-        assert not self.lib.has_symbol(self.symbol)
+        ## This is check only for standard delete operation
+        if self.symbol_deleted:
+            assert not self.lib.has_symbol(self.symbol)
         self.get_library_manager().clear_all_modifiable_libs_from_this_process()
 
     def time_delete(self, cache, num_rows):
         self.lib.delete(self.symbol)
+        self.symbol_deleted = True
 
     def time_delete_over_time(self, cache, num_rows):
         with config_context("VersionMap.ReloadInterval", 0):
-            for i in range(100):
+            for i in range(25):
                 self.lib.write("delete_over_time", pd.DataFrame())
                 self.lib.delete("delete_over_time")
