@@ -13,8 +13,14 @@ namespace arcticdb::util {
         }
         // Use boost as it can handle nanoseconds both on all OS's.
         // std::std::chrono::time_point<std::chrono::system_clock> does not handle nanoseconds on Windows and Mac
+
+        const timestamp seconds = ts / 1'000'000'000;
+        const timestamp ns_remainder = ts % 1'000'000'000;
         const boost::posix_time::ptime epoch = boost::posix_time::from_time_t(0);
-        const boost::posix_time::ptime time = epoch + boost::posix_time::nanoseconds{ts};
+        // Split into seconds and nanoseconds fractions because using epoch + boost::posix_time::nanoseconds fails when
+        // std::numeric_limits<int64_t>::max() is used
+        const boost::posix_time::ptime dt = epoch + boost::posix_time::seconds(seconds) + boost::posix_time::nanoseconds(ns_remainder);
+
         // Custom formatting seems to work best compared to other options.
         // * using std::put_time(std::gmtime(...)) throws on Windows when pre-epoch dates are used
         // * using boosts time_facet requires the facet used for formatting to be allocated on the heap for each
@@ -22,13 +28,13 @@ namespace arcticdb::util {
         //   pointer
         return fmt::format(
             "{}-{:02}-{:02} {:02}:{:02}:{:02}.{:09}",
-            int{time.date().year()},
-            int{time.date().month()},
-            int{time.date().day()},
-            time.time_of_day().hours(),
-            time.time_of_day().minutes(),
-            time.time_of_day().seconds(),
-            time.time_of_day().fractional_seconds()
+            int{dt.date().year()},
+            int{dt.date().month()},
+            int{dt.date().day()},
+            dt.time_of_day().hours(),
+            dt.time_of_day().minutes(),
+            dt.time_of_day().seconds(),
+            dt.time_of_day().fractional_seconds()
         );
     }
 }
