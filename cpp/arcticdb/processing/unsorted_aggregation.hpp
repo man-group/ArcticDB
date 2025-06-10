@@ -10,7 +10,6 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
-#include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 
 namespace arcticdb {
@@ -72,7 +71,8 @@ public:
     void add_data_type(DataType data_type);
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
-    SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
+    SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
+    std::optional<Value> get_default_value();
 
 private:
 
@@ -89,11 +89,12 @@ public:
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    std::optional<Value> get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
+    util::BitMagic sparse_map_;
 };
 
 class MinAggregatorData : private AggregatorDataBase
@@ -104,11 +105,12 @@ public:
     DataType get_output_data_type();
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    std::optional<Value> get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;
     std::optional<DataType> data_type_;
+    util::BitMagic sparse_map_;
 };
 
 class MeanAggregatorData : private AggregatorDataBase
@@ -121,7 +123,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
-
+    std::optional<Value> get_default_value();
 private:
 
     struct Fraction
@@ -146,7 +148,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
-
+    std::optional<Value> get_default_value();
 private:
 
     std::vector<uint64_t> aggregated_;
@@ -162,7 +164,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    std::optional<Value> get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;
@@ -181,7 +183,7 @@ public:
     }
     void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
-
+    std::optional<Value> get_default_value();
 private:
 
     std::vector<uint8_t> aggregated_;

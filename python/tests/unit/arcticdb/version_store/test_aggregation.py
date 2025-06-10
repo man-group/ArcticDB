@@ -12,9 +12,7 @@ from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
-from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic
-from arcticdb.config import set_log_level
-from arcticdb_ext.log import flush_all
+from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic, common_sum_aggregation_dtype
 
 pytestmark = pytest.mark.pipeline
 
@@ -318,10 +316,12 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
     q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
 
     lib.write("symbol", df)
-    res = lib.read("symbol", query_builder=q)
-    df = pd.DataFrame({"to_mean": (1.1 + 1.4 + 2.5) / 3, "to_max": [2.5]}, index=["group_1"])
+    res = lib.read("symbol", query_builder=q).data
+    res.sort_index(axis=1, inplace=True)
+    df = pd.DataFrame({"to_max": [2.5], "to_mean": [(1.1 + 1.4 + 2.5) / 3]}, index=["group_1"])
     df.index.rename("grouping_column", inplace=True)
-    assert_frame_equal(res.data, df)
+    df.sort_index(axis=1, inplace=True)
+    assert_frame_equal(res, df)
 
 
 ##################################
@@ -488,51 +488,54 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
     lib.append(symbol, append_df)
     generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
 
-@pytest.fixture(scope='session')
-def log_file(tmpdir_factory):
-    file = tmpdir_factory.mktemp('logs').join('log.txt')
-    yield file
+@pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
+@pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
+@pytest.mark.parametrize("first_group", ["0", "1"])
+@pytest.mark.parametrize("second_group", ["0", "1"])
+def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype, first_group, second_group):
+    """
+    Sum aggregation promotes to the largest type of the respective category. int -> int64, uint -> uint64, float -> float64
+    Dynamic schema allows mixin int and uint. In the case of sum aggregation, this will require mixing uint64 and int64
+    in the end segment, and those do not have a common type. In that case we use int64 (pyarrow does the same). In this
+    test we test all configurations of dtypes and grouping options (same group vs different group)
+    """
+    lib = lmdb_version_store_dynamic_schema_v1
+    df1 = pd.DataFrame({"grouping_column": [first_group], "to_sum": np.array([1], first_dtype)})
+    df2 = pd.DataFrame({"grouping_column": [second_group], "to_sum": np.array([1], second_dtype)})
+    lib.append("sym", df1)
+    if ((pd.api.types.is_signed_integer_dtype(first_dtype) and second_dtype == np.uint64) or
+        (first_dtype == np.uint64 and pd.api.types.is_signed_integer_dtype(second_dtype))):
+        with pytest.raises(SchemaException):
+            lib.append("sym", df2)
+    else:
+        lib.append("sym", df2)
+        q = QueryBuilder()
+        q = q.groupby("grouping_column").agg({"to_sum": "sum"})
+        data = lib.read("sym", query_builder=q).data
+        expected_type = common_sum_aggregation_dtype(first_dtype, second_dtype)
+        assert np.dtype(data["to_sum"].dtype) == np.dtype(expected_type)
 
-@pytest.fixture(scope='function')
-def clean_log_file(log_file):
+@pytest.mark.parametrize("extremum", ["min", "max"])
+@pytest.mark.parametrize("dtype", [np.int32, np.float32])
+def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1, extremum, dtype):
     """
-    Current implementation of set_log_level allows setting the output file only once, next calls are ignored. Thus we
-    need to create a session scoped file and erase its contents in a funciton scoped fixture. It's safe to do this for
-    parallel tests as tmpdir_factory will be different for the different workers
+    Test that a sparse column will be backfilled with the correct values.
+    d1 will be skipped because there is no grouping colum, df2 will form the first row which. The first row is sparse
+    because the aggregation column is missing, d2 will be the second row which will be dense and not backfilled.
     """
-    log_file.write_text("", encoding="utf-8")
-    yield log_file
-
-class TestDynamicSchemaLogsWarningWhenPromotingIntToFloat:
-    """
-    Dynamic schema promotes int typed columns to float for min and max so that if that a column is missing from a
-    segment, and we end up with empty bucket we can set the value to NaN. That's because numpy can't handle missing
-    values properly. ArcticDB v6.0.0 will change that: the Arrow backend can handle missing values and for numpy it'll
-    be backfiled with 0. This tests that the current version emits a warning. Remove these tests when this is no longer
-    valid.
-    """
-
-    @pytest.mark.parametrize("agg", ["min", "max"])
-    @pytest.mark.parametrize("dtype", ["int8", "int16", "int32", "int64", "uint8", "uint16", "uint32", "uint64"])
-    def test_warn_int_types(self, lmdb_library_dynamic_schema, agg, dtype, clean_log_file):
-        set_log_level(console_output=False, file_output_path=str(clean_log_file))
-        lib = lmdb_library_dynamic_schema
-        lib.write("sym", pd.DataFrame({"group": [0], "col": np.array([1], dtype=dtype)}))
-        lib.append("sym", pd.DataFrame({"group": [1]}))
-        qb = QueryBuilder().groupby("group").agg({agg: ("col", agg)})
-        lib.read("sym", query_builder=qb)
-        flush_all()
-        logs = clean_log_file.read_text(encoding="utf-8")
-        assert all([w in logs for w in ["W arcticdb", agg, "ArcticDB v6.0.0", "FLOAT64", dtype.upper(), agg.upper()]])
-    @pytest.mark.parametrize("agg", ["min", "max"])
-    @pytest.mark.parametrize("dtype", ["datetime64[ns]", "float32", "float64"])
-    def test_dont_warn_non_int_types(self, lmdb_library_dynamic_schema, agg, dtype, clean_log_file):
-        set_log_level(console_output=False, file_output_path=str(clean_log_file))
-        lib = lmdb_library_dynamic_schema
-        lib.write("sym", pd.DataFrame({"group": [0], "col": np.array([1], dtype=dtype)}))
-        lib.append("sym", pd.DataFrame({"group": [1]}))
-        qb = QueryBuilder().groupby("group").agg({agg: ("col", agg)})
-        lib.read("sym", query_builder=qb)
-        flush_all()
-        logs = clean_log_file.read_text(encoding="utf-8")
-        assert logs == ""
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "sym"
+    df1 = pd.DataFrame({"agg_column": np.array([0.0, 0.0], dtype)})
+    df2 = pd.DataFrame({"grouping_column": ["a"]})
+    df3 = pd.DataFrame({"grouping_column": ["b"], "agg_column": np.array([0], dtype)})
+    for df in [df1, df2, df3]:
+        lib.append(sym, df)
+    q = QueryBuilder()
+    q = q.groupby("grouping_column").agg({"agg_column": extremum})
+    data = lib.read("sym", query_builder=q).data
+    data = data.sort_index()
+    default_value = 0 if dtype == np.int32 else np.nan
+    expected = pd.DataFrame({"agg_column": np.array([default_value, 0], dtype)}, index=["a", "b"])
+    expected.index.name = "grouping_column"
+    expected = expected.sort_index()
+    assert_frame_equal(data, expected)

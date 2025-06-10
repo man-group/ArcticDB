@@ -14,9 +14,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/hash.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/variant_key.hpp>
@@ -30,7 +28,6 @@
 #include <arcticdb/util/test/random_throw.hpp>
 
 #include <type_traits>
-#include <ranges>
 
 namespace arcticdb::async {
 

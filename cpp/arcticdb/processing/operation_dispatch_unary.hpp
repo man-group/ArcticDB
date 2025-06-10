@@ -136,6 +136,11 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
             } else if constexpr (is_time_type(type_info::data_type)) {
                 return func.template apply<TimeTypeTag>(input_value);
             } else {
+                // This line should not be reached with if the column is of int type because we have an early exit
+                // above https://github.com/man-group/ArcticDB/blob/bc554c9d42c7714bab645a167c4df843bc2672c6/cpp/arcticdb/processing/operation_dispatch_unary.hpp#L117
+                // both null and not null are allowed with integers and return respectively EmptyResult and FullResult.
+                // We must keep the exception though as otherwise not all control paths of this function will return a
+                // value and this won't compile.
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform null check: {} ({})",
                                                                       unary_operation_to_string(func, col.column_name_),
                                                                       get_user_friendly_type_string(col.column_->type()));

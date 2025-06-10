@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/Poly.h>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb{
 
@@ -24,10 +25,13 @@ struct IGroupingAggregatorData {
         [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
             return folly::poly_call<3>(*this, output_column_name, dynamic_schema, unique_values);
         }
+        [[nodiscard]] std::optional<Value> get_default_value() {
+            return folly::poly_call<4>(*this);
+        }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::add_data_type, &T::get_output_data_type, &T::aggregate, &T::finalize>;
+    using Members = folly::PolyMembers<&T::add_data_type, &T::get_output_data_type, &T::aggregate, &T::finalize, &T::get_default_value>;
 };
 
 using GroupingAggregatorData = folly::Poly<IGroupingAggregatorData>;
