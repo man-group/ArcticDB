@@ -388,7 +388,7 @@ jobs:
 
       # Fallback if the clean up at test fixutre tear down fails due to crash or etc
       - name: Remove AWS S3 testing account and credentials and STS roles
-        if: ${{ always() && env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
+        if: ${{ always() && env.real_tests_storage_type == 'AWS_S3'}}
         run: |
           echo "env.real_tests_storage_type: [${{ env.real_tests_storage_type }}]"
           python -c "
