@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <limits>
 
 TEST(FormatDate, ZeroTs) {
@@ -31,4 +32,8 @@ TEST(FormatDate, April2821) {
 
 TEST(FormatDate, LargestInt64ns) {
     ASSERT_EQ("2262-04-11 23:47:16.854775807", arcticdb::util::format_timestamp(std::numeric_limits<int64_t>::max()));
+}
+
+TEST(FormatDate, NaT) {
+    ASSERT_EQ("NaT", arcticdb::util::format_timestamp(arcticdb::NaT));
 }
