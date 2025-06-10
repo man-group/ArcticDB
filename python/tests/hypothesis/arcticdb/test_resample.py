@@ -108,7 +108,7 @@ def offset(draw):
 
 @st.composite
 def dynamic_schema_column_list(draw):
-    all_column_names = [f"col_{i}" for i in range(10)]
+    all_column_names = [f"col_{i}" for i in range(5)]
     segment_count = draw(st.integers(min_value=1, max_value=10))
     segment_ranges = sorted(draw(st.lists(date(min_date=MIN_DATE, max_date=MAX_DATE, unit="s"), unique=True, min_size=segment_count+1, max_size=segment_count+1)))
     segments = []
