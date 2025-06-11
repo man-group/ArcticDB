@@ -32,6 +32,7 @@ from arcticdb.version_store._custom_normalizers import (
     CompositeCustomNormalizer,
 )
 from arcticdb.version_store._normalization import (
+    BlockManagerUnconsolidated,
     FrameData,
     MsgPackNormalizer,
     normalize_metadata,
@@ -1070,6 +1071,13 @@ def test_pandas_consolidation_v1(version_store_factory, monkeypatch, env_var_set
         monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
     lib = version_store_factory()
     assert lib._normalizer.df._skip_df_consolidation == (env_var_set and IS_PANDAS_TWO)
+    sym = "test_pandas_consolidation_v1"
+    lib.write(sym, pd.DataFrame({"col": [0]}))
+    df = lib.read(sym).data
+    if lib._normalizer.df._skip_df_consolidation:
+        assert isinstance(df._mgr, BlockManagerUnconsolidated)
+    else:
+        assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
 
 
 @pytest.mark.parametrize("env_var_set", [True, False])
@@ -1078,3 +1086,10 @@ def test_pandas_consolidation_v2(lmdb_library_factory, monkeypatch, env_var_set)
         monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
     lib = lmdb_library_factory()
     assert lib._nvs._normalizer.df._skip_df_consolidation == IS_PANDAS_TWO
+    sym = "test_pandas_consolidation_v2"
+    lib.write(sym, pd.DataFrame({"col": [0]}))
+    df = lib.read(sym).data
+    if lib._nvs._normalizer.df._skip_df_consolidation:
+        assert isinstance(df._mgr, BlockManagerUnconsolidated)
+    else:
+        assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
