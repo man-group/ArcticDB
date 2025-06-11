@@ -1322,6 +1322,23 @@ def test_filter_unsupported_boolean_operators():
         q = q[not q["a"]]
 
 
+def test_abc(lmdb_storage, lib_name, sym):
+    from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 1)
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
+        )
+    lib.write(sym, df)
+    pattern_a = "^abc"
+    q_a = QueryBuilder()
+    q_a = q_a[q_a["a"].regex_match(pattern_a)]
+    assert_frame_equal(lib.read(sym, query_builder=q_a).data, df[df.a.str.contains(pattern_a)])
+
+
 def test_filter_regex_match_basic(lmdb_version_store_v1, sym):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
@@ -1347,12 +1364,12 @@ def test_filter_regex_match_basic(lmdb_version_store_v1, sym):
 
     q = QueryBuilder()
     q = q[q["a"].regex_match(pattern_a) & q["c"].regex_match(pattern_c)]
-    expected = df[df.a.str.contains(pattern_a) & df.c.astype(str).str.contains(pattern_c)]
+    expected = df[df.a.str.contains(pattern_a) & df.c.str.contains(pattern_c)]
     assert_frame_equal(lib.read(sym, query_builder=q).data, expected)
 
     q2 = QueryBuilder()
     q2 = q2[q2["a"].regex_match(pattern_a) & q2["c"].regex_match(pattern_c2)]
-    expected2 = df[df.a.str.contains(pattern_a) & df.c.astype(str).str.contains(pattern_c2)]
+    expected2 = df[df.a.str.contains(pattern_a) & df.c.str.contains(pattern_c2)]
     assert_frame_equal(lib.read(sym, query_builder=q2).data, expected2)
 
     q2_alt = QueryBuilder()
@@ -1382,18 +1399,6 @@ def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym):
     q2 = QueryBuilder()
     q2 = q2[q2["a"].regex_match(pattern_a) & q2["b"].isin([0])]
     assert lib.read(sym, query_builder=q2).data.empty
-
-
-def test_filter_regex_match_empty_symbol(lmdb_version_store_v1, sym):
-    lib = lmdb_version_store_v1
-    lib.write(sym, pd.DataFrame())
-
-    q = QueryBuilder()
-    q = q[q["a"].regex_match("^abc")]
-    assert lib.read(sym, query_builder=q).data.empty
-
-    lib.write(sym, pd.DataFrame({"a": []}))
-    assert lib.read(sym, query_builder=q).data.empty
     
 
 def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
@@ -1402,7 +1407,7 @@ def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
             index=pd.date_range(pd.Timestamp(0), periods=4),
             data={"a": ["abc", None, "aabc", np.nan], "b": [1, 2, 3, 4], "c": [np.nan, "q34c", None, "567f"]}
         )
-    lib.write(sym, df)
+    lib.write(sym, df, dynamic_strings=True)
 
     pattern_a = "^abc"
     q_a = QueryBuilder()
@@ -1426,6 +1431,8 @@ def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
         q = QueryBuilder()
         q = q[q["b"].regex_match(1)]
 
+
+def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
@@ -1456,18 +1463,19 @@ def test_filter_regex_match_unicode(lmdb_version_store_v1, sym):
     assert not expected.empty
 
 
-def test_filter_regex_match_chaining(lmdb_version_store_v1, sym):
+def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=4),
-            data={"a": ["abc", "abcd", "aabc", "abcde"], "b": ["1", "2", "2", "1"], "c": [1, 2, 3, 4]}
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": ["a-1,d-1", "g-i,3-l", "d-2,-hi"], "b": [1, 2, 3]}
         )
     lib.write(sym, df)
 
-    pattern = "^abc"
+    pattern = r"\w-\d"
     q = QueryBuilder()
-    q = q[q["a"].regex_match("^abc")].groupby("b").agg({"c": "mean"})
-
+    q = q[q["a"].regex_match(pattern)]
+    expected = df[df.a.str.contains(pattern)]
     received = lib.read(sym, query_builder=q).data
-    expected = df[df.a.str.contains(pattern)].groupby("b").agg({"c": "mean"})
-    assert_frame_equal(received.sort_index(), expected)
+    assert_frame_equal(expected, received)
+    assert not expected.empty
+

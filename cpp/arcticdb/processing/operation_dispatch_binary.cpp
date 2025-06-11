@@ -180,7 +180,7 @@ VariantData regex_match_membership(const ColumnWithStrings& column_with_strings,
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
-                std::string value_string = get_string_from_value_type(column_with_strings, val);
+                std::string value_string = std::string(*val.str_data(), val.len());
                 auto offset_set = column_with_strings.string_pool_->get_regex_match_offsets_for_column(value_string, *column_with_strings.column_);
                 Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,

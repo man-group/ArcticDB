@@ -219,7 +219,19 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
         details::visit_type(val.type().data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
-                std::string value_string = get_string_from_value_type(column_with_strings, val);
+                std::optional<std::string> utf32_string;
+                std::string value_string;
+                if constexpr(is_fixed_string_type(col_type_info::data_type)) {
+                    auto width = column_with_strings.get_fixed_width_string_size();
+                    if (width.has_value()) {
+                        utf32_string = ascii_to_padded_utf32(std::string_view(*val.str_data(), val.len()), *width);
+                        if (utf32_string.has_value()) {
+                            value_string = *utf32_string;
+                        }
+                    }
+                } else {
+                    value_string = std::string(*val.str_data(), val.len());
+                }
                 auto value_offset = column_with_strings.string_pool_->get_offset_for_column(value_string, *column_with_strings.column_);
                 Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
