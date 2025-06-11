@@ -145,7 +145,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        # This uses old arcticdb versions which won't work on python < 3.12
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -168,7 +169,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        # This uses old arcticdb versions which won't work on python < 3.12
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -277,7 +279,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        # This uses old arcticdb versions which won't work on python < 3.12
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -299,7 +302,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        # This uses old arcticdb versions which won't work on python < 3.12
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
