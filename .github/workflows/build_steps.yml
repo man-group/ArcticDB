@@ -358,6 +358,10 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+      
+      - name: Show soft limit
+        run: |
+          ulimit -a -S
 
       - name: Run test
         run: |
