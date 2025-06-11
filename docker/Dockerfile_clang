@@ -24,4 +24,4 @@ ENV CMAKE_C_COMPILER=/usr/bin/clang
 ENV CXX=/usr/bin/clang++
 ENV CMAKE_CXX_COMPILER=/usr/bin/clang++
 ENV LD_LIBRARY_PATH=/usr/lib64:/usr/lib
-ENV PATH=/usr/bin:/opt/python/cp311-cp311/bin:${PATH}
+ENV PATH=/opt/python/cp311-cp311/bin:/usr/bin:${PATH}
