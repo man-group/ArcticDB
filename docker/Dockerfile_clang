@@ -2,8 +2,8 @@ FROM quay.io/pypa/manylinux_2_28_x86_64
 
 RUN dnf update -y
 RUN dnf remove -y 'gcc-toolset-*'
-# Looks like clang depends on the gcc-toolset-13, so try to install the libatomic-devel from there
-RUN dnf install -y zip flex bison clang llvm lldb gcc-toolset-13-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
+# Looks like clang depends on the gcc-toolset-14, so try to install the libatomic-devel from there
+RUN dnf install -y zip flex bison clang llvm lldb gcc-toolset-14-libatomic-devel krb5-devel cyrus-sasl-devel openssl-devel \
 unzip tar epel-release jq wget libcurl-devel git-lfs \
 python3.11-devel python3.11-pip perl-IPC-Cmd
 
