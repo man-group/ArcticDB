@@ -115,7 +115,7 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
 ## MEMRAY supports linux and macos and python 3.8 and above
-MEMRAY_SUPPORTED = (sys.version_info >= (3, 8)) and (MACOS or LINUX)
+MEMRAY_SUPPORTED = (MACOS or LINUX)
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
     not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
 )
@@ -138,8 +138,7 @@ VENV_COMPAT_TESTS_MARK = pytest.mark.skipif(
 
 PANDAS_2_COMPAT_TESTS_MARK = pytest.mark.skipif(
     MACOS_CONDA_BUILD
-    or sys.version.startswith("3.7")  # Pandas 2 not available in 3.7 or 3.8
-    or sys.version.startswith("3.8")
+    or sys.version.startswith("3.8") # Pandas 2 not available in 3.8
     or sys.version.startswith("3.12")
     or sys.version.startswith("3.13"),  # Waiting for https://github.com/man-group/ArcticDB/issues/2008
     reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version and "
