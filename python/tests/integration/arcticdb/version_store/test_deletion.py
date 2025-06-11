@@ -331,6 +331,8 @@ def test_delete_versions_with_update(object_version_store, versions_to_delete, s
             expected = expected.combine_first(d)
             if not expected.empty:
                 expected.loc[d.index] = d
+        # pandas 1.0 patch, otherwise the col will be float64
+        expected['x'] = expected['x'].astype('int64')
         return expected
 
     # Write initial data
@@ -395,6 +397,8 @@ def test_delete_versions_with_update_large_data(object_version_store, versions_t
             expected = expected.combine_first(d)
             if not expected.empty:
                 expected.loc[d.index] = d
+        # pandas 1.0 patch, otherwise the col will be float64
+        expected['x'] = expected['x'].astype('int64')
         return expected
 
     # Write initial data
