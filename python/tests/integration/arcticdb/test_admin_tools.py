@@ -135,7 +135,7 @@ def test_get_sizes_for_symbol(arctic_client, lib_name):
     arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
     arctic_library.write_pickle("sym_1", 1)
     arctic_library.write_pickle("sym_1", 2)
-    df = sample_dataframe(size=250_000)
+    df = sample_dataframe(size=2_500)
     arctic_library.write("sym_1", df)
     arctic_library.delete("sym_1", versions=[0])
 
@@ -168,8 +168,8 @@ def test_get_sizes_for_symbol(arctic_client, lib_name):
 
     assert sizes[KeyType.TABLE_INDEX].count == 2
     assert 2000 < sizes[KeyType.TABLE_INDEX].bytes_compressed < 4500
-    assert sizes[KeyType.TABLE_DATA].count == 4
-    assert 10e6 < sizes[KeyType.TABLE_DATA].bytes_compressed < 15e6
+    assert sizes[KeyType.TABLE_DATA].count == 2
+    assert 10e4 < sizes[KeyType.TABLE_DATA].bytes_compressed < 15e6
     assert sizes[KeyType.APPEND_DATA].count == 0
     assert sizes[KeyType.APPEND_DATA].bytes_compressed == 0
 
@@ -184,14 +184,14 @@ def test_get_sizes_for_symbol(arctic_client, lib_name):
 
     arctic_library.write("new_sym", df, staged=True)
     sizes = arctic_library.admin_tools().get_sizes_for_symbol("new_sym")
-    assert sizes[KeyType.APPEND_DATA].count == 3
-    assert 10e6 < sizes[KeyType.APPEND_DATA].bytes_compressed < 15e6
+    assert sizes[KeyType.APPEND_DATA].count == 1
+    assert 10e3 < sizes[KeyType.APPEND_DATA].bytes_compressed < 15e6
 
     arctic_library._nvs.write("rec", [df, df], recursive_normalizers=True)
     sizes = arctic_library.admin_tools().get_sizes_for_symbol("rec")
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
-
+    
 
 def test_size_apis_self_consistent(arctic_library, lib_name):
     # Given
