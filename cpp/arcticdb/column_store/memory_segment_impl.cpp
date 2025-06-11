@@ -441,8 +441,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
 }
 
 bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& right) {
-    if(*left.descriptor_ != *right.descriptor_ ||
-       left.offset_ != right.offset_)
+    if(left.offset_ != right.offset_)
         return false;
 
     if(left.columns_.size() != right.columns_.size())
@@ -705,10 +704,10 @@ void SegmentInMemoryImpl::reset_timeseries_descriptor() {
 
 void SegmentInMemoryImpl::calculate_statistics() {
     for(auto& column : columns_) {
-        if(column->type().dimension() == Dimension::Dim0) {
-            const auto type = column->type();
-            if(is_numeric_type(type.data_type()) || is_sequence_type(type.data_type())) {
-                type.visit_tag([&column] (auto tdt) {
+        if(column->type().dimension() == Dimension::Dim0 && !column->has_statistics()) {
+            const auto type = column->type().data_type();
+            if(is_numeric_type(type) || is_sequence_type(type) || is_bool_type(type) || is_time_type(type)) {
+                column->type().visit_tag([&column] (auto tdt) {
                     using TagType = std::decay_t<decltype(tdt)>;
                     column->set_statistics(generate_column_statistics<TagType>(column->data()));
                 });

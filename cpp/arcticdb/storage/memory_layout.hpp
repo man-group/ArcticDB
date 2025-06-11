@@ -28,7 +28,7 @@ constexpr size_t encoding_size = 6;
 enum class Codec : uint16_t {
     UNKNOWN = 0,
     ZSTD,
-    PFOR,
+    ADAPTIVE,
     LZ4,
     PASS,
 };
@@ -61,15 +61,41 @@ struct PassthroughCodec {
     uint16_t padding_ = 0;
 };
 
-struct PforCodec {
-    static constexpr Codec type_ = Codec::PFOR;
+enum class EncodingType : uint16_t {
+    PLAIN,
+    FFOR,
+    DELTA,
+    FREQUENCY,
+    CONSTANT,
+    RLE,
+    ALP,
+    BITPACK,
+    COUNT
+};
 
-    uint32_t unused_ = 0;
+struct AdaptiveCodec {
+    static constexpr Codec type_ = Codec::ADAPTIVE;
+
+    AdaptiveCodec() = default;
+
+    AdaptiveCodec(EncodingType type) :
+        encoding_type_(type) {
+    }
+
+    EncodingType encoding_type_;
+    uint16_t unused_ = 0;
     uint16_t padding_ = 0;
 };
 
+
+struct DeltaEncoding {
+
+};
+
+static_assert(sizeof(AdaptiveCodec) == encoding_size);
+
 struct BlockCodec {
-    Codec codec_ = Codec::UNKNOWN;
+    Codec type_ = Codec::UNKNOWN;
     constexpr static size_t DataSize = 24;
     std::array<uint8_t, DataSize> data_ = {};
 };
@@ -80,8 +106,8 @@ struct Block {
     uint64_t hash_ = 0;
     uint16_t encoder_version_ = 0;
     bool is_shape_ = false;
-    uint8_t num_codecs_ = 0;
-    std::array<BlockCodec, 1> codecs_;
+    uint8_t unused_ = 0;
+    BlockCodec codec_;
 
     Block() = default;
 };
@@ -108,7 +134,6 @@ enum class UniqueCountType : uint8_t {
 };
 
 struct FieldStats {
-
     FieldStats() = default;
 
     uint64_t min_ = 0UL;
@@ -235,9 +260,6 @@ struct FrameDescriptor {
     FrameMetadataEncoding metadata_encoding_ = FrameMetadataEncoding::PROTOBUF;
 };
 
-// A SegmentDescriptor is present in every segment, and describes the
-// contents of this particular segment, rather than other segments
-// to which it refers
 struct SegmentDescriptor {
     SortedValue sorted_ = SortedValue::UNKNOWN;
     uint64_t compressed_bytes_ = 0UL;

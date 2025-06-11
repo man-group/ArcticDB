@@ -1,9 +1,10 @@
 #pragma once
 
 #include <arcticdb/storage/memory_layout.hpp>
-#include <arcticdb/column_store/column_data.hpp>
+#include <arcticdb/util/constructors.hpp>
 
 #include <ankerl/unordered_dense.h>
+
 
 #include <span>
 #include <algorithm>
@@ -21,10 +22,10 @@ void get_value(uint64_t value, T& target) {
 }
 
 enum class FieldStatsValue : uint8_t {
-        MIN = 1,
-        MAX = 1 << 1,
-        UNIQUE = 1 << 2
-    };
+    MIN = 1,
+    MAX = 1 << 1,
+    UNIQUE = 1 << 2
+};
 
 struct FieldStatsImpl : public FieldStats {
     FieldStatsImpl() = default;
@@ -44,8 +45,8 @@ struct FieldStatsImpl : public FieldStats {
     }
 
     void set_unique(
-            uint32_t unique_count,
-            UniqueCountType unique_count_precision) {
+        uint32_t unique_count,
+        UniqueCountType unique_count_precision) {
         unique_count_ = unique_count;
         unique_count_precision_ = unique_count_precision;
         set_ |= static_cast<uint8_t>(FieldStatsValue::UNIQUE);
@@ -68,21 +69,29 @@ struct FieldStatsImpl : public FieldStats {
     };
 
     template <typename T>
-    T get_max() {
+    T get_max() const {
         T value;
         get_value<T>(max_, value);
         return value;
     }
 
     template <typename T>
-    T get_min() {
+    T get_min() const {
         T value;
         get_value<T>(min_, value);
         return value;
     }
 
-    size_t get_unique_count() const {
+    [[nodiscard]] size_t get_unique_count() const {
         return unique_count_;
+    }
+
+    void set_sorted(SortedValue value) {
+        sorted_ = value;
+    }
+
+    [[nodiscard]] SortedValue get_sorted() const {
+        return sorted_;
     }
 
     FieldStatsImpl(FieldStats base) {
@@ -90,15 +99,29 @@ struct FieldStatsImpl : public FieldStats {
         max_ = base.max_;
         unique_count_ = base.unique_count_;
         unique_count_precision_ = base.unique_count_precision_;
+        sorted_ = base.sorted_;
         set_ = base.set_;
     }
 
     template<typename T>
     FieldStatsImpl(
-            T min,
-            T max,
-            uint32_t unique_count,
-            UniqueCountType unique_count_precision) {
+        T min,
+        T max,
+        uint32_t unique_count,
+        UniqueCountType unique_count_precision,
+        SortedValue sorted) {
+        set_min(min);
+        set_max(max);
+        set_unique(unique_count, unique_count_precision);
+        set_sorted(sorted);
+    }
+
+    template<typename T>
+    FieldStatsImpl(
+        T min,
+        T max,
+        uint32_t unique_count,
+        UniqueCountType unique_count_precision) {
         set_min(min);
         set_max(max);
         set_unique(unique_count, unique_count_precision);
@@ -107,7 +130,7 @@ struct FieldStatsImpl : public FieldStats {
     FieldStatsImpl(
         uint32_t unique_count,
         UniqueCountType unique_count_precision) {
-      set_unique(unique_count, unique_count_precision);
+        set_unique(unique_count, unique_count_precision);
     }
 
 
@@ -139,75 +162,84 @@ struct FieldStatsImpl : public FieldStats {
             }
         }
 
-        if (other.has_unique()) {
-            if (!has_unique()) {
-                unique_count_ = other.unique_count_;
-                unique_count_precision_ = other.unique_count_precision_;
-                set_ |= static_cast<uint8_t>(FieldStatsValue::UNIQUE);
-            } else {
-                util::check(unique_count_precision_ == other.unique_count_precision_,
-                            "Mismatching unique count precision, {} != {}",
-                            uint8_t(unique_count_precision_), uint8_t(other.unique_count_precision_));
-
-                unique_count_ += other.unique_count_;
-            }
-        }
+        if(other.get_sorted() != SortedValue::ASCENDING ||
+            get_sorted() != SortedValue::ASCENDING)
+            sorted_ = SortedValue::UNKNOWN;
     }
 };
 
+template <typename T, typename = typename std::enable_if<std::is_same<T, float>::value || std::is_same<T, double>::value>::type>
+std::pair<T, T> nan_agnostic_minmax(std::span<const T> data) {
+    bool found = false;
+    T min_val = std::numeric_limits<T>::quiet_NaN();
+    T max_val = std::numeric_limits<T>::quiet_NaN();
+    for (const T& val : data) {
+        if (std::isnan(val))
+            continue;
+        if (!found) {
+            found = true;
+            min_val = val;
+            max_val = val;
+        } else {
+            if (val < min_val)
+                min_val = val;
+            if (max_val < val)
+                max_val = val;
+        }
+    }
+    return {min_val, max_val};
+}
+
 template <typename T>
-FieldStatsImpl generate_numeric_statistics(std::span<const T> data) {
+std::pair<T, T> get_min_max(std::span<T> data) {
+    if constexpr (std::is_floating_point_v<T>) {
+        return nan_agnostic_minmax(data);
+    } else {
+        auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
+        return {*col_min, *col_max};
+    }
+}
+
+
+template <typename T>
+FieldStatsImpl generate_numeric_statistics(
+    std::span<const T> data,
+    ankerl::unordered_dense::set<T>& unique) {  // Take hashmap as reference
     if(data.empty())
         return FieldStatsImpl{};
 
-    auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
-    ankerl::unordered_dense::set<T> unique;
+    auto [col_min, col_max] = get_min_max(data);
+
     for(auto val : data) {
         unique.emplace(val);
     }
+
+    auto sorted_value = std::is_sorted(std::begin(data), std::end(data)) ? SortedValue::ASCENDING : SortedValue::UNKNOWN;
+
+    FieldStatsImpl field_stats(col_min, col_max, unique.size(), UniqueCountType::PRECISE, sorted_value);
+    return field_stats;
+}
+
+inline FieldStatsImpl generate_bool_statistics() {
+    FieldStatsImpl field_stats(0, 1, 2, UniqueCountType::PRECISE, SortedValue::UNKNOWN);
+    return field_stats;
+}
+
+inline FieldStatsImpl generate_string_statistics(
+    std::span<const uint64_t> data,
+    ankerl::unordered_dense::set<uint64_t>& unique) {
+    if(data.empty())
+        return FieldStatsImpl{};
+
+    for(auto val : data) {
+        unique.emplace(val);
+    }
+
+    auto [col_min, col_max] = std::minmax_element(std::begin(data), std::end(data));
+
     FieldStatsImpl field_stats(*col_min, *col_max, unique.size(), UniqueCountType::PRECISE);
     return field_stats;
 }
 
-inline FieldStatsImpl generate_string_statistics(std::span<const uint64_t> data) {
-    ankerl::unordered_dense::set<uint64_t> unique;
-    for(auto val : data) {
-        unique.emplace(val);
-    }
-    FieldStatsImpl field_stats(unique.size(), UniqueCountType::PRECISE);
-    return field_stats;
-}
 
-template <typename TagType>
-FieldStatsImpl generate_column_statistics(ColumnData column_data) {
-    using RawType = typename TagType::DataTypeTag::raw_type;
-    if(column_data.num_blocks() == 1) {
-        auto block = column_data.next<TagType>();
-        const RawType* ptr = block->data();
-        const size_t count = block->row_count();
-        if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
-            return generate_numeric_statistics<RawType>(std::span{ptr, count});
-        } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
-            return generate_string_statistics(std::span{ptr, count});
-        } else {
-            util::raise_rte("Cannot generate statistics for data type");
-        }
-    } else {
-        FieldStatsImpl stats;
-        while (auto block = column_data.next<TagType>()) {
-            const RawType* ptr = block->data();
-            const size_t count = block->row_count();
-            if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
-                auto local_stats = generate_numeric_statistics<RawType>(std::span{ptr, count});
-                stats.compose<RawType>(local_stats);
-            } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
-                auto local_stats = generate_string_statistics(std::span{ptr, count});
-                stats.compose<RawType>(local_stats);
-            } else {
-                util::raise_rte("Cannot generate statistics for data type");
-            }
-        }
-        return stats;
-    }
-}
 } // namespace arcticdb

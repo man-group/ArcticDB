@@ -89,6 +89,7 @@ message VersionStoreConfig {
        }
        bool snapshot_dedup = 17;
        bool compact_incomplete_dedup_rows = 18;
+       bool sparsify_floats = 19;
     }
 
     WriteOptions write_options = 1;

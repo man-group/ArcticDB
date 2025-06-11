@@ -73,14 +73,14 @@ VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
-    bool sparsify_floats,
+    const WriteOptions& options,
+    const BlockCodecImpl& block_codec,
     bool validate_index
     ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
-    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
+    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, de_dup_map, options, block_codec, validate_index);
     return {std::move(atom_key_fut).get()};
 }
 
@@ -88,11 +88,10 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
     const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
     const std::shared_ptr<DeDupMap> &de_dup_map,
-    bool sparsify_floats,
-    bool validate_index
-    ) {
+    const WriteOptions& options,
+    const BlockCodecImpl& block_codec,
+    bool validate_index) {
     ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0)
         verify_symbol_key(frame->desc.id());
@@ -103,7 +102,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
     }
-    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
+    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, options, block_codec);
 }
 
 namespace {
@@ -135,8 +134,8 @@ folly::Future<AtomKey> async_append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index,
-    bool empty_types) {
+    const BlockCodecImpl& block_codec,
+    bool validate_index) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to");
     const StreamId stream_id = frame->desc.id();
@@ -146,14 +145,14 @@ folly::Future<AtomKey> async_append_impl(
     auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     frame->set_offset(static_cast<ssize_t>(row_offset));
-    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, empty_types);
+    fix_descriptor_mismatch_or_throw(APPEND, options.dynamic_schema, index_segment_reader, *frame, options.empty_types);
     if (validate_index) {
         sorted_data_check_append(*frame, index_segment_reader);
     }
 
     frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
-    return append_frame(IndexPartialKey{stream_id, update_info.next_version_id_}, frame, slicing_arg, index_segment_reader, store, options.dynamic_schema, options.ignore_sort_order);
+    return append_frame(IndexPartialKey{stream_id, update_info.next_version_id_}, frame, slicing_arg, index_segment_reader, store, options, block_codec, options.ignore_sort_order);
 }
 
 VersionedItem append_impl(
@@ -161,17 +160,21 @@ VersionedItem append_impl(
     const UpdateInfo& update_info,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    bool validate_index,
-    bool empty_types) {
+    const BlockCodecImpl& block_codec,
+    bool validate_index) {
 
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    auto version_key_fut = async_append_impl(store,
-                                             update_info,
-                                             frame,
-                                             options,
-                                             validate_index,
-                                             empty_types);
-    auto versioned_item = VersionedItem(std::move(version_key_fut).get());
+
+    auto version_key_fut = async_append_impl(
+         store,
+         update_info,
+         frame,
+         options,
+         block_codec,
+         validate_index);
+
+    auto version_key = std::move(version_key_fut).get();
+    auto versioned_item = VersionedItem(std::move(version_key));
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}", versioned_item.symbol(), update_info.next_version_id_);
     return versioned_item;
 }
@@ -423,36 +426,34 @@ static std::pair<std::vector<SliceAndKey>, size_t> get_slice_and_keys_for_update
 }
 
 folly::Future<AtomKey> async_update_impl(
-    const std::shared_ptr<Store>& store,
-    const UpdateInfo& update_info,
-    const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types) {
+        const std::shared_ptr<Store>& store,
+        const UpdateInfo& update_info,
+        const UpdateQuery& query,
+        const std::shared_ptr<InputTensorFrame>& frame,
+        const WriteOptions& options,
+        BlockCodecImpl block_codec) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store).thenValue([
         store,
         update_info,
         query,
         frame,
         options=std::move(options),
-        dynamic_schema,
-        empty_types
+        &block_codec
         ](index::IndexSegmentReader&& index_segment_reader) {
-        check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
+        check_can_update(*frame, index_segment_reader, update_info, options.dynamic_schema, options.empty_types);
         ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->desc.id(), update_info.previous_index_key_->version_id());
         frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
-        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store
-        ).via(&async::cpu_executor()).thenValue([
+        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store, options, block_codec, {})
+        .via(&async::cpu_executor()).thenValue([
             store,
             update_info,
             query,
             frame,
-            dynamic_schema,
+            options,
             index_segment_reader=std::move(index_segment_reader)
         ](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
-            auto affected_keys = get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
+            auto affected_keys = get_keys_affected_by_update(index_segment_reader, *frame, query, options.dynamic_schema);
             auto unaffected_keys = get_keys_not_affected_by_update(index_segment_reader, *affected_keys);
             util::check(
                 affected_keys->size() + unaffected_keys.size() == index_segment_reader.size(),
@@ -470,7 +471,7 @@ folly::Future<AtomKey> async_update_impl(
                     affected_keys=std::move(affected_keys),
                     index_segment_reader=std::move(index_segment_reader),
                     frame,
-                    dynamic_schema,
+                    options,
                     update_info,
                     store](IntersectingSegments&& intersecting_segments) mutable {
                 auto [flattened_slice_and_keys, row_count] = get_slice_and_keys_for_update(
@@ -479,7 +480,7 @@ folly::Future<AtomKey> async_update_impl(
                     *affected_keys,
                     std::move(intersecting_segments),
                     std::move(new_slice_and_keys));
-                auto tsd = index::get_merged_tsd(row_count, dynamic_schema, index_segment_reader.tsd(), frame);
+                auto tsd = index::get_merged_tsd(row_count, options.dynamic_schema, index_segment_reader.tsd(), frame);
                 return index::write_index(
                     index_type_from_descriptor(tsd.as_stream_descriptor()),
                     std::move(tsd),
@@ -497,10 +498,9 @@ VersionedItem update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types) {
-    auto versioned_item = VersionedItem(async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get());
+    const WriteOptions& options,
+    BlockCodecImpl block_codec) {
+    auto versioned_item = VersionedItem(async_update_impl(store, update_info, query, frame, options, block_codec).get());
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;
 }
@@ -2087,9 +2087,9 @@ void set_row_id_if_index_only(
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store,
         const std::variant<VersionedItem, StreamId>& version_info,
-        ReadQuery& read_query,
-        const ReadOptions& read_options
-        ) {
+        const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options) {
+    ARCTICDB_SAMPLE_DEFAULT(ReadFrameForVersion)
     using namespace arcticdb::pipelines;
     auto pipeline_context = std::make_shared<PipelineContext>();
 
@@ -2098,7 +2098,7 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
         pipeline_context->stream_id_ = std::get<StreamId>(version_info);
     } else {
         pipeline_context->stream_id_ = std::get<VersionedItem>(version_info).key_.id();
-        read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), read_query, read_options);
+        read_indexed_keys_to_pipeline(store, pipeline_context, std::get<VersionedItem>(version_info), *read_query, read_options);
     }
 
     if(pipeline_context->multi_key_) {
@@ -2106,15 +2106,15 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     }
 
     if(read_options.get_incompletes()) {
-        util::check(std::holds_alternative<IndexRange>(read_query.row_filter), "Streaming read requires date range filter");
-        const auto& query_range = std::get<IndexRange>(read_query.row_filter);
+        util::check(std::holds_alternative<IndexRange>(read_query->row_filter), "Streaming read requires date range filter");
+        const auto& query_range = std::get<IndexRange>(read_query->row_filter);
         const auto existing_range = pipeline_context->index_range();
         if(!existing_range.specified_ || query_range.end_ > existing_range.end_) {
             const ReadIncompletesFlags read_incompletes_flags {
                     .dynamic_schema=opt_false(read_options.dynamic_schema()),
                     .has_active_version = has_active_version
             };
-            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, read_incompletes_flags);
+            read_incompletes_to_pipeline(store, pipeline_context, *read_query, read_options, read_incompletes_flags);
         }
     }
 
@@ -2124,7 +2124,7 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
     }
 
     modify_descriptor(pipeline_context, read_options);
-    generate_filtered_field_descriptors(pipeline_context, read_query.columns);
+    generate_filtered_field_descriptors(pipeline_context, read_query->columns);
     return pipeline_context;
 }
 
@@ -2156,7 +2156,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options,
         std::any& handler_data) {
-    auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
+    auto pipeline_context = setup_pipeline_context(store, version_info, read_query, read_options);
     auto res_versioned_item = generate_result_versioned_item(version_info);
     if(pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, *read_query);
@@ -2185,7 +2185,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
         const std::shared_ptr<ReadQuery>& read_query ,
         const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager) {
-    auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
+    auto pipeline_context = setup_pipeline_context(store, version_info, read_query, read_options);
     auto res_versioned_item = generate_result_versioned_item(version_info);
 
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(!pipeline_context->multi_key_, "Multi-symbol joins not supported with recursively normalized data");

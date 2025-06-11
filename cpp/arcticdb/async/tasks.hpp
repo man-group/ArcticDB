@@ -43,14 +43,14 @@ struct EncodeAtomTask : BaseTask {
     PartialKey partial_key_;
     timestamp creation_ts_;
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
+    std::shared_ptr<BlockCodecImpl> codec_meta_;
     EncodingVersion encoding_version_;
 
     EncodeAtomTask(
         PartialKey &&pk,
         timestamp creation_ts,
         SegmentInMemory &&segment,
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
+        std::shared_ptr<BlockCodecImpl> codec_meta,
         EncodingVersion encoding_version) :
             partial_key_(std::move(pk)),
             creation_ts_(creation_ts),
@@ -62,7 +62,7 @@ struct EncodeAtomTask : BaseTask {
     EncodeAtomTask(
         std::pair<PartialKey, SegmentInMemory>&& pk_seg,
         timestamp creation_ts,
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
+        std::shared_ptr<BlockCodecImpl> codec_meta,
         EncodingVersion encoding_version) :
             partial_key_(std::move(pk_seg.first)),
             creation_ts_(creation_ts),
@@ -79,7 +79,7 @@ struct EncodeAtomTask : BaseTask {
         IndexValue end_index,
         timestamp creation_ts,
         SegmentInMemory &&segment,
-        const std::shared_ptr<arcticdb::proto::encoding::VariantCodec> &codec_meta,
+        const std::shared_ptr<BlockCodecImpl> &codec_meta,
         EncodingVersion encoding_version) :
             EncodeAtomTask(
                 PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index), std::move(end_index)},
@@ -110,12 +110,12 @@ struct EncodeAtomTask : BaseTask {
 struct EncodeSegmentTask : BaseTask {
     VariantKey key_;
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
+    std::shared_ptr<BlockCodecImpl> codec_meta_;
     EncodingVersion encoding_version_;
 
     EncodeSegmentTask(entity::VariantKey key,
                       SegmentInMemory &&segment,
-                      std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
+                      std::shared_ptr<BlockCodecImpl> codec_meta,
                       EncodingVersion encoding_version)
             : key_(std::move(key)),
               segment_(std::move(segment)),
@@ -141,14 +141,14 @@ struct EncodeRefTask : BaseTask {
     KeyType key_type_;
     StreamId id_;
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
+    std::shared_ptr<BlockCodecImpl> codec_meta_;
     EncodingVersion encoding_version_;
 
     EncodeRefTask(
         KeyType key_type,
         StreamId stream_id,
         SegmentInMemory &&segment,
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
+        std::shared_ptr<BlockCodecImpl> codec_meta,
         EncodingVersion encoding_version
     )
         : key_type_(key_type),
@@ -429,8 +429,7 @@ struct DecodeSegmentTask : BaseTask {
         ARCTICDB_SAMPLE(DecodeAtomTask, 0)
 
         auto key_seg = std::move(ks);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
-                             variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
 
         return {key_seg.variant_key(), decode_segment(*key_seg.segment_ptr())};
     }

@@ -55,8 +55,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         const py::object& norm,
         const py::object& user_meta,
         bool prune_previous_versions,
-        bool allow_sparse,
-        bool validate_index);
+        bool validate_index = false,
+        bool sparsify_floats = false);
 
     VersionedItem write_versioned_composite_data(
         const StreamId& stream_id,

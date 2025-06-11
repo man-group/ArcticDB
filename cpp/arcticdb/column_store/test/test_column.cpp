@@ -338,7 +338,7 @@ TEST(ColumnStats, EmptyColumn) {
 
     EXPECT_FALSE(stats.has_min());
     EXPECT_FALSE(stats.has_max());
-    EXPECT_FALSE(stats.has_unique());
+    EXPECT_TRUE(stats.has_unique());
     EXPECT_EQ(stats.unique_count_, 0);
     EXPECT_EQ(stats.unique_count_precision_, UniqueCountType::PRECISE);
 }
