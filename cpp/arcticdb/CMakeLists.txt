@@ -725,6 +725,7 @@ if(${ARCTICDB_USING_CONDA})
 else()
 
     list (APPEND arcticdb_core_libraries
+        unofficial::pcre::pcre32
         unofficial::pcre::pcre
         msgpackc-cxx
         EnTT::EnTT
