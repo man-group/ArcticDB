@@ -139,6 +139,12 @@ jobs:
       if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/checkout@v3
 
+    - name: Set environment variables 
+      if: ${{ always() }}
+      shell: bash -l {0}      
+      run: |
+        ulimit -a
+
     - name: Set up Python
       if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/setup-python@v4
