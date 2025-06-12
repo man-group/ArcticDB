@@ -162,12 +162,12 @@ class StorageLock {
         if(!ttl_not_expired(store)) {
             ts_= create_ref_key(store);
             auto lock_sleep_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
-            ARCTICDB_DEBUG(log::lock(), "Waiting for {} ms, thread id: {}", lock_sleep_ms, std::this_thread::get_id());
+            ARCTICDB_DEBUG(log::lock(), "Waiting for {} ms..", lock_sleep_ms);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep_ms));
-            ARCTICDB_DEBUG(log::lock(), "Waited for {} ms, thread id: {}", lock_sleep_ms, std::this_thread::get_id());
+            ARCTICDB_DEBUG(log::lock(), "Waited for {} ms", lock_sleep_ms);
             auto read_ts = read_timestamp(store);
             auto duration = ClockType::coarse_nanos_since_epoch() - start;
-            auto duration_in_ms = duration / ONE_MILLISECOND;
+            [[maybe_unused]] auto duration_in_ms = duration / ONE_MILLISECOND;
             ARCTICDB_DEBUG(log::lock(), "Took {} ms", duration_in_ms);
             ARCTICDB_DEBUG(log::lock(), "Max is {} ms", 1.5 * lock_sleep_ms);
             if (duration > 1.5 * lock_sleep_ms * ONE_MILLISECOND) {
@@ -183,7 +183,7 @@ class StorageLock {
                 return false;
             }
         } else {
-            ARCTICDB_DEBUG(log::lock(), "Storage lock: failed {}", get_thread_id());
+            ARCTICDB_DEBUG(log::lock(), "Storage lock: failed, lock already taken");
             return false;
         }
     }
@@ -238,7 +238,7 @@ class StorageLock {
             // check TTL
             auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
             if (ClockType::coarse_nanos_since_epoch() - *read_ts > ttl) {
-                log::lock().warn("StorageLock {} taken for more than TTL (default 1 day). Force releasing", name_);
+                log::lock().warn("StorageLock {} taken since {}, which is more than TTL (default 1 day). Force releasing.", name_, *read_ts);
                 force_release_lock(name_, store);
                 return std::nullopt;
             }
