@@ -11,13 +11,8 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb.util.test import (
-    assert_frame_equal,
-    append_small_df,
-    snapshot_new_name,
-    append_small_df_and_prune_previous,
-    delete_snapshot,
-)
+from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.tasks import append_small_df, snapshot_new_name, append_small_df_and_prune_previous, delete_snapshot
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import ManualClockVersionStore
