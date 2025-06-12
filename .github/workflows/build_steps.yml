@@ -380,7 +380,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
-          ARCTICDB_VersionMap_ReloadInterval_int: ${{matrix.version_cache_timeout}}
+          VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout}}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
