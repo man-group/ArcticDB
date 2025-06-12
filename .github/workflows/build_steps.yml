@@ -255,7 +255,6 @@ jobs:
     outputs:
       manylinux_image: ${{env.manylinux_image}}
       python_impl_name: ${{env.python_impl_name}}
-      version_cache_timeout: ${{matrix.version_cache_timeout}}
       test_dirs: ${{env.test_dirs}}
       cibw_build: ${{env.CIBW_BUILD}}
 
