@@ -139,7 +139,7 @@ jobs:
       if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/checkout@v3
 
-    - name: Set environment variables 
+    - name: ulimit -a
       if: ${{ always() }}
       shell: bash -l {0}      
       run: |
