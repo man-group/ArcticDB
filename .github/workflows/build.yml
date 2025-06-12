@@ -205,6 +205,8 @@ jobs:
         python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12, 13]')}}
         include:
           - python_deps_ids: [""]
+            # Teting with 0(no version cache) and 2000000000(2s - default timeout) to see if the tests pass
+            version_cache_timeout: ["0", "2000000000"]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
             pytest_xdist_mode: "-n auto"
           - python3: 8
