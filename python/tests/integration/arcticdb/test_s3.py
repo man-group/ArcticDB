@@ -175,8 +175,11 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     test_bucket_name = wrapped_s3_storage_bucket.bucket
 
     with config_context("S3ClientTestWrapper.EnableFailures", 1):
-        with pytest.raises(StorageException, match="Network error: S3Error#99"):
-            lib.read("s")
+        # Depending on the reload interval, the error might be different
+        # Setting the reload interval to 0 will make the error be "StorageException"
+        with config_context("VersionMap.ReloadInterval", 0):
+            with pytest.raises(StorageException, match="Network error: S3Error#99"):
+                lib.read("s")
 
         with config_context_string("S3ClientTestWrapper.FailureBucket", test_bucket_name):
             with pytest.raises(StorageException, match="Network error: S3Error#99"):
