@@ -117,7 +117,8 @@ def test_query_stats_clear(s3_version_store_v1, clear_query_stats):
 def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
     s3_version_store_v1.write("a", 1)
     qs.enable()
-    s3_version_store_v1.snapshot("abc")
+    with config_context("VersionMap.ReloadInterval", 2_000_000_000):
+        s3_version_store_v1.snapshot("abc")
     with config_context("VersionMap.ReloadInterval", 0):
         s3_version_store_v1.snapshot("abc2")
     stats = qs.get_query_stats()
@@ -232,8 +233,9 @@ def test_query_stats_snapshot(s3_version_store_v1, clear_query_stats):
 
 def test_query_stats_read_write(s3_version_store_v1, clear_query_stats):
     qs.enable()
-    s3_version_store_v1.write("a", 1)
-    s3_version_store_v1.write("a", 2)
+    with config_context("VersionMap.ReloadInterval", 2_000_000_000):
+        s3_version_store_v1.write("a", 1)
+        s3_version_store_v1.write("a", 2)
     with config_context("VersionMap.ReloadInterval", 0):
         s3_version_store_v1.read("a")
         s3_version_store_v1.read("a")

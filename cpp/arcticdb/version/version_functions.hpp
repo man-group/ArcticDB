@@ -114,9 +114,9 @@ inline bool get_matching_prev_and_next_versions(
         }
     }
 
-    // if (!found_version && last) {
-    //     next_acceptor(*last);
-    // }
+    if (!found_version && last) {
+        next_acceptor(*last);
+    }
     return found_version;
 }
 
