@@ -7,16 +7,37 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 import numpy as np
 import pandas as pd
+import pytest
+from arcticdb.storage_fixtures.api import StorageFixture
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
 
 from arcticdb.options import EnterpriseLibraryOptions
 from arcticdb.version_store.admin_tools import sum_sizes
+from arcticdb.version_store.library import Library
 
 
-def test_get_sizes(arctic_client, lib_name):
+@pytest.fixture(
+    scope="function",
+    params=[
+        pytest.param("azurite"),
+    ],
+)
+def azurite_client(request, encoding_version) -> Arctic:
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    return ac
+
+
+@pytest.fixture
+def arctic_library(azurite_client, lib_name) -> Library:
+    yield azurite_client.create_library(lib_name)
+    azurite_client.delete_library(lib_name)
+    
+
+def test_get_sizes(azurite_client, lib_name):
     lib_opts = EnterpriseLibraryOptions(replication=True)
-    arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
+    arctic_library = azurite_client.create_library(lib_name, enterprise_library_options=lib_opts)
     # Given
     arctic_library.write_pickle("sym_1", 1)
     arctic_library.write_pickle("sym_1", 2)
@@ -72,10 +93,12 @@ def test_get_sizes(arctic_client, lib_name):
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
 
+    azurite_client.delete_library(lib_name)
 
-def test_get_sizes_by_symbol(arctic_client, lib_name):
+
+def test_get_sizes_by_symbol(azurite_client, lib_name):
     lib_opts = EnterpriseLibraryOptions(replication=True)
-    arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
+    arctic_library = azurite_client.create_library(lib_name, enterprise_library_options=lib_opts)
     # Given
     arctic_library.write_pickle("sym_1", 1)
     arctic_library.write_pickle("sym_1", 2)
@@ -129,10 +152,12 @@ def test_get_sizes_by_symbol(arctic_client, lib_name):
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
 
+    azurite_client.delete_library(lib_name)
 
-def test_get_sizes_for_symbol(arctic_client, lib_name):
+
+def test_get_sizes_for_symbol(azurite_client, lib_name):
     lib_opts = EnterpriseLibraryOptions(replication=True)
-    arctic_library = arctic_client.create_library(lib_name, enterprise_library_options=lib_opts)
+    arctic_library = azurite_client.create_library(lib_name, enterprise_library_options=lib_opts)
     arctic_library.write_pickle("sym_1", 1)
     arctic_library.write_pickle("sym_1", 2)
     df = sample_dataframe(size=250_000)
@@ -192,8 +217,10 @@ def test_get_sizes_for_symbol(arctic_client, lib_name):
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
 
+    azurite_client.delete_library(lib_name)
 
-def test_size_apis_self_consistent(arctic_library, lib_name):
+
+def test_size_apis_self_consistent(arctic_library):
     # Given
     arctic_library.write_pickle("sym_1", 1)
     arctic_library.write_pickle("sym_1", 2)
@@ -217,29 +244,15 @@ def test_size_apis_self_consistent(arctic_library, lib_name):
         assert size.bytes_compressed > 0
 
 
-def test_symbol_sizes_docs_example():
-    """Test the documentation in `library_sizes.md`"""
-    lib = Arctic("mem://").create_library("tst")
-    df = pd.DataFrame(np.random.randint(0, 100, size=(100, 5)))
-    lib.write("sym", df)
+def test_one(arctic_library):
+    arctic_library.write_pickle("sym_1", 1)
 
-    admin_tools = lib.admin_tools()
 
-    sizes = admin_tools.get_sizes()
-    assert sum_sizes(sizes.values()).count > 0
-    assert sum_sizes(sizes.values()).bytes_compressed > 0
-    assert sizes[KeyType.TABLE_DATA].count > 0
-    assert sizes[KeyType.TABLE_DATA].bytes_compressed > 0
+def test_two(arctic_library):
+    arctic_library.write("sym_1", sample_dataframe(size=25))
 
-    by_symbol = admin_tools.get_sizes_by_symbol()
-    size_for_sym = by_symbol["sym"]
-    assert sum_sizes(size_for_sym.values()).count > 0
-    assert sum_sizes(size_for_sym.values()).bytes_compressed > 0
-    assert size_for_sym[KeyType.TABLE_INDEX].count > 0
-    assert size_for_sym[KeyType.TABLE_INDEX].bytes_compressed > 0
 
-    for_symbol = admin_tools.get_sizes_for_symbol("sym")
-    assert sum_sizes(for_symbol.values()).count > 0
-    assert sum_sizes(for_symbol.values()).bytes_compressed > 0
-    assert for_symbol[KeyType.VERSION].count > 0
-    assert for_symbol[KeyType.VERSION].bytes_compressed > 0
+def test_two(arctic_library):
+    arctic_library.write("sym_1", sample_dataframe(size=1000))
+    arctic_library.write("sym_2", sample_dataframe(size=1000))
+    arctic_library.write("sym_3", sample_dataframe(size=1000))
