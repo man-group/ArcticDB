@@ -148,6 +148,23 @@ def test_lazy_project(lmdb_library):
     assert_frame_equal(expected, received)
 
 
+def test_lazy_project_constant_value(lmdb_library):
+    lib = lmdb_library
+    sym = "test_lazy_project"
+    df = pd.DataFrame(
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+    )
+    lib.write(sym, df)
+
+    lazy_df = lib.read(sym, lazy=True)
+    lazy_df["new_col"] = 5
+    received = lazy_df.collect().data
+    expected = df
+    expected["new_col"] = 5
+
+    assert_frame_equal(expected, received, check_dtype=False)
+
+
 def test_lazy_ternary(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_ternary"

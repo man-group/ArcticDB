@@ -137,6 +137,7 @@ struct FilterClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
     std::shared_ptr<ExpressionContext> expression_context_;
+    ExpressionName root_node_name_;
     PipelineOptimisation optimisation_;
 
     explicit FilterClause(std::unordered_set<std::string> input_columns,
@@ -144,6 +145,10 @@ struct FilterClause {
                           std::optional<PipelineOptimisation> optimisation) :
             expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))),
             optimisation_(optimisation.value_or(PipelineOptimisation::SPEED)) {
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                std::holds_alternative<ExpressionName>(expression_context_->root_node_name_),
+                "FilterClause AST would produce a column, not a bitset");
+        root_node_name_ = std::get<ExpressionName>(expression_context_->root_node_name_);
         clause_info_.input_columns_ = std::move(input_columns);
     }
 
@@ -198,6 +203,9 @@ struct ProjectClause {
                            ExpressionContext expression_context) :
             output_column_(output_column),
             expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))) {
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                std::holds_alternative<ExpressionName>(expression_context_->root_node_name_) || std::holds_alternative<ValueName>(expression_context_->root_node_name_),
+                "ProjectClause AST would not produce a column");
         clause_info_.input_columns_ = std::move(input_columns);
         clause_info_.modifies_output_descriptor_ = true;
     }
