@@ -242,8 +242,8 @@ ankerl::unordered_dense::set<position_t> StringPool::get_regex_match_offsets_for
     auto unique_values = unique_values_for_string_column(column);
     remove_nones_and_nans(unique_values);
     
-    util::RegexPattern pattern{std::string(str)};
-    util::Regex regex(pattern);
+    util::RegexPatternUTF8 pattern{std::string(str)};
+    util::RegexUTF8 regex(pattern);
     ankerl::unordered_dense::set<position_t> output;
 
     for(auto pos : unique_values) {
