@@ -8,6 +8,7 @@ on:
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
+      version_cache_timeout: {default: '[0]', type: string, description: build-python-wheels test matrix parameter. JSON string. Used to override ARCTICDB_VersionMap_ReloadInterval_int}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
@@ -254,6 +255,7 @@ jobs:
     outputs:
       manylinux_image: ${{env.manylinux_image}}
       python_impl_name: ${{env.python_impl_name}}
+      version_cache_timeout: ${{matrix.version_cache_timeout}}
       test_dirs: ${{env.test_dirs}}
       cibw_build: ${{env.CIBW_BUILD}}
 
@@ -266,9 +268,10 @@ jobs:
       matrix:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
+        version_cache_timeout: ${{fromJson(inputs.version_cache_timeout)}}
         include:
           ${{fromJSON(inputs.matrix)}}
-    name: ${{matrix.type}}${{matrix.python_deps_id}}
+    name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
     runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
@@ -379,7 +382,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
-          ARCTICDB_VersionMap_ReloadInterval_int: ${{matrix.version_cache_timeout}}
+          ARCTICDB_VersionMap_ReloadInterval_int: ${{inputs.version_cache_timeout}}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

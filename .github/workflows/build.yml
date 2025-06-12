@@ -91,8 +91,6 @@ jobs:
                 vcpkg_packages_dir: ""
                 symbols: "*.gz" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
-                # Teting with 0(no version cache) and 2000000000(2s - default timeout) to see if the tests pass
-                version_cache_timeout: ["0", "2000000000"]
                 test_services:
                   mongodb:
                     image: "mongo:4.4"
@@ -109,8 +107,6 @@ jobs:
                 vcpkg_packages_dir: C:/vcpkg_packages
                 symbols: "*.pdb" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.lib", "*.ilk", "*.pyd", "*.dll", "CMakeFiles/*.dir", "vcpkg_installed"]
-                # Teting with 0(no version cache) and 2000000000(2s - default timeout) to see if the tests pass
-                version_cache_timeout: ["0", "2000000000"]
                 test_services: {}
                 container: null
     steps:
@@ -153,6 +149,7 @@ jobs:
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
+            version_cache_timeout: ["0"]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
     name: Seed Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
@@ -164,6 +161,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      version_cache_timeout: ${{toJson(matrix.version_cache_timeout)}}
 
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup]
@@ -176,6 +174,7 @@ jobs:
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
+            version_cache_timeout: ["0"]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
     uses: ./.github/workflows/persistent_storage.yml
@@ -187,6 +186,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      version_cache_timeout: ${{toJson(matrix.version_cache_timeout)}}
 
   cpp-test-linux:
     needs: [cibw_docker_image, common_config]
@@ -209,6 +209,8 @@ jobs:
         python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12, 13]')}}
         include:
           - python_deps_ids: [""]
+            # Teting with 0(no version cache) and 2000000000(2s - default timeout) to see if the tests pass
+            version_cache_timeout: ["0", "2000000000"]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
             pytest_xdist_mode: "-n auto"
           - python3: 8
@@ -235,6 +237,7 @@ jobs:
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      version_cache_timeout: ${{toJson(matrix.version_cache_timeout)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
       persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
@@ -258,6 +261,9 @@ jobs:
       fail-fast: false
       matrix:
         python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12, 13]')}}
+        include:
+          - version_cache_timeout: ["0", "2000000000"]
+            matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -267,7 +273,8 @@ jobs:
       python3: ${{matrix.python3}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
-      matrix: ${{needs.common_config.outputs.windows_matrix}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      version_cache_timeout: ${{toJson(matrix.version_cache_timeout)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
       persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
@@ -285,6 +292,7 @@ jobs:
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
+            version_cache_timeout: ["0"]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
     name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version 
     uses: ./.github/workflows/persistent_storage.yml
@@ -296,6 +304,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      version_cache_timeout: ${{toJson(matrix.version_cache_timeout)}}
 
   persistent_storage_verify_windows:
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
@@ -307,6 +316,7 @@ jobs:
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
+            version_cache_timeout: ["0"]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
     uses: ./.github/workflows/persistent_storage.yml
@@ -318,6 +328,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      version_cache_timeout: ${{toJson(matrix.version_cache_timeout)}}
     
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
