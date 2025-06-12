@@ -29,7 +29,6 @@ jobs:
         do_not_archive: [0]
         test_services: [0] # Github service containers to spin up for the pytest run
         container: [0]
-        version_cache_timeout: [0]
         exclude:
             - os: 0
         include:
