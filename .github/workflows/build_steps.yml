@@ -278,7 +278,7 @@ jobs:
     services: ${{matrix.test_services}}
     env:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
-      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
+      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       real_tests_storage_type: ${{inputs.persistent_storage || 'no'}}
     steps:
