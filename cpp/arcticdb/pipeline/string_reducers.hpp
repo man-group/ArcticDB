@@ -59,7 +59,7 @@ public:
         frame_(std::move(frame)),
         src_buffer_(column.data().buffer()),
         column_width_(alloc_width),
-        dest_buffer_(ChunkedBuffer::presized(frame_.row_count() * column_width_, entity::AllocationType::PRESIZED)),
+        dest_buffer_(ChunkedBuffer::presized(frame_.row_count() * column_width_)),
         dst_(dest_buffer_.data()) {
         if (dest_buffer_.bytes() > 0) {
             std::memset(dest_buffer_.data(), 0, dest_buffer_.bytes());

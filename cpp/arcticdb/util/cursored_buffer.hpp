@@ -23,7 +23,7 @@ public:
 
     CursoredBuffer(size_t size, AllocationType allocation_type) :
         cursor_(allocation_type == AllocationType::PRESIZED ? static_cast<int64_t>(size) : 0),
-        buffer_(allocation_type == AllocationType::DYNAMIC ? BufferType{size} : BufferType::presized(size, allocation_type)) { }
+        buffer_(allocation_type == AllocationType::DYNAMIC ? BufferType{size} : BufferType::presized(size)) { }
 
     explicit CursoredBuffer(BufferType&& buffer) :
         cursor_(0),

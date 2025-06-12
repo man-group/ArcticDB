@@ -80,7 +80,7 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
 
     // This is trivially extendable to use presized_in_blocks, but there is no use case for this right now, and
     // copy_frame_data_to_buffer expects a contiguous buffer
-    auto output = ChunkedBufferImpl<BlockSize>::presized(output_size, entity::AllocationType::PRESIZED);
+    auto output = ChunkedBufferImpl<BlockSize>::presized(output_size);
     auto target_block = *output.blocks().begin();
 
     const auto& input_blocks = input.blocks();
