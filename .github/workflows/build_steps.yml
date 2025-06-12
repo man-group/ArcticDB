@@ -8,7 +8,6 @@ on:
       cibw_image_tag:    {required: false, type: string, description: Linux only. As built by cibw_docker_image.yml workflow}
       cibw_version:      {required: false, type: string, description: build-python-wheels only. Must match the cibw_image_tag}
       python_deps_ids:   {default: '[""]', type: string, description: build-python-wheels test matrix parameter. JSON string.}
-      version_cache_timeout: {required: true, type: string, description: build-python-wheels test matrix parameter. JSON string. Used to override the version cache timeout. Used to override ARCTICDB_VersionMap_ReloadInterval_int}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
@@ -29,6 +28,7 @@ jobs:
         do_not_archive: [0]
         test_services: [0] # Github service containers to spin up for the pytest run
         container: [0]
+        version_cache_timeout: [0]
         exclude:
             - os: 0
         include:
@@ -266,7 +266,7 @@ jobs:
       matrix:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
-        version_cache_timeout: ${{fromJson(inputs.version_cache_timeout)}}
+        version_cache_timeout: ${{fromJson(matrix.version_cache_timeout)}}
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}
