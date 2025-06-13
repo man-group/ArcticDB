@@ -32,7 +32,7 @@ This section will cover installation, setup and basic usage. More details on bas
 
 ### Installation
 
-ArcticDB supports Python 3.7 - 3.13.
+ArcticDB supports Python 3.8 - 3.13.
 
 To install, simply run:
 

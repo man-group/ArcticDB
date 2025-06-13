@@ -14,11 +14,7 @@ import string
 import time
 import sys
 from typing import Dict 
-if sys.version_info >= (3, 8): 
-    from typing import Literal, Any, List, Tuple, Union, get_args
-else: 
-    from typing_extensions import Literal
-    from typing import Any, List, Tuple, Union
+from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
 import pandas as pd
 
@@ -30,14 +26,9 @@ from arcticdb.version_store.library import Library
 ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
 ArcticFloatType = Union[np.float64, np.float32]
 ArcticTypes = Union[ArcticIntType, ArcticFloatType, str]
-if sys.version_info >= (3, 8):
-    supported_int_types_list = list(get_args(ArcticIntType))
-    supported_float_types_list = list(get_args(ArcticFloatType))
-    supported_types_list = list(get_args(ArcticTypes))
-else:
-    supported_int_types_list = [np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
-    supported_float_types_list = [np.float64, np.float32]
-    supported_types_list = [str] + supported_int_types_list + supported_float_types_list
+supported_int_types_list = list(get_args(ArcticIntType))
+supported_float_types_list = list(get_args(ArcticFloatType))
+supported_types_list = list(get_args(ArcticTypes))
 
 
 class GitHubSanitizingHandler(logging.StreamHandler):
