@@ -193,6 +193,7 @@ public:
     }
 
     bool key_exists_sync(const entity::VariantKey& key) override {
+        StorageFailureSimulator::instance()->go(FailureType::READ);
         std::lock_guard lock{mutex_};
         return util::variant_match(key,
            [&](const RefKey& key) {
@@ -263,7 +264,9 @@ public:
                 return it->second->clone();
             });
 
-        return {VariantKey{key}, encode_dispatch(std::move(segment_in_memory), codec_, EncodingVersion::V1)};
+        Segment segment = encode_dispatch(std::move(segment_in_memory), codec_, EncodingVersion::V1);
+        (void) segment.calculate_size();
+        return {VariantKey{key}, std::move(segment)};
     }
 
     folly::Future<std::pair<VariantKey, SegmentInMemory>> read(
@@ -272,12 +275,19 @@ public:
         return folly::makeFutureWith([&]() { return read_sync(key, opts); });
     }
 
-    folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair) override {
-        util::raise_rte("Not implemented");
+    folly::Future<folly::Unit> write_compressed(storage::KeySegmentPair key_segment) override {
+        return folly::makeFutureWith([&]() { return write_compressed_sync(key_segment); });
     }
 
-    void write_compressed_sync(storage::KeySegmentPair) override {
-        util::raise_rte("Not implemented");
+    void write_compressed_sync(storage::KeySegmentPair key_segment) override {
+        auto key = key_segment.variant_key();
+        if (std::holds_alternative<RefKey>(key)) {
+            auto ref_key = std::get<RefKey>(key);
+            add_segment(ref_key, decode_segment(*key_segment.segment_ptr()));
+        } else {
+            auto atom_key = key_segment.atom_key();
+            add_segment(atom_key, decode_segment(*key_segment.segment_ptr()));
+        }
     }
 
     RemoveKeyResultType remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
@@ -335,9 +345,30 @@ public:
     }
 
     bool scan_for_matching_key(
-            KeyType,
-            const IterateTypePredicate&) override {
-        util::raise_rte("scan_for_matching_key Not implemented for InMemoryStore");
+            KeyType kt,
+            const IterateTypePredicate& predicate) override {
+        auto failure_sim = StorageFailureSimulator::instance();
+
+        std::lock_guard lock{mutex_};
+        for (const auto & it : seg_by_atom_key_) {
+            const auto& key = it.first;
+            if (key.type() == kt && predicate(key)) {
+                ARCTICDB_DEBUG(log::version(), "Scan for matching key {}", key);
+                failure_sim->go(FailureType::ITERATE);
+                return true;
+            }
+        }
+
+        for (const auto & it : seg_by_ref_key_) {
+            const auto& key = it.first;
+            if (key.type() == kt && predicate(key)) {
+                ARCTICDB_DEBUG(log::version(), "Scan for matching key {}", key);
+                failure_sim->go(FailureType::ITERATE);
+                return true;
+            }
+        }
+
+        return false;
     }
 
     folly::Future<pipelines::SliceAndKey> async_write(
@@ -352,6 +383,8 @@ public:
     }
 
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
+        auto failure_sim = StorageFailureSimulator::instance();
+        failure_sim->go(FailureType::READ);
         std::vector<folly::Future<bool>> output;
         for (const auto& key : keys) {
             util::variant_match(key,
@@ -428,6 +461,8 @@ public:
     folly::Future<std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>>> read_metadata(
             const entity::VariantKey& key,
             storage::ReadKeyOpts) override {
+        auto failure_sim = StorageFailureSimulator::instance();
+        failure_sim->go(FailureType::READ);
         return util::variant_match(key,
            [&](const AtomKey& atom_key) {
                auto it = seg_by_atom_key_.find(atom_key);
@@ -456,6 +491,8 @@ public:
     folly::Future<std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor>> read_metadata_and_descriptor(
             const entity::VariantKey& key,
             storage::ReadKeyOpts) override {
+        auto failure_sim = StorageFailureSimulator::instance();
+        failure_sim->go(FailureType::READ);
         auto components = util::variant_match(key,
             [&](const AtomKey& atom_key) {
               auto it = seg_by_atom_key_.find(atom_key);
@@ -487,6 +524,8 @@ public:
     folly::Future<std::pair<VariantKey, arcticdb::TimeseriesDescriptor>> read_timeseries_descriptor(
             const entity::VariantKey& key,
             storage::ReadKeyOpts /*opts*/) override {
+        auto failure_sim = StorageFailureSimulator::instance();
+        failure_sim->go(FailureType::READ);
         return util::variant_match(key,
            [&](const AtomKey& atom_key) {
                auto it = seg_by_atom_key_.find(atom_key);

@@ -100,6 +100,18 @@ static inline FailureAction fault(double probability = 1.0) {
                 }};
     }
 }
+
+/** Simulate storage delays - sleep, but then respond normally. **/
+template< class Rep, class Period>
+static inline FailureAction sleep_for(const std::chrono::duration<Rep, Period>& sleep_duration) {
+    return {
+        fmt::format("sleep_for({}ms)", std::chrono::milliseconds(sleep_duration).count()),
+        [dur=sleep_duration](FailureType) {
+            std::this_thread::sleep_for(dur);
+        }
+    };
+}
+
 }
 
 /** Independent state for each FailureType. Thread-safe except for the c'tors. */
