@@ -18,7 +18,7 @@ namespace arcticdb {
 // '*', '<' and '>' are problematic for S3
 const auto UNSUPPORTED_S3_CHARS = std::set<char>{'*', '<', '>'};
 
-CheckOutcome verify_name(
+[[nodiscard]] CheckOutcome verify_name(
         const std::string& name_type_for_error,
         const StringId& name,
         bool check_symbol_out_of_range = true,
@@ -115,7 +115,10 @@ CheckOutcome verify_symbol_key(const StreamId& symbol_key) {
 constexpr auto UNSUPPORTED_LMDB_MONGO_PREFIX = '/';
 
 void verify_library_path(const StringId& library_path, char delim) {
-    verify_name("library name", library_path, false, {}, {}, delim);
+    CheckOutcome  res = verify_name("library name", library_path, false, {}, {}, delim);
+    if (std::holds_alternative<Error>(res)) {
+        std::get<Error>(res).throw_error();
+    }
 }
 
 void verify_library_path_part(const std::string& library_part, char delim) {
@@ -135,7 +138,10 @@ void verify_library_path_part(const std::string& library_part, char delim) {
 }
 
 void verify_library_path_on_write(const Store* store, const StringId& library_path) {
-    verify_name("library name", library_path, true, UNSUPPORTED_S3_CHARS);
+    CheckOutcome res = verify_name("library name", library_path, true, UNSUPPORTED_S3_CHARS);
+    if (std::holds_alternative<Error>(res)) {
+        std::get<Error>(res).throw_error();
+    }
     user_input::check<ErrorCode::E_INVALID_CHAR_IN_NAME>(
             store->is_path_valid(library_path),
             "The library name contains unsupported chars. Library Name: {}",
