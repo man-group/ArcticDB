@@ -236,7 +236,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
+        # This uses old arcticdb versions which won't work on python >= 3.12. So we test up to 3.11.
         python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
@@ -262,7 +262,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
+        # This uses old arcticdb versions which won't work on python >= 3.12. So we test up to 3.11.
         python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
@@ -396,7 +396,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
+        # This uses old arcticdb versions which won't work on python >= 3.12. So we test up to 3.11.
         python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]') }}
         arcticdb_version: ["oldest", "latest"]
         include:
@@ -421,7 +421,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # This uses old arcticdb versions which won't work on python < 3.12
+        # This uses old arcticdb versions which won't work on python >= 3.12. So we test up to 3.11.
         python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]') }}
         arcticdb_version: ["oldest", "latest"]
         include:

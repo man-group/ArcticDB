@@ -226,11 +226,9 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
-## MEMRAY supports linux and macos and python 3.8 and above
+## MEMRAY supports linux and macos
 MEMRAY_SUPPORTED = MACOS or LINUX
-MEMRAY_TESTS_MARK = pytest.mark.skipif(
-    not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
-)
+MEMRAY_TESTS_MARK = pytest.mark.skipif(not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos")
 
 ZONE_INFO_MARK = pytest.mark.skipif(sys.version_info < (3, 9), reason="zoneinfo module was introduced in Python 3.9")
 
