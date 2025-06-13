@@ -72,7 +72,7 @@ class LocalQueryBuilderFunctions:
 
     def time_filtering_string_regex_match(self, num_rows):
         # Selects about 1% of the rows
-        k = min(3, num_rows // 1000)
+        k = num_rows // 1000
         digit_pattern = ''.join([r'\d'] * k)
         pattern = f"^id{digit_pattern}$"
         q = QueryBuilder()
