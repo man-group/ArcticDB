@@ -395,6 +395,9 @@ bool operator()(uint64_t t, int64_t u) const {
 bool operator()(int64_t t, uint64_t u) const {
     return comparison::equals(t, u);
 }
+bool operator()(entity::position_t, ankerl::unordered_dense::set<position_t>) const {
+    util::raise_rte("EqualsOperator does not support position_t and unordered_dense::set<position_t>");
+}
 };
 
 struct NotEqualsOperator {
@@ -429,6 +432,9 @@ bool operator()(uint64_t t, int64_t u) const {
 bool operator()(int64_t t, uint64_t u) const {
     return comparison::not_equals(t, u);
 }
+bool operator()(entity::position_t, ankerl::unordered_dense::set<position_t>) const {
+    util::raise_rte("NotEqualsOperator does not support position_t and unordered_dense::set<position_t>");
+}
 };
 
 struct LessThanOperator {
@@ -450,6 +456,9 @@ bool operator()(uint64_t t, int64_t u) const {
 bool operator()(int64_t t, uint64_t u) const {
     return comparison::less_than(t, u);
 }
+bool operator()(entity::position_t, ankerl::unordered_dense::set<position_t>) const {
+    util::raise_rte("LessThanOperator does not support position_t and unordered_dense::set<position_t>");
+}
 };
 
 struct LessThanEqualsOperator {
@@ -464,6 +473,9 @@ bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const
 template<typename T>
 bool operator()([[maybe_unused]] T t, [[maybe_unused]] std::optional<T> u) const {
     util::raise_rte("Less than equals operator not supported with strings");
+}
+bool operator()(entity::position_t, ankerl::unordered_dense::set<position_t>) const {
+    util::raise_rte("LessThanEqualsOperator does not support position_t and unordered_dense::set<position_t>");
 }
 bool operator()(uint64_t t, int64_t u) const {
     return comparison::less_than_equals(t, u);
@@ -486,6 +498,9 @@ template<typename T>
 bool operator()([[maybe_unused]] T t, [[maybe_unused]] std::optional<T> u) const {
     util::raise_rte("Greater than operator not supported with strings");
 }
+bool operator()(entity::position_t, ankerl::unordered_dense::set<position_t>) const {
+    util::raise_rte("GreaterThanOperator does not support position_t and unordered_dense::set<position_t>");
+}
 bool operator()(uint64_t t, int64_t u) const {
     return comparison::greater_than(t, u);
 }
@@ -507,11 +522,24 @@ template<typename T>
 bool operator()([[maybe_unused]] T t, [[maybe_unused]] std::optional<T> u) const {
     util::raise_rte("Greater than equals operator not supported with strings");
 }
+bool operator()(entity::position_t, ankerl::unordered_dense::set<position_t>) const {
+    util::raise_rte("GreaterThanEqualsOperator does not support position_t and unordered_dense::set<position_t>");
+}
 bool operator()(uint64_t t, int64_t u) const {
     return comparison::greater_than_equals(t, u);
 }
 bool operator()(int64_t t, uint64_t u) const {
     return comparison::greater_than_equals(t, u);
+}
+};
+
+struct RegexMatchOperator {
+template<typename T, typename U>
+bool operator()(T, U) const {
+    util::raise_rte("RegexMatchOperator does not support {} and {}", typeid(T).name(), typeid(U).name());
+}
+bool operator()(entity::position_t offset, ankerl::unordered_dense::set<position_t> offset_set) const {
+    return offset_set.contains(offset);
 }
 };
 
@@ -801,6 +829,17 @@ struct formatter<arcticdb::IsNotInOperator> {
     template<typename FormatContext>
     constexpr auto format(arcticdb::IsNotInOperator, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "NOT IN");
+    }
+};
+
+template<>
+struct formatter<arcticdb::RegexMatchOperator> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    constexpr auto format(arcticdb::RegexMatchOperator, FormatContext &ctx) const {
+        return fmt::format_to(ctx.out(), "REGEX MATCH");
     }
 };
 

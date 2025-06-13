@@ -1322,30 +1322,14 @@ def test_filter_unsupported_boolean_operators():
         q = q[not q["a"]]
 
 
-def test_abc(lmdb_storage, lib_name, sym):
-    from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
-
-    ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 1)
-    df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
-        )
-    lib.write(sym, df)
-    pattern_a = "^abc"
-    q_a = QueryBuilder()
-    q_a = q_a[q_a["a"].regex_match(pattern_a)]
-    assert_frame_equal(lib.read(sym, query_builder=q_a).data, df[df.a.str.contains(pattern_a)])
-
-
-def test_filter_regex_match_basic(lmdb_version_store_v1, sym):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
         )
-    lib.write(sym, df)
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
 
     pattern_a = "^abc"
     q_a = QueryBuilder()
@@ -1378,13 +1362,14 @@ def test_filter_regex_match_basic(lmdb_version_store_v1, sym):
     assert_frame_equal(lib.read(sym, query_builder=q2_alt).data, expected2)
 
 
-def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
         )
-    lib.write(sym, df)
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
 
     pattern_a = r"^xyz"  # No matches
     q_a = QueryBuilder()
@@ -1407,7 +1392,7 @@ def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
             index=pd.date_range(pd.Timestamp(0), periods=4),
             data={"a": ["abc", None, "aabc", np.nan], "b": [1, 2, 3, 4], "c": [np.nan, "q34c", None, "567f"]}
         )
-    lib.write(sym, df, dynamic_strings=True)
+    lib.write(sym, df)
 
     pattern_a = "^abc"
     q_a = QueryBuilder()
@@ -1446,15 +1431,16 @@ def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
         lib.read(sym, query_builder=q)
     
 
-def test_filter_regex_match_unicode(lmdb_version_store_v1, sym):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": [f"{unicode_symbols}abc", f"abc{unicode_symbols}", "abc"], "b": [1, 2, 3]}
         )
-    lib.write(sym, df)
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
 
-    pattern = "^" + unicode_symbols
+    pattern = "^" + unicode_symbols + "abc$"
     q = QueryBuilder()
     q = q[q["a"].regex_match(pattern)]
     expected = df[df.a.str.contains(pattern)]
@@ -1463,13 +1449,14 @@ def test_filter_regex_match_unicode(lmdb_version_store_v1, sym):
     assert not expected.empty
 
 
-def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym):
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["a-1,d-1", "g-i,3-l", "d-2,-hi"], "b": [1, 2, 3]}
         )
-    lib.write(sym, df)
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
 
     pattern = r"\w-\d"
     q = QueryBuilder()
