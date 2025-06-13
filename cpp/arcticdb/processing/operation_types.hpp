@@ -13,6 +13,7 @@
 #include <arcticdb/processing/signed_unsigned_comparison.hpp>
 #include <arcticdb/util/constants.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/entity/types.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {
