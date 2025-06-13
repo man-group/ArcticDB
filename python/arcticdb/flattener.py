@@ -64,7 +64,7 @@ class Flattener:
             else:
                 santized_tokens.append("XXX")
 
-        vaguely_readable_name = "_".join([token[-3:] for token in santized_tokens])[: (adb_stream.MAX_SYMBOL_LENGTH - hash_length)]
+        vaguely_readable_name = "_".join([token[-3:] for token in santized_tokens])[: (adb_stream.MAX_SYMBOL_LENGTH - hash_length - 1)]
         shortened_hash = str(int(hashlib.sha256(convert).hexdigest(), 16) % 10**hash_length)
         return "{}_{}".format(vaguely_readable_name, shortened_hash)
 
@@ -150,6 +150,7 @@ class Flattener:
         if original_symbol is None:
             original_symbol = sym  # just used for error messages
 
+        # Factor of 2 is because msgpack recurses with two stackframes for each level of nesting
         if depth > DEFAULT_RECURSE_LIMIT // 2:
             raise DataTooNestedException(f"Symbol {original_symbol} cannot be recursively normalized as it contains more than "
                                          f"{DEFAULT_RECURSE_LIMIT // 2} levels of nested dictionaries. This is a limitation of the msgpack serializer.")
