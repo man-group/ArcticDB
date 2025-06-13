@@ -64,9 +64,6 @@ jobs:
         # This way we cover all python versions, OS-es and installation repos 
         # in just 8 combinations
         include:
-          - os: ubuntu-22.04
-            python: "3.7"
-            use_conda: "no"
           - os: windows-latest
             python: "3.8"
             use_conda: "no"
