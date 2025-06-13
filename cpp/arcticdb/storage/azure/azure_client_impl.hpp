@@ -15,10 +15,10 @@ class RealAzureClient : public AzureClientWrapper {
   private:
     Azure::Storage::Blobs::BlobContainerClient container_client;
 
-    static Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config& conf);
-
   public:
     explicit RealAzureClient(const Config& conf);
+
+    static Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config& conf);
 
     void write_blob(
             const std::string& blob_name, Segment& segment,

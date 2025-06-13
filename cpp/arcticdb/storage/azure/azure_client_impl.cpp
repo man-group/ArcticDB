@@ -34,7 +34,8 @@
  * Note that conda-forge's distribution of `libcurl` uses CA certificates
  * provided by the `ca-certificates` package originated from the certifi python package.
  *
- * See: https://github.com/conda-forge/ca-certificates-feedstock/blob/d13d63b3192ec707b514637930fd215d0776c604/recipe/meta.yaml#L8
+ * See:
+ * https://github.com/conda-forge/ca-certificates-feedstock/blob/d13d63b3192ec707b514637930fd215d0776c604/recipe/meta.yaml#L8
  * See: https://github.com/conda-forge/curl-feedstock/blob/c6144ac9941ab00393a5a76954ddc19fab8005d1/recipe/build.sh#L19
  */
 
@@ -65,9 +66,11 @@ Azure::Core::Context get_context(unsigned int request_timeout) {
 }
 
 RealAzureClient::RealAzureClient(const Config& conf) :
-    container_client(BlobContainerClient::CreateFromConnectionString(
-            conf.endpoint(), conf.container_name(), get_client_options(conf)
-    )) {}
+    container_client(
+            BlobContainerClient::CreateFromConnectionString(
+                    conf.endpoint(), conf.container_name(), get_client_options(conf)
+            )
+    ) {}
 
 Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(const Config& conf) {
     BlobClientOptions client_options;
@@ -79,14 +82,14 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
         client_options.Transport.Transport = std::make_shared<Azure::Core::Http::WinHttpTransport>();
     } else {
         throw ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            "CA certificate settings are not supported on Windows. "
-            "Please use Windows Certificate Manager (certmgr.msc) to manage certificates:\n"
-            "1. Open Certificate Manager (certmgr.msc)\n"
-            "2. Navigate to 'Trusted Root Certification Authorities'\n"
-            "3. Right-click and select 'All Tasks > Import'\n"
-            "4. Select your certificate file and follow the import wizard\n"
-            "5. Ensure 'Place all certificates in the following store' is selected\n"
-            "6. Complete the import by clicking 'Next' and 'Finish'"
+                "CA certificate settings are not supported on Windows. "
+                "Please use Windows Certificate Manager (certmgr.msc) to manage certificates:\n"
+                "1. Open Certificate Manager (certmgr.msc)\n"
+                "2. Navigate to 'Trusted Root Certification Authorities'\n"
+                "3. Right-click and select 'All Tasks > Import'\n"
+                "4. Select your certificate file and follow the import wizard\n"
+                "5. Ensure 'Place all certificates in the following store' is selected\n"
+                "6. Complete the import by clicking 'Next' and 'Finish'"
         );
     }
 #elif defined(__APPLE__)
@@ -96,14 +99,14 @@ Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(con
         client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>();
     } else {
         throw ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            "CA certificate settings are not supported on macOS. "
-            "Please use Keychain Access to manage certificates:\n"
-            "1. Open Keychain Access (Applications > Utilities > Keychain Access)\n"
-            "2. Select 'System' keychain from the left sidebar\n"
-            "3. Click File > Import Items\n"
-            "4. Select your certificate file\n"
-            "5. Enter your keychain password if prompted\n"
-            "6. The certificate will be added to the System keychain"
+                "CA certificate settings are not supported on macOS. "
+                "Please use Keychain Access to manage certificates:\n"
+                "1. Open Keychain Access (Applications > Utilities > Keychain Access)\n"
+                "2. Select 'System' keychain from the left sidebar\n"
+                "3. Click File > Import Items\n"
+                "4. Select your certificate file\n"
+                "5. Enter your keychain password if prompted\n"
+                "6. The certificate will be added to the System keychain"
         );
     }
 #else
