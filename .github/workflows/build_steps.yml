@@ -340,6 +340,12 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
+      - name: ulimit -a
+        if: ${{ always() }}
+        shell: bash      
+        run: |
+          ulimit -a          
+
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
         if: ${{ env.real_tests_storage_type != 'no' }} 
