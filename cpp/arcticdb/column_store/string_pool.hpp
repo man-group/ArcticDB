@@ -15,6 +15,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
+#include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 
@@ -84,6 +85,7 @@ class StringBlock {
 
     std::string_view at(position_t pos);
     [[nodiscard]] std::string_view const_at(position_t pos) const;
+    [[nodiscard]] std::u32string_view u32_const_at(position_t pos) const;
 
     void reset();
 
@@ -176,7 +178,7 @@ class StringPool {
 
     std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column) const;
     ankerl::unordered_dense::set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) const;
-    ankerl::unordered_dense::set<position_t> get_regex_match_offsets_for_column(std::string_view str, const Column& column) const;
+    ankerl::unordered_dense::set<position_t> get_regex_match_offsets_for_column(const std::shared_ptr<util::RegexGeneric>& regex_generic, const Column& column, bool fix_string_type) const;
   private:
     MapType map_;
     mutable StringBlock block_;

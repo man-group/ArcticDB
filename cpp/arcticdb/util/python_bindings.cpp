@@ -15,7 +15,8 @@ namespace arcticdb::util {
 void register_bindings(py::module &m) {
     auto tools = m.def_submodule("util", "Utility functions for ArcticDB");
 
-    py::class_<RegexGeneric>(tools, "RegexGeneric")
-        .def(py::init<const std::string&>(), py::arg("pattern"));
+    py::class_<RegexGeneric, std::shared_ptr<RegexGeneric>>(tools, "RegexGeneric")
+        .def(py::init<const std::string&>(), py::arg("pattern"))
+        .def("text", &RegexGeneric::text);
 }
 } // namespace arcticdb::util

@@ -110,7 +110,7 @@ class Regex : private PcreRegexEncode {
     const RegexPattern<PcreRegexEncode>& pattern_;
     typename PcreRegexEncode::ExtraPtr extra_ = nullptr;
     int options_ = 0;
-    std::vector<int> results_;
+    mutable std::vector<int> results_;
 public:
     ARCTICDB_NO_MOVE_OR_COPY(Regex);
 
@@ -119,7 +119,7 @@ public:
         results_((pattern_.capturing_groups() + 1) * 3, 0) {
     }
 
-    bool match(typename PcreRegexEncode::StringViewType text) {
+    bool match(typename PcreRegexEncode::StringViewType text) const {
         auto res = this->pcre_exec_(
             pattern_.handle(), 
             extra_, 
@@ -159,11 +159,14 @@ public:
         regex_utf8_(pattern_utf8_),
         regex_utf32_(pattern_utf32_){
     }
-    bool match(std::string_view text) {
+    bool match(std::string_view text) const {
         return regex_utf8_.match(text);
     }
-    bool match(std::u32string_view text) {
+    bool match(std::u32string_view text) const {
         return regex_utf32_.match(text);
+    }
+    std::string text() const {
+        return pattern_utf8_.text();
     }
 };
 

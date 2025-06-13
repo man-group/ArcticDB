@@ -52,6 +52,11 @@ std::string_view StringBlock::const_at(position_t pos) const {
     return {head->data(), head->size()};
 }
 
+std::u32string_view StringBlock::u32_const_at(position_t pos) const {
+    auto head(const_head_at(pos));
+    return {reinterpret_cast<const char32_t*>(head->data()), head->size() / sizeof(char32_t)};
+}
+
 void StringBlock::reset() {
     data_.reset();
 }
@@ -238,17 +243,21 @@ ankerl::unordered_dense::set<position_t> StringPool::get_offsets_for_column(cons
     return output;
 }
 
-ankerl::unordered_dense::set<position_t> StringPool::get_regex_match_offsets_for_column(std::string_view str, const Column& column) const {
+ankerl::unordered_dense::set<position_t> StringPool::get_regex_match_offsets_for_column(const std::shared_ptr<util::RegexGeneric>& regex_generic, const Column& column, bool fix_string_type) const {
     auto unique_values = unique_values_for_string_column(column);
     remove_nones_and_nans(unique_values);
-    
-    util::RegexPatternUTF8 pattern{std::string(str)};
-    util::RegexUTF8 regex(pattern);
-    ankerl::unordered_dense::set<position_t> output;
 
+    ankerl::unordered_dense::set<position_t> output;
     for(auto pos : unique_values) {
-        if(regex.match(block_.const_at(pos))) {
-            output.insert(pos);
+        if (fix_string_type) { 
+            if (regex_generic->match(block_.u32_const_at(pos))) {
+                output.insert(pos);
+            }
+        }
+        else {
+            if (regex_generic->match(block_.const_at(pos))) {
+                output.insert(pos);
+            }
         }
     }
     return output;

@@ -44,8 +44,6 @@ VariantData binary_boolean(EmptyResult, EmptyResult, OperationType operation);
 // commutative, however if that were to change we would need the full set
 VariantData visit_binary_boolean(const VariantData& left, const VariantData& right, OperationType operation);
 
-std::string get_string_from_value_type(const ColumnWithStrings& column_with_strings, const Value& val);
-
 template <typename Func>
 inline std::string binary_operation_column_name(std::string_view left_column, Func&& func, std::string_view right_column) {
     return fmt::format("({} {} {})", left_column, func, right_column);

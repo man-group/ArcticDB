@@ -11,6 +11,7 @@
 
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/string_wrapping_value.hpp>
+#include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
@@ -33,7 +34,10 @@ using ValueSetName = util::StringWrappingValue<ValueSetNameTag>;
 struct ExpressionNameTag{};
 using ExpressionName = util::StringWrappingValue<ExpressionNameTag>;
 
-using VariantNode = std::variant<std::monostate, ColumnName, ValueName, ValueSetName, ExpressionName>;
+struct RegexNameTag{};
+using RegexName = util::StringWrappingValue<RegexNameTag>;
+
+using VariantNode = std::variant<std::monostate, ColumnName, ValueName, ValueSetName, ExpressionName, RegexName>;
 
 struct ProcessingUnit;
 class Column;
@@ -79,7 +83,7 @@ struct FullResult {};
 
 struct EmptyResult {};
 
-using VariantData = std::variant<FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet>;
+using VariantData = std::variant<FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet, std::shared_ptr<util::RegexGeneric>>;
 
 // Used to represent that an ExpressionNode returns a bitset
 struct BitSetTag{};

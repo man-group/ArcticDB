@@ -40,6 +40,7 @@ from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
 from arcticdb_ext.version_store import ValueSetName as _ValueSetName
+from arcticdb_ext.version_store import RegexName as _RegexName
 from arcticdb_ext.version_store import Value as _Value
 from arcticdb_ext.version_store import ValueSet as _ValueSet
 from arcticdb_ext.version_store import (
@@ -57,7 +58,7 @@ from arcticdb_ext.version_store import (
 )
 from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
 from arcticdb_ext.version_store import OperationType as _OperationType
-from arcticdb_ext.util import RegexPattern as _RegexPattern
+from arcticdb_ext.util import RegexGeneric as _RegexGeneric
 
 COLUMN = "COLUMN"
 
@@ -236,8 +237,7 @@ class ExpressionNode:
     
     def regex_match(self, pattern: str):
         if isinstance(pattern, str):
-            _RegexPattern(pattern)  # Validate the regex pattern
-            return self._apply(pattern, _OperationType.REGEX_MATCH)
+            return self._apply(_RegexGeneric(pattern), _OperationType.REGEX_MATCH)
         else:
             raise UserInputException(
                 f"'regex_match' filtering only accepts str as pattern, {type(pattern)} is given"
@@ -1201,6 +1201,8 @@ def to_string(leaf):
     if isinstance(leaf, (np.ndarray, list)):
         # Truncate value set keys to first 100 characters
         key = str(leaf)[:100]
+    elif isinstance(leaf, _RegexGeneric):
+        key = "Regex({})".format(leaf.text())
     else:
         if isinstance(leaf, str):
             key = "Str({})".format(leaf)
@@ -1227,6 +1229,9 @@ def visit_expression(expr):
                     key = key + "-v" + str(valueset_keys[key])
                     expression_context.add_value_set(key, _ValueSet(node))
                     return _ValueSetName(key)
+                elif isinstance(node, _RegexGeneric):
+                    expression_context.add_regex(key, node)
+                    return _RegexName(key)
                 else:
                     expression_context.add_value(key, create_value(node))
                     return _ValueName(key)
