@@ -5,8 +5,8 @@ pushd "$(pwd)" >/dev/null
 tooling_dir="$(dirname $BASH_SOURCE)"
 cd $tooling_dir/../python
 
-RE='(?:[\s]+|[\n]+)' 
-FORBIDDEN_CONTENT=("import${RE}test" "from${RE}test")
+RE='(\s+\\*\n*)+'
+FORBIDDEN_CONTENT=("\s*import${RE}test.*" "\s*from${RE}tests.*")
 SEARCH_DIR="arcticdb/"
 ERROR_FOUND=0
 
