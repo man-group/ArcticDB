@@ -725,6 +725,7 @@ if(${ARCTICDB_USING_CONDA})
 else()
 
     list (APPEND arcticdb_core_libraries
+        unofficial::pcre::pcre32
         unofficial::pcre::pcre
         msgpackc-cxx
         EnTT::EnTT
@@ -805,6 +806,7 @@ set(arcticdb_python_srcs
         stream/python_bindings.cpp
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
+        util/python_bindings.cpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
         python/python_handlers.hpp
