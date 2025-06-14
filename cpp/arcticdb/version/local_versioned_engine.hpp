@@ -153,7 +153,7 @@ public:
             const StreamId& stream_id,
             const VersionQuery& version_query);
 
-    void write_parallel_frame(
+    StageResult write_parallel_frame(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool validate_index,

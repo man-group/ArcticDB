@@ -121,7 +121,7 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool validate_index = false,
             bool delete_staged_data_on_failure=false);
 
-    void write_parallel(
+    StageResult write_parallel(
         const StreamId& stream_id,
         const py::tuple& item,
         const py::object& norm,
