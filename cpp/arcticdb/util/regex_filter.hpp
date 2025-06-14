@@ -6,6 +6,7 @@
  */
 
 #pragma once
+
 #include <pcre.h>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/preconditions.hpp>
