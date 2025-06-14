@@ -403,7 +403,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         write_window_size())).via(&async::io_executor());
 }
 
-void write_parallel_impl(
+std::vector<AtomKey> write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
