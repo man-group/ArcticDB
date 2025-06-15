@@ -480,7 +480,6 @@ set(arcticdb_srcs
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
-        storage/failure_simulation.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
         storage/azure/azure_client_impl.cpp

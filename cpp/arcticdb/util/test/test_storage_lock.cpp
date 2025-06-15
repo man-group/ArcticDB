@@ -382,7 +382,7 @@ TEST_P(StorageLockWithSlowWrites, ConcurrentWrites) {
     constexpr size_t num_writers = 2;
     FutureExecutor<CPUThreadPoolExecutor> exec{num_writers};
 
-    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_LOCK, SLOW_ACTIONS}});
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE, SLOW_ACTIONS}});
 
     std::vector<Future<Unit>> futures;
     auto lock_data = std::make_shared<LockData>(num_writers);
@@ -409,10 +409,10 @@ TEST_P(StorageLockWithSlowWrites, ConcurrentWritesWithRetrying) {
     auto lock_data = std::make_shared<LockData>(num_writers);
     lock_data->store_ = std::make_shared<InMemoryStore>();
     FutureExecutor<CPUThreadPoolExecutor> exec{num_writers};
-    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_LOCK, SLOW_ACTIONS}});
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE, SLOW_ACTIONS}});
     std::vector<Future<Unit>> futures;
     for(size_t i = 0; i < num_writers; ++i) {
-        futures.emplace_back(exec.addFuture(LockTaskWithRetry(lock_data)));
+        futures.emplace_back(exec.addFuture(LockTaskWithRetry(lock_data, 5000)));
     }
     collect(futures).get();
 
@@ -428,7 +428,7 @@ TEST(StorageLock, StressManyWriters) {
     constexpr size_t num_writers = 50;
     FutureExecutor<CPUThreadPoolExecutor> exec{num_writers};
 
-    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_LOCK, SLOW_ACTIONS}});
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE, SLOW_ACTIONS}});
 
     std::vector<Future<Unit>> futures;
     auto lock_data = std::make_shared<LockData>(num_writers);
@@ -458,7 +458,7 @@ TEST(StorageLock, SlowWrites) {
     const StorageFailureSimulator::ParamActionSequence SLOW_WRITE = {
         action_factories::slow_action(1, min_ms, max_ms)
     };
-    StorageFailureSimulator::instance()->configure({{FailureType::WRITE_LOCK, SLOW_WRITE}});
+    StorageFailureSimulator::instance()->configure({{FailureType::WRITE, SLOW_WRITE}});
     auto lock = StorageLock("test");
     ASSERT_FALSE(lock.try_lock(std::make_shared<InMemoryStore>()));
 }

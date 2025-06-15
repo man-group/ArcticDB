@@ -193,8 +193,8 @@ class StorageLock {
     }
 
     timestamp create_ref_key(const std::shared_ptr<Store>& store) {
-        auto ts =  ClockType::nanos_since_epoch();
-        StorageFailureSimulator::instance()->go(FailureType::WRITE_LOCK);
+        auto ts = ClockType::nanos_since_epoch();
+        StorageFailureSimulator::instance()->go(FailureType::WRITE);
         store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts));
         ARCTICDB_DEBUG(log::lock(), "Created lock with timestamp {}", ts);
         return ts;
