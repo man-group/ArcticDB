@@ -185,10 +185,12 @@ jobs:
           asv machine --yes
       
       - name: Build project for ASV
+        shell: bash -el {0}
         run: |
           python -m pip install -ve .[Testing]
           
       - name: Run ASV Tests Check script
+        shell: bash -el {0}
         run: |
           python python/utils/asv_checks.py
         continue-on-error: false
