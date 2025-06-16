@@ -5,14 +5,33 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+import time
 import numpy as np
 import pandas as pd
+from arcticdb.util.utils import get_logger
+import arcticdb_ext
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
 
 from arcticdb.options import EnterpriseLibraryOptions
-from arcticdb.version_store.admin_tools import sum_sizes
+from arcticdb.version_store.admin_tools import AdminTools, sum_sizes
 
+
+logger = get_logger()
+
+
+def retry_get_sizes(admin_tools: AdminTools, retries=3, base_delay=1):
+    for attempt in range(retries + 1):
+        try:
+            result = admin_tools.get_sizes()
+            return result
+        except arcticdb_ext.exceptions.StorageException as e:
+            if ("E_UNEXPECTED_AZURE_ERROR" in str(e)) and (attempt < retries):
+                wait_time = base_delay * (2 ** attempt) 
+                logger.info(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time} seconds...")
+                time.sleep(wait_time)
+            else:
+                raise
 
 def test_get_sizes(arctic_client, lib_name):
     lib_opts = EnterpriseLibraryOptions(replication=True)
@@ -26,7 +45,7 @@ def test_get_sizes(arctic_client, lib_name):
     arctic_library.delete("sym_1", versions=[0])
 
     # When
-    sizes = arctic_library.admin_tools().get_sizes()
+    sizes = retry_get_sizes(arctic_library.admin_tools())
 
     # Then
     assert len(sizes) == 10
@@ -47,7 +66,7 @@ def test_get_sizes(arctic_client, lib_name):
         assert sizes[t].bytes_compressed == 0
 
     arctic_library.delete("sym_1")
-    sizes = arctic_library.admin_tools().get_sizes()
+    sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.VERSION_REF].count == 2
     assert sizes[KeyType.VERSION].count == 6
     assert sizes[KeyType.TABLE_INDEX].count == 1
@@ -62,13 +81,13 @@ def test_get_sizes(arctic_client, lib_name):
     # Check the other key types
     arctic_library.snapshot("snap")
     arctic_library.write("new_sym", df, staged=True)
-    sizes = arctic_library.admin_tools().get_sizes()
+    sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.SNAPSHOT_REF].count == 1
     assert sizes[KeyType.APPEND_DATA].count == 3
     assert 10e6 < sizes[KeyType.APPEND_DATA].bytes_compressed < 15e6
 
     arctic_library._nvs.write("rec", [df, df], recursive_normalizers=True)
-    sizes = arctic_library.admin_tools().get_sizes()
+    sizes = retry_get_sizes(arctic_library.admin_tools())
     assert sizes[KeyType.MULTI_KEY].count == 1
     assert sizes[KeyType.MULTI_KEY].bytes_compressed > 0
 
@@ -202,7 +221,7 @@ def test_size_apis_self_consistent(arctic_library, lib_name):
     arctic_library.write("sym_1", df, staged=True)
 
     # When
-    sizes = arctic_library.admin_tools().get_sizes()
+    sizes = retry_get_sizes(arctic_library.admin_tools())
     by_symbol = arctic_library.admin_tools().get_sizes_by_symbol()
     assert len(by_symbol) == 1
     by_symbol = by_symbol["sym_1"]
@@ -225,7 +244,7 @@ def test_symbol_sizes_docs_example():
 
     admin_tools = lib.admin_tools()
 
-    sizes = admin_tools.get_sizes()
+    sizes = retry_get_sizes(admin_tools)
     assert sum_sizes(sizes.values()).count > 0
     assert sum_sizes(sizes.values()).bytes_compressed > 0
     assert sizes[KeyType.TABLE_DATA].count > 0
