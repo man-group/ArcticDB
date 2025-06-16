@@ -397,8 +397,15 @@ class CustomDictNormalizer(CustomNormalizer):
         return CustomDict(item)
 
 
-def sample_dataframe(size=1000, seed=0):
-    return get_sample_dataframe(size, seed)
+def sample_dataframe(size=1000, seed=0, index_type="int64"):
+    if index_type == "int64":
+        return get_sample_dataframe(size, seed)
+    elif index_type == "datetime":
+        df = get_sample_dataframe(size, seed)
+        df.index = pd.date_range(start="2020-01-01", periods=size)
+        return df
+    else:
+        raise ValueError(f"Invalid index type: {index_type}")
 
 
 def sample_dataframe_only_strings(size=1000, seed=0, num_cols=1):
