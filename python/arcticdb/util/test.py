@@ -249,7 +249,7 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     assert_frame_equal(left=expected, right=actual)
 
 
-unicode_symbol = "\u00a0"  # start of latin extensions
+unicode_symbol = "\u00A0"  # start of latin extensions
 unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
 
 
@@ -380,10 +380,8 @@ class TestCustomNormalizer(CustomNormalizer):
     def denormalize(self, item: Any, norm_meta: NormalizationMetadata.CustomNormalizerMeta) -> Any:
         return CustomThing(custom_index=item.index, custom_columns=item.columns, custom_values=item.values)
 
-
 class CustomDict(dict):
     pass
-
 
 class CustomDictNormalizer(CustomNormalizer):
     NESTED_STRUCTURE = True
@@ -396,16 +394,8 @@ class CustomDictNormalizer(CustomNormalizer):
     def denormalize(self, item, norm_meta):
         return CustomDict(item)
 
-
-def sample_dataframe(size=1000, seed=0, index_type="int64"):
-    if index_type == "int64":
-        return get_sample_dataframe(size, seed)
-    elif index_type == "datetime":
-        df = get_sample_dataframe(size, seed)
-        df.index = pd.date_range(start="2020-01-01", periods=size)
-        return df
-    else:
-        raise ValueError(f"Invalid index type: {index_type}")
+def sample_dataframe(size=1000, seed=0):
+    return get_sample_dataframe(size, seed)
 
 
 def sample_dataframe_only_strings(size=1000, seed=0, num_cols=1):
