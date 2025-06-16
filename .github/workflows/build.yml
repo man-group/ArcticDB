@@ -88,7 +88,7 @@ jobs:
 
           echo "Final storage type for workflow execution: $_storage"
           echo "storage=$_storage" >> $GITHUB_OUTPUT
-          
+
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
@@ -188,7 +188,7 @@ jobs:
 
   pre_seed_cleanup:
     needs: [storage_type]
-    # This step is valid only for AWS_S3. 
+    # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
@@ -233,7 +233,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -293,7 +293,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
-      persistent_storage: ${{ needs.storage_type.outputs.storage }} 
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{inputs.version_cache_full_test || false}}
@@ -340,14 +340,14 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
-      persistent_storage: ${{ needs.storage_type.outputs.storage }} 
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
       pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
-    # This step is valid only for AWS_S3. 
+    # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
@@ -358,7 +358,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Linux with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -370,7 +370,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_verify_windows:
-    # This step is valid only for AWS_S3. 
+    # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
@@ -381,7 +381,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
-    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version 
+    name: Verify Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -391,10 +391,10 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
-    
+
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, storage_type]
-    # This step is valid only for AWS_S3. 
+    # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
@@ -407,7 +407,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.MACOS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12, 13]')}}
+        python3: ${{fromJson(vars.MACOS_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
@@ -432,7 +432,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.MACOS_PYTHON_VERSIONS || '[7, 8, 9, 10, 11, 12, 13]')}}
+        python3: ${{fromJson(vars.MACOS_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
