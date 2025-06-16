@@ -65,14 +65,6 @@ class CompileProto(Command):
                 # No available on PyPI for this configuration.
                 # See the last release's: https://pypi.org/project/protobuf/3.20.3/#files
                 print(f"Python protobuf {proto_ver} is not officially supported on Python {python}. Skipping...")
-            elif not ARCTICDB_USING_CONDA and python <= (3, 6) and proto_ver >= "4":
-                # No available on PyPI for this configuration
-                # See the first release's: https://pypi.org/project/protobuf/4.21.1/#files
-                print(f"Python protobuf {proto_ver} do not run on Python {python}. Skipping...")
-            elif not ARCTICDB_USING_CONDA and python <= (3, 7) and proto_ver >= "5":
-                # Not compatible with Python<=3.7 as
-                # GRPCIO >= 1.64.0 is not available on Python<=3.7 https://pypi.org/project/grpcio-tools/1.64.0/#files
-                print(f"Python protobuf {proto_ver} does not run on Python {python}. Skipping...")
             elif not ARCTICDB_USING_CONDA and python >= (3, 13) and proto_ver < "5":
                 # Not compatible with protobuf<5.26.1 as
                 # Python 3.13 requires GRPCIO >= 1.66.2, which requires protobuf >=5.26.1 https://github.com/grpc/grpc/blob/6fa8043bf9befb070b846993b59a3348248e6566/requirements.txt#L4

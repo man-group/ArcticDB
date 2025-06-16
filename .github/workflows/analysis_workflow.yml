@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
     inputs:
       run_all_benchmarks:
+        description: Run all benchmarks
         type: boolean
         default: false
       dev_image_tag:
@@ -125,7 +126,7 @@ jobs:
     name: Executes asv tests checks
     timeout-minutes: 120
     runs-on: ubuntu-latest
-    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag }}
+    container: ghcr.io/man-group/arcticdb-dev:${{ inputs.dev_image_tag || 'latest' }}
     env:
         SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}} # Setting this env var enables the caching
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
@@ -163,6 +164,17 @@ jobs:
             bucket: "arcticdb-asv-real-storage"
             aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
             aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"      
+
+      # Workaround for https://github.com/airspeed-velocity/asv/issues/1465
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          micromamba-version: 2.1.0-0
+
+      - name: Install libmambapy
+        shell: bash -el {0}
+        run: |
+          micromamba install -y -c conda-forge "libmambapy<2" pip python
           
       - name: Install ASV
         shell: bash -el {0}
