@@ -170,6 +170,7 @@ jobs:
         uses: mamba-org/setup-micromamba@v2
         with:
           micromamba-version: 2.1.0-0
+          init-shell: bash cmd.exe
 
       - name: Install libmambapy
         shell: bash -el {0}
