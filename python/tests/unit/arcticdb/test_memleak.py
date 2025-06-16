@@ -20,7 +20,7 @@ lib = ac.get_library("memleak_test", create_if_missing=True, library_options=Lib
 wide_sym_num_rows = 1
 wide_sym_num_cols = 100_000
 wide_sym_columns=[f"col_{idx}" for idx in range(wide_sym_num_cols)]
-long_sym_num_rows = 10_000_000
+long_sym_num_rows = 100_000_000
 long_sym_num_cols = 10
 long_sym_columns=[f"col_{idx}" for idx in range(long_sym_num_cols)]
 
@@ -58,26 +58,14 @@ def test_read_data(read_from_arctic):
         print(f"RSS: {get_rss():.2f} MB")
 
 
-@pytest.mark.parametrize("read_from_arctic", [True, False])
-def test_read_data_and_drop_columns(read_from_arctic):
-    print(f"read_from_arctic {read_from_arctic}")
+def test_read_data_and_drop_columns():
     get_rss = lambda: psutil.Process(os.getpid()).memory_info().rss / 1e6
-    if read_from_arctic:
-        df = lib.read("long_sym").data
-    else:
-        df = pd.DataFrame(
-            np.random.randint(0, 100, size=(long_sym_num_rows, long_sym_num_cols)),
-            columns=long_sym_columns,
-        )
-    print(f"RSS: {get_rss():.2f} MB")
-    chunks = 10
-    columns_per_chunk = wide_sym_num_cols // chunks
-    for idx in range(chunks):
-        df.drop(columns=long_sym_columns[idx * columns_per_chunk: (idx + 1) * columns_per_chunk], inplace=True)
-        gc.collect()
-        print(f"RSS: {get_rss():.2f} MB")
+    df = lib.read("long_sym").data
+    print(f"RSS after read: {get_rss():.2f} MB")
+    arrays = [df[f"col_{idx}"].to_numpy() for idx in range(long_sym_num_cols)]
+    print(f"RSS after arrays built: {get_rss():.2f} MB")
     del df
-    gc.collect()
-    print(f"RSS: {get_rss():.2f} MB")
-
-
+    print(f"RSS after del df: {get_rss():.2f} MB")
+    for idx in range(long_sym_num_cols):
+        arrays.pop()
+        print(f"RSS: {get_rss():.2f} MB")
