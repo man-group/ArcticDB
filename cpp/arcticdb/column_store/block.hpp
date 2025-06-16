@@ -60,7 +60,9 @@ struct MemBlock {
         magic_.check(true);
         if(owns_external_data_) {
             if (is_external()) {
-                log::version().warn("Unexpected release of detachable block memory");
+                // Previously warn level, but would then show up in a read_batch when some of the returned values are
+                // DataError objects if the read is racing with a delete
+                log::version().debug("Unexpected release of detachable block memory");
                 delete[] external_data_;
             } else {
                 log::version().warn("Cannot free inline allocated block");
@@ -119,7 +121,9 @@ struct MemBlock {
     [[nodiscard]] uint8_t *data() { return is_external() ? external_data_ : data_; }
 
     [[nodiscard]] uint8_t* release() {
-        util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
+        if (!is_external() || !owns_external_data_) {
+            util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
+        }
         auto* tmp = external_data_;
         external_data_ = nullptr;
         owns_external_data_ = false;
@@ -127,7 +131,9 @@ struct MemBlock {
     }
 
     void abandon() {
-        util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
+        if (!is_external() || !owns_external_data_) {
+            util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
+        }
         delete[] external_data_;
         external_data_ = nullptr;
         owns_external_data_ = false;
