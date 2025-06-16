@@ -6,18 +6,16 @@ tooling_dir="$(dirname $BASH_SOURCE)"
 cd $tooling_dir/../python
 
 RE='(\s+\\*\n*)+'
-FORBIDDEN_CONTENT=("\s*import${RE}test.*" "\s*from${RE}tests.*")
+FORBIDDEN_CONTENT="\s*import${RE}test.*|\s*from${RE}tests.*"
 SEARCH_DIR="arcticdb/"
 ERROR_FOUND=0
 
-for CONTENT in "${FORBIDDEN_CONTENT[@]}"; do
-    MATCHES=$(grep -rlPz "$CONTENT" "$SEARCH_DIR") 
-    if [ -n "$MATCHES" ]; then
-        echo "ERROR: Forbidden package '$CONTENT' is imported!"
-        echo "$MATCHES"  
-        ERROR_FOUND=1
-    fi
-done
+MATCHES=$(grep -rlPz  "$FORBIDDEN_CONTENT" "$SEARCH_DIR") 
+if [ -n "$MATCHES" ]; then
+    echo "ERROR: Forbidden package '$FORBIDDEN_CONTENT' is imported!"
+    echo "$MATCHES"  
+    ERROR_FOUND=1
+fi
 
 popd >/dev/null
 
