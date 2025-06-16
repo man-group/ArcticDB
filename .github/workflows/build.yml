@@ -156,7 +156,7 @@ jobs:
                 container: null
             macos_matrix:
               - os: macos
-                distro: macos-13
+                distro: macos-15
                 cmake_preset_prefix: macos
                 cibw_build_suffix: macosx_arm64
                 build_dir: /tmp/cpp_build
