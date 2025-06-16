@@ -158,16 +158,6 @@ jobs:
               - os: macos
                 distro: macos-13
                 cmake_preset_prefix: macos
-                cibw_build_suffix: macosx_x86_64
-                build_dir: /tmp/cpp_build
-                vcpkg_packages_dir: ""
-                symbols: "*.dSYM"
-                do_not_archive: ["*.dylib", "*.[ao]", "vcpkg_installed"]
-                test_services: {}
-                container: null
-              - os: macos
-                distro: macos-13
-                cmake_preset_prefix: macos
                 cibw_build_suffix: macosx_arm64
                 build_dir: /tmp/cpp_build
                 vcpkg_packages_dir: ""
