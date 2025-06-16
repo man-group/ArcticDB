@@ -240,7 +240,7 @@ jobs:
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "11.0"
-          CIBW_ARCHS_MACOS: "x86_64 arm64"
+          CIBW_ARCHS_MACOS: "arm64"
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
       - name: Store wheel artifact
