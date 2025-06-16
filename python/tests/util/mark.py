@@ -14,13 +14,15 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
+from arcticdb.util import marks
+
 MACOS = sys.platform.lower().startswith("darwin")
 LINUX = sys.platform.lower().startswith("linux")
 WINDOWS = sys.platform.lower().startswith("win32")
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
-ARCTICDB_USING_CONDA = os.getenv("ARCTICDB_USING_CONDA", "0") == "1"
+ARCTICDB_USING_CONDA = marks.ARCTICDB_USING_CONDA
 MACOS_CONDA_BUILD = sys.platform == "darwin" and ARCTICDB_USING_CONDA
 _MACOS_CONDA_BUILD_SKIP_REASON = (
     "Tests fail for macOS conda builds, either because Azurite is improperly configured"
@@ -42,7 +44,7 @@ STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_T
 STORAGE_AWS_S3 = os.getenv("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
 STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
 # Defined shorter logs on errors
-SHORTER_LOGS = os.getenv("ARCTICDB_SHORTER_LOGS", "0") == "1"
+SHORTER_LOGS = marks.SHORTER_LOGS
 
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
 # This is to avoid the risk of the name becoming out of sync with the actual condition.
