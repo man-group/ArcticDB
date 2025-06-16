@@ -17,42 +17,26 @@ from arcticdb import Arctic, LibraryOptions, QueryBuilder
 
 ac = Arctic("lmdb:///tmp/memleak_test")
 lib = ac.get_library("memleak_test", create_if_missing=True, library_options=LibraryOptions(columns_per_segment=1_000_000))
-num_rows = 1
-num_columns = 100_000
-columns=[f"col_{idx}" for idx in range(num_columns)]
+wide_sym_num_rows = 1
+wide_sym_num_cols = 100_000
+wide_sym_columns=[f"col_{idx}" for idx in range(wide_sym_num_cols)]
+long_sym_num_rows = 10_000_000
+long_sym_num_cols = 10
+long_sym_columns=[f"col_{idx}" for idx in range(long_sym_num_cols)]
 
 
 def test_write_data():
     lib._nvs.version_store.clear()
     df = pd.DataFrame(
-        np.random.randint(0, 100, size=(num_rows, num_columns)),
-        columns=columns,
+        np.random.randint(0, 100, size=(wide_sym_num_rows, wide_sym_num_cols)),
+        columns=wide_sym_columns,
     )
-    lib.write("sym", df)
-
-
-@pytest.mark.parametrize("read_from_arctic", [True, False])
-def test_read_data_and_drop_columns(read_from_arctic):
-    print(f"read_from_arctic {read_from_arctic}")
-    get_rss = lambda: psutil.Process(os.getpid()).memory_info().rss / 1e6
-    if read_from_arctic:
-        df = lib.read("sym").data
-    else:
-        df = pd.DataFrame(
-            np.random.randint(0, 100, size=(num_rows, num_columns)),
-            columns=columns,
-            index=pd.date_range("2000-01-01", periods=num_rows),
-        )
-    print(f"RSS: {get_rss():.2f} MB")
-    chunks = 10
-    columns_per_chunk = num_columns // chunks
-    for idx in range(chunks):
-        df = df.drop(columns=columns[idx * columns_per_chunk: (idx + 1) * columns_per_chunk])
-        gc.collect()
-        print(f"RSS: {get_rss():.2f} MB")
-    del df
-    gc.collect()
-    print(f"RSS: {get_rss():.2f} MB")
+    lib.write("wide_sym", df)
+    df = pd.DataFrame(
+        np.random.randint(0, 100, size=(long_sym_num_rows, long_sym_num_cols)),
+        columns=long_sym_columns,
+    )
+    lib.write("long_sym", df)
 
 
 @pytest.mark.parametrize("read_from_arctic", [True, False])
@@ -63,12 +47,37 @@ def test_read_data(read_from_arctic):
 
     for i in range(10):
         if read_from_arctic:
-            small = lib.read("sym").data
+            small = lib.read("wide_sym").data
         else:
             small = pd.DataFrame(
-                np.random.randint(0, 100, size=(num_rows, num_columns)),
-                columns=columns,
-                index=pd.date_range("2000-01-01", periods=num_rows),
+                np.random.randint(0, 100, size=(wide_sym_num_rows, wide_sym_num_cols)),
+                columns=wide_sym_columns,
+                index=pd.date_range("2000-01-01", periods=wide_sym_num_rows),
             )
         retrieved.append(small)
         print(f"RSS: {get_rss():.2f} MB")
+
+
+@pytest.mark.parametrize("read_from_arctic", [True, False])
+def test_read_data_and_drop_columns(read_from_arctic):
+    print(f"read_from_arctic {read_from_arctic}")
+    get_rss = lambda: psutil.Process(os.getpid()).memory_info().rss / 1e6
+    if read_from_arctic:
+        df = lib.read("long_sym").data
+    else:
+        df = pd.DataFrame(
+            np.random.randint(0, 100, size=(long_sym_num_rows, long_sym_num_cols)),
+            columns=long_sym_columns,
+        )
+    print(f"RSS: {get_rss():.2f} MB")
+    chunks = 10
+    columns_per_chunk = wide_sym_num_cols // chunks
+    for idx in range(chunks):
+        df.drop(columns=long_sym_columns[idx * columns_per_chunk: (idx + 1) * columns_per_chunk], inplace=True)
+        gc.collect()
+        print(f"RSS: {get_rss():.2f} MB")
+    del df
+    gc.collect()
+    print(f"RSS: {get_rss():.2f} MB")
+
+
