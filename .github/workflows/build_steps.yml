@@ -230,13 +230,7 @@ jobs:
 
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
-        run: |
-          if [ "${{matrix.os}}" = "macos" ]; then
-            # Set up Python environment
-            python3 -m pip install --upgrade pip
-            pip3 install cibuildwheel==${{inputs.cibw_version}}
-          fi
-          pipx run cibuildwheel==${{inputs.cibw_version}}
+        run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "11.0"
