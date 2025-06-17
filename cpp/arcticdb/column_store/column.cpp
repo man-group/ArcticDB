@@ -164,7 +164,7 @@ void Column::unsparsify(size_t num_rows) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
-        auto dest = ChunkedBuffer::presized(dest_bytes, entity::AllocationType::PRESIZED);
+        auto dest = ChunkedBuffer::presized(dest_bytes);
         util::default_initialize<TagType>(dest.data(), dest_bytes);
         util::expand_dense_buffer_using_bitmap<RawType>(sparse_map_.value(), data_.buffer().data(), dest.data());
         std::swap(dest, data_.buffer());

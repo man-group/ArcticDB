@@ -92,6 +92,9 @@ class ChunkedBufferImpl {
 
     ChunkedBufferImpl() = default;
 
+    explicit ChunkedBufferImpl(entity::AllocationType allocation_type) :
+            allocation_type_(allocation_type) {}
+
     explicit ChunkedBufferImpl(size_t size) {
         reserve(size);
     }
@@ -145,8 +148,14 @@ class ChunkedBufferImpl {
         *this = std::move(other);
     }
 
-    static auto presized(size_t size, entity::AllocationType allocation_type) {
-        ChunkedBufferImpl output(size, allocation_type);
+    static auto presized(size_t size) {
+        ChunkedBufferImpl output(entity::AllocationType::PRESIZED);
+        if (size > 0) {
+            if (size != DefaultBlockSize) {
+                output.handle_transition_to_irregular();
+            }
+            output.add_block(size, 0UL);
+        }
         output.ensure(size);
         return output;
     }

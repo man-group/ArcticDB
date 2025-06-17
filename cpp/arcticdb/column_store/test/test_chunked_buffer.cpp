@@ -30,6 +30,7 @@ TEST(ChunkedBuffer, Iterator) {
 
     ASSERT_EQ(count, 10000);
 }
+
 TEST(ChunkedBuffer, Split) {
     using namespace arcticdb;
     std::array<uint8_t, 17> input{1, 0, 0, 2, 3, 4, 5, 1, 2, 6, 4, 5, 6, 2, 3, 4, 4};
@@ -54,3 +55,32 @@ TEST(ChunkedBuffer, Split) {
             ++buf;
     }
 }
+
+class ChunkedBufferFixture : public ::testing::TestWithParam<size_t> {};
+
+TEST_P(ChunkedBufferFixture, Presized) {
+    using namespace arcticdb;
+    auto bytes = GetParam();
+    // Only need to test PRESIZED. DETACHABLE blocks are always exactly sized as they are for Arrow, and DYNAMIC expect
+    // the buffer to grow, which is not what we are interested in here
+    auto buffer = ChunkedBuffer::presized(bytes);
+    ASSERT_EQ(buffer.bytes(), bytes);
+    ASSERT_EQ(buffer.blocks().size(), 1);
+    if (bytes == BufferSize) {
+        ASSERT_TRUE(buffer.is_regular_sized());
+    } else {
+        ASSERT_FALSE(buffer.is_regular_sized());
+    }
+    ASSERT_EQ(buffer.blocks()[0]->capacity(), bytes);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+        ChunkedBufferPresized,
+        ChunkedBufferFixture,
+        testing::Values(
+                1,
+                arcticdb::BufferSize - 1,
+                arcticdb::BufferSize,
+                arcticdb::BufferSize + 1
+                )
+        );

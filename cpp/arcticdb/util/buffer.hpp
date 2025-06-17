@@ -69,7 +69,7 @@ struct Buffer : public BaseBuffer<Buffer, true> {
         check_invariants();
     }
 
-    static auto presized(size_t size, entity::AllocationType) {
+    static auto presized(size_t size) {
         return Buffer(size);
     };
 
