@@ -303,6 +303,7 @@ jobs:
     container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
       run: {shell: bash}
+    services: ${{matrix.test_services}}
     env:
       SCCACHE_GHA_ENABLED: "true"
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
