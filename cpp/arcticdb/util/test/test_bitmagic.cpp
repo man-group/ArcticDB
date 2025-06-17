@@ -46,7 +46,7 @@ TEST(BitMagic, DensifyAndExpand) {
             bv[idx] = true;
         }
     }
-    auto dense_buffer = ChunkedBuffer::presized(sizeof(float) * n_dense, entity::AllocationType::PRESIZED);
+    auto dense_buffer = ChunkedBuffer::presized(sizeof(float) * n_dense);
     auto *ptr = reinterpret_cast<uint8_t *>(&sample_data[0]);
     arcticdb::util::densify_buffer_using_bitmap<float>(bv, dense_buffer, ptr);
     auto *dense_array = reinterpret_cast<float *>(dense_buffer.data());
