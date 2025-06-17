@@ -398,7 +398,7 @@ DATA_TYPE_TAG(ASCII_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)
 DATA_TYPE_TAG(UTF_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(UTF_DYNAMIC64, std::uint64_t)
-DATA_TYPE_TAG(UTF_DYNAMIC32, std::uint32_t)
+DATA_TYPE_TAG(UTF_DYNAMIC32, std::int32_t) // Signed to align with pyarrow spec. See definition of `string_dict_from_block`
 DATA_TYPE_TAG(EMPTYVAL, std::uint64_t)
 DATA_TYPE_TAG(BOOL_OBJECT8, uint8_t)
 #undef DATA_TYPE_TAG

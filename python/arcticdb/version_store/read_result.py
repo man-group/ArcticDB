@@ -8,10 +8,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 class ReadResult:
-    def __init__(self, version, frame_data, output_format, norm, udm, mmeta, keys):
+    def __init__(self, version, frame_data, norm, udm, mmeta, keys):
         self.version = version
         self.frame_data = frame_data
-        self.output_format = output_format
         self.norm = norm
         self.udm = udm
         self.mmeta = mmeta

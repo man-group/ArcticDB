@@ -78,27 +78,33 @@ enum class ExtraBufferType : uint8_t {
 };
 
 
+// Specifies a way to index extra buffers.
+// We can attach extra buffers to each offset and type. This is used for OutputFormat::ARROW to store the extra buffers
+// required to construct a string buffer.
+// For example if we have an arrow Column with 2 chunks containing the strings ["a", "bc"], ["ab", "ab"], we'd have:
+// Column data in blocks:
+// offset:0 -> [0, 1] (int32_t)
+// offset:8 -> [0, 0] (int32_t)
+// Extra buffers for the column:
+// offset_bytes=0, type_=OFFSET -> [0, 1, 3] (int64_t)
+// offset_bytes=8, type_=OFFSET -> [0, 2] (int64_t)
+// offset_bytes=0, type_=STRING -> "abc"
+// offset_bytes=8, type_=STRING -> "ab"
 struct ExtraBufferIndex {
-    size_t offset_;
+    size_t offset_bytes_;
     ExtraBufferType type_;
 };
 
 inline bool operator==(const ExtraBufferIndex& lhs, const ExtraBufferIndex& rhs) {
-    return (lhs.offset_ == rhs.offset_) && (lhs.type_ == rhs.type_);
+    return (lhs.offset_bytes_ == rhs.offset_bytes_) && (lhs.type_ == rhs.type_);
 }
 
 struct ExtraBufferIndexHash {
-    static void hash_combine(std::size_t& seed, std::size_t value) {
-        static const std::size_t kMagic = 0x9e3779b97f4a7c15ULL;
-        seed ^= (value + kMagic + (seed << 6) + (seed >> 2));
-    }
-
-    std::size_t operator()(const ExtraBufferIndex& index) const noexcept {
-        std::size_t h = std::hash<std::size_t>{}(index.offset_);
-        hash_combine(h, std::hash<uint8_t>{}(static_cast<uint8_t>(index.type_)));
-        return h;
+    std::size_t operator()(const ExtraBufferIndex& index) const {
+        return folly::hash::hash_combine(index.offset_bytes_, index.type_);
     }
 };
+
 struct ExtraBufferContainer {
     mutable std::mutex mutex_;
     std::unordered_map<ExtraBufferIndex, ChunkedBuffer, ExtraBufferIndexHash> buffers_;

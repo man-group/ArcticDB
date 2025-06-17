@@ -138,8 +138,8 @@ namespace arcticdb {
             ARCTICDB_TRACE(log::codec(), "Encoding fields");
             for (std::size_t column_index = 0; column_index < in_mem_seg.num_columns(); ++column_index) {
                 const auto& column = in_mem_seg.column(column_index);
-                auto data_type = column.data().type().data_type();
-                util::check(!is_arrow_output_only_type(data_type), "Attempts to encode an output only type {}", data_type);
+                util::check(!is_arrow_output_only_type(column.type()),
+                    "Attempts to encode an output only type {}", column.type());
                 auto column_data = column.data();
                 auto* column_field = encoded_fields.add_field(column_data.num_blocks());
                 if(column_data.num_blocks() > 0) {

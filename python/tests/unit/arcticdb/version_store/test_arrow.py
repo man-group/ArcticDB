@@ -182,10 +182,15 @@ def test_dynamic_schema_column_change(lmdb_version_store_dynamic_schema):
     df1 = pd.DataFrame({"x": np.arange(10)})
 
     lib.write("arrow", df1)
-    df2 = pd.DataFrame({"x": np.arange(20.0, 30.0)})
+    df2 = pd.DataFrame({"x": np.arange(20.0, 30.0, dtype=np.float64)})
     lib.append("arrow", df2)
-    vit = lib.read("arrow", _output_format=OutputFormat.ARROW)
-    result = vit.data.to_pandas()
+    arrow_table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    batches = arrow_table.to_batches()
+    assert len(batches) == 2
+    for record_batch in batches:
+        x_arr = record_batch.columns[0]
+        assert x_arr.type == pa.float64()
+    result = arrow_table.to_pandas()
     expected = pd.concat([df1, df2])
     expected.reset_index(drop=True, inplace=True)
     assert_frame_equal(result.astype(float).fillna(0), expected.fillna(0))
@@ -208,4 +213,4 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
         index_arr, int_arr, str_arr = record_batch.columns
         assert index_arr.type == pa.int64()
         assert int_arr.type == pa.int64()
-        assert str_arr.type == pa.dictionary(pa.int32(), pa.string())
+        assert str_arr.type == pa.dictionary(pa.int32(), pa.large_string())

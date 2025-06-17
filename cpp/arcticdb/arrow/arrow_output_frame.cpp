@@ -14,14 +14,11 @@
 namespace arcticdb {
 
 ArrowOutputFrame::ArrowOutputFrame(
-    std::shared_ptr<std::vector<sparrow::record_batch>>&& data,
-    std::vector<std::string>&& names) :
-    data_(std::move(data)),
-    names_(std::move(names)) {
-}
+    std::shared_ptr<std::vector<sparrow::record_batch>>&& data) :
+    data_(std::move(data)) {}
 
 size_t ArrowOutputFrame::num_blocks() const {
-    if(data_->empty())
+    if(!data_ || data_->empty())
         return 0;
 
     return data_->size();
@@ -29,6 +26,9 @@ size_t ArrowOutputFrame::num_blocks() const {
 
 std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
     std::vector<RecordBatchData> output;
+    if (!data_) {
+        return output;
+    }
     output.reserve(data_->size());
 
     for(auto& batch : *data_) {
@@ -39,10 +39,6 @@ std::vector<RecordBatchData> ArrowOutputFrame::extract_record_batches() {
     }
 
     return output;
-}
-
-std::vector<std::string> ArrowOutputFrame::names() const {
-    return names_;
 }
 
 }  // namespace arcticdb

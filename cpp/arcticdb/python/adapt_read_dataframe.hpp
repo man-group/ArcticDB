@@ -32,7 +32,7 @@ inline py::tuple adapt_read_df(ReadResult&& ret, std::any* const handler_data) {
                 return py_metadatas;
             });
     auto multi_key_meta = python_util::pb_to_python(ret.multi_key_meta);
-    return py::make_tuple(ret.item, std::move(ret.frame_data), ret.output_format, pynorm, pyuser_meta, multi_key_meta, ret.multi_keys);
+    return py::make_tuple(ret.item, std::move(ret.frame_data), pynorm, pyuser_meta, multi_key_meta, ret.multi_keys);
 };
 
 }

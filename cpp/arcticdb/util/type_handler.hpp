@@ -120,7 +120,7 @@ public:
     }
 
 private:
-    std::array<std::unique_ptr<TypeHandlerDataFactory>, 4> handler_data_factories_;
+    std::array<std::unique_ptr<TypeHandlerDataFactory>, static_cast<size_t>(OutputFormat::COUNT)> handler_data_factories_;
 
     struct Hasher {
         size_t operator()(entity::TypeDescriptor val) const;
@@ -138,7 +138,7 @@ private:
         return handlers_[static_cast<int>(output_format)];
     }
 
-    std::array<TypeHandlerMap, 4> handlers_;
+    std::array<TypeHandlerMap, static_cast<size_t>(OutputFormat::COUNT)> handlers_;
 };
 
 inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, TypeDescriptor source) {

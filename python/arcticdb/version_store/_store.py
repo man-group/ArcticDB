@@ -53,7 +53,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
 from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import OutputFormat
+from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame, PandasOutputFrame
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -2043,7 +2043,7 @@ class NativeVersionStore:
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
     def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
-        if read_result.output_format == OutputFormat.ARROW:
+        if isinstance(read_result.frame_data, ArrowOutputFrame):
             # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
             return self._adapt_read_res(read_result)
         index_type = read_result.norm.df.common.WhichOneof("index_type")
@@ -2281,12 +2281,12 @@ class NativeVersionStore:
         return index_columns
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
-        if read_result.output_format == OutputFormat.PANDAS:
+        if isinstance(read_result.frame_data, PandasOutputFrame):
             frame_data = FrameData.from_cpp(read_result.frame_data)
             data = self._normalizer.denormalize(frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):
                 data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
-        elif read_result.output_format == OutputFormat.ARROW:
+        elif isinstance(read_result.frame_data, ArrowOutputFrame):
             frame_data = read_result.frame_data
             import pyarrow as pa
             record_batches = []

@@ -51,48 +51,49 @@ void ArrowStringHandler::convert_type(
     const DecodePathData&,
     std::any&,
     const std::shared_ptr<StringPool>& string_pool) const {
-    size_t bytes = 0;
     using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
-    auto dest_ptr = reinterpret_cast<uint32_t*>(dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(uint32_t)));
     auto input_data = source_column.data();
     auto pos = input_data.cbegin<ArcticStringColumnTag>();
     const auto end = input_data.cend<ArcticStringColumnTag>();
 
     struct DictEntry {
-        uint32_t index_offset_;
-        uint32_t bytes_pos_;
+        int32_t offset_buffer_pos_;
+        int64_t string_buffer_pos_;
     };
-
+    std::vector<StringPool::offset_t> unique_offsets_in_order;
     ankerl::unordered_dense::map<StringPool::offset_t, DictEntry> unique_offsets;
-    uint32_t unique_string_count = 0U;
+    int64_t bytes = 0;
+    auto dest_ptr = reinterpret_cast<int32_t*>(dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(int32_t)));
+
+    // First go through the source column once to compute the size of offset and string buffers.
     while(pos != end) {
-        auto [entry, emplaced] = unique_offsets.try_emplace(*pos, DictEntry{unique_string_count, static_cast<uint32_t>(bytes)});
-        if(emplaced) {
+        auto [entry, is_emplaced] = unique_offsets.try_emplace(*pos, DictEntry{static_cast<int32_t>(unique_offsets_in_order.size()), bytes});
+        if(is_emplaced) {
             bytes += string_pool->get_const_view(*pos).size();
-            ++unique_string_count;
+            unique_offsets_in_order.push_back(*pos);
         }
         ++pos;
-        *dest_ptr = entry->second.index_offset_;
+        *dest_ptr = entry->second.offset_buffer_pos_;
         ++dest_ptr;
     }
-    util::check(bytes <= std::numeric_limits<uint32_t>::max(),
-        "Arrow string handler doesn't support total length of strings larger than uint32_t. Total string bytes: {}",
-        bytes);
-    auto& data_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE);
-    auto& offsets_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::OFFSET, (unique_offsets.size() + 1) * sizeof(uint32_t), AllocationType::DETACHABLE);
+    auto& string_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE);
+    auto& offsets_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::OFFSET, (unique_offsets_in_order.size() + 1) * sizeof(int64_t), AllocationType::DETACHABLE);
 
-    auto strv_ptr = data_buffer.data();
-    auto begin_ptr = strv_ptr;
-    auto keys_ptr = reinterpret_cast<uint32_t*>(offsets_buffer.data());
-    for(auto unique_string : unique_offsets) {
-        const auto strv = string_pool->get_const_view(unique_string.first);
-        memcpy(strv_ptr, strv.data(), strv.size());
-        *keys_ptr = unique_string.second.bytes_pos_;
-        util::check(strv_ptr - begin_ptr == unique_string.second.bytes_pos_, "Mismatch in buffer offset");
-        strv_ptr += strv.size();
-        ++keys_ptr;
+    // Then go through unique_offsets to fill up the offset and string buffers.
+    auto offsets_ptr = reinterpret_cast<int64_t*>(offsets_buffer.data());
+    auto string_ptr = reinterpret_cast<char*>(string_buffer.data());
+    auto string_begin_ptr = string_ptr;
+    for(auto i=0u; i<unique_offsets_in_order.size(); ++i) {
+        auto string_pool_offset = unique_offsets_in_order[i];
+        auto& entry = unique_offsets[string_pool_offset];
+        util::check(static_cast<int32_t>(i) == entry.offset_buffer_pos_, "Mismatch in offset buffer pos");
+        util::check(string_ptr - string_begin_ptr == entry.string_buffer_pos_, "Mismatch in string buffer pos");
+        offsets_ptr[i] = entry.string_buffer_pos_;
+        const auto strv = string_pool->get_const_view(string_pool_offset);
+        memcpy(string_ptr, strv.data(), strv.size());
+        string_ptr += strv.size();
     }
-    *keys_ptr = strv_ptr - begin_ptr;
+    offsets_ptr[unique_offsets_in_order.size()] = bytes;
 }
 
 TypeDescriptor ArrowStringHandler::output_type(const TypeDescriptor&) const {

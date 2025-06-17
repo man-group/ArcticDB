@@ -289,21 +289,21 @@ struct VersionMapEntry {
 
     std::string dump() const {
         std::ostringstream strm;
-        strm << "\n" << "Last reload time: " << last_reload_time_ << "\n";
+        strm << "\nLast reload time: " << last_reload_time_ << "\n";
 
         if(head_)
-            strm << "Head: " << fmt::format("{}", *head_) << "\n";
+            strm << "Head: " << fmt::format("{}\n", *head_);
 
         if(tombstone_all_)
-            strm << "Tombstone all: " << fmt::format("{}", *tombstone_all_) << "\n";
+            strm << "Tombstone all: " << fmt::format("{}\n", *tombstone_all_);
 
-        strm << "Keys: " << "\n" << "\n";
+        strm << "Keys: \n\n";
         for(const auto& key: keys_)
-            strm << fmt::format("    {}", key) << "\n";
+            strm << fmt::format("    {}\n", key);
 
-        strm << "Tombstones: " << "\n" << "\n";
+        strm << "Tombstones: \n\n";
         for(const auto& tombstone: tombstones_)
-            strm << fmt::format("    {} - {}", tombstone.first, tombstone.second) << "\n";
+            strm << fmt::format("    {} - {}\n", tombstone.first, tombstone.second);
 
         return strm.str();
     }

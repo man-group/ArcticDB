@@ -252,7 +252,7 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                         "Expected single user metadata in adapt_read_dfs, received vector");
                 auto pyuser_meta = python_util::pb_to_python(std::get<proto::descriptors::UserDefinedMetadata>(read_result.user_meta));
                 auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
-                lst.append(py::make_tuple(read_result.item, std::move(read_result.frame_data), read_result.output_format, pynorm, pyuser_meta, multi_key_meta,
+                lst.append(py::make_tuple(read_result.item, std::move(read_result.frame_data), pynorm, pyuser_meta, multi_key_meta,
                                           read_result.multi_keys));
                 util::check(!output_format.has_value() || output_format.value() == read_result.output_format, "All results from a batch operation are expected to have the same output_format");
                 output_format = read_result.output_format;

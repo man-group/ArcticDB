@@ -37,15 +37,11 @@ struct ArrowOutputFrame {
     ArrowOutputFrame() = default;
 
     ArrowOutputFrame(
-        std::shared_ptr<std::vector<sparrow::record_batch>>&& data,
-        std::vector<std::string>&& names);
+        std::shared_ptr<std::vector<sparrow::record_batch>>&& data);
 
     std::shared_ptr<std::vector<sparrow::record_batch>> data_;
-    std::vector<std::string> names_;
 
     std::vector<RecordBatchData> extract_record_batches();
-
-    [[nodiscard]] std::vector<std::string> names() const;
 
     [[nodiscard]] size_t num_blocks() const;
 };

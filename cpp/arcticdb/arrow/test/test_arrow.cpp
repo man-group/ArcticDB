@@ -128,7 +128,7 @@ TEST(Arrow, ColumnString) {
     auto pool = std::make_shared<StringPool>();
     auto type_desc = TypeDescriptor{DataType::UTF_DYNAMIC32, Dimension::Dim0};
     auto column = Column(type_desc, 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED);
-    allocate_and_fill_chunked_column<uint32_t>(column, num_rows, chunk_size);
+    allocate_and_fill_chunked_column<int32_t>(column, num_rows, chunk_size);
     fill_chunked_string_column(column, num_rows, chunk_size, pool, column_values);
 
     // Verify applying the string handler sets the correct external buffers
@@ -146,9 +146,9 @@ TEST(Arrow, ColumnString) {
 
         for (auto row_in_chunk=0u; row_in_chunk < chunk_size; ++row_in_chunk) {
             auto global_row = chunk*chunk_size + row_in_chunk;
-            auto id = column_buffer.cast<uint32_t>(global_row);
-            auto offset_begin = offset_buffer.cast<uint32_t>(id);
-            auto str_size = offset_buffer.cast<uint32_t>(id+1) - offset_begin;
+            auto id = column_buffer.cast<int32_t>(global_row);
+            auto offset_begin = offset_buffer.cast<int64_t>(id);
+            auto str_size = offset_buffer.cast<int64_t>(id+1) - offset_begin;
             auto str_in_column = std::string_view(
                 reinterpret_cast<char*>(string_buffer.bytes_at(offset_begin, str_size)),
                 str_size);

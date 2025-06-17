@@ -88,9 +88,9 @@ inline ReadResult create_python_read_result(
 
     auto python_frame = [&]() -> OutputFrame {
         if (output_format == OutputFormat::ARROW) {
-            return ArrowOutputFrame{segment_to_arrow_data(result.frame_), names_from_segment(result.frame_)};
+            return ArrowOutputFrame{segment_to_arrow_data(result.frame_)};
         } else {
-            return pipelines::PandasOutputFrame{result.frame_, output_format};
+            return pipelines::PandasOutputFrame{result.frame_};
         }
     }();
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);

@@ -33,27 +33,17 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
     return vec;
 }
 
-std::vector<std::string> names_from_segment(const SegmentInMemory& segment) {
-    std::vector<std::string> output;
-    output.reserve(segment.fields().size());
-    for(auto i = 0UL; i < segment.fields().size(); ++i) {
-        const auto ref = segment.field(i).ref();
-        output.emplace_back(ref.name_);
-    }
-    return output;
-}
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
     const auto column_blocks = segment.column(0).num_blocks();
+    util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
     auto output = std::make_shared<std::vector<sparrow::record_batch>>();
     output->reserve(total_blocks);
 
     for(auto i = 0UL; i < column_blocks; ++i)
         output->emplace_back(sparrow::record_batch{});
-
-    util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
     for (auto i = 0UL; i < num_columns; ++i) {
         auto& column = segment.column(static_cast<position_t>(i));

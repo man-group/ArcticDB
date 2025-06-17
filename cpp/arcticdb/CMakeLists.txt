@@ -444,6 +444,9 @@ set(arcticdb_srcs
         pipeline/pandas_output_frame.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
+        pipeline/read_pipeline.cpp
+        pipeline/read_query.hpp
+        pipeline/read_query.cpp
         pipeline/slicing.cpp
         pipeline/string_pool_utils.cpp
         pipeline/value_set.cpp
@@ -535,16 +538,13 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        arrow/arrow_utils.hpp
-        arrow/arrow_output_frame.hpp
-        arrow/arrow_utils.cpp
-        arrow/arrow_output_frame.cpp
-        arrow/arrow_handlers.hpp
         arrow/array_from_block.hpp
+        arrow/arrow_handlers.hpp
         arrow/arrow_handlers.cpp
-        pipeline/read_query.hpp
-        pipeline/read_query.cpp
-        pipeline/read_pipeline.cpp
+        arrow/arrow_output_frame.hpp
+        arrow/arrow_output_frame.cpp
+        arrow/arrow_utils.hpp
+        arrow/arrow_utils.cpp
         )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})

@@ -63,6 +63,14 @@ inline bool contains(const RowRange& range, size_t row) {
     return row >= range.first && row <= range.second;
 }
 
+ /*
+ * This class is mostly (exclusively?) used in SliceAndKey objects, where the duplication of the StreamDescriptor
+ * with the SegmentInMemory is confusing and error-prone. Where possible do not add more uses of this class and
+ * SliceAndKey, prefer RangesAndKey or SegmentAndSlice depending on requirements.
+ * FrameSlice stores the vertical (RowRange) and horizontal (ColRange) offsets for a table-subsection, as well as
+ * (optionally) a descriptor for the source stream/index data. For dynamic_schema's bucketizing, it also stores
+ * the hash bucket it represents and the number of total buckets that are present for the current calculation
+ */
 struct FrameSlice {
     FrameSlice() = default;
 

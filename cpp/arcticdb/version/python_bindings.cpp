@@ -247,9 +247,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
-        //.def(py::init<const SegmentInMemory&, OutputFormat output_format, std::shared_ptr<BufferHolder>>())
-        .def(py::init<>([](const SegmentInMemory& segment_in_memory, OutputFormat output_format) {
-            return PandasOutputFrame(segment_in_memory, output_format);
+        .def(py::init<>([](const SegmentInMemory& segment_in_memory) {
+            return PandasOutputFrame(segment_in_memory);
         }))
         .def_property_readonly("value", [](py::object & obj){
             auto& fd = obj.cast<PandasOutputFrame&>();
@@ -264,7 +263,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         });
 
         py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
-        .def_property_readonly("names", &ArrowOutputFrame::names)
         .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches)
         ;
 
@@ -768,13 +766,12 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 const auto& tsd_proto = tsd.proto();
                 ReadResult res{
                     vit,
-                    PandasOutputFrame{
-                        SegmentInMemory{tsd.as_stream_descriptor()},  read_options.output_format()},
-                        read_options.output_format(),
-                        tsd_proto.normalization(),
-                        tsd_proto.user_meta(),
-                        tsd_proto.multi_key_meta(),
-                        std::vector<entity::AtomKey>{}
+                    PandasOutputFrame{SegmentInMemory{tsd.as_stream_descriptor()}},
+                    read_options.output_format(),
+                    tsd_proto.normalization(),
+                    tsd_proto.user_meta(),
+                    tsd_proto.multi_key_meta(),
+                    std::vector<entity::AtomKey>{}
                 };
                 return adapt_read_df(std::move(res), nullptr); },
              py::call_guard<SingleThreadMutexHolder>(), "Restore a previous version of a symbol.")
@@ -874,20 +871,22 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("batch_restore_version",
              [&](PythonVersionStore& v, const std::vector<StreamId>& ids, const std::vector<VersionQuery>& version_queries, const ReadOptions& read_options){
                  auto results = v.batch_restore_version(ids, version_queries);
-                 std::vector<py::object> output;
+                 std::vector<std::variant<ReadResult, DataError>> output;
                  output.reserve(results.size());
                  for(auto& [vit, tsd] : results) {
                      const auto& tsd_proto = tsd.proto();
-                     ReadResult res{vit, PandasOutputFrame{
-                         SegmentInMemory{tsd.as_stream_descriptor()}, read_options.output_format()},
-                                    read_options.output_format(),
-                                    tsd_proto.normalization(),
-                                    tsd_proto.user_meta(),
-                                    tsd_proto.multi_key_meta(), {}};
-
-                     output.emplace_back(adapt_read_df(std::move(res), nullptr));
+                     ReadResult res{
+                         vit,
+                         PandasOutputFrame{SegmentInMemory{tsd.as_stream_descriptor()}},
+                         read_options.output_format(),
+                         tsd_proto.normalization(),
+                         tsd_proto.user_meta(),
+                         tsd_proto.multi_key_meta(),
+                         std::vector<entity::AtomKey>{}
+                     };
+                     output.emplace_back(std::move(res));
                  }
-                 return output;
+                 return python_util::adapt_read_dfs(std::move(output), nullptr);
              },
             py::call_guard<SingleThreadMutexHolder>(), "Batch restore a group of versions to the versions indicated")
         .def("list_versions",[](
