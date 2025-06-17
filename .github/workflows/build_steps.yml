@@ -252,10 +252,10 @@ jobs:
         run: |
           if [ ${{inputs.python3}} -gt 8 ]
           then
-            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -exec basename {} \; | tr '\n' ',' |
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" \) -exec basename {} \; | tr '\n' ',' |
               sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
           else
-            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\|compat\)' -exec basename {} \; | tr '\n' ',' |
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" \) -exec basename {} \; | tr '\n' ',' |
               sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
           fi
 
