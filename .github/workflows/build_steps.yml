@@ -330,8 +330,8 @@ jobs:
             echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH;
           fi
 
-      - name: Select Python (Windows)
-        if: matrix.os == 'windows'
+      - name: Select Python (Windows and macOS)
+        if: matrix.os == 'windows' || matrix.os == 'macos'
         uses: actions/setup-python@v4.7.1
         with:
           python-version: "3.${{inputs.python3}}"
