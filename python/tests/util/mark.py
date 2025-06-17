@@ -23,9 +23,10 @@ WINDOWS = sys.platform.lower().startswith("win32")
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
 ARCTICDB_USING_CONDA = marks.ARCTICDB_USING_CONDA
-MACOS_CONDA_BUILD = sys.platform == "darwin" and ARCTICDB_USING_CONDA
-_MACOS_CONDA_BUILD_SKIP_REASON = (
-    "Tests fail for macOS conda builds, either because Azurite is improperly configured"
+MACOS_CONDA_BUILD = ARCTICDB_USING_CONDA and MACOS
+
+_MACOS_AZURE_TESTS_SKIP_REASON = (
+    "Tests fail for macOS vcpkg builds, either because Azurite is improperly configured"
     "on the CI or because there's problem with Azure SDK for C++ in this configuration."
 )
 
@@ -52,11 +53,11 @@ SLOW_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or DISABLE_SLOW_TESTS, reason="Skipping test as it takes a long time to run"
 )
 
-AZURE_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD or not LOCAL_STORAGE_TESTS_ENABLED,
-                                      reason=_MACOS_CONDA_BUILD_SKIP_REASON)
-"""Mark to skip all Azure tests when MACOS_CONDA_BUILD or ARCTICDB_FAST_TESTS_ONLY is set."""
+AZURE_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY or MACOS or not LOCAL_STORAGE_TESTS_ENABLED,
+                                      reason=_MACOS_AZURE_TESTS_SKIP_REASON)
+"""Mark to skip all Azure tests when MACOS or ARCTICDB_FAST_TESTS_ONLY is set."""
 
-# Mongo tests will run under local storage tests 
+# Mongo tests will run under local storage tests
 MONGO_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or sys.platform != "linux" or not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY and if local storage tests are disabled",
@@ -112,7 +113,7 @@ SIM_NFS_TESTS_MARK = pytest.mark.skipif(
 
 
 
-"""Windows and MacOS have different handling of self-signed CA cert for test. 
+"""Windows and MacOS have different handling of self-signed CA cert for test.
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
 SSL_TEST_SUPPORTED = sys.platform == "linux"
 
