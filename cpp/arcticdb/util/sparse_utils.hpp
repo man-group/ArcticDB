@@ -132,7 +132,7 @@ ChunkedBuffer scan_floating_point_to_sparse(
     }
 
     const auto bytes = block_bitset.count() * sizeof(RawType);
-    auto dense_buffer = ChunkedBuffer::presized(bytes, entity::AllocationType::PRESIZED);
+    auto dense_buffer = ChunkedBuffer::presized(bytes);
     auto start = reinterpret_cast<const uint8_t *>(ptr);
     densify_buffer_using_bitmap<RawType>(block_bitset, dense_buffer, start);
     return dense_buffer;
