@@ -279,7 +279,7 @@ jobs:
       persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
       pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args || ''}}
-      version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test}}
+      version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
