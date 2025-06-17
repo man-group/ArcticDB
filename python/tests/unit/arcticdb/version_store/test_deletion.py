@@ -213,7 +213,7 @@ def test_delete_snapshot_after_update_and_prune_previous(lmdb_version_store, sym
     assert_frame_equal(lib.read(sym).data, df)
     idx3 = pd.date_range("1970-06-22", periods=10, freq="D")
     df3 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx3), dtype="float")}, index=idx3)
-    lib.append(sym, df3, prune_previous_versions=True)  # v2
+    lib.append(sym, df3, prune_previous_version=True)  # v2
     final_df = pd.concat([df, df3])
     assert_frame_equal(lib.read(sym).data, final_df)
 
@@ -223,7 +223,6 @@ def test_delete_snapshot_after_update_and_prune_previous(lmdb_version_store, sym
     assert_frame_equal(pre_delete_snapshot, post_delete_snapshot)
     assert_frame_equal(pre_delete_snapshot, lib.read(sym, as_of=2).data)
     assert_frame_equal(pre_delete_snapshot, final_df)
-    assert_frame_equal(df, lib.read(sym, as_of=1).data)
 
 
 def test_delete_snapshot_update_with_full_overlap(lmdb_version_store, sym):
