@@ -364,7 +364,7 @@ def test_delete_over_time(lib_name, storage_bucket, clear_query_stats):
             )
 
 
-def test_wrute_and_prune_previous_over_time(lib_name, storage_bucket, clear_query_stats):
+def test_write_and_prune_previous_over_time(lib_name, storage_bucket, clear_query_stats):
     expected_ops = 9
     with config_context("VersionMap.ReloadInterval", 0):
         lib = storage_bucket.create_version_store_factory(lib_name)()

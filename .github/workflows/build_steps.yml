@@ -12,6 +12,7 @@ on:
       persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
+      version_cache_full_test: {default: false, type: boolean, description: if true, tests will run with both version cache 0 and 2000000000, otherwise only 2000000000}
 jobs:
   compile:
     strategy:
@@ -266,7 +267,8 @@ jobs:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
         # Testing with 0(no version cache) and 2000000000(2s - default timeout) to see if the tests pass
-        version_cache_timeout: ["0", "2000000000"]
+        # Always run with both for cp311 as it is the default timeout
+        version_cache_timeout: ${{(inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == "cp311") && ["0", "2000000000"] || ["2000000000"]}}
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
