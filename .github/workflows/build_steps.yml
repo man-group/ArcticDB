@@ -98,6 +98,10 @@ jobs:
           brew install bison   # required by thrift pulled via vcpkg
           echo "SCCACHE_DIR=/tmp/sccache" >> $GITHUB_ENV
           mkdir -p /tmp/sccache
+          # Start sccache server
+          sccache --start-server
+          # Show sccache stats
+          sccache --show-stats
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
