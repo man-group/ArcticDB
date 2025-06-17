@@ -141,7 +141,7 @@
       "inherits": "darwin",
       "cacheVariables": {
         "CMAKE_OSX_ARCHITECTURES": "arm64",
-        "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "15.0"
       }
     },
     {
