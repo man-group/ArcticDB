@@ -117,7 +117,7 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
 SegmentInMemory allocate_contiguous_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    SegmentInMemory output{get_filtered_descriptor(context, output_format),  row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
+    SegmentInMemory output{get_filtered_descriptor(context, output_format),  row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
 }
