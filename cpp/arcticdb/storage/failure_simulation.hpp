@@ -85,6 +85,7 @@ static FailureAction::FunctionWrapper maybe_execute(double probability, FailureA
     util::check_arg(probability >= 0 && probability <= 1.0, "Bad probability: {}", probability);
 
     return [probability, f = std::move(func)](FailureType type) mutable {
+        ARCTICDB_DEBUG(log::lock(), "Probability to use StorageFailureSimulator, {}", probability);
         if (probability == 0) {
             return;
         }
@@ -94,10 +95,10 @@ static FailureAction::FunctionWrapper maybe_execute(double probability, FailureA
             return;
         }
 
-        thread_local std::once_flag flag;
-        std::call_once(flag, [seed = (uint64_t)(&type)]() { init_random(seed); });
-        auto nd = random_probability();
-        if (nd < probability) {
+        thread_local std::uniform_int_distribution<size_t> dist(0.0, 1.0);
+        thread_local std::mt19937 gen(std::random_device{}());
+        double rnd = dist(gen);
+        if (rnd < probability) {
             std::invoke(std::move(f), type);
         }
     };

@@ -513,7 +513,6 @@ set(arcticdb_srcs
         util/allocator.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
-        util/configs_map.cpp
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
