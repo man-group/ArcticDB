@@ -345,8 +345,9 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
-      - name: Install npm # Linux github runner image does not come with npm
-        if: matrix.os == 'linux'
+      # GitHub runner image does not come with npm
+      - name: Install npm (Linux and macOS)
+        if: matrix.os == 'linux' || matrix.os == 'macos'
         uses: actions/setup-node@v3.3.0
         with:
           node-version: '16'
