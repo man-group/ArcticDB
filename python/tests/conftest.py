@@ -76,6 +76,7 @@ import arcticdb.toolbox.query_stats as query_stats
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
 hypothesis.settings.register_profile("ci_windows", max_examples=100)
+hypothesis.settings.register_profile("ci_macos", max_examples=100)
 hypothesis.settings.register_profile("dev", max_examples=100)
 
 hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
