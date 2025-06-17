@@ -98,7 +98,10 @@ if platform.system() == "Linux":
 
 def delete_nvs(nvs: NativeVersionStore):
     logger.info(f"Removing data for NativeVersionStore object: {nvs.library()}")
-    nvs.version_store.clear()
+    try:
+        nvs.version_store.clear()
+    except Exception as e:
+        logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
     assert nvs.list_symbols() == []
 
 
@@ -334,7 +337,8 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
 
 @pytest.fixture(
     scope="session",
-    params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
+    params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), 
+            pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
 )
 def real_storage_factory(request) -> Union[BaseGCPStorageFixtureFactory, BaseGCPStorageFixtureFactory]:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_factory")
@@ -878,21 +882,25 @@ def object_store_factory(request) -> Callable[..., NativeVersionStore]:
 
 
 @pytest.fixture
-def object_version_store(object_store_factory) -> NativeVersionStore:
+def object_version_store(object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all object stores and their simulations
     Doesn't support LMDB
     """
-    return object_store_factory()
+    nvs = object_store_factory()
+    yield nvs
+    delete_nvs(nvs)
 
 
 @pytest.fixture
-def object_version_store_prune_previous(object_store_factory) -> NativeVersionStore:
+def object_version_store_prune_previous(object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all object stores and their simulations
     Doesn't support LMDB
     """
-    return object_store_factory(prune_previous_version=True)
+    nvs = object_store_factory(prune_previous_version=True)
+    yield nvs
+    delete_nvs(nvs)
 
 
 @pytest.fixture(
@@ -908,21 +916,25 @@ def local_object_store_factory(request):
 
 
 @pytest.fixture
-def local_object_version_store(local_object_store_factory):
+def local_object_version_store(local_object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
     """
-    return local_object_store_factory()
+    nvs = local_object_store_factory()
+    yield nvs
+    delete_nvs(nvs)
 
 
 @pytest.fixture
-def local_object_version_store_prune_previous(local_object_store_factory):
+def local_object_version_store_prune_previous(local_object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
     """
-    return local_object_store_factory(prune_previous_version=True)
+    nvs = local_object_store_factory(prune_previous_version=True)
+    yield nvs
+    delete_nvs(nvs)
 
 
 @pytest.fixture(
@@ -956,14 +968,16 @@ def basic_store_factory(request) -> Callable[..., NativeVersionStore]:
 
 
 @pytest.fixture
-def basic_store(basic_store_factory) -> NativeVersionStore:
+def basic_store(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test the bare minimum of stores
      - LMDB for local storage
      - mem for in-memory storage
      - AWS S3 for persistent storage, if enabled
     """
-    return basic_store_factory()
+    nvs = basic_store_factory()
+    yield nvs
+    delete_nvs(nvs)
 
 
 @pytest.fixture
