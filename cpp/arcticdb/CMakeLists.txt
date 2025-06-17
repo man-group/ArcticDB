@@ -86,11 +86,14 @@ else()
 
     set(Zstd_LIBRARY zstd::libzstd_shared)
 
-    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
-    message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
-    list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
-    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 endif()
+
+# Adapt Folly::folly_deps to remove an non-existent include directory.
+get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
+set(NON_EXISTENT_INCLUDE_DIR "/usr/local/opt/openssl/include")
+message(STATUS "Folly's INTERFACE_INCLUDE_DIRECTORIES to remove: ${NON_EXISTENT_INCLUDE_DIR}")
+list(REMOVE_ITEM NEW_FOLLY_DEPS "${NON_EXISTENT_INCLUDE_DIR}")
+set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 
 # Have to statically link xxhash as inlining causes non-deterministic hashing, and cannot dynamically link
 # # since `XXH_state_t` which we rely on is only available when statically linking.
