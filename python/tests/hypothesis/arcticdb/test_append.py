@@ -11,6 +11,7 @@ from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext import set_config_int
 from hypothesis import given, assume, settings, strategies as st
 from itertools import chain, product, combinations
+from arcticdb.util.utils import delete_nvs
 from tests.util.mark import SLOW_TESTS_MARK
 from arcticdb.version_store._common import TimeFrame
 
@@ -261,17 +262,20 @@ def test_append_with_defragmentation(
         dynamic_strings=dynamic_strings,
         reuse_name=True,
     )
-    for num_of_rows in num_rows_per_test_cycle:
-        before_compact, index_offset = run_test(
-            lib,
-            col_per_append_df,
-            col_name_set if dynamic_schema else col_per_append_df,
-            segment_row_size,
-            df_in_str,
-            before_compact,
-            index_offset,
-            num_of_rows,
-        )
+    try: 
+        for num_of_rows in num_rows_per_test_cycle:
+            before_compact, index_offset = run_test(
+                lib,
+                col_per_append_df,
+                col_name_set if dynamic_schema else col_per_append_df,
+                segment_row_size,
+                df_in_str,
+                before_compact,
+                index_offset,
+                num_of_rows,
+            )
+    finally:
+        delete_nvs(lib)
 
 
 def test_regular_append_dynamic_schema_named_index(

@@ -96,15 +96,6 @@ if platform.system() == "Linux":
         pass
 
 
-def delete_nvs(nvs: NativeVersionStore):
-    logger.info(f"Removing data for NativeVersionStore object: {nvs.library()}")
-    try:
-        nvs.version_store.clear()
-    except Exception as e:
-        logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
-    assert nvs.list_symbols() == []
-
-
 @pytest.fixture()
 def sym(request: "pytest.FixtureRequest"):
     return request.node.name + datetime.utcnow().strftime("%Y-%m-%dT%H_%M_%S_%f")
@@ -645,8 +636,10 @@ def arctic_library_lmdb_100gb(arctic_client_lmdb_map_size_100gb, lib_name) -> Li
 
 
 @pytest.fixture
-def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
-    return basic_arctic_client.create_library(lib_name)
+def basic_arctic_library(basic_arctic_client, lib_name) -> Generator[Library, Any, Any]:
+    lib = basic_arctic_client.create_library(lib_name)
+    yield lib
+    basic_arctic_client.delete_library(lib_name)
 
 
 # endregion
@@ -657,7 +650,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Callable[..., NativeVersion
 
 
 @pytest.fixture
-def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
+def s3_store_factory_mock_storage_exception(lib_name, s3_storage) -> Generator[NativeVersionStore, Any, Any]:
     lib = s3_storage.create_version_store_factory(lib_name)
     endpoint = s3_storage.factory.endpoint
     # `rate_limit` in the uri will trigger the code injected to moto to give http 503 slow down response
@@ -906,7 +899,7 @@ def object_version_store_prune_previous(object_store_factory) -> Generator[Nativ
 @pytest.fixture(
     scope="function", params=["s3_store_factory", pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK)]
 )
-def local_object_store_factory(request):
+def local_object_store_factory(request) -> Callable[..., NativeVersionStore]:
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
@@ -944,7 +937,7 @@ def local_object_version_store_prune_previous(local_object_store_factory) -> Gen
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
     ]
 )
-def version_store_and_real_s3_basic_store_factory(request):
+def version_store_and_real_s3_basic_store_factory(request) -> Callable[..., NativeVersionStore]:
     """
     Just the version_store and real_s3 specifically for the test test_interleaved_store_read
     where the in_memory_store_factory is not designed to have this functionality.
@@ -1475,7 +1468,7 @@ def in_memory_version_store_tiny_segment(in_memory_store_factory) -> Generator[N
 
 
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
-def lmdb_or_in_memory_version_store_tiny_segment(request):
+def lmdb_or_in_memory_version_store_tiny_segment(request) -> Generator[NativeVersionStore, Any, Any]:
     return request.getfixturevalue(request.param)
 
 

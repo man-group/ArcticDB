@@ -7,6 +7,7 @@ from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
 
+from arcticdb.util.utils import delete_nvs
 from tests.util.mark import REAL_S3_TESTS_MARK
 
 
@@ -290,19 +291,22 @@ def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
     factory = azurite_storage.create_version_store_factory(lib_name)
     df = sample_dataframe(100, 0)
     lib = factory()
-    lib.write("s", df)
+    try:
+        lib.write("s", df)
 
-    blobs = azurite_storage.client.list_blobs()
-    total_size = 0
-    total_count = 0
-    for blob in blobs:
-        if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
-            total_size += blob.size
-            total_count += 1
+        blobs = azurite_storage.client.list_blobs()
+        total_size = 0
+        total_count = 0
+        for blob in blobs:
+            if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
+                total_size += blob.size
+                total_count += 1
 
-    sizes = lib.version_store.scan_object_sizes()
+        sizes = lib.version_store.scan_object_sizes()
 
-    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-    assert total_count == 1
-    assert data_size.count == total_count
-    assert data_size.compressed_size == total_size
+        data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+        assert total_count == 1
+        assert data_size.count == total_count
+        assert data_size.compressed_size == total_size
+    finally:
+        delete_nvs(lib)

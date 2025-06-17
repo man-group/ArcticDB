@@ -10,6 +10,7 @@ import pandas as pd
 import random
 
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.utils import delete_nvs
 
 
 @pytest.mark.parametrize(
@@ -29,18 +30,21 @@ def test_dynamic_bucketize_append_variable_width(
         dynamic_strings=True,
         lmdb_config={"map_size": 2**30},
     )
-    count = 0
-    df1 = get_wide_df(count, initial_col_width, max_col_width)
-    count += 1
-    lib.write(symbol, df1)
-    vit = lib.read(symbol)
-    assert_frame_equal(vit.data, df1)
-    while count < total_rows:
-        df2 = get_wide_df(count, random.randrange(max_col_width) + 1, max_col_width)
-        df1 = pd.concat([df1, df2])
-        lib.append(symbol, df2)
+    try:
+        count = 0
+        df1 = get_wide_df(count, initial_col_width, max_col_width)
         count += 1
-    res = lib.read(symbol).data
-    df1 = df1.reindex(sorted(list(df1.columns)), axis=1)
-    res = res.reindex(sorted(list(res.columns)), axis=1)
-    assert_frame_equal(res, df1)
+        lib.write(symbol, df1)
+        vit = lib.read(symbol)
+        assert_frame_equal(vit.data, df1)
+        while count < total_rows:
+            df2 = get_wide_df(count, random.randrange(max_col_width) + 1, max_col_width)
+            df1 = pd.concat([df1, df2])
+            lib.append(symbol, df2)
+            count += 1
+        res = lib.read(symbol).data
+        df1 = df1.reindex(sorted(list(df1.columns)), axis=1)
+        res = res.reindex(sorted(list(res.columns)), axis=1)
+        assert_frame_equal(res, df1)
+    finally:
+    	delete_nvs(lib)

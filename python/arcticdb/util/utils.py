@@ -13,12 +13,15 @@ import re
 import string
 import time
 import sys
+import arcticdb_ext
 from typing import Dict 
 from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
 import pandas as pd
+from responses import logger
 
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
+from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 
 
@@ -92,6 +95,22 @@ class GitHubSanitizingException(Exception):
         sanitized_message = GitHubSanitizingHandler.sanitize_message(message)
         super().__init__(sanitized_message)
 
+
+def delete_nvs(nvs: NativeVersionStore):
+    get_logger().info(f"Removing data for NativeVersionStore library_path: {nvs.library().library_path}")
+    try:
+        nvs.version_store.clear()
+    except Exception as e:
+        logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
+    remaining_symbols = []
+    try:
+        remaining_symbols = nvs.list_symbols()
+    except arcticdb_ext.exceptions.InternalException as e:
+        if "E_S3_RETRYABLE" in repr(e): # A known failure for error simulating fixtures
+            pass
+        else:
+            raise
+    assert remaining_symbols == []
 
 class  TimestampNumber:
     """

@@ -38,6 +38,7 @@ from arcticdb.version_store.library import (
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
+    REAL_GCP_TESTS_MARK,
     REAL_S3_TESTS_MARK,
     SSL_TEST_SUPPORTED,
     SSL_TEST_SUPPORTED,
@@ -419,8 +420,10 @@ def add_path_prefix(storage_fixture, prefix):
         "s3_storage",
         pytest.param("azurite_storage", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_storage", marks=REAL_GCP_TESTS_MARK),
     ],
 )
+@pytest.mark.storage
 def test_separation_between_libraries_with_prefixes(fixture, request):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when

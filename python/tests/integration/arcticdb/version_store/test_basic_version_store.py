@@ -45,6 +45,7 @@ from arcticdb.util.test import (
     config_context,
     distinct_timestamps,
 )
+from arcticdb.util.utils import delete_nvs
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
@@ -1364,12 +1365,15 @@ def test_batch_write_then_read(basic_store):
 def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
     factory = basic_store_factory
     lib = factory(symbol_list=False, segment_row_size=10)
-    df = pd.DataFrame([1, 2, 3])
-    for idx in range(10):
-        lib.version_store.clear()
-        symbols = [f"s{idx}-{i}" for i in [1, 2, 3]]
-        lib.batch_write(symbols=symbols, data_vector=[df, df, df])
-        assert set(lib.list_symbols()) == set(symbols)
+    try:
+        df = pd.DataFrame([1, 2, 3])
+        for idx in range(10):
+            lib.version_store.clear()
+            symbols = [f"s{idx}-{i}" for i in [1, 2, 3]]
+            lib.batch_write(symbols=symbols, data_vector=[df, df, df])
+            assert set(lib.list_symbols()) == set(symbols)
+    finally:
+    	delete_nvs(lib)
 
 
 @pytest.mark.storage
@@ -1377,20 +1381,22 @@ def test_batch_write_missing_keys_dedup(basic_store_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
     versions in order to refer to the corresponding keys for the deduplicated data."""
     lib = basic_store_factory(de_duplication=True)
-    assert lib.lib_cfg().lib_desc.version.write_options.de_duplication
+    try:
+        assert lib.lib_cfg().lib_desc.version.write_options.de_duplication
 
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [4, 6, 8]})
-    lib.write("s1", df1)
-    lib.write("s2", df2)
+        df1 = pd.DataFrame({"a": [3, 5, 7]})
+        df2 = pd.DataFrame({"a": [4, 6, 8]})
+        lib.write("s1", df1)
+        lib.write("s2", df2)
 
-    lib_tool = lib.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    lib_tool.remove(s1_index_key)
+        lib_tool = lib.library_tool()
+        s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+        lib_tool.remove(s1_index_key)
 
-    with pytest.raises(StorageException):
-        lib.batch_write(["s1", "s2"], [df1, df2])
-
+        with pytest.raises(StorageException):
+            lib.batch_write(["s1", "s2"], [df1, df2])
+    finally:
+    	delete_nvs(lib)
 
 @pytest.mark.storage
 def test_batch_write_metadata_missing_keys(basic_store):
@@ -1717,15 +1723,18 @@ def test_library_deletion_lmdb(basic_store):
 @pytest.mark.storage
 def test_resolve_defaults(basic_store_factory):
     lib = basic_store_factory()
-    proto_cfg = lib._lib_cfg.lib_desc.version.write_options
-    assert resolve_defaults("recursive_normalizers", proto_cfg, False) is False
-    os.environ["recursive_normalizers"] = "True"
-    assert resolve_defaults("recursive_normalizers", proto_cfg, False, uppercase=False) is True
+    try:
+        proto_cfg = lib._lib_cfg.lib_desc.version.write_options
+        assert resolve_defaults("recursive_normalizers", proto_cfg, False) is False
+        os.environ["recursive_normalizers"] = "True"
+        assert resolve_defaults("recursive_normalizers", proto_cfg, False, uppercase=False) is True
 
-    lib2 = basic_store_factory(dynamic_strings=True, reuse_name=True)
-    proto_cfg = lib2._lib_cfg.lib_desc.version.write_options
-    assert resolve_defaults("dynamic_strings", proto_cfg, False) is True
-    del os.environ["recursive_normalizers"]
+        lib2 = basic_store_factory(dynamic_strings=True, reuse_name=True)
+        proto_cfg = lib2._lib_cfg.lib_desc.version.write_options
+        assert resolve_defaults("dynamic_strings", proto_cfg, False) is True
+        del os.environ["recursive_normalizers"]
+    finally:
+    	delete_nvs(lib)    
 
 
 @pytest.mark.storage
@@ -1795,55 +1804,61 @@ def test_read_with_asof_version_for_snapshotted_version(basic_store_tombstone_an
 @pytest.mark.storage
 def test_get_tombstone_deletion_state_without_delayed_del(basic_store_factory, sym):
     lib = basic_store_factory(use_tombstones=True, delayed_deletes=False)
-    lib.write(sym, 1)
+    try:
+        lib.write(sym, 1)
 
-    lib.write(sym, 2)
+        lib.write(sym, 2)
 
-    lib.snapshot("snap")
-    lib.write(sym, 3, prune_previous_version=True)
-    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
-    # v0 and v1
-    assert len(tombstoned_version_map) == 2
-    assert tombstoned_version_map[0] is False
-    assert tombstoned_version_map[1] is True
+        lib.snapshot("snap")
+        lib.write(sym, 3, prune_previous_version=True)
+        tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+        # v0 and v1
+        assert len(tombstoned_version_map) == 2
+        assert tombstoned_version_map[0] is False
+        assert tombstoned_version_map[1] is True
 
-    lib.write(sym, 3)
-    lib.delete_version(sym, 2)
-    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
-    assert len(tombstoned_version_map) == 3
-    assert tombstoned_version_map[2] is False
+        lib.write(sym, 3)
+        lib.delete_version(sym, 2)
+        tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+        assert len(tombstoned_version_map) == 3
+        assert tombstoned_version_map[2] is False
 
-    lib.write(f"{sym}_new", 1)
-    lib.add_to_snapshot("snap", [f"{sym}_new"])
-    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
-    assert len(tombstoned_version_map) == 3
+        lib.write(f"{sym}_new", 1)
+        lib.add_to_snapshot("snap", [f"{sym}_new"])
+        tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+        assert len(tombstoned_version_map) == 3
+    finally:
+    	delete_nvs(lib)        
 
 
 @pytest.mark.storage
 def test_get_tombstone_deletion_state_with_delayed_del(basic_store_factory, sym):
     lib = basic_store_factory(use_tombstones=True, delayed_deletes=True)
-    lib.write(sym, 1)
+    try:
+        lib.write(sym, 1)
 
-    lib.write(sym, 2)
+        lib.write(sym, 2)
 
-    lib.snapshot("snap")
-    lib.write(sym, 3, prune_previous_version=True)
-    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
-    # v0 and v1
-    assert len(tombstoned_version_map) == 2
-    assert tombstoned_version_map[0] is True
-    assert tombstoned_version_map[1] is True
+        lib.snapshot("snap")
+        lib.write(sym, 3, prune_previous_version=True)
+        tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+        # v0 and v1
+        assert len(tombstoned_version_map) == 2
+        assert tombstoned_version_map[0] is True
+        assert tombstoned_version_map[1] is True
 
-    lib.write(sym, 3)
-    lib.delete_version(sym, 2)
-    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
-    assert len(tombstoned_version_map) == 3
-    assert tombstoned_version_map[2] is True
+        lib.write(sym, 3)
+        lib.delete_version(sym, 2)
+        tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+        assert len(tombstoned_version_map) == 3
+        assert tombstoned_version_map[2] is True
 
-    lib.write(f"{sym}_new", 1)
-    lib.add_to_snapshot("snap", [f"{sym}_new"])
-    tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
-    assert len(tombstoned_version_map) == 3
+        lib.write(f"{sym}_new", 1)
+        lib.add_to_snapshot("snap", [f"{sym}_new"])
+        tombstoned_version_map = lib.version_store._get_all_tombstoned_versions(sym)
+        assert len(tombstoned_version_map) == 3
+    finally:
+    	delete_nvs(lib)        
 
 
 @pytest.mark.storage
@@ -1897,18 +1912,21 @@ def test_batch_read_meta_with_tombstones(basic_store_tombstone_and_sync_passive)
 @pytest.mark.storage
 def test_batch_read_meta_with_pruning(basic_store_factory):
     lib = basic_store_factory(use_tombstones=True, prune_previous_version=True, sync_passive=True)
-    lib.write("sym1", 1, {"meta1": 1})
-    lib.write("sym1", 1, {"meta1": 2})
-    lib.write("sym1", 3, {"meta1": 3})
-    lib.write("sym2", 1, {"meta2": 1})
-    lib.write("sym2", 1, {"meta2": 2})
-    lib.write("sym2", 3, {"meta2": 3})
-    # v0 and v1 should be pruned by now.
-    results_dict = lib.batch_read_metadata(["sym1", "sym2", "sym3"])
-    assert results_dict["sym1"].metadata == {"meta1": 3}
-    assert results_dict["sym2"].metadata == {"meta2": 3}
-    assert "sym3" not in results_dict
-    assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
+    try:
+        lib.write("sym1", 1, {"meta1": 1})
+        lib.write("sym1", 1, {"meta1": 2})
+        lib.write("sym1", 3, {"meta1": 3})
+        lib.write("sym2", 1, {"meta2": 1})
+        lib.write("sym2", 1, {"meta2": 2})
+        lib.write("sym2", 3, {"meta2": 3})
+        # v0 and v1 should be pruned by now.
+        results_dict = lib.batch_read_metadata(["sym1", "sym2", "sym3"])
+        assert results_dict["sym1"].metadata == {"meta1": 3}
+        assert results_dict["sym2"].metadata == {"meta2": 3}
+        assert "sym3" not in results_dict
+        assert lib.read_metadata("sym1").metadata == results_dict["sym1"].metadata
+    finally:
+    	delete_nvs(lib)
 
 
 @pytest.mark.storage

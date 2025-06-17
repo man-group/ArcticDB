@@ -1347,6 +1347,7 @@ def test_azure_sas_token(azurite_storage_factory: StorageFixtureFactory):
             f.set_permission(read=True, write=True)
             ac = f.create_arctic()
             ac.create_library("x")
+            ac.delete_library("x")
 
 
 def test_lib_has_lib_tools_read_index(lmdb_library):
