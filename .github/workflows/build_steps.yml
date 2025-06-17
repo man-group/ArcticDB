@@ -12,7 +12,7 @@ on:
       persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
-      version_cache_full_test: {default: false, type: boolean, description: if true, tests will run with both version cache 0 and 2000000000, otherwise only 2000000000}
+      version_cache_full_test: {default: false, type: boolean, description: if true - tests will run with both version cache 0 and 2000000000 otherwise only 2000000000}
 jobs:
   compile:
     strategy:
