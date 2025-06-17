@@ -31,7 +31,6 @@ from arcticdb.exceptions import (
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
 from arcticdb.version_store import NativeVersionStore
-import arcticdb.version_store._normalization
 from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
@@ -113,6 +112,20 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     assert sym not in object_version_store.list_symbols()
 
 
+@pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
+@pytest.mark.storage
+def test_s3_breaking_chars_staged(object_version_store, breaking_char):
+    """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
+    corrupting the db.
+    """
+    sym = f"prefix{breaking_char}postfix"
+    df = sample_dataframe()
+    with pytest.raises(UserInputException):
+        object_version_store.write(sym, df, incomplete=True)
+
+    assert sym not in object_version_store.list_symbols_with_incomplete_data()
+
+
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 @pytest.mark.storage
 def test_unhandled_chars_default(object_version_store, unhandled_char):
@@ -123,6 +136,28 @@ def test_unhandled_chars_default(object_version_store, unhandled_char):
         object_version_store.write(sym, df)
     syms = object_version_store.list_symbols()
     assert sym not in syms
+
+
+@pytest.mark.parametrize("sym", [chr(0), chr(30), chr(127), chr(128), "", "l" * 255])
+@pytest.mark.storage
+def test_unhandled_chars_staged_data(object_version_store, sym):
+    """Test that by default, the problematic chars are raising an exception at staging time."""
+    df = sample_dataframe()
+    with pytest.raises(UserInputException):
+        object_version_store.write(sym, df, parallel=True)
+    assert sym not in object_version_store.list_symbols_with_incomplete_data()
+
+
+@pytest.mark.parametrize("sym", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254])
+@pytest.mark.storage
+def test_ok_chars_staged_data(object_version_store, sym):
+    """Test that by default, the problematic chars are raising an exception at staging time."""
+    df = sample_dataframe()
+    object_version_store.write(sym, df, parallel=True)
+    assert sym in object_version_store.list_symbols_with_incomplete_data()
+    object_version_store.compact_incomplete(sym, append=False, convert_int_to_float=False)
+    assert_frame_equal(object_version_store.read(sym).data, df)
+    assert sym in object_version_store.list_symbols()
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
@@ -161,6 +196,13 @@ def test_unhandled_chars_already_present_write(object_version_store, three_col_d
     object_version_store.write(sym, three_col_df(1))
     new_vitem = object_version_store.read(sym)
     assert not vitem.data.equals(new_vitem.data)
+
+    # Should still be able to use staged writes for pre-existing symbols that would fail the validation
+    staged_data = three_col_df(2)
+    object_version_store.write(sym, staged_data, parallel=True)
+    object_version_store.compact_incomplete(sym, append=False, convert_int_to_float=False)
+
+    assert_frame_equal(object_version_store.read(sym).data, staged_data)
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])

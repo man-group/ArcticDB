@@ -14,6 +14,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
+#include <arcticdb/version/version_map.hpp>
 
 namespace arcticdb::pipelines {
 struct PythonOutputFrame;
@@ -57,6 +58,7 @@ void remove_incomplete_segments(
 
 void write_parallel_impl(
     const std::shared_ptr<Store>& store,
+    const std::shared_ptr<VersionMap>& version_map,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     const WriteIncompleteOptions& options);
