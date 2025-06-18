@@ -26,6 +26,7 @@ from arcticdb.util.marks import ARCTICDB_USING_CONDA
 
 _WINDOWS = platform.system() == "Windows"
 _DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
+_MACOS = sys.platform.lower().startswith("darwin")
 
 
 def get_ephemeral_port(seed=0):
@@ -37,7 +38,9 @@ def get_ephemeral_port(seed=0):
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
-                time.sleep(30 if ARCTICDB_USING_CONDA else 20)  # Hold the port open for a while to improve the chance of collision detection
+                time.sleep(
+                    30 if (ARCTICDB_USING_CONDA or _MACOS) else 20
+                )  # Hold the port open for a while to improve the chance of collision detection
                 return port
         except OSError as e:
             print(repr(e), file=sys.stderr)
@@ -158,4 +161,4 @@ def get_ca_cert_for_testing(working_dir):
         cwd=working_dir,
         shell=True,
     )
-    return ca, key_file, cert_file, client_cert_file # Need to keep ca alive to authenticate the cert
+    return ca, key_file, cert_file, client_cert_file  # Need to keep ca alive to authenticate the cert
