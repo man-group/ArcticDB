@@ -358,8 +358,8 @@ inline std::set<StreamId> filter_by_regex(const std::set<StreamId>& results, con
         return results;
     }
     std::set<StreamId> filtered_results;
-    util::RegexPattern pattern(*opt_regex);
-    util::Regex regex{pattern};
+    util::RegexPatternUTF8 pattern(*opt_regex);
+    util::RegexUTF8 regex{pattern};
 
     // Using std::copy_if because it builds the new std::set in O(n).
     std::copy_if(results.begin(),
