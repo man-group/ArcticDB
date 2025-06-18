@@ -405,14 +405,15 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 
 void write_parallel_impl(
     const std::shared_ptr<Store>& store,
-    const std::shared_ptr<VersionMap>& version_map,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteIncompleteOptions& options) {
     // Apply validation for new symbols, but don't interfere with pre-existing symbols that would fail our modern validation.
     CheckOutcome check_outcome = verify_symbol_key(stream_id);
     if (std::holds_alternative<Error>(check_outcome)) {
-        if (auto&& [key, deleted] = get_latest_version(store, version_map, stream_id); !key) {
+        VersionMapEntry ref_entry;
+        read_symbol_ref(store, stream_id, ref_entry);
+        if (ref_entry.empty()) {
             std::get<Error>(check_outcome).throw_error();
         }
     }

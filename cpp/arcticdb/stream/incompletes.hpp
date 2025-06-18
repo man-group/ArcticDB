@@ -58,7 +58,6 @@ void remove_incomplete_segments(
 
 void write_parallel_impl(
     const std::shared_ptr<Store>& store,
-    const std::shared_ptr<VersionMap>& version_map,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     const WriteIncompleteOptions& options);
