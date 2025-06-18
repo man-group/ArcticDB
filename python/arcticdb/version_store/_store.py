@@ -2281,20 +2281,18 @@ class NativeVersionStore:
         return index_columns
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
-        if isinstance(read_result.frame_data, PandasOutputFrame):
-            frame_data = FrameData.from_cpp(read_result.frame_data)
-            data = self._normalizer.denormalize(frame_data, read_result.norm)
-            if read_result.norm.HasField("custom"):
-                data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
-        elif isinstance(read_result.frame_data, ArrowOutputFrame):
-            frame_data = read_result.frame_data
+        if isinstance(read_result.frame_data, ArrowOutputFrame):
             import pyarrow as pa
+            frame_data = read_result.frame_data
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
             data = pa.Table.from_batches(record_batches)
         else:
-            raise AssertionError("Invalid output format")
+            frame_data = FrameData.from_cpp(read_result.frame_data)
+            data = self._normalizer.denormalize(frame_data, read_result.norm)
+            if read_result.norm.HasField("custom"):
+                data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
 
         if isinstance(read_result.version, list):
             versions = []
