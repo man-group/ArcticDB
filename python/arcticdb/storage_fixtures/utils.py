@@ -35,9 +35,8 @@ def get_ephemeral_port(seed=0):
     # may get the same port! Below more sophisticated implementation uses the PID to avoid that:
     pid = os.getpid()
 
-    # use a guid to avoid collisions
-    guid = str(uuid.uuid4())
-    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000 + int(guid, 16) % 10000  # Crude hash
+    uuid_str = str(uuid.uuid4()).replace("-", "")  # Remove hyphens before converting to hex
+    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000 + int(uuid_str, 16) % 10000  # Crude hash
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
