@@ -86,9 +86,7 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
-<<<<<<< fix_file_descriptors
 logger = get_logger()
-=======
 
 # silence warnings about custom markers
 def pytest_configure(config):
@@ -96,7 +94,6 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
     config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
 
->>>>>>> master
 
 if platform.system() == "Linux":
     try:
@@ -787,18 +784,11 @@ def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory) -> Generator[Nat
 @pytest.fixture
 def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-<<<<<<< fix_file_descriptors
     nvs = nfs_backed_s3_store_factory(dynamic_strings=True,
                                       encoding_version=int(EncodingVersion.V2), name=library_name)
     yield nvs
     delete_nvs(nvs)
     
-=======
-    return nfs_backed_s3_store_factory(
-        dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name
-    )
-
->>>>>>> master
 
 @pytest.fixture
 def s3_version_store_v1(s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
