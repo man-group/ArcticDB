@@ -21,6 +21,7 @@ from typing import Union, Any
 from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 import trustme
+import uuid
 
 from arcticdb.util.marks import ARCTICDB_USING_CONDA, MACOS
 
@@ -33,7 +34,10 @@ def get_ephemeral_port(seed=0):
     # https://stackoverflow.com/a/61685162/ and multiple test runners call this function at roughly the same time, they
     # may get the same port! Below more sophisticated implementation uses the PID to avoid that:
     pid = os.getpid()
-    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000  # Crude hash
+
+    # use a guid to avoid collisions
+    guid = str(uuid.uuid4())
+    port = (pid // 1000 + pid) % 1000 + seed * 1000 + 10000 + int(guid, 16) % 10000  # Crude hash
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
@@ -91,7 +95,7 @@ class GracefulProcessUtils:
         if not _WINDOWS:
             exitcode = GracefulProcessUtils.wait(p, 2)
             if exitcode is None:
-                os.kill(p.pid, signal.SIGKILL)  # TODO (python37): use Process.kill()
+                os.kill(p.pid, signal.SIGTERM if MACOS else signal.SIGKILL)  # TODO (python37): use Process.kill()
 
 
 def wait_for_server_to_come_up(url: str, service: str, process: ProcessUnion, *, timeout=20, sleep=0.2, req_timeout=1):
