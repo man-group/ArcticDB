@@ -12,6 +12,7 @@ on:
       persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
+      version_cache_full_test: {default: false, type: boolean, description: if true - tests will run with both version cache 0 and 2000000000 otherwise only 2000000000}
 jobs:
   compile:
     strategy:
@@ -265,9 +266,11 @@ jobs:
       matrix:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
+        # Always run with both for cp311
+        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }} 
         include:
           ${{fromJSON(inputs.matrix)}}
-    name: ${{matrix.type}}${{matrix.python_deps_id}}
+    name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
     runs-on: ${{matrix.distro}}
     container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
@@ -275,7 +278,7 @@ jobs:
     services: ${{matrix.test_services}}
     env:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
-      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}
+      distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       real_tests_storage_type: ${{inputs.persistent_storage || 'no'}}
     steps:
@@ -380,6 +383,8 @@ jobs:
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
+          # Testing with 0(no version cache) and -1(will use default timeout)
+          VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

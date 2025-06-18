@@ -10,6 +10,8 @@ import time
 from typing import List
 from arcticdb import Arctic
 from arcticdb.version_store.library import WritePayload, ReadRequest
+from arcticdb.util.test import config_context
+
 import pandas as pd
 
 from benchmarks.common import *
@@ -361,3 +363,9 @@ class ModificationFunctions:
 
     def time_delete_short_wide(self, lad: LargeAppendDataModify, rows):
         self.lib_short_wide.delete("short_wide_sym")
+
+    def time_delete_over_time(self, lad: LargeAppendDataModify, rows):
+        with config_context("VersionMap.ReloadInterval", 0):
+            for i in range(100):
+                self.lib.write("delete_over_time", pd.DataFrame())
+                self.lib.delete("delete_over_time")

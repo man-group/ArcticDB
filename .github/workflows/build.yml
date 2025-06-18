@@ -38,6 +38,11 @@ on:
         description: Rewrite what tests will run or do your own pytest line if string starts with pytest ... (Example -- pytest -n auto -v --count=50 -x python/tests/compat)
         type: string
         default: ""
+      version_cache_full_test:
+        description: 'Run tests with both version cache 0 and 2000000000'
+        required: false
+        default: false
+        type: boolean
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:
   group: ${{github.ref}}
@@ -238,6 +243,7 @@ jobs:
       persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
+      version_cache_full_test: ${{inputs.version_cache_full_test || false}}
 
   cpp-test-windows:
     needs: [common_config]
@@ -256,6 +262,8 @@ jobs:
       fail-fast: false
       matrix:
         python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        include:
+          - matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: 3.${{matrix.python3}} Windows
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -265,12 +273,13 @@ jobs:
       python3: ${{matrix.python3}}
       cibw_version: ${{needs.common_config.outputs.cibuildwheel_ver}}
       cmake_preset_type: ${{needs.common_config.outputs.cmake_preset_type_resolved}}
-      matrix: ${{needs.common_config.outputs.windows_matrix}}
+      matrix: ${{toJson(matrix.matrix_override)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
       persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
       pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args || ''}}
+      version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]

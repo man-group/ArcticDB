@@ -86,7 +86,17 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
+<<<<<<< fix_file_descriptors
 logger = get_logger()
+=======
+
+# silence warnings about custom markers
+def pytest_configure(config):
+    config.addinivalue_line("markers", "storage: Mark tests related to storage functionality")
+    config.addinivalue_line("markers", "authentication: Mark tests related to authentication functionality")
+    config.addinivalue_line("markers", "pipeline: Mark tests related to pipeline functionality")
+
+>>>>>>> master
 
 if platform.system() == "Linux":
     try:
@@ -107,7 +117,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     name = re.sub(r"[^\w]", "_", request.node.name)[:30]
     pid = os.getpid()
     thread_id = threading.get_ident()
-    # There is limit to the name length, and note that without 
+    # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
     return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"
 
@@ -178,6 +188,7 @@ def lmdb_library_static_dynamic(request):
 def lmdb_library_factory(lmdb_storage, lib_name):
     def f(library_options: LibraryOptions = LibraryOptions()):
         return lmdb_storage.create_arctic().create_library(lib_name, library_options=library_options)
+
     return f
 
 
@@ -674,7 +685,9 @@ def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Callable[..., Native
 
 
 @pytest.fixture
-def mock_s3_store_with_error_simulation_factory(lib_name, mock_s3_storage_with_error_simulation) -> Callable[..., NativeVersionStore]:
+def mock_s3_store_with_error_simulation_factory(
+    lib_name, mock_s3_storage_with_error_simulation
+) -> Callable[..., NativeVersionStore]:
     return mock_s3_storage_with_error_simulation.create_version_store_factory(lib_name)
 
 
@@ -774,11 +787,18 @@ def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory) -> Generator[Nat
 @pytest.fixture
 def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
+<<<<<<< fix_file_descriptors
     nvs = nfs_backed_s3_store_factory(dynamic_strings=True,
                                       encoding_version=int(EncodingVersion.V2), name=library_name)
     yield nvs
     delete_nvs(nvs)
     
+=======
+    return nfs_backed_s3_store_factory(
+        dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name
+    )
+
+>>>>>>> master
 
 @pytest.fixture
 def s3_version_store_v1(s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
@@ -847,7 +867,7 @@ def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_ve
         return nfs_backed_s3_version_store_v2
     else:
         raise ValueError(f"Unexpected encoding version: {encoding_version}")
-    
+
 
 @pytest.fixture(scope="function")
 def mongo_version_store(mongo_store_factory) -> Generator[NativeVersionStore, Any, Any]:
@@ -1537,7 +1557,7 @@ def old_venv_and_arctic_uri(old_venv, arctic_uri):
 
     yield old_venv, arctic_uri
 
-    
+
 @pytest.fixture
 def clear_query_stats():
     yield
