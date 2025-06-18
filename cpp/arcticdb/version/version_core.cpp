@@ -1569,7 +1569,8 @@ FrameAndDescriptor read_column_stats_impl(
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
-        auto segment_in_memory = store->read(column_stats_key).get().second;
+        auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
+        auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());
