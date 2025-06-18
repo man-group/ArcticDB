@@ -81,7 +81,7 @@ namespace action_factories {
 // To allow `using namespace`
 static inline const FailureAction no_op("no_op", [](FailureType){});
 
-static FailureAction::FunctionWrapper maybe_execute(double probability, FailureAction::FunctionWrapper&& func) {
+static FailureAction::FunctionWrapper maybe_execute(double probability, FailureAction::FunctionWrapper func) {
     util::check_arg(probability >= 0 && probability <= 1.0, "Bad probability: {}", probability);
 
     return [probability, f = std::move(func)](FailureType type) mutable {
@@ -91,7 +91,7 @@ static FailureAction::FunctionWrapper maybe_execute(double probability, FailureA
         }
 
         if (probability == 1.0) {
-            std::invoke(std::move(f), type);
+            f(type);
             return;
         }
 
@@ -99,7 +99,7 @@ static FailureAction::FunctionWrapper maybe_execute(double probability, FailureA
         thread_local std::mt19937 gen(std::random_device{}());
         double rnd = dist(gen);
         if (rnd < probability) {
-            std::invoke(std::move(f), type);
+            f(type);
         }
     };
 }
@@ -117,7 +117,7 @@ static FailureAction slow_action(double probability, int slow_down_ms_min, int s
         thread_local std::uniform_int_distribution<size_t> dist(slow_down_ms_min, slow_down_ms_max);
         thread_local std::mt19937 gen(std::random_device{}());
         int sleep_ms = dist(gen);
-        ARCTICDB_INFO(log::lock(), "Testing: Sleeping for {} ms", sleep_ms);
+        ARCTICDB_INFO(log::storage(), "Testing: Sleeping for {} ms", sleep_ms);
         std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
     })};
 }
