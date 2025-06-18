@@ -14,6 +14,7 @@ from arcticdb.util.environment_setup import TestLibraryManager, LibraryType, Seq
 from arcticdb.util.utils import TimestampNumber
 from arcticdb.version_store.library import Library
 from benchmarks.common import AsvBase
+from arcticdb.util.test import config_context
 
 
 # region Setup classes
@@ -314,3 +315,10 @@ class AWSDeleteTestsFewLarge(AsvBase):
 
     def time_delete(self, cache, num_rows):
         self.lib.delete(self.symbol)
+        self.symbol_deleted = True
+
+    def time_delete_over_time(self, cache, num_rows):
+        with config_context("VersionMap.ReloadInterval", 0):
+            for i in range(25):
+                self.lib.write("delete_over_time", pd.DataFrame())
+                self.lib.delete("delete_over_time")

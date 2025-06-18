@@ -12,6 +12,12 @@ import pandas as pd
 import pytest
 
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.tasks import (
+    append_small_df,
+    snapshot_new_name,
+    append_small_df_and_prune_previous,
+    delete_snapshot,
+)
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import ManualClockVersionStore
@@ -175,6 +181,139 @@ def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, s
     lib.delete(sym)
     data_keys = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
     assert len(data_keys) == 0
+
+
+# this test also doubles up as a test for dfs with int index
+def test_delete_snapshot_after_prune_previous(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+    append_small_df(lib, sym)  # v0
+    snapshot_new_name(lib, "snap")
+    append_small_df(lib, sym)  # v1
+    append_small_df_and_prune_previous(lib, sym)  # v2
+    pre_delete_snapshot = lib.read(sym).data
+    delete_snapshot(lib, "snap")
+    post_delete_snapshot = lib.read(sym).data
+    assert_frame_equal(pre_delete_snapshot, post_delete_snapshot)
+    assert_frame_equal(pre_delete_snapshot, lib.read(sym, as_of=2).data)
+
+
+# this test also doubles up as a test for dfs with datetime index
+def test_delete_snapshot_after_update_and_prune_previous(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    assert lib._lib_cfg.lib_desc.version.write_options.delayed_deletes is False
+    idx = pd.date_range("1970-01-01", periods=100, freq="D")
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+    lib.write(sym, df)  # v0
+    snapshot_new_name(lib, "snap")
+    idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
+    lib.update(sym, df2)  # v1
+    df.update(df2)
+    assert_frame_equal(lib.read(sym).data, df)
+    idx3 = pd.date_range("1970-06-22", periods=10, freq="D")
+    df3 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx3), dtype="float")}, index=idx3)
+    lib.append(sym, df3, prune_previous_version=True)  # v2
+    final_df = pd.concat([df, df3])
+    assert_frame_equal(lib.read(sym).data, final_df)
+
+    pre_delete_snapshot = lib.read(sym).data
+    delete_snapshot(lib, "snap")
+    post_delete_snapshot = lib.read(sym).data
+    assert_frame_equal(pre_delete_snapshot, post_delete_snapshot)
+    assert_frame_equal(pre_delete_snapshot, lib.read(sym, as_of=2).data)
+    assert_frame_equal(pre_delete_snapshot, final_df)
+
+
+def test_delete_snapshot_update_with_full_overlap(lmdb_version_store, sym):
+    idx = pd.date_range("1970-01-01", periods=100, freq="D")
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+    original_df = df.copy(deep=True)
+    lmdb_version_store.write(sym, df)
+
+    lmdb_version_store.snapshot("snap")
+
+    idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
+    lmdb_version_store.update(sym, df2)
+
+    assert_frame_equal(lmdb_version_store.read(sym, 0).data, original_df)
+
+    df.update(df2)
+    assert_frame_equal(lmdb_version_store.read(sym, 1).data, df)
+
+    vit = lmdb_version_store.read(sym)
+    assert_frame_equal(vit.data, df)
+
+    lmdb_version_store.delete_version(sym, 0)
+    assert len(lmdb_version_store.list_versions()) == 2
+
+    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+    assert_frame_equal(lmdb_version_store.read(sym, 1).data, df)
+
+    idx3 = pd.date_range("1970-01-12", periods=5, freq="D")
+    df3 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx3), dtype="float")}, index=idx3)
+    lmdb_version_store.update(sym, df3)
+
+    df.update(df3)
+
+    pre_delete_snapshot = lmdb_version_store.read(sym).data
+    assert_frame_equal(pre_delete_snapshot, df)
+    assert_frame_equal(pre_delete_snapshot, lmdb_version_store.read(sym, as_of=2).data)
+
+    delete_snapshot(lmdb_version_store, "snap")
+    post_delete_snapshot = lmdb_version_store.read(sym).data
+    assert_frame_equal(pre_delete_snapshot, post_delete_snapshot)
+    assert_frame_equal(pre_delete_snapshot, lmdb_version_store.read(sym, as_of=2).data)
+    assert_frame_equal(pre_delete_snapshot, df)
+
+
+def test_delete_snapshot_update_with_partial_overlap(lmdb_version_store, sym):
+    idx = pd.date_range("1970-01-01", periods=100, freq="D")
+    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+    original_df = df.copy(deep=True)
+    lmdb_version_store.write(sym, df)
+
+    lmdb_version_store.snapshot("snap")
+
+    idx2 = pd.date_range("1970-02-12", periods=100, freq="D")
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
+    lmdb_version_store.update(sym, df2)
+
+    assert_frame_equal(lmdb_version_store.read(sym, 0).data, original_df)
+
+    # This will fix extend df to be the same as df + overlap + new data from df2
+    # and then update df with df2
+    # this way we can achieve the same result as an arcticdb update
+    df = df.combine_first(df2)
+    df.update(df2)
+    assert_frame_equal(lmdb_version_store.read(sym, 1).data, df)
+
+    res_df = lmdb_version_store.read(sym).data
+    assert_frame_equal(res_df, df)
+
+    lmdb_version_store.delete_version(sym, 0)
+    assert len(lmdb_version_store.list_versions()) == 2
+
+    assert_frame_equal(lmdb_version_store.read(sym).data, df)
+    assert_frame_equal(lmdb_version_store.read(sym, 1).data, df)
+
+    idx3 = pd.date_range("1970-03-12", periods=100, freq="D")
+    df3 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx3), dtype="float")}, index=idx3)
+    lmdb_version_store.update(sym, df3)
+
+    df = df.combine_first(df3)
+    df.update(df3)
+
+    pre_delete_snapshot = lmdb_version_store.read(sym).data
+    assert_frame_equal(pre_delete_snapshot, df)
+    assert_frame_equal(pre_delete_snapshot, lmdb_version_store.read(sym, as_of=2).data)
+
+    delete_snapshot(lmdb_version_store, "snap")
+    post_delete_snapshot = lmdb_version_store.read(sym).data
+    assert_frame_equal(pre_delete_snapshot, post_delete_snapshot)
+    assert_frame_equal(pre_delete_snapshot, lmdb_version_store.read(sym, as_of=2).data)
+    assert_frame_equal(pre_delete_snapshot, df)
 
 
 @pytest.mark.parametrize("delete_order", [[0, 1, 2], [1, 0, 2], [0, 2, 1], [1, 2, 0], [2, 0, 1], [2, 1, 0]])

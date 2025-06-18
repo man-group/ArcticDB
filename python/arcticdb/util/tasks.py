@@ -26,7 +26,7 @@ def write_small_df(lib, symbol):
 
 
 def write_small_df_and_prune_previous(lib, symbol):
-    return lib.write(symbol, sample_dataframe(size=3, seed=None), prune_previous=True)
+    return lib.write(symbol, sample_dataframe(size=3, seed=None), prune_previous_version=True)
 
 
 def append_small_df(lib, symbol):
@@ -34,7 +34,7 @@ def append_small_df(lib, symbol):
 
 
 def append_small_df_and_prune_previous(lib, symbol):
-    return lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True, prune_previous=True)
+    return lib.append(symbol, sample_dataframe(size=3, seed=None), write_if_missing=True, prune_previous_version=True)
 
 
 def delete_symbol(lib, symbol=None):
@@ -201,10 +201,10 @@ def run_scenario(func, lib, with_snapshots, verbose):
     try:
         symbol = get_symbol(func, lib)
         if verbose:
-            log.storage.info("Running function {} symbol {}".format(func.__name__, symbol))
+            log.storage.info("Tasks - Running function {} symbol {}".format(func.__name__, symbol))
         res = func(lib, symbol)
         if verbose:
-            log.storage.info("Function {} symbol {} returned {}".format(func.__name__, symbol, res))
+            log.storage.info("Tasks - Function {} symbol {} returned {}".format(func.__name__, symbol, res))
         if with_snapshots and lib.list_symbols():
             rand_id = "".join(random.choices(string.ascii_letters, k=5))
             lib.snapshot(rand_id + "snapshot" + datetime.utcnow().isoformat())
@@ -214,5 +214,5 @@ def run_scenario(func, lib, with_snapshots, verbose):
                 if (datetime.utcnow() - t).seconds > 60 * 60 * 3:
                     lib.delete_snapshot(s)
     except Exception as e:
-        log.storage.error("Running", func.__name__, "failed due to: ", e)
+        log.storage.error("Tasks - Running", func.__name__, "failed due to: ", e)
         raise e
