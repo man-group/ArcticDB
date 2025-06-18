@@ -370,7 +370,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
-            pytest_xdist_mode: "-n auto"
+            pytest_xdist_mode: "-x"
     name: 3.${{matrix.python3}} macOS
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
