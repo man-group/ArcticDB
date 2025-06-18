@@ -222,6 +222,13 @@ TEST_F(AstParsingOutputTypesTest, FilterComplexExpression) {
     ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
+TEST_F(AstParsingOutputTypesTest, FilterValue) {
+    auto value = std::make_shared<Value>(construct_value<uint16_t>(2));
+    ec.add_value("2", value);
+    ec.root_node_name_ = ValueName("2");
+    ASSERT_THROW(FilterClause({}, ec, {}), UserInputException);
+}
+
 TEST_F(AstParsingOutputTypesTest, ProjectionAbsNumeric) {
     ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("int32"), OperationType::ABS));
     ProjectClause project_clause{{"int32"}, "root", ec};
@@ -305,6 +312,17 @@ TEST_F(AstParsingOutputTypesTest, ProjectionComplexExpression) {
     auto output_schema = project_clause.modify_schema(initial_schema());
     auto stream_desc = initial_schema().stream_descriptor();
     stream_desc.add_scalar_field(DataType::INT64, "root");
+    ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
+}
+
+TEST_F(AstParsingOutputTypesTest, ProjectionValue) {
+    auto value = std::make_shared<Value>(construct_value<uint16_t>(2));
+    ec.add_value("2", value);
+    ec.root_node_name_ = ValueName("2");
+    ProjectClause project_clause{{}, "new_col", ec};
+    auto output_schema = project_clause.modify_schema(initial_schema());
+    auto stream_desc = initial_schema().stream_descriptor();
+    stream_desc.add_scalar_field(DataType::UINT16, "new_col");
     ASSERT_EQ(output_schema.stream_descriptor(), stream_desc);
 }
 
