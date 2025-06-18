@@ -364,7 +364,7 @@ jobs:
 
       - name: Run test
         run: |
-          build_tooling/monitor_opened_files.sh
+          build_tooling/monitor_opened_files.sh &
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
