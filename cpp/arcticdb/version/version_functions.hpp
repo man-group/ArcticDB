@@ -113,6 +113,14 @@ inline bool get_matching_prev_and_next_versions(
             }
         }
     }
+
+    // If we didn't find the version but there is a last version
+    // we need to pass it to the next acceptor
+    // because it might share data with the version we are looking for
+    // This is the case when we are deleting a snapshot and the version we are deleting is already deleted
+    if (!found_version && last) {
+        next_acceptor(*last);
+    }
     return found_version;
 }
 
