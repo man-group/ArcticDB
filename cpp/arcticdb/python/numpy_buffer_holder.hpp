@@ -14,23 +14,21 @@ namespace arcticdb {
 struct NumpyBufferHolder {
     TypeDescriptor type_{make_scalar_type(DataType::UNKNOWN)};
     uint8_t* ptr_{nullptr};
-    size_t bytes_{0};
+    size_t row_count_{0};
 
-    NumpyBufferHolder(TypeDescriptor type, uint8_t* ptr, size_t bytes):
+    NumpyBufferHolder(TypeDescriptor type, uint8_t* ptr, size_t row_count):
     type_(type),
     ptr_(ptr),
-    bytes_(bytes){
-        util::check(bytes_ % get_type_size(type_.data_type()) == 0,
-                    "Buffer of size {} not a multiple of type {} size {}", bytes_, type_, get_type_size(type_.data_type()));
+    row_count_(row_count){
     }
 
     explicit NumpyBufferHolder(NumpyBufferHolder&& other) {
         type_ = other.type_;
         ptr_ = other.ptr_;
-        bytes_ = other.bytes_;
+        row_count_ = other.row_count_;
         other.type_ = make_scalar_type(DataType::UNKNOWN);
         other.ptr_ = nullptr;
-        other.bytes_ = 0;
+        other.row_count_ = 0;
     }
 
     ~NumpyBufferHolder() {
@@ -39,8 +37,7 @@ struct NumpyBufferHolder {
                 if (is_object_type(type_)) {
                     if (is_array_type(type_) || !is_arrow_output_only_type(type_)) {
                         auto py_ptr = reinterpret_cast<PyObject**>(ptr_);
-                        auto num_values = bytes_ / get_type_size(type_.data_type());
-                        for (size_t idx = 0; idx < num_values; ++idx, ++py_ptr) {
+                        for (size_t idx = 0; idx < row_count_; ++idx, ++py_ptr) {
                             if (*py_ptr != nullptr) {
                                 Py_DECREF(*py_ptr);
                             } else {

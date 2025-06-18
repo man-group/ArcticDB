@@ -135,7 +135,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
             util::check(buffer.num_blocks() == 1, "Expected 1 block when creating ndarray, got {}",
                         buffer.num_blocks());
             uint8_t *ptr = buffer.blocks().at(0)->release();
-            NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, buffer.bytes());
+            NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, frame.row_count());
             auto base_obj = pybind11::cast(std::move(numpy_buffer_holder));
             return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, ptr, base_obj);
 //        } else {
