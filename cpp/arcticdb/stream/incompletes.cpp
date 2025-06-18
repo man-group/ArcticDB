@@ -410,12 +410,8 @@ void write_parallel_impl(
     const WriteIncompleteOptions& options) {
     // Apply validation for new symbols, but don't interfere with pre-existing symbols that would fail our modern validation.
     CheckOutcome check_outcome = verify_symbol_key(stream_id);
-    if (std::holds_alternative<Error>(check_outcome)) {
-        VersionMapEntry ref_entry;
-        read_symbol_ref(store, stream_id, ref_entry);
-        if (ref_entry.empty()) {
-            std::get<Error>(check_outcome).throw_error();
-        }
+    if (std::holds_alternative<Error>(check_outcome) && !store->key_exists_sync(RefKey{stream_id, KeyType::VERSION_REF})) {
+        std::get<Error>(check_outcome).throw_error();
     }
 
     if (options.sort_on_index || (options.sort_columns && !options.sort_columns->empty())) {
