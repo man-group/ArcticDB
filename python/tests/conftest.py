@@ -53,6 +53,7 @@ from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings
 from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
+from arcticdb.util.utils import delete_nvs
 from arcticdb.arctic import Arctic
 from .util.mark import (
     LMDB_TESTS_MARK,
