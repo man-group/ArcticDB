@@ -30,7 +30,7 @@ from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.version_store.library import (
     WritePayload,
@@ -1448,3 +1448,52 @@ def test_s3_checksum_on_by_env_var(s3_storage, lib_name, monkeypatch):
     monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_supported")
     with pytest.raises(Exception):
         create_library(s3_storage.arctic_uri, lib_name)
+
+
+@pytest.mark.parametrize("snap", [chr(0), chr(30), chr(127), chr(128), "", "l" * 255, "*<>"])
+def test_unhandled_chars_snapshots(arctic_library_v1, snap):
+    arctic_library = arctic_library_v1
+    df = sample_dataframe()
+    arctic_library.write("sym", df)
+    with pytest.raises(UserInputException):
+        arctic_library.snapshot(snap)
+    assert not arctic_library.list_snapshots()
+
+
+@pytest.mark.parametrize("snap", [chr(127), chr(128), "*<>"])
+def test_unhandled_chars_snapshots_validation_skipped(arctic_library_v1, snap):
+    arctic_library = arctic_library_v1
+    df = sample_dataframe()
+    arctic_library.write("sym", df)
+    with config_context("VersionStore.NoStrictSymbolCheck", 1):
+        arctic_library.snapshot(snap)
+
+    arctic_library.delete("sym")
+    assert not arctic_library.has_symbol("sym")
+
+    assert_frame_equal(arctic_library.read("sym", as_of=snap).data, df)
+    assert arctic_library.list_snapshots() == {snap: None}
+
+
+def test_empty_snapshot_name_never_ok(arctic_library_v1):
+    arctic_library = arctic_library_v1
+    df = sample_dataframe()
+    arctic_library.write("sym", df)
+    with config_context("VersionStore.NoStrictSymbolCheck", 1):
+        with pytest.raises(UserInputException):
+            arctic_library.snapshot("")
+
+    assert not arctic_library.list_snapshots()
+
+
+@pytest.mark.parametrize("snap", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254])
+def test_ok_chars_snapshots(arctic_library_v1, snap):
+    arctic_library = arctic_library_v1
+    df = sample_dataframe()
+    arctic_library.write("sym", df)
+    arctic_library.snapshot(snap)
+    arctic_library.delete("sym")
+    assert not arctic_library.has_symbol("sym")
+
+    assert_frame_equal(arctic_library.read("sym", as_of=snap).data, df)
+    assert arctic_library.list_snapshots() == {snap: None}
