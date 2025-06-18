@@ -249,6 +249,7 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
+        python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
         python/python_utils.hpp

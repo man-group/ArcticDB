@@ -20,6 +20,7 @@
 #include <arcticdb/processing/query_planner.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
+#include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
@@ -244,6 +245,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
     py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
             .def_property_readonly("data", &FrameDataWrapper::data);
+    py::class_<NumpyBufferHolder, std::shared_ptr<NumpyBufferHolder>>(version, "NumpyBufferHolder");
 
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame")

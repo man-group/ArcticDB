@@ -9,6 +9,7 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/frame_data_wrapper.hpp>
+#include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/python/python_types.hpp>
 
 #include <pybind11/pybind11.h>
@@ -130,36 +131,16 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
         } else {
             static_assert(!sizeof(data_type), "Unhandled data type");
         }
-        if constexpr((is_numeric_type(data_type) || is_bool_type(data_type)) && tag.dimension() == Dimension::Dim0) {
-            util::check(buffer.num_blocks() == 1, "Expected 1 block when creating ndarray, got {}", buffer.num_blocks());
-            auto ptr = buffer.blocks().at(0)->release();
-            const void* ptr2 = ptr;
-            auto& api = pybind11::detail::npy_api::get();
-            pybind11::dtype dt = py::dtype{dtype};
-            pybind11::detail::any_container<ssize_t> shape{frame.row_count()};
-            pybind11::detail::any_container<ssize_t> strides{esize};
-            auto tmp = reinterpret_steal<object>(api.PyArray_NewFromDescr_(
-                    api.PyArray_Type_,
-                    dt.release().ptr(),
-                    1,
-                    reinterpret_cast<Py_intptr_t *>(shape->data()),
-                    reinterpret_cast<Py_intptr_t *>(strides->data()),
-                    const_cast<void *>(ptr2),
-                    0,
-                    nullptr));
-            util::check(tmp, "panic");
-            return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, buffer.data(), anchor);
-
-
-//            auto res = py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, ptr);
-//            delete[] ptr;
-//            return res;
-        } else {
-            // Note how base is passed to the array to register the data owner.
-            // It's especially important to keep the frame data object alive for as long as the array is alive
-            // so that regular python ref counting logic handles the liveness
-            return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, buffer.data(), anchor);
-        }
+//        if constexpr((is_numeric_type(data_type) || is_bool_type(data_type)) && tag.dimension() == Dimension::Dim0) {
+            util::check(buffer.num_blocks() == 1, "Expected 1 block when creating ndarray, got {}",
+                        buffer.num_blocks());
+            uint8_t *ptr = buffer.blocks().at(0)->release();
+            NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, buffer.bytes());
+            auto base_obj = pybind11::cast(std::move(numpy_buffer_holder));
+            return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, ptr, base_obj);
+//        } else {
+//            return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, buffer.data(), anchor);
+//        }
     });
 }
 

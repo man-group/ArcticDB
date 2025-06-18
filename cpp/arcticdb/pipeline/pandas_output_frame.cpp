@@ -30,44 +30,44 @@ PandasOutputFrame::PandasOutputFrame(const SegmentInMemory &frame, OutputFormat 
 }
 
 PandasOutputFrame::~PandasOutputFrame() {
-    if(frame_.is_null())
-        return;
-
-    for (auto &column : frame_.columns()) {
-        auto dt = column->type().data_type();
-        if (is_dynamic_string_type(dt) && column->is_inflated()) {
-            auto column_data = column->data();
-            column_data.type().visit_tag([&](auto type_desc_tag) {
-                using TDT = decltype(type_desc_tag);
-                constexpr auto td = TypeDescriptor(type_desc_tag);
-                if constexpr (is_object_type(td)) {
-                    if constexpr(is_array_type(td)) {
-                        auto it = column_data.buffer().iterator(sizeof(PyObject*));
-                        while(!it.finished()) {
-                            if (reinterpret_cast<PyObject*>(it.value()) != nullptr) {
-                                Py_DECREF(reinterpret_cast<PyObject*>(it.value()));
-                            } else {
-                                log::version().error("Unexpected nullptr to DecRef in PandasOutputFrame destructor");
-                            }
-                            it.next();
-                        }
-                    } else if constexpr (!is_arrow_output_only_type(td)) {
-                        while (auto block = column_data.next<TDT>()) {
-                            for (auto item : *block) {
-                                if (reinterpret_cast<PyObject*>(item) != nullptr) {
-                                    Py_DECREF(reinterpret_cast<PyObject*>(item));
-                                } else {
-                                    log::version().error("Unexpected nullptr to DecRef in PandasOutputFrame destructor");
-                                }
-                            }
-                        }
-                    } else {
-                        log::version().error("Unexpected arrow output format seen in PandasOutputFrame");
-                    }
-                }
-            });
-        }
-    }
+//    if(frame_.is_null())
+//        return;
+//
+//    for (auto &column : frame_.columns()) {
+//        auto dt = column->type().data_type();
+//        if (is_dynamic_string_type(dt) && column->is_inflated()) {
+//            auto column_data = column->data();
+//            column_data.type().visit_tag([&](auto type_desc_tag) {
+//                using TDT = decltype(type_desc_tag);
+//                constexpr auto td = TypeDescriptor(type_desc_tag);
+//                if constexpr (is_object_type(td)) {
+//                    if constexpr(is_array_type(td)) {
+//                        auto it = column_data.buffer().iterator(sizeof(PyObject*));
+//                        while(!it.finished()) {
+//                            if (reinterpret_cast<PyObject*>(it.value()) != nullptr) {
+//                                Py_DECREF(reinterpret_cast<PyObject*>(it.value()));
+//                            } else {
+//                                log::version().error("Unexpected nullptr to DecRef in PandasOutputFrame destructor");
+//                            }
+//                            it.next();
+//                        }
+//                    } else if constexpr (!is_arrow_output_only_type(td)) {
+//                        while (auto block = column_data.next<TDT>()) {
+//                            for (auto item : *block) {
+//                                if (reinterpret_cast<PyObject*>(item) != nullptr) {
+//                                    Py_DECREF(reinterpret_cast<PyObject*>(item));
+//                                } else {
+//                                    log::version().error("Unexpected nullptr to DecRef in PandasOutputFrame destructor");
+//                                }
+//                            }
+//                        }
+//                    } else {
+//                        log::version().error("Unexpected arrow output format seen in PandasOutputFrame");
+//                    }
+//                }
+//            });
+//        }
+//    }
 }
 
 std::shared_ptr<FrameDataWrapper> PandasOutputFrame::arrays(py::object &ref) {
