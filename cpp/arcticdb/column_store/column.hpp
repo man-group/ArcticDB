@@ -807,14 +807,18 @@ public:
                                std::forward<functor>(f));
             }
         } else if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
-            // Both sparse, only project rows in the intersection of on-bits from both sparse maps
-            auto left_accessor = random_accessor<left_input_tdt>(&left_input_data);
-            auto right_accessor = random_accessor<right_input_tdt>(&right_input_data);
-            // TODO: experiment with more efficient bitset traversal methods
-            // https://github.com/tlk00/BitMagic/tree/master/samples/bvsample25
+            auto left_it = left_input_data.cbegin<left_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
+            auto right_it = right_input_data.cbegin<right_input_tdt, IteratorType::ENUMERATED, IteratorDensity::SPARSE>();
             auto end_bit = output_column.sparse_map().end();
             for (auto set_bit = output_column.sparse_map().first(); set_bit < end_bit; ++set_bit) {
-                *output_it++ = f(left_accessor.at(*set_bit), right_accessor.at(*set_bit));
+                const auto idx = *set_bit;
+                while (left_it->idx() != idx) {
+                    ++left_it;
+                }
+                while (right_it->idx() != idx) {
+                    ++right_it;
+                }
+                *output_it++ = f(left_it->value(), right_it->value());
             }
         } else if (left_input_column.is_sparse() && !right_input_column.is_sparse()) {
             // One sparse, one dense. Use the enumerating forward iterator over the sparse column as it is more efficient than random access
