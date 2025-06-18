@@ -254,7 +254,7 @@ class GcpS3Bucket(S3Bucket):
 
 
 def check_bucket(sff: Union['BaseS3StorageFixtureFactory', 'BaseGCPStorageFixtureFactory']):
-    s3_tool = S3Tool(sff.default_bucket, sff.default_key.user_name, sff.default_key.secret, sff.endpoint)
+    s3_tool = S3Tool(sff.default_bucket, sff.default_key.id, sff.default_key.secret, sff.endpoint)
     content = s3_tool.list_bucket(sff.default_prefix)
 
     logger.warning(f"Total objects left: {len(content)}")
