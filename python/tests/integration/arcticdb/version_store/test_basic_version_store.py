@@ -123,7 +123,7 @@ def test_s3_breaking_chars_staged(object_version_store, breaking_char):
     with pytest.raises(UserInputException):
         object_version_store.write(sym, df, incomplete=True)
 
-    assert sym not in object_version_store.list_symbols_with_incomplete_data()
+    assert not object_version_store.list_symbols_with_incomplete_data()
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
@@ -145,13 +145,12 @@ def test_unhandled_chars_staged_data(object_version_store, sym):
     df = sample_dataframe()
     with pytest.raises(UserInputException):
         object_version_store.write(sym, df, parallel=True)
-    assert sym not in object_version_store.list_symbols_with_incomplete_data()
+    assert not object_version_store.list_symbols_with_incomplete_data()
 
 
 @pytest.mark.parametrize("sym", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254])
 @pytest.mark.storage
 def test_ok_chars_staged_data(object_version_store, sym):
-    """Test that by default, the problematic chars are raising an exception at staging time."""
     df = sample_dataframe()
     object_version_store.write(sym, df, parallel=True)
     assert sym in object_version_store.list_symbols_with_incomplete_data()
@@ -203,6 +202,30 @@ def test_unhandled_chars_already_present_write(object_version_store, three_col_d
     object_version_store.compact_incomplete(sym, append=False, convert_int_to_float=False)
 
     assert_frame_equal(object_version_store.read(sym).data, staged_data)
+
+
+@pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
+@pytest.mark.parametrize("staged", (True, False))
+@pytest.mark.storage
+def test_unhandled_chars_already_present_on_deleted_symbol(object_version_store, three_col_df, unhandled_char, staged):
+    sym = f"prefix{unhandled_char}postfix"
+    with pytest.raises(UserInputException):
+        object_version_store.write(sym, three_col_df())  # reasonableness check - the sym we're using should fail the validation checks
+
+    with config_context("VersionStore.NoStrictSymbolCheck", 1):
+        object_version_store.write(sym, three_col_df())
+
+    object_version_store.delete(sym)
+
+    # Should still be able to use writes for pre-existing symbols that would fail the validation, even if they are deleted
+    data = three_col_df(2)
+    if staged:
+        object_version_store.write(sym, data, parallel=True)
+        object_version_store.compact_incomplete(sym, append=False, convert_int_to_float=False)
+    else:
+        object_version_store.write(sym, data)
+
+    assert_frame_equal(object_version_store.read(sym).data, data)
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
