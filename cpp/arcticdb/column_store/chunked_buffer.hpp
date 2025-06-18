@@ -95,10 +95,6 @@ class ChunkedBufferImpl {
     explicit ChunkedBufferImpl(entity::AllocationType allocation_type) :
             allocation_type_(allocation_type) {}
 
-    explicit ChunkedBufferImpl(size_t size) {
-        reserve(size);
-    }
-
     ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) :
             allocation_type_(allocation_type) {
         if(allocation_type == entity::AllocationType::DETACHABLE) {

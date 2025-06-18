@@ -294,7 +294,7 @@ void decode_or_expand(
             const auto &ndarray = encoded_field_info.ndarray();
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
 
-            ChunkedBuffer sparse{bytes};
+            ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
             source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
