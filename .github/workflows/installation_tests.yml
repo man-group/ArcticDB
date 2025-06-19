@@ -95,8 +95,15 @@ jobs:
 
     steps:
 
+    - name: ulimit -a
+      if: ${{ always() }}
+      shell: bash    
+      run: |
+        ulimit -a    
+
     - name: Set day of week
       id: set_day
+      shell: bash
       run: |
         d=$(date +'%a')
         echo $d
