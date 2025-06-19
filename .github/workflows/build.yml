@@ -75,16 +75,17 @@ jobs:
           echo "Storage type calculated for scheduled job: $_storage"
           if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
             echo "Workflow not triggered by schedule."
-            echo "inputs.persistent_storage=[$$INPUT_STORAGE]"
+            echo "inputs.persistent_storage=[$INPUT_STORAGE]"
             if [[ -z "${INPUT_STORAGE+x}" ]]; then
+              echo "INPUT_STORAGE" not defined
               _storage='no'
             else
+              echo "INPUT_STORAGE" is defined
               _storage=$INPUT_STORAGE
             fi
           fi
           echo "Final storage type for workflow execution: $_storage"
           echo "storage=$_storage" >> $GITHUB_OUTPUT
-
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
