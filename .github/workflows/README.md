@@ -149,7 +149,7 @@ This logic is used in [build.yml](build.yml).
 <tr><th>inputs.cibw_image_tag</th><td>Linux only. As built by cibw_docker_image.yml workflow</td>
 <tr><th>inputs.cibw_version</th><td>Follower only. Must match the cibw_image_tag</td>
 <tr><th>inputs.python_deps_ids</th><td>Follower test matrix parameter. JSON string.</td>
-<tr><th>inputs.python3</th><td>Specifies the Python 3 minor version (e.g. 6, 7, 8, etc.)</td>
+<tr><th>inputs.python3</th><td>Specifies the Python 3 minor version (e.g. 8, 9, 10, etc.)</td>
 </table>
 
 ## [tag.yml](tag.yml)

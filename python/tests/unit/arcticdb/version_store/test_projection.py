@@ -10,6 +10,7 @@ import pandas as pd
 import pytest
 
 from arcticdb_ext.exceptions import InternalException, UserInputException
+from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
 
@@ -69,6 +70,24 @@ def test_project_string_unary_arithmetic(lmdb_version_store_v1):
     q = q.apply("b", -q["a"])
     with pytest.raises(UserInputException):
         lib.read(symbol, query_builder=q)
+
+
+@pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=3)])
+@pytest.mark.parametrize("value", [5, "hello"])
+def test_project_fixed_value(lmdb_version_store_tiny_segment, index, value):
+    lib = lmdb_version_store_tiny_segment
+    sym = "test_project_fixed_value"
+    df = pd.DataFrame({"col1": [0, 1, 2], "col2": [3, 4, 5], "col3": [6, 7, 8]}, index=index)
+    lib.write(sym, df)
+    df["new_col"] = value
+    q = QueryBuilder().apply("new_col", value)
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(df, received, check_dtype=False)
+
+
+def test_project_value_set():
+    with pytest.raises(ArcticNativeException):
+        QueryBuilder().apply("new_col", [0, 1, 2])
 
 
 def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
@@ -150,3 +169,21 @@ def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_sc
     q = q.apply("projected_col", q["col_to_project"] * 2)
     received = lib.read(symbol, query_builder=q).data
     assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("index", [None, "timeseries"])
+@pytest.mark.parametrize("value", [5, "hello"])
+def test_project_fixed_value_dynamic(lmdb_version_store_dynamic_schema_v1, index, value):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_project_fixed_value_dynamic"
+    df0 = pd.DataFrame({"col1": [0, 0.1, 0.2], "col2": [0.3, 0.4, 0.5]}, index=pd.date_range("2025-01-01", periods=3) if index == "timeseries" else None)
+    df1 = pd.DataFrame({"col2": [0.6, 0.7, 0.8]}, index=pd.date_range("2025-01-04", periods=3) if index == "timeseries" else None)
+    lib.write(sym, df0)
+    lib.append(sym, df1)
+    expected = pd.concat([df0, df1])
+    expected["new_col"] = value
+    if index is None:
+        expected.index = pd.RangeIndex(6)
+    q = QueryBuilder().apply("new_col", value)
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received, check_dtype=False)

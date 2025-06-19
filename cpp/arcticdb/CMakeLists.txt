@@ -921,6 +921,7 @@ if(${TEST})
             codec/test/test_encode_field_collection.cpp
             codec/test/test_segment_header.cpp
             codec/test/test_encoded_field.cpp
+            column_store/test/test_chunked_buffer.cpp
             column_store/test/ingestion_stress_test.cpp
             column_store/test/test_column.cpp
             column_store/test/test_column_data_random_accessor.cpp
@@ -1101,7 +1102,6 @@ if(${TEST})
             column_store/test/rapidcheck_column.cpp
             column_store/test/rapidcheck_column_data_random_accessor.cpp
             column_store/test/rapidcheck_column_map.cpp
-            column_store/test/test_chunked_buffer.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
             util/test/rapidcheck_decimal.cpp

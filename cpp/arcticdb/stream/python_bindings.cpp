@@ -378,6 +378,12 @@ void register_stream_bindings(py::module &m) {
             .def_property_readonly("row_count", &TickReader::row_count)
             .def("add_segment", &TickReader::add_segment)
             .def("at", &TickReader::at);
+
+    m.def("is_symbol_key_valid", [](const StreamId& symbol_key) {
+        return std::holds_alternative<std::monostate>(verify_symbol_key(symbol_key));
+    });
+
+    m.attr("MAX_SYMBOL_LENGTH") = MAX_SYMBOL_LENGTH;
 }
 
 } // namespace arcticdb::stream

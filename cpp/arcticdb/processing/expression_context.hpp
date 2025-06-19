@@ -58,7 +58,7 @@ struct ExpressionContext {
     ConstantMap<ExpressionNode> expression_nodes_;
     ConstantMap<Value> values_;
     ConstantMap<ValueSet> value_sets_;
-    ExpressionName root_node_name_;
+    VariantNode root_node_name_;
     bool dynamic_schema_{false};
 };
 

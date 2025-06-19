@@ -46,17 +46,6 @@ def test_stage(lmdb_storage, lib_name, v2_api_enabled, finalize_mode):
     expected_df = pd.concat([not_staged] + data_to_stage) if finalize_mode is StagedDataFinalizeMethod.APPEND else pd.concat(data_to_stage)
     assert_frame_equal(lib.read(sym).data, expected_df, check_freq=False)
 
-def atom_key_equal(l, r):
-    return (
-        l.version_id == r.version_id and
-        l.creation_ts == r.creation_ts and
-        l.content_hash == r.content_hash and
-        l.start_index == r.start_index and
-        l.end_index == r.end_index and
-        l.type == r.type and
-        l.id == r.id
-    )
-
 def stage_result_worker(stage_result, result_queue):
     assert stage_result._version == 0
     assert len(stage_result._staged_segments) == 2
@@ -78,4 +67,5 @@ def test_stage_result_pickle(lmdb_storage, lib_name):
     keys_in = stage_result_in._staged_segments
     keys_out = stage_result_out._staged_segments
 
-    assert len(keys_in) == len(keys_out) and all(atom_key_equal(a, b) for a, b in zip(keys_in, keys_out))
+    assert keys_in == keys_out
+    

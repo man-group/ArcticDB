@@ -20,7 +20,7 @@ import time
 import attr
 from functools import wraps
 
-from tests.util.mark import SHORTER_LOGS
+from arcticdb.util.marks import SHORTER_LOGS
 
 try:
     from pandas.errors import UndefinedVariableError

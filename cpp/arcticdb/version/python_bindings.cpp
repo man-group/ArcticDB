@@ -166,7 +166,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         return py::make_tuple(key.id(), key.version_id(), key.creation_ts(), key.content_hash(), key.start_index(), key.end_index(), key.type());
     },[](py::tuple t) {
         if (t.size() != 7)
-            throw std::runtime_error("Invalid state!");
+            throw std::runtime_error("Invalid AtomKey pickle object!");
 
         AtomKey key(t[0].cast<StreamId>(), t[1].cast<VersionId>(), t[2].cast<timestamp>(),
             t[3].cast<ContentHash>(), t[4].cast<IndexValue>(), t[5].cast<IndexValue>(),
@@ -348,7 +348,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             },
             [](py::tuple t) {
                 if (t.size() != 2)
-                    throw std::runtime_error("Invalid state!");
+                    throw std::runtime_error("Invalid StageResult pickle object!");
 
                 StageResult p(t[0].cast<std::vector<AtomKey>>());
                 p.version = t[1].cast<uint64_t>();

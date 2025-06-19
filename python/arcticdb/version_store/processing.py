@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+from __future__ import annotations
 from collections import namedtuple
 import copy
 from dataclasses import dataclass
@@ -867,9 +868,7 @@ class QueryBuilder:
         self._python_clauses = self._python_clauses + [PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns, origin=origin)]
         return self
 
-    # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
-    # supported
-    def then(self, other):
+    def then(self, other : QueryBuilder):
         """
         Applies processing specified in other after any processing already defined for this QueryBuilder.
 
@@ -887,9 +886,7 @@ class QueryBuilder:
         self._python_clauses = self._python_clauses + other._python_clauses
         return self
 
-    # TODO: specify type of other must be QueryBuilder with from __future__ import annotations once only Python 3.7+
-    # supported
-    def prepend(self, other):
+    def prepend(self, other : QueryBuilder):
         """
         Applies processing specified in other before any processing already defined for this QueryBuilder.
 
@@ -1248,6 +1245,13 @@ def visit_expression(expr):
     expression_context = _ExpressionContext()
     input_columns = set()
     valueset_keys = dict()
-    _visit(expr)
-    expression_context.root_node_name = _ExpressionName(expr.get_name())
+    if isinstance(expr, ExpressionNode):
+        _visit(expr)
+        expression_context.root_node_name = _ExpressionName(expr.get_name())
+    elif isinstance(expr, (np.ndarray, list)):
+        raise ArcticNativeException("Query cannot create a new column from a list/set/array of values")
+    else:
+        key = to_string(expr)
+        expression_context.add_value(key, create_value(expr))
+        expression_context.root_node_name = _ValueName(key)
     return input_columns, expression_context

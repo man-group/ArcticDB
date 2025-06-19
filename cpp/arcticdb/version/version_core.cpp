@@ -94,8 +94,13 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     bool validate_index
     ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
-    if (version_id == 0)
-        verify_symbol_key(frame->desc.id());
+    if (version_id == 0) {
+        auto check_outcome = verify_symbol_key(frame->desc.id());
+        if (std::holds_alternative<Error>(check_outcome)) {
+            std::get<Error>(check_outcome).throw_error();
+        }
+    }
+
     // Slice the frame according to the write options
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
@@ -2224,15 +2229,6 @@ folly::Future<SymbolProcessingResult> read_and_process(
 } //namespace arcticdb::version_store
 
 namespace arcticdb {
-
-Error::Error(folly::Function<void(std::string)> raiser, std::string msg)
-    : raiser_(std::move(raiser)), msg_(std::move(msg)) {
-
-}
-
-void Error::throw_error() {
-    raiser_(msg_);
-}
 
 void remove_written_keys(Store* const store, CompactionWrittenKeys&& written_keys) {
     log::version().debug("Error during compaction, removing {} keys written before failure", written_keys.size());

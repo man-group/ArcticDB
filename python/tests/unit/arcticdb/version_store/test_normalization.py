@@ -274,8 +274,6 @@ def test_write_tz(lmdb_version_store, sym, tz):
             # We convert all timezones to pytz, so we expect to convert to a pytz timezone.
             expected_df.index = expected_df.index.tz_convert(pytz.timezone(str(tz)))
     assert_frame_equal(expected_df, result)
-    if tz == du.tz.gettz("UTC") and sys.version_info < (3, 7):
-        pytest.skip("Timezone files don't seem to have ever worked properly on Python 3.6")
     start_ts, end_ts = lmdb_version_store.get_timerange_for_symbol(sym)
     assert isinstance(start_ts, datetime.datetime)
     assert isinstance(end_ts, datetime.datetime)

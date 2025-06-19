@@ -17,6 +17,7 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
+#include <arcticdb/version/version_functions.hpp>
 
 namespace arcticdb {
 
@@ -407,6 +408,12 @@ std::vector<AtomKey> write_parallel_impl(
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteIncompleteOptions& options) {
+    // Apply validation for new symbols, but don't interfere with pre-existing symbols that would fail our modern validation.
+    CheckOutcome check_outcome = verify_symbol_key(stream_id);
+    if (std::holds_alternative<Error>(check_outcome) && !store->key_exists_sync(RefKey{stream_id, KeyType::VERSION_REF})) {
+        std::get<Error>(check_outcome).throw_error();
+    }
+
     const bool should_sort = options.sort_on_index || (options.sort_columns && !options.sort_columns->empty());
     auto write_incomplete_func = should_sort ? &write_incomplete_frame_with_sorting : &write_incomplete_frame;
     return write_incomplete_func(store, stream_id, frame, options).get();
