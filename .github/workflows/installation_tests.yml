@@ -92,6 +92,28 @@ jobs:
 
     steps:
 
+    - name: ulimit -a
+      if: ${{ always() }}
+      shell: bash    
+      run: |
+        ulimit -a    
+
+    - name: Set day of week
+      id: set_day
+      shell: bash
+      run: |
+        d=$(date +'%a')
+        echo $d
+        echo "day=$d" >> $GITHUB_OUTPUT
+
+    - name: Run on Monday and Thursday
+      if: ${{ steps.set_day.outputs.day == 'Mon' || steps.set_day.outputs.day == 'Thu' }}
+      run: echo "This step runs on Monday and Thursday"
+
+    - name: Run on Tuesday and Friday
+      if: ${{ steps.set_day.outputs.day == 'Tue' || steps.set_day.outputs.day == 'Fri' }}
+      run: echo "This step runs on Tuesday and Friday"
+ 
     - name: When On Schedule - Override the arcticdb version based on hour of execution
       # Only when executed on schedule this step will be triggered
       # Based on the hour of execution a specific version will be assigned
@@ -135,6 +157,12 @@ jobs:
     - name: Checkout code
       if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/checkout@v3
+
+    - name: ulimit -a
+      if: ${{ always() }}
+      shell: bash -l {0}      
+      run: |
+        ulimit -a
 
     - name: Set up Python
       if: ${{ env.SKIP_JOB != 'true' }}
