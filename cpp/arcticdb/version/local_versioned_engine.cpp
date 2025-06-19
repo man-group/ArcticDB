@@ -1033,8 +1033,7 @@ StageResult LocalVersionedEngine::write_parallel_frame(
         .sort_on_index=sort_on_index,
         .sort_columns=sort_columns};
     auto staged_keys = write_parallel_impl(store_, stream_id, frame, options);
-    auto stage_result = StageResult(std::move(staged_keys));
-    return stage_result;
+    return StageResult(std::move(staged_keys));
 }
 
 void LocalVersionedEngine::add_to_symbol_list_on_compaction(

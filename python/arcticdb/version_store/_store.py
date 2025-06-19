@@ -26,13 +26,14 @@ from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import SortedValue
+from arcticdb_ext.version_store import SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb_ext import get_config_int
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -529,9 +530,14 @@ class NativeVersionStore:
             norm_failure_options_msg=norm_failure_options_msg,
         )
         if isinstance(item, NPDDataFrame):
-            self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+            is_v2_stage_api_enabled = get_config_int("Stage.IsV2ApiEnabled") == 1
+            result = self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+            if is_v2_stage_api_enabled:
+                return result
+            return None
         else:
             log.warning("The data could not be normalized to an ArcticDB format and has not been written")
+            return None
 
     def write(
         self,
@@ -2216,6 +2222,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         delete_staged_data_on_failure: bool = False,
+        _stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel

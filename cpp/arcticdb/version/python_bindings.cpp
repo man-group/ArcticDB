@@ -162,7 +162,18 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     .def(pybind11::self != pybind11::self)
     .def("__repr__", &AtomKey::view)
     .def(py::self < py::self)
-    ;
+    .def(py::pickle([] (const AtomKey& key) {
+        return py::make_tuple(key.id(), key.version_id(), key.creation_ts(), key.content_hash(), key.start_index(), key.end_index(), key.type());
+    },[](py::tuple t) {
+        if (t.size() != 7)
+            throw std::runtime_error("Invalid state!");
+
+        AtomKey key(t[0].cast<StreamId>(), t[1].cast<VersionId>(), t[2].cast<timestamp>(),
+            t[3].cast<ContentHash>(), t[4].cast<IndexValue>(), t[5].cast<IndexValue>(),
+            t[6].cast<KeyType>());
+        return key;
+    }
+    ));
 
     py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
     .def(py::init())
@@ -326,6 +337,24 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end_index", &DescriptorItem::end_index)
         .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
         .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
+
+    py::class_<StageResult>(version, "StageResult")
+        .def(py::init([]() { return StageResult({}); }))
+	.def_property_readonly("_staged_segments", [](const StageResult& self) { return self.staged_segments; })
+	.def_property_readonly("_version", [](const StageResult& self) { return self.version; })
+        .def(py::pickle(
+            [](const StageResult& s) {
+                return py::make_tuple(s.staged_segments, s.version);
+            },
+            [](py::tuple t) {
+                if (t.size() != 2)
+                    throw std::runtime_error("Invalid state!");
+
+                StageResult p(t[0].cast<std::vector<AtomKey>>());
+                p.version = t[1].cast<uint64_t>();
+                return p;
+            }
+        ));
 
     py::class_<pipelines::FrameSlice, std::shared_ptr<pipelines::FrameSlice>>(version, "FrameSlice")
         .def_property_readonly("col_range", &pipelines::FrameSlice::columns)
