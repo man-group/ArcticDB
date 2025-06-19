@@ -59,6 +59,7 @@ jobs:
         id: set-storage
         shell: bash
         run: |
+          _storage='no'
           day=$(date +'%a')
           echo "Today is $day"
           if [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
@@ -69,7 +70,13 @@ jobs:
             echo "UNDETERMINED RESULT for this day"
           exit 1
           fi
-          echo "Storage type selected: $_storage"
+          echo "Storage type calculated for scheduled job: $_storage"
+          if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
+            echo "Workflow not triggered by schedule. Therefore storage type is 'no' (LMDB)"
+            _storage='no'
+            echo ""
+          fi
+          echo "Final storage type for workflow execution: $_storage"
           echo "storage=$_storage" >> $GITHUB_OUTPUT
 
   cibw_docker_image:
