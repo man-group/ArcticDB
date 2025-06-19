@@ -259,6 +259,7 @@ def check_bucket(sff: Union['BaseS3StorageFixtureFactory', 'BaseGCPStorageFixtur
 
     logger.warning(f"Total objects left: {len(content)}")
     logger.warning(f"First 100: {content[0:100]}")
+    logger.warning(f"BUCKET: {sff.default_bucket}")
     left_from = set()
     for key in content:
         library_name = key.split("/")[1] # get the name from object

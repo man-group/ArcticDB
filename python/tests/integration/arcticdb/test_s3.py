@@ -16,6 +16,7 @@ import pytest
 import pandas as pd
 import sys
 
+from arcticdb.util.utils import delete_nvs
 from arcticdb_ext.exceptions import StorageException
 from arcticdb_ext.storage import NoDataFoundException
 
@@ -79,19 +80,22 @@ def test_s3_running_on_aws_fast_check(lib_name, s3_storage_factory, run_on_aws):
 def test_nfs_backed_s3_storage(lib_name, nfs_clean_bucket):
     # Given
     lib = nfs_clean_bucket.create_version_store_factory(lib_name)()
+    
+    try:
+        # When
+        lib.write("s", data=create_df())
 
-    # When
-    lib.write("s", data=create_df())
+        # Then - should be written in "bucketized" structure
+        bucket = nfs_clean_bucket.get_boto_bucket()
+        objects = bucket.objects.all()
 
-    # Then - should be written in "bucketized" structure
-    bucket = nfs_clean_bucket.get_boto_bucket()
-    objects = bucket.objects.all()
+        # Expect one or two repetitions of 3 digit "buckets" in the object names
+        bucketized_pattern = r".*/(sl|tdata|tindex|ver|vref)/([0-9]{1,3}/){1,2}.*"
 
-    # Expect one or two repetitions of 3 digit "buckets" in the object names
-    bucketized_pattern = r".*/(sl|tdata|tindex|ver|vref)/([0-9]{1,3}/){1,2}.*"
-
-    for o in objects:
-        assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
+        for o in objects:
+            assert re.match(bucketized_pattern, o.key), f"Object {o.key} does not match pattern {bucketized_pattern}"
+    finally:
+        delete_nvs(lib)
 
 
 def read_repeatedly(version_store, queue: Queue):
@@ -154,13 +158,16 @@ def test_read_path_with_dot(lib_name, s3_storage_dots_in_path):
     factory = s3_storage_dots_in_path.create_version_store_factory(lib_name)
     lib = factory()
 
-    # When
-    expected = create_df()
-    lib.write("s", data=expected)
+    try:
+        # When
+        expected = create_df()
+        lib.write("s", data=expected)
 
-    # Then - should be readable
-    res = lib.read("s").data
-    pd.testing.assert_frame_equal(res, expected)
+        # Then - should be readable
+        res = lib.read("s").data
+        pd.testing.assert_frame_equal(res, expected)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.fixture(scope="function")
@@ -171,34 +178,38 @@ def wrapped_s3_storage_bucket(wrapped_s3_storage_factory):
 
 def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     lib = wrapped_s3_storage_bucket.create_version_store_factory(lib_name)()
-    lib.write("s", data=create_df())
-    test_bucket_name = wrapped_s3_storage_bucket.bucket
 
-    with config_context("S3ClientTestWrapper.EnableFailures", 1):
-        # Depending on the reload interval, the error might be different
-        # Setting the reload interval to 0 will make the error be "StorageException"
-        with config_context("VersionMap.ReloadInterval", 0):
-            with pytest.raises(StorageException, match="Network error: S3Error#99"):
+    try:
+        lib.write("s", data=create_df())
+        test_bucket_name = wrapped_s3_storage_bucket.bucket
+
+        with config_context("S3ClientTestWrapper.EnableFailures", 1):
+            # Depending on the reload interval, the error might be different
+            # Setting the reload interval to 0 will make the error be "StorageException"
+            with config_context("VersionMap.ReloadInterval", 0):
+                with pytest.raises(StorageException, match="Network error: S3Error#99"):
+                    lib.read("s")
+
+            with config_context_string("S3ClientTestWrapper.FailureBucket", test_bucket_name):
+                with pytest.raises(StorageException, match="Network error: S3Error#99"):
+                    lib.write("s", data=create_df())
+
+            with config_context_string("S3ClientTestWrapper.FailureBucket", f"{test_bucket_name},non_existent_bucket"):
+                with pytest.raises(StorageException, match="Network error: S3Error#99"):
+                    lib.write("s", data=create_df())
+
+            # There should be no failures
+            # given that we should not be simulating any failures for the test bucket
+            with config_context_string("S3ClientTestWrapper.FailureBucket", "non_existent_bucket"):
                 lib.read("s")
-
-        with config_context_string("S3ClientTestWrapper.FailureBucket", test_bucket_name):
-            with pytest.raises(StorageException, match="Network error: S3Error#99"):
                 lib.write("s", data=create_df())
 
-        with config_context_string("S3ClientTestWrapper.FailureBucket", f"{test_bucket_name},non_existent_bucket"):
-            with pytest.raises(StorageException, match="Network error: S3Error#99"):
-                lib.write("s", data=create_df())
-
-        # There should be no failures
-        # given that we should not be simulating any failures for the test bucket
-        with config_context_string("S3ClientTestWrapper.FailureBucket", "non_existent_bucket"):
-            lib.read("s")
-            lib.write("s", data=create_df())
-
-    # There should be no problems after the failure simulation has been turned off
-    lib.read("s")
-    lib.write("s", data=create_df())
-
+        # There should be no problems after the failure simulation has been turned off
+        lib.read("s")
+        lib.write("s", data=create_df())
+    finally:
+        delete_nvs(lib)
+        
 
 @pytest.fixture(scope="session")
 def test_prefix():
@@ -216,19 +227,23 @@ def storage_bucket(test_prefix, request):
 
 def test_library_get_key_path(lib_name, storage_bucket, test_prefix):
     lib = storage_bucket.create_version_store_factory(lib_name)()
-    lib.write("s", data=create_df())
-    lib_tool = lib.library_tool()
 
-    keys_count = 0
-    for key_type in KeyType.__members__.values():
-        keys = lib_tool.find_keys(key_type)
-        keys_count += len(keys)
-        for key in keys:
-            path = lib_tool.get_key_path(key)
-            assert path != ""
-            assert path.startswith(test_prefix)
+    try:
+        lib.write("s", data=create_df())
+        lib_tool = lib.library_tool()
 
-    assert keys_count > 0
+        keys_count = 0
+        for key_type in KeyType.__members__.values():
+            keys = lib_tool.find_keys(key_type)
+            keys_count += len(keys)
+            for key in keys:
+                path = lib_tool.get_key_path(key)
+                assert path != ""
+                assert path.startswith(test_prefix)
+
+        assert keys_count > 0
+    finally:
+        delete_nvs(lib)
 
 
 def sum_operations(stats):
@@ -331,59 +346,65 @@ def test_delete_over_time(lib_name, storage_bucket, clear_query_stats):
     expected_ops = 14
     lib = storage_bucket.create_version_store_factory(lib_name)()
 
-    with config_context("VersionMap.ReloadInterval", 0):
-        # Setup
-        # First write and delete will add an extra couple of version keys
-        lib.write("s", data=create_df())
-        qs.reset_stats()
-        lib.delete("s")
+    try:
+        with config_context("VersionMap.ReloadInterval", 0):
+            # Setup
+            # First write and delete will add an extra couple of version keys
+            lib.write("s", data=create_df())
+            qs.reset_stats()
+            lib.delete("s")
 
-        assert sum_all_operations(qs.get_query_stats()) == expected_ops
-        lib.write("s", data=create_df())
-        qs.reset_stats()
-
-        lib.delete("s")
-        base_stats = qs.get_query_stats()
-        base_ops_count = sum_all_operations(base_stats)
-        # expected_ops + 2 (read the new version and the tombstone all key)
-        assert base_ops_count == (expected_ops + 2)
-        qs.reset_stats()
-
-        iters = 10
-
-        # make sure that the delete makes a constant number of operations
-        for i in range(iters):
+            assert sum_all_operations(qs.get_query_stats()) == expected_ops
             lib.write("s", data=create_df())
             qs.reset_stats()
 
             lib.delete("s")
-            stats = qs.get_query_stats()
+            base_stats = qs.get_query_stats()
+            base_ops_count = sum_all_operations(base_stats)
+            # expected_ops + 2 (read the new version and the tombstone all key)
+            assert base_ops_count == (expected_ops + 2)
             qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == (expected_ops + 2), visualize_stats_diff(
-                base_stats, stats
-            )
+
+            iters = 10
+
+            # make sure that the delete makes a constant number of operations
+            for i in range(iters):
+                lib.write("s", data=create_df())
+                qs.reset_stats()
+
+                lib.delete("s")
+                stats = qs.get_query_stats()
+                qs.reset_stats()
+                assert sum_all_operations(stats) == base_ops_count == (expected_ops + 2), visualize_stats_diff(
+                    base_stats, stats
+                )
+    finally:
+        delete_nvs(lib)
 
 
 def test_write_and_prune_previous_over_time(lib_name, storage_bucket, clear_query_stats):
     expected_ops = 9
     with config_context("VersionMap.ReloadInterval", 0):
-        lib = storage_bucket.create_version_store_factory(lib_name)()
-        qs.enable()
-        lib.write("s", data=create_df())
-        qs.reset_stats()
-
-        lib.write("s", data=create_df(), prune_previous=True)
-
-        base_stats = qs.get_query_stats()
-        base_ops_count = sum_all_operations(base_stats)
-        assert base_ops_count == expected_ops
-        qs.reset_stats()
-
-        iters = 10
-
-        # make sure that the write and prune makes a constant number of operations
-        for i in range(iters):
-            lib.write("s", data=create_df(), prune_previous=True)
-            stats = qs.get_query_stats()
+        try:
+            lib = storage_bucket.create_version_store_factory(lib_name)()
+            qs.enable()
+            lib.write("s", data=create_df())
             qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == expected_ops, visualize_stats_diff(base_stats, stats)
+
+            lib.write("s", data=create_df(), prune_previous=True)
+
+            base_stats = qs.get_query_stats()
+            base_ops_count = sum_all_operations(base_stats)
+            assert base_ops_count == expected_ops
+            qs.reset_stats()
+
+            iters = 10
+
+            # make sure that the write and prune makes a constant number of operations
+            for i in range(iters):
+                lib.write("s", data=create_df(), prune_previous=True)
+                stats = qs.get_query_stats()
+                qs.reset_stats()
+                assert sum_all_operations(stats) == base_ops_count == expected_ops, visualize_stats_diff(base_stats, stats)
+        finally:
+            delete_nvs(lib)

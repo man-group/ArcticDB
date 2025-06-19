@@ -100,6 +100,7 @@ def delete_nvs(nvs: NativeVersionStore):
     get_logger().info(f"Removing data for NativeVersionStore library_path: {nvs.library().library_path}")
     try:
         nvs.version_store.clear()
+        logger.info(f"SUCCESS in deletion")  
     except Exception as e:
         logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
     remaining_symbols = []

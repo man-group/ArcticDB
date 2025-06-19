@@ -14,6 +14,7 @@ import sys
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util.utils import delete_nvs
 from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
@@ -40,18 +41,22 @@ def test_read_keys(object_and_mem_and_lmdb_version_store_dynamic_schema):
 @pytest.mark.storage
 def test_update_int_float(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
-    symbol = "test_update_int_float"
-    data1 = pd.DataFrame({"a": [np.int64(2)]}, index=[datetime.datetime(2019, 4, 9, 10, 5, 2, 1)])
-    data2 = pd.DataFrame({"a": [np.float64(1.0)]}, index=[datetime.datetime(2019, 4, 8, 10, 5, 2, 1)])
-    expected = pd.concat((data1, data2))
-    expected.sort_index(inplace=True)
 
-    lib.write(symbol, data1)
-    lib.update(symbol, data2, dynamic_schema=True)
-    result = lib.read(symbol, dynamic_schema=True).data
-    result.sort_index(inplace=True)
+    try:
+        symbol = "test_update_int_float"
+        data1 = pd.DataFrame({"a": [np.int64(2)]}, index=[datetime.datetime(2019, 4, 9, 10, 5, 2, 1)])
+        data2 = pd.DataFrame({"a": [np.float64(1.0)]}, index=[datetime.datetime(2019, 4, 8, 10, 5, 2, 1)])
+        expected = pd.concat((data1, data2))
+        expected.sort_index(inplace=True)
 
-    assert_frame_equal(expected, result)
+        lib.write(symbol, data1)
+        lib.update(symbol, data2, dynamic_schema=True)
+        result = lib.read(symbol, dynamic_schema=True).data
+        result.sort_index(inplace=True)
+
+        assert_frame_equal(expected, result)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.storage
@@ -438,12 +443,15 @@ def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, inde
 
 
 def test_delete_snapshot_regression(nfs_clean_bucket):
-    lib = nfs_clean_bucket.create_version_store_factory("test_delete_snapshot_regression")()
-    lib.write("sym", 1)
-    lib.snapshot("snap")
-    assert "snap" in lib.list_snapshots()
-    lib.delete_snapshot("snap")
-    assert "snap" not in lib.list_snapshots()
+    try:
+        lib = nfs_clean_bucket.create_version_store_factory("test_delete_snapshot_regression")()
+        lib.write("sym", 1)
+        lib.snapshot("snap")
+        assert "snap" in lib.list_snapshots()
+        lib.delete_snapshot("snap")
+        assert "snap" not in lib.list_snapshots()
+    finally:
+        delete_nvs(lib)
 
 
 def test_resampling_non_timeseries(lmdb_version_store_v1):

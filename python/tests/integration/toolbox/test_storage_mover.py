@@ -3,6 +3,7 @@ import pytest
 
 from hypothesis import given, strategies as st, settings
 from arcticdb.config import Defaults
+from arcticdb.util.utils import delete_nvs
 from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg, add_lmdb_library_to_env
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.toolbox.storage import SymbolVersionsPair
@@ -271,21 +272,24 @@ def lib_with_gaps_and_reused_keys(version_store_factory):
 
 @pytest.mark.parametrize("mode", ("check assumptions", "go", "no force"))
 def test_correct_versions_in_destination(mode, lib_with_gaps_and_reused_keys, lmdb_version_store_v1):
-    s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store_v1._library)
-    if mode == "check assumptions":
-        check = lib_with_gaps_and_reused_keys
-    elif mode == "go":
-        s.go()
-        check = lmdb_version_store_v1
-    else:
-        s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", ["s2", 4, 6])], False)
-        check = lmdb_version_store_v1
+    try:
+        s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store_v1._library)
+        if mode == "check assumptions":
+            check = lib_with_gaps_and_reused_keys
+        elif mode == "go":
+            s.go()
+            check = lmdb_version_store_v1
+        else:
+            s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", ["s2", 4, 6])], False)
+            check = lmdb_version_store_v1
 
-    lt = check.library_tool()
+        lt = check.library_tool()
 
-    assert {vi["version"] for vi in check.list_versions("x")} == {2, 4, 6}
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
-    assert [k.version_id for k in lt.find_keys(KeyType.TABLE_DATA)] == [2, 3, 4, 4, 6]
+        assert {vi["version"] for vi in check.list_versions("x")} == {2, 4, 6}
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
+        assert [k.version_id for k in lt.find_keys(KeyType.TABLE_DATA)] == [2, 3, 4, 4, 6]
+    finally:
+        delete_nvs(lib_with_gaps_and_reused_keys)
 
 
 @settings(deadline=None, suppress_health_check=(hypothesis.HealthCheck.function_scoped_fixture,))
@@ -305,37 +309,40 @@ def _tmp_test_body(to_copy, existing, lib_with_gaps_and_reused_keys, version_sto
     source = lib_with_gaps_and_reused_keys
     target = version_store_factory(name="_unique_")
 
-    if existing:
-        target.write("x", 0)
+    try:
+        if existing:
+            target.write("x", 0)
 
-    s = StorageMover(source._library, target._library)
-    s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", to_copy)], True)
+        s = StorageMover(source._library, target._library)
+        s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", to_copy)], True)
 
-    actual_vers = sorted(vi["version"] for vi in target.list_versions("x"))
-    print(to_copy, existing, "->", actual_vers)
+        actual_vers = sorted(vi["version"] for vi in target.list_versions("x"))
+        print(to_copy, existing, "->", actual_vers)
 
-    lt = target.library_tool()
-    start = 0 if existing else 2  # mover starts at the first input version if target is empty....
-    n = int(existing) + len(to_copy)
-    assert actual_vers == list(range(start, start + n))
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == n
+        lt = target.library_tool()
+        start = 0 if existing else 2  # mover starts at the first input version if target is empty....
+        n = int(existing) + len(to_copy)
+        assert actual_vers == list(range(start, start + n))
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == n
 
-    source_keys = source.library_tool().find_keys(KeyType.TABLE_DATA)
-    expected_target = []
-    for item in to_copy:
-        if item == "s2":
-            expected_target.append(source_keys[0])
-        elif item == 4:
-            expected_target.extend(source_keys[1:4])
-        else:
-            expected_target.append(source_keys[-1])
-    expected_target.sort()  # key=lambda k: (k.version_id, k.start_index))
+        source_keys = source.library_tool().find_keys(KeyType.TABLE_DATA)
+        expected_target = []
+        for item in to_copy:
+            if item == "s2":
+                expected_target.append(source_keys[0])
+            elif item == 4:
+                expected_target.extend(source_keys[1:4])
+            else:
+                expected_target.append(source_keys[-1])
+        expected_target.sort()  # key=lambda k: (k.version_id, k.start_index))
 
-    target_keys = lt.find_keys(KeyType.TABLE_DATA)
-    target_keys.sort()
-    if existing:
-        target_keys.pop(0)
+        target_keys = lt.find_keys(KeyType.TABLE_DATA)
+        target_keys.sort()
+        if existing:
+            target_keys.pop(0)
 
-    for a, e in zip(target_keys, expected_target):
-        assert a.content_hash == e.content_hash
-        assert a.creation_ts >= source_keys[-1].creation_ts
+        for a, e in zip(target_keys, expected_target):
+            assert a.content_hash == e.content_hash
+            assert a.creation_ts >= source_keys[-1].creation_ts
+    finally:
+        delete_nvs(target)

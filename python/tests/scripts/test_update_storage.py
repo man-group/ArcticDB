@@ -143,12 +143,15 @@ def test_upgrade_script_azure(azurite_storage: AzureContainer, lib_name):
     ac = azurite_storage.create_arctic()
     create_library_config(ac, lib_name)
 
-    run(uri=azurite_storage.arctic_uri, run=True)
+    try:
+        run(uri=azurite_storage.arctic_uri, run=True)
 
-    config = ac._library_manager.get_library_config(lib_name)
-    azure_storage = _get_azure_storage_config(config)
-    assert azure_storage.ca_cert_path == ""
-    assert azure_storage.ca_cert_dir == ""
-    assert azure_storage.container_name == ""
-    assert azure_storage.endpoint == ""
-    assert azure_storage.prefix.startswith(lib_name)
+        config = ac._library_manager.get_library_config(lib_name)
+        azure_storage = _get_azure_storage_config(config)
+        assert azure_storage.ca_cert_path == ""
+        assert azure_storage.ca_cert_dir == ""
+        assert azure_storage.container_name == ""
+        assert azure_storage.endpoint == ""
+        assert azure_storage.prefix.startswith(lib_name)
+    finally:
+        ac.delete_library(lib_name)
