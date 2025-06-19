@@ -172,6 +172,10 @@ endif ()
 set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
+        arrow/array_from_block.hpp
+        arrow/arrow_handlers.hpp
+        arrow/arrow_output_frame.hpp
+        arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
         async/bit_rate_stats.hpp
@@ -403,6 +407,9 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+        arrow/arrow_handlers.cpp
+        arrow/arrow_output_frame.cpp
+        arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
         async/task_scheduler.cpp
@@ -538,13 +545,6 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        arrow/array_from_block.hpp
-        arrow/arrow_handlers.hpp
-        arrow/arrow_handlers.cpp
-        arrow/arrow_output_frame.hpp
-        arrow/arrow_output_frame.cpp
-        arrow/arrow_utils.hpp
-        arrow/arrow_utils.cpp
         )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
