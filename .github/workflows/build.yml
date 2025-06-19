@@ -56,20 +56,20 @@ jobs:
       storage: ${{ steps.set-storage.outputs.storage }}
     steps:
       - name: Determine Storage Type Based On Schedule
-	      id: set-storage
+        id: set-storage
         shell: bash
         run: |
           day=$(date +'%a')
-		      echo "Today is $day"
+          echo "Today is $day"
           if [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
-		        _storage='AWS_S3'
+            _storage='AWS_S3'
           elif [[ "$day" == "Tue" || "$day" == "Thu" ]]; then
             _storage='GCPXML'
           else
             echo "UNDETERMINED RESULT for this day"
-			     exit 1
+          exit 1
           fi
-		      echo "Storage type selected: $_storage"
+          echo "Storage type selected: $_storage"
           echo "storage=$_storage" >> $GITHUB_OUTPUT
 
   cibw_docker_image:
