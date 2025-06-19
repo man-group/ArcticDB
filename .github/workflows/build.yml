@@ -174,8 +174,8 @@ jobs:
 
   pre_seed_cleanup:
     needs: [storage_type]
-    # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' || inputs.persistent_storage == 'AWS_S3'}}
+    # This step is valid only for AWS_S3. 
+    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -184,8 +184,8 @@ jobs:
 
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup, storage_type]
-    # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3'  || inputs.persistent_storage == 'AWS_S3'}}
+    # This step is valid only for AWS_S3.
+    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
     strategy:
       fail-fast: false
       matrix:
@@ -208,8 +208,8 @@ jobs:
 
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup, storage_type]
-    # This step is valid only for AWS_S3. When schedulled it will be S3 run
-    if: ${{ github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' || inputs.persistent_storage == 'AWS_S3'}}
+    # This step is valid only for AWS_S3.
+    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
     strategy:
       fail-fast: false
       matrix:
@@ -279,7 +279,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
-      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
+      persistent_storage: ${{ needs.storage_type.outputs.storage }} 
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{inputs.version_cache_full_test || false}}
@@ -315,15 +315,15 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
-      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
+      persistent_storage: ${{ needs.storage_type.outputs.storage }} 
       pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
-    # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
+    # This step is valid only for AWS_S3. 
+    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -345,8 +345,8 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_verify_windows:
-    # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
+    # This step is valid only for AWS_S3. 
+    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -369,8 +369,8 @@ jobs:
     
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, storage_type]
-    # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule'  && needs.storage_type.outputs.storage == 'AWS_S3' || inputs.persistent_storage == 'AWS_S3'}}
+    # This step is valid only for AWS_S3. 
+    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
