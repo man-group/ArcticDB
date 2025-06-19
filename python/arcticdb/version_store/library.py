@@ -25,7 +25,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat
+from arcticdb_ext.version_store import DataError, OutputFormat, StageResult
 import pandas as pd
 import numpy as np
 import logging
@@ -811,7 +811,7 @@ class Library:
         sort_columns:
             Sort the data by specific columns prior to writing.
         """
-        self._nvs.stage(
+        return self._nvs.stage(
             symbol,
             data,
             validate_index=validate_index,
@@ -1474,6 +1474,7 @@ class Library:
         metadata: Any = None,
         validate_index=True,
         delete_staged_data_on_failure: bool = False,
+        _stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
@@ -1587,6 +1588,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
+            _stage_results=_stage_results,
         )
 
     def sort_and_finalize_staged_data(
@@ -1596,6 +1598,7 @@ class Library:
         prune_previous_versions: bool = False,
         metadata: Any = None,
         delete_staged_data_on_failure: bool = False,
+        _stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Sorts and merges all staged data, making it available for reads. This differs from `finalize_staged_data` in that it

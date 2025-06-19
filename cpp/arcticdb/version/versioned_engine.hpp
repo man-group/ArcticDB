@@ -7,7 +7,6 @@
 
 #pragma once
 
-
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/symbol_list.hpp>

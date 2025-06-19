@@ -5,8 +5,14 @@ import arcticdb as adb
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import SortedValue
+from arcticdb_ext import set_config_int
 
 from arcticdb.util.test import random_strings_of_length
+
+# Reuse all current testing with both the new and old API
+@pytest.fixture(params=[True, False], autouse=True)
+def setup_is_v2(request):
+    set_config_int("Stage.IsV2APIEnabled", 1 if request.param else 0)
 
 
 @pytest.mark.storage
