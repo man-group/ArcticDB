@@ -9,7 +9,7 @@ on:
     branches: ["**"]
   schedule:
     # IMPORTANT: For scheduled job we execute AWS_S3
-    - cron: '0 6 * * 1,4' # Mon and Thu at 6 am
+    - cron: '0 1 * * 1,2,3,4' # Mon and Thu at 1 am
   workflow_dispatch:
     inputs:
       persistent_storage:
