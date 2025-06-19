@@ -92,8 +92,6 @@ jobs:
       arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
-      DAY_OF_WEEK: ${{ steps.set_day.outputs.day }}
-
 
     steps:
 
@@ -105,11 +103,11 @@ jobs:
         echo "day=$d" >> $GITHUB_OUTPUT
 
     - name: Run on Monday and Thursday
-      if: ${{ env.DAY_OF_WEEK == 'Mon' || env.DAY_OF_WEEK == 'Thu' }}
+      if: ${{ steps.set_day.outputs.day == 'Mon' || steps.set_day.outputs.day == 'Thu' }}
       run: echo "This step runs on Monday and Thursday"
 
     - name: Run on Tuesday and Friday
-      if: ${{ env.DAY_OF_WEEK == 'Tue' || env.DAY_OF_WEEK == 'Fri' }}
+      if: ${{ steps.set_day.outputs.day == 'Tue' || steps.set_day.outputs.day == 'Fri' }}
       run: echo "This step runs on Tuesday and Friday"
  
     - name: When On Schedule - Override the arcticdb version based on hour of execution
