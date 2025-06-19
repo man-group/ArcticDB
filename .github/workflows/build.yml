@@ -49,6 +49,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+
+  storage_type:
+    runs-on: ubuntu-latest
+    outputs:
+      storage: ${{ steps.set-storage.outputs.storage }}
+    steps:
+      - name: Determine Storage Type Based On Schedule
+	      id: set-storage
+        shell: bash
+        run: |
+          day=$(date +'%a')
+		      echo "Today is $day"
+          if [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
+		        _storage='AWS_S3'
+          elif [[ "$day" == "Tue" || "$day" == "Thu" ]]; then
+            _storage='GCPXML'
+          else
+            echo "UNDETERMINED RESULT for this day"
+			     exit 1
+          fi
+		      echo "Storage type selected: $_storage"
+          echo "storage=$_storage" >> $GITHUB_OUTPUT
+
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
@@ -135,8 +158,9 @@ jobs:
       windows_matrix: ${{toJson(matrix.windows_matrix)}}
 
   pre_seed_cleanup:
+    needs: [storage_type]
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' || inputs.persistent_storage == 'AWS_S3'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -144,9 +168,9 @@ jobs:
       job_type: cleanup
 
   persistent_storage_seed_linux:
-    needs: [common_config, pre_seed_cleanup]
+    needs: [common_config, pre_seed_cleanup, storage_type]
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3'  || inputs.persistent_storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -168,9 +192,9 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
 
   persistent_storage_seed_windows:
-    needs: [common_config, pre_seed_cleanup]
+    needs: [common_config, pre_seed_cleanup, storage_type]
     # This step is valid only for AWS_S3. When schedulled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' || inputs.persistent_storage == 'AWS_S3'}}
     strategy:
       fail-fast: false
       matrix:
@@ -205,7 +229,7 @@ jobs:
 
   build-python-wheels-linux:
     # Then use the cached compilation artifacts to build other python versions concurrently in cibuildwheels
-    needs: [cibw_docker_image, common_config]
+    needs: [cibw_docker_image, common_config, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -240,7 +264,7 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
-      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
+      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{inputs.version_cache_full_test || false}}
@@ -257,7 +281,7 @@ jobs:
       matrix: ${{needs.common_config.outputs.windows_matrix}}
 
   build-python-wheels-windows:
-    needs: [common_config]
+    needs: [common_config, storage_type]
     strategy:
       fail-fast: false
       matrix:
@@ -276,7 +300,7 @@ jobs:
       matrix: ${{toJson(matrix.matrix_override)}}
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
-      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
+      persistent_storage: ${{ inputs.persistent_storage || github.event_name == 'schedule' && needs.storage_type.outputs.storage == 'AWS_S3' && 'AWS_S3'|| github.event_name != 'workflow_dispatch' && 'no'}} 
       pytest_xdist_mode: "-n auto"
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
@@ -329,9 +353,9 @@ jobs:
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
     
   post_verify_cleanup:
-    needs: [persistent_storage_verify_windows, persistent_storage_verify_linux]
+    needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, storage_type]
     # This step is valid only for AWS_S3. When scheduled it will be S3 run
-    if: ${{ github.event_name == 'schedule' || inputs.persistent_storage == 'AWS_S3'}}
+    if: ${{ github.event_name == 'schedule'  && needs.storage_type.outputs.storage == 'AWS_S3' || inputs.persistent_storage == 'AWS_S3'}}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
