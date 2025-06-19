@@ -2043,8 +2043,9 @@ class NativeVersionStore:
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
     def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
-        # Hacky way to keep weak pointer alive in C++ layer, fix properly by not ping-ponging off Python layer at all
-        keep_alive = read_result.frame_data.value
+        if read_result.output_format == OutputFormat.PANDAS:
+            # Hacky way to keep weak pointer alive in C++ layer, fix properly by not ping-ponging off Python layer at all
+            keep_alive = read_result.frame_data.value
         if read_result.output_format == OutputFormat.ARROW:
             # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
             return self._adapt_read_res(read_result)
