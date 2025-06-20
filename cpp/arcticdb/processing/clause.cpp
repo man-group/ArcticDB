@@ -1318,7 +1318,15 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
 
 std::string RowRangeClause::to_string() const {
     if (row_range_type_ == RowRangeType::RANGE) {
-        return fmt::format("ROWRANGE: RANGE, start={}, end ={}", start_, end_);
+        if (user_provided_start_ && user_provided_end_) {
+            return fmt::format("ROWRANGE: RANGE, start={}, end={}", user_provided_start_, user_provided_end_);
+        } else if (user_provided_start_) {
+            return fmt::format("ROWRANGE: RANGE, start={}, end=OPEN", user_provided_start_);
+        } else if (user_provided_end_) {
+            return fmt::format("ROWRANGE: RANGE, start=OPEN, end={}", user_provided_end_);
+        } else {
+            return fmt::format("ROWRANGE: RANGE, start=OPEN, end=OPEN");
+        }
     }
 
     return fmt::format("ROWRANGE: {}, n={}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);
