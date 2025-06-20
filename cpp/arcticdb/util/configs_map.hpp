@@ -22,7 +22,7 @@ using namespace arcticdb::proto::config;
 class ConfigsMap {
 public:
     static void init();
-    static std::shared_ptr<ConfigsMap> instance() { 
+    static std::shared_ptr<ConfigsMap>& instance() { 
         static auto instance_ = std::make_shared<ConfigsMap>();
         return instance_;
     }

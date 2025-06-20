@@ -23,6 +23,7 @@ namespace arcticdb {
 enum class FailureType : int {
     WRITE = 0,
     READ,
+    WRITE_LOCK, // TODO: Remove this when refactoring StorageFailureSimulator
     ITERATE,
     DELETE,
 };
@@ -30,6 +31,7 @@ enum class FailureType : int {
 static const char* failure_names[] = {
         "WRITE",
         "READ",
+        "WRITE_LOCK", // TODO: Remove this when refactoring StorageFailureSimulator
         "ITERATE",
         "DELETE",
 };
@@ -187,7 +189,7 @@ public:
             categories_.try_emplace(WRITE, ParamActionSequence{action_factories::fault(cfg.write_failure_prob())});
         }
         else if (cfg.write_slowdown_prob() > 0) {
-            categories_.try_emplace(WRITE, ParamActionSequence{action_factories::slow_action(
+            categories_.try_emplace(WRITE_LOCK, ParamActionSequence{action_factories::slow_action(
                 cfg.write_slowdown_prob(), cfg.slow_down_min_ms(), cfg.slow_down_max_ms())});
         }
         configured_ = true;

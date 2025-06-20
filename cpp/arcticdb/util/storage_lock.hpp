@@ -78,7 +78,7 @@ class StorageLock {
   public:
     static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24; // 1 Day
     static constexpr int64_t DEFAULT_WAIT_MS = 1000; // After writing the lock, waiting this time before checking if the written lock is still ours.
-    static constexpr double DEFAULT_MAX_DURATION_FACTOR = 1; // Controls what factor of the wait time is the maximum time the lock shoud spend. (writing + waiting + reading).
+    static constexpr double DEFAULT_MAX_DURATION_FACTOR = 1.5; // Controls what factor of the wait time is the maximum time the lock shoud spend. (writing + waiting + reading).
     static constexpr int64_t DEFAULT_INITIAL_WAIT_MS = 10;
 
     static void force_release_lock(const StreamId& name, const std::shared_ptr<Store>& store) {
@@ -197,7 +197,7 @@ class StorageLock {
 
     timestamp create_ref_key(const std::shared_ptr<Store>& store) {
         auto ts = ClockType::nanos_since_epoch();
-        StorageFailureSimulator::instance()->go(FailureType::WRITE);
+        StorageFailureSimulator::instance()->go(FailureType::WRITE_LOCK);
         store->write_sync(KeyType::LOCK, name_, lock_segment(name_, ts));
         ARCTICDB_DEBUG(log::lock(), "Created lock with timestamp {}", ts);
         return ts;

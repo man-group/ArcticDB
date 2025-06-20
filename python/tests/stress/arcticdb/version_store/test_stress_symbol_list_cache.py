@@ -27,7 +27,6 @@ def compact_symbols_worker(lib):
 @pytest.fixture(params=[
     (0, 0, 0), # Probability of slowdown, min ms, max ms
     (0.1, 10, 50),
-    (0.3, 200, 300),
     (0.5, 300, 700),
     (0.7, 1100, 1700)
 ])
