@@ -11,6 +11,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/symbol_list.hpp>
 #include <arcticdb/entity/protobufs.hpp>
+#include <arcticdb/entity/stage_result.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -76,7 +77,7 @@ public:
         const StreamId& stream_id
     ) = 0;
 
-    virtual void write_parallel_frame(
+    virtual StageResult write_parallel_frame(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool validate_index,
