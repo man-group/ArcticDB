@@ -530,9 +530,9 @@ class NativeVersionStore:
             norm_failure_options_msg=norm_failure_options_msg,
         )
         if isinstance(item, NPDDataFrame):
-            is_v2_stage_api_enabled = get_config_int("Stage.IsV2ApiEnabled") == 1
+            is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
             result = self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
-            if is_v2_stage_api_enabled:
+            if is_new_stage_api_enabled:
                 return result
             return None
         else:

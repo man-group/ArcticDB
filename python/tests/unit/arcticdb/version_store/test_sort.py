@@ -11,8 +11,8 @@ from arcticdb.util.test import random_strings_of_length
 
 # Reuse all current testing with both the new and old API
 @pytest.fixture(params=[True, False], autouse=True)
-def setup_is_v2(request):
-    set_config_int("Stage.IsV2APIEnabled", 1 if request.param else 0)
+def setup_use_new_stage_api(request):
+    set_config_int("dev.stage_new_api_enabled", 1 if request.param else 0)
 
 
 @pytest.mark.storage
