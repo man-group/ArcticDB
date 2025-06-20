@@ -426,7 +426,6 @@ jobs:
           ln -s python/tests ${{runner.temp}}/tests
           cd ${{runner.temp}}
           ls -la .
-          ls -la tests/*
           python -m pytest --timeout=3600 -n 2 tests $ARCTICDB_PYTEST_ARGS
 
       - name: Collect crash dumps (Windows)
