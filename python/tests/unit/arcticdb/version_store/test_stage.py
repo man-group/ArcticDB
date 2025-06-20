@@ -5,7 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-from multiprocessing import SimpleQueue
+import pickle
 
 import pandas as pd
 import pytest
@@ -15,13 +15,12 @@ from arcticdb_ext.version_store import StageResult
 from arcticdb_ext import set_config_int
 from arcticdb.version_store.library import StagedDataFinalizeMethod
 from arcticdb.util.test import assert_frame_equal
-from multiprocessing import Process
 
 
-@pytest.mark.parametrize("v2_api_enabled", [True, False])
+@pytest.mark.parametrize("new_api_enabled", [True, False])
 @pytest.mark.parametrize("finalize_mode", [StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND])
-def test_stage(lmdb_storage, lib_name, v2_api_enabled, finalize_mode):
-    set_config_int("Stage.IsV2APIEnabled", 1 if v2_api_enabled else 0)
+def test_stage(lmdb_storage, lib_name, new_api_enabled, finalize_mode):
+    set_config_int("dev.stage_new_api_enabled", 1 if new_api_enabled else 0)
     sym = "sym"
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=1))
@@ -36,7 +35,7 @@ def test_stage(lmdb_storage, lib_name, v2_api_enabled, finalize_mode):
 
     staged_results = [lib.stage(sym, df) for df in data_to_stage]
 
-    if not v2_api_enabled:
+    if not new_api_enabled:
         assert all(x is None for x in staged_results)
     else:
         assert all(len(staged_result._staged_segments) == 2 and staged_result._version == 0 for staged_result in staged_results)
@@ -46,26 +45,16 @@ def test_stage(lmdb_storage, lib_name, v2_api_enabled, finalize_mode):
     expected_df = pd.concat([not_staged] + data_to_stage) if finalize_mode is StagedDataFinalizeMethod.APPEND else pd.concat(data_to_stage)
     assert_frame_equal(lib.read(sym).data, expected_df, check_freq=False)
 
-def stage_result_worker(stage_result, result_queue):
-    assert stage_result._version == 0
-    assert len(stage_result._staged_segments) == 2
-    result_queue.put(stage_result)
 
 def test_stage_result_pickle(lmdb_storage, lib_name):
-    set_config_int("Stage.IsV2APIEnabled", 1)
+    set_config_int("dev.stage_new_api_enabled", 1)
     sym = "sym"
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=1))
     df = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}, index=pd.date_range("2025-01-01", periods=2))
-    stage_result_in = lib.stage(sym, df)
-    result_queue = SimpleQueue()
-    p = Process(target=stage_result_worker, args=(stage_result_in, result_queue))
-    p.start()
-    p.join()
-    assert p.exitcode == 0
-    stage_result_out = result_queue.get()
-    keys_in = stage_result_in._staged_segments
-    keys_out = stage_result_out._staged_segments
+    stage_result = lib.stage(sym, df)
+    stage_result_after_pickling = pickle.loads(pickle.dumps(stage_result))
+    segments = stage_result._staged_segments
+    segments_after_pickling = stage_result_after_pickling._staged_segments
 
-    assert keys_in == keys_out
-    
+    assert segments == segments_after_pickling
