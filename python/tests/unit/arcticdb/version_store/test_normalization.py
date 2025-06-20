@@ -18,6 +18,8 @@ import pandas as pd
 import dateutil as du
 import pytest
 import pytz
+
+from arcticdb.util.utils import delete_nvs
 if sys.version_info >= (3, 9):
     import zoneinfo
 from numpy.testing import assert_equal, assert_array_equal
@@ -1037,45 +1039,50 @@ def test_empty_dimension(lmdb_version_store):
 )
 def test_required_field_inclusion(version_store_factory, dynamic_schema, segment_row_size, column_group_size, data_type, index):
     lib = version_store_factory(dynamic_schema=dynamic_schema, column_group_size=column_group_size, segment_row_size=segment_row_size)
-    sym = "test_required_field_inclusion"
-    num_rows = len(index) if index is not None else 12
-    original_data = pd.Series(np.arange(num_rows), index=index) if data_type == "series" else \
-    pd.DataFrame({"col1": np.arange(num_rows), "col2": np.arange(num_rows), "col3": np.arange(num_rows)}, index=index)
-    lib.write(sym, original_data)
-    received_data = lib.read(sym).data
-    if data_type == "series":
-        assert_series_equal(original_data, received_data)
-    else:
-        assert_frame_equal(original_data, received_data)
-        # Also test with column selection and processing
-        received_data = lib.read(sym, columns=["col3"]).data
-        expected_df = original_data.drop(columns=["col1", "col2"])
-        assert_frame_equal(expected_df, received_data)
-        q = QueryBuilder()
-        q = q[q["col1"] > 5]
-        received_data = lib.read(sym, query_builder=q).data
-        expected_df = original_data[original_data["col1"] > 5]
-        if index is None:
-            expected_df.index = pd.RangeIndex(0, 6)
-        assert_frame_equal(expected_df, received_data)
-        received_data = lib.read(sym, columns=["col3"], query_builder=q).data
-        expected_df = expected_df.drop(columns=["col1", "col2"])
-        assert_frame_equal(expected_df, received_data)
-
+    try:
+        sym = "test_required_field_inclusion"
+        num_rows = len(index) if index is not None else 12
+        original_data = pd.Series(np.arange(num_rows), index=index) if data_type == "series" else \
+        pd.DataFrame({"col1": np.arange(num_rows), "col2": np.arange(num_rows), "col3": np.arange(num_rows)}, index=index)
+        lib.write(sym, original_data)
+        received_data = lib.read(sym).data
+        if data_type == "series":
+            assert_series_equal(original_data, received_data)
+        else:
+            assert_frame_equal(original_data, received_data)
+            # Also test with column selection and processing
+            received_data = lib.read(sym, columns=["col3"]).data
+            expected_df = original_data.drop(columns=["col1", "col2"])
+            assert_frame_equal(expected_df, received_data)
+            q = QueryBuilder()
+            q = q[q["col1"] > 5]
+            received_data = lib.read(sym, query_builder=q).data
+            expected_df = original_data[original_data["col1"] > 5]
+            if index is None:
+                expected_df.index = pd.RangeIndex(0, 6)
+            assert_frame_equal(expected_df, received_data)
+            received_data = lib.read(sym, columns=["col3"], query_builder=q).data
+            expected_df = expected_df.drop(columns=["col1", "col2"])
+            assert_frame_equal(expected_df, received_data)
+    finally:
+        delete_nvs(lib)
 
 @pytest.mark.parametrize("env_var_set", [True, False])
 def test_pandas_consolidation_v1(version_store_factory, monkeypatch, env_var_set):
     if env_var_set:
         monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
     lib = version_store_factory()
-    assert lib._normalizer.df._skip_df_consolidation == (env_var_set and IS_PANDAS_TWO)
-    sym = "test_pandas_consolidation_v1"
-    lib.write(sym, pd.DataFrame({"col": [0]}))
-    df = lib.read(sym).data
-    if lib._normalizer.df._skip_df_consolidation:
-        assert isinstance(df._mgr, BlockManagerUnconsolidated)
-    else:
-        assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
+    try:
+        assert lib._normalizer.df._skip_df_consolidation == (env_var_set and IS_PANDAS_TWO)
+        sym = "test_pandas_consolidation_v1"
+        lib.write(sym, pd.DataFrame({"col": [0]}))
+        df = lib.read(sym).data
+        if lib._normalizer.df._skip_df_consolidation:
+            assert isinstance(df._mgr, BlockManagerUnconsolidated)
+        else:
+            assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("env_var_set", [True, False])
@@ -1083,11 +1090,14 @@ def test_pandas_consolidation_v2(lmdb_library_factory, monkeypatch, env_var_set)
     if env_var_set:
         monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
     lib = lmdb_library_factory()
-    assert lib._nvs._normalizer.df._skip_df_consolidation == IS_PANDAS_TWO
-    sym = "test_pandas_consolidation_v2"
-    lib.write(sym, pd.DataFrame({"col": [0]}))
-    df = lib.read(sym).data
-    if lib._nvs._normalizer.df._skip_df_consolidation:
-        assert isinstance(df._mgr, BlockManagerUnconsolidated)
-    else:
-        assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
+    try:
+        assert lib._nvs._normalizer.df._skip_df_consolidation == IS_PANDAS_TWO
+        sym = "test_pandas_consolidation_v2"
+        lib.write(sym, pd.DataFrame({"col": [0]}))
+        df = lib.read(sym).data
+        if lib._nvs._normalizer.df._skip_df_consolidation:
+            assert isinstance(df._mgr, BlockManagerUnconsolidated)
+        else:
+            assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
+    finally:
+        delete_nvs(lib)

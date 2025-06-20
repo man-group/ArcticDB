@@ -3,6 +3,7 @@ import pytest
 
 from hypothesis import given, strategies as st, settings
 from arcticdb.config import Defaults
+from arcticdb.util.utils import delete_nvs
 from arcticdb.version_store.helper import ArcticMemoryConfig, get_lib_cfg, add_lmdb_library_to_env
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.toolbox.storage import SymbolVersionsPair
@@ -86,10 +87,13 @@ def test_storage_mover_single_go(lmdb_version_store_v1, arctidb_native_local_lib
     lib_cfg.version.symbol_list = True
     dst_lib = arctic["local.extra"]
 
-    s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
-    s.go()
+    try:
+        s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
+        s.go()
 
-    compare_two_libs(lmdb_version_store_v1, dst_lib)
+        compare_two_libs(lmdb_version_store_v1, dst_lib)
+    finally:
+        delete_nvs(dst_lib)
 
 
 def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
@@ -99,13 +103,15 @@ def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_li
     lib_cfg.version.symbol_list = True
     dst_lib = arctic["local.extra"]
 
-    s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
-    all_keys = s.get_all_source_keys()
-    for key in all_keys:
-        s.write_keys_from_source_to_target([key], 2)
+    try:
+        s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
+        all_keys = s.get_all_source_keys()
+        for key in all_keys:
+            s.write_keys_from_source_to_target([key], 2)
 
-    compare_two_libs(lmdb_version_store_v1, dst_lib)
-
+        compare_two_libs(lmdb_version_store_v1, dst_lib)
+    finally:
+        delete_nvs(dst_lib)
 
 @pytest.mark.xfail(sys.platform == "win32", reason="Numpy strings are not implemented for Windows")
 @pytest.mark.parametrize("versions_to_delete", [0, [0, 1]])
@@ -121,106 +127,110 @@ def test_storage_mover_symbol_tree(
     lib.version.symbol_list = True
     lmdb_version_store_symbol_list = ArcticMemoryConfig(local_lib_cfg, Defaults.ENV)[lib_name]
 
-    lmdb_version_store_symbol_list.write("symbol", sample_dataframe(), metadata="yolo")
-    lmdb_version_store_symbol_list.write("symbol", sample_dataframe(), metadata="yolo2")
-    if isinstance(versions_to_delete, list):
-        lmdb_version_store_symbol_list.write("snapshot_test", 0)
-        lmdb_version_store_symbol_list.write("snapshot_test", 1)
-    else:
-        lmdb_version_store_symbol_list.write("snapshot_test", 1)
+    try:
+        lmdb_version_store_symbol_list.write("symbol", sample_dataframe(), metadata="yolo")
+        lmdb_version_store_symbol_list.write("symbol", sample_dataframe(), metadata="yolo2")
+        if isinstance(versions_to_delete, list):
+            lmdb_version_store_symbol_list.write("snapshot_test", 0)
+            lmdb_version_store_symbol_list.write("snapshot_test", 1)
+        else:
+            lmdb_version_store_symbol_list.write("snapshot_test", 1)
 
-    lmdb_version_store_symbol_list.snapshot("my_snap")
-    lmdb_version_store_symbol_list.snapshot("my_snap2")
-    lmdb_version_store_symbol_list.snapshot("snapshot_test", 2)
-    if isinstance(versions_to_delete, list):
-        lmdb_version_store_symbol_list.delete_versions("snapshot_test", versions_to_delete)
-    else:
-        lmdb_version_store_symbol_list.delete_version("snapshot_test", versions_to_delete)
-    lmdb_version_store_symbol_list.write("pickled", {"a": 1}, metadata="cantyolo", pickle_on_failure=True)
-    lmdb_version_store_symbol_list.write("pickled", {"b": 1}, metadata="cantyolo2", pickle_on_failure=True)
-    lmdb_version_store_symbol_list.write("pickled", {"c": 1}, metadata="yoloded", pickle_on_failure=True)
-    lmdb_version_store_symbol_list.write(
-        "rec_norm",
-        data={"a": np.arange(1000), "b": np.arange(8000), "c": None},
-        metadata="realyolo",
-        recursive_normalizers=True,
-    )
-    lmdb_version_store_symbol_list.write(
-        "rec_norm",
-        data={"e": np.arange(1000), "f": np.arange(8000), "g": None},
-        metadata="realyolo2",
-        recursive_normalizers=True,
-    )
+        lmdb_version_store_symbol_list.snapshot("my_snap")
+        lmdb_version_store_symbol_list.snapshot("my_snap2")
+        lmdb_version_store_symbol_list.snapshot("snapshot_test", 2)
+        if isinstance(versions_to_delete, list):
+            lmdb_version_store_symbol_list.delete_versions("snapshot_test", versions_to_delete)
+        else:
+            lmdb_version_store_symbol_list.delete_version("snapshot_test", versions_to_delete)
+        lmdb_version_store_symbol_list.write("pickled", {"a": 1}, metadata="cantyolo", pickle_on_failure=True)
+        lmdb_version_store_symbol_list.write("pickled", {"b": 1}, metadata="cantyolo2", pickle_on_failure=True)
+        lmdb_version_store_symbol_list.write("pickled", {"c": 1}, metadata="yoloded", pickle_on_failure=True)
+        lmdb_version_store_symbol_list.write(
+            "rec_norm",
+            data={"a": np.arange(1000), "b": np.arange(8000), "c": None},
+            metadata="realyolo",
+            recursive_normalizers=True,
+        )
+        lmdb_version_store_symbol_list.write(
+            "rec_norm",
+            data={"e": np.arange(1000), "f": np.arange(8000), "g": None},
+            metadata="realyolo2",
+            recursive_normalizers=True,
+        )
 
-    lmdb_version_store_symbol_list.write("dup_data", np.array(["YOLO"] * 10000))
+        lmdb_version_store_symbol_list.write("dup_data", np.array(["YOLO"] * 10000))
 
-    arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
-    lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
-    lib_cfg.version.symbol_list = True
-    dst_lib = arctic["local.extra"]
+        arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
+        lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
+        lib_cfg.version.symbol_list = True
+        dst_lib = arctic["local.extra"]
 
-    s = StorageMover(lmdb_version_store_symbol_list._library, dst_lib._library)
-    sv1 = SymbolVersionsPair("symbol", [1, 0])
-    sv2 = SymbolVersionsPair("pickled", [2, 0])
-    sv3 = SymbolVersionsPair("rec_norm", [1, 0])
-    sv4 = SymbolVersionsPair("dup_data", [0])
-    sv5 = SymbolVersionsPair("snapshot_test", ["my_snap", "my_snap2"])
-    res = s.write_symbol_trees_from_source_to_target([sv1, sv2, sv3, sv4, sv5], False)
-    assert len(res) == 5
-    for r in res:
-        for v in res[r]:
-            assert type(res[r][v]) == int
+        s = StorageMover(lmdb_version_store_symbol_list._library, dst_lib._library)
+        sv1 = SymbolVersionsPair("symbol", [1, 0])
+        sv2 = SymbolVersionsPair("pickled", [2, 0])
+        sv3 = SymbolVersionsPair("rec_norm", [1, 0])
+        sv4 = SymbolVersionsPair("dup_data", [0])
+        sv5 = SymbolVersionsPair("snapshot_test", ["my_snap", "my_snap2"])
+        res = s.write_symbol_trees_from_source_to_target([sv1, sv2, sv3, sv4, sv5], False)
+        assert len(res) == 5
+        for r in res:
+            for v in res[r]:
+                assert type(res[r][v]) == int
 
-    assert len(dst_lib.list_versions()) == 8
-    assert_frame_equal(lmdb_version_store_symbol_list.read("symbol").data, dst_lib.read("symbol").data)
-    assert_frame_equal(lmdb_version_store_symbol_list.read("symbol", 0).data, dst_lib.read("symbol", 0).data)
-    assert lmdb_version_store_symbol_list.read("symbol").metadata == dst_lib.read("symbol").metadata
-    assert lmdb_version_store_symbol_list.read("symbol", 0).metadata == dst_lib.read("symbol", 0).metadata
+        assert len(dst_lib.list_versions()) == 8
+        assert_frame_equal(lmdb_version_store_symbol_list.read("symbol").data, dst_lib.read("symbol").data)
+        assert_frame_equal(lmdb_version_store_symbol_list.read("symbol", 0).data, dst_lib.read("symbol", 0).data)
+        assert lmdb_version_store_symbol_list.read("symbol").metadata == dst_lib.read("symbol").metadata
+        assert lmdb_version_store_symbol_list.read("symbol", 0).metadata == dst_lib.read("symbol", 0).metadata
 
-    assert lmdb_version_store_symbol_list.read("pickled").data == dst_lib.read("pickled").data
-    assert lmdb_version_store_symbol_list.read("pickled", 0).data == dst_lib.read("pickled", 0).data
-    assert lmdb_version_store_symbol_list.read("pickled").metadata == dst_lib.read("pickled").metadata
-    assert lmdb_version_store_symbol_list.read("pickled", 0).metadata == dst_lib.read("pickled", 0).metadata
+        assert lmdb_version_store_symbol_list.read("pickled").data == dst_lib.read("pickled").data
+        assert lmdb_version_store_symbol_list.read("pickled", 0).data == dst_lib.read("pickled", 0).data
+        assert lmdb_version_store_symbol_list.read("pickled").metadata == dst_lib.read("pickled").metadata
+        assert lmdb_version_store_symbol_list.read("pickled", 0).metadata == dst_lib.read("pickled", 0).metadata
 
-    def comp_dict(d1, d2):
-        assert len(d1) == len(d2)
-        for k in d1:
-            if isinstance(d1[k], np.ndarray):
-                assert (d1[k] == d2[k]).all()
-            else:
-                assert d1[k] == d2[k]
+        def comp_dict(d1, d2):
+            assert len(d1) == len(d2)
+            for k in d1:
+                if isinstance(d1[k], np.ndarray):
+                    assert (d1[k] == d2[k]).all()
+                else:
+                    assert d1[k] == d2[k]
 
-    comp_dict(lmdb_version_store_symbol_list.read("rec_norm").data, dst_lib.read("rec_norm").data)
-    comp_dict(lmdb_version_store_symbol_list.read("rec_norm", 0).data, dst_lib.read("rec_norm", 0).data)
-    assert lmdb_version_store_symbol_list.read("rec_norm").metadata == dst_lib.read("rec_norm").metadata
-    assert lmdb_version_store_symbol_list.read("rec_norm", 0).metadata == dst_lib.read("rec_norm", 0).metadata
+        comp_dict(lmdb_version_store_symbol_list.read("rec_norm").data, dst_lib.read("rec_norm").data)
+        comp_dict(lmdb_version_store_symbol_list.read("rec_norm", 0).data, dst_lib.read("rec_norm", 0).data)
+        assert lmdb_version_store_symbol_list.read("rec_norm").metadata == dst_lib.read("rec_norm").metadata
+        assert lmdb_version_store_symbol_list.read("rec_norm", 0).metadata == dst_lib.read("rec_norm", 0).metadata
 
-    np.testing.assert_equal(lmdb_version_store_symbol_list.read("dup_data").data, dst_lib.read("dup_data").data)
-    assert lmdb_version_store_symbol_list.read("dup_data").metadata == dst_lib.read("dup_data").metadata
+        np.testing.assert_equal(lmdb_version_store_symbol_list.read("dup_data").data, dst_lib.read("dup_data").data)
+        assert lmdb_version_store_symbol_list.read("dup_data").metadata == dst_lib.read("dup_data").metadata
 
-    assert lmdb_version_store_symbol_list.read("snapshot_test", "my_snap").data, dst_lib.read("snapshot_test", 0).data
+        assert lmdb_version_store_symbol_list.read("snapshot_test", "my_snap").data, dst_lib.read("snapshot_test", 0).data
 
-    lmdb_version_store_symbol_list.write("new_symbol", 1)
-    lmdb_version_store_symbol_list.snapshot("new_snap")
-    lmdb_version_store_symbol_list.write("new_symbol", 2)
-    lmdb_version_store_symbol_list.snapshot("new_snap2")
-    lmdb_version_store_symbol_list.write("new_symbol", 3)
-    lmdb_version_store_symbol_list.delete_version("new_symbol", 1)
-    sv6 = SymbolVersionsPair("new_symbol", [2, 0, "new_snap", "new_snap2"])
-    dst_lib.write("new_symbol", 0)
+        lmdb_version_store_symbol_list.write("new_symbol", 1)
+        lmdb_version_store_symbol_list.snapshot("new_snap")
+        lmdb_version_store_symbol_list.write("new_symbol", 2)
+        lmdb_version_store_symbol_list.snapshot("new_snap2")
+        lmdb_version_store_symbol_list.write("new_symbol", 3)
+        lmdb_version_store_symbol_list.delete_version("new_symbol", 1)
+        sv6 = SymbolVersionsPair("new_symbol", [2, 0, "new_snap", "new_snap2"])
+        dst_lib.write("new_symbol", 0)
 
-    res = s.write_symbol_trees_from_source_to_target([sv6], True)
-    assert len(res) == 1
-    assert "new_symbol" in res
-    assert res["new_symbol"][2] == 3
-    assert res["new_symbol"][0] == 1
-    assert res["new_symbol"]["new_snap"] == 1
-    assert res["new_symbol"]["new_snap2"] == 2
+        res = s.write_symbol_trees_from_source_to_target([sv6], True)
+        assert len(res) == 1
+        assert "new_symbol" in res
+        assert res["new_symbol"][2] == 3
+        assert res["new_symbol"][0] == 1
+        assert res["new_symbol"]["new_snap"] == 1
+        assert res["new_symbol"]["new_snap2"] == 2
 
-    assert dst_lib.read("new_symbol", 0).data == 0
-    assert dst_lib.read("new_symbol", 1).data == 1
-    assert dst_lib.read("new_symbol", 2).data == 2
-    assert dst_lib.read("new_symbol", 3).data == 3
+        assert dst_lib.read("new_symbol", 0).data == 0
+        assert dst_lib.read("new_symbol", 1).data == 1
+        assert dst_lib.read("new_symbol", 2).data == 2
+        assert dst_lib.read("new_symbol", 3).data == 3
+    finally:
+        delete_nvs(lmdb_version_store_symbol_list)
+        delete_nvs(dst_lib)
 
 
 def test_storage_mover_and_key_checker(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
@@ -230,11 +240,14 @@ def test_storage_mover_and_key_checker(lmdb_version_store_v1, arctidb_native_loc
     lib_cfg.version.symbol_list = True
     dst_lib = arctic["local.extra"]
 
-    s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
-    s.go()
+    try:
+        s = StorageMover(lmdb_version_store_v1._library, dst_lib._library)
+        s.go()
 
-    keys = s.get_keys_in_source_only()
-    assert len(keys) == 0
+        keys = s.get_keys_in_source_only()
+        assert len(keys) == 0
+    finally:
+        delete_nvs(dst_lib)
 
 
 def test_storage_mover_clone_keys_for_symbol(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
@@ -266,26 +279,30 @@ def lib_with_gaps_and_reused_keys(version_store_factory):
     lib.delete_version("x", 5)
     lib.write("x", 6)
 
-    return lib
+    yield lib
+    delete_nvs(lib)
 
 
 @pytest.mark.parametrize("mode", ("check assumptions", "go", "no force"))
 def test_correct_versions_in_destination(mode, lib_with_gaps_and_reused_keys, lmdb_version_store_v1):
-    s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store_v1._library)
-    if mode == "check assumptions":
-        check = lib_with_gaps_and_reused_keys
-    elif mode == "go":
-        s.go()
-        check = lmdb_version_store_v1
-    else:
-        s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", ["s2", 4, 6])], False)
-        check = lmdb_version_store_v1
+    try:
+        s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store_v1._library)
+        if mode == "check assumptions":
+            check = lib_with_gaps_and_reused_keys
+        elif mode == "go":
+            s.go()
+            check = lmdb_version_store_v1
+        else:
+            s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", ["s2", 4, 6])], False)
+            check = lmdb_version_store_v1
 
-    lt = check.library_tool()
+        lt = check.library_tool()
 
-    assert {vi["version"] for vi in check.list_versions("x")} == {2, 4, 6}
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
-    assert [k.version_id for k in lt.find_keys(KeyType.TABLE_DATA)] == [2, 3, 4, 4, 6]
+        assert {vi["version"] for vi in check.list_versions("x")} == {2, 4, 6}
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 3
+        assert [k.version_id for k in lt.find_keys(KeyType.TABLE_DATA)] == [2, 3, 4, 4, 6]
+    finally:
+        delete_nvs(lib_with_gaps_and_reused_keys)
 
 
 @settings(deadline=None, suppress_health_check=(hypothesis.HealthCheck.function_scoped_fixture,))
@@ -305,37 +322,40 @@ def _tmp_test_body(to_copy, existing, lib_with_gaps_and_reused_keys, version_sto
     source = lib_with_gaps_and_reused_keys
     target = version_store_factory(name="_unique_")
 
-    if existing:
-        target.write("x", 0)
+    try:
+        if existing:
+            target.write("x", 0)
 
-    s = StorageMover(source._library, target._library)
-    s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", to_copy)], True)
+        s = StorageMover(source._library, target._library)
+        s.write_symbol_trees_from_source_to_target([SymbolVersionsPair("x", to_copy)], True)
 
-    actual_vers = sorted(vi["version"] for vi in target.list_versions("x"))
-    print(to_copy, existing, "->", actual_vers)
+        actual_vers = sorted(vi["version"] for vi in target.list_versions("x"))
+        print(to_copy, existing, "->", actual_vers)
 
-    lt = target.library_tool()
-    start = 0 if existing else 2  # mover starts at the first input version if target is empty....
-    n = int(existing) + len(to_copy)
-    assert actual_vers == list(range(start, start + n))
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == n
+        lt = target.library_tool()
+        start = 0 if existing else 2  # mover starts at the first input version if target is empty....
+        n = int(existing) + len(to_copy)
+        assert actual_vers == list(range(start, start + n))
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == n
 
-    source_keys = source.library_tool().find_keys(KeyType.TABLE_DATA)
-    expected_target = []
-    for item in to_copy:
-        if item == "s2":
-            expected_target.append(source_keys[0])
-        elif item == 4:
-            expected_target.extend(source_keys[1:4])
-        else:
-            expected_target.append(source_keys[-1])
-    expected_target.sort()  # key=lambda k: (k.version_id, k.start_index))
+        source_keys = source.library_tool().find_keys(KeyType.TABLE_DATA)
+        expected_target = []
+        for item in to_copy:
+            if item == "s2":
+                expected_target.append(source_keys[0])
+            elif item == 4:
+                expected_target.extend(source_keys[1:4])
+            else:
+                expected_target.append(source_keys[-1])
+        expected_target.sort()  # key=lambda k: (k.version_id, k.start_index))
 
-    target_keys = lt.find_keys(KeyType.TABLE_DATA)
-    target_keys.sort()
-    if existing:
-        target_keys.pop(0)
+        target_keys = lt.find_keys(KeyType.TABLE_DATA)
+        target_keys.sort()
+        if existing:
+            target_keys.pop(0)
 
-    for a, e in zip(target_keys, expected_target):
-        assert a.content_hash == e.content_hash
-        assert a.creation_ts >= source_keys[-1].creation_ts
+        for a, e in zip(target_keys, expected_target):
+            assert a.content_hash == e.content_hash
+            assert a.creation_ts >= source_keys[-1].creation_ts
+    finally:
+        delete_nvs(target)

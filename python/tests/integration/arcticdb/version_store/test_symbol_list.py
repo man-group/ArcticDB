@@ -26,6 +26,7 @@ from arcticdb_ext.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
+from arcticdb.util.utils import delete_nvs
 from tests.util.mark import MACOS_CONDA_BUILD
 
 
@@ -96,14 +97,17 @@ def test_symbol_list_with_rec_norm(basic_store):
 @pytest.mark.storage
 def test_interleaved_store_read(version_store_and_real_s3_basic_store_factory):
     basic_store_factory = version_store_and_real_s3_basic_store_factory
-    vs1 = basic_store_factory()
-    vs2 = basic_store_factory(reuse_name=True)
+    vs1: NativeVersionStore = basic_store_factory()
+    vs2: NativeVersionStore = basic_store_factory(reuse_name=True)
 
-    vs1.write("a", 1)
-    vs2.delete("a")
+    try:
+        vs1.write("a", 1)
+        vs2.delete("a")
 
-    assert vs1.list_symbols() == []
-
+        assert vs1.list_symbols() == []
+    finally:
+        delete_nvs(vs1)
+        delete_nvs(vs2)
 
 @pytest.mark.storage
 def test_symbol_list_regex(basic_store):
@@ -262,25 +266,28 @@ def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, wri
     assert not lib.library_tool().find_keys(KeyType.SYMBOL_LIST)
 
     lib = object_store_factory(reuse_name=True, symbol_list=True)
-    lt = lib.library_tool()
-    if write_another:
-        lib.write("b", 2)
+    try: 
+        lt = lib.library_tool()
+        if write_another:
+            lib.write("b", 2)
 
+            sl_keys = lt.find_keys(KeyType.SYMBOL_LIST)
+            assert sl_keys
+            assert not any(k.id == CompactionId for k in sl_keys), "Should not have any compaction yet"
+
+        ro = make_read_only(lib)
+        # For some reason, symbol_list=True is not always picked up on the first call, so forcing it:
+        symbols = ro.list_symbols(use_symbol_list=True)
+        assert set(symbols) == ({"a", "b"} if write_another else {"a"})
+        assert not any(k.id == CompactionId for k in lt.find_keys(KeyType.SYMBOL_LIST))
+
+        symbols = lib.list_symbols(use_symbol_list=True)
+        assert set(symbols) == ({"a", "b"} if write_another else {"a"})
         sl_keys = lt.find_keys(KeyType.SYMBOL_LIST)
-        assert sl_keys
-        assert not any(k.id == CompactionId for k in sl_keys), "Should not have any compaction yet"
-
-    ro = make_read_only(lib)
-    # For some reason, symbol_list=True is not always picked up on the first call, so forcing it:
-    symbols = ro.list_symbols(use_symbol_list=True)
-    assert set(symbols) == ({"a", "b"} if write_another else {"a"})
-    assert not any(k.id == CompactionId for k in lt.find_keys(KeyType.SYMBOL_LIST))
-
-    symbols = lib.list_symbols(use_symbol_list=True)
-    assert set(symbols) == ({"a", "b"} if write_another else {"a"})
-    sl_keys = lt.find_keys(KeyType.SYMBOL_LIST)
-    assert len(sl_keys) == 1
-    assert sl_keys[0].id == CompactionId
+        assert len(sl_keys) == 1
+        assert sl_keys[0].id == CompactionId
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("mode", ["conflict", "normal"])

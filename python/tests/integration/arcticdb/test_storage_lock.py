@@ -4,8 +4,10 @@ import numpy as np
 import pytest
 import sys
 
+from arcticdb.arctic import Arctic
 from arcticdb.util.utils import get_logger
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
+from arcticdb.version_store.library import Library
 from tests.util.mark import REAL_S3_TESTS_MARK, WINDOWS
 
 import time
@@ -29,22 +31,26 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
     pid = os.getpid()
     logger.info(f"Process {pid}: initiated")
     fixture = real_storage_factory.create_fixture()
-    lib = fixture.create_arctic()[lib_name]
-    lock = ReliableStorageLock("test_lock", lib._nvs._library, storage_lock_timeout_sec * one_sec)
-    lock_manager = ReliableStorageLockManager()
-    lock_manager.take_lock_guard(lock)
-    logger.info(f"Process {pid}: start read")
-    df = lib.read(symbol).data
-    logger.info(f"Process {pid}: previous value {df['col'][0]}")
-    df["col", 0] = df["col"][0] + 1
-    time.sleep(sleep_time)
-    lib.write(symbol, df)
-    logger.info(f"Process {pid}: incrementing and saving value {df['col'][0]}")
-    symbol_name = f"{symbol_prefix}{pid}"
-    lib.write(symbol_name, df)
-    logger.info(f"Process {pid}: wrote unique symbol {symbol_name}")
-    lock_manager.free_lock_guard()
-    logger.info(f"Process {pid}: completed")
+    ac: Arctic = fixture.create_arctic()
+    lib : Library = ac[lib_name]
+    try:
+        lock = ReliableStorageLock("test_lock", lib._nvs._library, storage_lock_timeout_sec * one_sec)
+        lock_manager = ReliableStorageLockManager()
+        lock_manager.take_lock_guard(lock)
+        logger.info(f"Process {pid}: start read")
+        df = lib.read(symbol).data
+        logger.info(f"Process {pid}: previous value {df['col'][0]}")
+        df["col", 0] = df["col"][0] + 1
+        time.sleep(sleep_time)
+        lib.write(symbol, df)
+        logger.info(f"Process {pid}: incrementing and saving value {df['col'][0]}")
+        symbol_name = f"{symbol_prefix}{pid}"
+        lib.write(symbol_name, df)
+        logger.info(f"Process {pid}: wrote unique symbol {symbol_name}")
+        lock_manager.free_lock_guard()
+        logger.info(f"Process {pid}: completed")
+    finally:
+        ac.delete_library(lib_name)
 
 # NOTE: Is there is not enough memory the number of actually spawned processes
 # will be lowe. The test counts the actual processes that did really got executed
@@ -53,29 +59,33 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
 @pytest.mark.storage
 def test_many_increments(real_storage_factory, lib_name, num_processes, max_sleep):
     fixture = real_storage_factory.create_fixture()
-    lib = fixture.create_arctic().create_library(lib_name)
-    init_df = pd.DataFrame({"col": [0]})
-    symbol = "counter"
-    lib._nvs.version_store.force_delete_symbol(symbol)
-    lib.write(symbol, init_df)
+    ac: Arctic = fixture.create_arctic()
+    lib : Library = ac[lib_name]
+    try:
+        init_df = pd.DataFrame({"col": [0]})
+        symbol = "counter"
+        lib._nvs.version_store.force_delete_symbol(symbol)
+        lib.write(symbol, init_df)
 
-    processes = [
-        Process(target=slow_increment_task, args=(real_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
-        for i in range(num_processes)
-    ]
-    for p in processes:
-        p.start()
+        processes = [
+            Process(target=slow_increment_task, args=(real_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
+            for i in range(num_processes)
+        ]
+        for p in processes:
+            p.start()
 
-    for p in processes:
-        p.join()
+        for p in processes:
+            p.join()
 
-    symbols = lib.list_symbols(regex=f"{symbol_prefix}.*")
-    num_processes_succeeded = len(symbols)
-    logger.info(f"Total number liver processes{num_processes_succeeded}")
-    logger.info(f"{symbols}")
+        symbols = lib.list_symbols(regex=f"{symbol_prefix}.*")
+        num_processes_succeeded = len(symbols)
+        logger.info(f"Total number liver processes{num_processes_succeeded}")
+        logger.info(f"{symbols}")
 
-    vit = lib.read(symbol)
-    read_df = vit.data
-    expected_df = pd.DataFrame({"col": [num_processes_succeeded]})
-    assert_frame_equal(read_df, expected_df)
-    assert vit.version == num_processes_succeeded
+        vit = lib.read(symbol)
+        read_df = vit.data
+        expected_df = pd.DataFrame({"col": [num_processes_succeeded]})
+        assert_frame_equal(read_df, expected_df)
+        assert vit.version == num_processes_succeeded
+    finally:
+        ac.delete_library(lib_name)

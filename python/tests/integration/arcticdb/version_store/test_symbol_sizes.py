@@ -7,6 +7,7 @@ from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
 
+from arcticdb.util.utils import delete_nvs
 from tests.util.mark import REAL_S3_TESTS_MARK
 
 
@@ -112,32 +113,35 @@ def test_symbol_sizes_multiple_versions(basic_store):
 
 @pytest.mark.storage
 def test_scan_object_sizes(arctic_client, lib_name):
-    lib = arctic_client.create_library(lib_name)
-    basic_store = lib._nvs
+    try:
+        lib = arctic_client.create_library(lib_name)
+        basic_store = lib._nvs
 
-    df = sample_dataframe(1000)
-    basic_store.write("sym", df)
-    basic_store.write("sym", df)
+        df = sample_dataframe(1000)
+        basic_store.write("sym", df)
+        basic_store.write("sym", df)
 
-    sizes = basic_store.version_store.scan_object_sizes()
+        sizes = basic_store.version_store.scan_object_sizes()
 
-    res = dict()
-    for s in sizes:
-        res[s.key_type] = (s.count, s.compressed_size)
+        res = dict()
+        for s in sizes:
+            res[s.key_type] = (s.count, s.compressed_size)
 
-    assert KeyType.VERSION in res
-    assert KeyType.TABLE_INDEX in res
-    assert KeyType.TABLE_DATA in res
-    assert KeyType.VERSION_REF in res
+        assert KeyType.VERSION in res
+        assert KeyType.TABLE_INDEX in res
+        assert KeyType.TABLE_DATA in res
+        assert KeyType.VERSION_REF in res
 
-    assert res[KeyType.VERSION][0] == 2
-    assert 1000 < res[KeyType.VERSION][1] < 2000
-    assert res[KeyType.TABLE_INDEX][0] == 2
-    assert 2000 < res[KeyType.TABLE_INDEX][1] < 4000
-    assert res[KeyType.TABLE_DATA][0] == 2
-    assert 100_000 < res[KeyType.TABLE_DATA][1] < 200_000
-    assert res[KeyType.VERSION_REF][0] == 1
-    assert 500 < res[KeyType.VERSION_REF][1] < 1500
+        assert res[KeyType.VERSION][0] == 2
+        assert 1000 < res[KeyType.VERSION][1] < 2000
+        assert res[KeyType.TABLE_INDEX][0] == 2
+        assert 2000 < res[KeyType.TABLE_INDEX][1] < 4000
+        assert res[KeyType.TABLE_DATA][0] == 2
+        assert 100_000 < res[KeyType.TABLE_DATA][1] < 200_000
+        assert res[KeyType.VERSION_REF][0] == 1
+        assert 500 < res[KeyType.VERSION_REF][1] < 1500
+    finally:
+        arctic_client.delete_library(lib_name)
 
 
 @pytest.mark.parametrize("storage, encoding_version_, num_io_threads, num_cpu_threads", [
@@ -159,22 +163,25 @@ def test_scan_object_sizes_threading(request, storage, encoding_version_, lib_na
                 assert adb_async.cpu_thread_count() == num_cpu_threads
 
             lib = arctic_client.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=5))
-            basic_store = lib._nvs
+            try:
+                basic_store = lib._nvs
 
-            df = sample_dataframe(100)
-            basic_store.write("sym", df)
-            basic_store.write("sym", df)
+                df = sample_dataframe(100)
+                basic_store.write("sym", df)
+                basic_store.write("sym", df)
 
-            sizes = basic_store.version_store.scan_object_sizes()
+                sizes = basic_store.version_store.scan_object_sizes()
 
-            res = dict()
-            for s in sizes:
-                res[s.key_type] = (s.count, s.compressed_size)
+                res = dict()
+                for s in sizes:
+                    res[s.key_type] = (s.count, s.compressed_size)
 
-            assert KeyType.VERSION in res
-            assert KeyType.TABLE_INDEX in res
-            assert KeyType.TABLE_DATA in res
-            assert KeyType.VERSION_REF in res
+                assert KeyType.VERSION in res
+                assert KeyType.TABLE_INDEX in res
+                assert KeyType.TABLE_DATA in res
+                assert KeyType.VERSION_REF in res
+            finally:
+                arctic_client.delete_library(lib_name)
     finally:
         adb_async.reinit_task_scheduler()
 
@@ -290,19 +297,22 @@ def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
     factory = azurite_storage.create_version_store_factory(lib_name)
     df = sample_dataframe(100, 0)
     lib = factory()
-    lib.write("s", df)
+    try:
+        lib.write("s", df)
 
-    blobs = azurite_storage.client.list_blobs()
-    total_size = 0
-    total_count = 0
-    for blob in blobs:
-        if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
-            total_size += blob.size
-            total_count += 1
+        blobs = azurite_storage.client.list_blobs()
+        total_size = 0
+        total_count = 0
+        for blob in blobs:
+            if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
+                total_size += blob.size
+                total_count += 1
 
-    sizes = lib.version_store.scan_object_sizes()
+        sizes = lib.version_store.scan_object_sizes()
 
-    data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-    assert total_count == 1
-    assert data_size.count == total_count
-    assert data_size.compressed_size == total_size
+        data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
+        assert total_count == 1
+        assert data_size.count == total_count
+        assert data_size.compressed_size == total_size
+    finally:
+        delete_nvs(lib)

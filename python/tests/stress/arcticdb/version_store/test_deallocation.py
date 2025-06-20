@@ -10,6 +10,7 @@ import numpy as np
 import pytest
 
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.utils import delete_nvs
 
 
 @pytest.mark.storage
@@ -20,8 +21,10 @@ def test_many_version_store(basic_store_factory):
 
     for i in range(10):
         version_store = basic_store_factory(name=f"local.test{i}")
-
-        symbol = "sym_{}".format(i)
-        version_store.write(symbol, df2)
-        vit = version_store.read(symbol)
-        assert_frame_equal(vit.data, df2)
+        try: 
+            symbol = "sym_{}".format(i)
+            version_store.write(symbol, df2)
+            vit = version_store.read(symbol)
+            assert_frame_equal(vit.data, df2)
+        finally:
+            delete_nvs(version_store)

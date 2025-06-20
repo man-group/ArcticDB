@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from arcticdb.arctic import Arctic
 from arcticdb.util.test import assert_frame_equal, config_context
 import pytest
 from arcticdb_ext.storage import KeyType
@@ -780,94 +781,112 @@ class TestSlicing:
     def test_wide_segment_with_no_prior_slicing(self, lmdb_storage, lib_name, mode, delete_staged_data_on_failure):
         columns_per_segment = 5
         dataframe_columns = 2 * columns_per_segment
-        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
-        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-        # Initial staged write of wide dataframe is allowed
-        lib.write("sym", df_0, staged=True)
-        lib.sort_and_finalize_staged_data("sym", mode=mode)
-        assert_frame_equal(lib.read("sym").data, df_0)
+        ac: Arctic = lmdb_storage.create_arctic()
+        try:
+            lib = ac.create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+            df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+            # Initial staged write of wide dataframe is allowed
+            lib.write("sym", df_0, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=mode)
+            assert_frame_equal(lib.read("sym").data, df_0)
 
-        # Appending to unsliced dataframe is allowed
-        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.append("sym", df_1)
-        assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
-        # Cannot perform another sort and finalize append when column sliced data has been written even though the first
-        # write is done using sort and finalize
-        lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
-        with pytest.raises(UserInputException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
-        assert "append" in str(exception_info.value).lower()
-        assert "column" in str(exception_info.value).lower()
-        assert "sliced" in str(exception_info.value).lower()
-        expected_key_count = 0 if delete_staged_data_on_failure else 1
-        assert len(get_append_keys(lib, "sym")) == expected_key_count
+            # Appending to unsliced dataframe is allowed
+            df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+            lib.append("sym", df_1)
+            assert_frame_equal(lib.read("sym").data, pd.concat([df_0, df_1]))
+            # Cannot perform another sort and finalize append when column sliced data has been written even though the first
+            # write is done using sort and finalize
+            lib.write("sym", pd.DataFrame({f"col_{i}": [i] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3)])), staged=True)
+            with pytest.raises(UserInputException) as exception_info:
+                lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
+            assert "append" in str(exception_info.value).lower()
+            assert "column" in str(exception_info.value).lower()
+            assert "sliced" in str(exception_info.value).lower()
+            expected_key_count = 0 if delete_staged_data_on_failure else 1
+            assert len(get_append_keys(lib, "sym")) == expected_key_count
+        finally:
+            ac.delete_library(lib_name)
+
 
     @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     @pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE])
     def test_update_wide_staged_segment(self, lmdb_storage, lib_name, mode, delete_staged_data_on_failure):
         columns_per_segment = 5
         dataframe_columns = 2 * columns_per_segment
-        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
-        df_0 = pd.DataFrame({f"col_{i}": [1, 2, 3] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))))
-        # Initial staged write of wide dataframe is allowed
-        lib.write("sym", df_0, staged=True)
-        lib.sort_and_finalize_staged_data("sym", mode=mode)
-        assert_frame_equal(lib.read("sym").data, df_0)
+        ac: Arctic = lmdb_storage.create_arctic()
+        try:
+            lib = ac.create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+            df_0 = pd.DataFrame({f"col_{i}": [1, 2, 3] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))))
+            # Initial staged write of wide dataframe is allowed
+            lib.write("sym", df_0, staged=True)
+            lib.sort_and_finalize_staged_data("sym", mode=mode)
+            assert_frame_equal(lib.read("sym").data, df_0)
 
-        # Updating unsliced dataframe is allowed
-        update_df = pd.DataFrame({f"col_{i}": [4] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.update("sym", update_df)
+            # Updating unsliced dataframe is allowed
+            update_df = pd.DataFrame({f"col_{i}": [4] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+            lib.update("sym", update_df)
 
-        expected = pd.DataFrame({f"col_{i}": [1, 4, 3] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))))
-        assert_frame_equal(lib.read("sym").data, expected)
+            expected = pd.DataFrame({f"col_{i}": [1, 4, 3] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 3))))
+            assert_frame_equal(lib.read("sym").data, expected)
 
-        df_1 = pd.DataFrame({f"col_{i}": [5, 6, 7] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 4), pd.Timestamp(2024, 1, 6))))
-        # Cannot append via sort and finalize because slicing has occurred
-        with pytest.raises(UserInputException) as exception_info:
-            lib.write("sym", df_1, staged=True)
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
-        assert "append" in str(exception_info.value).lower()
-        assert "column" in str(exception_info.value).lower()
-        assert "sliced" in str(exception_info.value).lower()
-        expected_key_count = 0 if delete_staged_data_on_failure else 1
-        assert len(get_append_keys(lib, "sym")) == expected_key_count
-        
-        # Can perform regular append
-        lib.append("sym", df_1)
-        
-        expected = pd.DataFrame({f"col_{i}": [1, 4, 3, 5, 6, 7] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 6))))
-        assert_frame_equal(lib.read("sym").data, expected)
+            df_1 = pd.DataFrame({f"col_{i}": [5, 6, 7] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 4), pd.Timestamp(2024, 1, 6))))
+            # Cannot append via sort and finalize because slicing has occurred
+            with pytest.raises(UserInputException) as exception_info:
+                lib.write("sym", df_1, staged=True)
+                lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
+            assert "append" in str(exception_info.value).lower()
+            assert "column" in str(exception_info.value).lower()
+            assert "sliced" in str(exception_info.value).lower()
+            expected_key_count = 0 if delete_staged_data_on_failure else 1
+            assert len(get_append_keys(lib, "sym")) == expected_key_count
+            
+            # Can perform regular append
+            lib.append("sym", df_1)
+            
+            expected = pd.DataFrame({f"col_{i}": [1, 4, 3, 5, 6, 7] for i in range(0, dataframe_columns)}, index=pd.DatetimeIndex(pd.date_range(pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 6))))
+            assert_frame_equal(lib.read("sym").data, expected)
+        finally:
+            ac.delete_library(lib_name)
 
     @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])
     def test_appending_wide_segment_throws_with_prior_slicing(self, lmdb_storage, lib_name, delete_staged_data_on_failure):
         columns_per_segment = 5
-        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
-        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-        lib.write("sym", df_0)
-        
-        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", df_1, staged=True)
+        ac: Arctic = lmdb_storage.create_arctic()
+        try:
+            lib = ac.create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+            df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+            lib.write("sym", df_0)
+            
+            df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+            lib.write("sym", df_1, staged=True)
 
-        with pytest.raises(UserInputException) as exception_info:
-            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
-        assert "append" in str(exception_info.value).lower()
-        assert "column" in str(exception_info.value).lower()
-        assert "sliced" in str(exception_info.value).lower()
-        expected_key_count = 0 if delete_staged_data_on_failure else 1
-        assert len(get_append_keys(lib, "sym")) == expected_key_count
+            with pytest.raises(UserInputException) as exception_info:
+                lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=delete_staged_data_on_failure)
+            assert "append" in str(exception_info.value).lower()
+            assert "column" in str(exception_info.value).lower()
+            assert "sliced" in str(exception_info.value).lower()
+            expected_key_count = 0 if delete_staged_data_on_failure else 1
+            assert len(get_append_keys(lib, "sym")) == expected_key_count
+        finally:
+            ac.delete_library(lib_name)
+
 
     def test_writing_wide_segment_over_sliced_data(self, lmdb_storage, lib_name):
         columns_per_segment = 5
-        lib = lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
-        df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
-        lib.write("sym", df_0)
-        
-        df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
-        lib.write("sym", df_1, staged=True)
+        ac: Arctic = lmdb_storage.create_arctic()
+        try:
+            lib = ac.create_library(lib_name, library_options=LibraryOptions(columns_per_segment=columns_per_segment))
+            df_0 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1)]))
+            lib.write("sym", df_0)
+            
+            df_1 = pd.DataFrame({f"col_{i}": [i] for i in range(0, 10)}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 2)]))
+            lib.write("sym", df_1, staged=True)
 
-        lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
+            lib.sort_and_finalize_staged_data("sym", mode=StagedDataFinalizeMethod.WRITE)
 
-        assert_frame_equal(lib.read("sym").data, df_1)
+            assert_frame_equal(lib.read("sym").data, df_1)
+        finally:
+            ac.delete_library(lib_name)
 
 
 @pytest.mark.parametrize("delete_staged_data_on_failure", [True, False])

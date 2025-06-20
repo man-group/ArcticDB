@@ -30,7 +30,7 @@ class LmdbStorageFixture(StorageFixture):
         self.libs_instances_from_arctic: List[NativeVersionStore] = []
         self.arctic_instances: List[Arctic] = []
 
-    def create_arctic(self, **extras):
+    def create_arctic(self, **extras) -> Arctic:
         out = super().create_arctic(**extras)
         # This is a hack to allow the tests to access the libs_instances_from_arctic list
         out._accessed_libs = self.libs_instances_from_arctic
@@ -42,8 +42,9 @@ class LmdbStorageFixture(StorageFixture):
             #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
             #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects
             #  keeping the LMDB env open before they will release the lock and allow Windows to delete the LMDB files.
-            result.version_store = None
-            result._library = None
+            if result is not None:
+                result.version_store = None
+                result._library = None
         for a in self.arctic_instances:
             a._library_manager = None
             pass
