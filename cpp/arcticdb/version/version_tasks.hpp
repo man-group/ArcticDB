@@ -47,19 +47,24 @@ struct UpdateMetadataTask : async::BaseTask {
     }
 };
 
+struct MaybeDeletedAtomKey {
+    AtomKey key;
+    bool deleted;
+};
+
 struct AsyncRestoreVersionTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     std::shared_ptr<VersionMap> version_map_;
     const StreamId stream_id_;
     const AtomKey index_key_;
-    std::optional<AtomKey> maybe_prev_;
+    std::optional<MaybeDeletedAtomKey> maybe_prev_;
 
     AsyncRestoreVersionTask(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> version_map,
         StreamId stream_id,
         entity::AtomKey index_key,
-        std::optional<AtomKey> maybe_prev) :
+        std::optional<MaybeDeletedAtomKey> maybe_prev) :
         store_(std::move(store)),
         version_map_(std::move(version_map)),
         stream_id_(std::move(stream_id)),
@@ -71,35 +76,35 @@ struct AsyncRestoreVersionTask : async::BaseTask {
         using namespace arcticdb::pipelines;
         auto [index_segment_reader, slice_and_keys] = index::read_index_to_vector(store_, index_key_);
 
-        if (maybe_prev_ && maybe_prev_->version_id() == index_key_.version_id()) {
+        if (maybe_prev_ && !maybe_prev_->deleted && maybe_prev_->key.version_id() == index_key_.version_id()) {
             folly::Promise<std::pair<VersionedItem, TimeseriesDescriptor>> promise;
             auto future = promise.getFuture();
             promise.setTry(folly::Try(std::make_pair(VersionedItem{index_key_}, index_segment_reader.tsd())));
             return future;
-        } else {
-            auto tsd = std::make_shared<TimeseriesDescriptor>(index_segment_reader.tsd().clone());
-            auto sk = std::make_shared<std::vector<SliceAndKey>>(std::move(slice_and_keys));
-            auto version_id = get_next_version_from_key(maybe_prev_);
-            std::vector<folly::Future<VariantKey>> fut_keys;
-            for (const auto &slice_and_key : *sk)
-                fut_keys.emplace_back(
-                    store_->copy(slice_and_key.key().type(), stream_id_, version_id, slice_and_key.key()));
-
-            return folly::collect(fut_keys).via(&async::io_executor()).thenValue([sk](auto keys) {
-                std::vector<SliceAndKey> res;
-                res.reserve(keys.size());
-                for (std::size_t i = 0; i < res.capacity(); ++i) {
-                    res.emplace_back(SliceAndKey{(*sk)[i].slice_, std::move(to_atom(keys[i]))});
-                }
-                return res;
-            }).thenValue([store=store_, version_map=version_map_, tsd=tsd, stream_id=stream_id_, version_id] (auto&& new_slice_and_keys) {
-                auto index = index_type_from_descriptor(tsd->as_stream_descriptor());
-                return index::index_and_version(index, store, *tsd, new_slice_and_keys, stream_id, version_id);
-            }).thenValue([store=store_, version_map=version_map_, tsd=tsd, maybe_prev=maybe_prev_] (auto versioned_item) {
-                version_map->write_version(store, versioned_item.key_, std::nullopt);
-                return std::make_pair(versioned_item, *tsd);
-            });
         }
+
+        auto tsd = std::make_shared<TimeseriesDescriptor>(index_segment_reader.tsd().clone());
+        auto sk = std::make_shared<std::vector<SliceAndKey>>(std::move(slice_and_keys));
+        auto version_id = get_next_version_from_key(maybe_prev_->key);
+        std::vector<folly::Future<VariantKey>> fut_keys;
+        for (const auto &slice_and_key : *sk)
+            fut_keys.emplace_back(
+                store_->copy(slice_and_key.key().type(), stream_id_, version_id, slice_and_key.key()));
+
+        return folly::collect(fut_keys).via(&async::io_executor()).thenValue([sk](auto keys) {
+            std::vector<SliceAndKey> res;
+            res.reserve(keys.size());
+            for (std::size_t i = 0; i < res.capacity(); ++i) {
+                res.emplace_back(SliceAndKey{(*sk)[i].slice_, std::move(to_atom(keys[i]))});
+            }
+            return res;
+        }).thenValue([store=store_, version_map=version_map_, tsd=tsd, stream_id=stream_id_, version_id] (auto&& new_slice_and_keys) {
+            auto index = index_type_from_descriptor(tsd->as_stream_descriptor());
+            return index::index_and_version(index, store, *tsd, new_slice_and_keys, stream_id, version_id);
+        }).thenValue([store=store_, version_map=version_map_, tsd=tsd] (auto versioned_item) {
+            version_map->write_version(store, versioned_item.key_, std::nullopt);
+            return std::make_pair(versioned_item, *tsd);
+        });
     }
 };
 
