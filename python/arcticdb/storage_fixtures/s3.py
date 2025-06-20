@@ -736,6 +736,16 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             time.sleep(1)   
 
 
+def list_moto_storage(moto: 'MotoS3StorageFixtureFactory', bucket: Union['S3Bucket']):
+    response = moto._s3_admin.list_objects_v2(Bucket=bucket.bucket)
+
+    if 'Contents' in response:
+        for obj in response['Contents']:
+            logger.warning(f"Object left: {obj['Key']}")
+    else:
+        logger.info(f"Bucket is empty")
+
+
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
     _RO_POLICY: str
@@ -777,6 +787,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # and we need to make sure the bucket names are unique
         # set the unique_id to the current UNIX timestamp to avoid conflicts
         self.unique_id = str(int(time.time()))
+
 
     def bucket_name(self, bucket_type="s3"):
         # We need to increment the bucket_id for each new bucket
@@ -891,6 +902,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 # and if we try to delete the bucket, it will fail
                 b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
             try:
+                list_moto_storage(self, b)
                 self._s3_admin.delete_bucket(Bucket=b.bucket)
             except botocore.exceptions.ClientError as e:
                 if e.response["Error"]["Code"] != "NoSuchBucket":

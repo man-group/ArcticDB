@@ -24,7 +24,7 @@ from arcticdb_ext import set_config_string
 from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import create_df, assert_frame_equal
 
-from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
+from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory, list_moto_storage
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
 
 import arcticdb.toolbox.query_stats as qs
@@ -39,20 +39,23 @@ pytestmark = pytest.mark.skipif(
 
 def test_s3_storage_failures(mock_s3_store_with_error_simulation):
     lib = mock_s3_store_with_error_simulation
-    symbol_success = "symbol"
-    symbol_fail_write = "symbol#Failure_Write_99_0"
-    symbol_fail_read = "symbol#Failure_Read_17_0"
-    df = pd.DataFrame({"a": list(range(100))}, index=list(range(100)))
+    try:
+        symbol_success = "symbol"
+        symbol_fail_write = "symbol#Failure_Write_99_0"
+        symbol_fail_read = "symbol#Failure_Read_17_0"
+        df = pd.DataFrame({"a": list(range(100))}, index=list(range(100)))
 
-    lib.write(symbol_success, df)
-    result_df = lib.read(symbol_success).data
-    assert_frame_equal(result_df, df)
+        lib.write(symbol_success, df)
+        result_df = lib.read(symbol_success).data
+        assert_frame_equal(result_df, df)
 
-    with pytest.raises(StorageException, match="Network error: S3Error#99"):
-        lib.write(symbol_fail_write, df)
+        with pytest.raises(StorageException, match="Network error: S3Error#99"):
+            lib.write(symbol_fail_write, df)
 
-    with pytest.raises(StorageException, match="Unexpected error: S3Error#17"):
-        lib.read(symbol_fail_read)
+        with pytest.raises(StorageException, match="Unexpected error: S3Error#17"):
+            lib.read(symbol_fail_read)
+    finally:
+        delete_nvs(lib)
 
 
 # TODO: To make this test run alongside other tests we'll need to:
@@ -68,13 +71,16 @@ def test_s3_running_on_aws_fast_check(lib_name, s3_storage_factory, run_on_aws):
         set_config_string("EC2.TestIMDSEndpointOverride", s3_storage_factory.endpoint)
 
     lib = s3_storage_factory.create_fixture().create_version_store_factory(lib_name)()
-    lib_tool = lib.library_tool()
-    # We use the AWS_EC2_METADATA_DISABLED variable to verify we're disabling the EC2 Metadata check when outside of AWS
-    # For some reason os.getenv can't access environment variables from the cpp layer so we use lib_tool.inspect_env_variable
-    if run_on_aws:
-        assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == None
-    else:
-        assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == "true"
+    try:
+        lib_tool = lib.library_tool()
+        # We use the AWS_EC2_METADATA_DISABLED variable to verify we're disabling the EC2 Metadata check when outside of AWS
+        # For some reason os.getenv can't access environment variables from the cpp layer so we use lib_tool.inspect_env_variable
+        if run_on_aws:
+            assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == None
+        else:
+            assert lib_tool.inspect_env_variable("AWS_EC2_METADATA_DISABLED") == "true"
+    finally:
+        delete_nvs(lib)
 
 
 def test_nfs_backed_s3_storage(lib_name, nfs_clean_bucket):
@@ -121,25 +127,28 @@ def test_racing_list_and_delete_nfs(nfs_backed_s3_storage, lib_name):
     """This test is for a regression with NFS where iterating snapshots raced with
     deleting them, due to a bug in our logic to suppress the KeyNotFoundException."""
     lib = nfs_backed_s3_storage.create_version_store_factory(lib_name)()
-    lib.write("tst", [1, 2, 3])
-
-    exceptions_in_reader = Queue()
-    reader = Process(target=read_repeatedly, args=(lib, exceptions_in_reader))
-    writer = Process(target=write_repeatedly, args=(lib,))
-
     try:
-        reader.start()
-        writer.start()
+        lib.write("tst", [1, 2, 3])
 
-        # Run test for 2 seconds - this was enough for this regression test to reliably fail
-        # 10 times in a row.
-        reader.join(2)
-        writer.join(0.001)
+        exceptions_in_reader = Queue()
+        reader = Process(target=read_repeatedly, args=(lib, exceptions_in_reader))
+        writer = Process(target=write_repeatedly, args=(lib,))
+
+        try:
+            reader.start()
+            writer.start()
+
+            # Run test for 2 seconds - this was enough for this regression test to reliably fail
+            # 10 times in a row.
+            reader.join(2)
+            writer.join(0.001)
+        finally:
+            writer.terminate()
+            reader.terminate()
+
+        assert exceptions_in_reader.empty()
     finally:
-        writer.terminate()
-        reader.terminate()
-
-    assert exceptions_in_reader.empty()
+        delete_nvs(lib)
 
 
 @pytest.fixture(scope="session", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
@@ -151,6 +160,7 @@ def s3_storage_dots_in_path(request):
     ) as f:
         with f.create_fixture() as g:
             yield g
+        list_moto_storage(f, g)
 
 
 def test_read_path_with_dot(lib_name, s3_storage_dots_in_path):
