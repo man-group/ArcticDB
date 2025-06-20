@@ -113,32 +113,35 @@ def test_symbol_sizes_multiple_versions(basic_store):
 
 @pytest.mark.storage
 def test_scan_object_sizes(arctic_client, lib_name):
-    lib = arctic_client.create_library(lib_name)
-    basic_store = lib._nvs
+    try:
+        lib = arctic_client.create_library(lib_name)
+        basic_store = lib._nvs
 
-    df = sample_dataframe(1000)
-    basic_store.write("sym", df)
-    basic_store.write("sym", df)
+        df = sample_dataframe(1000)
+        basic_store.write("sym", df)
+        basic_store.write("sym", df)
 
-    sizes = basic_store.version_store.scan_object_sizes()
+        sizes = basic_store.version_store.scan_object_sizes()
 
-    res = dict()
-    for s in sizes:
-        res[s.key_type] = (s.count, s.compressed_size)
+        res = dict()
+        for s in sizes:
+            res[s.key_type] = (s.count, s.compressed_size)
 
-    assert KeyType.VERSION in res
-    assert KeyType.TABLE_INDEX in res
-    assert KeyType.TABLE_DATA in res
-    assert KeyType.VERSION_REF in res
+        assert KeyType.VERSION in res
+        assert KeyType.TABLE_INDEX in res
+        assert KeyType.TABLE_DATA in res
+        assert KeyType.VERSION_REF in res
 
-    assert res[KeyType.VERSION][0] == 2
-    assert 1000 < res[KeyType.VERSION][1] < 2000
-    assert res[KeyType.TABLE_INDEX][0] == 2
-    assert 2000 < res[KeyType.TABLE_INDEX][1] < 4000
-    assert res[KeyType.TABLE_DATA][0] == 2
-    assert 100_000 < res[KeyType.TABLE_DATA][1] < 200_000
-    assert res[KeyType.VERSION_REF][0] == 1
-    assert 500 < res[KeyType.VERSION_REF][1] < 1500
+        assert res[KeyType.VERSION][0] == 2
+        assert 1000 < res[KeyType.VERSION][1] < 2000
+        assert res[KeyType.TABLE_INDEX][0] == 2
+        assert 2000 < res[KeyType.TABLE_INDEX][1] < 4000
+        assert res[KeyType.TABLE_DATA][0] == 2
+        assert 100_000 < res[KeyType.TABLE_DATA][1] < 200_000
+        assert res[KeyType.VERSION_REF][0] == 1
+        assert 500 < res[KeyType.VERSION_REF][1] < 1500
+    finally:
+        arctic_client.delete_library(lib_name)
 
 
 @pytest.mark.parametrize("storage, encoding_version_, num_io_threads, num_cpu_threads", [
@@ -160,22 +163,25 @@ def test_scan_object_sizes_threading(request, storage, encoding_version_, lib_na
                 assert adb_async.cpu_thread_count() == num_cpu_threads
 
             lib = arctic_client.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=5))
-            basic_store = lib._nvs
+            try:
+                basic_store = lib._nvs
 
-            df = sample_dataframe(100)
-            basic_store.write("sym", df)
-            basic_store.write("sym", df)
+                df = sample_dataframe(100)
+                basic_store.write("sym", df)
+                basic_store.write("sym", df)
 
-            sizes = basic_store.version_store.scan_object_sizes()
+                sizes = basic_store.version_store.scan_object_sizes()
 
-            res = dict()
-            for s in sizes:
-                res[s.key_type] = (s.count, s.compressed_size)
+                res = dict()
+                for s in sizes:
+                    res[s.key_type] = (s.count, s.compressed_size)
 
-            assert KeyType.VERSION in res
-            assert KeyType.TABLE_INDEX in res
-            assert KeyType.TABLE_DATA in res
-            assert KeyType.VERSION_REF in res
+                assert KeyType.VERSION in res
+                assert KeyType.TABLE_INDEX in res
+                assert KeyType.TABLE_DATA in res
+                assert KeyType.VERSION_REF in res
+            finally:
+                arctic_client.delete_library(lib_name)
     finally:
         adb_async.reinit_task_scheduler()
 

@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import enum
 from typing import Any, Callable, Generator, Union
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.util.utils import get_logger
+from arcticdb.util.utils import delete_library, get_logger
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -23,6 +23,7 @@ import re
 import time
 import requests
 import uuid
+import arcticdb_ext
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
@@ -167,7 +168,7 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
     ac = lmdb_storage.create_arctic()
     yield lmdb_storage.create_arctic().create_library(lib_name)
-    ac.delete_library(lib_name)
+    delete_library(ac, lib_name)
 
 
 @pytest.fixture
@@ -175,7 +176,7 @@ def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Generator[Library, No
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
     yield lib
-    ac.delete_library(lib_name)
+    delete_library(ac, lib_name)
 
 
 @pytest.fixture(
@@ -598,26 +599,26 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
 @pytest.fixture
 def arctic_library(arctic_client, lib_name) -> Generator[Library, None, None]:
     yield arctic_client.create_library(lib_name)
-    arctic_client.delete_library(lib_name)
+    delete_library(arctic_client, lib_name)
 
 
 @pytest.fixture
 def arctic_library_dynamic(arctic_client, lib_name) -> Generator[Library, None, None]:
     lib_opts = LibraryOptions(dynamic_schema=True)
     yield arctic_client.create_library(lib_name, library_options=lib_opts)
-    arctic_client.delete_library(lib_name)
+    delete_library(arctic_client, lib_name)
 
 
 @pytest.fixture
 def arctic_library_v1(arctic_client_v1, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_v1.create_library(lib_name)
-    arctic_client_v1.delete_library(lib_name)
+    delete_library(arctic_client, lib_name)
 
 
 @pytest.fixture
 def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_lmdb.create_library(lib_name)
-    arctic_client_lmdb.delete_library(lib_name)
+    delete_library(arctic_client_lmdb, lib_name)
 
 
 @pytest.fixture(
@@ -645,15 +646,16 @@ def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
 
 
 @pytest.fixture
-def arctic_library_lmdb_100gb(arctic_client_lmdb_map_size_100gb, lib_name) -> Library:
-    return arctic_client_lmdb_map_size_100gb.create_library(lib_name)
+def arctic_library_lmdb_100gb(arctic_client_lmdb_map_size_100gb, lib_name) -> Generator[Library, None, None]:
+    yield arctic_client_lmdb_map_size_100gb.create_library(lib_name)
+    delete_library(arctic_client_lmdb_map_size_100gb, lib_name)
 
 
 @pytest.fixture
 def basic_arctic_library(basic_arctic_client, lib_name) -> Generator[Library, Any, Any]:
     lib = basic_arctic_client.create_library(lib_name)
     yield lib
-    basic_arctic_client.delete_library(lib_name)
+    delete_library(basic_arctic_client, lib_name)
 
 
 # endregion

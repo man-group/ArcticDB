@@ -111,6 +111,18 @@ def delete_nvs(nvs: NativeVersionStore, ac: Arctic = None):
         logger.warning(f"Cannot delete library without arctic instance. Library {nvs}")
     else:
         raise Exception(f"Unsupported type: {nvs}")
+    
+
+def delete_library(ac: Arctic, lib_name: str):
+    try:
+        ac.create_library(lib_name)
+    except arcticdb_ext.exceptions.StorageException as e:
+        if "LMDB" in repr(e): # skip LMDB errors
+            pass
+        else: 
+            logger.warning(f"Caught exception during deletion of library '{lib_name}' - {repr(e)}")
+            raise
+            
 
 class  TimestampNumber:
     """

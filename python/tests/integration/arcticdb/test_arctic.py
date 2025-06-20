@@ -1257,7 +1257,8 @@ def test_dedup(arctic_client, lib_name):
     # we are doing manual iteration due to a limitation that should be fixed by issue #1053
     for dedup in [True, False]:
         try:
-            ac.create_library(f"{lib_name}_{dedup}", LibraryOptions(dedup=dedup))
+            lname = f"{lib_name}_{dedup}"
+            ac.create_library(lname, LibraryOptions(dedup=dedup))
             lib = ac[f"{lib_name}_{dedup}"]
             symbol = "test_dedup"
             lib.write_pickle(symbol, 1)
@@ -1266,6 +1267,8 @@ def test_dedup(arctic_client, lib_name):
             assert data_key_version == 0 if dedup else 1
         except AssertionError as e:
             errors.append(f"Failed when using dedup value {dedup}: {str(e)}")
+        finally:
+            ac.delete_library(lname)
     assert not errors, "errors occurred:\n" + "\n".join(errors)
 
 
@@ -1274,21 +1277,23 @@ def test_segment_slicing(arctic_client, lib_name):
     ac = arctic_client
     rows_per_segment = 5
     columns_per_segment = 2
-    ac.create_library(
-        lib_name,
-        LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment),
-    )
-    lib = ac[lib_name]
-    symbol = "test_segment_slicing"
-    rows = 12
-    columns = 3
-    data = {}
-    for col in range(columns):
-        data[f"col{col}"] = np.arange(100 * col, (100 * col) + rows)
-    lib.write(symbol, pd.DataFrame(data))
-    num_data_segments = len(lib._nvs.read_index(symbol))
-    assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
-
+    try:
+        ac.create_library(
+            lib_name,
+            LibraryOptions(rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment),
+        )
+        lib = ac[lib_name]
+        symbol = "test_segment_slicing"
+        rows = 12
+        columns = 3
+        data = {}
+        for col in range(columns):
+            data[f"col{col}"] = np.arange(100 * col, (100 * col) + rows)
+        lib.write(symbol, pd.DataFrame(data))
+        num_data_segments = len(lib._nvs.read_index(symbol))
+        assert num_data_segments == math.ceil(rows / rows_per_segment) * math.ceil(columns / columns_per_segment)
+    finally:
+        ac.delete_library(lib_name)
 
 @pytest.mark.parametrize("fixture", ["s3_storage", pytest.param("azurite_storage", marks=AZURE_TESTS_MARK)])
 def test_reload_symbol_list(fixture, request):
@@ -1307,21 +1312,23 @@ def test_reload_symbol_list(fixture, request):
 
     ac = Arctic(storage_fixture.arctic_uri)
 
-    ac.create_library(lib_name)
-    lib = ac[lib_name]
+    try:
+        ac.create_library(lib_name)
+        lib = ac[lib_name]
 
-    lib.write_pickle("symbol_2", 2)
+        lib.write_pickle("symbol_2", 2)
 
-    for _ in range(15):
-        lib.write_pickle("symbol_1", 1)
-        lib.delete("symbol_1")
+        for _ in range(15):
+            lib.write_pickle("symbol_1", 1)
+            lib.delete("symbol_1")
 
-    # assert set(lib.list_symbols()) == {"symbol_2"}
-    assert len(get_symbol_list_keys(lib_name)) == 31
+        # assert set(lib.list_symbols()) == {"symbol_2"}
+        assert len(get_symbol_list_keys(lib_name)) == 31
 
-    lib.reload_symbol_list()
-    assert len(get_symbol_list_keys(lib_name)) == 1
-
+        lib.reload_symbol_list()
+        assert len(get_symbol_list_keys(lib_name)) == 1
+    finally:
+        ac.delete_library(lib_name)
 
 @pytest.mark.parametrize(
     "fixture",
