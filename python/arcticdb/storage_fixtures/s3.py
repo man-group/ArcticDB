@@ -355,6 +355,7 @@ def real_s3_from_environment_variables(
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     return out
 
+
 def real_gcp_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
 ) -> BaseGCPStorageFixtureFactory:
@@ -624,15 +625,14 @@ class HostDispatcherApplication(DomainDispatcherApplication):
 
         with self.lock:
             # Check for x-amz-checksum-mode header
-            if environ.get('HTTP_X_AMZ_CHECKSUM_MODE') == 'enabled':
+            if environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                    b'<Error><Code>MissingContentLength</Code>'
-                    b'<Message>You must provide the Content-Length HTTP header.</Message></Error>'
+                    b"<Error><Code>MissingContentLength</Code>"
+                    b"<Message>You must provide the Content-Length HTTP header.</Message></Error>"
                 )
                 start_response(
-                    "411 Length Required", 
-                    [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                    "411 Length Required", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
                 )
                 return [response_body]
             # Mock ec2 imds responses for testing
@@ -705,6 +705,7 @@ def run_gcp_server(port, key_file, cert_file):
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
+
 def create_bucket(s3_client, bucket_name, max_retries=15):
     for i in range(max_retries):
         try:
@@ -714,7 +715,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             if i >= max_retries - 1:
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
-            time.sleep(1)   
+            time.sleep(1)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -804,9 +805,10 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             try:
                 self._start_server()
                 break
-            except AssertionError as e:  # Thrown by wait_for_server_to_come_up
+            except Exception as e:  # Thrown by wait_for_server_to_come_up
                 sys.stderr.write(repr(e))
                 GracefulProcessUtils.terminate(self._p)
+                raise e
 
         self._s3_admin = self._boto(service="s3", key=self.default_key)
         return self
@@ -883,7 +885,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 )  # If CA cert verify fails, it will take ages for this line to finish
             except Exception:
                 # We clean bucket at session level so failure here does not matter
-                pass            
+                pass
             self._iam_admin = None
 
 
