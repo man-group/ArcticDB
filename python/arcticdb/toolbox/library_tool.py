@@ -12,7 +12,7 @@ from arcticdb_ext.codec import decode_segment
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
-from arcticdb_ext.version_store import AtomKey, PythonOutputFrame, RefKey
+from arcticdb_ext.version_store import AtomKey, RefKey
 from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
 
 VariantKey = Union[AtomKey, RefKey]

@@ -1245,6 +1245,13 @@ def visit_expression(expr):
     expression_context = _ExpressionContext()
     input_columns = set()
     valueset_keys = dict()
-    _visit(expr)
-    expression_context.root_node_name = _ExpressionName(expr.get_name())
+    if isinstance(expr, ExpressionNode):
+        _visit(expr)
+        expression_context.root_node_name = _ExpressionName(expr.get_name())
+    elif isinstance(expr, (np.ndarray, list)):
+        raise ArcticNativeException("Query cannot create a new column from a list/set/array of values")
+    else:
+        key = to_string(expr)
+        expression_context.add_value(key, create_value(expr))
+        expression_context.root_node_name = _ValueName(key)
     return input_columns, expression_context
