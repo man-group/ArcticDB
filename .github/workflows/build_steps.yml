@@ -423,7 +423,8 @@ jobs:
         if: ${{matrix.os == 'macos'}}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
-          cd python
+          ln -s python/tests ${{runner.temp}}
+          cd ${{runner.temp}}
           python -m pytest --timeout=3600 -n 2 tests $ARCTICDB_PYTEST_ARGS
 
       - name: Collect crash dumps (Windows)
