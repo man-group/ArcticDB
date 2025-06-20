@@ -423,7 +423,7 @@ jobs:
         if: ${{matrix.os == 'macos'}}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
-          ln -s python/tests ${{runner.temp}}/tests
+          cp -r python/tests ${{runner.temp}}/tests
           cd ${{runner.temp}}
           ls -la .
           python -m pytest --timeout=3600 -n 2 tests $ARCTICDB_PYTEST_ARGS
