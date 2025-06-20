@@ -737,13 +737,16 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
 
 
 def list_moto_storage(moto: 'MotoS3StorageFixtureFactory', bucket: Union['S3Bucket']):
-    response = moto._s3_admin.list_objects_v2(Bucket=bucket.bucket)
+    try:
+        response = moto._s3_admin.list_objects_v2(Bucket=bucket.bucket)
 
-    if 'Contents' in response:
-        for obj in response['Contents']:
-            logger.warning(f"Object left: {obj['Key']}")
-    else:
-        logger.info(f"Bucket is empty")
+        if 'Contents' in response:
+            for obj in response['Contents']:
+                logger.warning(f"Object left: {obj['Key']}")
+        else:
+            logger.info(f"Bucket is empty")
+    except Exception as e:
+        logger.info(f"Could not get info for bucket: {bucket.bucket}")
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):

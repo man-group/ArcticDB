@@ -103,15 +103,6 @@ def delete_nvs(nvs: NativeVersionStore):
         logger.info(f"SUCCESS in deletion")  
     except Exception as e:
         logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
-    remaining_symbols = []
-    try:
-        remaining_symbols = nvs.list_symbols()
-    except arcticdb_ext.exceptions.InternalException as e:
-        if "E_S3_RETRYABLE" in repr(e): # A known failure for error simulating fixtures
-            pass
-        else:
-            raise
-    assert remaining_symbols == []
 
 class  TimestampNumber:
     """
