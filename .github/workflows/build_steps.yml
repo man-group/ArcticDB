@@ -396,6 +396,11 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
+
+      - name: Setup tmate session
+        if: ${{matrix.os == 'macos' && matrix.type == 'integration'}}
+        uses: mxschmitt/action-tmate@v3
+
       - name: Run test
         run: |
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
