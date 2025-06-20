@@ -27,6 +27,9 @@ inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data, Out
     for(auto i = 0U; i < seg.num_columns(); ++i) {
         auto& column = seg.column(i);
         if(auto handler = get_type_handler(output_format, column.type()); handler) {
+            // TODO: To support arrow output format we'll need to change the allocation logic for the dest_column.
+            // We'll need to consider what arrow layout we want to output the data in.
+            util::check(output_format == OutputFormat::PANDAS, "Only Pandas output format is supported for read_result_from_single_frame");
             ColumnMapping mapping{column.type(), column.type(), seg.field(i), 0, seg.row_count(), 0, 0, 0, i};
             Column dest_column(column.type(), seg.row_count(), AllocationType::PRESIZED, Sparsity::PERMITTED, output_format, DataTypeMode::EXTERNAL);
             handler->convert_type(column, dest_column, mapping, shared_data, handler_data, seg.string_pool_ptr());
