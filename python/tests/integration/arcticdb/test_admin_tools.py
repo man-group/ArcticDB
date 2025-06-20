@@ -46,7 +46,7 @@ def test_get_sizes(arctic_client, lib_name):
         arctic_library.delete("sym_1", versions=[0])
 
         # When
-        retry_get_sizes(arctic_library.admin_tools())
+        sizes = retry_get_sizes(arctic_library.admin_tools())
 
         # Then
         assert len(sizes) == 10
