@@ -612,7 +612,7 @@ def arctic_library_dynamic(arctic_client, lib_name) -> Generator[Library, None, 
 @pytest.fixture
 def arctic_library_v1(arctic_client_v1, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_v1.create_library(lib_name)
-    delete_library(arctic_client, lib_name)
+    delete_library(arctic_client_v1, lib_name)
 
 
 @pytest.fixture
