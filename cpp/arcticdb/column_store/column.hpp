@@ -70,6 +70,72 @@ struct JiveTable {
     std::vector<uint32_t> sorted_pos_;
 };
 
+enum class ExtraBufferType : uint8_t {
+    OFFSET,
+    STRING,
+    ARRAY,
+    BITMAP
+};
+
+
+// Specifies a way to index extra buffers.
+// We can attach extra buffers to each offset and type. This is used for OutputFormat::ARROW to store the extra buffers
+// required to construct a string buffer.
+// For example if we have an arrow Column with 2 chunks containing the strings ["a", "bc"], ["ab", "ab"], we'd have:
+// Column data in blocks:
+// offset:0 -> [0, 1] (int32_t)
+// offset:8 -> [0, 0] (int32_t)
+// Extra buffers for the column:
+// offset_bytes=0, type_=OFFSET -> [0, 1, 3] (int64_t)
+// offset_bytes=8, type_=OFFSET -> [0, 2] (int64_t)
+// offset_bytes=0, type_=STRING -> "abc"
+// offset_bytes=8, type_=STRING -> "ab"
+struct ExtraBufferIndex {
+    size_t offset_bytes_;
+    ExtraBufferType type_;
+};
+
+inline bool operator==(const ExtraBufferIndex& lhs, const ExtraBufferIndex& rhs) {
+    return (lhs.offset_bytes_ == rhs.offset_bytes_) && (lhs.type_ == rhs.type_);
+}
+
+struct ExtraBufferIndexHash {
+    std::size_t operator()(const ExtraBufferIndex& index) const {
+        return folly::hash::hash_combine(index.offset_bytes_, index.type_);
+    }
+};
+
+struct ExtraBufferContainer {
+    mutable std::mutex mutex_;
+    std::unordered_map<ExtraBufferIndex, ChunkedBuffer, ExtraBufferIndexHash> buffers_;
+
+    ChunkedBuffer& create_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type) {
+        std::lock_guard lock(mutex_);
+        auto inserted = buffers_.try_emplace(ExtraBufferIndex{offset, type}, ChunkedBuffer{size, allocation_type});
+        util::check(inserted.second, "Failed to insert additional chunked buffer at position {}", offset);
+        return inserted.first->second;
+    }
+
+    void set_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
+        std::lock_guard lock(mutex_);
+        buffers_.try_emplace(ExtraBufferIndex{offset, type}, std::move(buffer));
+    }
+
+    ChunkedBuffer& get_buffer(size_t offset, ExtraBufferType type) const {
+        std::lock_guard lock(mutex_);
+        auto it = buffers_.find(ExtraBufferIndex{offset, type});
+        util::check(it != buffers_.end(), "Failed to find additional chunked buffer at position {}", offset);
+        return const_cast<ChunkedBuffer&>(it->second);
+    }
+
+    bool has_buffer(size_t offset, ExtraBufferType type) const {
+        std::lock_guard lock(mutex_);
+        auto it = buffers_.find(ExtraBufferIndex{offset, type});
+        return it != buffers_.end();
+    }
+};
+
+
 class Column;
 class StringPool;
 
@@ -967,19 +1033,26 @@ public:
         });
     }
 
-    ChunkedBuffer& create_extra_buffer(size_t offset, size_t size, AllocationType allocation_type) {
+    ChunkedBuffer& create_extra_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type) {
         init_buffer();
-        return extra_buffers_->create_buffer(offset, size, allocation_type);
+        return extra_buffers_->create_buffer(offset, type, size, allocation_type);
     }
 
-    ChunkedBuffer& get_extra_buffer(size_t offset) {
+    ChunkedBuffer& get_extra_buffer(size_t offset, ExtraBufferType type) const {
         util::check(static_cast<bool>(extra_buffers_), "Extra buffer {} requested but pointer is null", offset);
-        return extra_buffers_->get_buffer(offset);
+        return extra_buffers_->get_buffer(offset, type);
     }
 
-    void set_extra_buffer(size_t offset, ChunkedBuffer&& buffer) {
+    void set_extra_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
         init_buffer();
-        extra_buffers_->set_buffer(offset, std::move(buffer));
+        extra_buffers_->set_buffer(offset, type, std::move(buffer));
+    }
+
+    bool has_extra_buffer(size_t offset, ExtraBufferType type) const {
+        if(!extra_buffers_)
+            return false;
+
+        return extra_buffers_->has_buffer(offset, type);
     }
 private:
     position_t last_offset() const;
@@ -1014,29 +1087,8 @@ private:
     FieldStatsImpl stats_;
 
     std::unique_ptr<std::once_flag> init_buffer_ = std::make_unique<std::once_flag>();
-    struct ExtraBufferContainer {
-        std::mutex mutex_;
-        std::unordered_map<size_t, ChunkedBuffer> buffers_;
 
-        ChunkedBuffer& create_buffer(size_t offset, size_t size, AllocationType allocation_type) {
-            std::lock_guard lock(mutex_);
-            auto inserted = buffers_.try_emplace(offset, ChunkedBuffer{size, allocation_type});
-            util::check(inserted.second, "Failed to insert additional chunked buffer at position {}", offset);
-            return inserted.first->second;
-        }
 
-        void set_buffer(size_t offset, ChunkedBuffer&& buffer) {
-            std::lock_guard lock(mutex_);
-            buffers_.try_emplace(offset, std::move(buffer));
-        }
-
-        ChunkedBuffer& get_buffer(size_t offset) {
-            std::lock_guard lock(mutex_);
-            auto it = buffers_.find(offset);
-            util::check(it != buffers_.end(), "Failed to find additional chunked buffer at position {}", offset);
-            return it->second;
-        }
-    };
 
     std::unique_ptr<ExtraBufferContainer> extra_buffers_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;

@@ -12,23 +12,29 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
-#include <arcticdb/pipeline/python_output_frame.hpp>
+#include <arcticdb/pipeline/pandas_output_frame.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
+#include <arcticdb/arrow/arrow_output_frame.hpp>
+#include <arcticdb/arrow/arrow_utils.hpp>
 
 #include <vector>
 
 namespace arcticdb {
 
+using OutputFrame = std::variant<pipelines::PandasOutputFrame, ArrowOutputFrame>;
+
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
             const std::variant<VersionedItem, std::vector<VersionedItem>>& versioned_item,
-            pipelines::PythonOutputFrame&& frame_data,
+            OutputFrame&& frame_data,
+            OutputFormat output_format,
             const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta,
             const std::variant<arcticdb::proto::descriptors::UserDefinedMetadata, std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
             std::vector<entity::AtomKey>&& multi_keys) :
             item(versioned_item),
             frame_data(std::move(frame_data)),
+            output_format(output_format),
             norm_meta(norm_meta),
             user_meta(user_meta),
             multi_key_meta(multi_key_meta),
@@ -36,7 +42,8 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
 
     }
     std::variant<VersionedItem, std::vector<VersionedItem>> item;
-    pipelines::PythonOutputFrame frame_data;
+    OutputFrame frame_data;
+    OutputFormat output_format;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     std::variant<arcticdb::proto::descriptors::UserDefinedMetadata, std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>> user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
@@ -79,7 +86,13 @@ inline ReadResult create_python_read_result(
         }
     }
 
-    auto python_frame = pipelines::PythonOutputFrame{result.frame_, output_format};
+    auto python_frame = [&]() -> OutputFrame {
+        if (output_format == OutputFormat::ARROW) {
+            return ArrowOutputFrame{segment_to_arrow_data(result.frame_)};
+        } else {
+            return pipelines::PandasOutputFrame{result.frame_};
+        }
+    }();
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
@@ -89,7 +102,7 @@ inline ReadResult create_python_read_result(
     } else {
         metadata = std::move(desc_proto.user_meta());
     }
-    return {version, std::move(python_frame), desc_proto.normalization(),
+    return {version, std::move(python_frame), output_format, desc_proto.normalization(),
             metadata, desc_proto.multi_key_meta(), std::move(result.keys_)};
 }
 

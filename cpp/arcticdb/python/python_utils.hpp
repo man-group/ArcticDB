@@ -239,13 +239,14 @@ class PyTimestampRange {
     timestamp end_;
 };
 
-inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::pair<std::any&, OutputFormat>* const handler) {
+inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::any* const handler) {
     auto ret = std::move(r);
     py::list lst;
+    std::optional<OutputFormat> output_format = std::nullopt;
     for (auto &res: ret) {
         util::variant_match(
             res,
-            [&lst] (ReadResult& read_result) {
+            [&lst, &output_format] (ReadResult& read_result) {
                 auto pynorm = python_util::pb_to_python(read_result.norm_meta);
                 util::check(std::holds_alternative<proto::descriptors::UserDefinedMetadata>(read_result.user_meta),
                         "Expected single user metadata in adapt_read_dfs, received vector");
@@ -253,14 +254,16 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                 auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
                 lst.append(py::make_tuple(read_result.item, std::move(read_result.frame_data), pynorm, pyuser_meta, multi_key_meta,
                                           read_result.multi_keys));
+                util::check(!output_format.has_value() || output_format.value() == read_result.output_format, "All results from a batch operation are expected to have the same output_format");
+                output_format = read_result.output_format;
             },
             [&lst] (DataError& data_error) {
                 lst.append(data_error);
             }
         );
     }
-    if (handler) {
-        apply_global_refcounts(handler->first, handler->second);
+    if (handler && output_format.has_value()) {
+        apply_global_refcounts(*handler, *output_format);
     }
     return lst;
 }

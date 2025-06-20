@@ -187,7 +187,7 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
         const size_t count = block->row_count();
         if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
             return generate_numeric_statistics<RawType>(std::span{ptr, count});
-        } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
+        } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type) && !is_arrow_output_only_type(TagType::DataTypeTag::data_type)) {
             return generate_string_statistics(std::span{ptr, count});
         } else {
             util::raise_rte("Cannot generate statistics for data type");
@@ -200,7 +200,7 @@ FieldStatsImpl generate_column_statistics(ColumnData column_data) {
             if constexpr (is_numeric_type(TagType::DataTypeTag::data_type)) {
                 auto local_stats = generate_numeric_statistics<RawType>(std::span{ptr, count});
                 stats.compose<RawType>(local_stats);
-            } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type)) {
+            } else if constexpr (is_dynamic_string_type(TagType::DataTypeTag::data_type) && !is_arrow_output_only_type(TagType::DataTypeTag::data_type)) {
                 auto local_stats = generate_string_statistics(std::span{ptr, count});
                 stats.compose<RawType>(local_stats);
             } else {

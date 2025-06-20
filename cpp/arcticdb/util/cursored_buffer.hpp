@@ -23,7 +23,7 @@ public:
 
     CursoredBuffer(size_t size, AllocationType allocation_type) :
         cursor_(allocation_type == AllocationType::PRESIZED ? static_cast<int64_t>(size) : 0),
-        buffer_(allocation_type == AllocationType::DYNAMIC ? BufferType{size} : BufferType::presized(size)) { }
+        buffer_(allocation_type == AllocationType::PRESIZED ? BufferType::presized(size) : BufferType{size, allocation_type}) { }
 
     explicit CursoredBuffer(BufferType&& buffer) :
         cursor_(0),
@@ -142,12 +142,12 @@ public:
 
     uint8_t* bytes_at(size_t bytes, size_t required) {
         util::check(bytes + required <= buffer_.bytes(), "Bytes overflow, can't write {} bytes at position {} in buffer of size {}", required, bytes, buffer_.bytes());
-        return buffer_.bytes_at(bytes, required);
+        return &buffer_[bytes];
     }
 
     const uint8_t* bytes_at(size_t bytes, size_t required) const {
         util::check(bytes + required <= buffer_.bytes(), "Bytes overflow, can't write {} bytes at position {} in buffer of size {}", required, bytes, buffer_.bytes());
-        return buffer_.bytes_at(bytes, required);
+        return &buffer_[bytes];
     }
 
     void clear() {

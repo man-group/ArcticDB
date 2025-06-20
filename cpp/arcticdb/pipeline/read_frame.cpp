@@ -92,20 +92,19 @@ void finalize_segment_setup(SegmentInMemory& output, size_t offset, size_t row_c
     handle_modified_descriptor(context, output);
 }
 
-SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format, AllocationType allocation_type) {
+SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
     ARCTICDB_SAMPLE_DEFAULT(AllocContiguousFrame)
     auto [offset, row_count] = offset_and_row_count(context);
     auto block_row_counts = output_block_row_counts(context);
     ARCTICDB_DEBUG(log::version(), "Allocated chunked frame with offset {} and row count {}", offset, row_count);
-    SegmentInMemory output{get_filtered_descriptor(context, output_format), 0, allocation_type, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
+    SegmentInMemory output{get_filtered_descriptor(context, output_format), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
     auto handlers = TypeHandlerRegistry::instance();
 
     for(auto& column : output.columns()) {
         auto handler = handlers->get_handler(output_format, column->type());
-        const auto extra_rows = handler ? handler->extra_rows() : 0;
         const auto data_size = data_type_size(column->type(), output_format, DataTypeMode::EXTERNAL);
         for(auto block_row_count : block_row_counts) {
-            const auto bytes = (block_row_count + extra_rows) * data_size;
+            const auto bytes = block_row_count * data_size;
             column->allocate_data(bytes);
             column->advance_data(bytes);
         }
@@ -115,19 +114,19 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
     return output;
 }
 
-SegmentInMemory allocate_contiguous_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format, AllocationType allocation_type) {
+SegmentInMemory allocate_contiguous_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    SegmentInMemory output{get_filtered_descriptor(context, output_format),  row_count, allocation_type, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
+    SegmentInMemory output{get_filtered_descriptor(context, output_format),  row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
 }
 
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format, AllocationType allocation_type) {
-   if(output_format == OutputFormat::PANDAS)
-       return allocate_contiguous_frame(context, output_format, allocation_type);
+SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
+   if(output_format == OutputFormat::ARROW)
+       return allocate_chunked_frame(context, output_format);
    else
-       return allocate_chunked_frame(context, output_format, allocation_type);
+       return allocate_contiguous_frame(context, output_format);
 }
 
 size_t get_index_field_count(const SegmentInMemory& frame) {
@@ -229,7 +228,7 @@ void decode_index_field(
             auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
             auto tot_size = sz * slice_and_key.slice_.row_range.diff();
 
-            SliceDataSink sink(buffer.data() + offset, tot_size);
+            SliceDataSink sink(buffer.bytes_at(offset, tot_size), tot_size);
             ARCTICDB_DEBUG(log::storage(), "Creating index slice with total size {} ({} - {})", tot_size, sz,
                            slice_and_key.slice_.row_range.diff());
 
@@ -262,6 +261,16 @@ void handle_truncation(
     handle_truncation(dest_column, mapping.truncate_);
 }
 
+void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type) {
+    auto& sparse_buffer = dest_column.create_extra_buffer(
+        offset,
+        ExtraBufferType::BITMAP,
+        bitset_unpacked_size(sparse_map.count() * sizeof(uint64_t)),
+        allocation_type);
+
+    bitset_to_packed_bits(sparse_map, reinterpret_cast<uint64_t*>(sparse_buffer.data()));
+}
+
 void decode_or_expand(
     const uint8_t*& data,
     Column& dest_column,
@@ -285,7 +294,7 @@ void decode_or_expand(
             const auto &ndarray = encoded_field_info.ndarray();
             const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);
 
-            ChunkedBuffer sparse{bytes};
+            ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
             source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
@@ -294,6 +303,11 @@ void decode_or_expand(
                 util::default_initialize<TagType>(dest, dest_bytes);
                 util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
+
+            // TODO We must handle sparse columns in ArrowStringHandler and deduplicate logic between the two.
+            // Consider registering a sparse handler on the TypeHandlerRegistry.
+            if(output_format == OutputFormat::ARROW)
+                create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
         } else {
             SliceDataSink sink(dest, dest_bytes);
             const auto &ndarray = encoded_field_info.ndarray();
@@ -357,32 +371,31 @@ ColumnTruncation get_truncate_range(
         const uint8_t* index_field_offset) {
     ColumnTruncation truncate_rows;
     if(read_options.output_format() == OutputFormat::ARROW) {
-    util::variant_match(read_query.row_filter,
-        [&truncate_rows, &frame, &context, &index_field, index_field_offset, encoding_version] (const IndexRange& index_range) {
-            const auto& time_range = static_cast<const TimestampRange&>(index_range);
-            const auto& slice_time_range =  context.slice_and_key().key().time_range();
-            if(contains(slice_time_range, time_range.first) || contains(slice_time_range, time_range.second)) {
-                if(context.fetch_index()) {
-                    const auto& index_column = frame.column(0);
-                    const auto& current_row_range = context.slice_and_key().slice().row_range;
-                    truncate_rows = get_truncate_range_from_index(index_column, time_range.first, time_range.second, current_row_range.first, current_row_range.second);
-            } else {
-                const auto& frame_index_desc = frame.descriptor().fields(0UL);
-                Column sink{frame_index_desc.type(), encoding_sizes::field_uncompressed_size(index_field), AllocationType::PRESIZED, Sparsity::PERMITTED};
-                std::optional<util::BitMagic> bv;
-                (void)decode_field(frame_index_desc.type(), index_field, index_field_offset, sink, bv, encoding_version);
-                truncate_rows = get_truncate_range_from_index(sink, time_range.first, time_range.second);
-            }
-        }
+        util::variant_match(read_query.row_filter,
+            [&truncate_rows, &frame, &context, &index_field, index_field_offset, encoding_version] (const IndexRange& index_range) {
+                const auto& time_range = static_cast<const TimestampRange&>(index_range);
+                const auto& slice_time_range =  context.slice_and_key().key().time_range();
+                if(contains(slice_time_range, time_range.first) || contains(slice_time_range, time_range.second)) {
+                    if(context.fetch_index()) {
+                        const auto& index_column = frame.column(0);
+                        truncate_rows = get_truncate_range_from_index(index_column, time_range.first, time_range.second);
+                    } else {
+                        const auto& frame_index_desc = frame.descriptor().fields(0UL);
+                        Column sink{frame_index_desc.type(), encoding_sizes::field_uncompressed_size(index_field), AllocationType::PRESIZED, Sparsity::PERMITTED};
+                        std::optional<util::BitMagic> bv;
+                        (void)decode_field(frame_index_desc.type(), index_field, index_field_offset, sink, bv, encoding_version);
+                        truncate_rows = get_truncate_range_from_index(sink, time_range.first, time_range.second);
+                    }
+                }
             },
-        [&context] (const RowRange& row_range) {
-            const auto& slice_row_range = context.slice_and_key().slice().row_range;
-            get_truncate_range_from_rows(row_range, slice_row_range.start(), slice_row_range.end());
-        },
-        [] (const auto&) {
-            // Do nothing
-        });
-    }
+            [&context] (const RowRange& row_range) {
+                const auto& slice_row_range = context.slice_and_key().slice().row_range;
+                get_truncate_range_from_rows(row_range, slice_row_range.start(), slice_row_range.end());
+            },
+            [] (const auto&) {
+                // Do nothing
+            });
+        }
     return truncate_rows;
 };
 
@@ -480,6 +493,7 @@ void check_data_left_for_subsequent_fields(
     util::check(have_more_compressed_data || remaining_fields_empty(it, context),
                 "Reached end of input block with {} fields to decode", it.remaining_fields());
 }
+
 
 void decode_into_frame_static(
         SegmentInMemory &frame,

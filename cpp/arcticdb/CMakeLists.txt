@@ -19,6 +19,7 @@ cmake_policy(POP)
 
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
+find_package(sparrow CONFIG REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Folly REQUIRED)
 find_package(Gflags REQUIRED)
@@ -171,6 +172,10 @@ endif ()
 set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
+        arrow/array_from_block.hpp
+        arrow/arrow_handlers.hpp
+        arrow/arrow_output_frame.hpp
+        arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
         async/bit_rate_stats.hpp
@@ -238,12 +243,10 @@ set(arcticdb_srcs
         pipeline/input_tensor_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
-        pipeline/python_output_frame.hpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.hpp
         pipeline/read_options.hpp
-        pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
-        pipeline/read_query.hpp
         pipeline/slicing.hpp
         pipeline/string_pool_utils.hpp
         pipeline/value.hpp
@@ -404,6 +407,9 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+        arrow/arrow_handlers.cpp
+        arrow/arrow_output_frame.cpp
+        arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
         async/task_scheduler.cpp
@@ -442,12 +448,12 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
         pipeline/pipeline_context.cpp
-        pipeline/python_output_frame.cpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_pipeline.cpp
         pipeline/read_frame.cpp
+        pipeline/read_pipeline.cpp
+        pipeline/read_query.hpp
+        pipeline/read_query.cpp
         pipeline/slicing.cpp
         pipeline/string_pool_utils.cpp
         pipeline/value_set.cpp
@@ -538,7 +544,8 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp)
+        storage/s3/ec2_utils.cpp
+        )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -692,6 +699,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        sparrow::sparrow
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
@@ -915,6 +923,7 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
+            arrow/test/test_arrow.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
