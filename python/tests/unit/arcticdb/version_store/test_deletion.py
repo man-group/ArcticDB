@@ -18,6 +18,7 @@ from arcticdb.util.tasks import (
     append_small_df_and_prune_previous,
     delete_snapshot,
 )
+from arcticdb.util.utils import delete_nvs
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb_ext.version_store import ManualClockVersionStore
@@ -34,35 +35,37 @@ def eprint(*args, **kwargs):
 def test_delete_version_with_update(version_store_factory, pos, sym):
     lmdb_version_store = version_store_factory()
 
-    symbol = sym
+    try:
+        symbol = sym
 
-    idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
-    original_df = df.copy(deep=True)
-    lmdb_version_store.write(symbol, df)
+        idx = pd.date_range("1970-01-01", periods=100, freq="D")
+        df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+        original_df = df.copy(deep=True)
+        lmdb_version_store.write(symbol, df)
 
-    idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
-    lmdb_version_store.update(symbol, df2)
+        idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
+        df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
+        lmdb_version_store.update(symbol, df2)
 
-    assert_frame_equal(lmdb_version_store.read(symbol, 0).data, original_df)
-
-    df.update(df2)
-
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df)
-    assert_frame_equal(lmdb_version_store.read(symbol, 1).data, df)
-
-    lmdb_version_store.delete_version(symbol, pos)
-    assert len(lmdb_version_store.list_versions()) == 1
-
-    if pos == 0:
-        assert_frame_equal(lmdb_version_store.read(symbol).data, df)
-        assert_frame_equal(lmdb_version_store.read(symbol, 1).data, df)
-    else:
-        assert_frame_equal(lmdb_version_store.read(symbol).data, original_df)
         assert_frame_equal(lmdb_version_store.read(symbol, 0).data, original_df)
 
+        df.update(df2)
+
+        vit = lmdb_version_store.read(symbol)
+        assert_frame_equal(vit.data, df)
+        assert_frame_equal(lmdb_version_store.read(symbol, 1).data, df)
+
+        lmdb_version_store.delete_version(symbol, pos)
+        assert len(lmdb_version_store.list_versions()) == 1
+
+        if pos == 0:
+            assert_frame_equal(lmdb_version_store.read(symbol).data, df)
+            assert_frame_equal(lmdb_version_store.read(symbol, 1).data, df)
+        else:
+            assert_frame_equal(lmdb_version_store.read(symbol).data, original_df)
+            assert_frame_equal(lmdb_version_store.read(symbol, 0).data, original_df)
+    finally:
+        delete_nvs(lmdb_version_store)
 
 def test_delete_by_timestamp(lmdb_version_store, sym):
     symbol = sym
@@ -118,52 +121,58 @@ def test_clear_lmdb(lmdb_version_store, sym):
 
 def test_delete_library_tool(version_store_factory, sym):
     ut_small_all_version_store = version_store_factory(col_per_group=5, row_per_segment=10)
-    symbol = sym
-    lt = ut_small_all_version_store.library_tool()
-    ut_small_all_version_store.write(symbol, pd.DataFrame({"x": np.arange(10, dtype=np.int64)}))
-    ut_small_all_version_store.write(symbol, pd.DataFrame({"y": np.arange(10, dtype=np.int32)}))
-    df = sample_dataframe(1000)
-    ut_small_all_version_store.write(symbol, df)
+    try:
+        symbol = sym
+        lt = ut_small_all_version_store.library_tool()
+        ut_small_all_version_store.write(symbol, pd.DataFrame({"x": np.arange(10, dtype=np.int64)}))
+        ut_small_all_version_store.write(symbol, pd.DataFrame({"y": np.arange(10, dtype=np.int32)}))
+        df = sample_dataframe(1000)
+        ut_small_all_version_store.write(symbol, df)
 
-    assert len(ut_small_all_version_store.list_versions(symbol)) == 3
-    ut_small_all_version_store.delete(symbol)
-    for kt in KeyType.__members__.values():
-        if kt == KeyType.VERSION or kt == KeyType.VERSION_REF:
-            continue
+        assert len(ut_small_all_version_store.list_versions(symbol)) == 3
+        ut_small_all_version_store.delete(symbol)
+        for kt in KeyType.__members__.values():
+            if kt == KeyType.VERSION or kt == KeyType.VERSION_REF:
+                continue
 
-        assert len(lt.find_keys_for_id(kt, symbol)) == 0
+            assert len(lt.find_keys_for_id(kt, symbol)) == 0
+    finally:
+        delete_nvs(ut_small_all_version_store)
 
 
 def test_delete_snapshot(version_store_factory):
     lmdb_version_store = version_store_factory(col_per_group=5, row_per_segment=10)
-    lt = lmdb_version_store.library_tool()
+    try:
+        lt = lmdb_version_store.library_tool()
 
-    symbol = "test_delete_snapshot"
-    snap = "test_delete_snapshot_snap"
+        symbol = "test_delete_snapshot"
+        snap = "test_delete_snapshot_snap"
 
-    df1 = sample_dataframe(1000)
-    lmdb_version_store.write(symbol, df1)
-    lmdb_version_store.snapshot(snap)
+        df1 = sample_dataframe(1000)
+        lmdb_version_store.write(symbol, df1)
+        lmdb_version_store.snapshot(snap)
 
-    df2 = sample_dataframe(1000)
-    lmdb_version_store.write(symbol, df2, prune_previous_version=True)
+        df2 = sample_dataframe(1000)
+        lmdb_version_store.write(symbol, df2, prune_previous_version=True)
 
-    # Should not raise as it exists in a snapshot
-    lmdb_version_store.read(symbol, 0)
+        # Should not raise as it exists in a snapshot
+        lmdb_version_store.read(symbol, 0)
 
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of=snap).data, df1)
+        assert_frame_equal(lmdb_version_store.read(symbol, as_of=snap).data, df1)
 
-    lmdb_version_store.delete_snapshot(snap)
-    with pytest.raises(NoDataFoundException):
-        lmdb_version_store.read(symbol, as_of=snap)
+        lmdb_version_store.delete_snapshot(snap)
+        with pytest.raises(NoDataFoundException):
+            lmdb_version_store.read(symbol, as_of=snap)
 
-    index_keys = lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)
-    for k in index_keys:
-        assert k.version_id != 0
+        index_keys = lt.find_keys_for_id(KeyType.TABLE_INDEX, symbol)
+        for k in index_keys:
+            assert k.version_id != 0
 
-    data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)
-    for k in data_keys:
-        assert k.version_id != 0
+        data_keys = lt.find_keys_for_id(KeyType.TABLE_DATA, symbol)
+        for k in data_keys:
+            assert k.version_id != 0
+    finally:
+        delete_nvs(lmdb_version_store)
 
 
 def test_tombstones_deleted_data_keys_prune(lmdb_version_store_prune_previous, sym):

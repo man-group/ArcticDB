@@ -24,6 +24,7 @@ from arcticdb.exceptions import (
     InternalException,
     SortingException,
 )
+from arcticdb.util.utils import delete_nvs
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
@@ -51,23 +52,25 @@ def test_update_single_dates(lmdb_version_store_dynamic_schema):
 
 def test_update(version_store_factory):
     lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
-    symbol = "update_no_daterange"
+    try:
+        symbol = "update_no_daterange"
 
-    idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
-    lmdb_version_store.write(symbol, df)
+        idx = pd.date_range("1970-01-01", periods=100, freq="D")
+        df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+        lmdb_version_store.write(symbol, df)
 
-    idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame(
-        {"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2
-    )
-    lmdb_version_store.update(symbol, df2)
+        idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
+        df2 = pd.DataFrame(
+            {"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2
+        )
+        lmdb_version_store.update(symbol, df2)
 
-    vit = lmdb_version_store.read(symbol)
-    df.update(df2)
+        vit = lmdb_version_store.read(symbol)
+        df.update(df2)
 
-    assert_frame_equal(vit.data, df)
-
+        assert_frame_equal(vit.data, df)
+    finally:
+        delete_nvs(lmdb_version_store)
 
 def test_update_long_strides(s3_version_store):
     lib = s3_version_store
@@ -128,30 +131,33 @@ def test_update_repeatedly_dynamic_schema(
         col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True
     )
 
-    symbol = "update_dynamic_schema"
+    try:
+        symbol = "update_dynamic_schema"
 
-    idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
-    lmdb_version_store.write(symbol, df)
-    update_end = update_start + start_dist
+        idx = pd.date_range("1970-01-01", periods=100, freq="D")
+        df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+        lmdb_version_store.write(symbol, df)
+        update_end = update_start + start_dist
 
-    for x in range(iterations):
-        adjust_start = x * start_increment
-        adjust_end = x * end_increment
-        update_date = "1970-01-{}".format(update_start + adjust_start)
-        periods = (update_end + adjust_end) - update_start
-        if periods <= 0:
-            continue
+        for x in range(iterations):
+            adjust_start = x * start_increment
+            adjust_end = x * end_increment
+            update_date = "1970-01-{}".format(update_start + adjust_start)
+            periods = (update_end + adjust_end) - update_start
+            if periods <= 0:
+                continue
 
-        idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame(
-            {"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2
-        )
-        lmdb_version_store.update(symbol, df2)
+            idx2 = pd.date_range(update_date, periods=periods, freq="D")
+            df2 = pd.DataFrame(
+                {"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2
+            )
+            lmdb_version_store.update(symbol, df2)
 
-        vit = lmdb_version_store.read(symbol)
-        df.update(df2)
-        assert_frame_equal(vit.data, df)
+            vit = lmdb_version_store.read(symbol)
+            df.update(df2)
+            assert_frame_equal(vit.data, df)
+    finally:
+        delete_nvs(lmdb_version_store)
 
 
 @pytest.mark.parametrize(
@@ -171,50 +177,53 @@ def test_update_repeatedly_dynamic_schema_hashed(
         col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True
     )
 
-    symbol = "update_dynamic_schema"
+    try: 
+        symbol = "update_dynamic_schema"
 
-    idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    l = len(idx)
-    df = pd.DataFrame(
-        {
-            "a": np.arange(l, dtype="float"),
-            "b": np.arange(1, l + 1, dtype="float"),
-            "c": np.arange(2, l + 2, dtype="float"),
-            "d": np.arange(3, l + 3, dtype="float"),
-            "e": np.arange(4, l + 4, dtype="float"),
-        },
-        index=idx,
-    )
-
-    lmdb_version_store.write(symbol, df)
-    update_end = update_start + start_dist
-
-    for x in range(iterations):
-        adjust_start = x * start_increment
-        adjust_end = x * end_increment
-        update_date = "1970-01-{}".format(update_start + adjust_start)
-        periods = (update_end + adjust_end) - update_start
-        if periods <= 0:
-            continue
-
-        idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        l = len(idx2)
-        df2 = pd.DataFrame(
+        idx = pd.date_range("1970-01-01", periods=100, freq="D")
+        l = len(idx)
+        df = pd.DataFrame(
             {
-                "a": np.arange(x, l + x, dtype="float"),
-                "b": np.arange(1 + x, l + 1 + x, dtype="float"),
-                "c": np.arange(2 + x, l + 2 + x, dtype="float"),
-                "d": np.arange(3 + x, l + 3 + x, dtype="float"),
-                "e": np.arange(4 + x, l + 4 + x, dtype="float"),
+                "a": np.arange(l, dtype="float"),
+                "b": np.arange(1, l + 1, dtype="float"),
+                "c": np.arange(2, l + 2, dtype="float"),
+                "d": np.arange(3, l + 3, dtype="float"),
+                "e": np.arange(4, l + 4, dtype="float"),
             },
-            index=idx2,
+            index=idx,
         )
 
-        lmdb_version_store.update(symbol, df2)
+        lmdb_version_store.write(symbol, df)
+        update_end = update_start + start_dist
 
-        vit = lmdb_version_store.read(symbol)
-        df.update(df2)
-        assert_frame_equal(vit.data, df)
+        for x in range(iterations):
+            adjust_start = x * start_increment
+            adjust_end = x * end_increment
+            update_date = "1970-01-{}".format(update_start + adjust_start)
+            periods = (update_end + adjust_end) - update_start
+            if periods <= 0:
+                continue
+
+            idx2 = pd.date_range(update_date, periods=periods, freq="D")
+            l = len(idx2)
+            df2 = pd.DataFrame(
+                {
+                    "a": np.arange(x, l + x, dtype="float"),
+                    "b": np.arange(1 + x, l + 1 + x, dtype="float"),
+                    "c": np.arange(2 + x, l + 2 + x, dtype="float"),
+                    "d": np.arange(3 + x, l + 3 + x, dtype="float"),
+                    "e": np.arange(4 + x, l + 4 + x, dtype="float"),
+                },
+                index=idx2,
+            )
+
+            lmdb_version_store.update(symbol, df2)
+
+            vit = lmdb_version_store.read(symbol)
+            df.update(df2)
+            assert_frame_equal(vit.data, df)
+    finally:
+        delete_nvs(lmdb_version_store)
 
 
 @pytest.mark.parametrize(
@@ -234,30 +243,33 @@ def test_update_repeatedly(
         col_per_group=col_per_group, row_per_segment=2
     )
 
-    symbol = "update_no_daterange"
+    try:
+        symbol = "update_no_daterange"
 
-    idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
-    lmdb_version_store.write(symbol, df)
-    update_end = update_start + start_dist
+        idx = pd.date_range("1970-01-01", periods=100, freq="D")
+        df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+        lmdb_version_store.write(symbol, df)
+        update_end = update_start + start_dist
 
-    for x in range(iterations):
-        adjust_start = x * start_increment
-        adjust_end = x * end_increment
-        update_date = "1970-01-{}".format(update_start + adjust_start)
-        periods = (update_end + adjust_end) - update_start
-        if periods <= 0:
-            continue
+        for x in range(iterations):
+            adjust_start = x * start_increment
+            adjust_end = x * end_increment
+            update_date = "1970-01-{}".format(update_start + adjust_start)
+            periods = (update_end + adjust_end) - update_start
+            if periods <= 0:
+                continue
 
-        idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame(
-            {"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2
-        )
-        lmdb_version_store.update(symbol, df2)
+            idx2 = pd.date_range(update_date, periods=periods, freq="D")
+            df2 = pd.DataFrame(
+                {"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2
+            )
+            lmdb_version_store.update(symbol, df2)
 
-        vit = lmdb_version_store.read(symbol)
-        df.update(df2)
-        assert_frame_equal(vit.data, df)
+            vit = lmdb_version_store.read(symbol)
+            df.update(df2)
+            assert_frame_equal(vit.data, df)
+    finally:
+        delete_nvs(lmdb_version_store)
 
 
 @pytest.mark.parametrize(
@@ -277,70 +289,76 @@ def test_update_repeatedly_with_strings(
         col_per_group=col_per_group, row_per_segment=2
     )
 
-    symbol = "update_no_daterange"
+    try:
+        symbol = "update_no_daterange"
 
-    idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
-    lmdb_version_store.write(symbol, df)
-    update_end = update_start + start_dist
+        idx = pd.date_range("1970-01-01", periods=100, freq="D")
+        df = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx))]}, index=idx)
+        lmdb_version_store.write(symbol, df)
+        update_end = update_start + start_dist
 
-    for x in range(iterations):
-        adjust_start = x * start_increment
-        adjust_end = x * end_increment
-        update_date = "1970-01-{}".format(update_start + adjust_start)
-        periods = (update_end + adjust_end) - update_start
-        if periods <= 0:
-            continue
+        for x in range(iterations):
+            adjust_start = x * start_increment
+            adjust_end = x * end_increment
+            update_date = "1970-01-{}".format(update_start + adjust_start)
+            periods = (update_end + adjust_end) - update_start
+            if periods <= 0:
+                continue
 
-        idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame(
-            {"a": [random_string(10) for _ in range(len(idx2))]}, index=idx2
-        )
-        lmdb_version_store.update(symbol, df2)
+            idx2 = pd.date_range(update_date, periods=periods, freq="D")
+            df2 = pd.DataFrame(
+                {"a": [random_string(10) for _ in range(len(idx2))]}, index=idx2
+            )
+            lmdb_version_store.update(symbol, df2)
 
-        vit = lmdb_version_store.read(symbol)
-        df.update(df2)
-        assert_frame_equal(vit.data, df)
+            vit = lmdb_version_store.read(symbol)
+            df.update(df2)
+            assert_frame_equal(vit.data, df)
+    finally:
+        delete_nvs(lmdb_version_store)
 
 
 def test_update_with_snapshot(version_store_factory):
     lmdb_version_store = version_store_factory(col_per_group=2, row_per_segment=2)
 
-    symbol = "update_no_daterange"
+    try:
+        symbol = "update_no_daterange"
 
-    idx = pd.date_range("1970-01-01", periods=100, freq="D")
-    df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
-    original_df = df.copy(deep=True)
-    lmdb_version_store.write(symbol, df)
+        idx = pd.date_range("1970-01-01", periods=100, freq="D")
+        df = pd.DataFrame({"a": np.arange(len(idx), dtype="float")}, index=idx)
+        original_df = df.copy(deep=True)
+        lmdb_version_store.write(symbol, df)
 
-    lmdb_version_store.snapshot("my_snap")
+        lmdb_version_store.snapshot("my_snap")
 
-    idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame(
-        {"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2
-    )
-    lmdb_version_store.update(symbol, df2)
+        idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
+        df2 = pd.DataFrame(
+            {"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2
+        )
+        lmdb_version_store.update(symbol, df2)
 
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data, original_df)
-    assert_frame_equal(
-        lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
-    )
+        assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data, original_df)
+        assert_frame_equal(
+            lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
+        )
 
-    df.update(df2)
+        df.update(df2)
 
-    vit = lmdb_version_store.read(symbol)
-    assert_frame_equal(vit.data, df)
-    assert_frame_equal(lmdb_version_store.read(symbol, as_of=1).data, df)
-    assert_frame_equal(
-        lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
-    )
+        vit = lmdb_version_store.read(symbol)
+        assert_frame_equal(vit.data, df)
+        assert_frame_equal(lmdb_version_store.read(symbol, as_of=1).data, df)
+        assert_frame_equal(
+            lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
+        )
 
-    lmdb_version_store.delete(symbol)
-    assert lmdb_version_store.list_versions() == []
+        lmdb_version_store.delete(symbol)
+        assert lmdb_version_store.list_versions() == []
 
-    assert_frame_equal(
-        lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
-    )
+        assert_frame_equal(
+            lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
+        )
+    finally:
+        delete_nvs(lmdb_version_store)
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):

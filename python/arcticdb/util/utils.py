@@ -13,6 +13,7 @@ import re
 import string
 import time
 import sys
+from arcticdb.arctic import Arctic
 import arcticdb_ext
 from typing import Dict 
 from typing import Literal, Any, List, Tuple, Union, get_args
@@ -96,13 +97,20 @@ class GitHubSanitizingException(Exception):
         super().__init__(sanitized_message)
 
 
-def delete_nvs(nvs: NativeVersionStore):
-    get_logger().info(f"Removing data for NativeVersionStore library_path: {nvs.library().library_path}")
-    try:
-        nvs.version_store.clear()
-        logger.info(f"SUCCESS in deletion")  
-    except Exception as e:
-        logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
+def delete_nvs(nvs: NativeVersionStore, ac: Arctic = None):
+    if isinstance(nvs, NativeVersionStore):
+        get_logger().info(f"Removing data for NativeVersionStore library_path: {nvs.library().library_path}")
+        try:
+            nvs.version_store.clear()
+            logger.info(f"SUCCESS in deletion")  
+        except Exception as e:
+            logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
+    elif isinstance(nvs, Library):
+        ## What to do in cases where fixtures return callback to library creation objects
+        ## In the 
+        logger.warning(f"Cannot delete library without arctic instance. Library {nvs}")
+    else:
+        raise Exception(f"Unsupported type: {nvs}")
 
 class  TimestampNumber:
     """

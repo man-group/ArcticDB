@@ -165,12 +165,17 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 
 @pytest.fixture
 def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
+    ac = lmdb_storage.create_arctic()
     yield lmdb_storage.create_arctic().create_library(lib_name)
+    ac.delete_library(lib_name)
 
 
 @pytest.fixture
 def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Generator[Library, None, None]:
-    yield lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+    yield lib
+    ac.delete_library(lib_name)
 
 
 @pytest.fixture(
@@ -591,26 +596,26 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
 
 
 @pytest.fixture
-def arctic_library(arctic_client, lib_name) -> Library:
+def arctic_library(arctic_client, lib_name) -> Generator[Library, None, None]:
     yield arctic_client.create_library(lib_name)
     arctic_client.delete_library(lib_name)
 
 
 @pytest.fixture
-def arctic_library_dynamic(arctic_client, lib_name) -> Library:
+def arctic_library_dynamic(arctic_client, lib_name) -> Generator[Library, None, None]:
     lib_opts = LibraryOptions(dynamic_schema=True)
     yield arctic_client.create_library(lib_name, library_options=lib_opts)
     arctic_client.delete_library(lib_name)
 
 
 @pytest.fixture
-def arctic_library_v1(arctic_client_v1, lib_name) -> Library:
+def arctic_library_v1(arctic_client_v1, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_v1.create_library(lib_name)
     arctic_client_v1.delete_library(lib_name)
 
 
 @pytest.fixture
-def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
+def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_lmdb.create_library(lib_name)
     arctic_client_lmdb.delete_library(lib_name)
 

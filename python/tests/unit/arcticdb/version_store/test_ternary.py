@@ -14,6 +14,7 @@ import pandas as pd
 import pytest
 
 from arcticdb import QueryBuilder, where
+from arcticdb.util.utils import delete_nvs
 from arcticdb_ext.exceptions import InternalException, SchemaException, UserInputException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import assert_frame_equal
@@ -131,29 +132,32 @@ def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1):
 @pytest.mark.skipif(WINDOWS, reason="We do not support fixed-width strings on Windows")
 def test_project_ternary_fixed_width_strings(version_store_factory):
     lib = version_store_factory(dynamic_strings=False)
-    symbol = "test_project_ternary_fixed_width_strings"
-    df = pd.DataFrame(
-        {
-            "conditional": [True, False, False, True, False, True],
-            "width_1": ["a", "b", "c", "d", "e", "f"],
-            "width_2": ["gg", "hh", "ii", "jj", "kk", "ll"],
-        },
-        index=pd.date_range("2024-01-01", periods=6)
-    )
-    lib.write(symbol, df)
 
-    # Column/value
-    q = QueryBuilder()
-    q = q.apply("new_col", where(q["conditional"], q["width_1"], "hello"))
-    with pytest.raises(SchemaException):
-        lib.read(symbol, query_builder=q)
+    try:
+        symbol = "test_project_ternary_fixed_width_strings"
+        df = pd.DataFrame(
+            {
+                "conditional": [True, False, False, True, False, True],
+                "width_1": ["a", "b", "c", "d", "e", "f"],
+                "width_2": ["gg", "hh", "ii", "jj", "kk", "ll"],
+            },
+            index=pd.date_range("2024-01-01", periods=6)
+        )
+        lib.write(symbol, df)
 
-    # Column/column
-    q = QueryBuilder()
-    q = q.apply("new_col", where(q["conditional"], q["width_1"], q["width_2"]))
-    with pytest.raises(SchemaException):
-        lib.read(symbol, query_builder=q)
+        # Column/value
+        q = QueryBuilder()
+        q = q.apply("new_col", where(q["conditional"], q["width_1"], "hello"))
+        with pytest.raises(SchemaException):
+            lib.read(symbol, query_builder=q)
 
+        # Column/column
+        q = QueryBuilder()
+        q = q.apply("new_col", where(q["conditional"], q["width_1"], q["width_2"]))
+        with pytest.raises(SchemaException):
+            lib.read(symbol, query_builder=q)
+    finally:
+        delete_nvs(lib)
 
 def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -262,41 +266,44 @@ def test_project_ternary_column_sliced(version_store_factory, index):
     # Cannot use lmdb_version_store_tiny_segment as it has fixed-width strings, which are not supported with the ternary
     # operator
     lib = version_store_factory(dynamic_strings=True, column_group_size=2, segment_row_size=2)
-    symbol = "test_project_ternary_column_sliced_range_index"
-    # This fixture has 2 columns per slice, so the column groups will be:
-    # - ["conditional", num_1]
-    # - ["num_2", "str1"]
-    # - ["str_2"]
-    # i.e. the numeric columns and (more importantly) the string columns are in different segments from one another,
-    # testing the string pool handling
-    df = pd.DataFrame(
-        {
-            "conditional": [True, False, False, True, False, True],
-            "num_1": np.arange(0, 6, dtype=np.int64),
-            "num_2": np.arange(10, 16, dtype=np.int64),
-            "str_1": ["one", "two", "three", "four", "five", "six"],
-            "str_2": ["eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"],
-        },
-        index=index
-    )
-    lib.write(symbol, df)
 
-    # Numeric
-    expected = df
-    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["num_1"].to_numpy(), df["num_2"].to_numpy())
-    q = QueryBuilder()
-    q = q.apply("new_col", where(q["conditional"], q["num_1"], q["num_2"]))
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received)
+    try:
+        symbol = "test_project_ternary_column_sliced_range_index"
+        # This fixture has 2 columns per slice, so the column groups will be:
+        # - ["conditional", num_1]
+        # - ["num_2", "str1"]
+        # - ["str_2"]
+        # i.e. the numeric columns and (more importantly) the string columns are in different segments from one another,
+        # testing the string pool handling
+        df = pd.DataFrame(
+            {
+                "conditional": [True, False, False, True, False, True],
+                "num_1": np.arange(0, 6, dtype=np.int64),
+                "num_2": np.arange(10, 16, dtype=np.int64),
+                "str_1": ["one", "two", "three", "four", "five", "six"],
+                "str_2": ["eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"],
+            },
+            index=index
+        )
+        lib.write(symbol, df)
 
-    # String
-    expected = df
-    expected["new_col"] = np.where(df["conditional"].to_numpy(), df["str_1"].to_numpy(), df["str_2"].to_numpy())
-    q = QueryBuilder()
-    q = q.apply("new_col", where(q["conditional"], q["str_1"], q["str_2"]))
-    received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received)
+        # Numeric
+        expected = df
+        expected["new_col"] = np.where(df["conditional"].to_numpy(), df["num_1"].to_numpy(), df["num_2"].to_numpy())
+        q = QueryBuilder()
+        q = q.apply("new_col", where(q["conditional"], q["num_1"], q["num_2"]))
+        received = lib.read(symbol, query_builder=q).data
+        assert_frame_equal(expected, received)
 
+        # String
+        expected = df
+        expected["new_col"] = np.where(df["conditional"].to_numpy(), df["str_1"].to_numpy(), df["str_2"].to_numpy())
+        q = QueryBuilder()
+        q = q.apply("new_col", where(q["conditional"], q["str_1"], q["str_2"]))
+        received = lib.read(symbol, query_builder=q).data
+        assert_frame_equal(expected, received)
+    finally:
+        delete_nvs(lib)
 
 def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1

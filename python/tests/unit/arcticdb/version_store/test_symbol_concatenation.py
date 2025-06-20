@@ -13,6 +13,7 @@ from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryB
 from arcticdb.exceptions import NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util.utils import delete_nvs
 
 pytestmark = pytest.mark.pipeline
 
@@ -24,44 +25,48 @@ pytestmark = pytest.mark.pipeline
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
-    df_0 = pd.DataFrame(
-        {
-            "col1": np.arange(3, dtype=np.int64),
-            "col2": np.arange(100, 103, dtype=np.int64),
-            "col3": np.arange(1000, 1003, dtype=np.int64),
-        },
-        index=index[:3] if index is not None else None,
-    )
-    df_1 = pd.DataFrame(
-        {
-            "col1": np.arange(4, dtype=np.int64),
-            "col2": np.arange(200, 204, dtype=np.int64),
-            "col3": np.arange(2000, 2004, dtype=np.int64),
-        },
-        index=index[3:7] if index is not None else None,
-    )
-    df_2 = pd.DataFrame(
-        {
-            "col1": np.arange(5, dtype=np.int64),
-            "col2": np.arange(300, 305, dtype=np.int64),
-            "col3": np.arange(3000, 3005, dtype=np.int64),
-        },
-        index=index[7:] if index is not None else None,
-    )
-    lib.write("sym0", df_0, metadata=0)
-    lib.write("sym1", df_1)
-    lib.write("sym2", df_2, metadata=2)
 
-    received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect()
-    expected = pd.concat([df_0, df_1, df_2])
-    if index is None:
-        expected.index = pd.RangeIndex(len(expected))
-    assert_frame_equal(expected, received.data)
-    for idx, version in enumerate(received.versions):
-        assert version.symbol == f"sym{idx}"
-        assert version.version == 0
-        assert version.data is None
-        assert version.metadata == (None if idx == 1 else idx)
+    try:
+        df_0 = pd.DataFrame(
+            {
+                "col1": np.arange(3, dtype=np.int64),
+                "col2": np.arange(100, 103, dtype=np.int64),
+                "col3": np.arange(1000, 1003, dtype=np.int64),
+            },
+            index=index[:3] if index is not None else None,
+        )
+        df_1 = pd.DataFrame(
+            {
+                "col1": np.arange(4, dtype=np.int64),
+                "col2": np.arange(200, 204, dtype=np.int64),
+                "col3": np.arange(2000, 2004, dtype=np.int64),
+            },
+            index=index[3:7] if index is not None else None,
+        )
+        df_2 = pd.DataFrame(
+            {
+                "col1": np.arange(5, dtype=np.int64),
+                "col2": np.arange(300, 305, dtype=np.int64),
+                "col3": np.arange(3000, 3005, dtype=np.int64),
+            },
+            index=index[7:] if index is not None else None,
+        )
+        lib.write("sym0", df_0, metadata=0)
+        lib.write("sym1", df_1)
+        lib.write("sym2", df_2, metadata=2)
+
+        received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect()
+        expected = pd.concat([df_0, df_1, df_2])
+        if index is None:
+            expected.index = pd.RangeIndex(len(expected))
+        assert_frame_equal(expected, received.data)
+        for idx, version in enumerate(received.versions):
+            assert version.symbol == f"sym{idx}"
+            assert version.version == 0
+            assert version.data is None
+            assert version.metadata == (None if idx == 1 else idx)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"])
@@ -91,17 +96,21 @@ def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type):
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_with_series(lmdb_library_factory, index, name_0, name_1, join):
     lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
-    s_0 = pd.Series(np.arange(8, dtype=np.float64), index=index, name=name_0)
-    s_1 = pd.Series(np.arange(10, 18, dtype=np.float64), index=index, name=name_1)
-    lib.write("sym0", s_0)
-    lib.write("sym1", s_1)
 
-    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
-    expected = pd.concat([s_0, s_1], join=join)
-    if index is None:
-        expected.index = pd.RangeIndex(len(expected))
-    expected.name = name_0 if name_0 == name_1 else None
-    assert_series_equal(expected, received)
+    try:
+        s_0 = pd.Series(np.arange(8, dtype=np.float64), index=index, name=name_0)
+        s_1 = pd.Series(np.arange(10, 18, dtype=np.float64), index=index, name=name_1)
+        lib.write("sym0", s_0)
+        lib.write("sym1", s_1)
+
+        received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
+        expected = pd.concat([s_0, s_1], join=join)
+        if index is None:
+            expected.index = pd.RangeIndex(len(expected))
+        expected.name = name_0 if name_0 == name_1 else None
+        assert_series_equal(expected, received)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -109,107 +118,119 @@ def test_symbol_concat_with_series(lmdb_library_factory, index, name_0, name_1, 
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schema, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
-    # Use floats and strings so that our backfilling and Pandas' match
-    df_0 = pd.DataFrame(
-        {
-            "col1": np.arange(5, dtype=np.float64),
-            "col2": np.arange(5, dtype=np.float64),
-            "col3": ["a", "b", "c", "d", "e"],
-            "col4": ["1", "2", "3", "4", "5"],
-            "col5": np.arange(5, dtype=np.float64),
-        }
-    )
-    df_1 = pd.DataFrame(
-        {
-            "col7": np.arange(5, dtype=np.float64),
-            "col5": np.arange(5, dtype=np.float64),
-            "col3": ["f", "g", "h", "i", "j"],
-            "col1": np.arange(5, dtype=np.float64),
-            "col6": np.arange(5, dtype=np.float64),
-        }
-    )
-    lib.write("sym0", df_0)
-    lib.write("sym1", df_1)
+    
+    try:
+        # Use floats and strings so that our backfilling and Pandas' match
+        df_0 = pd.DataFrame(
+            {
+                "col1": np.arange(5, dtype=np.float64),
+                "col2": np.arange(5, dtype=np.float64),
+                "col3": ["a", "b", "c", "d", "e"],
+                "col4": ["1", "2", "3", "4", "5"],
+                "col5": np.arange(5, dtype=np.float64),
+            }
+        )
+        df_1 = pd.DataFrame(
+            {
+                "col7": np.arange(5, dtype=np.float64),
+                "col5": np.arange(5, dtype=np.float64),
+                "col3": ["f", "g", "h", "i", "j"],
+                "col1": np.arange(5, dtype=np.float64),
+                "col6": np.arange(5, dtype=np.float64),
+            }
+        )
+        lib.write("sym0", df_0)
+        lib.write("sym1", df_1)
 
-    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
-    expected = pd.concat([df_0, df_1], join=join)
-    expected.index = pd.RangeIndex(len(expected))
-    assert_frame_equal(expected, received)
+        received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
+        expected = pd.concat([df_0, df_1], join=join)
+        expected.index = pd.RangeIndex(len(expected))
+        assert_frame_equal(expected, received)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 def test_symbol_concat_integer_columns_outer_join(lmdb_library_factory, dynamic_schema, columns_per_segment):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
-    df_0 = pd.DataFrame(
-        {
-            "col1": np.arange(5, dtype=np.int64),
-            "col2": np.arange(5, 10, dtype=np.int64),
-            "col3": np.arange(10, 15, dtype=np.int64),
-            "col4": np.arange(15, 20, dtype=np.int64),
-            "col5": np.arange(20, 25, dtype=np.int64),
-        }
-    )
-    df_1 = pd.DataFrame(
-        {
-            "col7": np.arange(25, 30, dtype=np.int64),
-            "col5": np.arange(30, 35, dtype=np.int64),
-            "col3": np.arange(35, 40, dtype=np.int64),
-            "col1": np.arange(40, 45, dtype=np.int64),
-            "col6": np.arange(45, 50, dtype=np.int64),
-        }
-    )
-    lib.write("sym0", df_0)
-    lib.write("sym1", df_1)
 
-    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join="outer").collect().data
-    expected = pd.concat([df_0, df_1], join="outer")
-    expected.index = pd.RangeIndex(len(expected))
-    expected.fillna(0, inplace=True)
-    expected = expected.astype(np.int64)
-    assert_frame_equal(expected, received)
+    try:
+        df_0 = pd.DataFrame(
+            {
+                "col1": np.arange(5, dtype=np.int64),
+                "col2": np.arange(5, 10, dtype=np.int64),
+                "col3": np.arange(10, 15, dtype=np.int64),
+                "col4": np.arange(15, 20, dtype=np.int64),
+                "col5": np.arange(20, 25, dtype=np.int64),
+            }
+        )
+        df_1 = pd.DataFrame(
+            {
+                "col7": np.arange(25, 30, dtype=np.int64),
+                "col5": np.arange(30, 35, dtype=np.int64),
+                "col3": np.arange(35, 40, dtype=np.int64),
+                "col1": np.arange(40, 45, dtype=np.int64),
+                "col6": np.arange(45, 50, dtype=np.int64),
+            }
+        )
+        lib.write("sym0", df_0)
+        lib.write("sym1", df_1)
+
+        received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join="outer").collect().data
+        expected = pd.concat([df_0, df_1], join="outer")
+        expected.index = pd.RangeIndex(len(expected))
+        expected.fillna(0, inplace=True)
+        expected = expected.astype(np.int64)
+        assert_frame_equal(expected, received)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
-    df_0 = pd.DataFrame(
-        {
-            "col1": np.arange(5, dtype=np.float64),
-            "col2": np.arange(5, 10, dtype=np.float64),
-            "col3": np.arange(10, 15, dtype=np.float64),
-        }
-    )
-    df_1 = pd.DataFrame(
-        {
-            "col2": np.arange(15, 20, dtype=np.float64),
-            "col3": np.arange(15, 20, dtype=np.float64),
-            "col4": np.arange(20, 25, dtype=np.float64),
-        }
-    )
-    df_2 = pd.DataFrame(
-        {
-            "col1": np.arange(25, 30, dtype=np.float64),
-            "col4": np.arange(30, 35, dtype=np.float64),
-            "col5": np.arange(35, 40, dtype=np.float64),
-        }
-    )
-    df_3 = pd.DataFrame(
-        {
-            "col4": np.arange(40, 45, dtype=np.float64),
-            "col5": np.arange(45, 50, dtype=np.float64),
-            "col6": np.arange(50, 55, dtype=np.float64),
-        }
-    )
-    lib.write("sym0", df_0)
-    lib.append("sym0", df_1)
-    lib.write("sym1", df_2)
-    lib.append("sym1", df_3)
 
-    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
-    expected = pd.concat([pd.concat([df_0, df_1], join="outer"), pd.concat([df_2, df_3], join="outer")], join=join)
-    expected.index = pd.RangeIndex(len(expected))
-    assert_frame_equal(expected, received)
+    try:
+        df_0 = pd.DataFrame(
+            {
+                "col1": np.arange(5, dtype=np.float64),
+                "col2": np.arange(5, 10, dtype=np.float64),
+                "col3": np.arange(10, 15, dtype=np.float64),
+            }
+        )
+        df_1 = pd.DataFrame(
+            {
+                "col2": np.arange(15, 20, dtype=np.float64),
+                "col3": np.arange(15, 20, dtype=np.float64),
+                "col4": np.arange(20, 25, dtype=np.float64),
+            }
+        )
+        df_2 = pd.DataFrame(
+            {
+                "col1": np.arange(25, 30, dtype=np.float64),
+                "col4": np.arange(30, 35, dtype=np.float64),
+                "col5": np.arange(35, 40, dtype=np.float64),
+            }
+        )
+        df_3 = pd.DataFrame(
+            {
+                "col4": np.arange(40, 45, dtype=np.float64),
+                "col5": np.arange(45, 50, dtype=np.float64),
+                "col6": np.arange(50, 55, dtype=np.float64),
+            }
+        )
+        lib.write("sym0", df_0)
+        lib.append("sym0", df_1)
+        lib.write("sym1", df_2)
+        lib.append("sym1", df_3)
+
+        received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
+        expected = pd.concat([pd.concat([df_0, df_1], join="outer"), pd.concat([df_2, df_3], join="outer")], join=join)
+        expected.index = pd.RangeIndex(len(expected))
+        assert_frame_equal(expected, received)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -218,35 +239,39 @@ def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_schema, columns_per_segment, index, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
-    df_0 = pd.DataFrame(
-        {
-            "col1": np.arange(5, dtype=np.float64),
-            "col2": np.arange(5, dtype=np.float64),
-            "col3": np.arange(5, dtype=np.float64),
-        },
-        index=index,
-    )
-    df_1 = pd.DataFrame(
-        {
-            "col4": np.arange(5, dtype=np.float64),
-            "col5": np.arange(5, dtype=np.float64),
-            "col6": np.arange(5, dtype=np.float64),
-        },
-        index=index,
-    )
-    lib.write("sym0", df_0)
-    lib.write("sym1", df_1)
 
-    received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
-    if join == "inner":
-        if index is None:
-            assert not len(received)
-        assert not len(received.columns)
-    else:
-        expected = pd.concat([df_0, df_1], join=join)
-        if index is None:
-            expected.index = pd.RangeIndex(len(expected))
-        assert_frame_equal(expected, received)
+    try:
+        df_0 = pd.DataFrame(
+            {
+                "col1": np.arange(5, dtype=np.float64),
+                "col2": np.arange(5, dtype=np.float64),
+                "col3": np.arange(5, dtype=np.float64),
+            },
+            index=index,
+        )
+        df_1 = pd.DataFrame(
+            {
+                "col4": np.arange(5, dtype=np.float64),
+                "col5": np.arange(5, dtype=np.float64),
+                "col6": np.arange(5, dtype=np.float64),
+            },
+            index=index,
+        )
+        lib.write("sym0", df_0)
+        lib.write("sym1", df_1)
+
+        received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join=join).collect().data
+        if join == "inner":
+            if index is None:
+                assert not len(received)
+            assert not len(received.columns)
+        else:
+            expected = pd.concat([df_0, df_1], join=join)
+            if index is None:
+                expected.index = pd.RangeIndex(len(expected))
+            assert_frame_equal(expected, received)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -256,31 +281,35 @@ def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_s
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
-    df_0 = pd.DataFrame(
-        {
-            "col1": np.arange(3, dtype=np.int64),
-            "col2": np.arange(100, 103, dtype=np.int64),
-            "col3": np.arange(1000, 1003, dtype=np.int64),
-        },
-    )
-    df_1 = pd.DataFrame(
-        {
-            "col0": np.arange(10, 14, dtype=np.int64),
-            "col1": np.arange(4, dtype=np.int64),
-            "col2": np.arange(200, 204, dtype=np.int64),
-            "col3": np.arange(2000, 2004, dtype=np.int64),
-        },
-    )
-    lib.write("sym0", df_0)
-    lib.write("sym1", df_1)
 
-    lazy_df_0 = lib.read("sym0", columns=columns, lazy=True)
-    lazy_df_1 = lib.read("sym1", columns=columns, lazy=True)
+    try:
+        df_0 = pd.DataFrame(
+            {
+                "col1": np.arange(3, dtype=np.int64),
+                "col2": np.arange(100, 103, dtype=np.int64),
+                "col3": np.arange(1000, 1003, dtype=np.int64),
+            },
+        )
+        df_1 = pd.DataFrame(
+            {
+                "col0": np.arange(10, 14, dtype=np.int64),
+                "col1": np.arange(4, dtype=np.int64),
+                "col2": np.arange(200, 204, dtype=np.int64),
+                "col3": np.arange(2000, 2004, dtype=np.int64),
+            },
+        )
+        lib.write("sym0", df_0)
+        lib.write("sym1", df_1)
 
-    received = concat([lazy_df_0, lazy_df_1], join).collect().data
-    expected = pd.concat([df_0.loc[:, columns], df_1.loc[:, columns]])
-    expected.index = pd.RangeIndex(len(expected))
-    assert_frame_equal(expected, received)
+        lazy_df_0 = lib.read("sym0", columns=columns, lazy=True)
+        lazy_df_1 = lib.read("sym1", columns=columns, lazy=True)
+
+        received = concat([lazy_df_0, lazy_df_1], join).collect().data
+        expected = pd.concat([df_0.loc[:, columns], df_1.loc[:, columns]])
+        expected.index = pd.RangeIndex(len(expected))
+        assert_frame_equal(expected, received)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("only_incompletes", [True, False])
@@ -324,20 +353,24 @@ def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_multiindex_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
-    df = pd.DataFrame(
-        {
-            "col1": np.arange(12, dtype=np.int64),
-            "col2": np.arange(100, 112, dtype=np.int64),
-            "col3": np.arange(1000, 1012, dtype=np.int64),
-        },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=["datetime", "level"]),
-    )
-    lib.write("sym0", df[:3])
-    lib.write("sym1", df[3:7])
-    lib.write("sym2", df[7:])
 
-    received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect().data
-    assert_frame_equal(df, received)
+    try:
+        df = pd.DataFrame(
+            {
+                "col1": np.arange(12, dtype=np.int64),
+                "col2": np.arange(100, 112, dtype=np.int64),
+                "col3": np.arange(1000, 1012, dtype=np.int64),
+            },
+            index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=["datetime", "level"]),
+        )
+        lib.write("sym0", df[:3])
+        lib.write("sym1", df[3:7])
+        lib.write("sym2", df[7:])
+
+        received = concat(lib.read_batch(["sym0", "sym1", "sym2"], lazy=True), join).collect().data
+        assert_frame_equal(df, received)
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
@@ -375,48 +408,52 @@ def test_symbol_concat_with_date_range(lmdb_library, join):
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
-    df_0 = pd.DataFrame(
-        {
-        "col1": np.arange(3, dtype=np.int64),
-        "col2": np.arange(100, 103, dtype=np.int64),
-        "col3": np.arange(1000, 1003, dtype=np.int64),
-        },
-        index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3),
-    )
-    df_1 = pd.DataFrame(
-        {
-        "col1": np.arange(4, dtype=np.int64),
-        "col2": np.arange(200, 204, dtype=np.int64),
-        "col3": np.arange(2000, 2004, dtype=np.int64),
-        },
-        index=pd.date_range(pd.Timestamp(2000), freq="1000ns", periods=4),
-    )
-    df_2 = pd.DataFrame(
-        {
-        "col1": np.arange(5, dtype=np.int64),
-        "col2": np.arange(300, 305, dtype=np.int64),
-        "col3": np.arange(3000, 3005, dtype=np.int64),
-        },
-        index=pd.date_range(pd.Timestamp(6000), freq="1000ns", periods=5),
-    )
-    lib.write("sym0", df_0)
-    lib.write("sym1", df_1)
-    lib.write("sym2", df_2)
 
-    lazy_df_0 = lib.read("sym0", lazy=True)
-    lazy_df_1 = lib.read("sym1", lazy=True)
-    lazy_df_1 = lazy_df_1.date_range((pd.Timestamp(pd.Timestamp(3000)), None))
-    lazy_df_2 = lib.read("sym2", date_range=(None, pd.Timestamp(9000)), lazy=True)
+    try:
+        df_0 = pd.DataFrame(
+            {
+            "col1": np.arange(3, dtype=np.int64),
+            "col2": np.arange(100, 103, dtype=np.int64),
+            "col3": np.arange(1000, 1003, dtype=np.int64),
+            },
+            index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3),
+        )
+        df_1 = pd.DataFrame(
+            {
+            "col1": np.arange(4, dtype=np.int64),
+            "col2": np.arange(200, 204, dtype=np.int64),
+            "col3": np.arange(2000, 2004, dtype=np.int64),
+            },
+            index=pd.date_range(pd.Timestamp(2000), freq="1000ns", periods=4),
+        )
+        df_2 = pd.DataFrame(
+            {
+            "col1": np.arange(5, dtype=np.int64),
+            "col2": np.arange(300, 305, dtype=np.int64),
+            "col3": np.arange(3000, 3005, dtype=np.int64),
+            },
+            index=pd.date_range(pd.Timestamp(6000), freq="1000ns", periods=5),
+        )
+        lib.write("sym0", df_0)
+        lib.write("sym1", df_1)
+        lib.write("sym2", df_2)
 
-    lazy_df = concat([lazy_df_0, lazy_df_1, lazy_df_2], join)
+        lazy_df_0 = lib.read("sym0", lazy=True)
+        lazy_df_1 = lib.read("sym1", lazy=True)
+        lazy_df_1 = lazy_df_1.date_range((pd.Timestamp(pd.Timestamp(3000)), None))
+        lazy_df_2 = lib.read("sym2", date_range=(None, pd.Timestamp(9000)), lazy=True)
 
-    lazy_df.resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+        lazy_df = concat([lazy_df_0, lazy_df_1, lazy_df_2], join)
 
-    received = lazy_df.collect().data
-    received = received.reindex(columns=sorted(received.columns))
-    expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
-    assert_frame_equal(expected, received)
+        lazy_df.resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
 
+        received = lazy_df.collect().data
+        received = received.reindex(columns=sorted(received.columns))
+        expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+        assert_frame_equal(expected, received)
+    finally:
+        delete_nvs(lib)
+        
 
 def test_symbol_concat_querybuilder_syntax(lmdb_library):
     lib = lmdb_library

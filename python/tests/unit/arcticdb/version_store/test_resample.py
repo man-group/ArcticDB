@@ -18,6 +18,8 @@ from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 import itertools
 
+from arcticdb.util.utils import delete_nvs
+
 pytestmark = pytest.mark.pipeline
 
 
@@ -218,55 +220,59 @@ def test_resampling_nan_correctness(version_store_factory):
         dynamic_strings=True,
         lmdb_config={"map_size": 2**30}
     )
-    sym = "test_resampling_nan_correctness"
-    # NaN here means NaT for datetime columns and NaN/None in string columns
-    # Create 5 buckets worth of data, each containing 3 values:
-    # - No nans
-    # - All nans
-    # - First value nan
-    # - Middle value nan
-    # - Last value nan
-    # Will group on microseconds
-    idx = [0, 1, 2, 1000, 1001, 1002, 2000, 2001, 2002, 3000, 3001, 3002, 4000, 4001, 4002]
-    idx = np.array(idx, dtype="datetime64[ns]")
-    float_col = np.arange(15, dtype=np.float64)
-    string_col = [f"str {str(i)}" for i in range(15)]
-    datetime_col = np.array(np.arange(0, 30, 2), dtype="datetime64[ns]")
-    for i in [3, 4, 5, 6, 10, 14]:
-        float_col[i] = np.nan
-        string_col[i] = None if i % 2 == 0 else np.nan
-        datetime_col[i] = np.datetime64('NaT')
 
-    df = pd.DataFrame({"float_col": float_col, "string_col": string_col, "datetime_col": datetime_col}, index=idx)
-    lib.write(sym, df)
+    try:
+        sym = "test_resampling_nan_correctness"
+        # NaN here means NaT for datetime columns and NaN/None in string columns
+        # Create 5 buckets worth of data, each containing 3 values:
+        # - No nans
+        # - All nans
+        # - First value nan
+        # - Middle value nan
+        # - Last value nan
+        # Will group on microseconds
+        idx = [0, 1, 2, 1000, 1001, 1002, 2000, 2001, 2002, 3000, 3001, 3002, 4000, 4001, 4002]
+        idx = np.array(idx, dtype="datetime64[ns]")
+        float_col = np.arange(15, dtype=np.float64)
+        string_col = [f"str {str(i)}" for i in range(15)]
+        datetime_col = np.array(np.arange(0, 30, 2), dtype="datetime64[ns]")
+        for i in [3, 4, 5, 6, 10, 14]:
+            float_col[i] = np.nan
+            string_col[i] = None if i % 2 == 0 else np.nan
+            datetime_col[i] = np.datetime64('NaT')
 
-    agg_dict = {
-        "float_sum": ("float_col", "sum"),
-        "float_mean": ("float_col", "mean"),
-        "float_min": ("float_col", "min"),
-        "float_max": ("float_col", "max"),
-        "float_first": ("float_col", "first"),
-        "float_last": ("float_col", "last"),
-        "float_count": ("float_col", "count"),
-    }
+        df = pd.DataFrame({"float_col": float_col, "string_col": string_col, "datetime_col": datetime_col}, index=idx)
+        lib.write(sym, df)
 
-    # Pandas 1.X does not support all of these aggregators, or behaves in a less intuitive way than Pandas 2.X
-    if IS_PANDAS_TWO:
-        agg_dict.update(
-            {
-                "string_first": ("string_col", "first"),
-                "string_last": ("string_col", "last"),
-                "string_count": ("string_col", "count"),
-                "datetime_mean": ("datetime_col", "mean"),
-                "datetime_min": ("datetime_col", "min"),
-                "datetime_max": ("datetime_col", "max"),
-                "datetime_first": ("datetime_col", "first"),
-                "datetime_last": ("datetime_col", "last"),
-                "datetime_count": ("datetime_col", "count"),
-            }
-        )
+        agg_dict = {
+            "float_sum": ("float_col", "sum"),
+            "float_mean": ("float_col", "mean"),
+            "float_min": ("float_col", "min"),
+            "float_max": ("float_col", "max"),
+            "float_first": ("float_col", "first"),
+            "float_last": ("float_col", "last"),
+            "float_count": ("float_col", "count"),
+        }
 
-    generic_resample_test(lib, sym, "us", agg_dict)
+        # Pandas 1.X does not support all of these aggregators, or behaves in a less intuitive way than Pandas 2.X
+        if IS_PANDAS_TWO:
+            agg_dict.update(
+                {
+                    "string_first": ("string_col", "first"),
+                    "string_last": ("string_col", "last"),
+                    "string_count": ("string_col", "count"),
+                    "datetime_mean": ("datetime_col", "mean"),
+                    "datetime_min": ("datetime_col", "min"),
+                    "datetime_max": ("datetime_col", "max"),
+                    "datetime_first": ("datetime_col", "first"),
+                    "datetime_last": ("datetime_col", "last"),
+                    "datetime_count": ("datetime_col", "count"),
+                }
+            )
+
+        generic_resample_test(lib, sym, "us", agg_dict)
+    finally:
+        delete_nvs(lib)
 
 
 def test_resampling_bool_columns(lmdb_version_store_tiny_segment):

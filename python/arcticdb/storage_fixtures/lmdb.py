@@ -30,7 +30,7 @@ class LmdbStorageFixture(StorageFixture):
         self.libs_instances_from_arctic: List[NativeVersionStore] = []
         self.arctic_instances: List[Arctic] = []
 
-    def create_arctic(self, **extras):
+    def create_arctic(self, **extras) -> Arctic:
         out = super().create_arctic(**extras)
         # This is a hack to allow the tests to access the libs_instances_from_arctic list
         out._accessed_libs = self.libs_instances_from_arctic
