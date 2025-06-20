@@ -20,6 +20,8 @@ import time
 import attr
 from functools import wraps
 
+from arcticdb.util.marks import SHORTER_LOGS
+
 try:
     from pandas.errors import UndefinedVariableError
 except ImportError:
@@ -142,15 +144,18 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
     a problems in test code or arctic
     """
     print("-" * 80)
-    if isinstance(df, pd.DataFrame):
-        print("dataframe : , ", label_for_df)
-        print(df.to_csv())
-        print("column definitions : ")
-        print(df.dtypes)
+    if SHORTER_LOGS:
+        print("No full dataframes dumps when shorter logs is activated")
     else:
-        print(f"Not a dataframe passed : {type(df)}")
-        print(df)
-    print("-" * 80)
+        if isinstance(df, pd.DataFrame):
+            print("dataframe : , ", label_for_df)
+            print(df.to_csv())
+            print("column definitions : ")
+            print(df.dtypes)
+        else:
+            print(f"Not a dataframe passed : {type(df)}")
+            print(df)
+        print("-" * 80)
 
 
 def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:

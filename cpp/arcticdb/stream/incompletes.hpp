@@ -14,6 +14,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
+#include <arcticdb/version/version_map.hpp>
 
 namespace arcticdb::pipelines {
 struct PythonOutputFrame;

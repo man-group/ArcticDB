@@ -14,13 +14,15 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
+from arcticdb.util import marks
+
 MACOS = sys.platform.lower().startswith("darwin")
 LINUX = sys.platform.lower().startswith("linux")
 WINDOWS = sys.platform.lower().startswith("win32")
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
-ARCTICDB_USING_CONDA = os.getenv("ARCTICDB_USING_CONDA", "0") == "1"
+ARCTICDB_USING_CONDA = marks.ARCTICDB_USING_CONDA
 MACOS_CONDA_BUILD = sys.platform == "darwin" and ARCTICDB_USING_CONDA
 _MACOS_CONDA_BUILD_SKIP_REASON = (
     "Tests fail for macOS conda builds, either because Azurite is improperly configured"
@@ -41,6 +43,8 @@ LOCAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", 
 STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
 STORAGE_AWS_S3 = os.getenv("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
 STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
+# Defined shorter logs on errors
+SHORTER_LOGS = marks.SHORTER_LOGS
 
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
 # This is to avoid the risk of the name becoming out of sync with the actual condition.
@@ -115,7 +119,7 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
 ## MEMRAY supports linux and macos and python 3.8 and above
-MEMRAY_SUPPORTED = (sys.version_info >= (3, 8)) and (MACOS or LINUX)
+MEMRAY_SUPPORTED = (MACOS or LINUX)
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
     not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
 )
@@ -138,8 +142,7 @@ VENV_COMPAT_TESTS_MARK = pytest.mark.skipif(
 
 PANDAS_2_COMPAT_TESTS_MARK = pytest.mark.skipif(
     MACOS_CONDA_BUILD
-    or sys.version.startswith("3.7")  # Pandas 2 not available in 3.7 or 3.8
-    or sys.version.startswith("3.8")
+    or sys.version.startswith("3.8") # Pandas 2 not available in 3.8
     or sys.version.startswith("3.12")
     or sys.version.startswith("3.13"),  # Waiting for https://github.com/man-group/ArcticDB/issues/2008
     reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version and "

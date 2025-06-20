@@ -32,6 +32,7 @@ from arcticdb.version_store._custom_normalizers import (
     CompositeCustomNormalizer,
 )
 from arcticdb.version_store._normalization import (
+    BlockManagerUnconsolidated,
     FrameData,
     MsgPackNormalizer,
     normalize_metadata,
@@ -44,6 +45,8 @@ from arcticdb.version_store._normalization import (
     NPDDataFrame,
 )
 from arcticdb.version_store._common import TimeFrame
+from arcticdb.version_store._store import NativeVersionStore
+from arcticdb.version_store.library import Library
 from arcticdb.util.test import (
     CustomThing,
     TestCustomNormalizer,
@@ -271,8 +274,6 @@ def test_write_tz(lmdb_version_store, sym, tz):
             # We convert all timezones to pytz, so we expect to convert to a pytz timezone.
             expected_df.index = expected_df.index.tz_convert(pytz.timezone(str(tz)))
     assert_frame_equal(expected_df, result)
-    if tz == du.tz.gettz("UTC") and sys.version_info < (3, 7):
-        pytest.skip("Timezone files don't seem to have ever worked properly on Python 3.6")
     start_ts, end_ts = lmdb_version_store.get_timerange_for_symbol(sym)
     assert isinstance(start_ts, datetime.datetime)
     assert isinstance(end_ts, datetime.datetime)
@@ -1060,3 +1061,33 @@ def test_required_field_inclusion(version_store_factory, dynamic_schema, segment
         received_data = lib.read(sym, columns=["col3"], query_builder=q).data
         expected_df = expected_df.drop(columns=["col1", "col2"])
         assert_frame_equal(expected_df, received_data)
+
+
+@pytest.mark.parametrize("env_var_set", [True, False])
+def test_pandas_consolidation_v1(version_store_factory, monkeypatch, env_var_set):
+    if env_var_set:
+        monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
+    lib = version_store_factory()
+    assert lib._normalizer.df._skip_df_consolidation == (env_var_set and IS_PANDAS_TWO)
+    sym = "test_pandas_consolidation_v1"
+    lib.write(sym, pd.DataFrame({"col": [0]}))
+    df = lib.read(sym).data
+    if lib._normalizer.df._skip_df_consolidation:
+        assert isinstance(df._mgr, BlockManagerUnconsolidated)
+    else:
+        assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
+
+
+@pytest.mark.parametrize("env_var_set", [True, False])
+def test_pandas_consolidation_v2(lmdb_library_factory, monkeypatch, env_var_set):
+    if env_var_set:
+        monkeypatch.setenv("SKIP_DF_CONSOLIDATION", "true")
+    lib = lmdb_library_factory()
+    assert lib._nvs._normalizer.df._skip_df_consolidation == IS_PANDAS_TWO
+    sym = "test_pandas_consolidation_v2"
+    lib.write(sym, pd.DataFrame({"col": [0]}))
+    df = lib.read(sym).data
+    if lib._nvs._normalizer.df._skip_df_consolidation:
+        assert isinstance(df._mgr, BlockManagerUnconsolidated)
+    else:
+        assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)

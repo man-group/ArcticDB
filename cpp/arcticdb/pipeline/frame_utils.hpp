@@ -84,7 +84,7 @@ RawType* flatten_tensor(
         size_t slice_num,
         size_t regular_slice_size
         ) {
-    flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType), entity::AllocationType::PRESIZED);
+    flattened_buffer = ChunkedBuffer::presized(rows_to_write * sizeof(RawType));
     TypedTensor<RawType> t(tensor, slice_num, regular_slice_size, rows_to_write);
     util::FlattenHelper flattener{t};
     auto dst = reinterpret_cast<RawType*>(flattened_buffer->data());
@@ -220,7 +220,7 @@ void set_bool_object_type(
     util::BitSet bitset = util::scan_object_type_to_sparse(ptr_data, rows_to_write);
 
     const auto num_values = bitset.count();
-    auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t), entity::AllocationType::PRESIZED);
+    auto bool_buffer = ChunkedBuffer::presized(num_values * sizeof(uint8_t));
     auto bool_ptr = bool_buffer.ptr_cast<uint8_t>(0u, num_values);
     for (auto it = bitset.first(); it < bitset.end(); ++it) {
         *bool_ptr = static_cast<uint8_t>(PyObject_IsTrue(ptr_data[*it]));

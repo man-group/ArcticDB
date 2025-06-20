@@ -22,12 +22,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 import trustme
 
-try:
-    # this module can be used outside of the test suite
-    # where the mark module is not available
-    from tests.util.mark import ARCTICDB_USING_CONDA
-except ImportError:
-    ARCTICDB_USING_CONDA = False
+from arcticdb.util.marks import ARCTICDB_USING_CONDA
 
 _WINDOWS = platform.system() == "Windows"
 _DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")

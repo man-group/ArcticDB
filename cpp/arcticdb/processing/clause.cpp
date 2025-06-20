@@ -129,8 +129,8 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
     }
     auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
     proc.set_expression_context(expression_context_);
-    ARCTICDB_RUNTIME_DEBUG(log::memory(), "Doing filter {} for entity ids {}", expression_context_->root_node_name_, entity_ids);
-    auto variant_data = proc.get(expression_context_->root_node_name_);
+    ARCTICDB_RUNTIME_DEBUG(log::memory(), "Doing filter {} for entity ids {}", root_node_name_, entity_ids);
+    auto variant_data = proc.get(root_node_name_);
     std::vector<EntityId> output;
     util::variant_match(variant_data,
                         [&proc, &output, this](util::BitSet &bitset) {
@@ -155,14 +155,14 @@ std::vector<EntityId> FilterClause::process(std::vector<EntityId>&& entity_ids) 
 
 OutputSchema FilterClause::modify_schema(OutputSchema&& output_schema) const {
     check_column_presence(output_schema, *clause_info_.input_columns_, "Filter");
-    auto root_expr = expression_context_->expression_nodes_.get_value(expression_context_->root_node_name_.value);
+    auto root_expr = expression_context_->expression_nodes_.get_value(root_node_name_.value);
     std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_, output_schema.column_types());
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<BitSetTag>(return_type), "FilterClause AST would produce a column, not a bitset");
     return output_schema;
 }
 
 std::string FilterClause::to_string() const {
-    return expression_context_ ? fmt::format("WHERE {}", expression_context_->root_node_name_.value) : "";
+    return expression_context_ ? fmt::format("WHERE {}", root_node_name_.value) : "";
 }
 
 std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids) const {
@@ -180,7 +180,8 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
                             output = push_entities(*component_manager_, std::move(proc));
                         },
                         [&proc, &output, this](const std::shared_ptr<Value>& val) {
-                            // With the ternary operator, it is possible for the AST to produce a Value
+                            // It is possible for the AST to produce a Value, either through use of apply with a raw
+                            // value, or through use of the ternary operator
                             // Turn this Value into a dense column where all of the entries are the same as this value,
                             // of the same length as the other segments in this processing unit
                             auto rows = proc.segments_->back()->row_count();
@@ -223,15 +224,35 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
 
 OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
     check_column_presence(output_schema, *clause_info_.input_columns_, "Project");
-    auto root_expr = expression_context_->expression_nodes_.get_value(expression_context_->root_node_name_.value);
-    std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_, output_schema.column_types());
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(return_type), "ProjectClause AST would produce a bitset, not a column");
-    output_schema.add_field(output_column_, std::get<DataType>(return_type));
+    util::variant_match(
+            expression_context_->root_node_name_,
+            [&](const ExpressionName& root_node_name) {
+                auto root_expr = expression_context_->expression_nodes_.get_value(root_node_name.value);
+                std::variant<BitSetTag, DataType> return_type = root_expr->compute(*expression_context_,
+                                                                                   output_schema.column_types());
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(return_type),
+                                                                      "ProjectClause AST would produce a bitset, not a column");
+                output_schema.add_field(output_column_, std::get<DataType>(return_type));
+            },
+            [&](const ValueName& root_node_name) {
+                output_schema.add_field(output_column_, expression_context_->values_.get_value(root_node_name.value)->type().data_type());
+            },
+            [](const auto&) {
+                // Shouldn't make it here due to check in ctor
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("ProjectClause AST would not produce a column");
+            });
     return output_schema;
 }
 
 [[nodiscard]] std::string ProjectClause::to_string() const {
-    return expression_context_ ? fmt::format("PROJECT Column[\"{}\"] = {}", output_column_, expression_context_->root_node_name_.value) : "";
+    return expression_context_ ?
+    fmt::format(
+            "PROJECT Column[\"{}\"] = {}",
+            output_column_,
+            std::holds_alternative<ExpressionName>(expression_context_->root_node_name_) ?
+                    std::get<ExpressionName>(expression_context_->root_node_name_).value:
+                    std::get<ValueName>(expression_context_->root_node_name_).value) :
+    "";
 }
 
 void ProjectClause::add_column(ProcessingUnit& proc, const ColumnWithStrings &col) const {

@@ -874,15 +874,16 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             try:
                 self._s3_admin.delete_bucket(Bucket=b.bucket)
             except botocore.exceptions.ClientError as e:
-                # There is a problem with xdist on Windows 3.7
-                # where we try to clean up the bucket but it's already gone
-                is_win_37 = platform.system() == "Windows" and sys.version_info[:2] == (3, 7)
-                if e.response["Error"]["Code"] != "NoSuchBucket" and not is_win_37:
+                if e.response["Error"]["Code"] != "NoSuchBucket":
                     raise e
         else:
-            requests.post(
-                self._iam_endpoint + "/moto-api/reset", verify=False
-            )  # If CA cert verify fails, it will take ages for this line to finish
+            try:
+                requests.post(
+                    self._iam_endpoint + "/moto-api/reset", verify=False
+                )  # If CA cert verify fails, it will take ages for this line to finish
+            except Exception:
+                # We clean bucket at session level so failure here does not matter
+                pass            
             self._iam_admin = None
 
 

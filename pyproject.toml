@@ -12,7 +12,7 @@ test-extras = "Testing"
 # See also build_many_linux_image.sh
 before-all = """
 [[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
-    openssl-devel cyrus-sasl-devel devtoolset-10-libatomic-devel libcurl-devel ; }
+    openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel libcurl-devel ; }
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
@@ -30,7 +30,7 @@ line-length = 120
 
 [tool.black]
 line-length = 120
-target_version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py311']
+target_version = ['py38', 'py39', 'py310', 'py311', 'py312', 'py313']
 preview = true
 # This must be kept in sync with the version in setup.cfg.
 exclude = '''

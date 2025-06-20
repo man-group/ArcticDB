@@ -586,6 +586,7 @@ def concat(
     join : str, default="outer"
         Whether the columns of the input symbols should be inner or outer joined. Supported inputs are "inner" and
         "outer".
+
         * inner - Only columns present in ALL the input symbols will be present in the returned DataFrame.
         * outer - Columns present in ANY of the input symbols will be present in the returned DataFrame. Columns
           that are present in some input symbols but not in others will be backfilled according to their type using
@@ -749,7 +750,7 @@ class Library:
         """
         self.arctic_instance_desc = arctic_instance_description
         self._nvs = nvs
-        self._nvs._normalizer.df._skip_df_consolidation = True
+        self._nvs._normalizer.df.set_skip_df_consolidation()
         self._dev_tools = DevTools(nvs)
 
     def __repr__(self):

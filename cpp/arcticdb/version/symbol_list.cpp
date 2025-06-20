@@ -74,7 +74,7 @@ std::vector<SymbolListEntry> load_previous_from_version_keys(
             log::symbol().warn(
                 "No compacted symbol list cache found. "
                 "`list_symbols` may take longer than expected. \n\n"
-                "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
+                "See here for more information: https://docs.arcticdb.io/latest/technical/on_disk_storage/#symbol-list-caching\n\n"
                 "To resolve, run `list_symbols` through to completion to compact the symbol list cache.\n"
                 "Note: This warning will only appear once.\n");
 
@@ -110,7 +110,7 @@ std::vector<AtomKey> get_all_symbol_list_keys(
         if (uncompacted_keys_found == warning_threshold() && !data.warned_expected_slowdown_) {
             log::symbol().warn(
                 "`list_symbols` may take longer than expected as there have been many modifications since `list_symbols` was last called. \n\n"
-                "See here for more information: https://docs.arcticdb.io/technical/on_disk_storage/#symbol-list-caching\n\n"
+                "See here for more information: https://docs.arcticdb.io/latest/technical/on_disk_storage/#symbol-list-caching\n\n"
                 "To resolve, run `list_symbols` through to completion frequently.\n"
                 "Note: This warning will only appear once.\n");
 

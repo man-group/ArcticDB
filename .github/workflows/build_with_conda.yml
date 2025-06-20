@@ -17,6 +17,16 @@ on:
         type: boolean
         required: false
         default: false
+      run_cpp_tests:
+        description: 'Run C++ tests'
+        type: boolean
+        required: true
+        default: true        
+      run_custom_pytest_command:
+        description: 'Run custom pytest command (curdir is project root). Or pass additional arguments to default command'
+        type: string
+        required: false
+        default: ""        
 
 jobs:
 
@@ -59,6 +69,7 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
+        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
@@ -66,6 +77,7 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
       - name: Run C++ Tests
+        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
           cd cpp/out/linux-conda-release-build/
@@ -92,16 +104,31 @@ jobs:
         run: |
           npm install -g azurite
 
+      - name: Check no arcticdb file depend on tests package
+        shell: bash -l {0}
+        run: |
+          build_tooling/checks.sh          
+
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          cd python
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS"
+            python -m pip  install pytest-repeat
+            python -m pip  install setuptools
+            python -m pip  install wheel
+            echo "Run custom pytest command: $command"
+            eval "$command"
+          else
+            cd python
+            python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests $ARCTICDB_PYTEST_ARGS
+          fi
         env:
           ARCTICDB_USING_CONDA: 1
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
+          ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
 
 
   macos:
@@ -144,6 +171,7 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
 
       - name: Build C++ Tests
+        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
@@ -151,6 +179,7 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
       - name: Run C++ Tests
+        if: ${{ inputs.run_cpp_tests == true|| github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
           cd cpp/out/darwin-conda-release-build/
@@ -169,9 +198,17 @@ jobs:
       - name: Test with pytest
         shell: bash -l {0}
         run: |
-          cd python
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} tests
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS"
+            echo "Run custom pytest command: $command"
+            python -m pip  install pytest-repeat
+            eval "$command"
+          else
+            cd python
+            python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} tests $ARCTICDB_PYTEST_ARGS
+          fi
         env:
           ARCTICDB_USING_CONDA: 1
+          ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
 
