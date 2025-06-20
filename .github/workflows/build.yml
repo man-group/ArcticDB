@@ -9,7 +9,7 @@ on:
     branches: ["**"]
   schedule:
     # IMPORTANT: For scheduled job we execute AWS_S3
-    - cron: '0 1 * * 1,2,3,4' # Mon and Thu at 1 am
+    - cron: '0 1 * * 1,2,3,4' # Mon-Thu at 1 am
   workflow_dispatch:
     inputs:
       persistent_storage:
@@ -61,7 +61,7 @@ jobs:
         id: set-storage
         shell: bash
         run: |
-          _storage='no'
+          _storage='not_scheduled'
           day=$(date +'%a')
           echo "Today is $day"
           if [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
@@ -70,8 +70,9 @@ jobs:
             _storage='GCPXML'
           else
             echo "UNDETERMINED RESULT for this day"
-          exit 1
           fi
+          # Default value if none is further assigned based on rules
+          _storage='no'
           echo "Storage type calculated for scheduled job: $_storage"
           if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
             echo "Workflow not triggered by schedule."
