@@ -2200,6 +2200,53 @@ def test_restore_version_as_of(lmdb_version_store, batch):
 
 
 @pytest.mark.parametrize("batch", (True, False))
+def test_restore_version_as_of_deleted_but_in_snapshot(lmdb_version_store, batch):
+    """Test restoring a version that has been deleted but which is kept alive by a snapshot."""
+    lib = lmdb_version_store
+    sym = "test_restore_version_as_of_deleted_in_snapshot"
+
+    def restore(as_of):
+        if batch:
+            res = lib.batch_restore_version([sym], [as_of])
+            assert len(res) == 1
+            return res[0]
+        else:
+            return lib.restore_version(sym, as_of)
+
+    lib.version_store = ManualClockVersionStore(lib._library)
+
+    first_ts = pd.Timestamp(1000)
+    ManualClockVersionStore.time = first_ts.value
+    first_df = get_sample_dataframe(20, 4)
+    lib.write(sym, first_df, metadata=1)
+
+    second_ts = pd.Timestamp(2000)
+    ManualClockVersionStore.time = second_ts.value
+    lib.snapshot("snap")
+    ManualClockVersionStore.time = pd.Timestamp(2500).value
+    lib.delete(sym)
+    assert sym not in lib.list_symbols()
+    lib.compact_symbol_list()  # important to compact the symbol list and throw away the "add" entry else conflict resolution
+    # in the symbol list, that refers to the version chain, can hide bugs with the symbol list state
+
+    third_ts = pd.Timestamp(3000)
+    ManualClockVersionStore.time = third_ts.value
+
+    restore_item = restore("snap")
+
+    # Then
+    assert restore_item.version == 1
+    assert restore_item.metadata == 1
+    latest = lib.read(sym)
+    assert_equal(latest.data, first_df)
+    assert latest.metadata == 1
+    assert latest.version == 1
+
+    assert sym in lib.list_symbols(use_symbol_list=True)
+    assert sym in lib.list_symbols(use_symbol_list=False)
+
+
+@pytest.mark.parametrize("batch", (True, False))
 def test_restore_version_deleted(lmdb_version_store_delayed_deletes_v1, batch):
     lib = lmdb_version_store_delayed_deletes_v1
     sym = "test_restore_version_deleted"
@@ -2221,6 +2268,7 @@ def test_restore_version_deleted(lmdb_version_store_delayed_deletes_v1, batch):
 
     ManualClockVersionStore.time = 1500
     lib.delete(sym)
+    lib.compact_symbol_list()
 
     ManualClockVersionStore.time = 2000
     with pytest.raises(NoSuchVersionException):

@@ -1590,7 +1590,7 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(duplicate_streams.empty(), "Duplicate symbols in restore_version request. Symbols submitted more than once [{}]",
                                                           fmt::join(duplicate_streams, ","));
 
-    auto previous = batch_get_latest_version(store(), version_map(), stream_ids, true);
+    auto previous = batch_get_latest_version_with_deletion_info(store(), version_map(), stream_ids, true);
     auto versions_to_restore = folly::collect(batch_get_versions_async(store(), version_map(), stream_ids, version_queries)).get();
 
     std::vector<StreamId> symbols_with_missing_versions;
@@ -1605,12 +1605,24 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine
                                                           fmt::join(symbols_with_missing_versions, ","));
 
     std::vector<folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>>> fut_vec;
-    for(const std::optional<AtomKey>& key_opt : versions_to_restore) {
-        AtomKey key = *key_opt;
-        auto prev_it = previous->find(key.id());
-        auto maybe_prev = prev_it == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(prev_it->second);
-        auto restore_fut = async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), key.id(), key, maybe_prev});
-        fut_vec.emplace_back(std::move(restore_fut));
+    for(const std::optional<AtomKey>& key : versions_to_restore) {
+        auto prev_it = previous->find(key->id());
+        auto maybe_prev = prev_it == std::end(*previous) ? std::nullopt : std::make_optional<MaybeDeletedAtomKey>(prev_it->second);
+        auto restore_fut = async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), key->id(), *key, maybe_prev});
+        if (maybe_prev && maybe_prev->deleted) {
+            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a symbol list entry for it
+            auto overall_fut = std::move(restore_fut).via(&async::io_executor()).thenValue([this](auto&& restore_result) {
+                WriteSymbolTask(store(),
+                                symbol_list_ptr(),
+                                restore_result.first.key_.id(),
+                                restore_result.first.key_.version_id())();
+                return std::move(restore_result);
+            });
+            fut_vec.push_back(std::move(overall_fut));
+        } else {
+            // Otherwise we cannot be restoring a deleted symbol so it must already have a symbol list entry
+            fut_vec.push_back(std::move(restore_fut));
+        }
     }
 
     return folly::collect(fut_vec).get();
