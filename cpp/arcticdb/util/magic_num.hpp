@@ -25,9 +25,17 @@ struct MagicNum {
         magic_ = ~magic_;
     }
 
-    void check() const {
-        std::string_view expected(reinterpret_cast<const char*>(&Magic), 4);
-        util::check(magic_ == Magic, "Magic number failure, expected {}({}) got {}", Magic, expected, magic_);
+    // Set log_only to true if calling from destructors to avoid undefined behaviour of throwing
+    void check(bool log_only = false) const {
+        if (magic_ != Magic) {
+            std::string_view expected(reinterpret_cast<const char*>(&Magic), 4);
+            std::string message(fmt::format("Magic number failure, expected {}({}) got {}", Magic, expected, magic_));
+            if (log_only) {
+                log::version().warn(message);
+            } else {
+                util::raise_rte(message);
+            }
+        }
     }
 
   private:

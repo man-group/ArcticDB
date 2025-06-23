@@ -90,7 +90,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
 
         auto start_range_begin = start_idx_col.template begin<IndexTagType>();
         std::advance(start_range_begin, begin_offset);
-        while(begin_offset <= end_offset && !range_intersects<RawType>(range_start, range_end, *start_range_begin, *start_pos)) {
+        while(begin_offset <= end_offset && !range_intersects<RawType>(range_start, range_end, *start_range_begin, *start_pos - 1)) {
             ARCTICDB_DEBUG(log::version(), "increasing start index");
             ++start_range_begin;
             ++start_pos;
@@ -99,7 +99,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
 
         auto end_range_last = end_idx_col.template begin<IndexTagType>();
         std::advance(end_range_last, end_offset);
-        while(!range_intersects<RawType>(range_start, range_end, *end_pos, *end_range_last) && begin_offset < end_offset) {
+        while(!range_intersects<RawType>(range_start, range_end, *end_pos, *end_range_last - 1) && begin_offset < end_offset) {
             ARCTICDB_DEBUG(log::version(), "decreasing end index");
             --end_pos;
             --end_range_last;
@@ -124,7 +124,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         const auto range_start = std::get<timestamp>(rg.start_);
         const auto range_end = std::get<timestamp>(rg.end_);
         for(auto i = 0u; i < container.size(); ++i) {
-            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos);
+            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos - 1);
             (*res)[i] = intersects;
             if(intersects)
                 ARCTICDB_DEBUG(log::version(), "range intersects at {}", i);
