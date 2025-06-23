@@ -1,6 +1,7 @@
 import sys
 import pytest
 import pytz
+
 if sys.version_info >= (3, 9):
     import zoneinfo
 from packaging import version
@@ -17,6 +18,9 @@ from arcticdb.util.venv import CompatLibrary
 
 if ARCTICDB_USING_CONDA:
     pytest.skip("These tests rely on pip based environments", allow_module_level=True)
+
+if sys.platform == "darwin":
+    pytest.skip("We don't have previous versions of arcticdb pypi released for MacOS", allow_module_level=True)
 
 
 def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
@@ -193,8 +197,9 @@ def test_compat_timestamp_metadata(old_venv_and_arctic_uri, lib_name, zone_name)
         # Write two versions with old arctic:
         # v0 - no timezone
         # v1 - pytz
-        compat.old_lib.execute([
-            f"""
+        compat.old_lib.execute(
+            [
+                f"""
 import pytz
 timestamp_no_tz = pd.Timestamp(year=2025, month=1, day=1)
 timestamp_pytz = pd.Timestamp(year=2025, month=1, day=1, tz=pytz.timezone({repr(zone_name)}))
@@ -203,7 +208,9 @@ lib.write_metadata({repr(sym)}, timestamp_pytz)
 assert lib.read_metadata({repr(sym)}, as_of=0).metadata == timestamp_no_tz
 assert lib.read_metadata({repr(sym)}, as_of=1).metadata == timestamp_pytz
 """
-        ], dfs={"df": df})
+            ],
+            dfs={"df": df},
+        )
 
         # Write 3 more versions with current arctic:
         # v2 - no timezone
@@ -213,15 +220,16 @@ assert lib.read_metadata({repr(sym)}, as_of=1).metadata == timestamp_pytz
             lib = curr.lib
             assert lib.read_metadata(sym, as_of=0).metadata == timestamp_no_tz
             assert lib.read_metadata(sym, as_of=1).metadata == timestamp_pytz
-            lib.write_metadata(sym, timestamp_no_tz) # v2
-            lib.write_metadata(sym, timestamp_pytz) # v3
-            lib.write_metadata(sym, timestamp_zoneinfo) # v4
+            lib.write_metadata(sym, timestamp_no_tz)  # v2
+            lib.write_metadata(sym, timestamp_pytz)  # v3
+            lib.write_metadata(sym, timestamp_zoneinfo)  # v4
             assert lib.read_metadata(sym, as_of=2).metadata == timestamp_no_tz
             assert lib.read_metadata(sym, as_of=3).metadata == timestamp_pytz
             assert lib.read_metadata(sym, as_of=4).metadata == timestamp_pytz
 
-        compat.old_lib.execute([
-            f"""
+        compat.old_lib.execute(
+            [
+                f"""
 import pytz
 timestamp_no_tz = pd.Timestamp(year=2025, month=1, day=1)
 timestamp_pytz = pd.Timestamp(year=2025, month=1, day=1, tz=pytz.timezone({repr(zone_name)}))
@@ -229,7 +237,8 @@ assert lib.read_metadata({repr(sym)}, as_of=2).metadata == timestamp_no_tz
 assert lib.read_metadata({repr(sym)}, as_of=3).metadata == timestamp_pytz
 assert lib.read_metadata({repr(sym)}, as_of=4).metadata == timestamp_pytz
 """
-        ])
+            ]
+        )
 
 
 def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name):
@@ -326,9 +335,15 @@ def test_compat_resample_updated_data(old_venv_and_arctic_uri, lib_name):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         sym = "sym"
-        df_0 = pd.DataFrame({"col": [0, 0]}, index=[pd.Timestamp("2025-01-02 00:02:00"), pd.Timestamp("2025-01-03 00:01:00")])
-        df_1 = pd.DataFrame({"col": [1, 1]}, index=[pd.Timestamp("2025-01-03 00:04:00"), pd.Timestamp("2025-01-04 00:01:00")])
-        df_2 = pd.DataFrame({"col": [2, 2]}, index=[pd.Timestamp("2025-01-05 22:00:00"), pd.Timestamp("2025-01-05 23:00:00")])
+        df_0 = pd.DataFrame(
+            {"col": [0, 0]}, index=[pd.Timestamp("2025-01-02 00:02:00"), pd.Timestamp("2025-01-03 00:01:00")]
+        )
+        df_1 = pd.DataFrame(
+            {"col": [1, 1]}, index=[pd.Timestamp("2025-01-03 00:04:00"), pd.Timestamp("2025-01-04 00:01:00")]
+        )
+        df_2 = pd.DataFrame(
+            {"col": [2, 2]}, index=[pd.Timestamp("2025-01-05 22:00:00"), pd.Timestamp("2025-01-05 23:00:00")]
+        )
         # Write to library using old version
         compat.old_lib.write(sym, df_0)
         compat.old_lib.update(sym, df_1, '(pd.Timestamp("2025-01-03 00:01:00"), None)')
@@ -336,7 +351,16 @@ def test_compat_resample_updated_data(old_venv_and_arctic_uri, lib_name):
 
         # Resample using current version
         with compat.current_version() as curr:
-            q = QueryBuilder().date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04 23:59"))).resample("1D").agg({"col": "sum"})
+            q = (
+                QueryBuilder()
+                .date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04 23:59")))
+                .resample("1D")
+                .agg({"col": "sum"})
+            )
             received_df = curr.lib.read(sym, query_builder=q).data
-            expected_df = curr.lib.read(sym, date_range=(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04 23:59"))).data.resample("1D").agg({"col": "sum"})
+            expected_df = (
+                curr.lib.read(sym, date_range=(pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-04 23:59")))
+                .data.resample("1D")
+                .agg({"col": "sum"})
+            )
             assert_frame_equal(expected_df, received_df)
