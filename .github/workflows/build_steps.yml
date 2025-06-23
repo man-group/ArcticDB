@@ -364,7 +364,7 @@ jobs:
 
       - name: Run test
         run: |
-          build_tooling/monitor_opened_files.sh $MONITOR_FILE &
+          build_tooling/monitor_opened_files.sh $MONITOR_FILE $PROCESSES_FILE &
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
@@ -386,6 +386,7 @@ jobs:
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
           MONITOR_FILE: ${{runner.temp}}/tests_file_descriptors.log
+          PROCESSES_FILE: ${{runner.temp}}/tests_active_processes.log
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

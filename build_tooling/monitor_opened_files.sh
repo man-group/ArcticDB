@@ -1,13 +1,17 @@
 #!/bin/bash
 
 LOGFILE="${1:-opened_files.log}"
+PROCESSESFILE="${2:-active_processes.log}"
 
 PROCESS_NAME="pytest"
 
 # Clear or create the log file
 : > "$LOGFILE"
+: > "$PROCESSESFILE"
 
 while true; do
+
+    # Monitor opened files 
     timestamp=$(date '+%Y-%m-%d %H:%M:%S')
 
     output="$timestamp"
@@ -18,6 +22,12 @@ while true; do
     done
 
     echo -e "$output" >> "$LOGFILE"
+
+    # Processes dump to file
+    echo $timestamp >> "$PROCESSESFILE"
+    ps -ef >> "$PROCESSESFILE"
+    echo "======================================" >> "$PROCESSESFILE"
+
     sleep 10
 done
 
