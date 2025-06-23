@@ -950,10 +950,51 @@ void PythonVersionStore::delete_versions(
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
         delete_tree(result.keys_to_delete, result);
     }
-
     if(result.no_undeleted_left && cfg().symbol_list()) {
         symbol_list().remove_symbol(store(), stream_id, result.latest_version_);
     }
+}
+
+void PythonVersionStore::batch_delete_versions(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<std::vector<VersionId>>& version_ids) {
+    util::check(stream_ids.size() == version_ids.size(), "stream_ids and version_ids must have the same size");
+    
+    auto results = ::arcticdb::tombstone_versions_batch_from_vectors(store(), version_map(), stream_ids, version_ids);
+    
+    // If no results, nothing to delete
+    if (results.empty()) {
+        return;
+    }
+    
+    std::vector<IndexTypeKey> keys_to_delete;
+    std::vector<std::pair<StreamId, VersionId>> symbols_to_delete;
+
+    for (const auto& result : results) {
+        if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
+            keys_to_delete.insert(keys_to_delete.end(), result.keys_to_delete.begin(), result.keys_to_delete.end());
+        }
+
+        if(result.no_undeleted_left && cfg().symbol_list()) {
+            auto stream_id = result.keys_to_delete.front().id();
+            symbols_to_delete.emplace_back(stream_id, result.latest_version_);
+        }
+    }
+
+    // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
+    if(!keys_to_delete.empty()) {
+        delete_tree(keys_to_delete, TombstoneVersionResult{false});
+    }
+
+    std::vector<folly::Future<folly::Unit>> remove_symbol_tasks;
+
+    if(!symbols_to_delete.empty()) {
+        for(const auto& [stream_id, latest_version] : symbols_to_delete) {
+            remove_symbol_tasks.push_back(async::submit_io_task(DeleteSymbolTask{store(), symbol_list_ptr(), stream_id, latest_version}));
+        }
+    }
+
+    folly::collectAll(remove_symbol_tasks).get();
 }
 
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {

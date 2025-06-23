@@ -11,6 +11,9 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/async/base_task.hpp>
+#include <arcticdb/version/version_tasks.hpp>
+#include <folly/futures/Future.h>
 
 namespace arcticdb {
 
@@ -155,23 +158,15 @@ inline std::unordered_map<VersionId, bool> get_all_tombstoned_versions(
     return result;
 }
 
-inline version_store::TombstoneVersionResult tombstone_versions(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const StreamId &stream_id,
+inline version_store::TombstoneVersionResult populate_tombstone_result(
+    const std::shared_ptr<VersionMapEntry>& entry,
     const std::unordered_set<VersionId>& version_ids,
+    const StreamId& stream_id,
+    const std::shared_ptr<Store>& store,
     const std::optional<timestamp>& creation_ts=std::nullopt) {
-    ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
-
-    LoadStrategy load_strategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY};
-    auto entry = version_map->check_reload(store, stream_id, load_strategy, __FUNCTION__);
-    // Might as well do the previous/next version check while we find the required version_id.
-    // But if entry is empty, it's possible the load failed (since iterate_on_failure=false above), so set the flag
-    // to defer the check to delete_tree() (instead of reloading in case eager delete is disabled).
     version_store::TombstoneVersionResult res(entry->empty());
     auto latest_key = entry->get_first_index(true).first;
-    std::vector<AtomKey> index_keys_to_tombstone;
-
+    
     for (auto version_id: version_ids) {
         bool found = false;
         get_matching_prev_and_next_versions(entry, version_id,
@@ -216,14 +211,117 @@ inline version_store::TombstoneVersionResult tombstone_versions(
         res.keys_to_delete.size(), 
         fmt::format("{}", res.keys_to_delete)
     );
-    version_map->write_tombstones(store, res.keys_to_delete, stream_id, entry, creation_ts);
+    return res;
+}
 
+inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_result(
+    version_store::TombstoneVersionResult res,
+    const std::shared_ptr<VersionMap>& version_map,
+    const std::shared_ptr<VersionMapEntry>& entry,
+    AtomKey tombstone_key) {
+    ARCTICDB_DEBUG(log::version(), "Finalizing result for tombstone key {}", tombstone_key);
+    // Update the result with final state
     if (version_map->validate())
         entry->validate();
 
     res.no_undeleted_left = !entry->get_first_index(false).first.has_value();
     res.latest_version_ = entry->get_first_index(true).first->version_id();
     return res;
+}
+
+inline folly::Future<version_store::TombstoneVersionResult> process_tombstone_versions(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<VersionMap>& version_map,
+    const StreamId& stream_id,
+    const std::unordered_set<VersionId>& version_ids,
+    const std::optional<timestamp>& creation_ts,
+    std::shared_ptr<VersionMapEntry> entry) {
+    // Populate the tombstone result
+    version_store::TombstoneVersionResult res = populate_tombstone_result(entry, version_ids, stream_id, store, creation_ts);
+    
+    // Submit the write tombstone task
+    return async::submit_io_task(WriteTombstoneTask{store,
+                                    version_map,
+                                    res.keys_to_delete,
+                                    stream_id,
+                                    entry,
+                                    creation_ts})
+        .thenValue([res = std::move(res), version_map, entry](AtomKey tombstone_key) mutable {
+            return finalize_tombstone_result(std::move(res), version_map, entry, tombstone_key);
+        });
+}
+
+inline folly::Future<version_store::TombstoneVersionResult> tombstone_versions_async(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const StreamId &stream_id,
+    const std::unordered_set<VersionId>& version_ids,
+    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
+
+    return async::submit_io_task(CheckReloadTask{store,
+                                    version_map,
+                                    stream_id,
+                                    LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}})
+        .thenValue([store, version_map, stream_id, version_ids, creation_ts](std::shared_ptr<VersionMapEntry> entry) {
+            return process_tombstone_versions(store, version_map, stream_id, version_ids, creation_ts, entry);
+        });
+}
+
+inline version_store::TombstoneVersionResult tombstone_versions(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const StreamId &stream_id,
+    const std::unordered_set<VersionId>& version_ids,
+    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
+
+    return tombstone_versions_async(store, version_map, stream_id, version_ids, creation_ts).get();
+}
+
+inline std::vector<version_store::TombstoneVersionResult> tombstone_versions_batch(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const std::vector<std::pair<StreamId, std::unordered_set<VersionId>>> &stream_ids_and_version_ids,
+    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    std::vector<folly::Future<version_store::TombstoneVersionResult>> futures;
+    for (const auto& [stream_id, version_ids] : stream_ids_and_version_ids) {
+        futures.push_back(tombstone_versions_async(store, version_map, stream_id, version_ids, creation_ts));
+    }
+
+    auto tries = folly::collectAll(futures).get();
+    std::vector<version_store::TombstoneVersionResult> results;
+    results.reserve(tries.size());
+    for (auto& try_result : tries) {
+        results.push_back(std::move(try_result.value()));
+    }
+    return results;
+}
+
+inline std::vector<version_store::TombstoneVersionResult> tombstone_versions_batch_from_vectors(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const std::vector<StreamId> &stream_ids,
+    const std::vector<std::vector<VersionId>> &version_ids,
+    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    std::vector<std::pair<StreamId, std::unordered_set<VersionId>>> stream_ids_and_version_ids;
+    stream_ids_and_version_ids.reserve(stream_ids.size());
+    
+    for (size_t i = 0; i < stream_ids.size(); ++i) {
+        // Skip if version_ids[i] is empty
+        if (version_ids[i].empty()) {
+            continue;
+        }
+        std::unordered_set<VersionId> version_set(version_ids[i].begin(), version_ids[i].end());
+        stream_ids_and_version_ids.emplace_back(stream_ids[i], std::move(version_set));
+    }
+    
+    // If no valid version IDs to process, return empty result
+    if (stream_ids_and_version_ids.empty()) {
+        return {};
+    }
+    
+    return tombstone_versions_batch(store, version_map, stream_ids_and_version_ids, creation_ts);
 }
 
 inline std::optional<AtomKey> get_index_key_from_time(
