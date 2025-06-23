@@ -153,6 +153,42 @@ struct WriteVersionTask : async::BaseTask {
         return folly::Unit{};
     }
 };
+
+struct WriteTombstoneTask : async::BaseTask {
+    const std::shared_ptr<Store> store_;
+    const std::shared_ptr<VersionMap> version_map_;
+    const std::vector<AtomKey> keys_;
+    const StreamId stream_id_;
+    const std::shared_ptr<VersionMapEntry> entry_;
+    const std::optional<timestamp> creation_ts_;
+
+    WriteTombstoneTask(
+        std::shared_ptr<Store> store,
+        std::shared_ptr<VersionMap> version_map,
+        std::vector<AtomKey> keys,
+        StreamId stream_id,
+        std::shared_ptr<VersionMapEntry> entry,
+        std::optional<timestamp> creation_ts) :
+        store_(std::move(store)),
+        version_map_(std::move(version_map)),
+        keys_(std::move(keys)),
+        stream_id_(std::move(stream_id)),
+        entry_(std::move(entry)),
+        creation_ts_(std::move(creation_ts)) {
+    }
+
+    folly::Future<AtomKey> operator()() {
+        ScopedLock lock(version_map_->get_lock_object(stream_id_));
+        return version_map_->write_tombstones(
+            store_,
+            keys_,
+            stream_id_,
+            entry_,
+            creation_ts_
+        );
+    }
+};
+
 struct WriteAndPrunePreviousTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     const std::shared_ptr<VersionMap> version_map_;
