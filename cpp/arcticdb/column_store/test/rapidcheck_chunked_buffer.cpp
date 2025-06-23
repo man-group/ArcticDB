@@ -98,6 +98,85 @@ RC_GTEST_PROP(ChunkedBuffer, TruncateBuffer, (const std::vector<uint8_t> &input)
     }
 }
 
+RC_GTEST_PROP(ChunkedBuffer, TruncateSingleBlock, (const std::vector<uint8_t>& input)) {
+    using namespace arcticdb;
+    RC_PRE(input.size() >= 3u);
+    auto n = input.size();
+    auto start_offset = *rc::gen::inRange(size_t(1), n - 1);
+    auto end_offset = *rc::gen::inRange(start_offset + 1, n);
+    ChunkedBufferImpl<64> cb(n, AllocationType::DETACHABLE);
+    memcpy(cb.data(), input.data(), n);
+    RC_ASSERT(cb.num_blocks() == 1);
+    auto ptr = cb.data();
+    for (size_t idx = 0; idx < n; ++idx, ++ptr) {
+        RC_ASSERT(*ptr == input.at(idx));
+    }
+    cb.truncate_single_block(start_offset, end_offset);
+    RC_ASSERT(cb.num_blocks() == 1);
+    RC_ASSERT(cb.blocks().at(0)->bytes() == end_offset - start_offset);
+    ptr = cb.data();
+    for (auto idx = start_offset; idx != end_offset; ++idx, ++ptr) {
+        RC_ASSERT(*ptr == input.at(idx));
+    }
+    // Just needed to avoid warning logs
+    cb.blocks().at(0)->abandon();
+}
+
+RC_GTEST_PROP(ChunkedBuffer, TruncateFirstLastBlock, (const std::vector<uint8_t>& block0, const std::vector<uint8_t>& block1)) {
+    // Setup
+    using namespace arcticdb;
+    RC_PRE(block0.size() >= 2u && block1.size() >= 2u);
+    auto n0 = block0.size();
+    auto n1 = block1.size();
+    auto first_block_bytes = *rc::gen::inRange(size_t(1), n0);
+    auto last_block_bytes = *rc::gen::inRange(size_t(1), n1);
+    ChunkedBufferImpl<64> cb(n0, AllocationType::DETACHABLE);
+    memcpy(cb.data(), block0.data(), n0);
+    cb.ensure(n0 + n1);
+    RC_ASSERT(cb.num_blocks() == 2);
+    memcpy(cb.blocks().at(1)->data(), block1.data(), n1);
+    auto ptr1 = cb.blocks().at(0)->data();
+    auto ptr2 = cb.blocks().at(1)->data();
+    for (size_t idx = 0; idx < n0; ++idx, ++ptr1) {
+        RC_ASSERT(*ptr1 == block0.at(idx));
+    }
+    for (size_t idx = 0; idx < n1; ++idx, ++ptr2) {
+        RC_ASSERT(*ptr2 == block1.at(idx));
+    }
+
+    // truncate_first_block
+    cb.truncate_first_block(first_block_bytes);
+    RC_ASSERT(cb.num_blocks() == 2);
+    RC_ASSERT(cb.blocks().at(0)->bytes() == n0 - first_block_bytes);
+    RC_ASSERT(cb.blocks().at(1)->bytes() == n1);
+    ptr1 = cb.blocks().at(0)->data();
+    ptr2 = cb.blocks().at(1)->data();
+    for (size_t idx = first_block_bytes; idx < n0; ++idx, ++ptr1) {
+        RC_ASSERT(*ptr1 == block0.at(idx));
+    }
+    for (size_t idx = 0; idx < n1; ++idx, ++ptr2) {
+        RC_ASSERT(*ptr2 == block1.at(idx));
+    }
+
+    // truncate_last_block
+    cb.truncate_last_block(last_block_bytes);
+    RC_ASSERT(cb.num_blocks() == 2);
+    RC_ASSERT(cb.blocks().at(0)->bytes() == n0 - first_block_bytes);
+    RC_ASSERT(cb.blocks().at(1)->bytes() == n1 - last_block_bytes);
+    ptr1 = cb.blocks().at(0)->data();
+    ptr2 = cb.blocks().at(1)->data();
+    for (size_t idx = first_block_bytes; idx < n0; ++idx, ++ptr1) {
+        RC_ASSERT(*ptr1 == block0.at(idx));
+    }
+    for (size_t idx = 0; idx < n1 - last_block_bytes; ++idx, ++ptr2) {
+        RC_ASSERT(*ptr2 == block1.at(idx));
+    }
+
+    // Just needed to avoid warning logs
+    cb.blocks().at(0)->abandon();
+    cb.blocks().at(1)->abandon();
+}
+
 RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<uint64_t>> &inputs)) {
     using namespace arcticdb;
     CursoredBuffer<ChunkedBufferImpl<64>> cb;
