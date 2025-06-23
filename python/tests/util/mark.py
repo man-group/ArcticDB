@@ -44,6 +44,15 @@ LOCAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", 
 STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
 STORAGE_AWS_S3 = os.getenv("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
 STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
+
+# TODO: the S3, GCP tests on the CI are failing for macOS wheels workflows (the storage simulator
+# not binding to the correct port for unknown reason).
+# We disable them for now.
+if MACOS and not ARCTICDB_USING_CONDA:
+    LOCAL_STORAGE_TESTS_ENABLED = False
+    STORAGE_AWS_S3 = False
+    STORAGE_GCP = False
+
 # Defined shorter logs on errors
 SHORTER_LOGS = marks.SHORTER_LOGS
 
