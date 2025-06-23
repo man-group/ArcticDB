@@ -22,6 +22,7 @@ from contextlib import AbstractContextManager
 from dataclasses import dataclass, field
 import trustme
 import uuid
+import socket
 
 from arcticdb.util.marks import ARCTICDB_USING_CONDA, MACOS
 
@@ -40,9 +41,13 @@ def get_ephemeral_port(seed=0):
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
-                time.sleep(
-                    30 if (ARCTICDB_USING_CONDA or MACOS) else 20
-                )  # Hold the port open for a while to improve the chance of collision detection
+                time.sleep(180)  # Hold the port open for a while to improve the chance of collision detection
+                # Test if the port is still open
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    if s.connect_ex(("localhost", port)) == 0:
+                        return port
+                    else:
+                        raise Exception(f"Port {port} is not open")
                 return port
         except OSError as e:
             print(repr(e), file=sys.stderr)
