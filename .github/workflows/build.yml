@@ -69,12 +69,11 @@ jobs:
           elif [[ "$day" == "Tue" || "$day" == "Thu" ]]; then
             _storage='GCPXML'
           else
-            echo "UNDETERMINED RESULT for this day"
+            echo "UNSPECIFIED RESULT for this day (assumed LMDB)"
+            _storage='no'
           fi
           echo "Storage type calculated for scheduled job: $_storage"
 
-          # Default value if none is assigned based on rules below
-          _storage='no'
           if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
             echo "Workflow not triggered by schedule."
             echo "inputs.persistent_storage=[$INPUT_STORAGE]"
