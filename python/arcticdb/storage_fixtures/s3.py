@@ -16,6 +16,8 @@ import platform
 from tempfile import mkdtemp
 from urllib.parse import urlparse
 import boto3
+from botocore.client import Config
+
 import time
 import random
 from datetime import datetime
@@ -290,6 +292,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             aws_access_key_id=key.id,
             aws_secret_access_key=key.secret,
             verify=self.client_cert_file if self.client_cert_file else False,
+            config=Config(connect_timeout=180, retries={"max_attempts": 0}),
         )
 
     def create_fixture(self) -> S3Bucket:
@@ -787,7 +790,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self.client_cert_dir = self.working_dir
 
         spawn_context = multiprocessing.get_context(
-            "forkserver"
+            "spawn"
         )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
         self._p = spawn_context.Process(
             target=run_s3_server,
@@ -920,7 +923,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         self.client_cert_dir = self.working_dir
 
         spawn_context = multiprocessing.get_context(
-            "forkserver"
+            "spawn"
         )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
         self._p = spawn_context.Process(
             target=run_gcp_server,
