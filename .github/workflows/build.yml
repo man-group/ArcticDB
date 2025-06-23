@@ -71,9 +71,10 @@ jobs:
           else
             echo "UNDETERMINED RESULT for this day"
           fi
-          # Default value if none is further assigned based on rules
-          _storage='no'
           echo "Storage type calculated for scheduled job: $_storage"
+
+          # Default value if none is assigned based on rules below
+          _storage='no'
           if [[ "$GITHUB_EVENT_NAME" != "schedule" ]]; then
             echo "Workflow not triggered by schedule."
             echo "inputs.persistent_storage=[$INPUT_STORAGE]"
@@ -85,6 +86,7 @@ jobs:
               _storage=$INPUT_STORAGE
             fi
           fi
+
           echo "Final storage type for workflow execution: $_storage"
           echo "storage=$_storage" >> $GITHUB_OUTPUT
           
