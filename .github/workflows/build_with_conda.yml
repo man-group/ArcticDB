@@ -113,6 +113,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
+          build_tooling/monitor_opened_files.sh $MONITOR_FILE &
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             python -m pip  install pytest-repeat
@@ -124,11 +125,13 @@ jobs:
             cd python
             python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests $ARCTICDB_PYTEST_ARGS
           fi
+          build_tooling/process_opened_files_log.sh $MONITOR_FILE
         env:
           ARCTICDB_USING_CONDA: 1
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          MONITOR_FILE: ${{runner.temp}}/tests_file_descriptors.log
 
 
   macos:

@@ -2,9 +2,13 @@
 
 LOGFILE="${1:-opened_files.log}"
 
-if [[ -f "$LOGFILE" ]]; then
-    max=$(awk '{print $3}' "$LOGFILE" | sort -nr | head -n 1)
-    echo "Maximum open files during pytest run: $max"
-else
-    echo "Log file not found!"
-fi
+for i in {3..20}; do
+    if [[ -f "$LOGFILE" ]]; then
+        AWK='{ print $'$i' }'
+        max=$(awk "$AWK" "$LOGFILE" | sort -nr | head -n 1)
+        echo "Maximum open files during pytest process $i run: $max"
+    else
+        echo "Log file not found!"
+    fi
+
+done

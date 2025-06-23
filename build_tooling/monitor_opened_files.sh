@@ -8,9 +8,16 @@ PROCESS_NAME="pytest"
 : > "$LOGFILE"
 
 while true; do
-    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    count=$(lsof -c "$PROCESS_NAME" 2>/dev/null | wc -l)
-    echo "$timestamp $count" >> "$LOGFILE"
+    timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+
+    output="$timestamp"
+
+    for pid in $(pgrep -f 'pytest|multiprocessing'); do
+        count=$(lsof -p "$pid" 2>/dev/null | wc -l)
+        output+=" $count"
+    done
+
+    echo -e "$output" >> "$LOGFILE"
     sleep 10
 done
 
