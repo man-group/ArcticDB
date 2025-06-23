@@ -539,7 +539,7 @@ template<typename T, typename U>
 bool operator()(T, U) const {
     util::raise_rte("RegexMatchOperator does not support {} and {}", typeid(T).name(), typeid(U).name());
 }
-bool operator()(entity::position_t offset, ankerl::unordered_dense::set<position_t> offset_set) const {
+bool operator()(entity::position_t offset, const ankerl::unordered_dense::set<position_t>& offset_set) const {
     return offset_set.contains(offset);
 }
 };
