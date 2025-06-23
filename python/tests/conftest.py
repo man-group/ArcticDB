@@ -66,6 +66,8 @@ from .util.mark import (
     SSL_TEST_SUPPORTED,
     VENV_COMPAT_TESTS_MARK,
     PANDAS_2_COMPAT_TESTS_MARK,
+    MACOS,
+    ARCTICDB_USING_CONDA,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
@@ -667,6 +669,8 @@ def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
 
 @pytest.fixture
 def s3_store_factory(lib_name, s3_storage) -> Callable[..., NativeVersionStore]:
+    if MACOS and not ARCTICDB_USING_CONDA:
+        pytest.skip("S3 tests are disabled for macOS wheels workflows due to storage simulator port binding issues")
     return s3_storage.create_version_store_factory(lib_name)
 
 
@@ -684,6 +688,8 @@ def mock_s3_store_with_error_simulation_factory(
 
 @pytest.fixture
 def real_s3_store_factory(lib_name, real_s3_storage) -> Callable[..., NativeVersionStore]:
+    if MACOS and not ARCTICDB_USING_CONDA:
+        pytest.skip("S3 tests are disabled for macOS wheels workflows due to storage simulator port binding issues")
     return real_s3_storage.create_version_store_factory(lib_name)
 
 
