@@ -15,7 +15,6 @@
 namespace arcticdb {
 
 struct MemBlock {
-    static const size_t Align = 128;
     static const size_t MinSize = 64;
     using magic_t = arcticdb::util::MagicNum<'M', 'e', 'm', 'b'>;
     magic_t magic_;
@@ -147,17 +146,21 @@ struct MemBlock {
     bool owns_external_data_ = false;
 
     static const size_t HeaderDataSize =
-            sizeof(magic_) +   // 8 bytes
-            sizeof(bytes_) +   // 8 bytes
-            sizeof(capacity_) +   // 8 bytes
+        sizeof(magic_) +
+            sizeof(bytes_) +
+            sizeof(capacity_) +
             sizeof(external_data_) +
             sizeof(offset_) +
-            sizeof(timestamp_) + 
+            sizeof(timestamp_) +
             sizeof(owns_external_data_);
 
-    uint8_t pad[Align - HeaderDataSize];
-    static const size_t HeaderSize = HeaderDataSize + sizeof(pad);
-    static_assert(HeaderSize == Align);
-    uint8_t data_[MinSize];
+    static const size_t DataAlignment = 64;
+    static const size_t PadSize = (DataAlignment - (HeaderDataSize % DataAlignment)) % DataAlignment;
+
+    uint8_t pad[PadSize];
+    static const size_t HeaderSize = HeaderDataSize + PadSize;
+    static_assert(HeaderSize % DataAlignment == 0, "Header size must be aligned to 64 bytes");
+
+    alignas(DataAlignment) uint8_t data_[MinSize];
 };
 }
