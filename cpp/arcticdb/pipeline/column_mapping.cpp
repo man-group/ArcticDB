@@ -107,7 +107,6 @@ ColumnMapping::ColumnMapping(
             source_field_pos_ = field_count_;
             source_col_ = last_slice_col_offset_;
         }
-        ARCTICDB_TRACE(log::version(), "Post advance: source {} dest {} source_col: dst_col_", source_field_pos_, field_count_);
     }
 
     bool StaticColumnMappingIterator::invalid() const {
@@ -115,7 +114,6 @@ ColumnMapping::ColumnMapping(
     }
 
     bool StaticColumnMappingIterator::has_next() const {
-        ARCTICDB_TRACE(log::version(), "Has next: {} {}", source_field_pos_, field_count_);
         return source_field_pos_ < field_count_;
     }
 

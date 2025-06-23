@@ -106,6 +106,11 @@ struct OutputType<DataTypeTag<DataType::ASCII_DYNAMIC64>, void> {
 };
 
 template<>
+struct OutputType<DataTypeTag<DataType::UTF_DYNAMIC32>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC32>>;
+};
+
+template<>
 struct OutputType<DataTypeTag<DataType::UTF_FIXED64>, void> {
     using type = ScalarTagType<DataTypeTag<DataType::UTF_FIXED64>>;
 };

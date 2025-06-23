@@ -143,7 +143,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         return f"AzuriteStorageFixtureFactory[port={self.port},dir={self.working_dir}]"
 
     def _safe_enter(self):
-        args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0 --skipApiVersionCheck"
+        args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0 --skipApiVersionCheck --silent"
         if self.ssl_test_support:
             self.client_cert_dir = self.working_dir
             self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.client_cert_dir)

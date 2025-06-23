@@ -27,7 +27,7 @@ const auto UNSUPPORTED_S3_CHARS = std::set<char>{'*', '<', '>'};
         std::optional<char> unsupported_suffix = std::nullopt) {
     if (name.empty()) {
         return Error{
-            throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
+            throw_error<ErrorCode::E_EMPTY_NAME>,
             fmt::format("The {} cannot be an empty string.", name_type_for_error)
         };
     }
@@ -99,15 +99,31 @@ CheckOutcome verify_symbol_key(const StreamId& symbol_key) {
 
     return util::variant_match(
             symbol_key,
-            [](const NumericId &num_symbol_key) -> CheckOutcome {
-                (void) num_symbol_key; // Suppresses -Wunused-parameter
-                ARCTICDB_DEBUG(log::version(), "Nothing to verify in stream id {} as it contains a NumericId.",
-                               num_symbol_key);
+            [](const NumericId&) -> CheckOutcome {
                 return std::monostate{};
             },
             [](const StringId &str_symbol_key) -> CheckOutcome {
                 return verify_name("symbol key", str_symbol_key);
             }
+    );
+}
+
+CheckOutcome verify_snapshot_id(const SnapshotId& snapshot_id) {
+    if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck")) {
+        ARCTICDB_DEBUG(log::version(),
+                       "Key with stream id {} will not be strictly checked because VersionStore.NoStrictSymbolCheck variable is set to 1.",
+                       snapshot_id);
+        return std::monostate{};
+    }
+
+    return util::variant_match(
+        snapshot_id,
+        [](const StringId &str_snapshot_id) -> CheckOutcome {
+            return verify_name("snapshot name", str_snapshot_id);
+        },
+        [](const auto&) -> CheckOutcome {
+            return std::monostate{};
+        }
     );
 }
 
