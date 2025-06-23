@@ -97,7 +97,7 @@ class GracefulProcessUtils:
                 os.kill(p.pid, signal.SIGTERM if MACOS else signal.SIGKILL)  # TODO (python37): use Process.kill()
 
 
-def wait_for_server_to_come_up(url: str, service: str, process: ProcessUnion, *, timeout=20, sleep=0.2, req_timeout=1):
+def wait_for_server_to_come_up(url: str, service: str, process: ProcessUnion, *, timeout=240, sleep=0.2, req_timeout=1):
     deadline = time.time() + timeout
     if process is None:
         alive = lambda: True
