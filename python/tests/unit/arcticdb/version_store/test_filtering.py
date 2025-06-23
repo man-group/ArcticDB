@@ -1403,12 +1403,12 @@ def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
     pattern_c = r"\d\d[a-zA-Z]"
     q_c = QueryBuilder()
     q_c = q_c[q_c["c"].regex_match(pattern_c)]
-    expected = df[df.c.astype(str).str.contains(pattern_c, na=False)]
+    expected = df[df.c.str.contains(pattern_c, na=False)]
     assert_frame_equal(lib.read(sym, query_builder=q_c).data, expected)
 
 
 def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
-    with pytest.raises(UserInputException):
+    with pytest.raises(InternalException): # Pending changing exception type to UserInputException in v6.0.0 release 
         q = QueryBuilder()
         q = q[q["a"].regex_match("[")]
 

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <pcre.h>
+#include <boost/locale.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
@@ -18,9 +19,9 @@ template<typename T>
     if constexpr (std::is_same_v<T, std::string> || std::is_same_v<T, std::string_view>) {
         return input; // Already UTF-8
     } else if constexpr (std::is_same_v<T, std::u32string_view>) {
-        return std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t>().to_bytes(std::u32string(input));
+        return boost::locale::conv::utf_to_utf<char>(std::u32string(input));
     } else if constexpr (std::is_same_v<T, std::u32string>) {
-        return std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t>().to_bytes(input);
+        return boost::locale::conv::utf_to_utf<char>(input);
     }
 }
 
@@ -86,8 +87,7 @@ public:
 private:
     void compile_regex() {
         handle_ = this->pcre_compile2_(reinterpret_cast<typename PcreRegexEncode::StringCastingType>(text_.data()), options_, &error_, &help_, &offset_, table_);
-        // Should be safe to assume regex pattern must be user input
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+        util::check(
             handle_ != nullptr, 
             "Error {} compiling regex {}: {}", 
             error_, 
@@ -156,7 +156,7 @@ private:
 public:
     RegexGeneric(const std::string& pattern) :
         pattern_utf8_(pattern),
-        pattern_utf32_(std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t>().from_bytes(pattern)),
+        pattern_utf32_(boost::locale::conv::utf_to_utf<char32_t>(pattern)),
         regex_utf8_(pattern_utf8_),
         regex_utf32_(pattern_utf32_){
     }

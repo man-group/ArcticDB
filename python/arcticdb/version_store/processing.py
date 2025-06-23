@@ -436,11 +436,10 @@ class QueryBuilder:
 
     * Binary arithmetic: +, -, *, /
     * Unary arithmetic: -, abs
-    * regex match: regex_match
 
     Supported filtering operations:
 
-    * isna, isnull, notna, notnull - return all rows where a specified column is/is not NaN or None. isna is
+    * isna, isnull, notna, and notnull - return all rows where a specified column is/is not NaN or None. isna is
     equivalent to isnull, and notna is equivalent to notnull, i.e. no distinction is made between NaN and None values
     in column types that support both (e.g. strings). For example:
         ```
@@ -451,6 +450,7 @@ class QueryBuilder:
     * Unary NOT: ~
     * Binary combinators: &, |, ^
     * List membership: isin, isnotin (also accessible with == and !=)
+    * Regex match: regex_match
 
     isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:
 

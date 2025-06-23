@@ -178,7 +178,7 @@ class StringPool {
 
     std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column) const;
     ankerl::unordered_dense::set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) const;
-    ankerl::unordered_dense::set<position_t> get_regex_match_offsets_for_column(const std::shared_ptr<util::RegexGeneric>& regex_generic, const Column& column, bool fix_string_type) const;
+    ankerl::unordered_dense::set<position_t> get_regex_match_offsets_for_column(const util::RegexGeneric& regex_generic, const Column& column) const;
   private:
     MapType map_;
     mutable StringBlock block_;
