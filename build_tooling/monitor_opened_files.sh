@@ -1,6 +1,7 @@
 #!/bin/bash
 
-LOGFILE="opened_files.log"
+LOGFILE="${1:-opened_files.log}"
+
 PROCESS_NAME="pytest"
 
 # Clear or create the log file

@@ -364,7 +364,7 @@ jobs:
 
       - name: Run test
         run: |
-          build_tooling/monitor_opened_files.sh &
+          build_tooling/monitor_opened_files.sh $MONITOR_FILE &
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
@@ -375,7 +375,7 @@ jobs:
           else
             build_tooling/parallel_test.sh tests/${{matrix.type}}
           fi
-          build_tooling/process_opened_files_log.sh
+          build_tooling/process_opened_files_log.sh $MONITOR_FILE
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
           # Use the Mongo created in the service container above to test against
@@ -385,6 +385,7 @@ jobs:
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
+          MONITOR_FILE: ${{runner.temp}}/tests_file_descriptors.log
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()

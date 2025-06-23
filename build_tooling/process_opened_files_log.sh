@@ -1,6 +1,6 @@
 #!/bin/bash
 
-LOGFILE="opened_files.log"
+LOGFILE="${1:-opened_files.log}"
 
 if [[ -f "$LOGFILE" ]]; then
     max=$(awk '{print $3}' "$LOGFILE" | sort -nr | head -n 1)
