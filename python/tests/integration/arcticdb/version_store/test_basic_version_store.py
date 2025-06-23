@@ -149,15 +149,26 @@ def test_unhandled_chars_staged_data(object_version_store, sym):
     assert not object_version_store.list_symbols_with_incomplete_data()
 
 
-@pytest.mark.parametrize("sym", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254])
-@pytest.mark.storage
-def test_ok_chars_staged_data(object_version_store, sym):
+@pytest.mark.parametrize("snap", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254,
+                                  chr(127), chr(128), "l" * 255, "*", "<", ">"])
+def test_snapshot_names(object_version_store, snap):
+    """We validate against these snapshot names in the V2 API, but let them go through in the V1 API to avoid disruption
+    to legacy users on the V1 API."""
     df = sample_dataframe()
-    object_version_store.write(sym, df, parallel=True)
-    assert sym in object_version_store.list_symbols_with_incomplete_data()
-    object_version_store.compact_incomplete(sym, append=False, convert_int_to_float=False)
-    assert_frame_equal(object_version_store.read(sym).data, df)
-    assert sym in object_version_store.list_symbols()
+    object_version_store.write("sym", df)
+    object_version_store.snapshot(snap)
+    object_version_store.delete("sym")
+    assert not object_version_store.has_symbol("sym")
+    assert object_version_store.list_snapshots() == {snap: None}
+    assert_frame_equal(object_version_store.read("sym", as_of=snap).data, df)
+
+
+def test_empty_snapshot_name_not_allowed(object_version_store):
+    df = sample_dataframe()
+    object_version_store.write("sym", df)
+    with pytest.raises(UserInputException):
+        object_version_store.snapshot("")
+    assert not object_version_store.list_snapshots()
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
