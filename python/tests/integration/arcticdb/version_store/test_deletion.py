@@ -332,7 +332,7 @@ def test_delete_versions_with_update(object_version_store, versions_to_delete, s
             if not expected.empty:
                 expected.loc[d.index] = d
         # pandas 1.0 patch, otherwise the col will be float64
-        expected['x'] = expected['x'].astype('int64')
+        expected["x"] = expected["x"].astype("int64")
         return expected
 
     # Write initial data
@@ -398,7 +398,7 @@ def test_delete_versions_with_update_large_data(object_version_store, versions_t
             if not expected.empty:
                 expected.loc[d.index] = d
         # pandas 1.0 patch, otherwise the col will be float64
-        expected['x'] = expected['x'].astype('int64')
+        expected["x"] = expected["x"].astype("int64")
         return expected
 
     # Write initial data
@@ -439,6 +439,69 @@ def test_delete_versions_with_update_large_data(object_version_store, versions_t
     assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == expected_data_keys
 
     assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(remaining_dfs))
+
+
+@pytest.mark.parametrize("versions_to_delete", [[0, 1], [1, 2], [0, 2], [0, 1, 2], [2, 3], [0, 3]])
+@pytest.mark.storage
+def test_batch_delete_versions_with_update_large_data(object_version_store, versions_to_delete, sym):
+    symbols = [sym, "another-{}".format(sym)]
+    dfs = []
+    idx_start = pd.Timestamp("2000-1-1")
+    rows = 1000000
+
+    def build_expected_df(dataframes):
+        expected = pd.DataFrame()
+        for d in dataframes:
+            expected = expected.combine_first(d)
+            if not expected.empty:
+                expected.loc[d.index] = d
+        # pandas 1.0 patch, otherwise the col will be float64
+        expected["x"] = expected["x"].astype("int64")
+        return expected
+
+    # Write initial data
+    vers = 4
+    for i in range(vers):
+        overlap_start = idx_start + pd.Timedelta(seconds=(i * (rows / 2)))
+        idx = pd.date_range(overlap_start, periods=rows, freq="s")
+        d = {"x": np.arange(i * rows, (i + 1) * rows, dtype=np.int64)}
+        df = pd.DataFrame(data=d, index=idx)
+        dfs.append(df)
+        for symbol in symbols:
+            object_version_store.update(symbol, df, upsert=True)
+            assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(dfs))
+
+    lib_tool = object_version_store.library_tool()
+
+    expected_vers = len(symbols) * vers
+
+    assert len(lib_tool.find_keys(KeyType.VERSION)) == expected_vers
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == expected_vers
+    # Because the data is large, each version is split in 10 data keys
+    # after the first version, the data in half of those overlaps with the previous version
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == expected_vers * 10
+    # Delete versions and verify
+    object_version_store.batch_delete_versions(symbols, [versions_to_delete] * len(symbols))
+
+    for symbol in symbols:
+        assert len(object_version_store.list_versions(symbol)) == len(dfs) - len(versions_to_delete)
+
+        check_tombstones_after_multiple_delete(lib_tool, symbol, versions_to_delete, vers)
+
+        # Determine which versions to keep based on deletion pattern
+        if versions_to_delete == [2, 3]:
+            remaining_dfs = dfs[:-2]  # Keep first two versions
+            expected_data_keys = 20
+        elif versions_to_delete == [0, 3]:
+            remaining_dfs = dfs[:-1]
+            expected_data_keys = 25
+        else:
+            remaining_dfs = dfs
+            expected_data_keys = vers * 10 - (len(versions_to_delete) * 5)
+
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == expected_data_keys
+
+        assert_frame_equal(object_version_store.read(symbol).data, build_expected_df(remaining_dfs))
 
 
 @pytest.mark.storage
