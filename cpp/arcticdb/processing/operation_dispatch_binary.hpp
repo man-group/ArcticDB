@@ -281,7 +281,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
 }
 
 template <typename Func>
-VariantData binary_comparator(const ColumnWithStrings& column_with_strings, const std::shared_ptr<util::RegexGeneric>& regex_generic, Func&& func) {
+VariantData binary_comparator(const ColumnWithStrings& column_with_strings, const util::RegexGeneric& regex_generic, Func&& func) {
     if (is_empty_type(column_with_strings.column_->type().data_type())) {
         return EmptyResult{};
     }
