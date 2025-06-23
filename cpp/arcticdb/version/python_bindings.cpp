@@ -578,6 +578,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("delete_versions",
              &PythonVersionStore::delete_versions,
              py::call_guard<SingleThreadMutexHolder>(), "Delete specific versions of the given symbol")
+        .def("batch_delete_versions",
+             &PythonVersionStore::batch_delete_versions,
+             py::call_guard<SingleThreadMutexHolder>(), "Delete specific versions of the given symbols")
          .def("prune_previous_versions",
               &PythonVersionStore::prune_previous_versions,
               py::call_guard<SingleThreadMutexHolder>(), "Delete all but the latest version of the given symbol")

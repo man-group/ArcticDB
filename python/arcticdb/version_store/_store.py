@@ -2284,6 +2284,7 @@ class NativeVersionStore:
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
             import pyarrow as pa
+
             frame_data = read_result.frame_data
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
@@ -2631,6 +2632,19 @@ class NativeVersionStore:
         """
         self.version_store.delete_versions(symbol, versions)
 
+    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]):
+        """
+        Delete the given versions of the given symbols.
+
+        Parameters
+        ----------
+        symbols : `List[str]`
+            Symbols to delete versions for.
+        versions : `List[List[int]]`
+            Versions to delete for each symbol.
+        """
+        self.version_store.batch_delete_versions(symbols, versions)
+
     def prune_previous_versions(self, symbol: str):
         """
         Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
@@ -2962,7 +2976,7 @@ class NativeVersionStore:
 
     def lib_cfg(self):
         return self._lib_cfg
-    
+
     def lib_native_cfg(self):
         return self._native_cfg
 
