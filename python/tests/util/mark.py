@@ -80,7 +80,7 @@ REAL_GCP_TESTS_MARK = pytest.mark.skipif(
 """Mark on tests using S3 model storage.
 """
 SIM_S3_TESTS_MARK = pytest.mark.skipif(
-    not LOCAL_STORAGE_TESTS_ENABLED or MACOS,
+    not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Ability to disable local storages - simulates s3 is disabled",
 )
 """Mark on tests using GCP model storage.

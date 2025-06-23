@@ -97,6 +97,8 @@ class GracefulProcessUtils:
                 os.kill(p.pid, signal.SIGTERM if MACOS else signal.SIGKILL)  # TODO (python37): use Process.kill()
 
 
+# There is a problem with the performance of the socket module on MacOS 15  GHA runners - https://github.com/actions/runner-images/issues/12162
+# We need to wait for a longer time for the server to come up so we wait for 240 seconds
 def wait_for_server_to_come_up(url: str, service: str, process: ProcessUnion, *, timeout=240, sleep=0.2, req_timeout=1):
     deadline = time.time() + timeout
     if process is None:
