@@ -1152,6 +1152,10 @@ class KnownTypeFallbackOnError(Normalizer):
         self._delegate = delegate
         self._failure_handler = nfh
 
+    def set_skip_df_consolidation(self):
+        if isinstance(self._delegate, DataFrameNormalizer):
+            self._delegate.set_skip_df_consolidation()
+
     def normalize(self, item, **kwargs):
         try:
             return self._delegate.normalize(item, **kwargs)
@@ -1179,6 +1183,10 @@ class CompositeNormalizer(Normalizer):
 
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer
+
+
+    def set_skip_df_consolidation(self):
+        self.df.set_skip_df_consolidation()
 
     def _normalize(
         self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
