@@ -600,6 +600,8 @@ void Column::truncate_first_block(size_t start_row) {
 void Column::truncate_last_block(size_t end_row) {
     if(!is_sparse()) {
         const auto column_row_count = row_count();
+        util::check(column_row_count >= static_cast<int64_t>(end_row),
+                    "Cannot truncate column of length {} to row {}", column_row_count, end_row);
         auto bytes = (column_row_count - end_row) * data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
         data_.buffer().truncate_last_block(bytes);
     }

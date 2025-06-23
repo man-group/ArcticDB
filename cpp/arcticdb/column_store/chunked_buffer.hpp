@@ -462,20 +462,30 @@ class ChunkedBufferImpl {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
     }
 
+    // Note that with all the truncate_*_block methods, the bytes_ and offsets are no longer accurate after the methods
+    // are called, but downstream logic uses these values to match up blocks with record batches, so this is deliberate
     void truncate_single_block(size_t start_offset, size_t end_offset) {
-        auto [block, offset, ts] = block_and_offset(start_offset);
+        // Inclusive of start_offset, exclusive of end_offset
+        util::check(end_offset >= start_offset, "Truncate single block expects end ({}) >= start ({})", end_offset, start_offset);
         util::check(blocks_.size() == 1, "Truncate single block expects buffer with only one block");
-        const auto removed_bytes = start_offset + (block->bytes() - end_offset);
-        util::check(removed_bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", removed_bytes, block->bytes());
+        auto [block, offset, ts] = block_and_offset(start_offset);
+        const auto removed_bytes = block->bytes() - (end_offset - start_offset);
+        util::check(removed_bytes <= block->bytes(), "Can't truncate {} bytes from a {} byte block", removed_bytes, block->bytes());
         auto remaining_bytes = block->bytes() - removed_bytes;
-        auto new_block = create_block(remaining_bytes, 0);
-        new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
-        blocks_[0] = new_block;
+        if (remaining_bytes > 0) {
+            auto new_block = create_block(remaining_bytes, 0);
+            new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
+            blocks_[0] = new_block;
+        } else {
+            blocks_.clear();
+            block_offsets_.clear();
+        }
         block->abandon();
         delete block;
     }
 
     void truncate_first_block(size_t bytes) {
+        // bytes is the number of bytes to remove, and is asserted to be in the first block of the buffer
         auto [block, offset, ts] = block_and_offset(bytes);
         util::check(block == *blocks_.begin(), "Truncate first block position {} not within initial block", bytes);
         util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
@@ -488,6 +498,7 @@ class ChunkedBufferImpl {
     }
 
     void truncate_last_block(size_t bytes) {
+        // bytes is the number of bytes to remove, and is asserted to be in the last block of the buffer
         auto [block, offset, ts] = block_and_offset(bytes_ - bytes);
         util::check(block == *blocks_.rbegin(), "Truncate last block position {} not within last block", bytes);
         util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());

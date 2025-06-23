@@ -23,6 +23,7 @@ def test_basic(lmdb_version_store_v1):
 # TODO: Do this fix during normalization in frontend PR
 def fix_timeseries_index(df, set_index=False):
     df["index"] = df["index"].apply(lambda x : pd.Timestamp(x))
+    df["index"] = df["index"].astype("datetime64[ns]")
     if set_index:
         df = df.set_index("index")
     return df
@@ -132,6 +133,60 @@ def test_all_types(lmdb_version_store_v1):
     assert_frame_equal(result, df)
 
 
+@pytest.mark.parametrize("date_range_start", [0, 1, 2, 3, 4, 5, 6])
+@pytest.mark.parametrize("date_range_width", [0, 1, 2, 3])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_date_range_corner_cases(version_store_factory, date_range_start, date_range_width, dynamic_schema):
+    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": np.arange(7)}, index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7))
+    sym = "test_date_range_corner_cases"
+    lib.write(sym, df)
+
+    query_start_ts = pd.Timestamp(date_range_start)
+    query_end_ts = pd.Timestamp(date_range_start + date_range_width)
+
+    date_range = (query_start_ts, query_end_ts)
+    expected_df = lib.read(sym, date_range=date_range, _output_format=OutputFormat.PANDAS).data
+    expected_df.index.name = "index"
+    data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    received_df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
+    assert_frame_equal(expected_df, received_df)
+
+
+def test_date_range_between_index_values(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    df = pd.DataFrame(data={"col1": np.arange(2)}, index=[pd.Timestamp(0), pd.Timestamp(10)])
+    sym = "test_date_range_between_index_values"
+    lib.write(sym, df)
+
+    date_range = (pd.Timestamp(4), pd.Timestamp(5))
+    expected_df = lib.read(sym, date_range=date_range, _output_format=OutputFormat.PANDAS).data
+    expected_df.index.name = "index"
+    data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    received_df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
+    assert_frame_equal(expected_df, received_df)
+
+
+@pytest.mark.parametrize("date_range_start", [-5, 10])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_date_range_empty_result(version_store_factory, date_range_start, dynamic_schema):
+    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]}, index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7))
+    sym = "test_date_range_empty_result"
+    lib.write(sym, df)
+
+    query_start_ts = pd.Timestamp(date_range_start)
+    query_end_ts = pd.Timestamp(date_range_start + 1)
+
+    date_range = (query_start_ts, query_end_ts)
+    expected_df = lib.read(sym, date_range=date_range, _output_format=OutputFormat.PANDAS).data
+    expected_df.index.name = "index"
+    data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    received_df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
+    received_df = convert_pandas_categorical_to_str(received_df)
+    assert_frame_equal(expected_df, received_df)
+
+
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 3), (3, 75), (4, 32), (0, 99), (7, 56)])
 def test_date_range(version_store_factory, segment_row_size, start_offset, end_offset):
@@ -157,11 +212,11 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
 def test_date_range_with_duplicates(version_store_factory, segment_row_size, start_date, end_date):
     lib = version_store_factory(segment_row_size=segment_row_size)
     index_with_duplicates = (
-        [ pd.Timestamp(2025, 1, 1) ] * 10 +
-        [ pd.Timestamp(2025, 1, 2) ] * 13 +
-        [ pd.Timestamp(2025, 1, 5) ] * 5 +
-        [ pd.Timestamp(2025, 1, 6) ] * 1 +
-        [ pd.Timestamp(2025, 1, 7) ] * 25
+            [ pd.Timestamp(2025, 1, 1) ] * 10 +
+            [ pd.Timestamp(2025, 1, 2) ] * 13 +
+            [ pd.Timestamp(2025, 1, 5) ] * 5 +
+            [ pd.Timestamp(2025, 1, 6) ] * 1 +
+            [ pd.Timestamp(2025, 1, 7) ] * 25
     )
     size = len(index_with_duplicates)
     df = pd.DataFrame(data=np.arange(size, dtype=np.int64), index=index_with_duplicates, columns=['x'])
@@ -176,6 +231,47 @@ def test_date_range_with_duplicates(version_store_factory, segment_row_size, sta
     read_df = fix_timeseries_index(arrow_table.to_pandas())
     expected_df = df[(df.index >= query_start_ts) & (df.index <= query_end_ts)].reset_index()
     assert_frame_equal(read_df, expected_df)
+
+
+@pytest.mark.parametrize("row_range_start", [0, 1, 2, 3, 4, 5, 6])
+@pytest.mark.parametrize("row_range_width", [0, 1, 2, 3])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("index", [None, pd.date_range(pd.Timestamp(0), freq="ns", periods=7)])
+def test_row_range_corner_cases(version_store_factory, row_range_start, row_range_width, dynamic_schema, index):
+    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": np.arange(7)}, index=index)
+    sym = "test_row_range_corner_cases"
+    lib.write(sym, df)
+
+    row_range = (row_range_start, row_range_start + row_range_width + 1)
+    expected_df = lib.read(sym, row_range=row_range, _output_format=OutputFormat.PANDAS).data
+    data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    received_df = data_closed_table.to_pandas()
+    if index is not None:
+        expected_df.index.name = "index"
+        received_df = fix_timeseries_index(received_df, set_index=True)
+    assert_frame_equal(expected_df, received_df)
+
+
+@pytest.mark.parametrize("row_range_start", [-10, 10])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("index", [None, pd.date_range(pd.Timestamp(0), freq="ns", periods=7)])
+def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_schema, index):
+    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]}, index=index)
+    sym = "test_row_range_empty_result"
+    lib.write(sym, df)
+
+    row_range = (row_range_start, row_range_start + 1)
+    expected_df = lib.read(sym, row_range=row_range, _output_format=OutputFormat.PANDAS).data
+    data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    received_df = data_closed_table.to_pandas()
+    if index is not None:
+        expected_df.index.name = "index"
+        received_df = fix_timeseries_index(received_df, set_index=True)
+    received_df = convert_pandas_categorical_to_str(received_df)
+    assert_frame_equal(expected_df, received_df)
+
 
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 4), (3, 76), (4, 33), (0, 100), (7, 57)])
