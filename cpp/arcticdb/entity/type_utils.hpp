@@ -33,7 +33,7 @@ enum class IntToFloatConversion {
 [[nodiscard]] bool is_valid_type_promotion_to_target(
     const entity::TypeDescriptor& source,
     const entity::TypeDescriptor& target,
-    IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
+    const IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
 );
 
 [[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_common_type(

@@ -80,11 +80,9 @@ namespace arcticdb {
             case IntToFloatConversion::STRICT: return target.get_size_bits() == entity::SizeBits::S64 || source.get_size_bits() < entity::SizeBits::S32;
             case IntToFloatConversion::PERMISSIVE: return true;
             default: {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    false,
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                     "Unknown int to float conversion type {}",
                     static_cast<std::underlying_type_t<IntToFloatConversion>>(int_to_to_float_conversion));
-                return false;
             }
         }
     }
@@ -92,7 +90,7 @@ namespace arcticdb {
     bool is_valid_type_promotion_to_target(
         const entity::TypeDescriptor& source,
         const entity::TypeDescriptor& target,
-        IntToFloatConversion int_to_to_float_conversion
+        const IntToFloatConversion int_to_to_float_conversion
     ) {
         if (source.dimension() != target.dimension()) {
             // Empty of dimension 0 means lack of any given type and can be promoted to anything (even if the dimensions

@@ -631,6 +631,7 @@ struct ColumnStatsGenerationClause {
     }
 
     OutputSchema modify_schema(ARCTICDB_UNUSED OutputSchema&& output_schema) const {
+        // This clause is not used at the moment. Returning empty output schema so that unit tests can succeed.
         return OutputSchema{};
     }
 
