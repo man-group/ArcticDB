@@ -316,8 +316,8 @@ struct OutputSchema {
         default_values_.clear();
     }
 
-    void set_default_value_for_column(std::string name, const Value& value) {
-        default_values_.emplace(std::move(name), value);
+    void set_default_value_for_column(const std::string& name, const Value& value) {
+        default_values_.emplace(name, value);
     }
 
 private:

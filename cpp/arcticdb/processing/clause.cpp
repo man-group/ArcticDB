@@ -434,8 +434,8 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                                 }
 
                                 if (is_sparse) {
-                                    constexpr size_t missing_value_group_id = 0;
                                     for (auto j = previous_value_index; j != enumerating_it.idx(); ++j) {
+                                        static constexpr size_t missing_value_group_id = 0;
                                         *row_to_group_ptr++ = missing_value_group_id;
                                     }
                                     previous_value_index = enumerating_it.idx() + 1;
@@ -467,7 +467,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                         if (opt_input_column) {
                             // The column is missing from the segment. Do not perform any aggregation and leave it to
                             // the NullValueReducer to take care of the default values.
-                            agg_data->aggregate(opt_input_column, row_to_group, num_unique);
+                            agg_data->aggregate(*opt_input_column, row_to_group, num_unique);
                         }
                     }
                 });

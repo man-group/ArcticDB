@@ -19,7 +19,7 @@ struct IGroupingAggregatorData {
 
         DataType get_output_data_type() { return folly::poly_call<1>(*this); };
 
-        void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+        void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
             folly::poly_call<2>(*this, input_column, groups, unique_values);
         }
         [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {

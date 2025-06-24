@@ -70,7 +70,7 @@ public:
 
     void add_data_type(DataType data_type);
     DataType get_output_data_type();
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
     std::optional<Value> get_default_value();
 
@@ -87,7 +87,7 @@ public:
 
     void add_data_type(DataType data_type);
     DataType get_output_data_type();
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
     std::optional<Value> get_default_value();
 private:
@@ -103,7 +103,7 @@ public:
 
     void add_data_type(DataType data_type);
     DataType get_output_data_type();
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
     std::optional<Value> get_default_value();
 private:
@@ -121,7 +121,7 @@ public:
     DataType get_output_data_type() {
         return DataType::FLOAT64;
     }
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
     std::optional<Value> get_default_value();
 private:
@@ -146,7 +146,7 @@ public:
     DataType get_output_data_type() {
         return DataType::UINT64;
     }
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name,  bool dynamic_schema, size_t unique_values);
     std::optional<Value> get_default_value();
 private:
@@ -162,7 +162,7 @@ public:
     DataType get_output_data_type() {
         return *data_type_;
     }
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
     std::optional<Value> get_default_value();
 private:
@@ -181,7 +181,7 @@ public:
     DataType get_output_data_type() {
         return *data_type_;
     }
-    void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values);
+    void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values);
     SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values);
     std::optional<Value> get_default_value();
 private:

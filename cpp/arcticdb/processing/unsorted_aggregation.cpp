@@ -179,33 +179,32 @@ std::optional<Value> SumAggregatorData::get_default_value() {
     });
 }
 
-void SumAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+void SumAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     details::visit_type(get_output_data_type(), [&input_column, unique_values, &groups, this] (auto global_tag) {
         using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
         using RawType = typename global_type_info::RawType;
         if constexpr(!is_sequence_type(global_type_info::data_type)) {
             aggregated_.resize(sizeof(RawType) * unique_values);
             auto out_ptr = reinterpret_cast<RawType*>(aggregated_.data());
-            if (input_column.has_value()) {
-                details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
-                    using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-                    if constexpr(!is_sequence_type(col_type_info::data_type)) {
-                        Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&out_ptr, &groups](auto enumerating_it) {
-                            if constexpr (is_bool_type(global_type_info::data_type)) {
-                                out_ptr[groups[enumerating_it.idx()]] |= RawType(enumerating_it.value());
-                            } else if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                                    out_ptr[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
-                                }
-                            } else {
+            details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
+                using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+                if constexpr(!is_sequence_type(col_type_info::data_type)) {
+                    Column::for_each_enumerated<typename col_type_info::TDT>(*input_column.column_, [&out_ptr, &groups](auto enumerating_it) {
+                        if constexpr (is_bool_type(global_type_info::data_type)) {
+                            out_ptr[groups[enumerating_it.idx()]] |= RawType(enumerating_it.value());
+                        } else if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                            if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
                                 out_ptr[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
                             }
-                        });
-                    } else {
-                        util::raise_rte("String aggregations not currently supported");
-                    }
-                });
-            }
+                        } else {
+                            out_ptr[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
+                        }
+                    });
+                } else {
+                    util::raise_rte("String aggregations not currently supported");
+                }
+            });
+
         }
     });
 }
@@ -377,7 +376,7 @@ DataType MaxAggregatorData::get_output_data_type() {
     return *data_type_;
 }
 
-void MaxAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
+void MaxAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
     aggregate_impl<Extremum::MAX>(input_column, groups, unique_values, aggregated_, data_type_, sparse_map_);
 }
@@ -408,7 +407,7 @@ DataType MinAggregatorData::get_output_data_type() {
     return *data_type_;
 }
 
-void MinAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values)
+void MinAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values)
 {
     aggregate_impl<Extremum::MIN>(input_column, groups, unique_values, aggregated_, data_type_, sparse_map_);
 }
@@ -434,29 +433,28 @@ void MeanAggregatorData::add_data_type(DataType data_type) {
             data_type);
 }
 
-void MeanAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-    if(input_column.has_value()) {
-        fractions_.resize(unique_values);
-        details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, this] (auto col_tag) {
-            using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-            if constexpr(!is_sequence_type(col_type_info::data_type)) {
-                Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&groups, this](auto enumerating_it) {
-                    auto& fraction = fractions_[groups[enumerating_it.idx()]];
-                    if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
-                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                            fraction.numerator_ += double(enumerating_it.value());
-                            ++fraction.denominator_;
-                        }
-                    } else {
+void MeanAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+    fractions_.resize(unique_values);
+    details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, this] (auto col_tag) {
+        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+        if constexpr(!is_sequence_type(col_type_info::data_type)) {
+            Column::for_each_enumerated<typename col_type_info::TDT>(*input_column.column_, [&groups, this](auto enumerating_it) {
+                auto& fraction = fractions_[groups[enumerating_it.idx()]];
+                if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
+                    if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
                         fraction.numerator_ += double(enumerating_it.value());
                         ++fraction.denominator_;
                     }
-                });
-            } else {
-                util::raise_rte("String aggregations not currently supported");
-            }
-        });
-    }
+                } else {
+                    fraction.numerator_ += double(enumerating_it.value());
+                    ++fraction.denominator_;
+                }
+            });
+        } else {
+            util::raise_rte("String aggregations not currently supported");
+        }
+    });
+
 }
 
 SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_name,  bool, size_t unique_values) {
@@ -486,24 +484,22 @@ std::optional<Value> MeanAggregatorData::get_default_value() {
  * CountAggregatorData *
  ***********************/
 
-void CountAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-    if(input_column.has_value()) {
-        aggregated_.resize(unique_values);
-        details::visit_type(input_column->column_->type().data_type(), [&input_column, &groups, this] (auto col_tag) {
-            using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-            Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&groups, this](auto enumerating_it) {
-                if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                    if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                        auto& val = aggregated_[groups[enumerating_it.idx()]];
-                        ++val;
-                    }
-                } else {
+void CountAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+    aggregated_.resize(unique_values);
+    details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, this] (auto col_tag) {
+        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+        Column::for_each_enumerated<typename col_type_info::TDT>(*input_column.column_, [&groups, this](auto enumerating_it) {
+            if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
                     auto& val = aggregated_[groups[enumerating_it.idx()]];
                     ++val;
                 }
-            });
+            } else {
+                auto& val = aggregated_[groups[enumerating_it.idx()]];
+                ++val;
+            }
         });
-    }
+    });
 }
 
 SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_name,  bool, size_t unique_values) {
@@ -531,16 +527,16 @@ void FirstAggregatorData::add_data_type(DataType data_type) {
     add_data_type_impl(data_type, data_type_);
 }
 
-void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-    if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
+void FirstAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+    if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL) {
         details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_tag) {
             using GlobalInputType = decltype(global_tag);
             using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
             aggregated_.resize(sizeof(GlobalRawType)* unique_values);
-            auto col_data = input_column->column_->data();
+            auto col_data = input_column.column_->data();
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
-            details::visit_type(input_column->column_->type().data_type(), [this, &groups, &out_ptr, &col_data] (auto col_tag) {
+            details::visit_type(input_column.column_->type().data_type(), [this, &groups, &out_ptr, &col_data] (auto col_tag) {
                 using ColumnTagType = std::decay_t<decltype(col_tag)>;
                 using ColumnType =  typename ColumnTagType::raw_type;
                 auto groups_pos = 0;
@@ -548,7 +544,7 @@ void FirstAggregatorData::aggregate(const std::optional<ColumnWithStrings>& inpu
                     auto ptr = reinterpret_cast<const ColumnType *>(block.value().data());
                     for (auto i = 0u; i < block.value().row_count(); ++i, ++ptr, ++groups_pos) {
                         auto& val = out_ptr[groups[groups_pos]];
-                        bool is_first_group_el = (groups_cache_.find(groups[groups_pos]) == groups_cache_.end());
+                        bool is_first_group_el = (!groups_cache_.contains(groups[groups_pos]));
                         if constexpr(std::is_floating_point_v<ColumnType>) {
                             if (is_first_group_el || std::isnan(static_cast<ColumnType>(val))) {
                                 groups_cache_.insert(groups[groups_pos]);
@@ -594,16 +590,16 @@ void LastAggregatorData::add_data_type(DataType data_type) {
     add_data_type_impl(data_type, data_type_);
 }
 
-void LastAggregatorData::aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
-    if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL && input_column.has_value()) {
+void LastAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+    if(data_type_.has_value() && *data_type_ != DataType::EMPTYVAL) {
         details::visit_type(*data_type_, [&input_column, unique_values, &groups, this] (auto global_tag) {
             using GlobalInputType = decltype(global_tag);
             using GlobalTypeDescriptorTag =  typename OutputType<GlobalInputType>::type;
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
             aggregated_.resize(sizeof(GlobalRawType)* unique_values);
-            auto col_data = input_column->column_->data();
+            auto col_data = input_column.column_->data();
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
-            details::visit_type(input_column->column_->type().data_type(), [&groups, &out_ptr, &col_data, this] (auto col_tag) {
+            details::visit_type(input_column.column_->type().data_type(), [&groups, &out_ptr, &col_data, this] (auto col_tag) {
                 using ColumnTagType = std::decay_t<decltype(col_tag)>;
                 using ColumnType =  typename ColumnTagType::raw_type;
                 auto groups_pos = 0;

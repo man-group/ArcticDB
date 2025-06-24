@@ -20,7 +20,7 @@ namespace entity {
 enum class IntToFloatConversion {
     /// Avoids lossy casting from int to float and tries to make sure that the integer can be represented exactly using
     /// the specified float, (u)int8, (u)int16 can be represented exactly using float 32, (u)int32 can be represented
-    /// exactly via float64. Note this still allows casting (u)int64 to flaot64 even though it's a lossy cast.
+    /// exactly via float64. Note this still allows casting (u)int64 to float64 even though it's a lossy cast.
     STRICT,
     /// Allow all type casts from int to float regardless of the byte size of the int and float type
     PERMISSIVE
