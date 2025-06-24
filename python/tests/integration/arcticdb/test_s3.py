@@ -160,7 +160,6 @@ def s3_storage_dots_in_path(request):
     ) as f:
         with f.create_fixture() as g:
             yield g
-        list_moto_storage(f, g)
 
 
 def test_read_path_with_dot(lib_name, s3_storage_dots_in_path):
