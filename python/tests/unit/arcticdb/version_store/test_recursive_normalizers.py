@@ -20,6 +20,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb_ext.stream as adb_stream
 
+from tests.conftest import MACOS
 
 class AlmostAList(list):
     pass
@@ -706,6 +707,8 @@ def test_data_layout(lmdb_version_store_v1):
 
 
 class TestRecursiveNormalizersCompat:
+
+    @pytest.mark.skipif(MACOS, reason="We don't have previous versions of arcticdb pypi released for MacOS")
     def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
@@ -727,6 +730,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
                 for key in data.keys():
                     assert_frame_equal(data[key], expected[key])
 
+    @pytest.mark.skipif(MACOS, reason="We don't have previous versions of arcticdb pypi released for MacOS")
     def test_write_new_read_old(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
