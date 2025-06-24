@@ -975,7 +975,7 @@ void PythonVersionStore::batch_delete_versions(
         util::variant_match(result,
             [&](const version_store::TombstoneVersionResult& tombstone_result) {
                 if (!tombstone_result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
-                    delete_tree(tombstone_result.keys_to_delete, tombstone_result);
+                    keys_to_delete.insert(keys_to_delete.end(), tombstone_result.keys_to_delete.begin(), tombstone_result.keys_to_delete.end());
                 }
 
                 if(tombstone_result.no_undeleted_left && cfg().symbol_list()) {
@@ -989,10 +989,10 @@ void PythonVersionStore::batch_delete_versions(
         );
     }
 
-    // // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
-    // if(!keys_to_delete.empty()) {
-    //     delete_tree(keys_to_delete, TombstoneVersionResult{true});
-    // }
+    // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
+    if(!keys_to_delete.empty()) {
+        delete_tree(keys_to_delete, TombstoneVersionResult{true});
+    }
 
     std::vector<folly::Future<folly::Unit>> remove_symbol_tasks;
 
