@@ -500,5 +500,9 @@ def test_update_data_key_timestamps(lmdb_version_store_v1, date_range):
 
 
 def test_use_norm_failure_handler_known_types(lmdb_version_store_allows_pickling):
+    # The change in PR https://github.com/man-group/ArcticDB/pull/2392 did not take into account that
+    # self._nvs._normalizer.df could be not only DataFrameNormalizer, but also KnownTypeFallbackOnError if
+    # use_norm_failure_handler_known_types (aka pickle_on_failure) was set to True. Skipping of df consolidation
+    # is set in Library.__init__, hence why this test stresses the correct codepath
     nvs = lmdb_version_store_allows_pickling
     Library("dummy", nvs)
