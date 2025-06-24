@@ -17,11 +17,7 @@ while true; do
     output="$timestamp"
 
     for pid in $(pgrep -f 'pytest|multiprocessing'); do
-        count=$(lsof -p "$pid" 2>/dev/null | wc -l)
-        # try with sudo if count is 0
-        if [ "$count" -eq 0 ]; then
-            count=$(sudo lsof -p "$pid" 2>/dev/null | wc -l)
-        fi
+        count=$(sudo lsof -p "$pid" 2>/dev/null | wc -l)
         output+=" $count"
     done
 
