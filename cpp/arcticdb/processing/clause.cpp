@@ -193,12 +193,12 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
                             // Turn this Value into a dense column where all of the entries are the same as this value,
                             // of the same length as the other segments in this processing unit
                             auto rows = proc.segments_->back()->row_count();
-                            auto output_column = std::make_unique<Column>(val->type(), Sparsity::PERMITTED);
+                            auto output_column = std::make_unique<Column>(val->descriptor(), Sparsity::PERMITTED);
                             auto output_bytes = rows * get_type_size(output_column->type().data_type());
                             output_column->allocate_data(output_bytes);
                             output_column->set_row_data(rows);
                             auto string_pool = std::make_shared<StringPool>();
-                            details::visit_type(val->type().data_type(), [&](auto val_tag) {
+                            details::visit_type(val->data_type(), [&](auto val_tag) {
                                 using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
                                 if constexpr(is_dynamic_string_type(val_type_info::data_type)) {
                                     using TargetType = val_type_info::RawType;
@@ -211,7 +211,7 @@ std::vector<EntityId> ProjectClause::process(std::vector<EntityId>&& entity_ids)
                                     auto data = output_column->ptr_cast<TargetType>(0, output_bytes);
                                     std::fill_n(data, rows, value);
                                 } else {
-                                    util::raise_rte("Unexpected Value type in ProjectClause: {}", val->type().data_type());
+                                    util::raise_rte("Unexpected Value type in ProjectClause: {}", val->data_type());
                                 }
                             });
                             ColumnWithStrings col(std::move(output_column), string_pool, "");

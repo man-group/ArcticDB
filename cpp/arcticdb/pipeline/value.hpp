@@ -13,108 +13,95 @@ namespace arcticdb {
 
 using namespace arcticdb::entity;
 
-struct ValueIterator {
-    ValueIterator(char* data) :
-        data_(data) {
-    }
-
-    bool finished() const {
-        return false;
-    }
-
-    uint8_t* value() const {
-        return reinterpret_cast<uint8_t *>(data_);
-    }
-
-    void next() {}
-
-    char* data_;
-};
-
 struct Value {
     Value() = default;
-    DataType data_type_;
-    char data_[8] = {};
-    size_t len_ = 0;
 
     template <typename T>
-    explicit Value(T t, DataType data_type=DataType::UNKNOWN):
-    data_type_(data_type) {
+    requires (!std::convertible_to<T, std::string_view>)
+    explicit Value(T t): Value(t, DataType::UNKNOWN) {}
+
+    template <typename T>
+    requires (!std::convertible_to<T, std::string_view>)
+    explicit Value(T t, const DataType data_type): data_type_(data_type) {
         *reinterpret_cast<T*>(&data_) = t;
     }
 
-    void assign(const Value& other) {
-        if(is_sequence_type(other.data_type_)) {
-            assign_string(*other.str_data(), other.len_);
-        } else {
-            memcpy(data_, other.data_, 8);
-        }
+    explicit Value(const std::string_view string_data, const DataType data_type) :data_type_(data_type) {
+        assign_string(string_data.data(), string_data.size());
     }
 
-    Value(const Value& other) :
-        data_type_(other.data_type_) {
+    Value(const Value& other) : data_type_(other.data_type_) {
         assign(other);
     }
 
+    Value(Value&& other) noexcept : data_type_(other.data_type_), len_(other.len_) {
+        data_ = other.data_;
+        other.data_type_ = DataType::UNKNOWN;
+    }
+
     Value& operator=(const Value& other) {
+        free_data();
         data_type_ = other.data_type_;
         assign(other);
         return *this;
     }
 
-    bool operator==(const Value& other) const {
-        return data_type_ == other.data_type_ && memcmp(other.data_, data_, 8) == 0;
+    Value& operator=(Value&& other) noexcept {
+        free_data();
+        data_type_ = other.data_type();
+        data_ = other.data_;
+
+        other.data_type_ = DataType::UNKNOWN;
+        return *this;
     }
 
-    ValueIterator get_iterator() {
-        return {data_};
+    ~Value() noexcept {
+        free_data();
+    }
+
+    [[nodiscard]] bool operator==(const Value& other) const {
+        if (data_type_ != other.data_type_) {
+            return false;
+        }
+        if (!has_sequence_type()) {
+            return details::visit_type(data_type_, [&, this]<typename TypeTag>(TypeTag) {
+                using raw_type = typename TypeTag::raw_type;
+                return get<raw_type>() == other.get<raw_type>();
+            });
+        }
+        return len_ == other.len_ && strcmp(*str_data(), *other.str_data()) == 0;
     }
 
     template <typename T>
-    T get() const {
-        return *reinterpret_cast<const T*>(&data_);
+    [[nodiscard]] T get() const {
+        return *reinterpret_cast<const T*>(data_.data());
     }
 
     template <typename T>
     void set(T t) {
-        *reinterpret_cast<T*>(data_) = t;
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+            details::visit_type(data_type_, []<typename TypeTag>(TypeTag) {
+                return std::is_same_v<std::decay_t<T>, typename TypeTag::raw_type>;
+            }),
+            "Value type of type {} cannot represent {}", data_type_, t
+        );
+        *reinterpret_cast<T*>(data_.data()) = t;
     }
 
-    TypeDescriptor type() const {
-        return make_scalar_type(data_type_);
+    [[nodiscard]] char** str_data() {
+        return reinterpret_cast<char**>(data_.data());
     }
 
-    char** str_data() {
-        return reinterpret_cast<char**>(data_);
+    [[nodiscard]] const char* const* str_data() const {
+        return reinterpret_cast<const char* const *>(data_.data());
     }
 
-    const char* const* str_data() const {
-        return reinterpret_cast<const char* const *>(data_);
-    }
-
-    size_t len() const {
+    [[nodiscard]] size_t len() const {
         return len_;
     }
 
-    void assign_string(const char* c, size_t len) {
-        auto data = new char[len + 1];
-        memcpy(data, c, len);
-        data[len] = '\0';
-        *str_data() = data;
-        len_ = len;
-    }
-
-    void assign_string(const std::string& str) {
-        len_ = str.size();
-        auto data = new char[len_ + 1];
-        memset(data, 0, len_ + 1);
-        memcpy(data, str.data(), str.size()) ;
-
-        *str_data() = data;
-    }
-
     template<typename RawType>
-    std::string to_string() const {
+    [[nodiscard]] std::string to_string() const {
         if (has_sequence_type()) {
             return "\"" + std::string(*str_data(), len()) + "\"";
         } else {
@@ -122,19 +109,44 @@ struct Value {
         }
     }
 
-    ~Value() {
+    [[nodiscard]] bool has_sequence_type() const {
+        return is_sequence_type(data_type_);
+    }
+
+    [[nodiscard]] TypeDescriptor descriptor() const {
+        return make_scalar_type(data_type_);
+    }
+
+    [[nodiscard]] DataType data_type() const {
+        return data_type_;
+    }
+
+private:
+    void assign_string(const char* c, const size_t len) {
+        const auto data = new char[len + 1];
+        memcpy(data, c, len);
+        data[len] = '\0';
+        *str_data() = data;
+        len_ = len;
+    }
+
+    void assign(const Value& other) {
+        if(is_sequence_type(other.data_type_)) {
+            assign_string(*other.str_data(), other.len_);
+        } else {
+            data_ = other.data_;
+        }
+    }
+
+    void free_data() {
         if(has_sequence_type()) {
             delete[] *str_data();
         }
     }
 
-    bool has_sequence_type() const {
-        return is_sequence_type(data_type_);
-    }
-
-    auto descriptor() const {
-        return TypeDescriptor {data_type_, Dimension::Dim0};
-    }
+    DataType data_type_ = DataType::UNKNOWN;
+    std::array<uint8_t, 8> data_{};
+    size_t len_ = 0;
 };
 
 template<typename T>
@@ -146,10 +158,7 @@ Value construct_value(T val) {
 #define VALUE_CONSTRUCT(__T__, __DT__)  \
    template<> \
     inline Value construct_value(__T__ val) { \
-        Value value; \
-        value.data_type_ = DataType::__DT__; \
-        *(reinterpret_cast<__T__ *>(&(value.data_))) = val; \
-        return value; \
+        return Value{val, DataType::__DT__}; \
     }
 
 VALUE_CONSTRUCT(bool, BOOL8)
@@ -165,10 +174,7 @@ VALUE_CONSTRUCT(float, FLOAT32)
 VALUE_CONSTRUCT(double, FLOAT64)
 
 inline Value construct_string_value(const std::string& str) {
-    Value value;
-    value.data_type_ = DataType::UTF_DYNAMIC64;
-    value.assign_string(str);
-    return value;
+    return Value{str, DataType::UTF_DYNAMIC64};
 }
 
 inline std::optional<std::string> ascii_to_padded_utf32(std::string_view str, size_t width) {

@@ -302,7 +302,7 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                 return it->second;
             },
             [&expression_context] (const ValueName& value_name) -> std::variant<BitSetTag, DataType> {
-                return expression_context.values_.get_value(value_name.value)->data_type_;
+                return expression_context.values_.get_value(value_name.value)->data_type();
             },
             [&expression_context, &value_set_state] (const ValueSetName& value_set_name) -> std::variant<BitSetTag, DataType> {
                 auto value_set = expression_context.value_sets_.get_value(value_set_name.value);

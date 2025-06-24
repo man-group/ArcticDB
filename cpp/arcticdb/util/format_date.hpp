@@ -12,6 +12,6 @@
 
 namespace arcticdb::util {
 
-std::string format_timestamp(entity::timestamp ts);
+std::string format_timestamp(const entity::timestamp ts);
 
 }

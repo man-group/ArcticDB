@@ -44,19 +44,16 @@ inline std::string unary_operation_to_string(Func&& func, std::string_view opera
 template <typename Func>
 VariantData unary_operator(const Value& val, Func&& func) {
     auto output = std::make_unique<Value>();
-    output->data_type_ = val.data_type_;
-
-    details::visit_type(val.type().data_type(), [&](auto val_tag) {
+    details::visit_type(val.data_type(), [&](auto val_tag) {
         using type_info = ScalarTypeInfo<decltype(val_tag)>;
         if constexpr (!is_numeric_type(type_info::data_type)) {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform unary operation {} ({})",
                                                                   unary_operation_to_string(func,val.to_string<typename type_info::RawType>()),
-                                                                  get_user_friendly_type_string(val.type()));
+                                                                  get_user_friendly_type_string(val.descriptor()));
         }
-        auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
+        auto value = val.get<typename type_info::RawType>();
         using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
-        output->data_type_ = data_type_from_raw_type<TargetType>();
-        *reinterpret_cast<TargetType*>(output->data_) = func.apply(value);
+        *output = Value{TargetType{func.apply(value)}, data_type_from_raw_type<TargetType>()};
     });
 
     return {std::move(output)};

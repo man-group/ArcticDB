@@ -1304,7 +1304,6 @@ void copy_frame_data_to_buffer(
         DecodePathData shared_data,
         std::any& handler_data,
         OutputFormat output_format,
-        IntToFloatConversion int_to_float_conversion,
         const std::optional<Value>& default_value) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
@@ -1331,7 +1330,7 @@ void copy_frame_data_to_buffer(
             util::initialize<decltype(dst_desc_tag)>(dst_ptr, total_size, default_value);
         });
     // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
-    } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion)) {
+    } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE)) {
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
             typename dst_type_info::RawType* typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
@@ -1362,7 +1361,7 @@ void copy_frame_data_to_buffer(
             }
 
         });
-    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), int_to_float_conversion) ||
+    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE) ||
                (src_column.type().data_type() == DataType::UINT64 && dst_column.type().data_type() == DataType::INT64)) {
         // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type between
         // these types. This means that the second condition cannot happen during a regular read. The processing
@@ -1410,7 +1409,6 @@ struct CopyToBufferTask : async::BaseTask {
     DecodePathData shared_data_;
     std::any& handler_data_;
     OutputFormat output_format_;
-    IntToFloatConversion int_to_float_conversion_;
     std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
@@ -1451,7 +1449,6 @@ struct CopyToBufferTask : async::BaseTask {
                     shared_data_,
                     handler_data_,
                     output_format_,
-                    IntToFloatConversion::PERMISSIVE,
                     {});
             } else {
                 // All other columns use names to match the source with the destination
@@ -1477,7 +1474,6 @@ struct CopyToBufferTask : async::BaseTask {
                     shared_data_,
                     handler_data_,
                     output_format_,
-                    IntToFloatConversion::PERMISSIVE,
                     default_value);
             }
         }

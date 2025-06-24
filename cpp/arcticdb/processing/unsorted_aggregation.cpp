@@ -45,13 +45,13 @@ SegmentInMemory MinMaxAggregatorData::finalize(const std::vector<ColumnName>& ou
             output_column_names.size());
     SegmentInMemory seg;
     if (min_.has_value()) {
-        details::visit_type(min_->data_type_, [&output_column_names, &seg, that = this](auto col_tag) {
+        details::visit_type(min_->data_type(), [&output_column_names, &seg, this](auto col_tag) {
             using RawType = typename ScalarTypeInfo<decltype(col_tag)>::RawType;
-            auto min_col = std::make_shared<Column>(make_scalar_type(that->min_->data_type_), Sparsity::PERMITTED);
-            min_col->push_back<RawType>(that->min_->get<RawType>());
+            auto min_col = std::make_shared<Column>(make_scalar_type(min_->data_type()), Sparsity::PERMITTED);
+            min_col->push_back<RawType>(min_->get<RawType>());
 
-            auto max_col = std::make_shared<Column>(make_scalar_type(that->max_->data_type_), Sparsity::PERMITTED);
-            max_col->push_back<RawType>(that->max_->get<RawType>());
+            auto max_col = std::make_shared<Column>(make_scalar_type(max_->data_type()), Sparsity::PERMITTED);
+            max_col->push_back<RawType>(max_->get<RawType>());
 
             seg.add_column(scalar_field(min_col->type().data_type(), output_column_names[0].value), min_col);
             seg.add_column(scalar_field(max_col->type().data_type(), output_column_names[1].value), max_col);

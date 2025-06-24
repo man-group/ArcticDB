@@ -11,21 +11,21 @@ namespace arcticdb::util {
         if (ts == NaT) {
             return "NaT";
         }
-        // Use boost as it can handle nanoseconds both on all OS's.
-        // std::std::chrono::time_point<std::chrono::system_clock> does not handle nanoseconds on Windows and Mac
-
-        const timestamp seconds = ts / 1'000'000'000;
-        const timestamp ns_remainder = ts % 1'000'000'000;
+        // Use boost as it can handle nanoseconds on all OS's.
+        // std::std::chrono::time_point<std::chrono::system_clock> does not handle nanoseconds on Windows and Mac.
+        const auto div = std::lldiv(ts, 1'000'000'000);
+        const timestamp seconds = div.quot;
+        const timestamp ns_remainder = div.rem;
         const boost::posix_time::ptime epoch = boost::posix_time::from_time_t(0);
         // Split into seconds and nanoseconds fractions because using epoch + boost::posix_time::nanoseconds fails when
-        // std::numeric_limits<int64_t>::max() is used
+        // std::numeric_limits<int64_t>::max() is used due to overflow
         const boost::posix_time::ptime dt = epoch + boost::posix_time::seconds(seconds) + boost::posix_time::nanoseconds(ns_remainder);
 
         // Custom formatting seems to work best compared to other options.
-        // * using std::put_time(std::gmtime(...)) throws on Windows when pre-epoch dates are used
-        // * using boosts time_facet requires the facet used for formatting to be allocated on the heap for each
+        // * using std::put_time(std::gmtime(...)) throws on Windows when pre-epoch dates are used (pre-epoch is UB)
+        // * using Boost's time_facet requires the facet used for formatting to be allocated on the heap for each
         //   formatting call (because it requires calling std::stringstream::imbue which takes onwership of the passed
-        //   pointer
+        //   pointer)
         return fmt::format(
             "{}-{:02}-{:02} {:02}:{:02}:{:02}.{:09}",
             int{dt.date().year()},

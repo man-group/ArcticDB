@@ -936,6 +936,7 @@ if(${TEST})
             pipeline/test/test_pipeline.cpp
             pipeline/test/test_query.cpp
             pipeline/test/test_frame_allocation.cpp
+            pipeline/test/test_value.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
