@@ -17,7 +17,12 @@ while true; do
     output="$timestamp"
 
     for pid in $(pgrep -f 'pytest|multiprocessing'); do
-        count=$(sudo lsof -p "$pid" 2>/dev/null | wc -l)
+        count=$(sudo ls  /proc/$pid/fd 2>/dev/null | wc -l)
+        # try with sudo if count is 0
+        if [ "$count" -eq 0 ]; then
+            echo "Use fallback method"
+            count=$(sudo lsof -p "$pid" 2>/dev/null | wc -l)
+        fi        
         output+=" $count"
     done
 
