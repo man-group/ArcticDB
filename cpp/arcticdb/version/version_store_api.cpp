@@ -1002,13 +1002,7 @@ void PythonVersionStore::batch_delete_versions(
         }
     }
 
-    auto remove_symbol_results = folly::collectAll(remove_symbol_tasks).get();
-
-    for(const auto& result : remove_symbol_results) {
-        if (result.hasException()) {
-            failed_symbols.push_back(std::string(result.exception().what()));
-        }
-    }
+    folly::collectAll(remove_symbol_tasks).get();
 
     if(!failed_symbols.empty()) {
         throw InternalException(fmt::format("Failed to delete versions for symbols: {}", fmt::join(failed_symbols, ", ")));
