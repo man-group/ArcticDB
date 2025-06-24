@@ -960,7 +960,7 @@ void PythonVersionStore::batch_delete_versions(
     const std::vector<std::vector<VersionId>>& version_ids) {
     util::check(stream_ids.size() == version_ids.size(), "stream_ids and version_ids must have the same size");
     
-    auto results = ::arcticdb::tombstone_versions_batch_from_vectors(store(), version_map(), stream_ids, version_ids);
+    auto results = batch_delete_versions_internal(stream_ids, version_ids);
     
     // If no results, nothing to delete
     if (results.empty()) {
@@ -969,17 +969,24 @@ void PythonVersionStore::batch_delete_versions(
     
     std::vector<IndexTypeKey> keys_to_delete;
     std::vector<std::pair<StreamId, VersionId>> symbols_to_delete;
+    std::vector<std::string> failed_symbols;
 
     for (const auto& result : results) {
-        if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
-            // keys_to_delete.insert(keys_to_delete.end(), result.keys_to_delete.begin(), result.keys_to_delete.end());
-            delete_tree(result.keys_to_delete, result);
-        }
+        util::variant_match(result,
+            [&](const version_store::TombstoneVersionResult& tombstone_result) {
+                if (!tombstone_result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
+                    delete_tree(tombstone_result.keys_to_delete, tombstone_result);
+                }
 
-        if(result.no_undeleted_left && cfg().symbol_list()) {
-            auto stream_id = result.keys_to_delete.front().id();
-            symbols_to_delete.emplace_back(stream_id, result.latest_version_);
-        }
+                if(tombstone_result.no_undeleted_left && cfg().symbol_list()) {
+                    auto stream_id = tombstone_result.keys_to_delete.front().id();
+                    symbols_to_delete.emplace_back(stream_id, tombstone_result.latest_version_);
+                }
+            },
+            [&](const DataError& data_error) {
+                failed_symbols.push_back(data_error.symbol());
+            }
+        );
     }
 
     // // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
@@ -995,7 +1002,22 @@ void PythonVersionStore::batch_delete_versions(
         }
     }
 
-    folly::collectAll(remove_symbol_tasks).get();
+    auto remove_symbol_results = folly::collectAll(remove_symbol_tasks).get();
+
+    for(const auto& result : remove_symbol_results) {
+        util::variant_match(result,
+            [&](const folly::Unit& unit) {
+                // Success
+            },
+            [&](const std::exception& ex) {
+                failed_symbols.push_back(ex.what());
+            }
+        );
+    }
+
+    if(!failed_symbols.empty()) {
+        throw InternalException(fmt::format("Failed to delete versions for symbols: {}", fmt::join(failed_symbols, ", ")));
+    }
 }
 
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {
