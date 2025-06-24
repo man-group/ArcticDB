@@ -253,13 +253,14 @@ class GcpS3Bucket(S3Bucket):
         return cfg, self.native_config
 
 
-def check_bucket(sff: Union['BaseS3StorageFixtureFactory', 'BaseGCPStorageFixtureFactory']):
-    s3_tool = S3Tool(sff.default_bucket, sff.default_key.id, sff.default_key.secret, sff.endpoint)
-    content = s3_tool.list_bucket(sff.default_prefix)
+def check_bucket(storage_faactory: Union['BaseS3StorageFixtureFactory', 'BaseGCPStorageFixtureFactory']):
+    s3_tool = S3Tool(storage_faactory.default_bucket, storage_faactory.default_key.id, 
+                     storage_faactory.default_key.secret, storage_faactory.endpoint)
+    content = s3_tool.list_bucket(storage_faactory.default_prefix)
 
     logger.warning(f"Total objects left: {len(content)}")
     logger.warning(f"First 100: {content[0:100]}")
-    logger.warning(f"BUCKET: {sff.default_bucket}")
+    logger.warning(f"BUCKET: {storage_faactory.default_bucket}")
     left_from = set()
     for key in content:
         library_name = key.split("/")[1] # get the name from object

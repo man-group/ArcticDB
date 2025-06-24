@@ -89,6 +89,7 @@ def get_logger(bencmhark_cls: Union[str, Any] = None):
     loggers[name] = logger
     return logger
 
+logger = get_logger()
 
 class GitHubSanitizingException(Exception):
     def __init__(self, message: str):
@@ -99,7 +100,7 @@ class GitHubSanitizingException(Exception):
 
 def delete_nvs(nvs: NativeVersionStore, ac: Arctic = None):
     if isinstance(nvs, NativeVersionStore):
-        get_logger().info(f"Removing data for NativeVersionStore library_path: {nvs.library().library_path}")
+        logger.info(f"Removing data for NativeVersionStore library_path: {nvs.library().library_path}")
         try:
             nvs.version_store.clear()
             logger.info(f"SUCCESS in deletion")  
