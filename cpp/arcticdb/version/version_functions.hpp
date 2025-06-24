@@ -218,7 +218,7 @@ inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_r
     version_store::TombstoneVersionResult res,
     const std::shared_ptr<VersionMap>& version_map,
     const std::shared_ptr<VersionMapEntry>& entry,
-    AtomKey tombstone_key) {
+    [[maybe_unused]] AtomKey tombstone_key) {
     ARCTICDB_DEBUG(log::version(), "Finalizing result for tombstone key {}", tombstone_key);
     // Update the result with final state
     if (version_map->validate())
