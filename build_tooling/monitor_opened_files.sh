@@ -17,6 +17,8 @@ while true; do
     output="$timestamp"
 
     for pid in $(pgrep -f 'pytest|multiprocessing'); do
+        echo "PID detected: $pid"
+        ps -p $pid -o pid,ppid,cmd,%mem,%cpu,etime
         count=$(sudo ls  /proc/$pid/fd 2>/dev/null | wc -l)
         # try with sudo if count is 0
         if [ "$count" -eq 0 ]; then
