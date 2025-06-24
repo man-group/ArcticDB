@@ -14,8 +14,13 @@ try:
     # from pytest this way will work
     from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
 except ModuleNotFoundError:
-    # when storage_tests.py is executed with argument
-    from mark import PERSISTENT_STORAGE_TESTS_ENABLED
+    try:
+        # when storage_tests.py is executed with argument
+        from mark import PERSISTENT_STORAGE_TESTS_ENABLED
+    except ImportError:
+        # patch until arcticdb.util.marks.py becomes part of release
+        PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
+    
 
 
 # TODO: Remove this when the latest version that we support
