@@ -151,6 +151,7 @@ def test_batch_delete_versions_invalid_input(basic_store):
     # Create test data
     df1 = pd.DataFrame({"x": np.arange(10, dtype=np.int64)})
     lib.write("sym1", df1)
+    lib.write("sym2", df1)
 
     # Test with non-existent symbol
     with pytest.raises(InternalException):
@@ -158,11 +159,19 @@ def test_batch_delete_versions_invalid_input(basic_store):
 
     # Test with non-existent version
     with pytest.raises(InternalException):
-        lib.batch_delete_versions(["sym1"], [[1]])
+        lib.batch_delete_versions(["sym1", "sym2"], [[1], [0]])
+
+    with pytest.raises(NoDataFoundException):
+        lib.read("sym2", 0)
+
+    assert_frame_equal(lib.read("sym1").data, df1)
+    assert len(lib.list_versions("sym1")) == 1
+    assert len(lib.list_versions("sym2")) == 0
+    assert lib.list_symbols() == ["sym1"]
 
     # Test with invalid version number
     with pytest.raises(TypeError):
-        lib.batch_delete_versions(["sym1"], [[-1]])
+        lib.batch_delete_versions(["sym1", "sym2"], [[-1], [0]])
 
 
 @pytest.mark.storage
