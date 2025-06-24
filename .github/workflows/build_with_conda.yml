@@ -113,6 +113,8 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
+          sudo apt install procps
+          pgrep --version
           build_tooling/monitor_opened_files.sh $MONITOR_FILE &
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
@@ -202,6 +204,8 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
+          sudo apt install procps
+          pgrep --version
           build_tooling/monitor_opened_files.sh $MONITOR_FILE &
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
