@@ -48,3 +48,4 @@ def test_dynamic_bucketize_append_variable_width(
         assert_frame_equal(res, df1)
     finally:
     	delete_nvs(lib)
+        

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-# Save firectory from which we started the script to go back after it finishes
+# Save directory from which we started the script to go back after it finishes
 pushd "$(pwd)" >/dev/null
 
 tooling_dir="$(dirname $BASH_SOURCE)"
