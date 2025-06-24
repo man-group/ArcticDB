@@ -1005,14 +1005,9 @@ void PythonVersionStore::batch_delete_versions(
     auto remove_symbol_results = folly::collectAll(remove_symbol_tasks).get();
 
     for(const auto& result : remove_symbol_results) {
-        util::variant_match(result,
-            [&](const folly::Unit& unit) {
-                // Success
-            },
-            [&](const std::exception& ex) {
-                failed_symbols.push_back(ex.what());
-            }
-        );
+        if (result.hasException()) {
+            failed_symbols.push_back(std::string(result.exception().what()));
+        }
     }
 
     if(!failed_symbols.empty()) {
