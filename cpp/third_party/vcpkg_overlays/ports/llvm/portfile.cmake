@@ -1,9 +1,0 @@
-vcpkg_cmake_configure(
-    ${FEATURE_OPTIONS}
-    MAYBE_UNUSED_VARIABLES
-    COMPILER_RT_ENABLE_IOS
-    BOLT_TOOLS_INSTALL_DIR
-    LIBOMP_INSTALL_ALIASES
-)
-
-vcpkg_cmake_install(ADD_BIN_TO_PATH) 
