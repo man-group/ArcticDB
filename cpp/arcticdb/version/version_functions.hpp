@@ -279,51 +279,6 @@ inline version_store::TombstoneVersionResult tombstone_versions(
     return tombstone_versions_async(store, version_map, stream_id, version_ids, creation_ts).get();
 }
 
-inline std::vector<version_store::TombstoneVersionResult> tombstone_versions_batch(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const std::vector<std::pair<StreamId, std::unordered_set<VersionId>>> &stream_ids_and_version_ids,
-    const std::optional<timestamp>& creation_ts=std::nullopt) {
-    std::vector<folly::Future<version_store::TombstoneVersionResult>> futures;
-    for (const auto& [stream_id, version_ids] : stream_ids_and_version_ids) {
-        futures.push_back(tombstone_versions_async(store, version_map, stream_id, version_ids, creation_ts));
-    }
-
-    auto tries = folly::collectAll(futures).get();
-    std::vector<version_store::TombstoneVersionResult> results;
-    results.reserve(tries.size());
-    for (auto& try_result : tries) {
-        results.push_back(std::move(try_result.value()));
-    }
-    return results;
-}
-
-inline std::vector<version_store::TombstoneVersionResult> tombstone_versions_batch_from_vectors(
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<VersionMap> &version_map,
-    const std::vector<StreamId> &stream_ids,
-    const std::vector<std::vector<VersionId>> &version_ids,
-    const std::optional<timestamp>& creation_ts=std::nullopt) {
-    std::vector<std::pair<StreamId, std::unordered_set<VersionId>>> stream_ids_and_version_ids;
-    stream_ids_and_version_ids.reserve(stream_ids.size());
-    
-    for (size_t i = 0; i < stream_ids.size(); ++i) {
-        // Skip if version_ids[i] is empty
-        if (version_ids[i].empty()) {
-            continue;
-        }
-        std::unordered_set<VersionId> version_set(version_ids[i].begin(), version_ids[i].end());
-        stream_ids_and_version_ids.emplace_back(stream_ids[i], std::move(version_set));
-    }
-    
-    // If no valid version IDs to process, return empty result
-    if (stream_ids_and_version_ids.empty()) {
-        return {};
-    }
-    
-    return tombstone_versions_batch(store, version_map, stream_ids_and_version_ids, creation_ts);
-}
-
 inline std::optional<AtomKey> get_index_key_from_time(
     timestamp from_time,
     const std::vector<AtomKey> &keys) {

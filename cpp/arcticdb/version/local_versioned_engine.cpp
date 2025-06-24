@@ -1391,6 +1391,37 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     return transform_batch_items_or_throw(std::move(write_versions), stream_ids, flags);
 }
 
+std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> LocalVersionedEngine::batch_delete_versions_internal(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<std::vector<VersionId>>& version_ids,
+    const std::optional<timestamp>& creation_ts) {
+    util::check(stream_ids.size() == version_ids.size(), "stream_ids and version_ids must have the same size");
+
+    if (stream_ids.empty()) {
+        return {};
+    }
+    
+    std::vector<std::unordered_set<VersionId>> version_sets;
+    version_sets.reserve(version_ids.size());
+    for (const auto& version_list : version_ids) {
+        std::unordered_set<VersionId> version_set(version_list.begin(), version_list.end());
+        version_sets.emplace_back(std::move(version_set));
+    }
+    
+    std::vector<folly::Future<version_store::TombstoneVersionResult>> futures;
+    for (size_t i = 0; i < stream_ids.size(); ++i) {
+        if (!version_sets[i].empty()) {
+            futures.push_back(tombstone_versions_async(store(), version_map(), stream_ids[i], version_sets[i], creation_ts));
+        }
+    }
+
+    auto tombstone_results = folly::collectAll(futures).get();
+    return transform_batch_items_or_throw<version_store::TombstoneVersionResult>(
+        std::move(tombstone_results),
+        stream_ids,
+        TransformBatchResultsFlags{}
+    );
+}
 
 VersionedItem LocalVersionedEngine::append_internal(
     const StreamId& stream_id,
