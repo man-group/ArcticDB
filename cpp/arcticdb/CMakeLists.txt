@@ -88,12 +88,15 @@ else()
 
 endif()
 
-# Adapt Folly::folly_deps to remove an non-existent include directory.
-get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
-set(NON_EXISTENT_INCLUDE_DIR "/usr/local/opt/openssl/include")
-message(STATUS "Folly's INTERFACE_INCLUDE_DIRECTORIES to remove: ${NON_EXISTENT_INCLUDE_DIR}")
-list(REMOVE_ITEM NEW_FOLLY_DEPS "${NON_EXISTENT_INCLUDE_DIR}")
-set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
+if(${ARCTICDB_USING_CONDA} OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    # Adapt Folly::folly_deps to remove an non-existent include directory
+    # (which is supposedly only present on Linux and used for the static build of Folly)
+    get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
+    set(NON_EXISTENT_INCLUDE_DIR "/usr/local/opt/openssl/include")
+    message(STATUS "Folly's INTERFACE_INCLUDE_DIRECTORIES to remove: ${NON_EXISTENT_INCLUDE_DIR}")
+    list(REMOVE_ITEM NEW_FOLLY_DEPS "${NON_EXISTENT_INCLUDE_DIR}")
+    set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
+endif()
 
 # Have to statically link xxhash as inlining causes non-deterministic hashing, and cannot dynamically link
 # # since `XXH_state_t` which we rely on is only available when statically linking.
