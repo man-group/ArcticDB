@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# This file should be produced by monitor_opened_files.sh
+# It will be processed and maximum number for each process will be
+# displayed as result
 LOGFILE="${1:-opened_files.log}"
 
 for i in {3..20}; do
