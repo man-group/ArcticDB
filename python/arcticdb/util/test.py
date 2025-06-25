@@ -864,6 +864,7 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
     for col in left_no_inf_and_nan.columns:
+        print(f"Column [{col}] series comparison starting.")        
         if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(
             right_no_inf_and_nan[col].dtype
         ):
