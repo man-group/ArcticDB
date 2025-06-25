@@ -1011,14 +1011,8 @@ def largest_numeric_type(dtype):
         return np.uint64
     return dtype
 
-def common_float_int_type(float_dtype, int_dtype):
-    # We don't support float16
-    float_dtype = np.dtype(float_dtype)
-    int_dtype = np.dtype(int_dtype)
-    assert float_dtype.itemsize >= 4
-    if int_dtype.itemsize <= 2:
-        return float_dtype
-    return np.float64
+def is_numeric_type(dtype):
+    return pd.api.types.is_integer_dtype(dtype) or pd.api.types.is_float_dtype(dtype)
 
 def valid_common_type(left, right):
     """
@@ -1033,36 +1027,24 @@ def valid_common_type(left, right):
     right = np.dtype(right)
     if left == right:
         return left
-    if pd.api.types.is_float_dtype(left):
-        if pd.api.types.is_float_dtype(right):
-            return left if left.itemsize > right.itemsize else right
-        elif pd.api.types.is_integer_dtype(right):
-            return common_float_int_type(left, right)
+    # Strings are represented via object dtype. Numeric types and strings do not have valid common type
+    if (is_numeric_type(left) and not is_numeric_type(right)) or (is_numeric_type(right) and not is_numeric_type(left)):
         return None
+    if pd.api.types.is_float_dtype(left):
+        if pd.api.types.is_float_dtype(right) or pd.api.types.is_integer_dtype(right):
+            return np.promote_types(left, right)
     elif pd.api.types.is_signed_integer_dtype(left):
-        if pd.api.types.is_float_dtype(right):
-            return common_float_int_type(right, left)
-        elif pd.api.types.is_signed_integer_dtype(right):
-            return left if left.itemsize > right.itemsize else right
+        if pd.api.types.is_float_dtype(right) or pd.api.types.is_signed_integer_dtype(right):
+            return np.promote_types(left, right)
         elif pd.api.types.is_unsigned_integer_dtype(right):
-            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
-            if right.itemsize >= 8:
-                return None
-            elif left.itemsize > right.itemsize:
-                return left
-            return int_dtypes[right.itemsize * 2]
+            # Numpy promotes int* and uint64 to float64. ArcticDB does not allow such promotion
+            return None if right.itemsize >= 8 else np.promote_types(left, right)
     elif pd.api.types.is_unsigned_integer_dtype(left):
-        if pd.api.types.is_float_dtype(right):
-            return common_float_int_type(right, left)
-        elif pd.api.types.is_unsigned_integer_dtype(right):
-            return left if left.itemsize > right.itemsize else right
+        if pd.api.types.is_float_dtype(right) or pd.api.types.is_unsigned_integer_dtype(right):
+            return np.promote_types(left, right)
         elif pd.api.types.is_signed_integer_dtype(right):
-            int_dtypes = {1: np.dtype("int8"), 2: np.dtype("int16"), 4: np.dtype("int32"), 8: np.dtype("int64")}
-            if left.itemsize >= 8:
-                return None
-            elif right.itemsize > left.itemsize:
-                return right
-            return int_dtypes[left.itemsize * 2]
+            # Numpy promotes int* and uint64 to float64. ArcticDB does not allow such promotion
+            return None if left.itemsize >= 8 else np.promote_types(left, right)
     return None
 
 def expected_aggregation_type(aggregation, df_list, column_name):
