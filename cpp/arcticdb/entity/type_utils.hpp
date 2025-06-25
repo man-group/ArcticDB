@@ -52,3 +52,19 @@ inline std::string get_user_friendly_type_string(const entity::TypeDescriptor& t
 }
 
 }
+
+template<>
+struct fmt::formatter<arcticdb::IntToFloatConversion> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::IntToFloatConversion conversion, FormatContext &ctx) const {
+        switch (conversion) {
+            case arcticdb::IntToFloatConversion::PERMISSIVE: return fmt::format_to(ctx.out(), "PERMISSIVE");
+            case arcticdb::IntToFloatConversion::STRICT: return fmt::format_to(ctx.out(), "STRICT");
+            default:
+                arcticdb::util::raise_rte("Unrecognized int to float conversion type {}", int(conversion));
+        }
+    }
+};
