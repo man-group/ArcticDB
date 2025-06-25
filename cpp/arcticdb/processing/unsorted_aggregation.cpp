@@ -24,8 +24,8 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
             Column::for_each<typename type_info::TDT>(*input_column.column_, [this](auto value) {
                 const auto& curr = static_cast<RawType>(value);
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
-                    min_ = std::make_optional<Value>(curr, type_info::data_type);
-                    max_ = std::make_optional<Value>(curr, type_info::data_type);
+                    min_ = Value{curr, type_info::data_type};
+                    max_ = Value{curr, type_info::data_type};
                 } else {
                     min_->set(std::min(min_->get<RawType>(), curr));
                     max_->set(std::max(max_->get<RawType>(), curr));
@@ -236,23 +236,6 @@ namespace
         MIN
     };
 
-    template <typename T, Extremum E>
-    struct MaybeValue
-    {
-        bool written_ = false;
-        T value_ = init_value();
-
-    private:
-
-        static constexpr T init_value()
-        {
-            if constexpr (E == Extremum::MAX)
-                return std::numeric_limits<T>::lowest();
-            else
-                return std::numeric_limits<T>::max();
-        }
-    };
-
     std::shared_ptr<Column> create_output_column(TypeDescriptor td, util::BitMagic&& sparse_map, size_t unique_values) {
         sparse_map.resize(unique_values);
         const size_t num_set_rows = sparse_map.count();
@@ -266,6 +249,26 @@ namespace
             col->set_sparse_map(std::move(sparse_map));
             col->set_row_data(unique_values - 1);
             return col;
+        }
+    }
+
+    template<Extremum E, typename ColType>
+    requires (std::floating_point<ColType> || std::integral<ColType>) && (E == Extremum::MAX || E == Extremum::MIN)
+    consteval ColType default_value_for_extremum() {
+        if constexpr (E == Extremum::MAX) {
+            return std::numeric_limits<ColType>::lowest();
+        } else {
+            return std::numeric_limits<ColType>::max();
+        }
+    }
+
+    template<Extremum E, typename T>
+    requires (std::floating_point<T> || std::integral<T>) && (E == Extremum::MAX || E == Extremum::MIN)
+    T apply_extremum(const T& left, const T& right) {
+        if constexpr (E == Extremum::MAX) {
+            return std::max(left, right);
+        } else {
+            return std::min(left, right);
         }
     }
 
@@ -283,39 +286,29 @@ namespace
                 using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
                 using GlobalRawType = typename global_type_info::RawType;
                 if constexpr(!is_sequence_type(global_type_info::data_type)) {
-                    using MaybeValueType = MaybeValue<GlobalRawType, T>;
-                    auto prev_size = aggregated.size() / sizeof(MaybeValueType);
-                    aggregated.resize(sizeof(MaybeValueType) * unique_values);
+                    auto prev_size = aggregated.size() / sizeof(GlobalRawType);
+                    aggregated.resize(sizeof(GlobalRawType) * unique_values);
                     sparse_map.resize(unique_values);
-                    auto out_ptr = reinterpret_cast<MaybeValueType*>(aggregated.data());
-                    std::fill(out_ptr + prev_size, out_ptr + unique_values, MaybeValueType{});
+                    std::span<GlobalRawType> out{reinterpret_cast<GlobalRawType*>(aggregated.data()), unique_values};
+                    constexpr GlobalRawType default_value = default_value_for_extremum<T, GlobalRawType>();
+                    std::ranges::fill(out.subspan(prev_size), default_value);
                     details::visit_type(input_column->column_->type().data_type(), [&] (auto col_tag) {
                         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                         using ColRawType = typename col_type_info::RawType;
                         if constexpr(!is_sequence_type(col_type_info::data_type)) {
                             Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&](auto row) {
-                                auto& group_entry = out_ptr[row_to_group[row.idx()]];
+                                auto& group_entry = out[row_to_group[row.idx()]];
+                                const auto& current_value = GlobalRawType(row.value());
                                 if constexpr(std::is_floating_point_v<ColRawType>) {
-                                    const auto& curr = GlobalRawType(row.value());
-                                    if (!group_entry.written_ || std::isnan(static_cast<ColRawType>(group_entry.value_))) {
-                                        group_entry.value_ = curr;
-                                        group_entry.written_ = true;
+                                    if (!sparse_map[row_to_group[row.idx()]] || std::isnan(static_cast<ColRawType>(group_entry))) {
+                                        group_entry = current_value;
                                         sparse_map.set(row_to_group[row.idx()]);
-                                    } else if (!std::isnan(static_cast<ColRawType>(curr))) {
-                                        if constexpr(T == Extremum::MAX) {
-                                            group_entry.value_ = std::max(group_entry.value_, curr);
-                                        } else {
-                                            group_entry.value_ = std::min(group_entry.value_, curr);
-                                        }
+                                    } else if (!std::isnan(static_cast<ColRawType>(current_value))) {
+                                        group_entry = apply_extremum<T>(group_entry, current_value);
                                     }
                                 } else {
-                                    if constexpr(T == Extremum::MAX) {
-                                        group_entry.value_ = std::max(group_entry.value_, GlobalRawType(row.value()));
-                                    } else {
-                                        group_entry.value_ = std::min(group_entry.value_, GlobalRawType(row.value()));
-                                    }
+                                    group_entry = apply_extremum<T>(group_entry, current_value);
                                     sparse_map.set(row_to_group[row.idx()]);
-                                    group_entry.written_ = true;
                                 }
                             });
                         } else {
@@ -342,15 +335,10 @@ namespace
             std::shared_ptr<Column> col = create_output_column(column_type, std::move(sparse_map), unique_values);
             details::visit_type(*data_type, [&] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-                using MaybeValueType = MaybeValue<typename col_type_info::RawType, T>;
-                const std::span<const MaybeValueType> group_values{reinterpret_cast<const MaybeValueType*>(aggregated.data()), aggregated.size() / sizeof(MaybeValueType)};
+                using RawType = typename col_type_info::RawType;
+                const std::span<const RawType> group_values{reinterpret_cast<const RawType*>(aggregated.data()), aggregated.size() / sizeof(RawType)};
                 Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
-                    const bool has_value = group_values[row.idx()].written_;
-                    if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                        row.value() = has_value ? group_values[row.idx()].value_ : std::numeric_limits<typename col_type_info::RawType>::quiet_NaN();
-                    } else {
-                        row.value() = has_value ? group_values[row.idx()].value_ : typename col_type_info::RawType{0};
-                    }
+                    row.value() = group_values[row.idx()];
                 });
             });
             res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
