@@ -965,6 +965,7 @@ class TestResampleDynamicSchema:
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for=None,
             expected_types=expected_types)
+
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
     def test_bucket_intersects_two_segments_aggregation_column_not_in_second(self, lmdb_version_store_dynamic_schema_v1, label, closed):
@@ -1003,6 +1004,7 @@ class TestResampleDynamicSchema:
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for="_empty_bucket_tracker_",
             expected_types=expected_types)
+
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
     @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
