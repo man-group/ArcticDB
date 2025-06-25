@@ -49,7 +49,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 | --------------------- | - | - |
 | Linux (Intel/AMD)     | ✔️ | ✔️ |
 | Windows (Intel/AMD)   | ✔️ | ➖ |
-| MacOS                 | ➖ | Beta️ |
+| MacOS                 | Beta | Beta️ |
 
 For conda-forge see the [release-info](https://github.com/conda-forge/arcticdb-feedstock/?tab=readme-ov-file#current-release-info).
 
