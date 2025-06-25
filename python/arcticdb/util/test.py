@@ -213,14 +213,6 @@ def maybe_not_check_freq(f):
     def wrapper(*args, **kwargs):
         if PANDAS_VERSION >= CHECK_FREQ_VERSION and "check_freq" not in kwargs:
             kwargs["check_freq"] = False
-        else:
-            # With 1.1.0  this is fixed but until then if both dataframes 
-            # are empty object columns will be translated to float64
-            # therefore best is to check for column names only in that edge case
-            df1 = kwargs["left"]
-            df2 = kwargs["right"]
-            if df1.shape[0] == df2.shape[0] and df1.shape[0] == 0:
-                assert df1.columns.equals(df2.columns)
         try:
             return f(*args, **kwargs)
         except AssertionError as ae:
