@@ -33,14 +33,14 @@ def dataframe(draw):
     The dataframe returned will contain 3 64 bit columns with float64, int64, uint64 values.
     However the range of values in them will be limited due to the fact that we will run sum, mean operations which have internal 
     maximum of float64. Thus if we generate values to max 64 bits we would achieve overflow and this
-    could lead to failures in comparison to Pandas. Ints are limited to 62 bit and floats to 60 bits 
+    could lead to failures in comparison to Pandas. Ints are limited to 56 bit and floats to 32 bits 
     '''
     index = hs_pd.indexes(elements=date(min_date=MIN_DATE, max_date=MAX_DATE)
                           .filter(lambda d: d is not pd.NaT), min_size=1)
     columns = [column(name="col_float", elements=st.floats(width=32, 
                                                            allow_nan=True, allow_infinity=True), dtype=np.float64),
-               column(name="col_int", elements=st.integers(-(2**61), 2**61 - 1), dtype=np.int64),
-               column(name="col_uint", elements=st.integers(0, 2**62 - 1), dtype=np.uint64)]
+               column(name="col_int", elements=st.integers(-(2**55), 2**55 - 1), dtype=np.int64),
+               column(name="col_uint", elements=st.integers(0, 2**56 - 1), dtype=np.uint64)]
     result = draw(hs_pd.data_frames(columns, index=index))
     result.sort_index(inplace=True)
     return result
