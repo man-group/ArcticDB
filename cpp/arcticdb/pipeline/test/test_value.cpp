@@ -81,6 +81,7 @@ TEST_P(ValueDataType, ValueConstruct) {
                 ASSERT_EQ(copy_constructed.to_string<raw_type>(), fmt::format("{}", v));
                 ASSERT_EQ(copy_constructed.descriptor(), arcticdb::TypeDescriptor(GetParam(), Dimension::Dim0));
 
+                // Copy assign
                 Value copy_assigned;
                 copy_assigned = copy_constructed;
                 ASSERT_EQ(copy_assigned.data_type(), GetParam());

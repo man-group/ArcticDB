@@ -47,20 +47,27 @@ def dataframe(draw, column_names, column_dtypes, min_date, max_date):
     columns = []
     for name, dtype in zip(column_names, column_dtypes):
         if pd.api.types.is_integer_dtype(dtype):
+            # Cap the int size to be in the range of either (u)int32 or the range of the given dtype if it's smaller.
             # There are two reasons to cap int size:
             # 1. To avoid overflows (happens usually when the dtype is 64bit and sum aggregator is used)
-            # 2. When dynamic schema is used. If we use pd.concat([df1, df2]) on two dataframes which are dynamic
+            # 2. When dynamic schema is used. If we use pd.concat([df1, df2]) on two dataframes which are using dynamic
             #    schema segments, the columns which are missing in either df will become float64 in the result (so that
             #    the missing values can be NaN), however, if int64 is used some values won't be represented correctly
             #    and the test will fail.
             current_byte_size = np.dtype(dtype).itemsize
-            max_bits = min(current_byte_size, 4) * 8 - 1 if pd.api.types.is_signed_integer_dtype(dtype) else 0
-            min_value = 0 if pd.api.types.is_unsigned_integer_dtype(np.dtype(dtype)) else -2**max_bits
-            columns.append(hs_pd.column(name=name, elements=st.integers(min_value=min_value, max_value=2**max_bits - 1), dtype=dtype))
+            if current_byte_size <= 4:
+                type_info = np.iinfo(dtype)
+            else:
+                is_signed = pd.api.types.is_signed_integer_dtype(np.dtype(dtype))
+                capping_dtype = np.dtype("int32") if is_signed else np.dtype("uint32")
+                type_info = np.iinfo(capping_dtype)
+            min_value = type_info.min
+            max_value = type_info.max
+            columns.append(hs_pd.column(name=name, elements=st.integers(min_value=min_value, max_value=max_value), dtype=dtype))
         elif pd.api.types.is_float_dtype(dtype):
             # The column will still be of the specified dtype (float32 or float36), but by asking hypothesis to generate
-            # 16-bit floats, we reduce the way of overflows. Pandas use Kahan summation which can sometimes can yield
-            # a different result for overflows. Passing min_value and max_value will disable generation of NaN, -inf and
+            # 16-bit floats, we reduce overflows. Pandas use Kahan summation which can sometimes yield a different
+            # result for overflows. Passing min_value and max_value will disable generation of NaN, -inf and
             # inf, which are supposed to work and have to be tested.
             columns.append(hs_pd.column(name=name, elements=st.floats(width=16), dtype=dtype))
         else:

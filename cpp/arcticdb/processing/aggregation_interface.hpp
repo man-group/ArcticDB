@@ -25,6 +25,10 @@ struct IGroupingAggregatorData {
         [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
             return folly::poly_call<3>(*this, output_column_name, dynamic_schema, unique_values);
         }
+
+        /// @returns std::nullopt if the aggregation's default value is the same as the default value of the underlying
+        ///   type. If the aggregation type has a special default value return it encoded in an Value object. This value
+        ///   will later be used by the NullValueReducer to fill in sparse data.
         [[nodiscard]] std::optional<Value> get_default_value() {
             return folly::poly_call<4>(*this);
         }
