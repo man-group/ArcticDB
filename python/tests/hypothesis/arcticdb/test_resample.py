@@ -37,8 +37,8 @@ def dataframe(draw):
     '''
     index = hs_pd.indexes(elements=date(min_date=MIN_DATE, max_date=MAX_DATE)
                           .filter(lambda d: d is not pd.NaT), min_size=1)
-    columns = [column(name="col_float", elements=st.floats(min_value=-1e18, max_value=1e18, 
-                                                           allow_nan=False, allow_infinity=False), dtype=np.float64),
+    columns = [column(name="col_float", elements=st.floats(width=32, 
+                                                           allow_nan=True, allow_infinity=True), dtype=np.float64),
                column(name="col_int", elements=st.integers(-(2**61), 2**61 - 1), dtype=np.int64),
                column(name="col_uint", elements=st.integers(0, 2**62 - 1), dtype=np.uint64)]
     result = draw(hs_pd.data_frames(columns, index=index))
