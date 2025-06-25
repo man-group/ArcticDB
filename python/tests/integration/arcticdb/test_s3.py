@@ -24,7 +24,7 @@ from arcticdb_ext import set_config_string
 from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import create_df, assert_frame_equal
 
-from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory, list_moto_storage
+from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
 
 import arcticdb.toolbox.query_stats as qs

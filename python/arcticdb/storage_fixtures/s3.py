@@ -737,19 +737,6 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             time.sleep(1)   
 
 
-def list_moto_storage(moto: 'MotoS3StorageFixtureFactory', bucket: Union['S3Bucket']):
-    try:
-        response = moto._s3_admin.list_objects_v2(Bucket=bucket.bucket)
-
-        if 'Contents' in response:
-            for obj in response['Contents']:
-                logger.warning(f"Object left: {obj['Key']}")
-        else:
-            logger.info(f"Bucket is empty")
-    except Exception as e:
-        logger.info(f"Could not get info for bucket: {bucket.bucket}")
-
-
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
     default_key = Key(id="awd", secret="awd", user_name="dummy")
     _RO_POLICY: str
@@ -898,6 +885,18 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._live_buckets.append(out)
         return out
 
+    def _log_moto_storage_content(self, bucket: Union['S3Bucket']):
+        try:
+            response = self._s3_admin.list_objects_v2(Bucket=bucket.bucket)
+
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    logger.warning(f"Object left: {obj['Key']}")
+            else:
+                logger.info(f"Bucket is empty")
+        except Exception as e:
+            logger.info(f"Could not get info for bucket: {bucket.bucket}")
+
     def cleanup_bucket(self, b: S3Bucket):
         self._live_buckets.remove(b)
         if len(self._live_buckets):
@@ -906,7 +905,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 # and if we try to delete the bucket, it will fail
                 b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
             try:
-                list_moto_storage(self, b)
+                self._log_moto_storage_content(b)
                 self._s3_admin.delete_bucket(Bucket=b.bucket)
             except botocore.exceptions.ClientError as e:
                 if e.response["Error"]["Code"] != "NoSuchBucket":
