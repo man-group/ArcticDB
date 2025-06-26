@@ -48,6 +48,10 @@ if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
 
+# Required for the macOS SDK to use all the latest features of libc++, for both vcpkg and conda-forge builds.
+# See: https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
+add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
@@ -59,8 +63,6 @@ else()
     # sources to be able to use dependencies via conda at compile time.
     # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
     add_compile_definitions(ARCTICDB_USING_CONDA)
-    # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
-    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
 
@@ -84,9 +86,15 @@ else()
 
     set(Zstd_LIBRARY zstd::libzstd_shared)
 
+endif()
+
+if(${ARCTICDB_USING_CONDA} OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    # Adapt Folly::folly_deps to remove an non-existent include directory
+    # (which is supposedly only present on Linux and used for the static build of Folly)
     get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
-    message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
-    list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
+    set(NON_EXISTENT_INCLUDE_DIR "/usr/local/opt/openssl/include")
+    message(STATUS "Folly's INTERFACE_INCLUDE_DIRECTORIES to remove: ${NON_EXISTENT_INCLUDE_DIR}")
+    list(REMOVE_ITEM NEW_FOLLY_DEPS "${NON_EXISTENT_INCLUDE_DIR}")
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 endif()
 

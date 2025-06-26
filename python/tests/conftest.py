@@ -66,6 +66,8 @@ from .util.mark import (
     SSL_TEST_SUPPORTED,
     VENV_COMPAT_TESTS_MARK,
     PANDAS_2_COMPAT_TESTS_MARK,
+    MACOS,
+    ARCTICDB_USING_CONDA,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
@@ -76,6 +78,7 @@ import arcticdb.toolbox.query_stats as query_stats
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
 hypothesis.settings.register_profile("ci_windows", max_examples=100)
+hypothesis.settings.register_profile("ci_macos", max_examples=100)
 hypothesis.settings.register_profile("dev", max_examples=100)
 
 hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))

@@ -115,7 +115,7 @@ def test_move_lmdb_library_map_size_increase(tmp_path: Path):
     # Given - any LMDB library
     original = tmp_path / "original"
     original.mkdir()
-    ac = Arctic(f"lmdb://{original}?map_size=500KB")
+    ac = Arctic(f"lmdb://{original}?map_size=2MB")
     ac.create_library("lib")
     lib = ac["lib"]
 
@@ -134,7 +134,7 @@ def test_move_lmdb_library_map_size_increase(tmp_path: Path):
     shutil.move(str(original / "lib"), dest)
 
     # Then - should be readable at new location as long as map size made big enough
-    # 20 writes of this size would fail with the old 500KB map size
+    # 20 writes of this size would fail with the old 2MB map size
     ac = Arctic(f"lmdb://{dest}?map_size=10MB")
     lib = ac["lib"]
     for i in range(20):
