@@ -950,9 +950,62 @@ void PythonVersionStore::delete_versions(
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
         delete_tree(result.keys_to_delete, result);
     }
-
     if(result.no_undeleted_left && cfg().symbol_list()) {
         symbol_list().remove_symbol(store(), stream_id, result.latest_version_);
+    }
+}
+
+void PythonVersionStore::batch_delete_versions(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<std::vector<VersionId>>& version_ids) {
+    util::check(stream_ids.size() == version_ids.size(), "stream_ids and version_ids must have the same size");
+    
+    auto results = batch_delete_versions_internal(stream_ids, version_ids);
+    
+    // If no results, nothing to delete
+    if (results.empty()) {
+        return;
+    }
+    
+    std::vector<IndexTypeKey> keys_to_delete;
+    std::vector<std::pair<StreamId, VersionId>> symbols_to_delete;
+    std::vector<std::string> failed_symbols;
+
+    for (const auto& result : results) {
+        util::variant_match(result,
+            [&](const version_store::TombstoneVersionResult& tombstone_result) {
+                if (!tombstone_result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
+                    keys_to_delete.insert(keys_to_delete.end(), tombstone_result.keys_to_delete.begin(), tombstone_result.keys_to_delete.end());
+                }
+
+                if(tombstone_result.no_undeleted_left && cfg().symbol_list()) {
+                    auto stream_id = tombstone_result.keys_to_delete.front().id();
+                    symbols_to_delete.emplace_back(stream_id, tombstone_result.latest_version_);
+                }
+            },
+            [&](const DataError& data_error) {
+                failed_symbols.push_back(data_error.symbol());
+            }
+        );
+    }
+
+    // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
+    if(!keys_to_delete.empty()) {
+        delete_tree(keys_to_delete, TombstoneVersionResult{true});
+    }
+
+    std::vector<folly::Future<folly::Unit>> remove_symbol_tasks;
+
+    if(!symbols_to_delete.empty()) {
+        for(const auto& [stream_id, latest_version] : symbols_to_delete) {
+            remove_symbol_tasks.push_back(async::submit_io_task(DeleteSymbolTask{store(), symbol_list_ptr(), stream_id, latest_version}));
+        }
+    }
+
+    folly::collectAll(remove_symbol_tasks).get();
+
+    if(!failed_symbols.empty()) {
+        throw InternalException(fmt::format("Failed to delete versions for symbols: {}", fmt::join(failed_symbols, ", ")));
     }
 }
 
