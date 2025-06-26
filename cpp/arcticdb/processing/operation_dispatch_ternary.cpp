@@ -332,8 +332,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                     *col.column_,
                     EmptyResult{},
                     *output_column,
-                    [](typename col_type_info::RawType val) { return val; }
-            );
+                    +[](typename col_type_info::RawType val) -> typename col_type_info::RawType { return val; });
         } else {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     "Invalid ternary operator arguments {}",
