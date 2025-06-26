@@ -15,7 +15,7 @@ from arcticdb import Arctic
 
 from arcticdb.util.test import assert_frame_equal
 
-from tests.util.mark import SKIP_CONDA_MARK, MACOS
+from tests.util.mark import SKIP_CONDA_MARK, MACOS_WHEEL_BUILD
 
 
 def df(symbol):
@@ -55,7 +55,7 @@ def _read_and_assert_symbol(args):
             time.sleep(0.5)  # Make sure the writes have finished, especially azurite.
 
 
-@pytest.mark.skipif(MACOS, reason="This test times out on macOS (the reason is unknown)")
+@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="This test times out on macOS (the reason is unknown)")
 def test_parallel_reads(local_object_version_store):
     symbols = ["XXX"] * 20
     p = Pool(10)
@@ -67,7 +67,7 @@ def test_parallel_reads(local_object_version_store):
 
 
 @pytest.mark.parametrize("storage_name", ["s3_storage", "gcp_storage"])
-@pytest.mark.skipif(MACOS, reason="This test times out on macOS (the reason is unknown)")
+@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="This test times out on macOS (the reason is unknown)")
 @SKIP_CONDA_MARK
 def test_parallel_reads_arctic(storage_name, request, lib_name):
     storage = request.getfixturevalue(storage_name)

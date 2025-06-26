@@ -11,7 +11,7 @@ from arcticdb import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
-from tests.util.mark import ARCTICDB_USING_CONDA, ZONE_INFO_MARK
+from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
 
 from arcticdb.util.venv import CompatLibrary
@@ -19,7 +19,7 @@ from arcticdb.util.venv import CompatLibrary
 if ARCTICDB_USING_CONDA:
     pytest.skip("These tests rely on pip based environments", allow_module_level=True)
 
-if sys.platform == "darwin":
+if MACOS_WHEEL_BUILD:
     pytest.skip("We don't have previous versions of arcticdb pypi released for MacOS", allow_module_level=True)
 
 
