@@ -29,9 +29,10 @@ void verify_name(
         std::optional<char> unsupported_prefix = std::nullopt,
         std::optional<char> unsupported_suffix = std::nullopt) {
     if (name.empty()) {
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                "The {} cannot be an empty string.",
-                name_type_for_error);
+        return Error{
+            throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
+            fmt::format("The {} cannot be an empty string.", name_type_for_error)
+        };
     }
     if (name.size() > MAX_SIZE) {
         user_input::raise<ErrorCode::E_NAME_TOO_LONG>(
@@ -89,34 +90,15 @@ void verify_symbol_key(const StreamId& symbol_key) {
 
     util::variant_match(
             symbol_key,
-            [](const NumericId &num_symbol_key) {
+            [](const NumericId &num_symbol_key) -> CheckOutcome {
                 (void) num_symbol_key; // Suppresses -Wunused-parameter
                 ARCTICDB_DEBUG(log::version(), "Nothing to verify in stream id {} as it contains a NumericId.",
                                num_symbol_key);
-                return;
+                return std::monostate{};
             },
             [](const StringId &str_symbol_key) {
                 verify_name("symbol key", str_symbol_key);
             }
-    );
-}
-
-CheckOutcome verify_snapshot_id(const SnapshotId& snapshot_id) {
-    if (ConfigsMap::instance()->get_int("VersionStore.NoStrictSymbolCheck")) {
-        ARCTICDB_DEBUG(log::version(),
-                       "Key with stream id {} will not be strictly checked because VersionStore.NoStrictSymbolCheck variable is set to 1.",
-                       snapshot_id);
-        return std::monostate{};
-    }
-
-    return util::variant_match(
-        snapshot_id,
-        [](const StringId &str_snapshot_id) -> CheckOutcome {
-            return verify_name("snapshot name", str_snapshot_id);
-        },
-        [](const auto&) -> CheckOutcome {
-            return std::monostate{};
-        }
     );
 }
 

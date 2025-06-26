@@ -231,8 +231,6 @@ class PythonVersionStore : public LocalVersionedEngine {
         return version_map()->indexes_sorted(store(), stream_id);
     }
 
-    void verify_snapshot(const SnapshotId& snap_name);
-
     void snapshot(
         const SnapshotId &snap_name,
         const py::object &user_meta,
