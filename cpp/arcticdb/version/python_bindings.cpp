@@ -659,9 +659,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
        .def("indexes_sorted",
              &PythonVersionStore::indexes_sorted,
              py::call_guard<SingleThreadMutexHolder>(), "Returns the sorted indexes of a symbol")
-        .def("verify_snapshot",
-             &PythonVersionStore::verify_snapshot,
-             py::call_guard<SingleThreadMutexHolder>(), "Validate the snapshot name and raise if it fails")
         .def("snapshot",
              &PythonVersionStore::snapshot,
              py::call_guard<SingleThreadMutexHolder>(), "Create a snapshot")

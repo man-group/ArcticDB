@@ -283,6 +283,16 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 
 namespace arcticdb {
 
+struct Error {
+
+    explicit Error(folly::Function<void(std::string)> raiser, std::string msg);
+    void throw_error();
+
+    folly::Function<void(std::string)> raiser_;
+    std::string msg_;
+};
+
+using CheckOutcome = std::variant<Error, std::monostate>;
 using CompactionWrittenKeys = std::vector<VariantKey>;
 using CompactionResult = std::variant<CompactionWrittenKeys, Error>;
 

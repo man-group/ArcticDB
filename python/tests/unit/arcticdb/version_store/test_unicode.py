@@ -217,8 +217,11 @@ def test_batch_update(lmdb_version_store):
 
 
 def test_snapshots(lmdb_version_store):
-    """We validate against snapshot names more strictly with the v2 API. This checks that we do something sensible
-    even without validation in the v1 API. """
+    """We should probably validate against snapshots with unicode names like we do for symbols, but these tests check
+    the status quo.
+
+    Monday: 8667974441 to validate against this.
+    """
     start = pd.Timestamp("2018-01-02")
     index = pd.date_range(start=start, periods=4)
 
@@ -227,26 +230,20 @@ def test_snapshots(lmdb_version_store):
         data={"a": ["123", unicode_str, copyright, trademark], trademark: [1, 2, 3, 4], copyright: [unicode_str] * 4},
     )
 
-    bad_s3_chars = "*<>"
-
     # Test snapshots with unicode names
     lmdb_version_store.write(symbol, df, metadata=metadata)
     lmdb_version_store.snapshot(copyright)
-    lmdb_version_store.snapshot(bad_s3_chars)
     lmdb_version_store.snapshot(unicode_str, metadata=metadata)
     lmdb_version_store.write(symbol, [1, 2, 3])
 
     vit = lmdb_version_store.read(symbol, as_of=copyright)
     assert_frame_equal(vit.data, df)
-    vit = lmdb_version_store.read(symbol, as_of=bad_s3_chars)
-    assert_frame_equal(vit.data, df)
 
     snapshots = lmdb_version_store.list_snapshots()
-    assert snapshots == {copyright: None, unicode_str: metadata, bad_s3_chars: None}
+    assert snapshots == {copyright: None, unicode_str: metadata}
 
     # Test deleting a snapshot with unicode name
     lmdb_version_store.delete_snapshot(copyright)
-    lmdb_version_store.delete_snapshot(bad_s3_chars)
     snapshots = lmdb_version_store.list_snapshots()
     assert snapshots == {unicode_str: metadata}
     with pytest.raises(NoDataFoundException):

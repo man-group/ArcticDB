@@ -12,8 +12,6 @@
 #include <stdexcept>
 #include <vector>
 #include <unordered_map>
-#include <folly/Function.h>
-#include <variant>
 
 namespace arcticdb {
 
@@ -99,7 +97,6 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(7004, E_NO_STAGED_SEGMENTS)\
     ERROR_CODE(7005, E_COLUMN_NOT_FOUND) \
     ERROR_CODE(7006, E_SORT_ON_SPARSE) \
-    ERROR_CODE(7007, E_EMPTY_NAME) \
     ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION)   \
     ERROR_CODE(9000, E_DECODE_ERROR) \
     ERROR_CODE(9001, E_UNKNOWN_CODEC) \
@@ -162,18 +159,6 @@ struct ArcticSpecificException : public ArcticCategorizedException<get_error_cat
         static_assert(get_error_category(specific_code) == category);
     }
 };
-
-// Utility to treat exceptions as data
-struct Error {
-
-    explicit Error(folly::Function<void(std::string)> raiser, std::string msg);
-    void throw_error();
-
-    folly::Function<void(std::string)> raiser_;
-    std::string msg_;
-};
-
-using CheckOutcome = std::variant<Error, std::monostate>;
 
 using InternalException = ArcticCategorizedException<ErrorCategory::INTERNAL>;
 using SchemaException = ArcticCategorizedException<ErrorCategory::SCHEMA>;
