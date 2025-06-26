@@ -249,49 +249,51 @@ def test_stage_with_sort_columns_not_ts(lmdb_version_store_v1):
 def test_stage_finalize_dynamic_with_chunking(arctic_client, lib_name):
     lib_opts = adb.LibraryOptions(dynamic_schema=True, rows_per_segment=2, columns_per_segment=2)
     lib = arctic_client.get_library(lib_name, create_if_missing=True, library_options=lib_opts)
-    symbol = "AAPL"
-    sort_cols = ["timestamp", "col1"]
+    try:
+        symbol = "AAPL"
+        sort_cols = ["timestamp", "col1"]
 
-    df1 = pd.DataFrame(
-        {
-            "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
-            "col1": np.arange(1, 8, dtype=np.uint8),
-            "col2": [f"a{i:02d}" for i in range(1, 8)],
-            "col3": np.arange(1, 8, dtype=np.int32),
-        }
-    ).set_index("timestamp")
+        df1 = pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2023-01-01", periods=7, freq="H"),
+                "col1": np.arange(1, 8, dtype=np.uint8),
+                "col2": [f"a{i:02d}" for i in range(1, 8)],
+                "col3": np.arange(1, 8, dtype=np.int32),
+            }
+        ).set_index("timestamp")
 
-    df2 = pd.DataFrame(
-        {
-            "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
-            "col1": np.arange(8, 15, dtype=np.int32),
-            "col2": [f"b{i:02d}" for i in range(8, 15)],
-            "col3": np.arange(8, 15, dtype=np.uint16),
-        }
-    ).set_index("timestamp")
+        df2 = pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2023-01-04", periods=7, freq="H"),
+                "col1": np.arange(8, 15, dtype=np.int32),
+                "col2": [f"b{i:02d}" for i in range(8, 15)],
+                "col3": np.arange(8, 15, dtype=np.uint16),
+            }
+        ).set_index("timestamp")
 
-    df1_shuffled = df1.sample(frac=1)
-    df2_shuffled = df2.sample(frac=1)
+        df1_shuffled = df1.sample(frac=1)
+        df2_shuffled = df2.sample(frac=1)
 
-    lib.stage(symbol, df1_shuffled, False, False, sort_cols)
-    lib.stage(symbol, df2_shuffled, False, False, sort_cols)
+        lib.stage(symbol, df1_shuffled, False, False, sort_cols)
+        lib.stage(symbol, df2_shuffled, False, False, sort_cols)
 
-    lib_tool = lib._dev_tools.library_tool()
-    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
-    assert len(data_keys) == 8
-    for k in data_keys:
-        df = lib_tool.read_to_dataframe(k)
-        assert df.index.is_monotonic_increasing
+        lib_tool = lib._dev_tools.library_tool()
+        data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
+        assert len(data_keys) == 8
+        for k in data_keys:
+            df = lib_tool.read_to_dataframe(k)
+            assert df.index.is_monotonic_increasing
 
-    lib.finalize_staged_data(symbol)
-    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
-    assert not data_keys
+        lib.finalize_staged_data(symbol)
+        data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
+        assert not data_keys
 
-    result = lib.read(symbol).data
+        result = lib.read(symbol).data
 
-    expected = pd.concat([df1, df2]).sort_values(sort_cols)
-    pd.testing.assert_frame_equal(result, expected)
-
+        expected = pd.concat([df1, df2]).sort_values(sort_cols)
+        pd.testing.assert_frame_equal(result, expected)
+    finally:
+        arctic_client.delete_library(lib_name)
 
 @pytest.mark.storage
 def test_stage_finalize_index_and_additional(arctic_library):

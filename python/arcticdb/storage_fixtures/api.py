@@ -12,7 +12,7 @@ from contextlib import AbstractContextManager, contextmanager
 from abc import abstractmethod
 from enum import Enum
 
-from .utils import handle_cleanup_exception
+from .utils import _WINDOWS, handle_cleanup_exception
 from arcticdb import Arctic
 from arcticdb.config import Defaults
 from arcticdb.version_store import NativeVersionStore
@@ -97,7 +97,9 @@ class StorageFixture(_SaferContextManager):
         suffix = 0
         while f"{name}{suffix or ''}" in libs_from_factory:
             suffix += 1
-        libs_from_factory[f"{name}{suffix or ''}"] = out
+        # No caching for NativeVersionStores at StorageFixture for non- Windows
+        # Preserve only names of created NativeVersionStores
+        libs_from_factory[f"{name}{suffix or ''}"] = out if _WINDOWS else None
         return out
 
     def create_version_store_factory(self, default_lib_name: str, **defaults) -> Callable[..., NativeVersionStore]:
@@ -125,8 +127,9 @@ class StorageFixture(_SaferContextManager):
 
     def slow_cleanup(self, failure_consequence=""):
         for lib in self.libs_from_factory.values():
-            with handle_cleanup_exception(self, lib, consequence=failure_consequence):
-                lib.version_store.clear()
+            if lib is not None:
+                with handle_cleanup_exception(self, lib, consequence=failure_consequence):
+                    lib.version_store.clear()
         self.libs_from_factory.clear()
 
         arctic = self.create_arctic()

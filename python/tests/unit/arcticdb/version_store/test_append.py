@@ -7,6 +7,7 @@ import sys
 from numpy.testing import assert_array_equal
 
 from pandas import MultiIndex
+from arcticdb.util.utils import delete_nvs
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import (
     InternalException,
@@ -36,37 +37,43 @@ def test_append_simple(lmdb_version_store):
 @pytest.mark.parametrize("dynamic_schema", (True, False))
 def test_append_range_index(version_store_factory, empty_types, dynamic_schema):
     lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
-    sym = "test_append_range_index"
-    df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(0, 4, 2))
-    lib.write(sym, df_0)
+    try:
+        sym = "test_append_range_index"
+        df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(0, 4, 2))
+        lib.write(sym, df_0)
 
-    # Appending another range index following on from what is there should work
-    df_1 = pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(4, 8, 2))
-    lib.append(sym, df_1)
-    expected = pd.concat([df_0, df_1])
-    received = lib.read(sym).data
-    assert_frame_equal(expected, received)
+        # Appending another range index following on from what is there should work
+        df_1 = pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(4, 8, 2))
+        lib.append(sym, df_1)
+        expected = pd.concat([df_0, df_1])
+        received = lib.read(sym).data
+        assert_frame_equal(expected, received)
 
-    # Appending a range starting earlier or later, or with a different step size, should fail
-    for idx in [
-        pd.RangeIndex(6, 10, 2),
-        pd.RangeIndex(10, 14, 2),
-        pd.RangeIndex(8, 14, 3),
-    ]:
-        with pytest.raises(NormalizationException):
-            lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx))
+        # Appending a range starting earlier or later, or with a different step size, should fail
+        for idx in [
+            pd.RangeIndex(6, 10, 2),
+            pd.RangeIndex(10, 14, 2),
+            pd.RangeIndex(8, 14, 3),
+        ]:
+            with pytest.raises(NormalizationException):
+                lib.append(sym, pd.DataFrame({"col": [4, 5]}, index=idx))
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("empty_types", (True, False))
 @pytest.mark.parametrize("dynamic_schema", (True, False))
 def test_append_range_index_from_zero(version_store_factory, empty_types, dynamic_schema):
     lib = version_store_factory(empty_types=empty_types, dynamic_schema=dynamic_schema)
-    sym = "test_append_range_index_from_zero"
-    df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(-6, -2, 2))
-    lib.write(sym, df_0)
+    try:
+        sym = "test_append_range_index_from_zero"
+        df_0 = pd.DataFrame({"col": [0, 1]}, index=pd.RangeIndex(-6, -2, 2))
+        lib.write(sym, df_0)
 
-    with pytest.raises(NormalizationException):
-        lib.append(sym, pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)))
+        with pytest.raises(NormalizationException):
+            lib.append(sym, pd.DataFrame({"col": [2, 3]}, index=pd.RangeIndex(0, 4, 2)))
+    finally:
+        delete_nvs(lib)
 
 
 def test_append_indexed(s3_version_store):
@@ -202,27 +209,30 @@ def test_append_out_of_order_and_sort(lmdb_version_store_ignore_order, prune_pre
 @pytest.mark.parametrize("write_sorted", [True, False])
 def test_sort_index(version_store_factory, dynamic_schema, prune_previous_versions, write_sorted):
     lib = version_store_factory(dynamic_schema=dynamic_schema, ignore_sort_order=not write_sorted)
-    symbol = "symbol"
+    try:
+        symbol = "symbol"
 
-    df_1 = pd.DataFrame(data={"col": [1, 2]}, index=[pd.Timestamp(1), pd.Timestamp(2)])
-    df_2 = pd.DataFrame(data={"col": [3, 4]}, index=[pd.Timestamp(3), pd.Timestamp(4)])
-    if not write_sorted:
-        df_1, df_2 = df_2, df_1
-    combined_df = pd.concat([df_1, df_2])
-    sorted_df = combined_df.sort_index(inplace=False)
+        df_1 = pd.DataFrame(data={"col": [1, 2]}, index=[pd.Timestamp(1), pd.Timestamp(2)])
+        df_2 = pd.DataFrame(data={"col": [3, 4]}, index=[pd.Timestamp(3), pd.Timestamp(4)])
+        if not write_sorted:
+            df_1, df_2 = df_2, df_1
+        combined_df = pd.concat([df_1, df_2])
+        sorted_df = combined_df.sort_index(inplace=False)
 
-    # df should be combined as is
-    lib.write(symbol, df_1)
-    lib.append(symbol, df_2)
-    assert_frame_equal(lib.read(symbol).data, combined_df)
+        # df should be combined as is
+        lib.write(symbol, df_1)
+        lib.append(symbol, df_2)
+        assert_frame_equal(lib.read(symbol).data, combined_df)
 
-    # sort once
-    lib.version_store.sort_index(symbol, dynamic_schema, prune_previous_versions)
-    assert_frame_equal(lib.read(symbol).data, sorted_df)
+        # sort once
+        lib.version_store.sort_index(symbol, dynamic_schema, prune_previous_versions)
+        assert_frame_equal(lib.read(symbol).data, sorted_df)
 
-    # sort again to verify it's idempotent
-    lib.version_store.sort_index(symbol, dynamic_schema, prune_previous_versions)
-    assert_frame_equal(lib.read(symbol).data, sorted_df)
+        # sort again to verify it's idempotent
+        lib.version_store.sort_index(symbol, dynamic_schema, prune_previous_versions)
+        assert_frame_equal(lib.read(symbol).data, sorted_df)
+    finally:
+        delete_nvs(lib)
 
 
 def test_upsert_with_delete(lmdb_version_store_big_map):

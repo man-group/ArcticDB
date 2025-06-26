@@ -11,6 +11,7 @@ import sys
 import pytest
 import pandas as pd
 
+from arcticdb.util.utils import delete_library
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb_ext.storage import KeyType
 from arcticdb.exceptions import (
@@ -38,6 +39,7 @@ from arcticdb.version_store.library import (
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
+    REAL_GCP_TESTS_MARK,
     REAL_S3_TESTS_MARK,
     SSL_TEST_SUPPORTED,
     SSL_TEST_SUPPORTED,
@@ -74,7 +76,7 @@ def test_library_creation_deletion(arctic_client, lib_name):
         assert not ac.has_library(lib_name)
         assert lib_name not in ac
     finally:
-        ac.delete_library(lib_name)
+        delete_library(ac, lib_name)
 
 
 @pytest.mark.storage
@@ -84,9 +86,11 @@ def test_get_library(arctic_client, lib_name):
     with pytest.raises(LibraryNotFound):
         _ = ac.get_library(lib_name)
     # Creates library with default options if just create_if_missing set to True
-    lib = ac.get_library(f"{lib_name}_do", create_if_missing=True)
-
+    lname = f"{lib_name}_do"
+    lib = ac.get_library(lname, create_if_missing=True)
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
+    ac.delete_library(lname)
+
     # Creates library with the specified options if create_if_missing set to True and options provided
     library_options = LibraryOptions(
         dynamic_schema=True,
@@ -95,8 +99,9 @@ def test_get_library(arctic_client, lib_name):
         columns_per_segment=10,
         encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
     )
+    lname = f"{lib_name}_so" # specific options
     lib = ac.get_library(
-        f"{lib_name}_so", # specific options
+        lname, 
         create_if_missing=True,
         library_options=library_options,
     )
@@ -106,7 +111,7 @@ def test_get_library(arctic_client, lib_name):
     library_options.dynamic_schema = False
     with pytest.raises(MismatchingLibraryOptions):
         _ = ac.get_library(
-            f"{lib_name}_so", # specific options
+            lname, # specific options
             create_if_missing=True,
             library_options=library_options,
         )
@@ -114,164 +119,198 @@ def test_get_library(arctic_client, lib_name):
     with pytest.raises(ArcticInvalidApiUsageException):
         _ = ac.get_library(lib_name, create_if_missing=False, library_options=library_options)
 
+    delete_library(ac, lib_name)
+
 
 def test_create_library_enterprise_options_defaults(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
 
-    enterprise_options = lib.enterprise_options()
-    assert not enterprise_options.replication
-    assert not enterprise_options.background_deletion
-
+        enterprise_options = lib.enterprise_options()
+        assert not enterprise_options.replication
+        assert not enterprise_options.background_deletion
+    finally:
+        delete_library(ac, lib_name)
 
 def test_create_library_enterprise_options_set(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(
-        lib_name,
-        enterprise_library_options=EnterpriseLibraryOptions(replication=True, background_deletion=True),
-    )
+    try:
+        lib = ac.create_library(
+            lib_name,
+            enterprise_library_options=EnterpriseLibraryOptions(replication=True, background_deletion=True),
+        )
 
-    enterprise_options = lib.enterprise_options()
-    assert enterprise_options.replication
-    assert enterprise_options.background_deletion
+        enterprise_options = lib.enterprise_options()
+        assert enterprise_options.replication
+        assert enterprise_options.background_deletion
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.sync_passive.enabled
-    assert proto_options.delayed_deletes
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.sync_passive.enabled
+        assert proto_options.delayed_deletes
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_create_library_replication_option_set_writes_logs(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name, enterprise_library_options=EnterpriseLibraryOptions(replication=True))
-    lt = lib._nvs.library_tool()
-    assert not lt.find_keys(KeyType.LOG)
+    try:
+        lib = ac.create_library(lib_name, enterprise_library_options=EnterpriseLibraryOptions(replication=True))
+        lt = lib._nvs.library_tool()
+        assert not lt.find_keys(KeyType.LOG)
 
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    lib.write("abc", df)
+        df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+        lib.write("abc", df)
 
-    assert len(lt.find_keys(KeyType.LOG))
+        assert len(lt.find_keys(KeyType.LOG))
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_create_library_background_deletion_option_set_does_not_delete(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(
-        lib_name,
-        enterprise_library_options=EnterpriseLibraryOptions(background_deletion=True),
-    )
-    lt = lib._nvs.library_tool()
+    try:
+        lib = ac.create_library(
+            lib_name,
+            enterprise_library_options=EnterpriseLibraryOptions(background_deletion=True),
+        )
+        lt = lib._nvs.library_tool()
 
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    lib.write("abc", df)
-    lib.delete("abc")
+        df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+        lib.write("abc", df)
+        lib.delete("abc")
 
-    assert len(lt.find_keys(KeyType.TABLE_DATA))
+        assert len(lt.find_keys(KeyType.TABLE_DATA))
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_modify_options_affect_in_memory_lib(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
 
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
-    ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
+        ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.sync_passive.enabled
-    assert not proto_options.de_duplication
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.sync_passive.enabled
+        assert not proto_options.de_duplication
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_modify_options_affect_persistent_lib_config(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
 
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
-    new_client = Arctic(ac.get_uri())
-    new_lib = new_client[lib_name]
-    proto_options = new_lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.sync_passive.enabled
-    assert proto_options.delayed_deletes
+        new_client = Arctic(ac.get_uri())
+        new_lib = new_client[lib_name]
+        proto_options = new_lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.sync_passive.enabled
+        assert proto_options.delayed_deletes
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_modify_options_dedup(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
 
-    ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
+        ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, False)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert not proto_options.de_duplication
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert not proto_options.de_duplication
 
-    ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, True)
+        ac.modify_library_option(lib, ModifiableLibraryOption.DEDUP, True)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.de_duplication
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.de_duplication
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_modify_options_rows_per_segment(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
 
-    ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 100)
+        ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 100)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.segment_row_size == 100
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.segment_row_size == 100
 
-    ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 200)
+        ac.modify_library_option(lib, ModifiableLibraryOption.ROWS_PER_SEGMENT, 200)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.segment_row_size == 200
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.segment_row_size == 200
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_modify_options_cols_per_segment(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
 
-    ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 100)
+        ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 100)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.column_group_size == 100
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.column_group_size == 100
 
-    ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 200)
+        ac.modify_library_option(lib, ModifiableLibraryOption.COLUMNS_PER_SEGMENT, 200)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.column_group_size == 200
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.column_group_size == 200
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_modify_options_replication(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
+    try:
+        lib = ac.create_library(lib_name)
 
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
 
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.sync_passive.enabled
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.sync_passive.enabled
 
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    lib.write("abc", df)
+        df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+        lib.write("abc", df)
 
-    lt = lib._nvs.library_tool()
-    assert len(lt.find_keys(KeyType.LOG)) == 1
+        lt = lib._nvs.library_tool()
+        assert len(lt.find_keys(KeyType.LOG)) == 1
 
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, False)
-    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert not proto_options.sync_passive.enabled
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, False)
+        proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert not proto_options.sync_passive.enabled
 
-    lib.write("def", df)
-    assert len(lt.find_keys(KeyType.LOG)) == 1
+        lib.write("def", df)
+        assert len(lt.find_keys(KeyType.LOG)) == 1
+    finally:
+        delete_library(ac, lib_name)
 
 
 def test_modify_options_background_deletion(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name)
-    lt = lib._nvs.library_tool()
+    try:
+        lib = ac.create_library(lib_name)
+        lt = lib._nvs.library_tool()
 
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
-    df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
-    lib.write("abc", df)
-    lib.delete("abc")
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
+        df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
+        lib.write("abc", df)
+        lib.delete("abc")
 
-    assert len(lt.find_keys(KeyType.TABLE_DATA))
+        assert len(lt.find_keys(KeyType.TABLE_DATA))
+    finally:
+        delete_library(ac, lib_name)
 
 
 @pytest.mark.storage
@@ -300,7 +339,7 @@ def test_create_library_with_invalid_name(arctic_client_v1, lib_name):
         assert all(lib_name in all_libraries for lib_name in valid_names)
     finally:
         for lib_name in valid_names:
-            ac.delete_library(lib_name)
+            delete_library(ac, lib_name)
 
 
 def test_do_not_persist_s3_details(s3_storage):
@@ -332,7 +371,7 @@ def test_do_not_persist_s3_details(s3_storage):
         else:
             assert not s3_storage.https
     finally:
-        ac.delete_library("test")
+        delete_library(ac, "test")
 
 
 @pytest.mark.storage
@@ -356,6 +395,7 @@ def test_library_options(arctic_client, lib_name):
         columns_per_segment=3,
         encoding_version=EncodingVersion.V2,
     )
+    ac.delete_library(lib_name_do)
     lib_name_eo = f"{lib_name}_eo" # explicit options
     ac.create_library(
         lib_name_eo,
@@ -370,6 +410,7 @@ def test_library_options(arctic_client, lib_name):
     assert write_options.column_group_size == 3
     assert write_options.dynamic_strings
     assert lib._nvs._lib_cfg.lib_desc.version.encoding_version == EncodingVersion.V2
+    delete_library(ac, lib_name_eo)
 
 
 @pytest.mark.storage
@@ -380,10 +421,9 @@ def test_separation_between_libraries(arctic_client_v1, lib_name):
     ac = arctic_client_v1
     lib_name_1 = f"{lib_name}_1"
     lib_name_2 = f"{lib_name}_2"
+    ac.create_library(lib_name_1)
+    ac.create_library(lib_name_2)
     try:
-        ac.create_library(lib_name_1)
-        ac.create_library(lib_name_2)
-
         assert lib_name_1 in set(ac.list_libraries())
         assert lib_name_2 in set(ac.list_libraries())
 
@@ -393,8 +433,8 @@ def test_separation_between_libraries(arctic_client_v1, lib_name):
         assert ac[lib_name_2].list_symbols() == ["test_2"]
 
     finally:
-        ac.delete_library(lib_name_1)
-        ac.delete_library(lib_name_2)
+        delete_library(ac, lib_name_1)
+        delete_library(ac, lib_name_2)
 
 
 def add_path_prefix(storage_fixture, prefix):
@@ -419,8 +459,10 @@ def add_path_prefix(storage_fixture, prefix):
         "s3_storage",
         pytest.param("azurite_storage", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_storage", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp_storage", marks=REAL_GCP_TESTS_MARK),
     ],
 )
+@pytest.mark.storage
 def test_separation_between_libraries_with_prefixes(fixture, request):
     """The motivation for the prefix feature is that separate users want to be able to create libraries
     with the same name in the same bucket without over-writing each other's work. This can be useful when
@@ -482,7 +524,7 @@ def test_library_management_path_prefix(fixture, request, lib_name):
         assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
         assert any(k.startswith("hello/world/test_library_management_path_p") for k in keys)
     finally:    
-        ac.delete_library(lib_name)
+        delete_library(ac, lib_name)
 
     assert lib_name not in ac.list_libraries()
     with pytest.raises(LibraryNotFound):

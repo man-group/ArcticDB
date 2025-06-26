@@ -29,9 +29,10 @@ class InMemoryStorageFixture(StorageFixture):
         if kwargs.get("reuse_name", False):
             default_name = args[2]
             name = kwargs.get("name", default_name)
-            existing = self.libs_from_factory[name]
             out = super()._factory_impl(*args, **kwargs)
-            PythonVersionStore.reuse_storage_for_testing(existing.version_store, out.version_store)
+            # We do not have any store that can be reused
+            # existing = self.libs_from_factory[name]
+            # PythonVersionStore.reuse_storage_for_testing(existing.version_store, out.version_store)
         else:
             out = super()._factory_impl(*args, **kwargs)
         return out

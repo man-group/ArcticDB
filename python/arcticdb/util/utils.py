@@ -13,12 +13,16 @@ import re
 import string
 import time
 import sys
+from arcticdb.arctic import Arctic
+import arcticdb_ext
 from typing import Dict 
 from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
 import pandas as pd
+from responses import logger
 
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
+from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 
 
@@ -85,12 +89,40 @@ def get_logger(bencmhark_cls: Union[str, Any] = None):
     loggers[name] = logger
     return logger
 
+logger = get_logger()
 
 class GitHubSanitizingException(Exception):
     def __init__(self, message: str):
         # Sanitize the message
         sanitized_message = GitHubSanitizingHandler.sanitize_message(message)
         super().__init__(sanitized_message)
+
+
+def delete_nvs(nvs: NativeVersionStore, ac: Arctic = None):
+    if isinstance(nvs, NativeVersionStore):
+        logger.info(f"Removing data for NativeVersionStore library_path: {nvs.library().library_path}")
+        try:
+            nvs.version_store.clear()
+            logger.info(f"SUCCESS in deletion")  
+        except Exception as e:
+            logger.warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
+    elif isinstance(nvs, Library):
+        ## What to do in cases where fixtures return callback to library creation objects
+        ## In the 
+        logger.warning(f"Cannot delete library without arctic instance. Library {nvs}")
+    else:
+        raise Exception(f"Unsupported type: {nvs}")
+    
+
+def delete_library(ac: Arctic, lib_name: str):
+    try:
+        ac.delete_library(lib_name)
+    except arcticdb_ext.exceptions.StorageException as e:
+        if "LMDB" in repr(e): # skip LMDB errors
+            pass
+        else: 
+            logger.warning(f"Caught exception during deletion of library '{lib_name}' - {repr(e)}")
+            raise
 
 
 class  TimestampNumber:

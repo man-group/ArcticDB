@@ -7,7 +7,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
-from typing import Callable, Generator, Union
+from typing import Any, Callable, Generator, Union
+from arcticdb.authorization.permissions import OpenMode
+from arcticdb.util.utils import delete_library, get_logger
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -21,6 +23,7 @@ import re
 import time
 import requests
 import uuid
+import arcticdb_ext
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
@@ -51,6 +54,7 @@ from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings
 from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
+from arcticdb.util.utils import delete_nvs
 from arcticdb.arctic import Arctic
 from .util.mark import (
     LMDB_TESTS_MARK,
@@ -83,6 +87,7 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
+logger = get_logger()
 
 # silence warnings about custom markers
 def pytest_configure(config):
@@ -98,6 +103,18 @@ if platform.system() == "Linux":
         cdll.LoadLibrary("libSegFault.so")
     except:
         pass
+
+
+class VersionStoreWrapper:
+    def __init__(self, store_factory):
+        self.factory = store_factory
+
+    def wrap(self, **kwargs) -> Generator[NativeVersionStore, Any, Any]:
+        nvs = self.factory(**kwargs)
+        try:
+            yield nvs
+        finally:
+            delete_nvs(nvs)
 
 
 @pytest.fixture()
@@ -161,12 +178,17 @@ def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
 
 @pytest.fixture
 def lmdb_library(lmdb_storage, lib_name) -> Generator[Library, None, None]:
+    ac = lmdb_storage.create_arctic()
     yield lmdb_storage.create_arctic().create_library(lib_name)
+    delete_library(ac, lib_name)
 
 
 @pytest.fixture
 def lmdb_library_dynamic_schema(lmdb_storage, lib_name) -> Generator[Library, None, None]:
-    yield lmdb_storage.create_arctic().create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+    yield lib
+    delete_library(ac, lib_name)
 
 
 @pytest.fixture(
@@ -333,7 +355,8 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
 
 @pytest.fixture(
     scope="session",
-    params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
+    params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), 
+            pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
 )
 def real_storage_factory(request) -> Union[BaseGCPStorageFixtureFactory, BaseGCPStorageFixtureFactory]:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_factory")
@@ -586,28 +609,28 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
 
 
 @pytest.fixture
-def arctic_library(arctic_client, lib_name) -> Library:
+def arctic_library(arctic_client, lib_name) -> Generator[Library, None, None]:
     yield arctic_client.create_library(lib_name)
-    arctic_client.delete_library(lib_name)
+    delete_library(arctic_client, lib_name)
 
 
 @pytest.fixture
-def arctic_library_dynamic(arctic_client, lib_name) -> Library:
+def arctic_library_dynamic(arctic_client, lib_name) -> Generator[Library, None, None]:
     lib_opts = LibraryOptions(dynamic_schema=True)
     yield arctic_client.create_library(lib_name, library_options=lib_opts)
-    arctic_client.delete_library(lib_name)
+    delete_library(arctic_client, lib_name)
 
 
 @pytest.fixture
-def arctic_library_v1(arctic_client_v1, lib_name) -> Library:
+def arctic_library_v1(arctic_client_v1, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_v1.create_library(lib_name)
-    arctic_client_v1.delete_library(lib_name)
+    delete_library(arctic_client_v1, lib_name)
 
 
 @pytest.fixture
-def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
+def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_lmdb.create_library(lib_name)
-    arctic_client_lmdb.delete_library(lib_name)
+    delete_library(arctic_client_lmdb, lib_name)
 
 
 @pytest.fixture(
@@ -635,13 +658,16 @@ def arctic_client_lmdb_map_size_100gb(lmdb_storage) -> Arctic:
 
 
 @pytest.fixture
-def arctic_library_lmdb_100gb(arctic_client_lmdb_map_size_100gb, lib_name) -> Library:
-    return arctic_client_lmdb_map_size_100gb.create_library(lib_name)
+def arctic_library_lmdb_100gb(arctic_client_lmdb_map_size_100gb, lib_name) -> Generator[Library, None, None]:
+    yield arctic_client_lmdb_map_size_100gb.create_library(lib_name)
+    delete_library(arctic_client_lmdb_map_size_100gb, lib_name)
 
 
 @pytest.fixture
-def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
-    return basic_arctic_client.create_library(lib_name)
+def basic_arctic_library(basic_arctic_client, lib_name) -> Generator[Library, Any, Any]:
+    lib = basic_arctic_client.create_library(lib_name)
+    yield lib
+    delete_library(basic_arctic_client, lib_name)
 
 
 # endregion
@@ -652,7 +678,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Callable[..., NativeVersion
 
 
 @pytest.fixture
-def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
+def s3_store_factory_mock_storage_exception(lib_name, s3_storage) -> Generator[NativeVersionStore, Any, Any]:
     lib = s3_storage.create_version_store_factory(lib_name)
     endpoint = s3_storage.factory.endpoint
     # `rate_limit` in the uri will trigger the code injected to moto to give http 503 slow down response
@@ -719,79 +745,92 @@ def in_memory_store_factory(mem_storage, lib_name) -> Callable[..., NativeVersio
 # endregion
 # region ================================ `NativeVersionStore` Fixtures =================================
 @pytest.fixture
-def real_s3_version_store(real_s3_store_factory):
-    return real_s3_store_factory()
+def real_s3_version_store(real_s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(real_s3_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def real_s3_version_store_dynamic_schema(real_s3_store_factory):
-    return real_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+def real_s3_version_store_dynamic_schema(real_s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(real_s3_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def real_gcp_version_store(real_gcp_store_factory):
-    return real_gcp_store_factory()
+def real_gcp_version_store(real_gcp_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(real_gcp_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def real_gcp_version_store_dynamic_schema(real_gcp_store_factory):
-    return real_gcp_store_factory(dynamic_strings=True, dynamic_schema=True)
+def real_gcp_version_store_dynamic_schema(real_gcp_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(real_gcp_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def real_s3_sts_version_store(real_s3_sts_store_factory):
-    return real_s3_sts_store_factory()
+def real_s3_sts_version_store(real_s3_sts_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(real_s3_sts_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def mock_s3_store_with_error_simulation(mock_s3_store_with_error_simulation_factory):
-    return mock_s3_store_with_error_simulation_factory()
+def mock_s3_store_with_error_simulation(mock_s3_store_with_error_simulation_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(mock_s3_store_with_error_simulation_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exception):
-    return s3_store_factory_mock_storage_exception()
+def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exception) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(s3_store_factory_mock_storage_exception)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory):
-    return nfs_backed_s3_store_factory(dynamic_strings=True)
+def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(nfs_backed_s3_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True)
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name):
+def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return nfs_backed_s3_store_factory(
-        dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name
-    )
+    wrapper = VersionStoreWrapper(nfs_backed_s3_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True,
+                                      encoding_version=int(EncodingVersion.V2), name=library_name)
+   
+
+@pytest.fixture
+def s3_version_store_v1(s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(s3_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True)
 
 
 @pytest.fixture
-def s3_version_store_v1(s3_store_factory):
-    return s3_store_factory(dynamic_strings=True)
-
-
-@pytest.fixture
-def s3_version_store_v2(s3_store_factory, lib_name):
+def s3_version_store_v2(s3_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return s3_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
+    wrapper = VersionStoreWrapper(s3_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True,
+                                      encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
 @pytest.fixture
-def s3_version_store_dynamic_schema_v1(s3_store_factory):
-    return s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+def s3_version_store_dynamic_schema_v1(s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(s3_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def s3_version_store_dynamic_schema_v2(s3_store_factory, lib_name):
+def s3_version_store_dynamic_schema_v2(s3_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return s3_store_factory(
+    wrapper = VersionStoreWrapper(s3_store_factory)
+    yield from wrapper.wrap(
         dynamic_strings=True, dynamic_schema=True, encoding_version=int(EncodingVersion.V2), name=library_name
     )
 
 
 @pytest.fixture
-def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version):
+def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version) -> Generator[NativeVersionStore, Any, Any]:
     if encoding_version == EncodingVersion.V1:
         return s3_version_store_v1
     elif encoding_version == EncodingVersion.V2:
@@ -801,20 +840,21 @@ def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version)
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_dynamic_schema_v1(nfs_backed_s3_store_factory):
-    return nfs_backed_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
+def nfs_backed_s3_version_store_dynamic_schema_v1(nfs_backed_s3_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(nfs_backed_s3_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, lib_name):
+def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return nfs_backed_s3_store_factory(
+    wrapper = VersionStoreWrapper(nfs_backed_s3_store_factory)
+    yield from wrapper.wrap(
         dynamic_strings=True, dynamic_schema=True, encoding_version=int(EncodingVersion.V2), name=library_name
     )
 
-
 @pytest.fixture
-def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version):
+def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version) -> Generator[NativeVersionStore, Any, Any]:
     if encoding_version == EncodingVersion.V1:
         return nfs_backed_s3_version_store_v1
     elif encoding_version == EncodingVersion.V2:
@@ -824,8 +864,9 @@ def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_ve
 
 
 @pytest.fixture(scope="function")
-def mongo_version_store(mongo_store_factory):
-    return mongo_store_factory()
+def mongo_version_store(mongo_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(mongo_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture(
@@ -848,27 +889,29 @@ def object_store_factory(request) -> Callable[..., NativeVersionStore]:
 
 
 @pytest.fixture
-def object_version_store(object_store_factory) -> NativeVersionStore:
+def object_version_store(object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all object stores and their simulations
     Doesn't support LMDB
     """
-    return object_store_factory()
+    wrapper = VersionStoreWrapper(object_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def object_version_store_prune_previous(object_store_factory) -> NativeVersionStore:
+def object_version_store_prune_previous(object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all object stores and their simulations
     Doesn't support LMDB
     """
-    return object_store_factory(prune_previous_version=True)
+    wrapper = VersionStoreWrapper(object_store_factory)
+    yield from wrapper.wrap(prune_previous_version=True)
 
 
 @pytest.fixture(
     scope="function", params=["s3_store_factory", pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK)]
 )
-def local_object_store_factory(request):
+def local_object_store_factory(request) -> Callable[..., NativeVersionStore]:
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
@@ -878,21 +921,23 @@ def local_object_store_factory(request):
 
 
 @pytest.fixture
-def local_object_version_store(local_object_store_factory):
+def local_object_version_store(local_object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
     """
-    return local_object_store_factory()
+    wrapper = VersionStoreWrapper(local_object_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def local_object_version_store_prune_previous(local_object_store_factory):
+def local_object_version_store_prune_previous(local_object_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
     """
-    return local_object_store_factory(prune_previous_version=True)
+    wrapper = VersionStoreWrapper(local_object_store_factory)
+    yield from wrapper.wrap(prune_previous_version=True)
 
 
 @pytest.fixture(
@@ -902,7 +947,7 @@ def local_object_version_store_prune_previous(local_object_store_factory):
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
     ]
 )
-def version_store_and_real_s3_basic_store_factory(request):
+def version_store_and_real_s3_basic_store_factory(request) -> Callable[..., NativeVersionStore]:
     """
     Just the version_store and real_s3 specifically for the test test_interleaved_store_read
     where the in_memory_store_factory is not designed to have this functionality.
@@ -926,76 +971,90 @@ def basic_store_factory(request) -> Callable[..., NativeVersionStore]:
 
 
 @pytest.fixture
-def basic_store(basic_store_factory) -> NativeVersionStore:
+def basic_store(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test the bare minimum of stores
      - LMDB for local storage
      - mem for in-memory storage
      - AWS S3 for persistent storage, if enabled
     """
-    return basic_store_factory()
+    nvs = basic_store_factory()
+    yield nvs
+    delete_nvs(nvs)
 
 
 @pytest.fixture
-def azure_version_store(azure_store_factory):
-    return azure_store_factory()
+def azure_version_store(azure_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(azure_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def azure_version_store_dynamic_schema(azure_store_factory):
-    return azure_store_factory(dynamic_schema=True, dynamic_strings=True)
+def azure_version_store_dynamic_schema(azure_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(azure_store_factory)
+    yield from wrapper.wrap(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_string_coercion(version_store_factory) -> NativeVersionStore:
-    return version_store_factory()
+def lmdb_version_store_string_coercion(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap()
 
-
-@pytest.fixture
-def lmdb_version_store_v1(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore:
+def lmdb_version_store_v1(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True)
+
+
+@pytest.fixture
+def lmdb_version_store_v2(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
 @pytest.fixture(scope="function", params=("lmdb_version_store_v1", "lmdb_version_store_v2"))
-def lmdb_version_store(request):
+def lmdb_version_store(request) -> Generator[NativeVersionStore, Any, Any]:
     yield request.getfixturevalue(request.param)
 
 
 @pytest.fixture
-def lmdb_version_store_prune_previous(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
+def lmdb_version_store_prune_previous(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
 
 
 @pytest.fixture
-def lmdb_version_store_big_map(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(lmdb_config={"map_size": 2**30})
+def lmdb_version_store_big_map(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def lmdb_version_store_very_big_map(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(lmdb_config={"map_size": 2**35})
+def lmdb_version_store_very_big_map(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(lmdb_config={"map_size": 2**35})
 
 
 @pytest.fixture
-def lmdb_version_store_column_buckets(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
+def lmdb_version_store_column_buckets(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema_v1(version_store_factory, lib_name) -> NativeVersionStore:
-    return version_store_factory(dynamic_schema=True, dynamic_strings=True)
+def lmdb_version_store_dynamic_schema_v1(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name) -> NativeVersionStore:
+def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return version_store_factory(
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(
         dynamic_schema=True, dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name
     )
 
@@ -1003,7 +1062,7 @@ def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name) -> Nat
 @pytest.fixture
 def lmdb_version_store_dynamic_schema(
     lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
-):
+) -> Generator[NativeVersionStore, Any, Any]:
     if encoding_version == EncodingVersion.V1:
         return lmdb_version_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
@@ -1013,29 +1072,33 @@ def lmdb_version_store_dynamic_schema(
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_v1(version_store_factory, lib_name) -> NativeVersionStore:
+def lmdb_version_store_empty_types_v1(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v1"
-    return version_store_factory(dynamic_strings=True, empty_types=True, name=library_name)
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, empty_types=True, name=library_name)
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_v2(version_store_factory, lib_name) -> NativeVersionStore:
+def lmdb_version_store_empty_types_v2(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return version_store_factory(
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(
         dynamic_strings=True, empty_types=True, encoding_version=int(EncodingVersion.V2), name=library_name
     )
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_dynamic_schema_v1(version_store_factory, lib_name) -> NativeVersionStore:
+def lmdb_version_store_empty_types_dynamic_schema_v1(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v1"
-    return version_store_factory(dynamic_strings=True, empty_types=True, dynamic_schema=True, name=library_name)
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, empty_types=True, dynamic_schema=True, name=library_name)
 
 
 @pytest.fixture
-def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_name) -> NativeVersionStore:
+def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return version_store_factory(
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(
         dynamic_strings=True,
         empty_types=True,
         dynamic_schema=True,
@@ -1045,16 +1108,18 @@ def lmdb_version_store_empty_types_dynamic_schema_v2(version_store_factory, lib_
 
 
 @pytest.fixture
-def lmdb_version_store_delayed_deletes_v1(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(
+def lmdb_version_store_delayed_deletes_v1(version_store_factory)-> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(
         delayed_deletes=True, dynamic_strings=True, empty_types=True, prune_previous_version=True
     )
-
+    
 
 @pytest.fixture
-def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name) -> NativeVersionStore:
+def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return version_store_factory(
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(
         dynamic_strings=True,
         delayed_deletes=True,
         empty_types=True,
@@ -1064,79 +1129,94 @@ def lmdb_version_store_delayed_deletes_v2(version_store_factory, lib_name) -> Na
 
 
 @pytest.fixture
-def lmdb_version_store_tombstones_no_symbol_list(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
+def lmdb_version_store_tombstones_no_symbol_list(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_allows_pickling(version_store_factory, lib_name) -> NativeVersionStore:
-    return version_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
+def lmdb_version_store_allows_pickling(version_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def lmdb_version_store_no_symbol_list(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(col_per_group=None, row_per_segment=None, symbol_list=False)
+def lmdb_version_store_no_symbol_list(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(col_per_group=None, row_per_segment=None, symbol_list=False)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone_and_pruning(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(use_tombstones=True, prune_previous_version=True)
+def lmdb_version_store_tombstone_and_pruning(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(use_tombstones=True, prune_previous_version=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(use_tombstones=True)
+def lmdb_version_store_tombstone(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(use_tombstones=True)
 
 
 @pytest.fixture
-def lmdb_version_store_tombstone_and_sync_passive(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(use_tombstones=True, sync_passive=True)
+def lmdb_version_store_tombstone_and_sync_passive(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(use_tombstones=True, sync_passive=True)
 
 
 @pytest.fixture
-def lmdb_version_store_ignore_order(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(ignore_sort_order=True)
+def lmdb_version_store_ignore_order(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(ignore_sort_order=True)
 
 
 @pytest.fixture
-def lmdb_version_store_small_segment(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+def lmdb_version_store_small_segment(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def lmdb_version_store_tiny_segment(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+def lmdb_version_store_tiny_segment(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def lmdb_version_store_tiny_segment_dynamic(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+def lmdb_version_store_tiny_segment_dynamic(version_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(version_store_factory)
+    yield from wrapper.wrap(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 
 
 @pytest.fixture
-def basic_store_prune_previous(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
+def basic_store_prune_previous(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(dynamic_strings=True, prune_previous_version=True, use_tombstones=True)
 
 
 @pytest.fixture
-def basic_store_large_data(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(lmdb_config={"map_size": 2**30})
+def basic_store_large_data(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def basic_store_column_buckets(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
+def basic_store_column_buckets(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(dynamic_schema=True, column_group_size=3, segment_row_size=2, bucketize_dynamic=True)
 
 
 @pytest.fixture
-def basic_store_dynamic_schema_v1(basic_store_factory, lib_name) -> NativeVersionStore:
-    return basic_store_factory(dynamic_schema=True, dynamic_strings=True)
+def basic_store_dynamic_schema_v1(basic_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(dynamic_schema=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def basic_store_dynamic_schema_v2(basic_store_factory, lib_name) -> NativeVersionStore:
-    library_name = lib_name + "_v2"
-    return basic_store_factory(
+def basic_store_dynamic_schema_v2(basic_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
+    library_name = lib_name + "_V2"
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(
         dynamic_schema=True, dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name
     )
 
@@ -1144,7 +1224,7 @@ def basic_store_dynamic_schema_v2(basic_store_factory, lib_name) -> NativeVersio
 @pytest.fixture
 def basic_store_dynamic_schema(
     basic_store_dynamic_schema_v1, basic_store_dynamic_schema_v2, encoding_version
-) -> NativeVersionStore:
+) -> Generator[NativeVersionStore, Any, Any]:
     if encoding_version == EncodingVersion.V1:
         return basic_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
@@ -1154,71 +1234,84 @@ def basic_store_dynamic_schema(
 
 
 @pytest.fixture
-def basic_store_delayed_deletes(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(delayed_deletes=True)
+def basic_store_delayed_deletes(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(delayed_deletes=True)
 
 
 @pytest.fixture
-def basic_store_delayed_deletes_v1(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
+def basic_store_delayed_deletes_v1(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(delayed_deletes=True, dynamic_strings=True, prune_previous_version=True)
 
 
 @pytest.fixture
-def basic_store_delayed_deletes_v2(basic_store_factory, lib_name) -> NativeVersionStore:
+def basic_store_delayed_deletes_v2(basic_store_factory, lib_name)-> Generator[NativeVersionStore, Any, Any]:
     library_name = lib_name + "_v2"
-    return basic_store_factory(
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(
         dynamic_strings=True, delayed_deletes=True, encoding_version=int(EncodingVersion.V2), name=library_name
     )
 
 
 @pytest.fixture
-def basic_store_tombstones_no_symbol_list(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
+def basic_store_tombstones_no_symbol_list(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(use_tombstones=True, dynamic_schema=True, symbol_list=False, dynamic_strings=True)
 
 
 @pytest.fixture
-def basic_store_allows_pickling(basic_store_factory, lib_name) -> NativeVersionStore:
-    return basic_store_factory(use_norm_failure_handler_known_types=True, dynamic_strings=True)
+def basic_store_allows_pickling(basic_store_factory, lib_name) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(use_norm_failure_handler_known_types=True, dynamic_strings=True)
 
 
 @pytest.fixture
-def basic_store_no_symbol_list(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(symbol_list=False)
+def basic_store_no_symbol_list(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(symbol_list=False)
 
 
 @pytest.fixture
-def basic_store_tombstone_and_pruning(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(use_tombstones=True, prune_previous_version=True)
+def basic_store_tombstone_and_pruning(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(use_tombstones=True, prune_previous_version=True)
 
 
 @pytest.fixture
-def basic_store_tombstone(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(use_tombstones=True)
+def basic_store_tombstone(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(use_tombstones=True)
 
 
 @pytest.fixture
-def basic_store_tombstone_and_sync_passive(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(use_tombstones=True, sync_passive=True)
+def basic_store_tombstone_and_sync_passive(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(use_tombstones=True, sync_passive=True)
 
 
 @pytest.fixture
-def basic_store_ignore_order(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(ignore_sort_order=True)
+def basic_store_ignore_order(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(ignore_sort_order=True)
 
 
 @pytest.fixture
-def basic_store_small_segment(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
+def basic_store_small_segment(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(column_group_size=1000, segment_row_size=1000, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def basic_store_tiny_segment(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+def basic_store_tiny_segment(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
-def basic_store_tiny_segment_dynamic(basic_store_factory) -> NativeVersionStore:
-    return basic_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=True)
+def basic_store_tiny_segment_dynamic(basic_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(basic_store_factory)
+    yield from wrapper.wrap(column_group_size=2, segment_row_size=2, dynamic_schema=True)
 
 
 # endregion
@@ -1265,7 +1358,7 @@ def get_wide_df():
         "lmdb_version_store_empty_types_dynamic_schema_v2",
     ),
 )
-def lmdb_version_store_static_and_dynamic(request):
+def lmdb_version_store_static_and_dynamic(request) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all combinations between schema and encoding version for LMDB
     """
@@ -1288,7 +1381,7 @@ def lmdb_version_store_static_and_dynamic(request):
         pytest.param("real_gcp_version_store", marks=REAL_GCP_TESTS_MARK),
     ),
 )
-def object_and_mem_and_lmdb_version_store(request):
+def object_and_mem_and_lmdb_version_store(request) -> Generator[NativeVersionStore, Any, Any]:
     """
     Designed to test all supported stores
     """
@@ -1311,7 +1404,7 @@ def object_and_mem_and_lmdb_version_store(request):
         pytest.param("real_gcp_version_store_dynamic_schema", marks=REAL_GCP_TESTS_MARK),
     ),
 )
-def object_and_mem_and_lmdb_version_store_dynamic_schema(request):
+def object_and_mem_and_lmdb_version_store_dynamic_schema(request) -> Generator[NativeVersionStore, Any, Any]:
     filter_out_unwanted_mark(request, request.param)
     """
     Designed to test all supported stores
@@ -1320,22 +1413,25 @@ def object_and_mem_and_lmdb_version_store_dynamic_schema(request):
 
 
 @pytest.fixture
-def in_memory_version_store(in_memory_store_factory):
-    return in_memory_store_factory()
+def in_memory_version_store(in_memory_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(in_memory_store_factory)
+    yield from wrapper.wrap()
 
 
 @pytest.fixture
-def in_memory_version_store_dynamic_schema(in_memory_store_factory):
-    return in_memory_store_factory(dynamic_schema=True)
+def in_memory_version_store_dynamic_schema(in_memory_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(in_memory_store_factory)
+    yield from wrapper.wrap(dynamic_schema=True)
 
 
 @pytest.fixture
-def in_memory_version_store_tiny_segment(in_memory_store_factory):
-    return in_memory_store_factory(column_group_size=2, segment_row_size=2)
+def in_memory_version_store_tiny_segment(in_memory_store_factory) -> Generator[NativeVersionStore, Any, Any]:
+    wrapper = VersionStoreWrapper(in_memory_store_factory)
+    yield from wrapper.wrap(column_group_size=2, segment_row_size=2)
 
 
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
-def lmdb_or_in_memory_version_store_tiny_segment(request):
+def lmdb_or_in_memory_version_store_tiny_segment(request) -> Generator[NativeVersionStore, Any, Any]:
     return request.getfixturevalue(request.param)
 
 

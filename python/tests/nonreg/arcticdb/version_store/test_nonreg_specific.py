@@ -14,6 +14,7 @@ import sys
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.util.utils import delete_nvs
 from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
@@ -319,26 +320,29 @@ def test_date_range_multi_index(lmdb_version_store):
 @pytest.mark.parametrize("arg", (True, False, None))
 def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
-    should_be_pruned = lib_config
-    if env_var:
-        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
-        should_be_pruned = True
-    if arg is not None:
-        should_be_pruned = arg
 
-    lt = lib.library_tool()
-    sym = f"test_prune_previous_general"
-    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
-    lib.write(sym, df_0)
+    try:
+        should_be_pruned = lib_config
+        if env_var:
+            monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
+            should_be_pruned = True
+        if arg is not None:
+            should_be_pruned = arg
 
-    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
-    arg_0 = [sym] if method.startswith("batch") else sym
-    arg_1 = [df_1] if method.startswith("batch") else df_1
+        lt = lib.library_tool()
+        sym = f"test_prune_previous_general"
+        df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+        lib.write(sym, df_0)
 
-    getattr(lib, method)(arg_0, arg_1, prune_previous_version=arg)
+        df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
+        arg_0 = [sym] if method.startswith("batch") else sym
+        arg_1 = [df_1] if method.startswith("batch") else df_1
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+        getattr(lib, method)(arg_0, arg_1, prune_previous_version=arg)
 
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+    finally:
+        delete_nvs(lib)
 
 @pytest.mark.parametrize("append", (True, False))
 @pytest.mark.parametrize("lib_config", (True, False))
@@ -346,24 +350,28 @@ def test_prune_previous_general(version_store_factory, monkeypatch, method, lib_
 @pytest.mark.parametrize("arg", (True, False, None))
 def test_prune_previous_compact_incomplete(version_store_factory, monkeypatch, append, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
-    should_be_pruned = lib_config
-    if env_var:
-        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
-        should_be_pruned = True
-    if arg is not None:
-        should_be_pruned = arg
 
-    lt = lib.library_tool()
-    sym = f"test_prune_previous_compact_incomplete"
-    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
-    lib.write(sym, df_0)
+    try:
+        should_be_pruned = lib_config
+        if env_var:
+            monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
+            should_be_pruned = True
+        if arg is not None:
+            should_be_pruned = arg
 
-    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
-    lib.write(sym, df_1, parallel=True)
+        lt = lib.library_tool()
+        sym = f"test_prune_previous_compact_incomplete"
+        df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+        lib.write(sym, df_0)
 
-    lib.compact_incomplete(sym, append, False, prune_previous_version=arg)
+        df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
+        lib.write(sym, df_1, parallel=True)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+        lib.compact_incomplete(sym, append, False, prune_previous_version=arg)
+
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("lib_config", (True, False))
@@ -371,21 +379,25 @@ def test_prune_previous_compact_incomplete(version_store_factory, monkeypatch, a
 @pytest.mark.parametrize("arg", (True, False, None))
 def test_prune_previous_delete_date_range(version_store_factory, monkeypatch, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
-    should_be_pruned = lib_config
-    if env_var:
-        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
-        should_be_pruned = True
-    if arg is not None:
-        should_be_pruned = arg
 
-    lt = lib.library_tool()
-    sym = f"test_prune_previous_delete_date_range"
-    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
-    lib.write(sym, df_0)
+    try:
+        should_be_pruned = lib_config
+        if env_var:
+            monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
+            should_be_pruned = True
+        if arg is not None:
+            should_be_pruned = arg
 
-    lib.delete(sym, (pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-07")), prune_previous_version=arg)
+        lt = lib.library_tool()
+        sym = f"test_prune_previous_delete_date_range"
+        df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+        lib.write(sym, df_0)
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+        lib.delete(sym, (pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-07")), prune_previous_version=arg)
+
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("lib_config", (True, False))
@@ -393,26 +405,30 @@ def test_prune_previous_delete_date_range(version_store_factory, monkeypatch, li
 @pytest.mark.parametrize("arg", (True, False, None))
 def test_prune_previous_defragment_symbol_data(version_store_factory, monkeypatch, lib_config, env_var, arg):
     lib = version_store_factory(prune_previous_version=lib_config, use_tombstones=True)
-    should_be_pruned = lib_config
-    if env_var:
-        monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
-        should_be_pruned = True
-    if arg is not None:
-        should_be_pruned = arg
 
-    lt = lib.library_tool()
-    sym = f"test_prune_previous_defragment_symbol_data"
-    df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
-    lib.write(sym, df_0)
-    df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
-    lib.append(sym, df_1, prune_previous_version=arg)
+    try:
+        should_be_pruned = lib_config
+        if env_var:
+            monkeypatch.setenv("PRUNE_PREVIOUS_VERSION", "true")
+            should_be_pruned = True
+        if arg is not None:
+            should_be_pruned = arg
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
+        lt = lib.library_tool()
+        sym = f"test_prune_previous_defragment_symbol_data"
+        df_0 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-01", periods=10))
+        lib.write(sym, df_0)
+        df_1 = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2024-01-11", periods=10))
+        lib.append(sym, df_1, prune_previous_version=arg)
 
-    set_config_int("SymbolDataCompact.SegmentCount", 1)
-    lib.defragment_symbol_data(sym, prune_previous_version=arg)
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 2
 
-    assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 3
+        set_config_int("SymbolDataCompact.SegmentCount", 1)
+        lib.defragment_symbol_data(sym, prune_previous_version=arg)
+
+        assert len(lt.find_keys(KeyType.TABLE_INDEX)) == 1 if should_be_pruned else 3
+    finally:
+        delete_nvs(lib)
 
 
 @pytest.mark.parametrize("index_start", range(9))
@@ -440,11 +456,14 @@ def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, inde
 
 def test_delete_snapshot_regression(nfs_clean_bucket):
     lib = nfs_clean_bucket.create_version_store_factory("test_delete_snapshot_regression")()
-    lib.write("sym", 1)
-    lib.snapshot("snap")
-    assert "snap" in lib.list_snapshots()
-    lib.delete_snapshot("snap")
-    assert "snap" not in lib.list_snapshots()
+    try:
+        lib.write("sym", 1)
+        lib.snapshot("snap")
+        assert "snap" in lib.list_snapshots()
+        lib.delete_snapshot("snap")
+        assert "snap" not in lib.list_snapshots()
+    finally:
+        delete_nvs(lib)
 
 
 def test_resampling_non_timeseries(lmdb_version_store_v1):

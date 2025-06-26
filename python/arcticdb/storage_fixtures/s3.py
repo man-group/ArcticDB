@@ -21,7 +21,7 @@ import random
 from datetime import datetime
 
 import requests
-from typing import Optional, Any, Type
+from typing import Optional, Any, Type, Union
 
 import werkzeug
 import botocore.exceptions
@@ -38,6 +38,7 @@ from .utils import (
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
 from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, GCPXMLSettings as NativeGCPXMLSettings
+from arcticdb_ext.tools import S3Tool
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -252,6 +253,21 @@ class GcpS3Bucket(S3Bucket):
         return cfg, self.native_config
 
 
+def check_bucket(storage_factory: Union['BaseS3StorageFixtureFactory', 'BaseGCPStorageFixtureFactory']):
+    s3_tool = S3Tool(storage_factory.default_bucket, storage_factory.default_key.id, 
+                     storage_factory.default_key.secret, storage_factory.endpoint)
+    content = s3_tool.list_bucket(storage_factory.default_prefix)
+
+    logger.warning(f"Total objects left: {len(content)}")
+    logger.warning(f"First 100: {content[0:100]}")
+    logger.warning(f"BUCKET: {storage_factory.default_bucket}")
+    left_from = set()
+    for key in content:
+        library_name = key.split("/")[1] # get the name from object
+        left_from.add(library_name)
+    logger.warning(f"Left overs from libraries: {left_from}")
+    assert len(content) < 1
+
 class BaseS3StorageFixtureFactory(StorageFixtureFactory):
     """Logic and fields common to real and mock S3"""
 
@@ -302,6 +318,8 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             # and if we try to delete the bucket, it will fail
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
 
+            check_bucket(self)
+
 
 class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
     """Logic and fields common to real and mock S3"""
@@ -335,6 +353,8 @@ class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
             # We are not writing to buckets in this case
             # and if we try to delete the bucket, it will fail
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+
+            check_bucket(self)
 
 
 def real_s3_from_environment_variables(
@@ -759,6 +779,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # set the unique_id to the current UNIX timestamp to avoid conflicts
         self.unique_id = str(int(time.time()))
 
+
     def bucket_name(self, bucket_type="s3"):
         # We need to increment the bucket_id for each new bucket
         self._bucket_id += 1
@@ -864,6 +885,18 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         self._live_buckets.append(out)
         return out
 
+    def _log_moto_storage_content(self, bucket: Union['S3Bucket']):
+        try:
+            response = self._s3_admin.list_objects_v2(Bucket=bucket.bucket)
+
+            if 'Contents' in response:
+                for obj in response['Contents']:
+                    logger.warning(f"Object left: {obj['Key']}")
+            else:
+                logger.info(f"Bucket is empty")
+        except Exception as e:
+            logger.info(f"Could not get info for bucket: {bucket.bucket}")
+
     def cleanup_bucket(self, b: S3Bucket):
         self._live_buckets.remove(b)
         if len(self._live_buckets):
@@ -872,6 +905,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 # and if we try to delete the bucket, it will fail
                 b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
             try:
+                self._log_moto_storage_content(b)
                 self._s3_admin.delete_bucket(Bucket=b.bucket)
             except botocore.exceptions.ClientError as e:
                 if e.response["Error"]["Code"] != "NoSuchBucket":
