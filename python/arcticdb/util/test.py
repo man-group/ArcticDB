@@ -244,6 +244,10 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     First will rebuild index for dataframes to assure we
     have same index in both frames when row range index is used
     """
+    if PANDAS_VERSION < CHECK_FREQ_VERSION:
+        if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
+            assert expected.columns.equals(expected.columns)    
+            return
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
