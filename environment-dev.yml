@@ -49,7 +49,9 @@ dependencies:
   # Versions must be kept in sync
   - xxhash==0.8.2
   - semimap
-  - rapidcheck
+  # Make sure to get builds with the static library on Windows
+  # https://github.com/conda-forge/rapidcheck-feedstock/pull/3/files
+  - rapidcheck>=2023.4.13=h*_3
   - msgpack-c
   - recycle
   # Matches the version of lmdb as vendored in its submodule.
