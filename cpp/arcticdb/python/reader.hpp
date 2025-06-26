@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <fmt/format.h>
 
 #include <pybind11/numpy.h>
@@ -83,7 +84,7 @@ public:
                         res.append(output);
                     }
                     else
-                        res.append(to_py_array(segment_.tensor_at<RawType>(row, col).value()));
+                        res.append(convert::to_py_array(segment_.tensor_at<RawType>(row, col).value()));
                 }
             });
         }

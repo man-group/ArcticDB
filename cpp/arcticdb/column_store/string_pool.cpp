@@ -10,8 +10,6 @@
 #include <arcticdb/column_store/segment_utils.hpp>
 #include <ankerl/unordered_dense.h>
 
-#include <pybind11/pybind11.h>
-
 namespace arcticdb {
 
 /*****************
@@ -197,15 +195,6 @@ const Buffer& StringPool::shapes() const {
 
 size_t StringPool::size() const {
     return block_.size();
-}
-
-py::buffer_info StringPool::as_buffer_info() const {
-    return py::buffer_info{
-        (void *) block_.at(0).data(),
-        1,
-        py::format_descriptor<char>::format(),
-        ssize_t(block_.at(0).size())
-    };
 }
 
 std::optional<position_t> StringPool::get_offset_for_column(std::string_view string, const Column& column) {
