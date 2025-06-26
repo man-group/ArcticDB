@@ -12,8 +12,6 @@
 #include <stdexcept>
 #include <vector>
 #include <unordered_map>
-#include <folly/Function.h>
-#include <variant>
 
 namespace arcticdb {
 
@@ -162,18 +160,6 @@ struct ArcticSpecificException : public ArcticCategorizedException<get_error_cat
         static_assert(get_error_category(specific_code) == category);
     }
 };
-
-// Utility to treat exceptions as data
-struct Error {
-
-    explicit Error(folly::Function<void(std::string)> raiser, std::string msg);
-    void throw_error();
-
-    folly::Function<void(std::string)> raiser_;
-    std::string msg_;
-};
-
-using CheckOutcome = std::variant<Error, std::monostate>;
 
 using InternalException = ArcticCategorizedException<ErrorCategory::INTERNAL>;
 using SchemaException = ArcticCategorizedException<ErrorCategory::SCHEMA>;
