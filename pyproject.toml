@@ -26,7 +26,7 @@ before-all = "bash {project}/build_tooling/prep_cpp_build.sh"
 before-build = "set"
 
 [tool.cibuildwheel.macos]
-build = "cp*-macosx_*"
+build = "cp*-macosx_15_0_arm64"
 
 [tool.ruff]
 line-length = 120
