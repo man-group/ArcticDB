@@ -26,7 +26,7 @@ struct Value {
         *reinterpret_cast<T*>(&data_) = t;
     }
 
-    explicit Value(const std::string_view string_data, const DataType data_type) :data_type_(data_type) {
+    explicit Value(const std::string_view string_data, const DataType data_type) : data_type_(data_type) {
         assign_string(string_data.data(), string_data.size());
     }
 
