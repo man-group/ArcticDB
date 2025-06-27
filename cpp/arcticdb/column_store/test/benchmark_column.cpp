@@ -16,8 +16,8 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-std::random_device rd;
-std::mt19937 gen(rd());
+static std::random_device rd;
+static std::mt19937 gen(rd());
 
 static void BM_search_sorted_random(benchmark::State& state) {
     auto num_rows = state.range(0);
