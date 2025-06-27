@@ -359,9 +359,10 @@ private:
 };
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-class SortedAggregator
-{
+class SortedAggregator {
 public:
+
+    static constexpr ResampleBoundary closed = closed_boundary;
 
     explicit SortedAggregator(ColumnName input_column_name, ColumnName output_column_name)
             : input_column_name_(std::move(input_column_name))
@@ -380,10 +381,20 @@ public:
                                    ResampleBoundary label) const;
 
     void check_aggregator_supported_with_data_type(DataType data_type) const;
-    [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
     [[nodiscard]] std::optional<Value> get_default_value(DataType common_input_data_type) const;
+    [[nodiscard]] DataType generate_output_data_type(const DataType common_input_data_type) const;
+    [[nodiscard]] std::optional<Column> generate_resampling_output_column(
+        const std::span<const std::shared_ptr<Column>> input_index_columns,
+        const std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+        const Column& output_index_column,
+        const ResampleBoundary label) const;
+
 private:
-    [[nodiscard]] std::optional<DataType> generate_common_input_type(const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns) const;
+    struct OutputColumnInfo {
+        std::optional<DataType> data_type_{};
+        bool is_sparse_{};
+    };
+    [[nodiscard]] OutputColumnInfo generate_common_input_type(std::span<const std::optional<ColumnWithStrings>>) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
 
     template<DataType input_data_type, typename Aggregator, typename T>

@@ -31,6 +31,123 @@ consteval bool is_aggregation_allowed(const AggregationOperator aggregation_oper
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_output_data_type(const DataType common_input_data_type) const {
+    DataType output_type{common_input_data_type};
+    if constexpr (aggregation_operator == AggregationOperator::SUM) {
+        // Deal with overflow as best we can
+        if (is_unsigned_type(common_input_data_type) || is_bool_type(common_input_data_type)) {
+            output_type = DataType::UINT64;
+        } else if (is_signed_type(common_input_data_type)) {
+            output_type = DataType::INT64;
+        } else if (is_floating_point_type(common_input_data_type)) {
+            output_type = DataType::FLOAT64;
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::MEAN) {
+        if (!is_time_type(common_input_data_type)) {
+            output_type = DataType::FLOAT64;
+        }
+    } else if constexpr (aggregation_operator == AggregationOperator::COUNT) {
+        output_type = DataType::UINT64;
+    }
+    return output_type;
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+typename SortedAggregator<aggregation_operator, closed_boundary>::OutputColumnInfo SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
+    const std::span<const std::optional<ColumnWithStrings>> input_agg_columns
+) const {
+    OutputColumnInfo output_column_info;
+    for (const auto& opt_input_agg_column: input_agg_columns) {
+        if (opt_input_agg_column.has_value()) {
+            auto input_data_type = opt_input_agg_column->column_->type().data_type();
+            check_aggregator_supported_with_data_type(input_data_type);
+            add_data_type_impl(input_data_type, output_column_info.data_type_);
+        } else {
+            output_column_info.is_sparse_ = true;
+        }
+    }
+    return output_column_info;
+}
+
+template<ResampleBoundary closed_boundary>
+bool value_past_bucket_start(const timestamp bucket_start, const timestamp value) {
+    if constexpr(closed_boundary == ResampleBoundary::LEFT) {
+        return value >= bucket_start;
+    }
+    return value > bucket_start;
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
+std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::generate_resampling_output_column(
+    [[maybe_unused]] const std::span<const std::shared_ptr<Column>> input_index_columns,
+    const std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+    const Column& output_index_column,
+    [[maybe_unused]] const ResampleBoundary label
+) const {
+    using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    const OutputColumnInfo type_info = generate_common_input_type(input_agg_columns);
+    if (!type_info.data_type_) {
+        return std::nullopt;
+    }
+
+    if (!type_info.is_sparse_) {
+        return Column(
+            make_scalar_type(generate_output_data_type(*type_info.data_type_)),
+            output_index_column.row_count(),
+            AllocationType::PRESIZED,
+            Sparsity::NOT_PERMITTED
+        );
+    }
+    auto output_index_at = [&output_index_column](const int64_t idx) {
+        return *(output_index_column.begin<IndexTDT>() + idx);
+    };
+    util::BitSet sparse_map(output_index_column.row_count());
+    int64_t output_row = 0, output_row_prev = 0;
+
+    std::cout<<fmt::format("Label: {}\n", label == ResampleBoundary::LEFT ? "LEFT" : "RIGHT");
+    std::cout<<fmt::format("Closed: {}\n", closed == ResampleBoundary::LEFT ? "LEFT" : "RIGHT");
+    std::cout<<"Output index column:\n";
+    Column::for_each<IndexTDT>(output_index_column, [](auto val){ std::cout << val << " "; });
+    std::cout<<"\n";
+
+    for (size_t col_index = 0; const std::shared_ptr<Column>& input_index_column : input_index_columns) {
+        const timestamp first_index_value = *input_index_column->begin<IndexTDT>();
+        const timestamp last_index_value = *(input_index_column->begin<IndexTDT>() + (input_index_column->row_count() - 1));
+        std::cout<<fmt::format("Processing column: {}, [{};{}]\n", col_index, first_index_value, last_index_value);
+
+        std::cout<<"Skip to find the first bucket containing the column\n";
+        while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_index_at(output_row), first_index_value)) {
+            ++output_row;
+        }
+        output_row_prev = output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
+        std::cout<<fmt::format("Skipped to output row {}, value {}. First index value: {}\n", output_row, output_index_at(output_row), first_index_value);
+
+        std::cout<<fmt::format("Find which output buckets does the column span\n");
+        while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_index_at(output_row), last_index_value)) {
+            ++output_row;
+        }
+        output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
+        std::cout<<fmt::format("Column index: [{};{}] spans [{};{}] row indexes [{};{}]\n", first_index_value, last_index_value, output_index_at(output_row_prev), output_index_at(output_row), output_row_prev, output_row);
+        if (input_agg_columns[col_index]) {
+            std::cout<<fmt::format("Column {} exists filling sparse map : [{};{}](inclusive)\n", col_index, output_row_prev, output_row);
+            sparse_map.set_range(output_row_prev, output_row);
+        }
+        output_row_prev = output_row;
+        ++col_index;
+    }
+
+    const Sparsity sparsity = sparse_map.count() == output_index_column.row_count() ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
+    const int64_t row_count = sparsity == Sparsity::PERMITTED ? sparse_map.count() : output_index_column.row_count();
+    Column result(make_scalar_type(generate_output_data_type(*type_info.data_type_)), row_count, AllocationType::PRESIZED, sparsity);
+    if (sparsity == Sparsity::PERMITTED) {
+        result.set_sparse_map(std::move(sparse_map));
+    }
+    result.set_row_data(output_index_column.row_count() - 1);
+    return result;
+
+}
+
+template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
                                                                           const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
                                                                           const std::vector<timestamp>& bucket_boundaries,
@@ -38,19 +155,13 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                                                           StringPool& string_pool,
                                                                           const ResampleBoundary label) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    const auto common_input_type = generate_common_input_type(input_agg_columns);
-    if (!common_input_type.has_value()) {
+    std::optional<Column> res = generate_resampling_output_column(input_index_columns, input_agg_columns, output_index_column, label);
+    if (!res) {
         return std::nullopt;
     }
-    Column res(
-        TypeDescriptor(generate_output_data_type(*common_input_type), Dimension::Dim0),
-        output_index_column.row_count(),
-        AllocationType::DYNAMIC,
-        Sparsity::PERMITTED
-    );
     position_t row_to_write = 0;
     details::visit_type(
-        res.type().data_type(),
+        res->type().data_type(),
         [&](auto output_type_desc_tag) {
             using output_type_info = ScalarTypeInfo<decltype(output_type_desc_tag)>;
             // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at runtime
@@ -84,7 +195,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                             bucket_has_values = true;
                                         } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it)) && row_to_write < output_index_column.row_count()) {
                                             if (bucket_has_values) {
-                                                res.set_scalar(row_to_write++, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
+                                                res->set_scalar(row_to_write++, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
                                             }
                                             // The following code is equivalent to:
                                             // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
@@ -122,7 +233,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                             }
                         );
                     } else {
-                        // The column does not contain the aggregation column. However, one of the columns in
+                        // The segment does not contain the aggregation column. However, one of the columns in
                         // input_agg_columns contains the aggregation column. We cannot end up here if none of the
                         // columns in input_agg_columns contain the aggregation column as there's an early exit in
                         // that case (common_input_type is std::nullopt). Even though this does not contain the
@@ -139,7 +250,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                         while (next_output_index_row < output_index_column.row_count() &&
                                *output_index_column.scalar_at<timestamp>(next_output_index_row) < last_index_value + (closed_boundary == ResampleBoundary::LEFT)) {
                             if (bucket_has_values) {
-                                res.set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
+                                res->set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
                                 bucket_has_values = false;
                             }
                             ++row_to_write;
@@ -160,27 +271,12 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                 }
                 // We were in the middle of aggregating a bucket when we ran out of index values
                 if (row_to_write < output_index_column.row_count() && bucket_has_values) {
-                    res.set_scalar(row_to_write++, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
+                    res->set_scalar(row_to_write++, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
                 }
             }
         }
     );
     return res;
-}
-
-template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-std::optional<DataType> SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
-        const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns
-        ) const {
-    std::optional<DataType> common_input_type;
-    for (const auto& opt_input_agg_column: input_agg_columns) {
-        if (opt_input_agg_column.has_value()) {
-            auto input_data_type = opt_input_agg_column->column_->type().data_type();
-            check_aggregator_supported_with_data_type(input_data_type);
-            add_data_type_impl(input_data_type, common_input_type);
-        }
-    }
-    return common_input_type;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
@@ -195,28 +291,6 @@ void SortedAggregator<aggregation_operator, closed_boundary>::check_aggregator_s
               aggregation_operator == AggregationOperator::COUNT)),
             "Resample: Unsupported aggregation type {} on column '{}' of type {}",
             aggregation_operator, get_input_column_name().value, data_type);
-}
-
-template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_output_data_type(DataType common_input_data_type) const {
-    DataType output_type{common_input_data_type};
-    if constexpr (aggregation_operator == AggregationOperator::SUM) {
-        // Deal with overflow as best we can
-        if (is_unsigned_type(common_input_data_type) || is_bool_type(common_input_data_type)) {
-            output_type = DataType::UINT64;
-        } else if (is_signed_type(common_input_data_type)) {
-            output_type = DataType::INT64;
-        } else if (is_floating_point_type(common_input_data_type)) {
-            output_type = DataType::FLOAT64;
-        }
-    } else if constexpr (aggregation_operator == AggregationOperator::MEAN) {
-        if (!is_time_type(common_input_data_type)) {
-            output_type = DataType::FLOAT64;
-        }
-    } else if constexpr (aggregation_operator == AggregationOperator::COUNT) {
-        output_type = DataType::UINT64;
-    }
-    return output_type;
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>

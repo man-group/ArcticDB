@@ -382,9 +382,8 @@ public:
         return std::move(shapes_.buffer());
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
-            int> = 0>
+    template<class T, template<class> class Tensor>
+    requires std::is_integral_v<T> || std::is_floating_point_v<T>
     void set_array(ssize_t row_offset, Tensor<T> &val) {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
@@ -402,7 +401,8 @@ public:
         ++last_logical_row_;
     }
 
-    template<class T, std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<class T>
+    requires std::is_integral_v<T> || std::is_floating_point_v<T>
     void set_array(ssize_t row_offset, py::array_t<T>& val) {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
