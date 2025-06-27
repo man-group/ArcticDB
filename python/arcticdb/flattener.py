@@ -9,25 +9,16 @@ import collections
 import hashlib
 import msgpack
 
-from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
-
-try:
-    from msgpack.fallback import DEFAULT_RECURSE_LIMIT
-except ImportError:
-    # The default as of msgpack 1.1.0 - handle the import error in case the msgpack wheel stops exporting this constant.
-    # Want to keep compatibility with a wide range of msgpack versions.
-    DEFAULT_RECURSE_LIMIT = 511
-
 from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer
 from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNormalizer
-import arcticdb_ext.stream as adb_stream
 
 
 class Flattener:
     # Probably a bad idea given the dict key could have this, fine for now as write does not allow this symbol anyways.
     SEPARATOR = "__"
+    MAX_KEY_LENGTH = 100
 
     def __init__(self):
         self.custom_normalizer = get_custom_normalizer(False)
@@ -46,9 +37,7 @@ class Flattener:
 
     def compact_v1(self, symbol):
         hash_length = 12
-        if adb_stream.is_symbol_key_valid(symbol):
-            # If the key is something we consider valid just save it for debuggability's sake
-            # The validity check includes a constraint on length
+        if len(symbol) < self.MAX_KEY_LENGTH:
             return symbol
 
         try:
@@ -57,14 +46,8 @@ class Flattener:
             convert = symbol
 
         tokens = symbol.split(self.SEPARATOR)
-        santized_tokens = []
-        for t in tokens:
-            if adb_stream.is_symbol_key_valid(t):
-                santized_tokens.append(t)
-            else:
-                santized_tokens.append("XXX")
+        vaguely_readable_name = "_".join([token[-3:] for token in tokens])[: (self.MAX_KEY_LENGTH - hash_length)]
 
-        vaguely_readable_name = "_".join([token[-3:] for token in santized_tokens])[: (adb_stream.MAX_SYMBOL_LENGTH - hash_length - 1)]
         shortened_hash = str(int(hashlib.sha256(convert).hexdigest(), 16) % 10**hash_length)
         return "{}_{}".format(vaguely_readable_name, shortened_hash)
 
@@ -146,17 +129,8 @@ class Flattener:
 
         return False
 
-    def _create_meta_structure(self, obj, sym, to_write, depth=0, original_symbol=None):
-        if original_symbol is None:
-            original_symbol = sym  # just used for error messages
-
-        # Factor of 2 is because msgpack recurses with two stackframes for each level of nesting
-        if depth > DEFAULT_RECURSE_LIMIT // 2:
-            raise DataTooNestedException(f"Symbol {original_symbol} cannot be recursively normalized as it contains more than "
-                                         f"{DEFAULT_RECURSE_LIMIT // 2} levels of nested dictionaries. This is a limitation of the msgpack serializer.")
-
-        # Commit 450170d94 shows a non-recursive implementation of this function, but since `msgpack.packb` of the
-        # result is itself recursive, there is little point to rewriting this function.
+    def _create_meta_structure(self, obj, sym, to_write):
+        # TODO: convert to non recursive and remove to_write from func arguments to not rely on external state.
         item_type, iterables, normalization_info = self.derive_iterables(obj)
         shortened_symbol = sym
         meta_struct = {
@@ -186,12 +160,8 @@ class Flattener:
         for k, v in iterables:
             # Note: It's fine to not worry about the separator given we just use it to form some sort of vaguely
             # readable name in the end when the leaf node is retrieved.
-            if issubclass(item_type, collections.abc.MutableMapping) and self.SEPARATOR in k:
-                raise UnsupportedKeyInDictionary(f"Dictionary keys used with recursive normalizers cannot contain [{self.SEPARATOR}]. "
-                                         f"Encountered key {k} while writing symbol {original_symbol}")
             key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str(k))
-            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write, depth=depth + 1,
-                                                                       original_symbol=original_symbol))
+            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write))
 
         return meta_struct
 
