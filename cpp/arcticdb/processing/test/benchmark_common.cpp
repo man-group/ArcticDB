@@ -31,7 +31,13 @@ ColumnWithStrings generate_string_dense_column(const size_t num_rows, const size
     offsets.reserve(unique_strings);
     for (size_t _ = 0; _ < unique_strings; _++) {
         auto str = generate_string();
-        offsets.emplace_back(string_pool->get(str, false).offset());
+        if (dt == DataType::UTF_FIXED64) {
+            auto utf32_str = boost::locale::conv::utf_to_utf<char32_t>(str.c_str(), str.c_str() + str.size());
+            std::string utf32_bytes(reinterpret_cast<const char*>(utf32_str.data()), utf32_str.size() * sizeof(char32_t));
+            offsets.emplace_back(string_pool->get(utf32_bytes, false).offset());
+        } else {
+            offsets.emplace_back(string_pool->get(str, false).offset());
+        }
     }
 
     std::vector<int64_t> data;
