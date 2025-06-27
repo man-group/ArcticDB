@@ -86,11 +86,20 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
 ) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     const OutputColumnInfo type_info = generate_common_input_type(input_agg_columns);
+
+    std::cout<<fmt::format("Label: {}", label == ResampleBoundary::LEFT ? "LEFT" : "RIGHT")<<std::endl;
+    std::cout<<fmt::format("Closed: {}", closed == ResampleBoundary::LEFT ? "LEFT" : "RIGHT")<<std::endl;
+    std::cout<<fmt::format("Output index column has {} rows", output_index_column.row_count())<<std::endl;
+    std::cout<<"Index content\n"<<std::flush;
+    Column::for_each<IndexTDT>(output_index_column, [](auto val){ std::cout << val << " "; });
+    std::cout<<std::endl;
+
     if (!type_info.data_type_) {
         return std::nullopt;
     }
 
     if (!type_info.is_sparse_) {
+        std::cout<<fmt::format("Creating a dense column of size {}\n", output_index_column.row_count())<<std::flush;
         return Column(
             make_scalar_type(generate_output_data_type(*type_info.data_type_)),
             output_index_column.row_count(),
@@ -102,47 +111,46 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
         return *(output_index_column.begin<IndexTDT>() + idx);
     };
     util::BitSet sparse_map(output_index_column.row_count());
+    std::cout<<fmt::format("Initialized sparse map of size: {}\n", sparse_map.size())<<std::flush;
     int64_t output_row = 0, output_row_prev = 0;
-
-    std::cout<<fmt::format("Label: {}\n", label == ResampleBoundary::LEFT ? "LEFT" : "RIGHT");
-    std::cout<<fmt::format("Closed: {}\n", closed == ResampleBoundary::LEFT ? "LEFT" : "RIGHT");
-    std::cout<<"Output index column:\n";
-    Column::for_each<IndexTDT>(output_index_column, [](auto val){ std::cout << val << " "; });
-    std::cout<<"\n";
 
     for (size_t col_index = 0; const std::shared_ptr<Column>& input_index_column : input_index_columns) {
         const timestamp first_index_value = *input_index_column->begin<IndexTDT>();
         const timestamp last_index_value = *(input_index_column->begin<IndexTDT>() + (input_index_column->row_count() - 1));
-        std::cout<<fmt::format("Processing column: {}, [{};{}]\n", col_index, first_index_value, last_index_value);
+        std::cout<<fmt::format("Processing column: {}, [{};{}]. Rowcount {}", col_index, first_index_value, last_index_value, input_index_column->row_count())<<std::endl;
 
-        std::cout<<"Skip to find the first bucket containing the column\n";
+        std::cout<<"Skip to find the first bucket containing the column"<<std::endl;
         while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_index_at(output_row), first_index_value)) {
             ++output_row;
         }
         output_row_prev = output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
-        std::cout<<fmt::format("Skipped to output row {}, value {}. First index value: {}\n", output_row, output_index_at(output_row), first_index_value);
+        std::cout<<fmt::format("Skipped to output row {}, value {}. First index value: {}", output_row, output_index_at(output_row), first_index_value)<<std::endl;
 
-        std::cout<<fmt::format("Find which output buckets does the column span\n");
+        std::cout<<fmt::format("Find which output buckets does the column span")<<std::endl;
         while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_index_at(output_row), last_index_value)) {
             ++output_row;
         }
         output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
-        std::cout<<fmt::format("Column index: [{};{}] spans [{};{}] row indexes [{};{}]\n", first_index_value, last_index_value, output_index_at(output_row_prev), output_index_at(output_row), output_row_prev, output_row);
+        std::cout<<fmt::format("Column index: [{};{}] spans [{};{}] row indexes [{};{}]", first_index_value, last_index_value, output_index_at(output_row_prev), output_index_at(output_row), output_row_prev, output_row)<<std::endl;
         if (input_agg_columns[col_index]) {
-            std::cout<<fmt::format("Column {} exists filling sparse map : [{};{}](inclusive)\n", col_index, output_row_prev, output_row);
-            sparse_map.set_range(output_row_prev, output_row);
+            const util::BitSet::size_type interval_end = std::min(static_cast<util::BitSet::size_type>(output_row), sparse_map.size() - 1);
+            std::cout<<fmt::format("Column {} exists filling sparse map : [{};{}](inclusive)", col_index, output_row_prev, interval_end)<<std::endl;
+            sparse_map.set_range(output_row_prev, interval_end);
         }
         output_row_prev = output_row;
         ++col_index;
+        std::cout<<std::endl;
     }
-
-    const Sparsity sparsity = sparse_map.count() == output_index_column.row_count() ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
+    const Sparsity sparsity = sparse_map.count() == sparse_map.size() ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
     const int64_t row_count = sparsity == Sparsity::PERMITTED ? sparse_map.count() : output_index_column.row_count();
+    std::cout<<fmt::format("Creating {} column. Sparse map size: {} sparse map count: {}", sparsity == Sparsity::NOT_PERMITTED ? "Dense" : "Sparse", sparse_map.size(), sparse_map.count())<<std::endl;
     Column result(make_scalar_type(generate_output_data_type(*type_info.data_type_)), row_count, AllocationType::PRESIZED, sparsity);
     if (sparsity == Sparsity::PERMITTED) {
         result.set_sparse_map(std::move(sparse_map));
     }
     result.set_row_data(output_index_column.row_count() - 1);
+
+    std::cout<<std::flush;
     return result;
 
 }
@@ -154,16 +162,26 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                                                           const Column& output_index_column,
                                                                           StringPool& string_pool,
                                                                           const ResampleBoundary label) const {
+    std::cout<<std::endl;
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     std::optional<Column> res = generate_resampling_output_column(input_index_columns, input_agg_columns, output_index_column, label);
     if (!res) {
         return std::nullopt;
     }
-    position_t row_to_write = 0;
+    constexpr char left_bracket = closed == ResampleBoundary::LEFT ? '[' : '(';
+    constexpr char right_bracket = closed == ResampleBoundary::RIGHT ? ']' : ')';
+    //std::cout<<"Buckets: \n";
+    //for (size_t i = 0; i < bucket_boundaries.size() - 1; ++i) {
+    //    std::cout<<fmt::format("{}{};{}{}\n", left_bracket, bucket_boundaries[i], bucket_boundaries[i + 1], right_bracket);
+    //}
+
     details::visit_type(
         res->type().data_type(),
         [&](auto output_type_desc_tag) {
             using output_type_info = ScalarTypeInfo<decltype(output_type_desc_tag)>;
+            auto output_data = res->data();
+            auto output_it = output_data.begin<typename output_type_info::TDT>();
+            auto output_end_it = output_data.end<typename output_type_info::TDT>();
             // Need this here to only generate valid get_bucket_aggregator code, exception will have been thrown earlier at runtime
             if constexpr (is_aggregation_allowed<output_type_info>(aggregation_operator)) {
                 auto bucket_aggregator = get_bucket_aggregator<output_type_info>();
@@ -190,12 +208,23 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                                     auto agg_data = agg_column.column_->data();
                                     auto agg_it = agg_data.template cbegin<typename input_type_info::TDT>();
                                     for (auto index_it = index_data.template cbegin<IndexTDT>(); index_it != index_cend && !reached_end_of_buckets; ++index_it, ++agg_it) {
+                                        std::cout << fmt::format(
+                                            "Processing index: {}. Current bucket: {}{};{}{}. Data: {}", *index_it,
+                                            left_bracket, current_bucket.start(), current_bucket.end(), right_bracket,
+                                            *agg_it) << std::endl;
                                         if (ARCTICDB_LIKELY(current_bucket.contains(*index_it))) {
+                                            std::cout << fmt::format("Current bucket: {}{};{}{} contains {} pushing",
+                                                                     left_bracket, current_bucket.start(),
+                                                                     current_bucket.end(), right_bracket,
+                                                                     *index_it, *agg_it) << std::endl;
                                             push_to_aggregator<input_type_info::data_type>(bucket_aggregator, *agg_it, agg_column);
                                             bucket_has_values = true;
-                                        } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, *bucket_end_it)) && row_to_write < output_index_column.row_count()) {
+                                        } else if (ARCTICDB_LIKELY(index_value_past_end_of_bucket(*index_it, current_bucket.end())) && output_it != output_end_it) {
                                             if (bucket_has_values) {
-                                                res->set_scalar(row_to_write++, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
+                                                std::cout<<fmt::format("Index {} past end of bucket {}{};{}{} finalizing",
+                                                    *index_it, left_bracket, current_bucket.start(), current_bucket.end(), right_bracket)<<std::endl;
+                                                *output_it = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                                                ++output_it;
                                             }
                                             // The following code is equivalent to:
                                             // if constexpr (closed_boundary == ResampleBoundary::LEFT) {
@@ -233,45 +262,37 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                             }
                         );
                     } else {
-                        // The segment does not contain the aggregation column. However, one of the columns in
-                        // input_agg_columns contains the aggregation column. We cannot end up here if none of the
-                        // columns in input_agg_columns contain the aggregation column as there's an early exit in
-                        // that case (common_input_type is std::nullopt). Even though this does not contain the
-                        // aggregation column, it contains index values. The output column will be sparse, and the
-                        // buckets resulting from the index values of this column will be empty. We need to check how
-                        // many buckets this column covers and advance row_to_write that many times. Since we know that
-                        // no aggregation is performed, it's enough to check the last index value of this column.
-                        // Note: The output index can contain fewer buckets than the buckets represented by
-                        // bucket_boundaries. Because if no data falls inside a bucket, we omit if from the result.
                         const Column& input_index = *input_index_columns[idx];
                         const timestamp last_index_value = *input_index.scalar_at<IndexTDT::DataTypeTag::raw_type>(input_index.row_count() - 1);
-                        // Check how many rows of the index must be skipped
-                        auto next_output_index_row = row_to_write + (label == ResampleBoundary::LEFT);
-                        while (next_output_index_row < output_index_column.row_count() &&
-                               *output_index_column.scalar_at<timestamp>(next_output_index_row) < last_index_value + (closed_boundary == ResampleBoundary::LEFT)) {
-                            if (bucket_has_values) {
-                                res->set_scalar(row_to_write, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
-                                bucket_has_values = false;
-                            }
-                            ++row_to_write;
-                            ++next_output_index_row;
-                        }
-
                         // Check how many buckets must be skipped.
+                        bool moved_to_new_bucket{};
                         while (bucket_end_it != bucket_boundaries_end && index_value_past_end_of_bucket(last_index_value, *bucket_end_it)) {
                             ++bucket_start_it;
                             ++bucket_end_it;
+                            moved_to_new_bucket = true;
                         }
                         if (bucket_end_it == bucket_boundaries_end) {
                             reached_end_of_buckets = true;
                         } else {
+                            if (moved_to_new_bucket) {
+                                std::cout<<fmt::format("Missing column has moved to a new bucket: {} {}\n", *bucket_start_it, *bucket_end_it);
+                                if (bucket_has_values) {
+                                    std::cout<<fmt::format("Column preceding empty column had values to finalize\n");
+                                    *output_it = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                                    ++output_it;
+                                }
+                                bucket_has_values = false;
+                            }
                             current_bucket.set_boundaries(*bucket_start_it, *bucket_end_it);
+
                         }
                     }
                 }
                 // We were in the middle of aggregating a bucket when we ran out of index values
-                if (row_to_write < output_index_column.row_count() && bucket_has_values) {
-                    res->set_scalar(row_to_write++, finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool));
+                if (output_it != output_end_it) {
+                    std::cout<<fmt::format("Reached end of input index values. Finalize aggregator\n");
+                    *output_it = finalize_aggregator<output_type_info::data_type>(bucket_aggregator, string_pool);
+                    ++output_it;
                 }
             }
         }

@@ -635,3 +635,59 @@ TYPED_TEST(SortedAggregatorSparseStructure, FirstColumnIsMissing) {
     ASSERT_EQ(sparse_map[0], false);
     ASSERT_EQ(sparse_map[1], true);
 }
+
+TYPED_TEST(SortedAggregatorSparseStructure, ThreeSegmentsInABucketMiddleIsMissing) {
+    using IndexTDT = typename TypeParam::IndexTDT;
+    const typename TypeParam::SortedAggregator aggregator{ColumnName{"input_column_name"}, ColumnName{"output_column_name"}};
+    constexpr ResampleBoundary label = TypeParam::label;
+    constexpr static std::array<timestamp, 2> bucket_boundaries{0, 10};
+    constexpr static std::array output_index = generate_labels(bucket_boundaries, label);
+    const Column output_index_column = create_dense_column<IndexTDT>(output_index);
+
+    const std::array input_index_columns{
+        std::make_shared<Column>(create_dense_column<IndexTDT>(std::array<timestamp, 2>{0, 1})),
+        std::make_shared<Column>(create_dense_column<IndexTDT>(std::array<timestamp, 1>{2})),
+        std::make_shared<Column>(create_dense_column<IndexTDT>(std::array<timestamp, 1>{3}))
+    };
+    const std::array input_agg_columns{
+        std::make_optional(ColumnWithStrings{create_dense_column<ScalarTagType<DataTypeTag<DataType::INT32>>>(std::array{1, 2}), nullptr, "col1"}),
+        std::optional<ColumnWithStrings>{},
+        std::make_optional(ColumnWithStrings{create_dense_column<ScalarTagType<DataTypeTag<DataType::INT32>>>(std::array{3, 4}), nullptr, "col1"}),
+    };
+    const std::optional<Column> output = aggregator.generate_resampling_output_column(
+        input_index_columns,
+        input_agg_columns,
+        output_index_column,
+        label);
+    ASSERT_TRUE(output.has_value());
+    assert_column_is_dense(*output);
+    ASSERT_EQ(output->row_count(), 1);
+}
+
+TYPED_TEST(SortedAggregatorSparseStructure, ThreeSegmentsInABuckeOnlyMiddleIsPresent) {
+    using IndexTDT = typename TypeParam::IndexTDT;
+    const typename TypeParam::SortedAggregator aggregator{ColumnName{"input_column_name"}, ColumnName{"output_column_name"}};
+    constexpr ResampleBoundary label = TypeParam::label;
+    constexpr static std::array<timestamp, 2> bucket_boundaries{0, 10};
+    constexpr static std::array output_index = generate_labels(bucket_boundaries, label);
+    const Column output_index_column = create_dense_column<IndexTDT>(output_index);
+
+    const std::array input_index_columns{
+        std::make_shared<Column>(create_dense_column<IndexTDT>(std::array<timestamp, 2>{0, 1})),
+        std::make_shared<Column>(create_dense_column<IndexTDT>(std::array<timestamp, 1>{2})),
+        std::make_shared<Column>(create_dense_column<IndexTDT>(std::array<timestamp, 1>{3}))
+    };
+    const std::array input_agg_columns{
+        std::optional<ColumnWithStrings>{},
+        std::make_optional(ColumnWithStrings{create_dense_column<ScalarTagType<DataTypeTag<DataType::INT32>>>(std::array{1}), nullptr, "col1"}),
+        std::optional<ColumnWithStrings>{}
+    };
+    const std::optional<Column> output = aggregator.generate_resampling_output_column(
+        input_index_columns,
+        input_agg_columns,
+        output_index_column,
+        label);
+    ASSERT_TRUE(output.has_value());
+    assert_column_is_dense(*output);
+    ASSERT_EQ(output->row_count(), 1);
+}
