@@ -562,7 +562,7 @@ public:
         return *columns_[idx];
     }
 
-    std::shared_ptr<Column> column_ptr(position_t idx) {
+    std::shared_ptr<Column> column_ptr(position_t idx) const {
         return columns_[idx];
     }
 
