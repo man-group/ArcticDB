@@ -147,6 +147,12 @@ def pytest_generate_tests(metafunc):
 # endregion
 # region ======================================= Storage Fixtures =======================================
 
+@pytest.fixture(scope="session")
+def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
+    tmp_path = tmp_path_factory.mktemp("lmdb")
+    with LmdbStorageFixture(tmp_path) as f:
+        yield f
+
 
 @pytest.fixture(scope="function")
 def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
