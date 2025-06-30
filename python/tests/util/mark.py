@@ -24,6 +24,7 @@ WINDOWS = sys.platform.lower().startswith("win32")
 # This is meant to be used as a temporary flag to skip/xfail those tests.
 ARCTICDB_USING_CONDA = marks.ARCTICDB_USING_CONDA
 MACOS_CONDA_BUILD = ARCTICDB_USING_CONDA and MACOS
+MACOS_WHEEL_BUILD = not ARCTICDB_USING_CONDA and MACOS
 
 _MACOS_AZURE_TESTS_SKIP_REASON = (
     "Tests fail for macOS vcpkg builds, either because Azurite is improperly configured"
