@@ -19,20 +19,20 @@ namespace stream {
 void register_stream_bindings(py::module &m);
 
 inline void register_bindings(py::module &m) {
-    auto arcticdb_ext_types = m.def_submodule("types", R"pydoc(
+    auto arcticxx_types = m.def_submodule("types", R"pydoc(
     Fundamental types
     -----------------
     Contains definition of the types used to define the descriptors)pydoc");
 
-    arcticdb::register_types(arcticdb_ext_types);
+    arcticdb::register_types(arcticxx_types);
 
-    auto arcticdb_ext_stream = m.def_submodule("stream", R"pydoc(
+    auto arcticxx_stream = m.def_submodule("stream", R"pydoc(
     arcticdb Streams
     -----------------
     Contains the stream api classes used to write/read streams of values
     )pydoc");
 
-    arcticdb::stream::register_stream_bindings(arcticdb_ext_stream);
+    arcticdb::stream::register_stream_bindings(arcticxx_stream);
 }
 
 } // namespace arcticdb::stream
