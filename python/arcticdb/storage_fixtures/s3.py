@@ -27,6 +27,8 @@ import werkzeug
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
 
+from arcticdb.util.utils import get_logger
+
 from .api import *
 from .utils import (
     get_ephemeral_port,
@@ -111,6 +113,10 @@ class S3Bucket(StorageFixture):
             # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
+        try:
+            self.slow_cleanup()
+        except Exception as e:
+            get_logger().warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
 
