@@ -163,9 +163,7 @@ DataType SumAggregatorData::get_output_data_type() {
         // If data_type_ has no value or is empty type, it means there is no data for this aggregation
         // For sums, we want this to display as zero rather than NaN
         output_type_ = DataType::FLOAT64;
-    } else if (is_bool_type(*common_input_type_)) {
-        output_type_ = DataType::BOOL8;
-    } else if (is_unsigned_type(*common_input_type_)) {
+    } else if (is_unsigned_type(*common_input_type_) || is_bool_type(*common_input_type_)) {
         output_type_ = DataType::UINT64;
     } else if (is_signed_type(*common_input_type_)) {
         output_type_ = DataType::INT64;
@@ -190,19 +188,17 @@ void SumAggregatorData::aggregate(const ColumnWithStrings& input_column, const s
         using RawType = typename global_type_info::RawType;
         if constexpr(!is_sequence_type(global_type_info::data_type)) {
             aggregated_.resize(sizeof(RawType) * unique_values);
-            auto out_ptr = reinterpret_cast<RawType*>(aggregated_.data());
-            details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, &out_ptr] (auto col_tag) {
+            auto out = std::span{reinterpret_cast<RawType*>(aggregated_.data()), unique_values};
+            details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, &out] (auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 if constexpr(!is_sequence_type(col_type_info::data_type)) {
-                    Column::for_each_enumerated<typename col_type_info::TDT>(*input_column.column_, [&out_ptr, &groups](auto enumerating_it) {
-                        if constexpr (is_bool_type(global_type_info::data_type)) {
-                            out_ptr[groups[enumerating_it.idx()]] |= RawType(enumerating_it.value());
-                        } else if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                    Column::for_each_enumerated<typename col_type_info::TDT>(*input_column.column_, [&out, &groups](auto enumerating_it) {
+                       if constexpr (is_floating_point_type(col_type_info::data_type)) {
                             if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                                out_ptr[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
+                                out[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
                             }
                         } else {
-                            out_ptr[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
+                            out[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
                         }
                     });
                 } else {
@@ -219,11 +215,11 @@ SegmentInMemory SumAggregatorData::finalize(const ColumnName& output_column_name
     if(!aggregated_.empty()) {
         details::visit_type(get_output_data_type(), [this, &res, &output_column_name, unique_values] (auto col_tag) {
             using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-            aggregated_.resize(sizeof(typename col_type_info::RawType)* unique_values);
+            aggregated_.resize(sizeof(typename col_type_info::RawType) * unique_values);
             auto col = std::make_shared<Column>(make_scalar_type(output_type_.value()), unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
             memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
-            res.add_column(scalar_field(output_type_.value(), output_column_name.value), col);
             col->set_row_data(unique_values - 1);
+            res.add_column(scalar_field(output_type_.value(), output_column_name.value), std::move(col));
         });
     }
     return res;
@@ -244,17 +240,13 @@ namespace
     std::shared_ptr<Column> create_output_column(TypeDescriptor td, util::BitMagic&& sparse_map, size_t unique_values) {
         sparse_map.resize(unique_values);
         const size_t num_set_rows = sparse_map.count();
-        const bool column_is_dense = num_set_rows == sparse_map.size();
-        if (column_is_dense) {
-            auto col = std::make_shared<Column>(td, unique_values, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-            col->set_row_data(unique_values - 1);
-            return col;
-        } else {
-            auto col = std::make_shared<Column>(td, num_set_rows, AllocationType::PRESIZED, Sparsity::PERMITTED);
+        const Sparsity sparsity = num_set_rows == sparse_map.size() ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
+        auto col = std::make_shared<Column>(td, unique_values, AllocationType::PRESIZED, sparsity);
+        if (sparsity == Sparsity::PERMITTED) {
             col->set_sparse_map(std::move(sparse_map));
-            col->set_row_data(unique_values - 1);
-            return col;
         }
+        col->set_row_data(unique_values - 1);
+        return col;
     }
 
     template<Extremum E, typename ColType>
