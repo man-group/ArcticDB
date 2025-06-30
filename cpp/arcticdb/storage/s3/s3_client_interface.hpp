@@ -58,6 +58,12 @@ struct ListObjectsOutput{
 struct FailedDelete{
     std::string s3_object_name;
     std::string error_message;
+
+#ifdef __apple_build_version__
+    // Required because Apple Clang doesn't support aggregate initialization.
+    FailedDelete(const std::string& name, const std::string& message)
+        : s3_object_name(name), error_message(message) {}
+#endif
 };
 
 struct DeleteObjectsOutput{
