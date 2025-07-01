@@ -669,7 +669,7 @@ def mock_s3_store_with_error_simulation_factory(
 
 @pytest.fixture
 def real_s3_store_factory(lib_name, real_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield s3_storage.create_version_store_factory(lib_name)
+    yield real_s3_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture

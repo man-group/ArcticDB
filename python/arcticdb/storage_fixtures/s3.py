@@ -116,6 +116,9 @@ class S3Bucket(StorageFixture):
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
+            assert len(self.libs_from_factory) < 1, f"There are items left in cache: {self.libs_from_factory.items()}"
+        get_logger().warning(f"Libraries not cleared remaining {self.libs_from_factory.keys()}")
+        
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
         cfg = EnvironmentConfigsMap()
@@ -182,7 +185,7 @@ class S3Bucket(StorageFixture):
 
         logger.warning(f"Total objects left: {len(content)}")
         logger.warning(f"First 100: {content[0:100]}")
-        logger.warning(f"BUCKET: {self.default_bucket}")
+        logger.warning(f"BUCKET: {self.bucket}")
         left_from = set()
         for key in content:
             library_name = key.split("/")[1] # get the name from object
