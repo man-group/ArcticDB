@@ -375,6 +375,7 @@ def real_s3_from_environment_variables(
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     return out
 
+
 def real_gcp_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
 ) -> BaseGCPStorageFixtureFactory:
@@ -644,15 +645,14 @@ class HostDispatcherApplication(DomainDispatcherApplication):
 
         with self.lock:
             # Check for x-amz-checksum-mode header
-            if environ.get('HTTP_X_AMZ_CHECKSUM_MODE') == 'enabled':
+            if environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                    b'<Error><Code>MissingContentLength</Code>'
-                    b'<Message>You must provide the Content-Length HTTP header.</Message></Error>'
+                    b"<Error><Code>MissingContentLength</Code>"
+                    b"<Message>You must provide the Content-Length HTTP header.</Message></Error>"
                 )
                 start_response(
-                    "411 Length Required", 
-                    [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                    "411 Length Required", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
                 )
                 return [response_body]
             # Mock ec2 imds responses for testing
@@ -725,6 +725,7 @@ def run_gcp_server(port, key_file, cert_file):
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
+
 def create_bucket(s3_client, bucket_name, max_retries=15):
     for i in range(max_retries):
         try:
@@ -734,7 +735,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             if i >= max_retries - 1:
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
-            time.sleep(1)   
+            time.sleep(1)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -817,7 +818,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             ),
         )
         self._p.start()
-        wait_for_server_to_come_up(self.endpoint, "moto", self._p)
+        # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
+        # Due to this, we need to wait for the server to come up for a longer time
+        wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
 
     def _safe_enter(self):
         for _ in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
@@ -903,7 +906,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 )  # If CA cert verify fails, it will take ages for this line to finish
             except Exception:
                 # We clean bucket at session level so failure here does not matter
-                pass            
+                pass
             self._iam_admin = None
 
 
@@ -950,7 +953,9 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
             ),
         )
         self._p.start()
-        wait_for_server_to_come_up(self.endpoint, "moto", self._p)
+        # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
+        # Due to this, we need to wait for the server to come up for a longer time
+        wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
