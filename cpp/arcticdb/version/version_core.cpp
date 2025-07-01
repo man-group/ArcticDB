@@ -901,11 +901,19 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     return add_schema_check(pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config);
 }
 
-static OutputSchema create_initial_output_schema(const PipelineContext& pipeline_context) {
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(pipeline_context.norm_meta_,
-                                                    "Normalization metadata should not be missing during read_and_process");
+static StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext& pipeline_context) {
+    const StreamDescriptor& desc = pipeline_context.descriptor();
+    // pipeline_context.overall_column_bitset_ can be different from std::nullopt only in case of static schema. We use
+    // it to constrain the initial set of columns. If dynamic schema is used and only certain columns must be read we
+    // use the whole descriptor and at the end of the read return only the ones that were selected. This is because
+    // currently dynamic schema cannot handle column dependencies e.g.
+    // columns on disk: col1, col2
+    // q = QueryBuilder()
+    // q = q["col1" < 1]
+    // lib.read(columns=["col2", query_builder=q)
+    // We want to read only col2 but the filtering requires col1, thus the OutputSchema must contain both col1 and col2
+    // in order to satisfy the filter clause.
     if (pipeline_context.overall_column_bitset_) {
-        const StreamDescriptor& desc = pipeline_context.descriptor();
         FieldCollection fields_to_use;
         auto overall_fields_it = pipeline_context.overall_column_bitset_->first();
         const auto overall_fields_end = pipeline_context.overall_column_bitset_->end();
@@ -913,15 +921,21 @@ static OutputSchema create_initial_output_schema(const PipelineContext& pipeline
             fields_to_use.add(desc.field(*overall_fields_it).ref());
             ++overall_fields_it;
         }
-        return OutputSchema{
-            StreamDescriptor{desc.data_ptr(), std::make_shared<FieldCollection>(std::move(fields_to_use))},
-            *pipeline_context.norm_meta_
-        };
+        return StreamDescriptor{desc.data_ptr(), std::make_shared<FieldCollection>(std::move(fields_to_use))};
     }
-    return OutputSchema{std::move(pipeline_context.descriptor()), *pipeline_context.norm_meta_};
+    return desc;
 }
 
-static OutputSchema generate_output_schema(const PipelineContext& pipeline_context, std::span<std::shared_ptr<Clause>> clauses) {
+static OutputSchema create_initial_output_schema(const PipelineContext& pipeline_context) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(pipeline_context.norm_meta_,
+                                                    "Normalization metadata should not be missing during read_and_process");
+    return OutputSchema{generate_initial_output_schema_descriptor(pipeline_context), *pipeline_context.norm_meta_};
+}
+
+static OutputSchema generate_output_schema(
+    const PipelineContext& pipeline_context,
+    const std::span<const std::shared_ptr<Clause>> clauses
+) {
     OutputSchema output_schema = create_initial_output_schema(pipeline_context);
     for (const auto& clause: clauses) {
         output_schema = clause->modify_schema(std::move(output_schema));
@@ -2288,7 +2302,7 @@ folly::Future<SymbolProcessingResult> read_and_process(
     OutputSchema output_schema = generate_output_schema(*pipeline_context, read_query->clauses_);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
-    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, std::move(component_manager))
     .thenValueInline([res_versioned_item = std::move(res_versioned_item), pipeline_context, output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
         // Pipeline context user metadata is not populated in the case that only incomplete segments exist for a symbol, no indexed versions
         return SymbolProcessingResult{std::move(res_versioned_item),

@@ -53,17 +53,17 @@ DataType SortedAggregator<aggregation_operator, closed_boundary>::generate_outpu
 }
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-typename SortedAggregator<aggregation_operator, closed_boundary>::OutputColumnInfo SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
+SortedAggregatorOutputColumnInfo SortedAggregator<aggregation_operator, closed_boundary>::generate_common_input_type(
     const std::span<const std::optional<ColumnWithStrings>> input_agg_columns
 ) const {
-    OutputColumnInfo output_column_info;
+    SortedAggregatorOutputColumnInfo output_column_info;
     for (const auto& opt_input_agg_column: input_agg_columns) {
         if (opt_input_agg_column.has_value()) {
             auto input_data_type = opt_input_agg_column->column_->type().data_type();
             check_aggregator_supported_with_data_type(input_data_type);
             add_data_type_impl(input_data_type, output_column_info.data_type_);
         } else {
-            output_column_info.is_sparse_ = true;
+            output_column_info.maybe_sparse_ = true;
         }
     }
     return output_column_info;
@@ -85,13 +85,13 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
     [[maybe_unused]] const ResampleBoundary label
 ) const {
     using IndexTDT = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    const OutputColumnInfo type_info = generate_common_input_type(input_agg_columns);
+    const SortedAggregatorOutputColumnInfo type_info = generate_common_input_type(input_agg_columns);
 
     if (!type_info.data_type_) {
         return std::nullopt;
     }
 
-    if (!type_info.is_sparse_) {
+    if (!type_info.maybe_sparse_) {
         return Column(
             make_scalar_type(generate_output_data_type(*type_info.data_type_)),
             output_index_column.row_count(),
@@ -99,30 +99,35 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
             Sparsity::NOT_PERMITTED
         );
     }
-    auto output_index_at = [&output_index_column](const int64_t idx) {
-        return *(output_index_column.begin<IndexTDT>() + idx);
-    };
-    util::BitSet sparse_map(output_index_column.row_count());
-    int64_t output_row = 0, output_row_prev = 0;
 
-    for (size_t col_index = 0; const std::shared_ptr<Column>& input_index_column : input_index_columns) {
+    auto output_data = output_index_column.data();
+    const auto output_accessor = random_accessor<IndexTDT>(&output_data);
+    util::BitSet sparse_map(output_index_column.row_count());
+    int64_t output_row = 0;
+    int64_t output_row_prev = 0;
+
+    for (auto&& [col_index, input_index_column] : folly::enumerate(input_index_columns)) {
         // Skip all labels that come before the first index value in the input column
         const timestamp first_index_value = *input_index_column->begin<IndexTDT>();
-        while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_index_at(output_row), first_index_value)) {
+        while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_accessor.at(output_row), first_index_value)) {
             ++output_row;
         }
         // If label is left this means the "bucket" is represented by the start of the interval, thus the loop above
         // skipped to the beginning of the next bucket.
-        output_row_prev = output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
+        output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
+        output_row_prev = output_row;
 
         // Compute how many output index values does the column span
         const timestamp last_index_value = *(input_index_column->begin<IndexTDT>() + (input_index_column->row_count() - 1));
-        while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_index_at(output_row), last_index_value)) {
+        while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_accessor.at(output_row), last_index_value)) {
             ++output_row;
         }
         output_row = std::max(int64_t{0}, output_row - (label == ResampleBoundary::LEFT));
 
         if (input_agg_columns[col_index]) {
+            // This can happen when a column has values in the last bucket and there are columns after that which are
+            // also in the last bucket. There's no need to iterate over the rest columns as we only need to know
+            // if there's something in the bucket.
             if (output_row >= sparse_map.size()) {
                 sparse_map.set_range(output_row_prev, sparse_map.size() - 1);
                 break;
@@ -130,7 +135,6 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
             sparse_map.set_range(output_row_prev, output_row);
         }
         output_row_prev = output_row;
-        ++col_index;
     }
     const Sparsity sparsity = sparse_map.count() == sparse_map.size() ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
     const int64_t row_count = sparsity == Sparsity::PERMITTED ? sparse_map.count() : output_index_column.row_count();
@@ -175,7 +179,8 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::a
                     // segment. This means that there is no way we can push in the aggregator. The only thing that must
                     // be done is skipping buckets and (if needed) finalize the aggregator but that is covered by the
                     // else if (index_value_past_end_of_bucket(*index_it, current_bucket.end())) && output_it != output_end_it)
-                    // below.
+                    // below. This works because the sparse structure of the output column is precomputed by
+                    // generate_resampling_output_column and the column data is pre-allocated.
                     if (input_agg_column.has_value()) {
                         details::visit_type(
                             input_agg_column->column_->type().data_type(),

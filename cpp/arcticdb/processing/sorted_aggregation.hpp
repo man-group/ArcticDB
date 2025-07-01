@@ -358,6 +358,11 @@ private:
     uint64_t count_{0};
 };
 
+struct SortedAggregatorOutputColumnInfo {
+    std::optional<DataType> data_type_{};
+    bool maybe_sparse_{};
+};
+
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 class SortedAggregator {
 public:
@@ -390,11 +395,7 @@ public:
         const ResampleBoundary label) const;
 
 private:
-    struct OutputColumnInfo {
-        std::optional<DataType> data_type_{};
-        bool is_sparse_{};
-    };
-    [[nodiscard]] OutputColumnInfo generate_common_input_type(std::span<const std::optional<ColumnWithStrings>>) const;
+    [[nodiscard]] SortedAggregatorOutputColumnInfo generate_common_input_type(std::span<const std::optional<ColumnWithStrings>>) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
 
     template<DataType input_data_type, typename Aggregator, typename T>
