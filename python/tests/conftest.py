@@ -630,15 +630,15 @@ def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
 
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
+def _store_factory(lib_name, bucket) -> Generator[Callable[..., NativeVersionStore], None, None]:
+    yield bucket.create_version_store_factory(lib_name)
+    bucket.slow_cleanup()
+
 
 @pytest.fixture
 def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    f: NativeVersionStore = lmdb_storage.create_version_store_factory(lib_name)
-    yield f
-    try:
-        f.clear()
-    except Exception as e:
-        pass
+    yield from _store_factory(lib_name, lmdb_storage)
+
 
 @pytest.fixture
 def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
@@ -655,14 +655,12 @@ def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
 
 @pytest.fixture
 def s3_store_factory(lib_name, s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with s3_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, s3_storage)
 
 
 @pytest.fixture
 def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with s3_no_ssl_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, s3_no_ssl_storage)
 
 @pytest.fixture
 def mock_s3_store_with_error_simulation_factory(
@@ -674,44 +672,37 @@ def mock_s3_store_with_error_simulation_factory(
 
 @pytest.fixture
 def real_s3_store_factory(lib_name, real_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with real_s3_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, real_s3_storage)
 
 
 @pytest.fixture
 def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with nfs_backed_s3_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, nfs_backed_s3_storage)
 
 
 @pytest.fixture
 def real_gcp_store_factory(lib_name, real_gcp_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with real_gcp_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, real_gcp_storage)
 
 
 @pytest.fixture
 def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with real_s3_sts_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, real_s3_sts_storage)
 
 
 @pytest.fixture
 def azure_store_factory(lib_name, azurite_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with azurite_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, azurite_storage)
 
 
 @pytest.fixture
 def mongo_store_factory(mongo_storage, lib_name) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with mongo_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, mongo_storage)
 
 
 @pytest.fixture
 def in_memory_store_factory(mem_storage, lib_name) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    with mem_storage.create_version_store_factory(lib_name) as f:
-        yield f
+    yield from _store_factory(lib_name, mem_storage)
 
 
 # endregion
