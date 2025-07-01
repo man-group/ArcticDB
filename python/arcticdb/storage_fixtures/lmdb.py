@@ -38,6 +38,7 @@ class LmdbStorageFixture(StorageFixture):
         return out
 
     def __exit__(self, exc_type, exc_value, traceback):
+        self.slow_cleanup()
         for result in chain(self.libs_from_factory.values(), self.libs_instances_from_arctic):
             #  pytest holds a member variable `cached_result` equal to `result` above which keeps the storage alive and
             #  locked. See https://github.com/pytest-dev/pytest/issues/5642 . So we need to decref the C++ objects
