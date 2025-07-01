@@ -40,6 +40,7 @@ from .utils import (
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
 from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, GCPXMLSettings as NativeGCPXMLSettings
+from arcticdb_ext.tools import S3Tool
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -113,10 +114,6 @@ class S3Bucket(StorageFixture):
             # client_cert_dir is skipped on purpose; It will be tested manually in other tests
 
     def __exit__(self, exc_type, exc_value, traceback):
-        try:
-            self.slow_cleanup()
-        except Exception as e:
-            get_logger().warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
 
@@ -178,6 +175,21 @@ class S3Bucket(StorageFixture):
         for key in self.iter_underlying_object_names():
             dest.copy({"Bucket": self.bucket, "Key": key}, key, SourceClient=source_client)
 
+    def check_bucket(self, assert_on_fail = True):
+        s3_tool = S3Tool(self.bucket, self.factory.default_key.id, 
+                        self.factory.default_key.secret, self.factory.endpoint)
+        content = s3_tool.list_bucket(self.bucket)
+
+        logger.warning(f"Total objects left: {len(content)}")
+        logger.warning(f"First 100: {content[0:100]}")
+        logger.warning(f"BUCKET: {self.default_bucket}")
+        left_from = set()
+        for key in content:
+            library_name = key.split("/")[1] # get the name from object
+            left_from.add(library_name)
+        logger.warning(f"Left overs from libraries: {left_from}")
+        if assert_on_fail: 
+            assert len(content) < 1
 
 class NfsS3Bucket(S3Bucket):
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
@@ -307,6 +319,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             # We are not writing to buckets in this case
             # and if we try to delete the bucket, it will fail
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+            b.check_bucket(assert_on_fail=True)
 
 
 class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
@@ -341,6 +354,7 @@ class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
             # We are not writing to buckets in this case
             # and if we try to delete the bucket, it will fail
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+            b.check_bucket(assert_on_fail=True)
 
 
 def real_s3_from_environment_variables(
