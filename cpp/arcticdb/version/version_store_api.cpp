@@ -955,18 +955,15 @@ void PythonVersionStore::delete_versions(
     }
 }
 
-void PythonVersionStore::batch_delete_versions(
+std::vector<DataError> PythonVersionStore::batch_delete_versions(
     const std::vector<StreamId>& stream_ids,
     const std::vector<std::vector<VersionId>>& version_ids) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions, stream_ids and version_ids must have the same size");
     
     auto results = batch_delete_versions_internal(stream_ids, version_ids);
     
-    // If no results, nothing to delete
-    if (results.empty()) {
-        return;
-    }
-    
+    std::vector<DataError> return_results;
+
     std::vector<IndexTypeKey> keys_to_delete;
     std::vector<std::pair<StreamId, VersionId>> symbols_to_delete;
     std::vector<std::string> failed_symbols;
@@ -984,7 +981,7 @@ void PythonVersionStore::batch_delete_versions(
                 }
             },
             [&](const DataError& data_error) {
-                failed_symbols.push_back(data_error.symbol());
+                return_results.emplace_back(data_error);
             }
         );
     }
@@ -994,17 +991,16 @@ void PythonVersionStore::batch_delete_versions(
         delete_tree(keys_to_delete, TombstoneVersionResult{true});
     }
 
-    std::vector<folly::Future<folly::Unit>> remove_symbol_tasks;
-
-    for(const auto& [stream_id, latest_version] : symbols_to_delete) {
-        remove_symbol_tasks.push_back(async::submit_io_task(DeleteSymbolTask{store(), symbol_list_ptr(), stream_id, latest_version}));
+    auto sym_delete_results = batch_delete_symbols_internal(symbols_to_delete);
+    
+    for(size_t i = 0; i < symbols_to_delete.size(); ++i) {
+        const auto& result = sym_delete_results[i];
+        if(std::holds_alternative<DataError>(result)) {
+            return_results.emplace_back(std::get<DataError>(result));
+        }
     }
-
-    folly::collectAll(remove_symbol_tasks).get();
-
-    if(!failed_symbols.empty()) {
-        throw InternalException(fmt::format("Failed to delete versions for symbols: {}", fmt::join(failed_symbols, ", ")));
-    }
+    
+    return return_results;
 }
 
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {

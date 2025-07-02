@@ -39,6 +39,7 @@ from arcticdb.version_store.library import (
     ReadRequest,
     ReadInfoRequest,
     ArcticInvalidApiUsageException,
+    DeleteRequest,
 )
 
 
@@ -495,6 +496,57 @@ def test_delete_batch(library_factory, sym):
     lib.delete(sym)
     lib_tool = lib._nvs.library_tool()
     assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+
+
+@pytest.mark.storage
+@pytest.mark.xfail(reason="Delete batch is not implemented yet")
+def test_delete_batch_comprehensive(arctic_library):
+    """Test delete_batch with both string symbols and DeleteRequest objects."""
+    lib = arctic_library
+
+    # Create test data
+    df1 = pd.DataFrame({"col": [1, 2, 3]})
+    df2 = pd.DataFrame({"col": [4, 5, 6]})
+    df3 = pd.DataFrame({"col": [7, 8, 9]})
+
+    # Write multiple versions of symbols
+    lib.write("sym1", df1)
+    lib.write("sym1", df2)  # version 1
+    lib.write("sym2", df3)
+
+    # Test 1: Delete all versions of a symbol (string input)
+    result = lib.delete_batch(["sym1"])
+
+    # Verify sym1 is deleted
+    assert not lib.has_symbol("sym1")
+    assert lib.has_symbol("sym2")  # sym2 should still exist
+
+    # Test 2: Delete specific versions using DeleteRequest
+    lib.write("sym3", df1)
+    lib.write("sym3", df2)  # version 1
+    lib.write("sym3", df3)  # version 2
+
+    # Delete only version 1 of sym3
+    delete_request = DeleteRequest("sym3", [1])
+    result = lib.delete_batch([delete_request])
+
+    # sym3 should still exist but version 1 should be deleted
+    assert lib.has_symbol("sym3")
+    versions = lib.list_versions("sym3")
+    assert ("sym3", 0) in versions
+    assert ("sym3", 2) in versions
+    assert ("sym3", 1) not in versions
+
+    # Test 3: Mixed input types
+    lib.write("sym4", df1)
+    lib.write("sym5", df2)
+
+    result = lib.delete_batch(["sym4", DeleteRequest("sym5", [0])])
+
+    # sym4 should be completely deleted
+    assert not lib.has_symbol("sym4")
+    # sym5 should still exist but version 0 should be deleted
+    assert lib.has_symbol("sym5")
 
 
 @pytest.mark.storage
