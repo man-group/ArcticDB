@@ -14,12 +14,52 @@
 
 namespace arcticdb {
 
+sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::string_view name) {
+    auto res = type.visit_tag([](auto &&impl) {
+        using TagType = std::decay_t<decltype(impl)>;
+        using DataTagType = typename TagType::DataTypeTag;
+        using RawType = typename DataTagType::raw_type;
+        std::optional<sparrow::validity_bitmap> validity_bitmap;
+        if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
+            // TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
+            //  consistent when there are zero rows. But sparrow (or possibly Arrow) requires at least one key-value
+            //  pair in the dictionary, even if there are zero rows
+            auto offset_ptr = new int64_t[2];
+            offset_ptr[0] = 0;
+            offset_ptr[1] = 1;
+            auto strings_ptr = new char[1];
+            strings_ptr[0] = 'a';
+            sparrow::u8_buffer<int64_t> offset_buffer(offset_ptr, 2);
+            sparrow::u8_buffer<char> strings_buffer(strings_ptr, 1);
+            sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
+            sparrow::big_string_array dict_values_array(
+                    std::move(strings_buffer),
+                    std::move(offset_buffer)
+            );
+            return sparrow::array{
+                create_dict_array<int32_t>(
+                    sparrow::array{std::move(dict_values_array)},
+                    std::move(dict_keys_buffer),
+                    validity_bitmap
+            )};
+        } else {
+            return sparrow::array{create_primitive_array<RawType>(nullptr, 0, validity_bitmap)};
+        }
+    });
+    res.set_name(name);
+    return res;
+}
+
 std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::string_view name) {
     std::vector<sparrow::array> vec;
     auto column_data = column.data();
     vec.reserve(column.num_blocks());
     column.type().visit_tag([&vec, &column_data, &column, name](auto &&impl) {
         using TagType = std::decay_t<decltype(impl)>;
+        if (column_data.num_blocks() == 0) {
+            // For empty columns we want to return one empty array instead of no arrays.
+            vec.emplace_back(empty_arrow_array_from_type(column.type(), name));
+        }
         while (auto block = column_data.next<TagType>()) {
             auto bitmap = create_validity_bitmap(block->offset(), column);
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
@@ -32,42 +72,6 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
     return vec;
 }
 
-    sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::string_view name) {
-        auto res = type.visit_tag([](auto &&impl) {
-            using TagType = std::decay_t<decltype(impl)>;
-            using DataTagType = typename TagType::DataTypeTag;
-            using RawType = typename DataTagType::raw_type;
-            std::optional<sparrow::validity_bitmap> validity_bitmap;
-            if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-                // TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
-                //  consistent when there are zero rows. But sparrow (or possibly Arrow) requires at least one key-value
-                //  pair in the dictionary, even if there are zero rows
-                auto offset_ptr = new int64_t[2];
-                offset_ptr[0] = 0;
-                offset_ptr[1] = 1;
-                auto strings_ptr = new char[1];
-                strings_ptr[0] = 'a';
-                sparrow::u8_buffer<int64_t> offset_buffer(offset_ptr, 2);
-                sparrow::u8_buffer<char> strings_buffer(strings_ptr, 1);
-                sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
-                sparrow::big_string_array dict_values_array(
-                        std::move(strings_buffer),
-                        std::move(offset_buffer)
-                );
-                return sparrow::array{
-                    create_dict_array<int32_t>(
-                        sparrow::array{std::move(dict_values_array)},
-                        std::move(dict_keys_buffer),
-                        validity_bitmap
-                )};
-            } else {
-                return sparrow::array{create_primitive_array<RawType>(nullptr, 0, validity_bitmap)};
-            }
-        });
-        res.set_name(name);
-        return res;
-    }
-
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
@@ -77,25 +81,17 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
     // column_blocks == 0 is a special case where we are returning a zero-row structure (e.g. if date_range is
     // provided outside of the time range covered by the symbol)
     auto output = std::make_shared<std::vector<sparrow::record_batch>>(column_blocks == 0 ? 1 : column_blocks, sparrow::record_batch{});
-    if (column_blocks == 0) {
-        for (auto i = 0UL; i < num_columns; ++i) {
-            auto& column = segment.column(static_cast<position_t>(i));
-            util::check(column.num_blocks() == column_blocks, "Non-standard column block number: {} != {}", column.num_blocks(), column_blocks);
-            (*output)[0].add_column(static_cast<std::string>(segment.field(i).name()),
-                                    empty_arrow_array_from_type(column.type(), segment.field(i).name()));
-        }
-    } else {
-        for (auto i = 0UL; i < num_columns; ++i) {
-            auto& column = segment.column(static_cast<position_t>(i));
-            util::check(column.num_blocks() == column_blocks, "Non-standard column block number: {} != {}", column.num_blocks(), column_blocks);
+    for (auto i = 0UL; i < num_columns; ++i) {
+        auto& column = segment.column(static_cast<position_t>(i));
+        util::check(column.num_blocks() == column_blocks, "Non-standard column block number: {} != {}", column.num_blocks(), column_blocks);
 
-            auto column_arrays = arrow_arrays_from_column(column, segment.field(i).name());
+        auto column_arrays = arrow_arrays_from_column(column, segment.field(i).name());
+        util::check(column_arrays.size() == output->size(), "Unexpected number of arrow arrays returned: {} != {}", column_arrays.size(), output->size());
 
-            for (auto block_idx = 0UL; block_idx < column_blocks; ++block_idx) {
-                util::check(block_idx < output->size(), "Block index overflow {} > {}", block_idx, output->size());
-                (*output)[block_idx].add_column(static_cast<std::string>(segment.field(i).name()),
-                                                std::move(column_arrays[block_idx]));
-            }
+        for (auto block_idx = 0UL; block_idx < column_arrays.size(); ++block_idx) {
+            util::check(block_idx < output->size(), "Block index overflow {} > {}", block_idx, output->size());
+            (*output)[block_idx].add_column(static_cast<std::string>(segment.field(i).name()),
+                                            std::move(column_arrays[block_idx]));
         }
     }
     return output;
