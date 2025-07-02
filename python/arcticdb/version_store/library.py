@@ -318,6 +318,25 @@ class ReadInfoRequest(NamedTuple):
         return res
 
 
+class DeleteRequest(NamedTuple):
+    """DeleteRequest is designed to enable batching of delete operations with an API that mirrors the singular ``delete`` API.
+    Therefore, construction of this object is only required for batch delete operations.
+
+    Attributes
+    ----------
+    symbol: str
+        See `delete` method.
+    version_ids: List[int]
+        See `delete` method.
+    """
+
+    symbol: str
+    version_ids: List[int]
+
+    def __repr__(self):
+        return f"DeleteRequest(symbol={self.symbol}, version_ids={self.version_ids})"
+
+
 class UpdatePayload:
     def __init__(
         self,
@@ -541,10 +560,11 @@ class LazyDataFrameAfterJoin(QueryBuilder):
     # Actual batch read, join, and subsequent processing happens here
     >>> df = lazy_df_after_join.collect().data
     """
+
     def __init__(
-            self,
-            lazy_dataframes: LazyDataFrameCollection,
-            join: QueryBuilder,
+        self,
+        lazy_dataframes: LazyDataFrameCollection,
+        join: QueryBuilder,
     ):
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
@@ -575,8 +595,8 @@ class LazyDataFrameAfterJoin(QueryBuilder):
 
 
 def concat(
-        lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
-        join: str = "outer",
+    lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
+    join: str = "outer",
 ) -> LazyDataFrameAfterJoin:
     """
     Concatenate a list of symbols together.
@@ -1963,9 +1983,9 @@ class Library:
             )
 
     def read_batch_and_join(
-            self,
-            symbols: List[ReadRequest],
-            query_builder: QueryBuilder,
+        self,
+        symbols: List[ReadRequest],
+        query_builder: QueryBuilder,
     ) -> VersionedItemWithJoin:
         """
         Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
@@ -2297,6 +2317,42 @@ class Library:
             versions = (versions,)
 
         self._nvs.delete_versions(symbol, versions)
+
+    def delete_batch(self, delete_requests: List[Union[str, DeleteRequest]]) -> List[DataError]:
+        """
+        Delete multiple symbols in a batch fashion.
+
+        Parameters
+        ----------
+        delete_requests : List[Union[str, DeleteRequest]]
+            List of symbols to delete. Can be either:
+            - String symbols (delete all versions of the symbol)
+            - DeleteRequest objects (delete specific versions of the symbol)
+
+        Returns
+        -------
+        List[DataError]
+            List of DataError objects, one for each symbol that was deleted.
+        """
+        symbols = []
+        versions = []
+
+        for request in delete_requests:
+            if isinstance(request, str):
+                # Delete all versions of the symbol
+                symbols.append(request)
+                versions.append([])  # Empty list means delete all versions
+            elif isinstance(request, DeleteRequest):
+                # Delete specific versions of the symbol
+                symbols.append(request.symbol)
+                versions.append(request.version_ids)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the delete_requests argument request=[{request}] type(request)=[{type(request)}]. "
+                    "Only [str] and [DeleteRequest] are supported."
+                )
+
+        return self._nvs.batch_delete_versions(symbols, versions)
 
     def prune_previous_versions(self, symbol):
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.

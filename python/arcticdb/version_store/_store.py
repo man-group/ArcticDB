@@ -2632,7 +2632,7 @@ class NativeVersionStore:
         """
         self.version_store.delete_versions(symbol, versions)
 
-    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]):
+    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]) -> List[DataError]:
         """
         Delete the given versions of the given symbols.
 
@@ -2643,7 +2643,7 @@ class NativeVersionStore:
         versions : `List[List[int]]`
             Versions to delete for each symbol.
         """
-        self.version_store.batch_delete_versions(symbols, versions)
+        return self.version_store.batch_delete_versions(symbols, versions)
 
     def prune_previous_versions(self, symbol: str):
         """
