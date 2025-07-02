@@ -741,6 +741,8 @@ public:
             if constexpr(std::is_same_v<T, typename type_info::RawType>) {
                 int64_t first = from.value_or(0);
                 const int64_t last = to.value_or(row_count());
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(last >= first,
+                    "Invalid input range for Column::search_sorted. First: {}, Last: {}", first, last);
                 int64_t step;
                 int64_t count{last - first};
                 int64_t idx;
