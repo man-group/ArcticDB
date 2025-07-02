@@ -100,8 +100,9 @@ def test_batch_delete_versions_partial_symbols(basic_store):
     # Delete versions 0 and 1 for only sym1 and sym3
     symbols_to_delete = ["sym1", "sym3"]
     versions_to_delete = [[0, 1], [0, 1]]  # One list per symbol
-    lib.batch_delete_versions(symbols_to_delete, versions_to_delete)
-
+    results = lib.batch_delete_versions(symbols_to_delete, versions_to_delete)
+    # There should be no errors
+    assert len(results) == 0
     # Verify that only specified symbols were affected
     for sym in symbols_to_delete:
         assert len(lib.list_versions(sym)) == 1
@@ -109,6 +110,11 @@ def test_batch_delete_versions_partial_symbols(basic_store):
         for version in [0, 1]:
             with pytest.raises(NoDataFoundException):
                 lib.read(sym, version)
+
+    results = lib.batch_delete_versions(symbols_to_delete, versions_to_delete)
+    assert len(results) == 2
+    assert results[0].symbol == "sym1"
+    assert results[1].symbol == "sym3"
 
     for sym in ["sym2", "sym4"]:
         assert len(lib.list_versions(sym)) == 3
@@ -156,15 +162,15 @@ def test_batch_delete_versions_invalid_input(basic_store):
     lib.write("sym2", df1)
 
     # Test with non-existent symbol
-    with pytest.raises(InternalException):
-        lib.batch_delete_versions(["non_existent"], [[0]])
+    res = lib.batch_delete_versions(["non_existent"], [[0]])
+    assert len(res) == 1
+    assert res[0].symbol == "non_existent"
 
     # Test with non-existent version
-    with pytest.raises(InternalException):
-        lib.batch_delete_versions(["sym1", "sym2"], [[1], [0]])
-
-    with pytest.raises(NoDataFoundException):
-        lib.read("sym2", 0)
+    res = lib.batch_delete_versions(["sym1", "sym2"], [[1], [0]])
+    assert len(res) == 2
+    assert res[0].symbol == "sym1"
+    assert res[1].symbol == "sym2"
 
     assert_frame_equal(lib.read("sym1").data, df1)
     assert len(lib.list_versions("sym1")) == 1
@@ -172,8 +178,10 @@ def test_batch_delete_versions_invalid_input(basic_store):
     assert lib.list_symbols() == ["sym1"]
 
     # Test with invalid version number
-    with pytest.raises(TypeError):
-        lib.batch_delete_versions(["sym1", "sym2"], [[-1], [0]])
+    res = lib.batch_delete_versions(["sym1", "sym2"], [[-1], [0]])
+    assert len(res) == 2
+    assert res[0].symbol == "sym1"
+    assert res[1].symbol == "sym2"
 
 
 @pytest.mark.storage
