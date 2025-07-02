@@ -9,8 +9,9 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 from typing import List
 from arcticdb import Arctic
-from arcticdb.version_store.library import WritePayload, ReadRequest
+from arcticdb.version_store.library import UpdatePayload, WritePayload, ReadRequest
 from arcticdb.util.test import config_context
+from arcticdb_ext.version_store import DataError
 
 import pandas as pd
 
@@ -162,6 +163,7 @@ class BatchBasicFunctions:
         self.read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
 
         self.df = generate_pseudo_random_dataframe(rows)
+        self.update_df = generate_pseudo_random_dataframe(rows // 2)
         self.lib = self.ac[get_prewritten_lib_name(rows)]
         self.fresh_lib = self.get_fresh_lib()
 
@@ -176,6 +178,21 @@ class BatchBasicFunctions:
     def peakmem_write_batch(self, rows, num_symbols):
         payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]
         self.fresh_lib.write_batch(payloads)
+
+    def time_update_batch(self, rows, num_symbols):
+        payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
+        results = self.lib.update_batch(payloads)
+        assert results[0].version == 1
+
+    def time_update_batch_errors(self, rows, num_symbols):
+        payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
+        results = self.lib.update_batch(payloads)
+        assert results[0] == DataError        
+
+    def peakmem_update_batch(self, rows, num_symbols):
+        payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
+        results = self.lib.update_batch(payloads)
+        assert results[0].version == 1
 
     def time_read_batch(self, rows, num_symbols):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
