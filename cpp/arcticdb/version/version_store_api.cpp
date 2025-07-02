@@ -958,7 +958,7 @@ void PythonVersionStore::delete_versions(
 void PythonVersionStore::batch_delete_versions(
     const std::vector<StreamId>& stream_ids,
     const std::vector<std::vector<VersionId>>& version_ids) {
-    util::check(stream_ids.size() == version_ids.size(), "stream_ids and version_ids must have the same size");
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions, stream_ids and version_ids must have the same size");
     
     auto results = batch_delete_versions_internal(stream_ids, version_ids);
     
@@ -980,7 +980,7 @@ void PythonVersionStore::batch_delete_versions(
 
                 if(tombstone_result.no_undeleted_left && cfg().symbol_list()) {
                     auto stream_id = tombstone_result.keys_to_delete.front().id();
-                    symbols_to_delete.emplace_back(stream_id, tombstone_result.latest_version_);
+                    symbols_to_delete.emplace_back(std::move(stream_id), tombstone_result.latest_version_);
                 }
             },
             [&](const DataError& data_error) {
@@ -996,10 +996,8 @@ void PythonVersionStore::batch_delete_versions(
 
     std::vector<folly::Future<folly::Unit>> remove_symbol_tasks;
 
-    if(!symbols_to_delete.empty()) {
-        for(const auto& [stream_id, latest_version] : symbols_to_delete) {
-            remove_symbol_tasks.push_back(async::submit_io_task(DeleteSymbolTask{store(), symbol_list_ptr(), stream_id, latest_version}));
-        }
+    for(const auto& [stream_id, latest_version] : symbols_to_delete) {
+        remove_symbol_tasks.push_back(async::submit_io_task(DeleteSymbolTask{store(), symbol_list_ptr(), stream_id, latest_version}));
     }
 
     folly::collectAll(remove_symbol_tasks).get();
