@@ -15,11 +15,11 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
+from arcticdb_ext.exceptions import UserInputException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
-import arcticdb_ext.stream as adb_stream
 
+from tests.util.mark import MACOS_WHEEL_BUILD
 
 class AlmostAList(list):
     pass
@@ -226,8 +226,7 @@ def test_recursive_normalizers_not_set(lmdb_version_store_v1, type, pickle_on_fa
     lib.write("sym", data, recursive_normalizers=False, pickle_on_failure=pickle_on_failure)
 
     # Then
-    assert lib.get_info("sym")["type"] == "pickled"  # pickle_on_failure just controls what happens if we
-    # try to normalize a type we natively support (like a dataframe) but it contains data we don't support
+    assert lib.get_info("sym")["type"] == "pickled"  # pickle_on_failure=False not respected: Monday 8083916814
 
     result = lib.read("sym").data
     if type == "dict":
@@ -248,7 +247,7 @@ def test_really_large_symbol_for_recursive_data(basic_store, read):
     write_vit = basic_store.write(sym, data, recursive_normalizers=True)
     fl = Flattener()
     metastruct, to_write = fl.create_meta_structure(data, "s" * 100)
-    assert len(list(to_write.keys())[0]) < adb_stream.MAX_SYMBOL_LENGTH
+    assert len(list(to_write.keys())[0]) < fl.MAX_KEY_LENGTH
     read_vit = read(basic_store, sym)
     equals(read_vit.data, data)
     assert read_vit.symbol == sym
@@ -306,40 +305,21 @@ def test_long_lists(lmdb_version_store_v1):
     assert_frame_equal(result[500], df)
 
 
-def test_deep_nesting_metastruct_size_over_limit(lmdb_version_store_v1):
+def test_deep_nesting_metastruct_size(lmdb_version_store_v1):
     # Given
     lib = lmdb_version_store_v1
     sym = "sym"
     key = "reasonable_length_key"
     data = {key: pd.DataFrame({"col": [0]})}
 
-    nesting_levels = 256
+    nesting_levels = 1_000
     for i in range(nesting_levels - 1):
         data[key] = {key: data[key]}
 
     # When & Then
-    with pytest.raises(DataTooNestedException, match=r"^Symbol sym cannot be recursively normalized.*255 levels.*"):
+    with pytest.raises(ValueError):
+        """Currently raises a ValueError: recursion limit exceeded within msgpack. We should try to do better here."""
         lib.write(sym, data, recursive_normalizers=True)
-
-
-def test_deep_nesting_metastruct_size_under_limit(lmdb_version_store_v1):
-    # Given
-    lib = lmdb_version_store_v1
-    sym = "sym"
-    key = "reasonable_length_key"
-    data = {key: pd.DataFrame({"col": [0]})}
-
-    nesting_levels = 255
-    for i in range(nesting_levels - 1):
-        data[key] = {key: data[key]}
-
-    lib.write(sym, data, recursive_normalizers=True)
-
-    res = lib.read(sym).data
-    for i in range(nesting_levels):
-        res = res[key]
-
-    assert_frame_equal(res, pd.DataFrame({"col": [0]}))
 
 
 def test_long_keys(lmdb_version_store_v1):
@@ -371,61 +351,9 @@ def test_unsupported_characters_in_keys(s3_version_store_v1, key):
 
     data = {key: df}
 
-    # When
-    lib.write("sym", data, recursive_normalizers=True)
-
-    # Then
-    res = lib.read("sym").data
-    assert_frame_equal(res[key], df)
-
-    lt = lib.library_tool()
-    multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
-    segment = lt.read_to_dataframe(multi_keys[0])
-    assert segment.shape[0] == 1
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-
-    assert stream_id.startswith("sym_XXX_")
-
-    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
-    assert len(index_keys) == 1
-    segment = lt.read_to_dataframe(index_keys[0])
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-    assert stream_id.startswith("sym_XXX_")
-
-
-@pytest.mark.parametrize("key", ("*", "<", ">", chr(31), chr(127)))
-def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key):
-    """Check how we serialize nested keys with characters that we do not support in normal symbol names"""
-    # Given
-    lib = s3_version_store_v1
-    df = pd.DataFrame({"col": [0]})
-    data = {"blah": {key: df}}
-
-    # When
-    lib.write("sym", data, recursive_normalizers=True)
-
-    # Then
-    res = lib.read("sym").data
-
-    assert_frame_equal(res["blah"][key], df)
-
-    lt = lib.library_tool()
-    multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
-    segment = lt.read_to_dataframe(multi_keys[0])
-    assert segment.shape[0] == 1
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-
-    assert stream_id.startswith("sym_lah_XXX_")
-
-    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
-    assert len(index_keys) == 1
-    segment = lt.read_to_dataframe(index_keys[0])
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-    assert stream_id.startswith("sym_lah_XXX_")
+    # When & Then
+    with pytest.raises(UserInputException):
+        lib.write("sym", data, recursive_normalizers=True)
 
 
 def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1):
@@ -526,62 +454,21 @@ def test_something_we_cannot_normalize_just_gets_pickled(lmdb_version_store_v1):
     assert lib.get_info("sym")["type"] == "pickled"
 
 
+@pytest.mark.xfail(reason="These do not roundtrip properly. Monday: 9256783357")
 @pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
-def test_double_underscore_names_validated_against(lmdb_version_store_v1, key):
+def test_key_names(lmdb_version_store_v1, key):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {key: df}
 
-    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key {key} while writing symbol sym$"):
-        lib.write("sym", data, recursive_normalizers=True)
-
-    with pytest.raises(NoSuchVersionException):
-        lib.read("sym")
-
-
-def test_nested_double_underscore_names_validated_against(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    df = pd.DataFrame({"d": [1, 2, 3]})
-    data = {"a": {"__a": df}}
-
-    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key __a while writing symbol sym$"):
-        lib.write("sym", data, recursive_normalizers=True)
-
-    with pytest.raises(NoSuchVersionException):
-        lib.read("sym")
-
-
-def test_double_underscores_in_lists_ok(lmdb_version_store_v1):
-    lib = lmdb_version_store_v1
-    df = pd.DataFrame({"d": [1, 2, 3]})
-
-    data = ["a__", "__a", "a__b", "__a__b", df, "a__b__", df, {"a": df}]
-
     lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
 
-    res = lib.read("sym").data
+    actual_data = lib.read("sym").data
+    assert key in actual_data
+    pd.testing.assert_frame_equal(actual_data[key], df)
 
-    assert res[0] == "a__"
-    assert res[1] == "__a"
-    assert res[2] == "a__b"
-    assert res[3] == "__a__b"
-    assert_frame_equal(res[4], df)
-    assert res[5] == "a__b__"
-    assert_frame_equal(res[6], df)
-    assert_frame_equal(res[7]["a"], df)
-
-
-@pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
-def test_double_underscores_in_dict_in_list_not_ok(lmdb_version_store_v1, key):
-    lib = lmdb_version_store_v1
-    df = pd.DataFrame({"d": [1, 2, 3]})
-    data = [df, {key: df}]
-
-    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key {key} while writing symbol sym$"):
-        lib.write("sym", data, recursive_normalizers=True)
-
-    with pytest.raises(NoSuchVersionException):
-        lib.read("sym")
+    assert lib.read("sym").version == 0
 
 
 def test_read_asof(lmdb_version_store_v1):
@@ -706,6 +593,8 @@ def test_data_layout(lmdb_version_store_v1):
 
 
 class TestRecursiveNormalizersCompat:
+
+    @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="We don't have previous versions of arcticdb pypi released for MacOS")
     def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
@@ -727,6 +616,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
                 for key in data.keys():
                     assert_frame_equal(data[key], expected[key])
 
+    @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="We don't have previous versions of arcticdb pypi released for MacOS")
     def test_write_new_read_old(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
