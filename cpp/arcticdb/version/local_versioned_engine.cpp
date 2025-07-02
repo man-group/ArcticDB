@@ -1394,7 +1394,7 @@ std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> Loca
     const std::vector<StreamId>& stream_ids,
     const std::vector<std::vector<VersionId>>& version_ids,
     const std::optional<timestamp>& creation_ts) {
-    util::check(stream_ids.size() == version_ids.size(), "stream_ids and version_ids must have the same size");
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions_internal, stream_ids and version_ids must have the same size");
 
     if (stream_ids.empty()) {
         return {};
@@ -1403,8 +1403,7 @@ std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> Loca
     std::vector<std::unordered_set<VersionId>> version_sets;
     version_sets.reserve(version_ids.size());
     for (const auto& version_list : version_ids) {
-        std::unordered_set<VersionId> version_set(version_list.begin(), version_list.end());
-        version_sets.emplace_back(std::move(version_set));
+        version_sets.emplace_back(version_list.begin(), version_list.end());
     }
     
     std::vector<folly::Future<version_store::TombstoneVersionResult>> futures;
