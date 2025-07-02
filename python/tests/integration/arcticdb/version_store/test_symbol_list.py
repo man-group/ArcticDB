@@ -26,7 +26,7 @@ from arcticdb_ext.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
-from tests.util.mark import MACOS_CONDA_BUILD
+from tests.util.mark import MACOS
 
 
 @pytest.fixture
@@ -466,7 +466,7 @@ def make_lock_ttl_less():
         unset_config_int("StorageLock.TTL")
 
 
-@pytest.mark.skipif(MACOS_CONDA_BUILD, reason="Failing for unclear reasons")
+@pytest.mark.skipif(MACOS, reason="Failing on macOS for unclear reasons")
 def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1, make_lock_ttl_less):
     # Set TTL to 5 seconds. Compact symbol list will retry for 10 seconds, so should always work
     lib = lmdb_version_store_v1
