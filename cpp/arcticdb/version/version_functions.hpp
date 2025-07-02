@@ -215,9 +215,9 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
 }
 
 inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_result(
-    version_store::TombstoneVersionResult res,
+    version_store::TombstoneVersionResult&& res,
     const std::shared_ptr<VersionMap>& version_map,
-    const std::shared_ptr<VersionMapEntry>& entry,
+    std::shared_ptr<VersionMapEntry>&& entry,
     [[maybe_unused]] AtomKey tombstone_key) {
     ARCTICDB_DEBUG(log::version(), "Finalizing result for tombstone key {}", tombstone_key);
     // Update the result with final state
@@ -246,8 +246,8 @@ inline folly::Future<version_store::TombstoneVersionResult> process_tombstone_ve
                                     stream_id,
                                     entry,
                                     creation_ts})
-        .thenValue([res = std::move(res), version_map, entry](AtomKey tombstone_key) mutable {
-            return finalize_tombstone_result(std::move(res), version_map, entry, tombstone_key);
+        .thenValue([res = std::move(res), version_map, e=std::move(entry)](AtomKey&& tombstone_key) mutable {
+            return finalize_tombstone_result(std::move(res), version_map, std::move(e), std::move(tombstone_key));
         });
 }
 
@@ -263,8 +263,8 @@ inline folly::Future<version_store::TombstoneVersionResult> tombstone_versions_a
                                     version_map,
                                     stream_id,
                                     LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}})
-        .thenValue([store, version_map, stream_id, version_ids, creation_ts](std::shared_ptr<VersionMapEntry> entry) {
-            return process_tombstone_versions(store, version_map, stream_id, version_ids, creation_ts, entry);
+        .thenValue([store, version_map, stream_id, version_ids, creation_ts](std::shared_ptr<VersionMapEntry>&& entry) {
+            return process_tombstone_versions(store, version_map, stream_id, version_ids, creation_ts, std::move(entry));
         });
 }
 
