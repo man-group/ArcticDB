@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import enum
 from typing import Callable, Generator, Union
+from arcticdb.util.environment_setup import get_console_logger
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -630,14 +631,21 @@ def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
 
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
-def _store_factory(lib_name, bucket) -> Generator[Callable[..., NativeVersionStore], None, None]:
+def _store_factory(lib_name, bucket, delete_bucket = True) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield bucket.create_version_store_factory(lib_name)
-    bucket.slow_cleanup()
+    if delete_bucket: 
+        try:
+            bucket.slow_cleanup()
+        except Exception as e:
+            get_console_logger().warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
 
 
 @pytest.fixture
 def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, lmdb_storage)
+    # Do not delete LMDB library on windows
+    # Otherwise there will be no storage space left for unit tests
+    # very peculiar behavior for LMDB, not investigated yet
+    yield from _store_factory(lib_name, lmdb_storage, not WINDOWS)     
 
 
 @pytest.fixture
