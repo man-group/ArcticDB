@@ -78,6 +78,9 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
             return res;
         }
 
+        // TODO: This logic is so hard to follow and inefficient. We can only rely on lower_bound and upper_bound. Will do this in a follow up commit.
+        // Currently with the lower bound we get some value before the one we want and with the upper bound we get some
+        // value after the one we want. Then we need to iterate row by row to get the row we want.
         using RawType = typename IndexTagType::DataTypeTag::raw_type;
         auto begin_offset = std::distance(end_index_col_begin, start_pos);
         ARCTICDB_DEBUG(log::version(), "start_pos at {} of {}", begin_offset, end_idx_col.row_count());
