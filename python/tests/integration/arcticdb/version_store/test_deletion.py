@@ -246,7 +246,7 @@ def test_delete_versions_with_append(object_version_store, versions_to_delete, s
     if mode == "single":
         symbols = [sym]
     else:
-        symbols = [sym, "another-{}".format(sym)]
+        symbols = [sym, f"another-{sym}"]
 
     dfs = []
     rows = 100
@@ -298,7 +298,7 @@ def test_delete_versions_with_append_large_data(object_version_store, versions_t
     if mode == "single":
         symbols = [sym]
     else:
-        symbols = [sym, "another-{}".format(sym)]
+        symbols = [sym, f"another-{sym}"]
 
     dfs = []
     rows = 1000000
@@ -350,7 +350,7 @@ def test_delete_versions_with_update(object_version_store, versions_to_delete, s
     if mode == "single":
         symbols = [sym]
     else:
-        symbols = [sym, "another-{}".format(sym)]
+        symbols = [sym, f"another-{sym}"]
 
     dfs = []
     idx_start = pd.Timestamp("2000-1-1")
@@ -430,7 +430,7 @@ def test_delete_versions_with_update_large_data(object_version_store, versions_t
     if mode == "single":
         symbols = [sym]
     else:
-        symbols = [sym, "another-{}".format(sym)]
+        symbols = [sym, f"another-{sym}"]
 
     dfs = []
     idx_start = pd.Timestamp("2000-1-1")

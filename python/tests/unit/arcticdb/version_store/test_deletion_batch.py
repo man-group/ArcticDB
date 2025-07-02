@@ -75,6 +75,8 @@ def test_batch_delete_versions_with_snapshots(basic_store):
     for sym in symbols:
         assert_frame_equal(lib.read(sym, as_of=f"{sym}_snap1").data, df1)
         assert_frame_equal(lib.read(sym, as_of=f"{sym}_snap2").data, df2)
+        assert_frame_equal(lib.read(sym, as_of=0).data, df1)
+        assert_frame_equal(lib.read(sym, as_of=1).data, df2)
         assert_frame_equal(lib.read(sym).data, df3)
 
 
