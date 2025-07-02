@@ -108,7 +108,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
 
     for (auto&& [col_index, input_index_column] : folly::enumerate(input_index_columns)) {
         // Skip all labels that come before the first index value in the input column
-        const timestamp first_index_value = *input_index_column->begin<IndexTDT>();
+        const timestamp first_index_value = *(input_index_column->template begin<IndexTDT>());
         while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_accessor.at(output_row), first_index_value)) {
             ++output_row;
         }
@@ -118,7 +118,7 @@ std::optional<Column> SortedAggregator<aggregation_operator, closed_boundary>::g
         output_row_prev = output_row;
 
         // Compute how many output index values does the column span
-        const timestamp last_index_value = *(input_index_column->begin<IndexTDT>() + (input_index_column->row_count() - 1));
+        const timestamp last_index_value = *(input_index_column->template begin<IndexTDT>() + (input_index_column->row_count() - 1));
         while (output_row < output_index_column.row_count() && value_past_bucket_start<closed>(output_accessor.at(output_row), last_index_value)) {
             ++output_row;
         }
