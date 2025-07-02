@@ -212,4 +212,28 @@ struct WriteAndPrunePreviousTask : async::BaseTask {
     }
 };
 
+// TODO: Add this functionality when implementing batch_delete
+// struct TombstoneAllTask : async::BaseTask {
+//     const std::shared_ptr<Store> store_;
+//     const std::shared_ptr<VersionMap> version_map_;
+//     const AtomKey previous_key_;
+//     const std::shared_ptr<VersionMapEntry> entry_;
+
+//     TombstoneAllTask(
+//         std::shared_ptr<Store> store,
+//         std::shared_ptr<VersionMap> version_map,
+//         AtomKey previous_key,
+//         std::shared_ptr<VersionMapEntry> entry) :
+//         store_(std::move(store)),
+//         version_map_(std::move(version_map)),
+//         previous_key_(std::move(previous_key)),
+//         entry_(std::move(entry)) {
+//     }
+
+//     folly::Future<AtomKey> operator()() {
+//         ScopedLock lock(version_map_->get_lock_object(previous_key_.id()));
+//         return version_map_->write_tombstone_all_key_internal(store_, previous_key_, entry_);
+//     }
+// };
+
 } //namespace arcticdb
