@@ -116,7 +116,7 @@ class S3Bucket(StorageFixture):
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
-        if len(self.libs_from_factory) < 1:
+        if len(self.libs_from_factory) > 0:
             get_logger().warning(f"Libraries not cleared remaining {self.libs_from_factory.keys()}")
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:

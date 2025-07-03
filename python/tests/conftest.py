@@ -645,7 +645,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Do not delete LMDB library on windows
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
-    yield from _store_factory(lib_name, lmdb_storage, not WINDOWS)     
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS))     
 
 
 @pytest.fixture
