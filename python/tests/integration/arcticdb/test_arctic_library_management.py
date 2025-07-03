@@ -153,7 +153,7 @@ def test_create_library_replication_option_set_writes_logs(lmdb_storage, lib_nam
     assert len(lt.find_keys(KeyType.LOG))
 
 
-@pytest.mark.parametrize("op", ["single", "batch_single", "batch_delete_request"])
+@pytest.mark.parametrize("delete_op", ["single", "batch_single", "batch_delete_request"])
 def test_create_library_background_deletion_option_set_does_not_delete(lmdb_storage, lib_name, delete_op):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(
