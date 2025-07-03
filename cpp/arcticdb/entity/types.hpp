@@ -524,9 +524,8 @@ inline TypeDescriptor make_array_type(DataType dt) {
 }
 
 template<typename DT, typename D>
+requires std::is_base_of_v<DataTypeTagBase, DT> && std::is_base_of_v<DimensionTagBase, D>
 struct TypeDescriptorTag {
-    static_assert(std::is_base_of_v<DataTypeTagBase, DT>);
-    static_assert(std::is_base_of_v<DimensionTagBase, D>);
     using DataTypeTag = DT;
     using DimensionTag = D;
     explicit constexpr operator TypeDescriptor() const {

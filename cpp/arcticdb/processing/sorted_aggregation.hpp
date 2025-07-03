@@ -28,19 +28,29 @@ struct ISortedAggregator {
     struct Interface : Base {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
-        [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+        [[nodiscard]] std::optional<Column> aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
                                        const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
                                        const std::vector<timestamp>& bucket_boundaries,
                                        const Column& output_index_column,
-                                       StringPool& string_pool) const {
-            return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, bucket_boundaries, output_index_column, string_pool);
+                                       StringPool& string_pool,
+                                       ResampleBoundary label) const {
+            return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, bucket_boundaries, output_index_column, string_pool, label);
         }
         void check_aggregator_supported_with_data_type(DataType data_type) const { folly::poly_call<3>(*this, data_type); };
         [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const { return folly::poly_call<4>(*this, common_input_data_type); };
+        [[nodiscard]] std::optional<Value> get_default_value(DataType common_input_data_type) const {
+            return folly::poly_call<5>(*this, common_input_data_type);
+        }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::get_input_column_name, &T::get_output_column_name, &T::aggregate, &T::check_aggregator_supported_with_data_type, &T::generate_output_data_type>;
+    using Members = folly::PolyMembers<
+        &T::get_input_column_name,
+        &T::get_output_column_name,
+        &T::aggregate,
+        &T::check_aggregator_supported_with_data_type,
+        &T::generate_output_data_type,
+        &T::get_default_value>;
 };
 
 using SortedAggregatorInterface = folly::Poly<ISortedAggregator>;
@@ -56,7 +66,7 @@ public:
         end_ = end;
     }
 
-    bool contains(timestamp ts) const {
+    [[nodiscard]] bool contains(timestamp ts) const {
         if constexpr (closed_boundary == ResampleBoundary::LEFT) {
             return ts >= start_ && ts < end_;
         } else {
@@ -64,7 +74,13 @@ public:
             return ts > start_ && ts <= end_;
         }
     }
+    [[nodiscard]] timestamp start() const {
+        return start_;
+    }
 
+    [[nodiscard]]timestamp end() const {
+        return end_;
+    }
 private:
     timestamp start_;
     timestamp end_;
@@ -342,10 +358,16 @@ private:
     uint64_t count_{0};
 };
 
+struct SortedAggregatorOutputColumnInfo {
+    std::optional<DataType> data_type_{};
+    bool maybe_sparse_{};
+};
+
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
-class SortedAggregator
-{
+class SortedAggregator {
 public:
+
+    static constexpr ResampleBoundary closed = closed_boundary;
 
     explicit SortedAggregator(ColumnName input_column_name, ColumnName output_column_name)
             : input_column_name_(std::move(input_column_name))
@@ -356,16 +378,24 @@ public:
     [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
 
-    [[nodiscard]] Column aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
+    [[nodiscard]] std::optional<Column> aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
                                    const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
                                    const std::vector<timestamp>& bucket_boundaries,
                                    const Column& output_index_column,
-                                   StringPool& string_pool) const;
+                                   StringPool& string_pool,
+                                   ResampleBoundary label) const;
 
     void check_aggregator_supported_with_data_type(DataType data_type) const;
-    [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const;
+    [[nodiscard]] std::optional<Value> get_default_value(DataType common_input_data_type) const;
+    [[nodiscard]] DataType generate_output_data_type(const DataType common_input_data_type) const;
+    [[nodiscard]] std::optional<Column> generate_resampling_output_column(
+        const std::span<const std::shared_ptr<Column>> input_index_columns,
+        const std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+        const Column& output_index_column,
+        const ResampleBoundary label) const;
+
 private:
-    [[nodiscard]] DataType generate_common_input_type(const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns) const;
+    [[nodiscard]] SortedAggregatorOutputColumnInfo generate_common_input_type(std::span<const std::optional<ColumnWithStrings>>) const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
 
     template<DataType input_data_type, typename Aggregator, typename T>
@@ -376,6 +406,8 @@ private:
             bucket_aggregator.push(value);
         } else if constexpr (is_sequence_type(input_data_type)) {
             bucket_aggregator.push(column_with_strings.string_at_offset(value));
+        } else {
+            static_assert(sizeof(T) == 0, "Unsupported aggregation.");
         }
     }
 
