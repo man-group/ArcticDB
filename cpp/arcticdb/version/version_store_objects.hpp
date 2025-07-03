@@ -55,8 +55,9 @@ static const PreDeleteChecks default_pre_delete_checks;
  * Output from tombstone_versions() with additional fields on top of PreDeleteChecks. Safe to be sliced to the latter.
  */
 struct TombstoneVersionResult : PreDeleteChecks {
-    explicit TombstoneVersionResult(bool entry_already_scanned) :
-        PreDeleteChecks{true, entry_already_scanned, entry_already_scanned, entry_already_scanned, {}} {}
+    explicit TombstoneVersionResult(bool entry_already_scanned, StreamId symbol = "") :
+        PreDeleteChecks{true, entry_already_scanned, entry_already_scanned, entry_already_scanned, {}},
+        symbol(symbol) {}
 
     /**
      * The index key that just got tombstoned, if any.
@@ -70,6 +71,11 @@ struct TombstoneVersionResult : PreDeleteChecks {
      * The most recent version written to the version list
      */
      VersionId latest_version_ = 0;
+
+    /**
+     * The symbol that was tombstoned
+     */
+    StreamId symbol;
 };
 
 /**

@@ -37,6 +37,7 @@ from arcticdb.version_store.library import (
     ArcticUnsupportedDataTypeException,
     ReadRequest,
     StagedDataFinalizeMethod,
+    DeleteRequest,
 )
 
 from ...util.mark import (
@@ -482,7 +483,8 @@ class TestAppendStagedData:
 
 
 @pytest.mark.storage
-def test_snapshots_and_deletes(arctic_library):
+@pytest.mark.parametrize("op", ["single", "batch_single", "batch_delete_request"])
+def test_snapshots_and_deletes(arctic_library, delete_op):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("my_symbol", df)
@@ -494,7 +496,13 @@ def test_snapshots_and_deletes(arctic_library):
 
     assert_frame_equal(lib.read("my_symbol", as_of="test1").data, df)
 
-    lib.delete("my_symbol")
+    if delete_op == "single":
+        lib.delete("my_symbol")
+    elif delete_op == "batch_single":
+        lib.delete_batch(["my_symbol"])
+    elif delete_op == "batch_delete_request":
+        lib.delete_batch([DeleteRequest("my_symbol", [0])])
+
     lib.snapshot("snap_after_delete")
     assert sorted(lib.list_symbols("test1")) == ["my_symbol", "my_symbol2"]
     assert lib.list_symbols("snap_after_delete") == ["my_symbol2"]
