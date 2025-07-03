@@ -152,13 +152,12 @@ def test_batch_delete_versions_empty_input(basic_store):
     with pytest.raises(ValueError):
         lib.batch_delete_versions(symbols, [[], []])
 
-    assert len(lib.list_symbols()) == 0
+    assert len(lib.list_symbols()) == 2
     for sym in symbols:
-        assert len(lib.list_versions(sym)) == 0
-        with pytest.raises(NoDataFoundException):
-            lib.read(sym)
-        with pytest.raises(NoDataFoundException):
-            lib.read(sym, 0)
+        assert len(lib.list_versions(sym)) == 2
+        assert_frame_equal(lib.read(sym).data, df2)
+        assert_frame_equal(lib.read(sym, 0).data, df1)
+        assert_frame_equal(lib.read(sym, 1).data, df2)
 
 
 @pytest.mark.storage
