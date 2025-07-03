@@ -77,7 +77,7 @@ void PythonEmptyHandler::convert_type(
     if(is_object_type(mapping.dest_type_desc_) || is_empty_type(mapping.dest_type_desc_.data_type())) {
         default_initialize(dest_column.buffer(), mapping.offset_bytes_, mapping.num_rows_ * type_size(), shared_data, handler_data);
     } else {
-        mapping.dest_type_desc_.visit_tag([&mapping, dest_data] (const auto tdt) {
+        mapping.dest_type_desc_.visit_tag([&mapping, dest_data] (auto tdt) {
             using TagType = decltype(tdt);
             using RawType = typename TagType::DataTypeTag::raw_type;
             const auto dest_bytes = mapping.num_rows_ * sizeof(RawType);

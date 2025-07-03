@@ -67,9 +67,30 @@ namespace arcticdb {
         return std::make_optional<entity::TypeDescriptor>(combine_data_type(entity::ValueType::FLOAT, target_size), dimension);
     }
 
+    static bool is_valid_int_to_float_conversion(
+        const entity::TypeDescriptor& source,
+        const entity::TypeDescriptor& target,
+        IntToFloatConversion int_to_to_float_conversion
+    ) {
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+            is_integer_type(source.data_type()) && is_floating_point_type(target.data_type()),
+            "Expected source to be int and target to be float got: {} {}", source, target
+        );
+        switch (int_to_to_float_conversion) {
+            case IntToFloatConversion::STRICT: return target.get_size_bits() == entity::SizeBits::S64 || source.get_size_bits() < entity::SizeBits::S32;
+            case IntToFloatConversion::PERMISSIVE: return true;
+            default: {
+                internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                    "Unknown int to float conversion type {}",
+                    static_cast<std::underlying_type_t<IntToFloatConversion>>(int_to_to_float_conversion));
+            }
+        }
+    }
+
     bool is_valid_type_promotion_to_target(
         const entity::TypeDescriptor& source,
-        const entity::TypeDescriptor& target
+        const entity::TypeDescriptor& target,
+        const IntToFloatConversion int_to_to_float_conversion
     ) {
         if (source.dimension() != target.dimension()) {
             // Empty of dimension 0 means lack of any given type and can be promoted to anything (even if the dimensions
@@ -108,7 +129,7 @@ namespace arcticdb {
                 return target_size > source_size;
             } else if (is_floating_point_type(target_type)) {
                 // UINT->FLOAT
-                return target_size == entity::SizeBits::S64 || source_size < entity::SizeBits::S32;
+                return is_valid_int_to_float_conversion(source, target, int_to_to_float_conversion);
             } else {
                 // Non-numeric target type
                 return false;
@@ -122,7 +143,7 @@ namespace arcticdb {
                 return target_size >= source_size;
             } else if (is_floating_point_type(target_type)) {
                 // INT->FLOAT
-                return target_size == entity::SizeBits::S64 || source_size < entity::SizeBits::S32;
+                return is_valid_int_to_float_conversion(source, target, int_to_to_float_conversion);
             } else {
                 // Non-numeric target type
                 return false;
@@ -167,7 +188,7 @@ namespace arcticdb {
                                                             "Expected right_size <= left_size in has_valid_common_type");
         }
 
-        auto target_size = entity::SizeBits(uint8_t(std::max(left_size, right_size)) + 1);
+        const auto target_size = static_cast<entity::SizeBits>(static_cast<uint8_t>(std::max(left_size, right_size)) + 1);
         if (target_size < entity::SizeBits::COUNT) {
             return std::make_optional<entity::TypeDescriptor>(combine_data_type(entity::ValueType::INT, target_size), dimension);
         } else {
@@ -175,10 +196,14 @@ namespace arcticdb {
         }
     }
 
-    std::optional<entity::TypeDescriptor> has_valid_common_type(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right) {
-        if (is_valid_type_promotion_to_target(left, right)) {
+    std::optional<entity::TypeDescriptor> has_valid_common_type(
+        const entity::TypeDescriptor& left,
+        const entity::TypeDescriptor& right,
+        IntToFloatConversion int_to_to_float_conversion
+    ) {
+        if (is_valid_type_promotion_to_target(left, right, int_to_to_float_conversion)) {
             return right;
-        } else if (is_valid_type_promotion_to_target(right, left)) {
+        } else if (is_valid_type_promotion_to_target(right, left, int_to_to_float_conversion)) {
             return left;
         }
 

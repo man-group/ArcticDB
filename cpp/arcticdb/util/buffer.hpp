@@ -10,7 +10,6 @@
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <cstdint>
 #include <memory>
 #include <variant>
 #include <optional>

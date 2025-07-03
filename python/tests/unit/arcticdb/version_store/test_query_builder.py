@@ -1073,6 +1073,8 @@ def test_query_builder_vwap(lmdb_version_store_v1):
     expected["product"] = expected["price"] * expected["volume"]
     expected = expected.resample(freq).agg(aggs)
     expected["vwap"] = expected["product"] / expected["volume"]
+    expected.sort_index(inplace=True, axis=1)
+    received.sort_index(inplace=True, axis=1)
     assert_frame_equal(expected, received, check_dtype=False)
 
 
