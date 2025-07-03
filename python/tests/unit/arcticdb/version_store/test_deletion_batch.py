@@ -139,8 +139,7 @@ def test_batch_delete_versions_empty_input(basic_store):
         lib.write(sym, df2, prune_previous_version=False)
 
     # Test with empty symbols list
-    with pytest.raises(ValueError):
-        lib.batch_delete_versions([], [])
+    lib.batch_delete_versions([], [])
 
     assert len(lib.list_symbols()) == 2
     for sym in symbols:

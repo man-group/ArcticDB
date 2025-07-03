@@ -268,7 +268,7 @@ def test_modify_options_replication(lmdb_storage, lib_name):
     assert len(lt.find_keys(KeyType.LOG)) == 1
 
 
-@pytest.mark.parametrize("op", ["single", "batch_single", "batch_delete_request"])
+@pytest.mark.parametrize("delete_op", ["single", "batch_single", "batch_delete_request"])
 def test_modify_options_background_deletion(lmdb_storage, lib_name, delete_op):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name)
