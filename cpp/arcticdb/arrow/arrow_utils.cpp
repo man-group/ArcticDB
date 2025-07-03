@@ -24,13 +24,13 @@ sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::stri
             // TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
             //  consistent when there are zero rows. But sparrow (or possibly Arrow) requires at least one key-value
             //  pair in the dictionary, even if there are zero rows
-            auto offset_ptr = new int64_t[2];
+            std::unique_ptr<int64_t[]> offset_ptr(new int64_t[2]);
             offset_ptr[0] = 0;
             offset_ptr[1] = 1;
-            auto strings_ptr = new char[1];
+            std::unique_ptr<char[]> strings_ptr(new char[1]);
             strings_ptr[0] = 'a';
-            sparrow::u8_buffer<int64_t> offset_buffer(offset_ptr, 2);
-            sparrow::u8_buffer<char> strings_buffer(strings_ptr, 1);
+            sparrow::u8_buffer<int64_t> offset_buffer(offset_ptr.release(), 2);
+            sparrow::u8_buffer<char> strings_buffer(strings_ptr.release(), 1);
             sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
             sparrow::big_string_array dict_values_array(
                     std::move(strings_buffer),
