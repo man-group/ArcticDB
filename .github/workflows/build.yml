@@ -64,7 +64,7 @@ jobs:
           _storage='not_scheduled'
           day=$(date +'%a')
           echo "Today is $day"
-          if [[ "$day" == "Sun" || "$day" == "Tue" || "$day" == "Thu"]]; then
+          if [[ "$day" == "Sun" || "$day" == "Tue" || "$day" == "Thu" ]]; then
             _storage='AWS_S3'
           elif [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
             _storage='GCPXML'
