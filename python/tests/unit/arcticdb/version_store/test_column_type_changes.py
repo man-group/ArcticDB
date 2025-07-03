@@ -368,13 +368,18 @@ def test_type_promotion_ints_and_floats_then_project_float64_result(lmdb_version
     df = pd.concat([original_data, first_append])
     expected = df
     expected["new_col"] = expected["a"] + expected["b"]
-    if append_type == np.float32 and original_type in (np.int16, np.uint16):
-        # We don't match Pandas here because we promote the sum of the 16 bit columns to 32 bit
-        assert expected.dtypes["new_col"] == np.float32
+    if original_type in (np.int16, np.uint16):
+        if append_type == np.float32:
+            expected_dtype = np.float32
+        else:
+            assert append_type == np.float64
+            expected_dtype = np.float64
     else:
-        assert expected.dtypes["new_col"] == np.float64
+        assert original_type in (np.int32, np.uint32, np.int64, np.uint64)
+        expected_dtype = np.float64
 
-    assert received.dtypes["new_col"] == np.float64
+    assert expected.dtypes["new_col"] == expected_dtype
+    assert received.dtypes["new_col"] == expected_dtype
     assert_frame_equal(expected, received, check_dtype=False)
 
 

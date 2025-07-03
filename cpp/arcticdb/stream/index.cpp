@@ -252,4 +252,9 @@ template class BaseIndex<TableIndex>;
 template class BaseIndex<RowCountIndex>;
 template class BaseIndex<EmptyIndex>;
 
+std::string mangled_name(std::string_view name) {
+    return fmt::format("__idx__{}", name);
+}
+
+
 }

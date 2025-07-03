@@ -160,7 +160,7 @@ void Column::unsparsify(size_t num_rows) {
     if(!sparse_map_)
         return;
 
-    type_.visit_tag([this, num_rows] (const auto tdt) {
+    type_.visit_tag([this, num_rows] (auto tdt) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
@@ -373,20 +373,24 @@ void Column::mark_absent_rows(size_t num_rows) {
 }
 
 void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc) {
+    default_initialize_rows(start_pos, num_rows, ensure_alloc, std::nullopt);
+}
+
+void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, const std::optional<Value>& default_value) {
     if (num_rows > 0) {
-        type_.visit_tag([this, start_pos, num_rows, ensure_alloc](auto tag) {
+        type_.visit_tag([&,this](auto tag) {
             using T = std::decay_t<decltype(tag)>;
             using RawType = typename T::DataTypeTag::raw_type;
             const auto bytes = (num_rows * sizeof(RawType));
 
-            if (ensure_alloc)
+            if (ensure_alloc) {
                 data_.ensure<uint8_t>(bytes);
-
+            }
             auto type_ptr = data_.ptr_cast<RawType>(start_pos, bytes);
-            util::default_initialize<T>(reinterpret_cast<uint8_t *>(type_ptr), bytes);
-
-            if (ensure_alloc)
+            util::initialize<T>(reinterpret_cast<uint8_t*>(type_ptr), bytes, default_value);
+            if (ensure_alloc) {
                 data_.commit();
+            }
 
             last_logical_row_ += static_cast<ssize_t>(num_rows);
             last_physical_row_ += static_cast<ssize_t>(num_rows);

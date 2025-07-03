@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <cstdint>
 #include <variant>
 #include <memory>
 #include <type_traits>
@@ -214,7 +213,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
 
     details::visit_type(column_with_strings.column_->type().data_type(), [&, sparse_missing_value_output](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        details::visit_type(val.type().data_type(), [&](auto val_tag) {
+        details::visit_type(val.data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
                 std::optional<std::string> utf32_string;
@@ -250,7 +249,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                 using comp = std::conditional_t<arguments_reversed,
                                                 typename arcticdb::Comparable<ValType, ColType>,
                                                 typename arcticdb::Comparable<ColType, ValType>>;
-                auto value = static_cast<typename comp::right_type>(*reinterpret_cast<const ValType *>(val.data_));
+                auto value = static_cast<typename comp::right_type>(val.get<ValType>());
                 Column::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
@@ -270,7 +269,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                         column_with_strings.column_->type(),
                                         func,
                                         val.to_string<typename val_type_info::RawType>(),
-                                        val.type(),
+                                        val.descriptor(),
                                         arguments_reversed));
             }
         });
@@ -349,24 +348,23 @@ template <typename Func>
 VariantData binary_operator(const Value& left, const Value& right, Func&& func) {
     auto output_value = std::make_unique<Value>();
 
-    details::visit_type(left.type().data_type(), [&](auto left_tag) {
+    details::visit_type(left.data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-        details::visit_type(right.type().data_type(), [&](auto right_tag) {
+        details::visit_type(right.data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
             if constexpr(!is_numeric_type(left_type_info::data_type) || !is_numeric_type(right_type_info::data_type)) {
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Non-numeric type provided to binary operation: {}",
                                 binary_operation_with_types_to_string(
                                     left.to_string<typename left_type_info::RawType>(),
-                                    left.type(),
+                                    left.descriptor(),
                                     func,
                                     right.to_string<typename right_type_info::RawType>(),
-                                    right.type()));
+                                    right.descriptor()));
             }
-            auto right_value = *reinterpret_cast<const typename right_type_info::RawType*>(right.data_);
-            auto left_value = *reinterpret_cast<const typename left_type_info::RawType*>(left.data_);
+            auto right_value = right.get<typename right_type_info::RawType>();
+            auto left_value = left.get<typename left_type_info::RawType>();
             using TargetType = typename binary_operation_promoted_type<typename left_type_info::RawType, typename right_type_info::RawType, std::remove_reference_t<Func>>::type;
-            output_value->data_type_ = data_type_from_raw_type<TargetType>();
-            *reinterpret_cast<TargetType*>(output_value->data_) = func.apply(left_value, right_value);
+            *output_value = Value{TargetType{func.apply(left_value, right_value)}, data_type_from_raw_type<TargetType>()};
         });
     });
     return VariantData(std::move(output_value));
@@ -417,7 +415,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
 
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        details::visit_type(val.type().data_type(), [&](auto val_tag) {
+        details::visit_type(val.data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(!is_numeric_type(col_type_info::data_type) || !is_numeric_type(val_type_info::data_type)) {
                 std::string error_message;
@@ -427,10 +425,10 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                                         col.column_->type(),
                                         func,
                                         val.to_string<typename val_type_info::RawType>(),
-                                        val.type(),
+                                        val.descriptor(),
                                         arguments_reversed));
             }
-            auto raw_value = *reinterpret_cast<const typename val_type_info::RawType*>(val.data_);
+            const auto& raw_value = val.get<typename val_type_info::RawType>();
             using TargetType = typename binary_operation_promoted_type<typename col_type_info::RawType, typename val_type_info::RawType, std::remove_reference_t<decltype(func)>>::type;
             if constexpr(arguments_reversed) {
                 column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_);
