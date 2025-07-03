@@ -543,6 +543,8 @@ def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype,
         else:
             expected_df = pd.DataFrame({"to_sum": np.array([1, 1], expected_type)}, index=["1", "0"])
         expected_df.index.name = "grouping_column"
+        expected_df.sort_index(inplace=True)
+        data.sort_index(inplace=True)
         assert_frame_equal(expected_df, data, check_dtype=True)
 
 @pytest.mark.parametrize("extremum", ["min", "max"])
