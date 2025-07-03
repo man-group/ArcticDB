@@ -435,7 +435,7 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     """ 
     See comment in previous test
     """
-    max_mem_bytes = 608_662_528
+    max_mem_bytes = 710_192_384 if MACOS else 608_662_528 # On macOs the memory required is more
 
     check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 

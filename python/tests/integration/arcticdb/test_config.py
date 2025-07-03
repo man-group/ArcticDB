@@ -3,10 +3,13 @@ import pytest
 from subprocess import run, PIPE
 
 from arcticdb_ext.log import LogLevel
+from tests.util.mark import MACOS
+
 
 _LEVELS = tuple(LogLevel.__entries)
 
 
+@pytest.mark.skipif(MACOS, reason="When failing causes pytest never to end halting att 99% test execution")
 @pytest.mark.parametrize("level", _LEVELS)
 def test_set_log_level(level):
     code = f"""import arcticdb; import sys
