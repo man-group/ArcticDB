@@ -12,8 +12,6 @@
 #include <arcticdb/util/movable_priority_queue.hpp>
 #include <arcticdb/stream/merge.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
-#include <arcticdb/stream/segment_aggregator.hpp>
-#include <arcticdb/version/schema_checks.hpp>
 
 namespace arcticdb {
 

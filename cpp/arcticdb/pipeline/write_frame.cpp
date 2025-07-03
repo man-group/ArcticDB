@@ -18,6 +18,7 @@
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
+
 #include <vector>
 #include <array>
 #include <ranges>
