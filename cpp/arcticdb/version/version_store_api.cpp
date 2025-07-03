@@ -955,7 +955,7 @@ void PythonVersionStore::delete_versions(
     }
 }
 
-std::vector<DataError> PythonVersionStore::batch_delete_versions(
+std::vector<DataError> PythonVersionStore::batch_delete(
     const std::vector<StreamId>& stream_ids,
     const std::vector<std::vector<VersionId>>& version_ids) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions, stream_ids and version_ids must have the same size");

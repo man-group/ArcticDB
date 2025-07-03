@@ -13,6 +13,7 @@ import os
 import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
+from dataclasses import dataclass
 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from numpy import datetime64
@@ -320,7 +321,8 @@ class ReadInfoRequest(NamedTuple):
         return res
 
 
-class DeleteRequest(NamedTuple):
+@dataclass(frozen=True)
+class DeleteRequest:
     """DeleteRequest is designed to enable batching of delete operations with an API that mirrors the singular ``delete`` API.
     Therefore, construction of this object is only required for batch delete operations.
 
@@ -330,10 +332,19 @@ class DeleteRequest(NamedTuple):
         See `delete` method.
     version_ids: List[int]
         See `delete` method.
+
+    Raises
+    ------
+    ValueError
+        If version_ids is empty.
     """
 
     symbol: str
     version_ids: List[int]
+
+    def __post_init__(self):
+        if not self.version_ids or len(self.version_ids) == 0:
+            raise ValueError(f"version_ids cannot be empty for symbol '{self.symbol}'")
 
     def __repr__(self):
         return f"DeleteRequest(symbol={self.symbol}, version_ids={self.version_ids})"
@@ -2340,7 +2351,8 @@ class Library:
         Returns
         -------
         List[DataError]
-            List of DataError objects, one for each symbol that was deleted.
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
         """
         symbols = []
         versions = []
@@ -2360,7 +2372,7 @@ class Library:
                     "Only [str] and [DeleteRequest] are supported."
                 )
 
-        return self._nvs.batch_delete_versions(symbols, versions)
+        return self._nvs.version_store.batch_delete(symbols, versions)
 
     def prune_previous_versions(self, symbol):
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
