@@ -19,6 +19,7 @@ from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.util.date import DateRange
+from tests.util.mark import MACOS_WHEEL_BUILD
 
 
 @pytest.mark.storage
@@ -73,6 +74,7 @@ def test_update_nan_int(object_and_mem_and_lmdb_version_store_dynamic_schema):
 
 
 @pytest.mark.storage
+@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Fatal Python error: Segmentation fault")
 def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_nan"
