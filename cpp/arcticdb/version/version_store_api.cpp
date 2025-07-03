@@ -971,11 +971,16 @@ std::vector<DataError> PythonVersionStore::batch_delete_versions(
     for (const auto& result : results) {
         util::variant_match(result,
             [&](const version_store::TombstoneVersionResult& tombstone_result) {
+                if(tombstone_result.keys_to_delete.empty()) {
+                    log::version().warn("Nothing to delete for symbol '{}'", tombstone_result.symbol);
+                    return;
+                }
+
                 if (!tombstone_result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
                     keys_to_delete.insert(keys_to_delete.end(), tombstone_result.keys_to_delete.begin(), tombstone_result.keys_to_delete.end());
                 }
 
-                if(tombstone_result.no_undeleted_left && cfg().symbol_list()) {
+                if(tombstone_result.no_undeleted_left && cfg().symbol_list() && !tombstone_result.keys_to_delete.empty()) {
                     auto stream_id = tombstone_result.keys_to_delete.front().id();
                     symbols_to_delete.emplace_back(std::move(stream_id), tombstone_result.latest_version_);
                 }

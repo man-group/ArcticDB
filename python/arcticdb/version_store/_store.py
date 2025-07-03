@@ -2641,6 +2641,7 @@ class NativeVersionStore:
             Symbols to delete versions for.
         versions : `List[List[int]]`
             Versions to delete for each symbol.
+            If the versions are empty or if there are no versions left for the symbol, the symbol will be deleted.
         """
         return self.version_store.batch_delete_versions(symbols, versions)
 

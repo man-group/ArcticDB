@@ -164,7 +164,7 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
     const StreamId& stream_id,
     const std::shared_ptr<Store>& store,
     const std::optional<timestamp>& creation_ts=std::nullopt) {
-    version_store::TombstoneVersionResult res(entry->empty());
+    version_store::TombstoneVersionResult res(entry->empty(), stream_id);
     auto latest_key = entry->get_first_index(true).first;
     
     for (auto version_id: version_ids) {
@@ -238,7 +238,7 @@ inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_a
     if (version_map->validate())
         entry->validate();
 
-    version_store::TombstoneVersionResult res{true};
+    version_store::TombstoneVersionResult res{true, entry->head_->id()};
     res.keys_to_delete = std::move(tombstone_result.second);
 
     res.no_undeleted_left = true;

@@ -522,11 +522,12 @@ def filter_out_unwanted_mark(request, current_param):
 @pytest.fixture(
     scope="function",
     params=[
+        # Make sure that mem and lmdb are first so we have faster startup
+        pytest.param("mem", marks=MEM_TESTS_MARK),
+        pytest.param("lmdb", marks=LMDB_TESTS_MARK),
         pytest.param("s3", marks=SIM_S3_TESTS_MARK),
         pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
         pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
-        pytest.param("lmdb", marks=LMDB_TESTS_MARK),
-        pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),

@@ -28,6 +28,7 @@ from arcticdb.util.test import (
 )
 from tests.util.storage_test import get_s3_storage_config
 from arcticdb_ext.storage import KeyType
+from arcticdb.version_store.library import DeleteRequest, WritePayload
 
 
 @pytest.mark.storage
@@ -173,6 +174,49 @@ def test_snapshots_with_deletes(basic_store):
         basic_store.read("sym3")
 
     assert basic_store.read("sym3", as_of="sym3_snap").data == original_data
+
+
+@pytest.mark.storage
+def test_snapshots_with_delete_batch(basic_store):
+    original_data = [1, 2, 3]
+    v1_data = [1, 2, 3, 4]
+
+    basic_store.write_batch(
+        [WritePayload("sym1", original_data), WritePayload("sym1", v1_data), WritePayload("sym2", original_data)]
+    )
+
+    # Delete without having anything in snapshots -> should delete:
+    # - sym1, version 1
+    # - sym2 completely
+    basic_store.delete_batch([DeleteRequest("sym1", [1]), "sym2"])
+
+    assert basic_store.has_symbol("sym1")
+    assert not basic_store.has_symbol("sym2")
+    assert basic_store.list_symbols() == ["sym1"]
+    # We should just have sym1
+    assert not [ver for ver in basic_store.list_versions() if ver["symbol"] == "sym2"]
+
+    basic_store.write("sym3", original_data)
+    basic_store.snapshot("sym3_snap")
+
+    # This version of sym3 is not in a snapshot
+    basic_store.write("sym3", v1_data)
+
+    # This should NOT delete sym1 and shoud return an error
+    # but should delete sym3 v1, which is not in a snapshot
+    res = basic_store.delete_batch([DeleteRequest("sym1", [0]), "sym3"])
+    assert len(res) == 1
+    assert res[0].symbol == "sym1"
+
+    assert basic_store.has_symbol("sym1")
+    assert basic_store.read("sym1").data == original_data
+
+    # sym3 shouldn't be readable now without going through the snapshot.
+    with pytest.raises(Exception):
+        basic_store.read("sym3")
+
+    assert basic_store.read("sym3", as_of="sym3_snap").data == original_data
+    assert basic_store.list_symbols() == ["sym1"]
 
 
 @pytest.mark.storage
