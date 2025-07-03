@@ -33,6 +33,7 @@ from arcticdb.version_store.library import (
     ReadRequest,
     StagedDataFinalizeMethod,
     ArcticInvalidApiUsageException,
+    DeleteRequest,
 )
 
 from tests.util.mark import (
@@ -96,7 +97,7 @@ def test_get_library(arctic_client, lib_name):
         encoding_version=EncodingVersion.V1 if ac._encoding_version == EncodingVersion.V2 else EncodingVersion.V2,
     )
     lib = ac.get_library(
-        f"{lib_name}_so", # specific options
+        f"{lib_name}_so",  # specific options
         create_if_missing=True,
         library_options=library_options,
     )
@@ -106,7 +107,7 @@ def test_get_library(arctic_client, lib_name):
     library_options.dynamic_schema = False
     with pytest.raises(MismatchingLibraryOptions):
         _ = ac.get_library(
-            f"{lib_name}_so", # specific options
+            f"{lib_name}_so",  # specific options
             create_if_missing=True,
             library_options=library_options,
         )
@@ -152,7 +153,8 @@ def test_create_library_replication_option_set_writes_logs(lmdb_storage, lib_nam
     assert len(lt.find_keys(KeyType.LOG))
 
 
-def test_create_library_background_deletion_option_set_does_not_delete(lmdb_storage, lib_name):
+@pytest.mark.parametrize("op", ["single", "batch_single", "batch_delete_request"])
+def test_create_library_background_deletion_option_set_does_not_delete(lmdb_storage, lib_name, delete_op):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(
         lib_name,
@@ -162,7 +164,12 @@ def test_create_library_background_deletion_option_set_does_not_delete(lmdb_stor
 
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("abc", df)
-    lib.delete("abc")
+    if delete_op == "single":
+        lib.delete("abc")
+    elif delete_op == "batch_single":
+        lib.delete_batch(["abc"])
+    elif delete_op == "batch_delete_request":
+        lib.delete_batch([DeleteRequest("abc", [0])])
 
     assert len(lt.find_keys(KeyType.TABLE_DATA))
 
@@ -261,7 +268,8 @@ def test_modify_options_replication(lmdb_storage, lib_name):
     assert len(lt.find_keys(KeyType.LOG)) == 1
 
 
-def test_modify_options_background_deletion(lmdb_storage, lib_name):
+@pytest.mark.parametrize("op", ["single", "batch_single", "batch_delete_request"])
+def test_modify_options_background_deletion(lmdb_storage, lib_name, delete_op):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name)
     lt = lib._nvs.library_tool()
@@ -269,7 +277,12 @@ def test_modify_options_background_deletion(lmdb_storage, lib_name):
     ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("abc", df)
-    lib.delete("abc")
+    if delete_op == "single":
+        lib.delete("abc")
+    elif delete_op == "batch_single":
+        lib.delete_batch(["abc"])
+    elif delete_op == "batch_delete_request":
+        lib.delete_batch([DeleteRequest("abc", [0])])
 
     assert len(lt.find_keys(KeyType.TABLE_DATA))
 
@@ -338,7 +351,7 @@ def test_do_not_persist_s3_details(s3_storage):
 @pytest.mark.storage
 def test_library_options(arctic_client, lib_name):
     ac = arctic_client
-    lib_name_do = f"{lib_name}_do" # default options
+    lib_name_do = f"{lib_name}_do"  # default options
     ac.create_library(lib_name_do)
     lib = ac[lib_name_do]
     assert lib.options() == LibraryOptions(encoding_version=ac._encoding_version)
@@ -356,7 +369,7 @@ def test_library_options(arctic_client, lib_name):
         columns_per_segment=3,
         encoding_version=EncodingVersion.V2,
     )
-    lib_name_eo = f"{lib_name}_eo" # explicit options
+    lib_name_eo = f"{lib_name}_eo"  # explicit options
     ac.create_library(
         lib_name_eo,
         library_options,
@@ -481,7 +494,7 @@ def test_library_management_path_prefix(fixture, request, lib_name):
         assert all(k.startswith("hello/world") for k in keys)
         assert any(k.startswith("hello/world/_arctic_cfg") for k in keys)
         assert any(k.startswith("hello/world/test_library_management_path_p") for k in keys)
-    finally:    
+    finally:
         ac.delete_library(lib_name)
 
     assert lib_name not in ac.list_libraries()
