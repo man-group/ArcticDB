@@ -729,7 +729,8 @@ public:
     // Returns the index such that if val were inserted before that index, the order would be preserved
     // By default returns the lowest index satisfying this property. If from_right=true, returns the highest such index
     // from (inclusive) and to (exclusive) can optionally be provided to search a subset of the rows in the column
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
     size_t search_sorted(T val, bool from_right=false, std::optional<int64_t> from = std::nullopt, std::optional<int64_t> to = std::nullopt) const {
         // There will not necessarily be a unique answer for sparse columns
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(!is_sparse(),
