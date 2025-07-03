@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/util/test/test_utils.hpp>
 
 using namespace arcticdb;
 

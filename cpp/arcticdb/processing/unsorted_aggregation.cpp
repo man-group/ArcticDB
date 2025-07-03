@@ -186,7 +186,9 @@ void SumAggregatorData::aggregate(const ColumnWithStrings& input_column, const s
     details::visit_type(get_output_data_type(), [&input_column, unique_values, &groups, this] (auto global_tag) {
         using global_type_info = ScalarTypeInfo<decltype(global_tag)>;
         using RawType = typename global_type_info::RawType;
-        if constexpr(!is_sequence_type(global_type_info::data_type)) {
+        // Output type for sum aggregation cannot be bool. If the input is bool the output is uint64 and the result
+        // is the count of true values. The constexpr is here to prevent compiler warnings.
+        if constexpr (!is_sequence_type(global_type_info::data_type) && !is_bool_type(global_type_info::data_type)) {
             aggregated_.resize(sizeof(RawType) * unique_values);
             auto out = std::span{reinterpret_cast<RawType*>(aggregated_.data()), unique_values};
             details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, &out] (auto col_tag) {
@@ -205,7 +207,6 @@ void SumAggregatorData::aggregate(const ColumnWithStrings& input_column, const s
                     util::raise_rte("String aggregations not currently supported");
                 }
             });
-
         }
     });
 }

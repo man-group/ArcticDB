@@ -135,7 +135,7 @@ def test_sum_aggregation_bool(lmdb_version_store_v1):
             "grouping_column": ["0", "0", "0", "1", "1", "2", "2", "3", "4"],
             "to_sum": [True, False, True, True, True, False, False, True, False]
         },
-        index=np.arange(7),
+        index=np.arange(9),
     )
     lib.write(symbol, df)
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
@@ -548,14 +548,13 @@ def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype,
         assert_frame_equal(expected_df, data, check_dtype=True)
 
 @pytest.mark.parametrize("extremum", ["min", "max"])
-@pytest.mark.parametrize("dtype_value", [(np.int32, 0), (np.float32, np.nan), (bool, False)])
-def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1, extremum, dtype_value):
+@pytest.mark.parametrize("dtype, default_value", [(np.int32, 0), (np.float32, np.nan), (bool, False)])
+def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1, extremum, dtype, default_value):
     """
     Test that a sparse column will be backfilled with the correct values.
     d1 will be skipped because there is no grouping colum, df2 will form the first row which. The first row is sparse
     because the aggregation column is missing, d2 will be the second row which will be dense and not backfilled.
     """
-    dtype, default_value = dtype_value
     lib = lmdb_version_store_dynamic_schema_v1
     sym = "sym"
     df1 = pd.DataFrame({"agg_column": np.array([0, 0], dtype)})
