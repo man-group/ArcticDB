@@ -48,7 +48,7 @@ def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
                     ac.delete_library(lib)
                 except Exception as e:
                     failed_to_delete.append(lib)
-            assert failed_to_delete < 1, f"Following libraries failed to delete: {failed_to_delete}"
+            assert len(failed_to_delete) > 0, f"Following libraries failed to delete: {failed_to_delete}"
         logger.info("Delete ended")
 
     assert not failed, "There is at least one failure look at the result"
