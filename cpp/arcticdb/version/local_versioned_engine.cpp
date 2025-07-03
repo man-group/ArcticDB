@@ -1410,6 +1410,8 @@ std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> Loca
     for (size_t i = 0; i < stream_ids.size(); ++i) {
         if (!version_sets[i].empty()) {
             futures.push_back(tombstone_versions_async(store(), version_map(), stream_ids[i], version_sets[i]));
+        } else {
+            futures.push_back(tombstone_all_async(store(), version_map(), stream_ids[i]));
         }
     }
 
