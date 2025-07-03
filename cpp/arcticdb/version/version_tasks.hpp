@@ -217,14 +217,14 @@ struct TombstoneAllTask : async::BaseTask {
     const std::shared_ptr<VersionMap> version_map_;
     const StreamId stream_id_;
     const std::optional<AtomKey> maybe_prev_;
-    const std::shared_ptr<VersionMapEntry> entry_;
+    const std::optional<std::shared_ptr<VersionMapEntry>> entry_;
 
     TombstoneAllTask(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> version_map,
         StreamId stream_id,
         std::optional<AtomKey> maybe_prev,
-        std::shared_ptr<VersionMapEntry> entry) :
+        std::optional<std::shared_ptr<VersionMapEntry>> entry) :
         store_(std::move(store)),
         version_map_(std::move(version_map)),
         stream_id_(std::move(stream_id)),

@@ -499,7 +499,6 @@ def test_delete_batch(library_factory, sym):
 
 
 @pytest.mark.storage
-@pytest.mark.xfail(reason="Delete batch is not implemented yet")
 def test_delete_batch_comprehensive(arctic_library):
     """Test delete_batch with both string symbols and DeleteRequest objects."""
     lib = arctic_library
@@ -529,6 +528,7 @@ def test_delete_batch_comprehensive(arctic_library):
     # Delete only version 1 of sym3
     delete_request = DeleteRequest("sym3", [1])
     result = lib.delete_batch([delete_request])
+    assert len(result) == 0
 
     # sym3 should still exist but version 1 should be deleted
     assert lib.has_symbol("sym3")
@@ -542,11 +542,10 @@ def test_delete_batch_comprehensive(arctic_library):
     lib.write("sym5", df2)
 
     result = lib.delete_batch(["sym4", DeleteRequest("sym5", [0])])
-
-    # sym4 should be completely deleted
+    assert len(result) == 0
+    # both sym4 and sym5 should be deleted
     assert not lib.has_symbol("sym4")
-    # sym5 should still exist but version 0 should be deleted
-    assert lib.has_symbol("sym5")
+    assert not lib.has_symbol("sym5")
 
 
 @pytest.mark.storage

@@ -139,16 +139,27 @@ def test_batch_delete_versions_empty_input(basic_store):
         lib.write(sym, df2, prune_previous_version=False)
 
     # Test with empty symbols list
-    lib.batch_delete_versions([], [])
+    res = lib.batch_delete_versions([], [])
+    assert len(res) == 0
 
-    # Test with empty versions list
-    lib.batch_delete_versions(symbols, [[], []])
-
-    # Verify that nothing was deleted
+    assert len(lib.list_symbols()) == 2
     for sym in symbols:
         assert len(lib.list_versions(sym)) == 2
         assert_frame_equal(lib.read(sym).data, df2)
         assert_frame_equal(lib.read(sym, 0).data, df1)
+        assert_frame_equal(lib.read(sym, 1).data, df2)
+
+    # Test with empty versions list
+    res = lib.batch_delete_versions(symbols, [[], []])
+    assert len(res) == 0
+
+    assert len(lib.list_symbols()) == 0
+    for sym in symbols:
+        assert len(lib.list_versions(sym)) == 0
+        with pytest.raises(NoDataFoundException):
+            lib.read(sym)
+        with pytest.raises(NoDataFoundException):
+            lib.read(sym, 0)
 
 
 @pytest.mark.storage
@@ -179,10 +190,8 @@ def test_batch_delete_versions_invalid_input(basic_store):
     assert lib.list_symbols() == ["sym1"]
 
     # Test with invalid version number for sym1
-    res = lib.batch_delete_versions(["sym1", "sym2"], [[-1], [0]])
-    assert len(res) == 2
-    assert res[0].symbol == "sym1"
-    assert res[1].symbol == "sym2"
+    with pytest.raises(TypeError):
+        lib.batch_delete_versions(["sym1", "sym2"], [[-1], [0]])
 
 
 @pytest.mark.storage

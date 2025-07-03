@@ -229,6 +229,39 @@ inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_r
     return res;
 }
 
+inline folly::Future<version_store::TombstoneVersionResult> finalize_tombstone_all_result(
+    const std::shared_ptr<VersionMap>& version_map,
+    std::shared_ptr<VersionMapEntry>&& entry,
+    std::pair<VersionId, std::vector<AtomKey>> tombstone_result) {
+    ARCTICDB_DEBUG(log::version(), "Finalizing result for tombstone key {}", tombstone_result.first);
+    // Update the result with final state
+    if (version_map->validate())
+        entry->validate();
+
+    version_store::TombstoneVersionResult res{true};
+    res.keys_to_delete = std::move(tombstone_result.second);
+
+    res.no_undeleted_left = true;
+    res.latest_version_ = tombstone_result.first;
+    return res;
+}
+
+inline folly::Future<version_store::TombstoneVersionResult> process_tombstone_all_versions(
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<VersionMap>& version_map,
+    const StreamId& stream_id,
+    std::shared_ptr<VersionMapEntry> entry) {
+    // Submit the write tombstone task
+    return async::submit_io_task(TombstoneAllTask{store,
+                                    version_map,
+                                    stream_id,
+                                    std::nullopt,
+                                    entry})
+        .thenValue([version_map, e=std::move(entry)](std::pair<VersionId, std::vector<AtomKey>>&& tombstone_result) mutable {
+            return finalize_tombstone_all_result(version_map, std::move(e), std::move(tombstone_result));
+        });
+}
+
 inline folly::Future<version_store::TombstoneVersionResult> process_tombstone_versions(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<VersionMap>& version_map,
@@ -265,6 +298,21 @@ inline folly::Future<version_store::TombstoneVersionResult> tombstone_versions_a
                                     LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}})
         .thenValue([store, version_map, stream_id, version_ids, creation_ts](std::shared_ptr<VersionMapEntry>&& entry) {
             return process_tombstone_versions(store, version_map, stream_id, version_ids, creation_ts, std::move(entry));
+        });
+}
+
+inline folly::Future<version_store::TombstoneVersionResult> tombstone_all_async(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const StreamId &stream_id) {
+    ARCTICDB_DEBUG(log::version(), "Tombstoning all versions for stream {}", stream_id);
+
+    return async::submit_io_task(CheckReloadTask{store,
+                                    version_map,
+                                    stream_id,
+                                    LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}})
+        .thenValue([store, version_map, stream_id](std::shared_ptr<VersionMapEntry>&& entry) {
+            return process_tombstone_all_versions(store, version_map, stream_id, std::move(entry));
         });
 }
 
