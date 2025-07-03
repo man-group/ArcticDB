@@ -166,18 +166,19 @@ def test_batch_delete_versions_invalid_input(basic_store):
     assert len(res) == 1
     assert res[0].symbol == "non_existent"
 
-    # Test with non-existent version
+    # Test with non-existent version for one symbol
     res = lib.batch_delete_versions(["sym1", "sym2"], [[1], [0]])
-    assert len(res) == 2
+    assert len(res) == 1
     assert res[0].symbol == "sym1"
-    assert res[1].symbol == "sym2"
 
+    # sym1 should still be accessible
+    # sym2 should be deleted
     assert_frame_equal(lib.read("sym1").data, df1)
     assert len(lib.list_versions("sym1")) == 1
     assert len(lib.list_versions("sym2")) == 0
     assert lib.list_symbols() == ["sym1"]
 
-    # Test with invalid version number
+    # Test with invalid version number for sym1
     res = lib.batch_delete_versions(["sym1", "sym2"], [[-1], [0]])
     assert len(res) == 2
     assert res[0].symbol == "sym1"
