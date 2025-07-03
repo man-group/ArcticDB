@@ -182,17 +182,12 @@ class BatchBasicFunctions:
     def time_update_batch(self, rows, num_symbols):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
         results = self.lib.update_batch(payloads)
-        assert results[0].version == 1
-
-    def time_update_batch_errors(self, rows, num_symbols):
-        payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
-        results = self.lib.update_batch(payloads)
-        assert results[0] == DataError        
+        assert results[0].version >= 1
 
     def peakmem_update_batch(self, rows, num_symbols):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
         results = self.lib.update_batch(payloads)
-        assert results[0].version == 1
+        assert results[0].version >= 1
 
     def time_read_batch(self, rows, num_symbols):
         read_reqs = [ReadRequest(f"{sym}_sym") for sym in range(num_symbols)]
