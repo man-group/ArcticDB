@@ -244,7 +244,7 @@ OutputSchema ProjectClause::modify_schema(OutputSchema&& output_schema) const {
                 output_schema.add_field(output_column_, std::get<DataType>(return_type));
             },
             [&](const ValueName& root_node_name) {
-                output_schema.add_field(output_column_, expression_context_->values_.get_value(root_node_name.value)->type().data_type());
+                output_schema.add_field(output_column_, expression_context_->values_.get_value(root_node_name.value)->descriptor().data_type());
             },
             [](const auto&) {
                 // Shouldn't make it here due to check in ctor
