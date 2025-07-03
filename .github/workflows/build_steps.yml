@@ -56,6 +56,8 @@ jobs:
       ARCTICDB_BUILD_DIR: ${{matrix.build_dir}}
       ARCTICDB_VCPKG_INSTALLED_DIR: ${{matrix.vcpkg_installed_dir}}
       ARCTICDB_VCPKG_PACKAGES_DIR: ${{matrix.vcpkg_packages_dir}}
+      MACOSX_DEPLOYMENT_TARGET: "15.0"
+      CMAKE_OSX_DEPLOYMENT_TARGET: "15.0"
       CIBW_ENVIRONMENT_PASS_LINUX: SCCACHE_GHA_VERSION ACTIONS_CACHE_URL ACTIONS_RUNTIME_TOKEN VCPKG_INSTALLATION_ROOT
         VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
@@ -71,10 +73,35 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3.3.0
         with:
-          submodules: recursive # Just in case a dep has its own third-party deps
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Convert to Full Clone
+        run: |
+          git config --global --add safe.directory /__w/ArcticDB/ArcticDB
+          git submodule update --init --recursive
+          cd cpp/vcpkg
+          git submodule update --init --recursive
+          cd ../..
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          version: "v0.10.0"
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup macOS build environment
+        if: matrix.os == 'macos'
+        run: |
+          brew install sccache
+          brew install mono
+          brew install bison   # required by thrift pulled via vcpkg
+          echo "SCCACHE_DIR=/tmp/sccache" >> $GITHUB_ENV
+          mkdir -p /tmp/sccache
+          # Start sccache server
+          sccache --start-server
+          # Show sccache stats
+          sccache --show-stats
 
       - name: Windows Pagefile
         if: matrix.os == 'windows'
@@ -84,7 +111,7 @@ jobs:
           maximum-size: 6GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
-          
+
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
@@ -102,7 +129,7 @@ jobs:
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
-      
+
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
         run: rm $(which ccache) || true
@@ -145,6 +172,8 @@ jobs:
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
           configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
+        env:
+          SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
@@ -205,6 +234,9 @@ jobs:
         run: pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
+          CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
+          CIBW_ARCHS_MACOS: "arm64"
+          SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
       - name: Store wheel artifact
         if: inputs.job_type == 'build-python-wheels'
@@ -218,13 +250,13 @@ jobs:
         # We only run the compat tests on for newer python versions.
         # There are so few nonreg tests, run them in the hypothesis runner.
         run: |
-          if [ ${{inputs.python3}} -gt 6 ]
+          if [ ${{inputs.python3}} -gt 8 ]
           then
-            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\)' -printf '"%f",' |
-              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
           else
-            find python/tests/* -maxdepth 0 -type d ! -regex '.*\(__pycache__\|util\|nonreg\|scripts\|compat\)' -printf '"%f",' |
-              sed 's/^/test_dirs=[/ ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/ ; s/,$/]/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
           fi
 
       # ========================= Common =========================
@@ -277,6 +309,7 @@ jobs:
       run: {shell: bash}
     services: ${{matrix.test_services}}
     env:
+      SCCACHE_GHA_ENABLED: "true"
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -295,14 +328,14 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           #there are cp313 and cp313t
-          if [[ "${{env.python_impl_name}}" == "cp313" ]]; then 
+          if [[ "${{env.python_impl_name}}" == "cp313" ]]; then
             echo /opt/python/cp313-cp313/bin >> $GITHUB_PATH;
           else
             echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH;
           fi
 
-      - name: Select Python (Windows)
-        if: matrix.os == 'windows'
+      - name: Select Python (Windows and macOS)
+        if: matrix.os == 'windows' || matrix.os == 'macos'
         uses: actions/setup-python@v4.7.1
         with:
           python-version: "3.${{inputs.python3}}"
@@ -316,8 +349,9 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
-      - name: Install npm # Linux github runner image does not come with npm
-        if: matrix.os == 'linux'
+      # GitHub runner image does not come with npm
+      - name: Install npm (Linux and macOS)
+        if: matrix.os == 'linux' || matrix.os == 'macos'
         uses: actions/setup-node@v3.3.0
         with:
           node-version: '16'
@@ -345,7 +379,7 @@ jobs:
 
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
-        if: ${{ env.real_tests_storage_type != 'no' }} 
+        if: ${{ env.real_tests_storage_type != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -354,9 +388,9 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
-        
+
       - name: Set s3 sts AWS S3 variables for Windows
-        if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }} 
+        if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -367,7 +401,7 @@ jobs:
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
-            python -m pip  install setuptools 
+            python -m pip  install setuptools
             python -m pip  install wheel
             python setup.py protoc --build-lib python
             eval "$ARCTICDB_PYTEST_ARGS"
@@ -414,3 +448,4 @@ jobs:
           name: pytest-${{env.distinguishing_name}}
           path: |
             ${{runner.temp}}/*test*
+            

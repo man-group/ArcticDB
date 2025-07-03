@@ -138,7 +138,7 @@ jobs:
           - os: macos-13
 
       fail-fast: false
-    runs-on: ${{ inputs.run_on_arm_mac == true && 'macos-13-xlarge' || matrix.os }}
+    runs-on: ${{ matrix.os }}
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:

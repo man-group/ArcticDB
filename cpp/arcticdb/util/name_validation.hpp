@@ -23,6 +23,9 @@ constexpr size_t MAX_SYMBOL_LENGTH = std::numeric_limits<uint8_t>::max() - 1;
 // Should be used only when writing new symbols to allow for backwards compatibility with old symbols.
 [[nodiscard]] CheckOutcome verify_symbol_key(const StreamId &symbol_key);
 
+// Similar to verify_symbol_key above.
+[[nodiscard]] CheckOutcome verify_snapshot_id(const SnapshotId& snapshot_id);
+
 // Does strict checks on library names and raises UserInputException if it encounters an error.
 // Should be checked only when writing new libraries to allow for backwards compatibility
 // with old invalid libraries.

@@ -76,8 +76,7 @@ private:
     }
 
     auto get_unique_counts(
-        const Column& column
-    ) {
+            const Column& column) {
         ankerl::unordered_dense::map<entity::position_t, size_t> unique_counts;
         unique_counts.reserve(column.row_count());
         auto data = column.data();

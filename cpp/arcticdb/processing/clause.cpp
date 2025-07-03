@@ -804,13 +804,13 @@ std::vector<EntityId> ResampleClause<closed_boundary>::process(std::vector<Entit
     // Resampling only makes sense for timestamp indexes
     internal::check<ErrorCode::E_ASSERTION_FAILURE>(is_time_type(first_row_slice_index_col.type().data_type()),
                                                     "Cannot resample data with index column of non-timestamp type");
-    auto first_ts = first_row_slice_index_col.scalar_at<timestamp>(0).value();
+    auto first_ts = first_row_slice_index_col.template scalar_at<timestamp>(0).value();
     // If there is only one row slice, then the last index value of interest is just the last index value for this row
     // slice. If there is more than one, then the first index value from the second row slice must be used to calculate
     // the buckets of interest, due to an old bug in update. See test_compatibility.py::test_compat_resample_updated_data
     // for details
-    auto last_ts = row_slices.size() == 1 ? first_row_slice_index_col.scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value():
-            row_slices.back().segments_->at(0)->column(0).scalar_at<timestamp>(0).value();
+    auto last_ts = row_slices.size() == 1 ? first_row_slice_index_col.template scalar_at<timestamp>(first_row_slice_index_col.row_count() - 1).value():
+            row_slices.back().segments_->at(0)->column(0).template scalar_at<timestamp>(0).value();
     auto bucket_boundaries = generate_bucket_boundaries(first_ts, last_ts, responsible_for_first_overlapping_bucket);
     if (bucket_boundaries.size() < 2) {
         return {};
@@ -1318,7 +1318,15 @@ void RowRangeClause::set_processing_config(const ProcessingConfig& processing_co
 
 std::string RowRangeClause::to_string() const {
     if (row_range_type_ == RowRangeType::RANGE) {
-        return fmt::format("ROWRANGE: RANGE, start={}, end ={}", start_, end_);
+        if (user_provided_start_ && user_provided_end_) {
+            return fmt::format("ROWRANGE: RANGE, start={}, end={}", user_provided_start_, user_provided_end_);
+        } else if (user_provided_start_) {
+            return fmt::format("ROWRANGE: RANGE, start={}, end=OPEN", user_provided_start_);
+        } else if (user_provided_end_) {
+            return fmt::format("ROWRANGE: RANGE, start=OPEN, end={}", user_provided_end_);
+        } else {
+            return fmt::format("ROWRANGE: RANGE, start=OPEN, end=OPEN");
+        }
     }
 
     return fmt::format("ROWRANGE: {}, n={}", row_range_type_ == RowRangeType::HEAD ? "HEAD" : "TAIL", n_);

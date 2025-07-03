@@ -256,7 +256,7 @@ TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
-    const auto& seg = read_result.frame_data.frame();
+    const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
 
     count = 0;
     auto col1_pos = seg.column_index( "thing1").value();
@@ -341,7 +341,7 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaIndexed) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
-    const auto& seg = read_result.frame_data.frame();
+    const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
 
     ASSERT_EQ(seg.row_count(), num_rows_per_incomplete * num_incompletes);
 
@@ -419,7 +419,7 @@ TEST_F(VersionStoreTest, CompactIncompleteStaticSchemaRowCountIndex) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data);
-    const auto& seg = read_result.frame_data.frame();
+    const auto& seg = std::get<PandasOutputFrame>(read_result.frame_data).frame();
     ASSERT_EQ(seg.row_count(), num_rows_per_incomplete * num_incompletes);
 
     auto col1_pos = seg.column_index( "thing1").value();
@@ -509,14 +509,14 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
 
     std::vector<std::shared_ptr<ReadQuery>> read_queries;
     ReadOptions read_options;
+    read_options.set_batch_throw_on_error(true);
     read_options.set_output_format(OutputFormat::NATIVE);
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-    read_options.set_batch_throw_on_error(true);
     auto latest_versions = test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options, handler_data);
     for(auto&& [idx, version] : folly::enumerate(latest_versions)) {
         auto expected = get_test_simple_frame(std::get<VersionedItem>(std::get<ReadResult>(version).item).symbol(), 10, idx);
-        bool equal = expected.segment_ == std::get<ReadResult>(version).frame_data.frame();
+        bool equal = expected.segment_ == std::get<PandasOutputFrame>(std::get<ReadResult>(version).frame_data).frame();
         ASSERT_EQ(equal, true);
     }
 }
@@ -889,7 +889,6 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, true, false);
 
     ReadOptions read_options;
-    read_options.set_output_format(OutputFormat::NATIVE);
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();
@@ -950,7 +949,6 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     version_store.update_internal(symbol, UpdateQuery{}, std::move(update_frame.frame_), false, true, false);
 
     ReadOptions read_options;
-    read_options.set_output_format(OutputFormat::NATIVE);
     read_options.set_dynamic_schema(true);
     auto read_query = std::make_shared<ReadQuery>();
     register_native_handler_data_factory();

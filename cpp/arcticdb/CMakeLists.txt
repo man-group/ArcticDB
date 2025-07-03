@@ -19,6 +19,7 @@ cmake_policy(POP)
 
 find_package(Boost REQUIRED)
 find_package(fmt REQUIRED)
+find_package(sparrow CONFIG REQUIRED)
 find_package(spdlog REQUIRED)
 find_package(Folly REQUIRED)
 find_package(Gflags REQUIRED)
@@ -47,6 +48,10 @@ if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
 endif()
 
+# Required for the macOS SDK to use all the latest features of libc++, for both vcpkg and conda-forge builds.
+# See: https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
+add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
+
 if(NOT ${ARCTICDB_USING_CONDA})
     find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
@@ -58,8 +63,6 @@ else()
     # sources to be able to use dependencies via conda at compile time.
     # TODO: rely on CMake directives instead of `ARCTICDB_USING_CONDA`.
     add_compile_definitions(ARCTICDB_USING_CONDA)
-    # https://conda-forge.org/docs/maintainer/knowledge_base.html#newer-c-features-with-old-sdk
-    add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
     SET(HIDE_LINKED_SYMBOLS OFF)
 
@@ -83,9 +86,15 @@ else()
 
     set(Zstd_LIBRARY zstd::libzstd_shared)
 
+endif()
+
+if(${ARCTICDB_USING_CONDA} OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    # Adapt Folly::folly_deps to remove an non-existent include directory
+    # (which is supposedly only present on Linux and used for the static build of Folly)
     get_target_property(NEW_FOLLY_DEPS Folly::folly_deps INTERFACE_INCLUDE_DIRECTORIES)
-    message(STATUS "NEW_FOLLY_DEPS" ${NEW_FOLLY_DEPS})
-    list(REMOVE_ITEM NEW_FOLLY_DEPS "/usr/local/opt/openssl/include" )
+    set(NON_EXISTENT_INCLUDE_DIR "/usr/local/opt/openssl/include")
+    message(STATUS "Folly's INTERFACE_INCLUDE_DIRECTORIES to remove: ${NON_EXISTENT_INCLUDE_DIR}")
+    list(REMOVE_ITEM NEW_FOLLY_DEPS "${NON_EXISTENT_INCLUDE_DIR}")
     set_target_properties(Folly::folly_deps PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${NEW_FOLLY_DEPS}")
 endif()
 
@@ -171,6 +180,10 @@ endif ()
 set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
+        arrow/array_from_block.hpp
+        arrow/arrow_handlers.hpp
+        arrow/arrow_output_frame.hpp
+        arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
         async/bit_rate_stats.hpp
@@ -238,12 +251,10 @@ set(arcticdb_srcs
         pipeline/input_tensor_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
-        pipeline/python_output_frame.hpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.hpp
         pipeline/read_options.hpp
-        pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
-        pipeline/read_query.hpp
         pipeline/slicing.hpp
         pipeline/string_pool_utils.hpp
         pipeline/value.hpp
@@ -404,6 +415,9 @@ set(arcticdb_srcs
         version/version_store_objects.hpp
         version/version_utils.hpp
         # CPP files
+        arrow/arrow_handlers.cpp
+        arrow/arrow_output_frame.cpp
+        arrow/arrow_utils.cpp
         async/async_store.cpp
         async/bit_rate_stats.cpp
         async/task_scheduler.cpp
@@ -442,12 +456,12 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
         pipeline/pipeline_context.cpp
-        pipeline/python_output_frame.cpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_query.cpp
-        pipeline/read_pipeline.cpp
         pipeline/read_frame.cpp
+        pipeline/read_pipeline.cpp
+        pipeline/read_query.hpp
+        pipeline/read_query.cpp
         pipeline/slicing.cpp
         pipeline/string_pool_utils.cpp
         pipeline/value_set.cpp
@@ -536,7 +550,8 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        storage/s3/ec2_utils.cpp)
+        storage/s3/ec2_utils.cpp
+        )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
@@ -690,6 +705,7 @@ set (arcticdb_core_libraries
         Folly::folly # Transitively includes: double-conversion, gflags, glog, libevent, libssl, libcrypto, libiberty, libsodium
         Azure::azure-identity
         Azure::azure-storage-blobs
+        sparrow::sparrow
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
@@ -913,6 +929,7 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
+            arrow/test/test_arrow.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp

@@ -99,6 +99,31 @@ inline std::shared_ptr<std::unordered_map<StreamId, SymbolStatus>> batch_check_l
     return output;
 }
 
+inline std::shared_ptr<std::unordered_map<StreamId, MaybeDeletedAtomKey>> batch_get_latest_version_with_deletion_info(
+    const std::shared_ptr<Store> &store,
+    const std::shared_ptr<VersionMap> &version_map,
+    const std::vector<StreamId> &stream_ids,
+    bool include_deleted) {
+    ARCTICDB_SAMPLE(BatchGetLatestVersion, 0)
+    const LoadStrategy load_strategy{LoadType::LATEST, include_deleted ? LoadObjective::INCLUDE_DELETED : LoadObjective::UNDELETED_ONLY};
+    auto output = std::make_shared<std::unordered_map<StreamId, MaybeDeletedAtomKey>>();
+    auto mutex = std::make_shared<std::mutex>();
+
+    submit_tasks_for_range(stream_ids,
+            [store, version_map, &load_strategy](auto& stream_id) {
+                return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy});
+            },
+            [output, include_deleted, mutex](auto id, auto entry) {
+                auto [index_key, deleted] = entry->get_first_index(include_deleted);
+                if (index_key) {
+                    std::lock_guard lock{*mutex};
+                    (*output)[id] = MaybeDeletedAtomKey{*index_key, deleted};
+                }
+            });
+
+    return output;
+}
+
 inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_version(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
@@ -110,16 +135,16 @@ inline std::shared_ptr<std::unordered_map<StreamId, AtomKey>> batch_get_latest_v
     auto mutex = std::make_shared<std::mutex>();
 
     submit_tasks_for_range(stream_ids,
-            [store, version_map, &load_strategy](auto& stream_id) {
-                return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy});
-            },
-            [output, include_deleted, mutex](auto id, auto entry) {
-                auto [index_key, deleted] = entry->get_first_index(include_deleted);
-                if (index_key) {
-                    std::lock_guard lock{*mutex};
-                    (*output)[id] =*index_key;
-                }
-            });
+                           [store, version_map, &load_strategy](auto& stream_id) {
+                               return async::submit_io_task(CheckReloadTask{store, version_map, stream_id, load_strategy});
+                           },
+                           [output, include_deleted, mutex](auto id, auto entry) {
+                               auto [index_key, deleted] = entry->get_first_index(include_deleted);
+                               if (index_key) {
+                                   std::lock_guard lock{*mutex};
+                                   (*output)[id] = *index_key;
+                               }
+                           });
 
     return output;
 }

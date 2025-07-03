@@ -244,6 +244,10 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     First will rebuild index for dataframes to assure we
     have same index in both frames when row range index is used
     """
+    if PANDAS_VERSION < CHECK_FREQ_VERSION:
+        if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
+            assert expected.columns.equals(expected.columns)    
+            return
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
@@ -848,10 +852,13 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     Checks if integer columns are exactly the same. For float columns checks if they are approximately the same.
     We can't guarantee the same order of operations for the floats thus numerical errors might appear.
     """
-    assert left.shape == right.shape
-    assert left.columns.equals(right.columns)
+    message = f"{left.shape} != {right.shape}  ----  Left.index=[{left.index}], Right.index=[{right.index}]"
+    assert left.shape == right.shape, message
+    message = f"left.columns({left.columns}) != right.columns({right.columns})"
+    assert left.columns.equals(right.columns), message
     # To avoid checking the freq member of the index as arctic does not fill it in
-    assert left.index.equals(right.index)
+    message = f"left.index({left.index}) != right.index({right.index})"
+    assert left.index.equals(right.index), message
 
     # Drop NaN an inf values because. Pandas uses Kahan summation algorithm to improve numerical stability.
     # Thus they don't consistently overflow to infinity. Discussion: https://github.com/pandas-dev/pandas/issues/60303
@@ -864,14 +871,15 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
     for col in left_no_inf_and_nan.columns:
+        print(f"Column [{col}] series comparison starting.")        
         if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(
             right_no_inf_and_nan[col].dtype
         ):
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags, obj=f"Column [{col}]")
         else:
             if PANDAS_VERSION >= Version("1.1"):
                 check_equals_flags["rtol"] = 3e-4
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags)
+            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags, obj=f"Column [{col}]")
 
 
 def generic_resample_test(

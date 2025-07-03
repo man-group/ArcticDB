@@ -14,6 +14,7 @@ import sys
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
+from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
@@ -477,3 +478,12 @@ def test_update_data_key_timestamps(lmdb_version_store_v1, date_range):
     index_df = lib.read_index(sym)
     assert (index_df.index.to_numpy() == np.array([0, 5, 20], dtype="datetime64[ns]")).all()
     assert (index_df["end_index"].to_numpy() == np.array([1, 16, 21], dtype="datetime64[ns]")).all()
+
+
+def test_use_norm_failure_handler_known_types(lmdb_version_store_allows_pickling):
+    # The change in PR https://github.com/man-group/ArcticDB/pull/2392 did not take into account that
+    # self._nvs._normalizer.df could be not only DataFrameNormalizer, but also KnownTypeFallbackOnError if
+    # use_norm_failure_handler_known_types (aka pickle_on_failure) was set to True. Skipping of df consolidation
+    # is set in Library.__init__, hence why this test stresses the correct codepath
+    nvs = lmdb_version_store_allows_pickling
+    Library("dummy", nvs)
