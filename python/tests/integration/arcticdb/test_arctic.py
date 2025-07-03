@@ -483,7 +483,7 @@ class TestAppendStagedData:
 
 
 @pytest.mark.storage
-@pytest.mark.parametrize("op", ["single", "batch_single", "batch_delete_request"])
+@pytest.mark.parametrize("delete_op", ["single", "batch_single", "batch_delete_request"])
 def test_snapshots_and_deletes(arctic_library, delete_op):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})

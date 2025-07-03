@@ -139,8 +139,8 @@ def test_batch_delete_versions_empty_input(basic_store):
         lib.write(sym, df2, prune_previous_version=False)
 
     # Test with empty symbols list
-    res = lib.batch_delete_versions([], [])
-    assert len(res) == 0
+    with pytest.raises(ValueError):
+        lib.batch_delete_versions([], [])
 
     assert len(lib.list_symbols()) == 2
     for sym in symbols:
@@ -150,8 +150,8 @@ def test_batch_delete_versions_empty_input(basic_store):
         assert_frame_equal(lib.read(sym, 1).data, df2)
 
     # Test with empty versions list
-    res = lib.batch_delete_versions(symbols, [[], []])
-    assert len(res) == 0
+    with pytest.raises(ValueError):
+        lib.batch_delete_versions(symbols, [[], []])
 
     assert len(lib.list_symbols()) == 0
     for sym in symbols:
