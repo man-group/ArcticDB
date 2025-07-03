@@ -81,6 +81,9 @@ struct IndexRange {
     // as this should never happen
     bool accept(const IndexValue &index);
 
+    // TODO: So many of these functions don't verify they are using the expected values of `start_inclusive` or `end_inclusive`.
+    // We should fix them and make `start_` and `end_` private and make them only accessible through functions like `inclusive_end()`.
+
     // N.B. Convenience function, variant construction will be too expensive for tight loops
     friend bool intersects(const IndexRange &left, const IndexRange& right) {
         if (!left.specified_ || !right.specified_)
@@ -113,6 +116,13 @@ struct IndexRange {
             auto end = std::get<NumericIndex>(end_);
             end_ = NumericIndex(end - 1);
         }
+    }
+
+    IndexValue inclusive_end() const {
+        if (std::holds_alternative<NumericIndex>(end_) && !end_closed_) {
+            return NumericIndex(std::get<NumericIndex>(end_) - 1);
+        }
+        return end_;
     }
 };
 
