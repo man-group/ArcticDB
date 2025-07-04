@@ -994,7 +994,6 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
     const VariantKey& key) {
-//    auto [_, seg] = store->read_sync(key);
     auto seg = store->read_compressed_sync(key).segment_ptr();
     return frame_and_descriptor_from_segment(decode_segment(*seg, AllocationType::DETACHABLE));
 }
