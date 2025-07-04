@@ -12,7 +12,7 @@ TEST(Value, DefaultConstruct) {
 
 class ValueDataType : public ::testing::TestWithParam<DataType> {};
 
-constexpr auto data_types() {
+consteval auto data_types() {
     return std::array{
         DataType::INT8,
         DataType::INT16,

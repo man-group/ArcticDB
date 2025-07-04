@@ -12,7 +12,13 @@ from pandas import DataFrame
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, SchemaException
-from arcticdb.util.test import assert_frame_equal, generic_aggregation_test, make_dynamic, common_sum_aggregation_dtype
+from arcticdb.util.test import (
+    assert_frame_equal,
+    generic_aggregation_test,
+    make_dynamic,
+    common_sum_aggregation_dtype,
+    valid_common_type
+)
 
 pytestmark = pytest.mark.pipeline
 
@@ -117,6 +123,19 @@ def test_sum_aggregation(lmdb_version_store_v1):
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
         index=np.arange(5),
+    )
+    lib.write(symbol, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
+
+def test_sum_aggregation_bool(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_sum_aggregation"
+    df = DataFrame(
+        {
+            "grouping_column": ["0", "0", "0", "1", "1", "2", "2", "3", "4"],
+            "to_sum": [True, False, True, True, True, False, False, True, False]
+        },
+        index=np.arange(9),
     )
     lib.write(symbol, df)
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
@@ -391,6 +410,13 @@ def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
         lib.append(symbol, df_slice, write_if_missing=True)
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
+def test_sum_aggregation_dynamic_bool_missing_aggregated_column(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_sum_aggregation_dynamic"
+    df = DataFrame({"grouping_column": ["group_1", "group_2"], "to_sum": [True, False]}, index=np.arange(2),)
+    lib.write(symbol, df)
+    lib.append(symbol, pd.DataFrame({"grouping_column": ["group_1", "group_2"]}, index=np.arange(2)))
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
@@ -488,23 +514,22 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
     lib.append(symbol, append_df)
     generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
 
-@pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
-@pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
+@pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
+@pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
 @pytest.mark.parametrize("first_group", ["0", "1"])
 @pytest.mark.parametrize("second_group", ["0", "1"])
 def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype, first_group, second_group):
     """
     Sum aggregation promotes to the largest type of the respective category. int -> int64, uint -> uint64, float -> float64
-    Dynamic schema allows mixin int and uint. In the case of sum aggregation, this will require mixing uint64 and int64
+    Dynamic schema allows mixing int and uint. In the case of sum aggregation, this will require mixing uint64 and int64
     in the end segment, and those do not have a common type. In that case we use int64 (pyarrow does the same). In this
     test we test all configurations of dtypes and grouping options (same group vs different group)
     """
     lib = lmdb_version_store_dynamic_schema_v1
     df1 = pd.DataFrame({"grouping_column": [first_group], "to_sum": np.array([1], first_dtype)})
     df2 = pd.DataFrame({"grouping_column": [second_group], "to_sum": np.array([1], second_dtype)})
-    lib.append("sym", df1)
-    if ((pd.api.types.is_signed_integer_dtype(first_dtype) and second_dtype == np.uint64) or
-        (first_dtype == np.uint64 and pd.api.types.is_signed_integer_dtype(second_dtype))):
+    lib.write("sym", df1)
+    if valid_common_type(first_dtype, second_dtype) is None:
         with pytest.raises(SchemaException):
             lib.append("sym", df2)
     else:
@@ -513,11 +538,18 @@ def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype,
         q = q.groupby("grouping_column").agg({"to_sum": "sum"})
         data = lib.read("sym", query_builder=q).data
         expected_type = common_sum_aggregation_dtype(first_dtype, second_dtype)
-        assert np.dtype(data["to_sum"].dtype) == np.dtype(expected_type)
+        if first_group == second_group:
+            expected_df = pd.DataFrame({"to_sum": np.array([2], expected_type)}, index=[first_group])
+        else:
+            expected_df = pd.DataFrame({"to_sum": np.array([1, 1], expected_type)}, index=["1", "0"])
+        expected_df.index.name = "grouping_column"
+        expected_df.sort_index(inplace=True)
+        data.sort_index(inplace=True)
+        assert_frame_equal(expected_df, data, check_dtype=True)
 
 @pytest.mark.parametrize("extremum", ["min", "max"])
-@pytest.mark.parametrize("dtype", [np.int32, np.float32])
-def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1, extremum, dtype):
+@pytest.mark.parametrize("dtype, default_value", [(np.int32, 0), (np.float32, np.nan), (bool, False)])
+def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1, extremum, dtype, default_value):
     """
     Test that a sparse column will be backfilled with the correct values.
     d1 will be skipped because there is no grouping colum, df2 will form the first row which. The first row is sparse
@@ -525,7 +557,7 @@ def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store
     """
     lib = lmdb_version_store_dynamic_schema_v1
     sym = "sym"
-    df1 = pd.DataFrame({"agg_column": np.array([0.0, 0.0], dtype)})
+    df1 = pd.DataFrame({"agg_column": np.array([0, 0], dtype)})
     df2 = pd.DataFrame({"grouping_column": ["a"]})
     df3 = pd.DataFrame({"grouping_column": ["b"], "agg_column": np.array([0], dtype)})
     for df in [df1, df2, df3]:
@@ -534,7 +566,6 @@ def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store
     q = q.groupby("grouping_column").agg({"agg_column": extremum})
     data = lib.read("sym", query_builder=q).data
     data = data.sort_index()
-    default_value = 0 if dtype == np.int32 else np.nan
     expected = pd.DataFrame({"agg_column": np.array([default_value, 0], dtype)}, index=["a", "b"])
     expected.index.name = "grouping_column"
     expected = expected.sort_index()
