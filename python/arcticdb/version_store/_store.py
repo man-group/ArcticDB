@@ -2283,6 +2283,7 @@ class NativeVersionStore:
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
             import pyarrow as pa
+
             frame_data = read_result.frame_data
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
@@ -2630,6 +2631,59 @@ class NativeVersionStore:
         """
         self.version_store.delete_versions(symbol, versions)
 
+    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]) -> List[DataError]:
+        """
+        Delete the given versions of the given symbols.
+        Batch equivalent of `delete_version` and `delete_versions`.
+
+        see `delete_version` and `delete_versions` for more details.
+
+        Parameters
+        ----------
+        symbols : `List[str]`
+            Symbols to delete versions for.
+        versions : `List[List[int]]`
+            Versions to delete for each symbol.
+            If there are no versions left for the symbol, the symbol will be deleted.
+
+        Returns
+        -------
+        `List[DataError]`
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
+
+        Raises
+        ------
+        ValueError
+            If version_ids is empty for any symbol.
+        """
+        # make sure that the versions are not empty
+        for symbol, version_ids in zip(symbols, versions):
+            if not version_ids:
+                raise ValueError(f"version_ids cannot be empty for symbol '{symbol}'")
+        return self.version_store.batch_delete(symbols, versions)
+
+    def batch_delete_symbols(self, symbols: List[str]) -> List[DataError]:
+        """
+        Delete all versions of the given symbols.
+
+        Batch equivalent of `delete`.
+
+        see `delete` for more details.
+
+        Parameters
+        ----------
+        symbols : `List[str]`
+            Symbols to delete all versions for.
+
+        Returns
+        -------
+        `List[DataError]`
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
+        """
+        return self.version_store.batch_delete(symbols, [[] for _ in symbols])
+
     def prune_previous_versions(self, symbol: str):
         """
         Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
@@ -2961,7 +3015,7 @@ class NativeVersionStore:
 
     def lib_cfg(self):
         return self._lib_cfg
-    
+
     def lib_native_cfg(self):
         return self._native_cfg
 
