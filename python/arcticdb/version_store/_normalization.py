@@ -35,7 +35,6 @@ from arcticdb.exceptions import (
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
-from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
@@ -107,21 +106,18 @@ def get_pickled_metadata_loglevel():
 
 # To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
 class FrameData(
-    NamedTuple("FrameData", [("data", List[np.ndarray]), ("names", List[str]), ("index_columns", List[str])])
+    NamedTuple("FrameData", [("data", List[np.ndarray]), ("names", List[str]), ("index_columns", List[str]), ("row_count", int), ("offset", int)])
 ):
     @staticmethod
     def from_npd_df(df):
         # type: (NPDDataFrame)->FrameData
-        return FrameData(df.index_values + df.columns_values, names=df.column_names, index_columns=df.index_names)
-
-    @staticmethod
-    def from_cpp(fd):
-        # type: (Any)->FrameData
-
-        if isinstance(fd, FrameData):
-            return fd
-        else:
-            return FrameData(fd.value.data, fd.names, fd.index_columns)
+        return FrameData(
+            data=df.index_values + df.columns_values,
+            names=df.column_names,
+            index_columns=df.index_names,
+            row_count=len(df.columns_values[0]),
+            offset=0,
+        )
 
 
 # NOTE: When using Pandas < 2.0, `datetime64` _always_ uses nanosecond resolution,
@@ -1369,12 +1365,13 @@ def denormalize_user_metadata(udm, ext_obj=None):
 
 
 def denormalize_dataframe(ret):
-    read_result = ReadResult(*ret)
-    frame_data = FrameData.from_cpp(read_result.frame_data)
+    pandas_output_frame = ret[1]
+    norm = ret[2]
+    frame_data = FrameData(*pandas_output_frame.extract_numpy_arrays())
     if len(frame_data.names) == 0:
         return None
 
-    return DataFrameNormalizer().denormalize(frame_data, read_result.norm.df)
+    return DataFrameNormalizer().denormalize(frame_data, norm.df)
 
 
 def normalize_dataframe(df, **kwargs):

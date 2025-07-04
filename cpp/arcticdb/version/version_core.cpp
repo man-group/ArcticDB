@@ -994,8 +994,8 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 FrameAndDescriptor read_segment_impl(
     const std::shared_ptr<Store>& store,
     const VariantKey& key) {
-    auto [_, seg] = store->read_sync(key);
-    return frame_and_descriptor_from_segment(std::move(seg));
+    auto seg = store->read_compressed_sync(key).segment_ptr();
+    return frame_and_descriptor_from_segment(decode_segment(*seg, AllocationType::DETACHABLE));
 }
 
 FrameAndDescriptor read_index_impl(
@@ -1570,7 +1570,8 @@ FrameAndDescriptor read_column_stats_impl(
     auto column_stats_key = index_key_to_column_stats_key(versioned_item.key_);
     // Remove try-catch once AsyncStore methods raise the new error codes themselves
     try {
-        auto segment_in_memory = store->read(column_stats_key).get().second;
+        auto segment = store->read_compressed(column_stats_key).get().segment_ptr();
+        auto segment_in_memory = decode_segment(*segment, AllocationType::DETACHABLE);
         TimeseriesDescriptor tsd;
         tsd.set_total_rows(segment_in_memory.row_count());
         tsd.set_stream_descriptor(segment_in_memory.descriptor());

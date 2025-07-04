@@ -108,9 +108,8 @@ def _from_file(symbol: str, file_path: str, read_query: Optional[Any] = None, re
 
     read_result = ReadResult(*read_dataframe_from_file(symbol, file_path, read_query, read_options))
     normalizer = CompositeNormalizer()
-    frame_data = FrameData.from_cpp(read_result.frame_data)
     meta = denormalize_user_metadata(read_result.udm, normalizer)
-    data = _denormalize_stateless(frame_data, read_result.norm, normalizer)
+    data = _denormalize_stateless(read_result.frame_data, read_result.norm, normalizer)
     return VersionedItem(
         symbol=symbol,
         library=file_path,
