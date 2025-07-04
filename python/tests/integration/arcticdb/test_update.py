@@ -399,6 +399,7 @@ def test_update_batch_types_upgrade(custom_library):
     for index, result in enumerate(update_result):
         symbol = symbol_names[index]
         if not hasattr(result, "version"):
+            # To catch rare problem on 3.8
             logger.error(f"Expected {result} with version attribute {repr(result)}\n {str(result)}")
         assert result.version == 4
         assert_frame_equal(original_dataframes[symbol], read_data[symbol].data)
