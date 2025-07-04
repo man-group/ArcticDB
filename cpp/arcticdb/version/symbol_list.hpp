@@ -206,17 +206,17 @@ struct WriteSymbolTask : async::BaseTask {
 struct DeleteSymbolTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     const std::shared_ptr<SymbolList> symbol_list_;
-    const StreamId stream_id_;
+    const StreamId& stream_id_;
     const entity::VersionId reference_id_;
 
     DeleteSymbolTask(
         std::shared_ptr<Store> store,
         std::shared_ptr<SymbolList> symbol_list,
-        StreamId stream_id,
+        const StreamId& stream_id,
         entity::VersionId reference_id) :
         store_(std::move(store)),
         symbol_list_(std::move(symbol_list)),
-        stream_id_(std::move(stream_id)),
+        stream_id_(stream_id),
         reference_id_(reference_id) {
     }
 
