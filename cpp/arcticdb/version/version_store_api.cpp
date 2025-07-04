@@ -950,6 +950,7 @@ void PythonVersionStore::delete_versions(
     if (!result.keys_to_delete.empty() && !cfg().write_options().delayed_deletes()) {
         delete_tree(result.keys_to_delete, result);
     }
+
     if(result.no_undeleted_left && cfg().symbol_list()) {
         symbol_list().remove_symbol(store(), stream_id, result.latest_version_);
     }
@@ -960,7 +961,7 @@ std::vector<DataError> PythonVersionStore::batch_delete(
     const std::vector<std::vector<VersionId>>& version_ids) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions, stream_ids and version_ids must have the same size");
     
-    auto results = batch_delete_versions_internal(stream_ids, version_ids);
+    auto results = batch_delete_internal(stream_ids, version_ids);
     
     std::vector<DataError> return_results;
 
@@ -981,8 +982,7 @@ std::vector<DataError> PythonVersionStore::batch_delete(
                 }
 
                 if(tombstone_result.no_undeleted_left && cfg().symbol_list() && !tombstone_result.keys_to_delete.empty()) {
-                    auto stream_id = tombstone_result.keys_to_delete.front().id();
-                    symbols_to_delete.emplace_back(std::move(stream_id), tombstone_result.latest_version_);
+                    symbols_to_delete.emplace_back(tombstone_result.symbol, tombstone_result.latest_version_);
                 }
             },
             [&](const DataError& data_error) {

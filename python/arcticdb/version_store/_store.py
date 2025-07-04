@@ -2672,7 +2672,7 @@ class NativeVersionStore:
         """
         # make sure that the versions are not empty
         for symbol, version_ids in zip(symbols, versions):
-            if not version_ids or len(version_ids) == 0:
+            if not version_ids:
                 raise ValueError(f"version_ids cannot be empty for symbol '{symbol}'")
         return self.version_store.batch_delete(symbols, versions)
 
