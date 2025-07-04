@@ -178,7 +178,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
 
     details::visit_type(col.column_->type().data_type(), [&](auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        details::visit_type(val.type().data_type(), [&](auto val_tag) {
+        details::visit_type(val.data_type(), [&](auto val_tag) {
             using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
             if constexpr(is_sequence_type(col_type_info::data_type) && is_sequence_type(val_type_info::data_type)) {
                 if constexpr(is_dynamic_string_type(col_type_info::data_type)) {
@@ -240,7 +240,7 @@ VariantData ternary_operator(const util::BitSet& condition, const ColumnWithStri
                                                                               col.column_name_,
                                                                               col.column_->type(),
                                                                               val.to_string<typename val_type_info::RawType>(),
-                                                                              val.type()));
+                                                                              val.descriptor()));
             }
         });
     });
@@ -305,9 +305,9 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
     std::string left_string;
     std::string right_string;
 
-    details::visit_type(left.type().data_type(), [&](auto left_tag) {
+    details::visit_type(left.data_type(), [&](auto left_tag) {
         using left_type_info = ScalarTypeInfo<decltype(left_tag)>;
-        details::visit_type(right.type().data_type(), [&](auto right_tag) {
+        details::visit_type(right.data_type(), [&](auto right_tag) {
             using right_type_info = ScalarTypeInfo<decltype(right_tag)>;
             if constexpr(is_sequence_type(left_type_info::data_type) && is_sequence_type(right_type_info::data_type)) {
                 if constexpr(left_type_info::data_type == right_type_info::data_type && is_dynamic_string_type(left_type_info::data_type)) {
@@ -336,9 +336,9 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& left, c
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                       ternary_operation_with_types_to_string(
                                                                               left.to_string<typename right_type_info::RawType>(),
-                                                                              left.type(),
+                                                                              left.descriptor(),
                                                                               right.to_string<typename right_type_info::RawType>(),
-                                                                              right.type()));
+                                                                              right.descriptor()));
             }
         });
     });
@@ -357,10 +357,10 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
     std::shared_ptr<StringPool> string_pool;
     std::string value_string;
 
-    details::visit_type(val.type().data_type(), [&](auto val_tag) {
+    details::visit_type(val.data_type(), [&](auto val_tag) {
         using val_type_info = ScalarTypeInfo<decltype(val_tag)>;
         if constexpr(is_dynamic_string_type(val_type_info::data_type)) {
-            output_column = std::make_unique<Column>(val.type(), Sparsity::PERMITTED);
+            output_column = std::make_unique<Column>(val.descriptor(), Sparsity::PERMITTED);
             string_pool = std::make_shared<StringPool>();
             value_string = std::string(*val.str_data(), val.len());
             auto offset_string = string_pool->get(value_string);
@@ -371,7 +371,7 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
                     *output_column);
         } else if constexpr (is_numeric_type(val_type_info::data_type) || is_bool_type(val_type_info::data_type)) {
             using TargetType = val_type_info::RawType;
-            output_column = std::make_unique<Column>(val.type(), Sparsity::PERMITTED);
+            output_column = std::make_unique<Column>(val.descriptor(), Sparsity::PERMITTED);
             auto value = static_cast<TargetType>(val.get<typename val_type_info::RawType>());
             value_string = fmt::format("{}", value);
             ternary_transform<typename val_type_info::TDT, arguments_reversed>(
@@ -383,7 +383,7 @@ VariantData ternary_operator(const util::BitSet& condition, const Value& val, Em
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Invalid ternary operator arguments {}",
                                                                   ternary_operation_with_types_to_string<arguments_reversed>(
                                                                           val.to_string<typename val_type_info::RawType>(),
-                                                                          val.type(),
+                                                                          val.descriptor(),
                                                                           "",
                                                                           {}));
         }
@@ -453,18 +453,18 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
             [&c](const util::BitSet &l, const std::shared_ptr<Value> &r) -> VariantData {
                 // This operator needs to resolve to a filter, which we can do with a boolean value, but doesn't make
                 // sense for numeric or string values without being opinionated on the truthiness of numbers/strings
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type_),
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type()),
                                                                       "Ternary operator expected bool value, received {}",
-                                                                      get_user_friendly_type_string(r->type()));
+                                                                      get_user_friendly_type_string(r->descriptor()));
                 auto result = ternary_operator(c, l, r->get<bool>());
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, const util::BitSet &r) -> VariantData {
                 // This operator needs to resolve to a filter, which we can do with a boolean value, but doesn't make
                 // sense for numeric or string values without being opinionated on the truthiness of numbers/strings
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type_),
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type()),
                                                                       "Ternary operator expected bool value, received {}",
-                                                                      get_user_friendly_type_string(l->type()));
+                                                                      get_user_friendly_type_string(l->descriptor()));
                 auto result = ternary_operator<true>(c, r, l->get<bool>());
                 return transform_to_placeholder(result);
             },
@@ -533,17 +533,17 @@ VariantData visit_ternary_operator(const VariantData& condition, const VariantDa
                 return transform_to_placeholder(result);
             },
             [&c](const std::shared_ptr<Value> &l, FullResult) -> VariantData {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type_),
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(l->data_type()),
                                                                       "Ternary operator expected bool value, received {}",
-                                                                      get_user_friendly_type_string(l->type()));
+                                                                      get_user_friendly_type_string(l->descriptor()));
                 auto value = l->get<bool>();
                 auto result = ternary_operator(c, value, true);
                 return transform_to_placeholder(result);
             },
             [&c](FullResult, const std::shared_ptr<Value> &r) -> VariantData {
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type_),
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(is_bool_type(r->data_type()),
                                                                       "Ternary operator expected bool value, received {}",
-                                                                      get_user_friendly_type_string(r->type()));
+                                                                      get_user_friendly_type_string(r->descriptor()));
                 auto value = r->get<bool>();
                 auto result = ternary_operator(c, true, value);
                 return transform_to_placeholder(result);

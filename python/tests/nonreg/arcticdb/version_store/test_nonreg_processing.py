@@ -26,4 +26,5 @@ def test_resample_mean_large_arithmetic_error_repro(lmdb_version_store_v1):
         sym,
         rule,
         agg,
+        df,
         origin=origin)

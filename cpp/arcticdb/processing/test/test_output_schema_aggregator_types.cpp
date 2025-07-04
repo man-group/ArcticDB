@@ -109,7 +109,7 @@ TEST_F(AggregationClauseOutputTypesTest, Sum) {
     ASSERT_EQ(stream_desc.field(8).type().data_type(), DataType::UINT64); // uint64
     ASSERT_EQ(stream_desc.field(9).type().data_type(), DataType::FLOAT64); // float32
     ASSERT_EQ(stream_desc.field(10).type().data_type(), DataType::FLOAT64); // float64
-    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::BOOL8); // bool
+    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::UINT64); // bool
 
     aggregation_clause = AggregationClause{"to_group", {{"sum", "timestamp", "timestamp_sum"}}};
     ASSERT_THROW(aggregation_clause.modify_schema(initial_schema()), SchemaException);
