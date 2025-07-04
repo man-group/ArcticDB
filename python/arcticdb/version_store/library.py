@@ -327,9 +327,9 @@ class DeleteRequest:
     Attributes
     ----------
     symbol: str
-        See `delete` method.
+        See `delete` and `batch_delete` methods.
     version_ids: List[int]
-        See `delete` method.
+        See `delete` and `batch_delete` methods.
 
     Raises
     ------
@@ -341,7 +341,7 @@ class DeleteRequest:
     version_ids: List[int]
 
     def __post_init__(self):
-        if not self.version_ids or len(self.version_ids) == 0:
+        if not self.version_ids:
             raise ValueError(f"version_ids cannot be empty for symbol '{self.symbol}'")
 
     def __repr__(self):
@@ -2338,7 +2338,7 @@ class Library:
         delete_requests : List[Union[str, DeleteRequest]]
             List of symbols to delete. Can be either:
             - String symbols (delete all versions of the symbol)
-            - DeleteRequest objects (delete specific versions of the symbol)
+            - DeleteRequest objects (delete specific versions of the symbol, must have at least one version)
 
         Returns
         -------

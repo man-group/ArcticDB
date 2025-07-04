@@ -1390,10 +1390,10 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     return transform_batch_items_or_throw(std::move(write_versions), stream_ids, flags);
 }
 
-std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> LocalVersionedEngine::batch_delete_versions_internal(
+std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> LocalVersionedEngine::batch_delete_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<std::vector<VersionId>>& version_ids) {
-    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions_internal, stream_ids and version_ids must have the same size");
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_internal, stream_ids and version_ids must have the same size");
 
     if (stream_ids.empty()) {
         return {};

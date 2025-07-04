@@ -162,8 +162,7 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
     const std::shared_ptr<VersionMapEntry>& entry,
     const std::unordered_set<VersionId>& version_ids,
     const StreamId& stream_id,
-    const std::shared_ptr<Store>& store,
-    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    const std::shared_ptr<Store>& store) {
     version_store::TombstoneVersionResult res(entry->empty(), stream_id);
     auto latest_key = entry->get_first_index(true).first;
     
@@ -196,7 +195,7 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
             res.keys_to_delete.emplace_back(
                 atom_key_builder()
                     .version_id(version_id)
-                    .creation_ts(creation_ts.value_or(store->current_timestamp()))
+                    .creation_ts(store->current_timestamp())
                     .content_hash(3)
                     .start_index(4)
                     .end_index(5)
@@ -267,18 +266,16 @@ inline folly::Future<version_store::TombstoneVersionResult> process_tombstone_ve
     const std::shared_ptr<VersionMap>& version_map,
     const StreamId& stream_id,
     const std::unordered_set<VersionId>& version_ids,
-    const std::optional<timestamp>& creation_ts,
     std::shared_ptr<VersionMapEntry> entry) {
     // Populate the tombstone result
-    version_store::TombstoneVersionResult res = populate_tombstone_result(entry, version_ids, stream_id, store, creation_ts);
+    version_store::TombstoneVersionResult res = populate_tombstone_result(entry, version_ids, stream_id, store);
     
     // Submit the write tombstone task
     return async::submit_io_task(WriteTombstoneTask{store,
                                     version_map,
                                     res.keys_to_delete,
                                     stream_id,
-                                    entry,
-                                    creation_ts})
+                                    entry})
         .thenValue([res = std::move(res), version_map, e=std::move(entry)](AtomKey&& tombstone_key) mutable {
             return finalize_tombstone_result(std::move(res), version_map, std::move(e), std::move(tombstone_key));
         });
@@ -288,16 +285,15 @@ inline folly::Future<version_store::TombstoneVersionResult> tombstone_versions_a
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const std::unordered_set<VersionId>& version_ids,
-    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    const std::unordered_set<VersionId>& version_ids) {
     ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
 
     return async::submit_io_task(CheckReloadTask{store,
                                     version_map,
                                     stream_id,
                                     LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}})
-        .thenValue([store, version_map, stream_id, version_ids, creation_ts](std::shared_ptr<VersionMapEntry>&& entry) {
-            return process_tombstone_versions(store, version_map, stream_id, version_ids, creation_ts, std::move(entry));
+        .thenValue([store, version_map, stream_id, version_ids](std::shared_ptr<VersionMapEntry>&& entry) {
+            return process_tombstone_versions(store, version_map, stream_id, version_ids, std::move(entry));
         });
 }
 
@@ -320,11 +316,10 @@ inline version_store::TombstoneVersionResult tombstone_versions(
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<VersionMap> &version_map,
     const StreamId &stream_id,
-    const std::unordered_set<VersionId>& version_ids,
-    const std::optional<timestamp>& creation_ts=std::nullopt) {
+    const std::unordered_set<VersionId>& version_ids) {
     ARCTICDB_DEBUG(log::version(), "Tombstoning versions {} for stream {}", version_ids, stream_id);
 
-    return tombstone_versions_async(store, version_map, stream_id, version_ids, creation_ts).get();
+    return tombstone_versions_async(store, version_map, stream_id, version_ids).get();
 }
 
 inline std::optional<AtomKey> get_index_key_from_time(
