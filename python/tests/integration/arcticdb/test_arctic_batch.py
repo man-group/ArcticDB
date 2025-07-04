@@ -529,6 +529,7 @@ def test_delete_batch_comprehensive(arctic_library):
 
     # Test 1: Delete all versions of a symbol (string input)
     result = lib.delete_batch(["sym1"])
+    assert len(result) == 0
 
     # Verify sym1 is deleted
     assert not lib.has_symbol("sym1")
