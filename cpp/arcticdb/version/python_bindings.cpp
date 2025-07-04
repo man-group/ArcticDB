@@ -248,26 +248,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
         .def("extract_numpy_arrays", [](PandasOutputFrame& self) {
-            auto frame = self.release_frame();
-            const size_t field_count = frame.fields().size();
-            const size_t index_field_count = frame.descriptor().index().field_count();
-            std::vector<std::string> index_column_names;
-            index_column_names.reserve(index_field_count);
-            // works because we ensure that the index must be fetched
-            for (size_t c = 0; c < index_field_count; ++c) {
-                index_column_names.emplace_back(frame.field(c).name());
-            }
-            std::vector<std::string> column_names;
-            column_names.reserve(field_count - index_field_count);
-            for (size_t c = index_field_count; c < field_count; ++c) {
-                column_names.emplace_back(frame.field(c).name());
-            }
-            std::vector<py::array> arrays;
-            arrays.reserve(field_count);
-            for (std::size_t c = 0; c < field_count; ++c) {
-                arrays.emplace_back(arcticdb::detail::array_at(frame, c, OutputFormat::PANDAS));
-            }
-            return py::make_tuple(std::move(arrays), std::move(column_names), std::move(index_column_names), frame.row_count(), frame.offset());
+            return python_util::extract_numpy_arrays(self);
         })
         ;
 
