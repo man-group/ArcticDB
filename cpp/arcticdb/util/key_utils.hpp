@@ -112,7 +112,7 @@ ankerl::unordered_dense::set<AtomKey> recurse_segment(const std::shared_ptr<stre
 /* Given a [multi-]index key, returns a set containing the top level [multi-]index key itself, and all the
  * multi-index, index, and data keys referenced by this [multi-]index key.
  * If the version_id argument is provided, the returned set will only contain keys matching that version_id.
- * Note that this differs from recurse_index_keys, which does not inclide the passed in keys in the returned set. */
+ * Note that this differs from recurse_index_keys, which does not include the passed in keys in the returned set. */
 inline ankerl::unordered_dense::set<AtomKey> recurse_index_key(
     const std::shared_ptr<stream::StreamSource>& store,
     const IndexTypeKey& index_key,
