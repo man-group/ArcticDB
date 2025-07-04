@@ -398,6 +398,8 @@ def test_update_batch_types_upgrade(custom_library):
     read_data = read_batch(lib, symbol_names)
     for index, result in enumerate(update_result):
         symbol = symbol_names[index]
+        if not hasattr(result, "version"):
+            logger.error(f"Expected {result} with version attribute {repr(result)}\n {str(result)}")
         assert result.version == 4
         assert_frame_equal(original_dataframes[symbol], read_data[symbol].data)
         with pytest.raises(NoSuchVersionException) as ex_info:
