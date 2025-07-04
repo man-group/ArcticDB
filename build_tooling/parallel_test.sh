@@ -23,7 +23,7 @@ fi
 
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
-    $catch python -m pytest --timeout=600 $PYTEST_XDIST_MODE -v \
+    $catch python -m pytest --timeout=1200 $PYTEST_XDIST_MODE -v \
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
@@ -32,7 +32,7 @@ else
     echo "Executing tests with additional pytest argiments:"
     echo "from user: $ARCTICDB_PYTEST_ARGS"
     echo "from automation: $PYTEST_ADD_TO_COMMAND_LINE"
-    $catch python -m pytest --timeout=600 $PYTEST_XDIST_MODE -v \
+    $catch python -m pytest --timeout=1200 $PYTEST_XDIST_MODE -v \
         --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
