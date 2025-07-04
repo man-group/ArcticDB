@@ -36,6 +36,7 @@ struct NumpyBufferHolder {
             if (is_dynamic_string_type(type_.data_type())) {
                 if (is_object_type(type_)) {
                     if (is_array_type(type_) || !is_arrow_output_only_type(type_)) {
+                        // pybind11 has taken the GIL for us so this is safe
                         auto py_ptr = reinterpret_cast<PyObject**>(ptr_);
                         for (size_t idx = 0; idx < row_count_; ++idx, ++py_ptr) {
                             if (*py_ptr != nullptr) {
