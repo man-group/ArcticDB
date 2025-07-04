@@ -191,6 +191,7 @@ constexpr uint8_t combine_val_bits(ValueType v, SizeBits b = SizeBits::UNKNOWN_S
 
 } // namespace anonymous
 
+// When adding DataType here add it to the all_data_types function
 enum class DataType : uint8_t {
     UINT8 = detail::combine_val_bits(ValueType::UINT, SizeBits::S8),
     UINT16 = detail::combine_val_bits(ValueType::UINT, SizeBits::S16),

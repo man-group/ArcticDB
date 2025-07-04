@@ -9,15 +9,12 @@
 
 #include <folly/futures/Future.h>
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <folly/Range.h>
 #include <arcticdb/util/preconditions.hpp>
 #include <unordered_map>
-#include <any>
 #include <string>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <variant>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 
