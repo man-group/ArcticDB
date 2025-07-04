@@ -19,7 +19,8 @@ from arcticdb.util.test import (
     largest_numeric_type,
     common_sum_aggregation_dtype,
     compute_common_type_for_columns_in_df_list,
-    expected_aggregation_type
+    expected_aggregation_type,
+    valid_common_type
 )
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
@@ -1114,8 +1115,8 @@ class TestResampleDynamicSchema:
             drop_empty_buckets_for="_empty_bucket_tracker_",
             expected_types=expected_types)
 
-    @pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
-    @pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64])
+    @pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
+    @pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
     def test_sum_aggregation_type(self, lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype):
         """
         Sum aggregation in resamling promotes to the largest type of the respective category.
@@ -1126,10 +1127,9 @@ class TestResampleDynamicSchema:
         """
         lib = lmdb_version_store_dynamic_schema_v1
         df1 = pd.DataFrame({"to_sum": np.array([1], first_dtype)}, index=pd.DatetimeIndex([pd.Timestamp(1)]))
-        df2 = pd.DataFrame({"to_sum": np.array([10], second_dtype)}, index=pd.DatetimeIndex([pd.Timestamp(2)]))
-        lib.append("sym", df1)
-        if ((pd.api.types.is_signed_integer_dtype(first_dtype) and second_dtype == np.uint64) or
-                (first_dtype == np.uint64 and pd.api.types.is_signed_integer_dtype(second_dtype))):
+        df2 = pd.DataFrame({"to_sum": np.array([1], second_dtype)}, index=pd.DatetimeIndex([pd.Timestamp(2)]))
+        lib.write("sym", df1)
+        if valid_common_type(first_dtype, second_dtype) is None:
             with pytest.raises(SchemaException):
                 lib.append("sym", df2)
         else:
@@ -1139,7 +1139,7 @@ class TestResampleDynamicSchema:
             data = lib.read("sym", query_builder=q).data
             expected_type = common_sum_aggregation_dtype(first_dtype, second_dtype)
             assert np.dtype(data["to_sum"].dtype) == np.dtype(expected_type)
-            assert data["to_sum"][0] == 11
+            assert data["to_sum"][0] == 2
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])

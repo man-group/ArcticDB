@@ -990,6 +990,8 @@ def common_sum_aggregation_dtype(left, right):
     elif ((pd.api.types.is_signed_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right)) or
           (pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_signed_integer_dtype(right))):
         return np.int64
+    elif pd.api.types.is_bool_dtype(left) and pd.api.types.is_bool_dtype(right):
+        return np.uint64
     else:
         return np.float64
 
@@ -1025,22 +1027,37 @@ def valid_common_type(left, right):
     # Strings are represented via object dtype. Numeric types and strings do not have valid common type
     if (is_numeric_type(left) and not is_numeric_type(right)) or (is_numeric_type(right) and not is_numeric_type(left)):
         return None
+    if pd.api.types.is_bool_dtype(left):
+        if pd.api.types.is_bool_dtype(right):
+            return left
+        elif pd.api.types.is_integer_dtype(right) or pd.api.types.is_float_dtype(right):
+            return None
+        raise Exception(f"Unexpected right dtype: {right}")
     if pd.api.types.is_float_dtype(left):
         if pd.api.types.is_float_dtype(right) or pd.api.types.is_integer_dtype(right):
             return np.promote_types(left, right)
+        elif pd.api.types.is_bool_dtype(right):
+            return None
+        raise Exception(f"Unexpected right dtype: {right}")
     elif pd.api.types.is_signed_integer_dtype(left):
         if pd.api.types.is_float_dtype(right) or pd.api.types.is_signed_integer_dtype(right):
             return np.promote_types(left, right)
         elif pd.api.types.is_unsigned_integer_dtype(right):
             # Numpy promotes int* and uint64 to float64. ArcticDB does not allow such promotion
             return None if right.itemsize >= 8 else np.promote_types(left, right)
+        elif pd.api.types.is_bool_dtype(right):
+            return None
+        raise Exception(f"Unexpected right dtype: {right}")
     elif pd.api.types.is_unsigned_integer_dtype(left):
         if pd.api.types.is_float_dtype(right) or pd.api.types.is_unsigned_integer_dtype(right):
             return np.promote_types(left, right)
         elif pd.api.types.is_signed_integer_dtype(right):
             # Numpy promotes int* and uint64 to float64. ArcticDB does not allow such promotion
             return None if left.itemsize >= 8 else np.promote_types(left, right)
-    return None
+        elif pd.api.types.is_bool_dtype(right):
+            return None
+        raise Exception(f"Unexpected right dtype: {right}")
+    raise Exception(f"Unexpected left dtype: {left}")
 
 def expected_aggregation_type(aggregation, df_list, column_name):
     common_types = compute_common_type_for_columns_in_df_list(df_list)
