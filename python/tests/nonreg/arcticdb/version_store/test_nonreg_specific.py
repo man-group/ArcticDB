@@ -74,7 +74,7 @@ def test_update_nan_int(object_and_mem_and_lmdb_version_store_dynamic_schema):
 
 
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Fatal Python error: Segmentation fault")
+@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Fatal Python error: Segmentation fault (monday:9520391456)")
 def test_update_int_nan(object_and_mem_and_lmdb_version_store_dynamic_schema):
     lib = object_and_mem_and_lmdb_version_store_dynamic_schema
     symbol = "test_update_int_nan"

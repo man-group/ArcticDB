@@ -90,6 +90,7 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
 
     cnt = 0
+    # On MacOS there is segmentation fault or not enough memory of more chunks are staged
     iterations = [500, 1000] if MACOS else [500, 1000, 1500, 2000]
     for iter in iterations:
         res = Results()
