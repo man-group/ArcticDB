@@ -55,6 +55,7 @@ from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
 from .util.mark import (
     LMDB_TESTS_MARK,
+    MACOS_WHEEL_BUILD,
     MEM_TESTS_MARK,
     SIM_GCP_TESTS_MARK,
     SIM_NFS_TESTS_MARK,
@@ -645,7 +646,8 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Do not delete LMDB library on windows
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
-    yield from _store_factory(lib_name, lmdb_storage, not WINDOWS)     
+    # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))     
 
 
 @pytest.fixture

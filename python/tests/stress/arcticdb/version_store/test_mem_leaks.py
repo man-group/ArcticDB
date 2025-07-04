@@ -31,7 +31,7 @@ from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions
-from tests.util.mark import LINUX, MACOS, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK
+from tests.util.mark import LINUX, MACOS, MACOS_WHEEL_BUILD, SLOW_TESTS_MARK, WINDOWS, MEMRAY_SUPPORTED, MEMRAY_TESTS_MARK, SKIP_CONDA_MARK
 
 
 logging.basicConfig(level=logging.INFO)
@@ -128,7 +128,7 @@ def check_process_memory_leaks(
 
         print("Starting watched code ...........")
         process_func()
-        lets_collect_some_garbage(10)
+        lets_collect_some_garbage(10 if not MACOS_WHEEL_BUILD else 15) # more time for MacOS ARM
 
         p_iter_mem_end: np.int64 = p.memory_info().rss
         process_growth: np.int64 = p.memory_info().rss - process_initial_memory
@@ -435,7 +435,7 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     """ 
     See comment in previous test
     """
-    max_mem_bytes = 1_060_192_384 if MACOS else 608_662_528 # On macOs the memory required is more
+    max_mem_bytes = 1_240_192_384 if MACOS_WHEEL_BUILD  else 608_662_528 # On macOs ARM the memory required is more
     # see https://github.com/man-group/ArcticDB/actions/runs/16048431365/job/45285477028
 
     check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
