@@ -36,9 +36,9 @@ TEST(Regex, Unicode) {
     const std::string no_match = "֑ ֒";
     const std::u32string u32_match_text = U"ɐɑɒɓɔɕɖɗɘəɚ";
     const std::u32string u32_no_match = U"֑ ֒";
-    const std::string original_pattern = "[ɐ|ɚ]";
-    const std::u32string u32_original_pattern = U"[ɐ|ɚ]";
-    const std::string no_match_pattern = "[ʧ|ʨ]";
+    const std::string original_pattern = "[ɐɚ]";
+    const std::u32string u32_original_pattern = U"[ɐɚ]";
+    const std::string no_match_pattern = "[ʧʨ]";
 
     util::RegexPatternUTF8 pattern{original_pattern};
     util::RegexPatternUTF8 non_match_pattern{no_match_pattern};
