@@ -144,20 +144,16 @@ class ChunkedBufferImpl {
         *this = std::move(other);
     }
 
-    static auto presized(size_t size, entity::AllocationType allocation_type = entity::AllocationType::PRESIZED) {
-        if (allocation_type == entity::AllocationType::DETACHABLE) {
-            return ChunkedBufferImpl(size, allocation_type);
-        } else {
-            ChunkedBufferImpl output(entity::AllocationType::PRESIZED);
-            if (size > 0) {
-                if (size != DefaultBlockSize) {
-                    output.handle_transition_to_irregular();
-                }
-                output.add_block(size, 0UL);
+    static auto presized(size_t size) {
+        ChunkedBufferImpl output(entity::AllocationType::PRESIZED);
+        if (size > 0) {
+            if (size != DefaultBlockSize) {
+                output.handle_transition_to_irregular();
             }
-            output.ensure(size);
-            return output;
+            output.add_block(size, 0UL);
         }
+        output.ensure(size);
+        return output;
     }
 
     static auto presized_in_blocks(size_t size) {

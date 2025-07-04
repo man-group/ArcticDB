@@ -853,7 +853,7 @@ struct ReduceColumnTask : async::BaseTask {
                     // be swapped out with the inflated strings buffer. However, if there are no strings to inflate, we
                     // still need to make this buffer detachable and full of nulls of the correct length
                     auto buffer_size = frame_.row_count() * (field_type == DataType::UTF_FIXED64 ? 4 : 1);
-                    auto new_buffer = ChunkedBuffer::presized(buffer_size, AllocationType::DETACHABLE);
+                    ChunkedBuffer new_buffer(buffer_size, AllocationType::DETACHABLE);
                     memset(new_buffer.data(), 0, buffer_size);
                     auto& prev_buffer = column.buffer();
                     swap(prev_buffer, new_buffer);
