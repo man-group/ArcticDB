@@ -35,7 +35,6 @@ from arcticdb.exceptions import (
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
-# from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
@@ -1366,11 +1365,13 @@ def denormalize_user_metadata(udm, ext_obj=None):
 
 
 def denormalize_dataframe(ret):
-    frame_data = FrameData(*ret[1].extract_numpy_arrays())
+    pandas_output_frame = ret[1]
+    norm = ret[2]
+    frame_data = FrameData(*pandas_output_frame.extract_numpy_arrays())
     if len(frame_data.names) == 0:
         return None
 
-    return DataFrameNormalizer().denormalize(frame_data, ret[2].df)
+    return DataFrameNormalizer().denormalize(frame_data, norm.df)
 
 
 def normalize_dataframe(df, **kwargs):
