@@ -23,7 +23,7 @@ import multiprocessing
 from arcticdb_ext import get_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
@@ -682,36 +682,36 @@ def test_delete_version_that_does_not_exist(arctic_library):
     lib = arctic_library
 
     # symbol does not exist
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=0)
 
     # symbol does not exist
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=[1, 2])
 
     # version does not exist
     lib.write("symbol", pd.DataFrame())
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=1)
 
     lib.write("symbol", pd.DataFrame(), prune_previous_versions=False)
     lib.delete("symbol", versions=0)
 
     # the version is already deleted
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=0)
 
     # one of the versions is already deleted
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=[0, 1])
 
     lib.delete("symbol", versions=1)
 
     # symbol does not exist
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=1)
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=[2, 3])
 
 
@@ -724,13 +724,13 @@ def test_delete_version_after_tombstone_all(arctic_library):
     assert len(lib.list_versions("symbol_tombstone_all")) == 2
     assert len(lib.list_symbols()) == 1
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0])
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0, 1])
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0, 1, 2])
 
     lib.delete("symbol_tombstone_all", versions=[1, 2])
