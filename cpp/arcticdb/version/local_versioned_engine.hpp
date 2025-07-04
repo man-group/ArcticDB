@@ -381,7 +381,7 @@ public:
         bool throw_on_error
     );
 
-    std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> batch_delete_versions_internal(
+    std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> batch_delete_internal(
         const std::vector<StreamId>& stream_ids,
         const std::vector<std::vector<VersionId>>& version_ids
     );
