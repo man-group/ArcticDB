@@ -181,11 +181,14 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
         // It is possible to have a tombstone key without a corresponding index_key
         // This scenario can happen in case of DR sync
         if (entry->is_tombstoned(version_id)) {
-            util::raise_rte("Version {} for symbol {} is already deleted", version_id, stream_id);
+            missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(  
+                "Version {} for symbol {} is already deleted", version_id, stream_id);
         } else {
-            if (!latest_key || latest_key->version_id() < version_id)
-                util::raise_rte("Can't delete version {} for symbol {} - it's higher than the latest version",
-                        stream_id, version_id);
+            if (!latest_key || latest_key->version_id() < version_id) {
+                missing_data::raise<ErrorCode::E_NO_SUCH_VERSION>(
+                    "Can't delete version {} for symbol {} - it's higher than the latest version",
+                    version_id, stream_id);
+            }
         }
 
 
@@ -203,7 +206,7 @@ inline version_store::TombstoneVersionResult populate_tombstone_result(
         }
     }
 
-    util::check(
+    storage::check<ErrorCode::E_KEY_NOT_FOUND>(
         res.keys_to_delete.size() == version_ids.size(),
         "Expected {} index keys to be marked for deletion, got {} keys: {}",
         version_ids.size(), 
