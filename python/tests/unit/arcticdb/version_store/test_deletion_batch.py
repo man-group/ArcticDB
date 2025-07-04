@@ -11,6 +11,9 @@ import pandas as pd
 import numpy as np
 from arcticdb.exceptions import NoDataFoundException, InternalException
 from arcticdb.util.test import assert_frame_equal
+from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
+
+ErrorCode
 
 
 @pytest.mark.storage
@@ -69,7 +72,8 @@ def test_batch_delete_versions_with_snapshots(basic_store):
 
     # Delete versions 0 and 1 for all symbols
     versions_to_delete = [[0, 1], [0, 1]]  # One list per symbol
-    lib.batch_delete_versions(symbols, versions_to_delete)
+    res = lib.batch_delete_versions(symbols, versions_to_delete)
+    assert len(res) == 0
 
     # Verify that data is still accessible through snapshots
     for sym in symbols:
@@ -174,11 +178,17 @@ def test_batch_delete_versions_invalid_input(basic_store):
     res = lib.batch_delete_versions(["non_existent"], [[0]])
     assert len(res) == 1
     assert res[0].symbol == "non_existent"
+    assert res[0].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert res[0].error_category == ErrorCategory.MISSING_DATA
+    assert "version 0" in res[0].exception_string
 
     # Test with non-existent version for one symbol
     res = lib.batch_delete_versions(["sym1", "sym2"], [[1], [0]])
     assert len(res) == 1
     assert res[0].symbol == "sym1"
+    assert res[0].error_code == ErrorCode.E_NO_SUCH_VERSION
+    assert res[0].error_category == ErrorCategory.MISSING_DATA
+    assert "version 1" in res[0].exception_string
 
     # sym1 should still be accessible
     # sym2 should be deleted
