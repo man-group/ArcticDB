@@ -239,10 +239,9 @@ namespace
     };
 
     std::shared_ptr<Column> create_output_column(TypeDescriptor td, util::BitMagic&& sparse_map, size_t unique_values) {
-        sparse_map.resize(unique_values);
         const size_t num_set_rows = sparse_map.count();
         const Sparsity sparsity = num_set_rows == sparse_map.size() ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
-        auto col = std::make_shared<Column>(td, unique_values, AllocationType::PRESIZED, sparsity);
+        auto col = std::make_shared<Column>(td, num_set_rows, AllocationType::PRESIZED, sparsity);
         if (sparsity == Sparsity::PERMITTED) {
             col->set_sparse_map(std::move(sparse_map));
         }
@@ -449,11 +448,11 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
         fractions_.resize(unique_values);
         auto col = std::make_shared<Column>(make_scalar_type(DataType::FLOAT64), fractions_.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
         auto column_data = col->data();
-        std::transform(fractions_.cbegin(), fractions_.cend(), column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](auto fraction) {
+        std::transform(fractions_.cbegin(), fractions_.cend(), column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](const auto& fraction) {
             return fraction.to_double();
         });
         col->set_row_data(fractions_.size() - 1);
-        res.add_column(scalar_field(DataType::FLOAT64, output_column_name.value), col);
+        res.add_column(scalar_field(DataType::FLOAT64, output_column_name.value), std::move(col));
     }
     return res;
 }
