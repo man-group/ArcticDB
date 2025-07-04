@@ -10,6 +10,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <arcticdb/util/test/test_utils.hpp>
 
 using namespace arcticdb;
 
@@ -370,20 +371,6 @@ TEST(Resample, ProcessMultipleSegments) {
     auto& resampled_sum_column_2 = resampled_seg_2.column(1);
     ASSERT_EQ(46, resampled_index_column_2.scalar_at<int64_t>(0));
     ASSERT_EQ(50, resampled_sum_column_2.scalar_at<int64_t>(0));
-}
-
-template<typename TagType, typename Input>
-requires requires(Input in) {
-    requires util::instantiation_of<TagType, TypeDescriptorTag>;
-    requires std::ranges::contiguous_range<Input>;
-    requires std::same_as<typename TagType::DataTypeTag::raw_type, std::ranges::range_value_t<Input>>;
-}
-Column create_dense_column(const Input& data) {
-    constexpr size_t element_size = sizeof(std::ranges::range_value_t<Input>);
-    Column result(TagType::type_descriptor(), data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-    std::memcpy(result.ptr(), data.data(), data.size() * element_size);
-    result.set_row_data(data.size());
-    return result;
 }
 
 template<typename SortedAggregatorType, ResampleBoundary label_>

@@ -416,43 +416,64 @@ void MeanAggregatorData::add_data_type(DataType data_type) {
             is_numeric_type(data_type) || is_bool_type(data_type) || is_empty_type(data_type),
             "Mean aggregation not supported with type {}",
             data_type);
+    add_data_type_impl(data_type, data_type_);
+}
+
+DataType MeanAggregatorData::get_output_data_type() {
+    if (data_type_ && is_time_type(*data_type_)) {
+        return *data_type_;
+    }
+    return DataType::FLOAT64;
 }
 
 void MeanAggregatorData::aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
     fractions_.resize(unique_values);
     details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, this] (auto col_tag) {
         using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        if constexpr(!is_sequence_type(col_type_info::data_type)) {
-            Column::for_each_enumerated<typename col_type_info::TDT>(*input_column.column_, [&groups, this](auto enumerating_it) {
-                auto& fraction = fractions_[groups[enumerating_it.idx()]];
-                if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
-                    if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                        fraction.numerator_ += double(enumerating_it.value());
-                        ++fraction.denominator_;
-                    }
-                } else {
-                    fraction.numerator_ += double(enumerating_it.value());
+        if constexpr (is_sequence_type(col_type_info::data_type)) {
+            util::raise_rte("String aggregations not currently supported");
+        } else if constexpr(is_empty_type(col_type_info::data_type)) {
+            return;
+        }
+        Column::for_each_enumerated<typename col_type_info::TDT>(*input_column.column_, [&groups, this](auto enumerating_it) {
+            auto& fraction = fractions_[groups[enumerating_it.idx()]];
+            if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
+                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                    fraction.numerator_ += static_cast<double>(enumerating_it.value());
                     ++fraction.denominator_;
                 }
-            });
-        } else {
-            util::raise_rte("String aggregations not currently supported");
-        }
+            } else {
+                fraction.numerator_ += static_cast<double>(enumerating_it.value());
+                ++fraction.denominator_;
+            }
+        });
     });
-
 }
 
 SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_name,  bool, size_t unique_values) {
     SegmentInMemory res;
     if(!fractions_.empty()) {
         fractions_.resize(unique_values);
-        auto col = std::make_shared<Column>(make_scalar_type(DataType::FLOAT64), fractions_.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+        auto col = std::make_shared<Column>(make_scalar_type(get_output_data_type()), fractions_.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
         auto column_data = col->data();
-        std::transform(fractions_.cbegin(), fractions_.cend(), column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), [](const auto& fraction) {
-            return fraction.to_double();
-        });
+        // TODO: Empty type needs more though. Maybe we should emit a column of empty value and leave it to the
+        //   NullValueReducer to handle it. As of this PR (04.07.2025) the empty type is feature flagged and not used so
+        //   we don't worry too much about optimizing it.
+        if (data_type_ && *data_type_ == DataType::EMPTYVAL) [[unlikely]] {
+            std::fill_n(column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), fractions_.size(), 0.f);
+        } else {
+            details::visit_type(col->type().data_type(), [&, this]<typename TypeTag>(TypeTag) {
+               using OutputDataTypeTag = std::conditional_t<is_time_type(TypeTag::data_type), TypeTag, DataTypeTag<DataType::FLOAT64>>;
+               using OutputTypeDescriptor = typename ScalarTypeInfo<OutputDataTypeTag>::TDT;
+               std::transform(fractions_.cbegin(), fractions_.cend(),
+                              column_data.begin<OutputTypeDescriptor>(),
+                              [](const auto &fraction) {
+                                 return static_cast<typename OutputDataTypeTag::raw_type>(fraction.to_double());
+                              });
+           });
+        }
         col->set_row_data(fractions_.size() - 1);
-        res.add_column(scalar_field(DataType::FLOAT64, output_column_name.value), std::move(col));
+        res.add_column(scalar_field(get_output_data_type(), output_column_name.value), std::move(col));
     }
     return res;
 }
