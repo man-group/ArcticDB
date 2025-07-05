@@ -34,10 +34,11 @@ TEST(Regex, Unicode) {
 
     const std::string match_text = "ɐɑɒɓɔɕɖɗɘəɚ";
     const std::string no_match = "֑ ֒";
-    const std::u32string u32_match_text = U"ɐɑɒɓɔɕɖɗɘəɚ";
-    const std::u32string u32_no_match = U"֑ ֒";
+    // In MSVC, the cpp file encoding will mess up the utf32 characters below, if not specified in \u....
+    const std::u32string u32_match_text = U"\u0250\u0251\u0252\u0253\u0254\u0255\u0256\u0257\u0258\u0259\u025A"; //U"ɐɑɒɓɔɕɖɗɘəɚ"
+    const std::u32string u32_no_match = U"\u0591\u0020\u0592"; //U"֑ ֒"
     const std::string original_pattern = "[ɐɚ]";
-    const std::u32string u32_original_pattern = U"[ɐɚ]";
+    const std::u32string u32_original_pattern = U"[\u0250\u025A]"; //U"[ɐɚ]"
     const std::string no_match_pattern = "[ʧʨ]";
 
     util::RegexPatternUTF8 pattern{original_pattern};
