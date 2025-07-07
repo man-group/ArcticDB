@@ -179,13 +179,8 @@ jobs:
         else   
             $RETRY="--resume-retries 5"
         fi
-
         python -m pip install --upgrade pip $RETRY
-
-        pip install wheel $RETRY
-        pip install setuptools $RETRY
-        pip install pytest $RETRY
-        pip install pytest-xdist $RETRY
+        pip install wheel setuptools pytest pytest-xdist $RETRY
 
       # Install conda environment
     - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
