@@ -100,6 +100,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
             std::get<Error>(check_outcome).throw_error();
         }
     }
+
     // Slice the frame according to the write options
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
