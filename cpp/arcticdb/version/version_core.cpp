@@ -431,6 +431,7 @@ folly::Future<AtomKey> async_update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types) {
@@ -439,6 +440,7 @@ folly::Future<AtomKey> async_update_impl(
         update_info,
         query,
         frame,
+        de_dup_map,
         options=std::move(options),
         dynamic_schema,
         empty_types
@@ -446,12 +448,13 @@ folly::Future<AtomKey> async_update_impl(
         check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
         ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->desc.id(), update_info.previous_index_key_->version_id());
         frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
-        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store
+        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store, de_dup_map
         ).via(&async::cpu_executor()).thenValue([
             store,
             update_info,
             query,
             frame,
+            de_dup_map,
             dynamic_schema,
             index_segment_reader=std::move(index_segment_reader)
         ](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
@@ -501,10 +504,11 @@ VersionedItem update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types) {
-    auto versioned_item = VersionedItem(async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get());
+    auto versioned_item = VersionedItem(async_update_impl(store, update_info, query, frame, de_dup_map, std::move(options), dynamic_schema, empty_types).get());
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;
 }

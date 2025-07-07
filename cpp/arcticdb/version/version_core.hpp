@@ -117,6 +117,7 @@ VersionedItem update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery & query,
     const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types);
@@ -126,6 +127,7 @@ folly::Future<AtomKey> async_update_impl(
     const UpdateInfo& update_info,
     const UpdateQuery& query,
     const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types);
