@@ -485,10 +485,15 @@ class ChunkedBufferImpl {
     }
 
     void truncate_first_block(size_t bytes) {
-        // bytes is the number of bytes to remove, and is asserted to be in the first block of the buffer
-        auto [block, offset, ts] = block_and_offset(bytes);
+        util::check(blocks_.size() > 0, "Truncate first block expected at least one block");
+        auto block = blocks_[0];
         util::check(block == *blocks_.begin(), "Truncate first block position {} not within initial block", bytes);
-        util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
+        // bytes is the number of bytes to remove, and is asserted to be in the first block of the buffer
+        // An old bug in update caused us to store a larger end_index value in the index key than needed. Thus, if
+        // date_range.start > table_data_key.last_ts && date_range.start < table_data_key.end_index we will load
+        // the first data key even if it has no rows within the range. So, we allow clearing the entire first block
+        // (i.e. bytes == block->bytes())
+        util::check(bytes <= block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
         auto remaining_bytes = block->bytes() - bytes;
         auto new_block = create_block(remaining_bytes, block->offset_);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);

@@ -415,6 +415,11 @@ ColumnTruncation get_truncate_range(
                         }
                     }
                 }
+                // Because of an old bug where end_index values in the index key could be larger than the last_ts+1,
+                // we need to handle the case where we need to drop the entire first block.
+                if (time_filter.first > last_ts) {
+                    truncate_rows.start_ = adjusted_row_range.second;
+                }
             },
             [&truncate_rows, &adjusted_row_range, &first_row_offset] (const RowRange& row_filter) {
                 // The row_filter is with respect to global offset. Column truncation works on column row indices.
