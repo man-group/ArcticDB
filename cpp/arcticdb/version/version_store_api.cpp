@@ -956,14 +956,14 @@ void PythonVersionStore::delete_versions(
     }
 }
 
-std::vector<DataError> PythonVersionStore::batch_delete(
+std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
     const std::vector<StreamId>& stream_ids,
     const std::vector<std::vector<VersionId>>& version_ids) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions, stream_ids and version_ids must have the same size");
     
     auto results = batch_delete_internal(stream_ids, version_ids);
     
-    std::vector<DataError> return_results;
+    std::vector<std::optional<DataError>> return_results;
 
     std::vector<IndexTypeKey> keys_to_delete;
     std::vector<std::pair<StreamId, VersionId>> symbols_to_delete;
@@ -972,6 +972,8 @@ std::vector<DataError> PythonVersionStore::batch_delete(
     for (const auto& result : results) {
         util::variant_match(result,
             [&](const version_store::TombstoneVersionResult& tombstone_result) {
+                return_results.emplace_back(std::nullopt);
+
                 if(tombstone_result.keys_to_delete.empty()) {
                     log::version().warn("Nothing to delete for symbol '{}'", tombstone_result.symbol);
                     return;
@@ -986,7 +988,7 @@ std::vector<DataError> PythonVersionStore::batch_delete(
                 }
             },
             [&](const DataError& data_error) {
-                return_results.emplace_back(data_error);
+                return_results.emplace_back(std::make_optional(data_error));
             }
         );
     }
@@ -1001,7 +1003,7 @@ std::vector<DataError> PythonVersionStore::batch_delete(
     for(size_t i = 0; i < symbols_to_delete.size(); ++i) {
         const auto& result = sym_delete_results[i];
         if(std::holds_alternative<DataError>(result)) {
-            return_results.emplace_back(std::get<DataError>(result));
+            return_results[i] = std::make_optional(std::get<DataError>(result));
         }
     }
     

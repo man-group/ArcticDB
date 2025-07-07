@@ -321,17 +321,16 @@ class ReadInfoRequest(NamedTuple):
         return res
 
 
-@dataclass(frozen=True)
-class DeleteRequest:
+class DeleteRequest(NamedTuple):
     """DeleteRequest is designed to enable batching of delete operations with an API that mirrors the singular ``delete`` API.
     Therefore, construction of this object is only required for batch delete operations.
 
     Attributes
     ----------
     symbol: str
-        See `delete` and `batch_delete` methods.
+        See `delete` and `delete_batch` methods.
     version_ids: List[int]
-        See `delete` and `batch_delete` methods.
+        See `delete` and `delete_batch` methods.
 
     Raises
     ------
@@ -341,10 +340,6 @@ class DeleteRequest:
 
     symbol: str
     version_ids: List[int]
-
-    def __post_init__(self):
-        if not self.version_ids:
-            raise ValueError(f"version_ids cannot be empty for symbol '{self.symbol}'")
 
     def __repr__(self):
         return f"DeleteRequest(symbol={self.symbol}, version_ids={self.version_ids})"
@@ -2337,7 +2332,7 @@ class Library:
 
         self._nvs.delete_versions(symbol, versions)
 
-    def delete_batch(self, delete_requests: List[Union[str, DeleteRequest]]) -> List[DataError]:
+    def delete_batch(self, delete_requests: List[Union[str, DeleteRequest]]) -> List[Optional[DataError]]:
         """
         Delete multiple symbols in a batch fashion.
 

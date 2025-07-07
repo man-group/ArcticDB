@@ -201,7 +201,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const std::vector<VersionId>& version_ids);
 
-    std::vector<DataError> batch_delete(
+    std::vector<std::optional<DataError>> batch_delete(
         const std::vector<StreamId>& stream_ids,
         const std::vector<std::vector<VersionId>>& version_ids);
 
