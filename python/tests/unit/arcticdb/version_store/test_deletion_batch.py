@@ -73,7 +73,7 @@ def test_batch_delete_versions_with_snapshots(basic_store):
     # Delete versions 0 and 1 for all symbols
     versions_to_delete = [[0, 1], [0, 1]]  # One list per symbol
     res = lib.batch_delete_versions(symbols, versions_to_delete)
-    assert len(res) == 0
+    assert len(res) == len(symbols)
 
     # Verify that data is still accessible through snapshots
     for sym in symbols:
@@ -106,7 +106,9 @@ def test_batch_delete_versions_partial_symbols(basic_store):
     versions_to_delete = [[0, 1], [0, 1]]  # One list per symbol
     results = lib.batch_delete_versions(symbols_to_delete, versions_to_delete)
     # There should be no errors
-    assert len(results) == 0
+    assert len(results) == len(symbols_to_delete)
+    for result in results:
+        assert result is None
     # Verify that only specified symbols were affected
     for sym in symbols_to_delete:
         assert len(lib.list_versions(sym)) == 1
@@ -184,11 +186,12 @@ def test_batch_delete_versions_invalid_input(basic_store):
 
     # Test with non-existent version for one symbol
     res = lib.batch_delete_versions(["sym1", "sym2"], [[1], [0]])
-    assert len(res) == 1
+    assert len(res) == 2
     assert res[0].symbol == "sym1"
     assert res[0].error_code == ErrorCode.E_NO_SUCH_VERSION
     assert res[0].error_category == ErrorCategory.MISSING_DATA
     assert "version 1" in res[0].exception_string
+    assert res[1] is None
 
     # sym1 should still be accessible
     # sym2 should be deleted
