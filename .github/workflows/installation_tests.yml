@@ -158,6 +158,7 @@ jobs:
   
     - name: (pypi) Install arcticdb (${{ env.arcticdb_version }}) from requirements files 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
+      shell: bash -l {0}
       run: |
         PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
         if [[ "$PYTHON_VERSION" == "3.8" ]]; then
