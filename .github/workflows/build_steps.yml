@@ -398,6 +398,7 @@ jobs:
 
       - name: Run test
         run: |
+          ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             echo "Run custom pytest command"
             python -m pip  install pytest-repeat
