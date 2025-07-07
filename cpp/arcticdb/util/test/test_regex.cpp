@@ -55,9 +55,11 @@ TEST(Regex, Unicode) {
     ASSERT_EQ(u32_regex.match(u32_match_text), true);
     ASSERT_EQ(u32_regex.match(u32_no_match), false);
 
-    util::RegexGeneric regex_generic{original_pattern};  
-    ASSERT_EQ(regex_generic.match(u32_match_text), true);
-    ASSERT_EQ(regex_generic.match(u32_no_match), false);
-    ASSERT_EQ(regex_generic.match(match_text), true);
-    ASSERT_EQ(regex_generic.match(no_match), false);
+    util::RegexGeneric regex_generic{original_pattern};
+    auto regex_utf8 = regex_generic.get_utf8_match_object();
+    auto regex_utf32 = regex_generic.get_utf32_match_object();
+    ASSERT_EQ(regex_utf32.match(u32_match_text), true);
+    ASSERT_EQ(regex_utf32.match(u32_no_match), false);
+    ASSERT_EQ(regex_utf8.match(match_text), true);
+    ASSERT_EQ(regex_utf8.match(no_match), false);
 }

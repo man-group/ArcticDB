@@ -4,7 +4,7 @@
   "dependencies": [
     "fmt",
     "spdlog",
-    "pcre",
+    "pcre2",
     "unordered-dense",
     {
       "name": "xxhash",

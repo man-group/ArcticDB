@@ -243,16 +243,18 @@ ankerl::unordered_dense::set<position_t> StringPool::get_regex_match_offsets_for
     remove_nones_and_nans(unique_values);
 
     ankerl::unordered_dense::set<position_t> output;
-    if (is_fixed_string_type(column.type().value_type())) { 
+    if (is_fixed_string_type(column.type().value_type())) {
+        auto regex_utf32 = regex_generic.get_utf32_match_object();
         for(auto pos : unique_values) {
             auto match_text = block_.const_at(pos);
-            if (regex_generic.match(std::u32string_view(reinterpret_cast<const char32_t*>(match_text.data()), match_text.size() / sizeof(char32_t)))) {
+            if (regex_utf32.match(std::u32string_view(reinterpret_cast<const char32_t*>(match_text.data()), match_text.size() / sizeof(char32_t)))) {
                 output.insert(pos);
             }
         }
     } else {
+        auto regex_utf8 = regex_generic.get_utf8_match_object();
         for(auto pos : unique_values) {
-            if (regex_generic.match(block_.const_at(pos))) {
+            if (regex_utf8.match(block_.const_at(pos))) {
                 output.insert(pos);
             }
         }
