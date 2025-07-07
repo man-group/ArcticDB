@@ -483,7 +483,7 @@ def _denormalize_columns(item, norm_meta, idx_type, n_indexes):
     return columns, denormed_columns, data
 
 
-def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_schema=False):
+def _normalize_columns_names(columns_names, norm_meta, dynamic_schema=False):
     counter = Counter(columns_names)
     for idx in range(len(columns_names)):
         col = columns_names[idx]
@@ -512,7 +512,7 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
             if dynamic_schema and (counter[col] > 1):
                 raise ArcticNativeException("Same column names not allowed in dynamic_schema")
             new_name = col_str
-            if counter[col] > 1 or col in index_names:
+            if counter[col] > 1:
                 new_name = "__col_{}__{}".format(col, 0 if dynamic_schema else idx)
             if isinstance(col, int):
                 norm_meta.common.col_names[new_name].is_int = True
@@ -537,7 +537,7 @@ def _normalize_columns(
     if not isinstance(columns_names, RangeIndex):
         if coerce_columns is not None and (set(columns_names_norm) != set(coerce_columns.keys())):
             raise ArcticNativeException("Keys in coerce column dictionary must match columns in dataframes")
-        columns_names_norm = _normalize_columns_names(list(columns_names), index_names, norm_meta, dynamic_schema)
+        columns_names_norm = _normalize_columns_names(list(columns_names), norm_meta, dynamic_schema)
 
         if columns_names_norm != list(columns_names):
             log.debug("Dataframe column names normalized")

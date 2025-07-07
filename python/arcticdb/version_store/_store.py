@@ -2981,9 +2981,7 @@ class NativeVersionStore:
 
     def _process_info(
         self,
-        symbol: str,
         dit,
-        as_of: VersionQueryInput,
         date_range_ns_precision: bool,
     ) -> Dict[str, Any]:
         timeseries_descriptor = dit.timeseries_descriptor
@@ -3080,7 +3078,7 @@ class NativeVersionStore:
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
         version_query = self._get_version_query(version, **kwargs)
         dit = self.version_store.read_descriptor(symbol, version_query)
-        return self._process_info(symbol, dit, version, date_range_ns_precision)
+        return self._process_info(dit, date_range_ns_precision)
 
     def batch_get_info(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
@@ -3137,7 +3135,7 @@ class NativeVersionStore:
             if isinstance(dit, DataError):
                 description_results.append(dit)
             else:
-                description_results.append(self._process_info(symbol, dit, as_of, date_range_ns_precision))
+                description_results.append(self._process_info(dit, date_range_ns_precision))
         return description_results
 
     def write_metadata(
