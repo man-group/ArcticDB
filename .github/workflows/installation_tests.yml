@@ -159,18 +159,32 @@ jobs:
     - name: (pypi) Install arcticdb (${{ env.arcticdb_version }}) from requirements files 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
       run: |
-        pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt" --resume-retries 5
+        PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        if [[ "$PYTHON_VERSION" == "3.8" ]]; then
+            echo "Python 3.8 detected. Using fallback strategy..."
+            pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt" --retries 5
+        else   
+            pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt" --resume-retries 5
+        fi
 
     - name: (pypi) Install other prerequisites 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
       shell: bash -l {0}
       run: |
-        python -m pip install --upgrade pip --resume-retries 5
+        PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        if [[ "$PYTHON_VERSION" == "3.8" ]]; then
+            echo "Python 3.8 detected. Using fallback strategy..."
+            $RETRY="--retries 5"
+        else   
+            $RETRY="--resume-retries 5"
+        fi
 
-        pip install wheel --resume-retries 5
-        pip install setuptools --resume-retries 5
-        pip install pytest --resume-retries 5
-        pip install pytest-xdist --resume-retries 5
+        python -m pip install --upgrade pip $RETRY
+
+        pip install wheel $RETRY
+        pip install setuptools $RETRY
+        pip install pytest $RETRY
+        pip install pytest-xdist $RETRY
 
       # Install conda environment
     - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
