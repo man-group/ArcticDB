@@ -1,0 +1,4 @@
+arcticdb==5.8.0
+numpy<=2.2.6
+pyarrow
+protobuf<6
