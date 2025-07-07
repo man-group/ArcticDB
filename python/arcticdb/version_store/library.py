@@ -26,6 +26,8 @@ from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
 from arcticdb_ext.version_store import DataError, OutputFormat, StageResult
+from arcticdb_ext import get_config_int
+
 import pandas as pd
 import numpy as np
 import logging
@@ -1520,6 +1522,8 @@ class Library:
               ``finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
+        _stage_results : Optional[List['StageResult']], default=None
+            Unused.
         Returns
         -------
         VersionedItem
@@ -1643,6 +1647,9 @@ class Library:
               ``sort_and_finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
+
+        _stage_results : Optional[List['StageResult']], default=None
+            Unused.
         Returns
         -------
         VersionedItem

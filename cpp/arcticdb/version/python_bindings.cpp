@@ -22,8 +22,6 @@
 #include <arcticdb/python/adapt_read_dataframe.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
-#include <arcticdb/python/python_handler_data.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 namespace arcticdb::version_store {
@@ -346,8 +344,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     py::class_<StageResult>(version, "StageResult")
         .def(py::init([]() { return StageResult({}); }))
-	.def_property_readonly("_staged_segments", [](const StageResult& self) { return self.staged_segments; })
-	.def_property_readonly("_version", [](const StageResult& self) { return self.version; })
+	.def_property_readonly("staged_segments", [](const StageResult& self) { return self.staged_segments; })
+	.def_property_readonly("version", [](const StageResult& self) { return self.version; })
         .def(py::pickle(
             [](const StageResult& s) {
                 return py::make_tuple(s.staged_segments, s.version);

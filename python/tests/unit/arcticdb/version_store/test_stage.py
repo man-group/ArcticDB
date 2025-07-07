@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pickle
 
 import pandas as pd
@@ -38,7 +39,7 @@ def test_stage(lmdb_storage, lib_name, new_api_enabled, finalize_mode):
     if not new_api_enabled:
         assert all(x is None for x in staged_results)
     else:
-        assert all(len(staged_result._staged_segments) == 2 and staged_result._version == 0 for staged_result in staged_results)
+        assert all(len(staged_result.staged_segments) == 2 and staged_result.version == 0 for staged_result in staged_results)
 
     assert_frame_equal(lib.read(sym).data, not_staged, check_freq=False)
     lib.finalize_staged_data(sym, mode=finalize_mode)
@@ -54,7 +55,7 @@ def test_stage_result_pickle(lmdb_storage, lib_name):
     df = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}, index=pd.date_range("2025-01-01", periods=2))
     stage_result = lib.stage(sym, df)
     stage_result_after_pickling = pickle.loads(pickle.dumps(stage_result))
-    segments = stage_result._staged_segments
-    segments_after_pickling = stage_result_after_pickling._staged_segments
+    segments = stage_result.staged_segments
+    segments_after_pickling = stage_result_after_pickling.staged_segments
 
     assert segments == segments_after_pickling
