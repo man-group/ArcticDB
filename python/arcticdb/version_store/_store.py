@@ -11,6 +11,8 @@ from dataclasses import dataclass
 import datetime
 import os
 import sys
+from warnings import warn
+
 import pandas as pd
 import numpy as np
 import pytz
@@ -663,6 +665,9 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             if parallel or incomplete:
+                is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
+                if is_new_stage_api_enabled:
+                    warn('Staging data with write() is deprecated. Use stage() instead.', DeprecationWarning, stacklevel=2)
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
@@ -2260,6 +2265,8 @@ class NativeVersionStore:
               ``compact_incomplete``.
 
             To manually delete staged data, use the ``remove_incomplete`` function.
+        _stage_results : `Optional[List[StageResult]]`, default=None
+            Unused.
         Returns
         -------
         VersionedItem
