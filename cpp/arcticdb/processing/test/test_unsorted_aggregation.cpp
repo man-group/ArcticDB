@@ -102,7 +102,7 @@ public:
         } else if constexpr (is_signed_type(input_data_type) || is_floating_point_type(input_data_type) || is_time_type(input_data_type)) {
             return std::vector<size_t>{3, 2, 1, 0, 3, 1, 2, 0, 2, 0, 1, 3, 5, 4};
         } else if constexpr (is_bool_type(InputTypeTag::data_type())) {
-            return std::vector<size_t>{0,0,0,1,1,1,2,2,2,3,3,3};
+            return std::vector<size_t>{0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3};
         } else if constexpr (is_empty_type(input_data_type)) {
             return std::vector<size_t>{0, 1, 0, 2, 2};
         }
