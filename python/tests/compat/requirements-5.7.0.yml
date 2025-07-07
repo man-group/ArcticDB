@@ -2,7 +2,7 @@ name: arcticdb
 channels:
   - conda-forge
 dependencies:
-  - arcticdb==5.6.0
+  - arcticdb==5.7.0
   - numpy<=2.2.6
   - pyarrow
   - protobuf<6
