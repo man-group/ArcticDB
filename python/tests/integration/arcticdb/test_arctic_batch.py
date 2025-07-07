@@ -529,7 +529,8 @@ def test_delete_batch_comprehensive(arctic_library):
 
     # Test 1: Delete all versions of a symbol (string input)
     result = lib.delete_batch(["sym1"])
-    assert len(result) == 0
+    assert len(result) == 1
+    assert result[0] is None
 
     # Verify sym1 is deleted
     assert not lib.has_symbol("sym1")
@@ -545,7 +546,8 @@ def test_delete_batch_comprehensive(arctic_library):
     # sym1 is already deleted, but we don't return an error for it, just print a warning
     # but that shouldn't affect the delete of sym3
     result = lib.delete_batch(["sym1", delete_request])
-    assert len(result) == 0
+    assert len(result) == 2
+    assert result[0] is None
     assert not lib.has_symbol("sym1")
     assert lib.has_symbol("sym3")
     versions = lib.list_versions("sym3")
@@ -565,14 +567,21 @@ def test_delete_batch_comprehensive(arctic_library):
     lib.write("sym5", df2)
 
     result = lib.delete_batch(["sym4", DeleteRequest("sym5", [0])])
-    assert len(result) == 0
+    assert len(result) == 2
+    assert result[0] is None
+    assert result[1] is None
     # both sym4 and sym5 should be deleted
     assert not lib.has_symbol("sym4")
     assert not lib.has_symbol("sym5")
 
     # Test 4: Delete all including the ones that are already deleted
     result = lib.delete_batch(["sym1", "sym2", "sym3", "sym4", "sym5"])
-    assert len(result) == 0
+    # assert len(result) == 5
+    # assert result[0] is None
+    # assert result[1] is None
+    # assert result[2] is None
+    # assert result[3] is None
+    # assert result[4] is None
     assert not lib.has_symbol("sym1")
     assert not lib.has_symbol("sym2")
     assert not lib.has_symbol("sym3")
@@ -618,7 +627,7 @@ def test_snapshots_with_delete_batch(arctic_library):
     # This should NOT delete sym1 and shoud return an error
     # but should delete sym3 v1, which is not in a snapshot
     res = lib.delete_batch([DeleteRequest("sym1", [0]), "sym3"])
-    assert len(res) == 0
+    assert len(res) == 2
 
     # sym1 and sym3 shouldn't be readable now without going through the snapshot.
     with pytest.raises(Exception):

@@ -2632,7 +2632,7 @@ class NativeVersionStore:
         """
         self.version_store.delete_versions(symbol, versions)
 
-    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]) -> List[DataError]:
+    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]) -> List[Optional[DataError]]:
         """
         Delete the given versions of the given symbols.
         Batch equivalent of `delete_version` and `delete_versions`.
@@ -2664,7 +2664,7 @@ class NativeVersionStore:
                 raise ValueError(f"version_ids cannot be empty for symbol '{symbol}'")
         return self.version_store.batch_delete(symbols, versions)
 
-    def batch_delete_symbols(self, symbols: List[str]) -> List[DataError]:
+    def batch_delete_symbols(self, symbols: List[str]) -> List[Optional[DataError]]:
         """
         Delete all versions of the given symbols.
 
