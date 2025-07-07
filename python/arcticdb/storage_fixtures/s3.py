@@ -27,6 +27,8 @@ import werkzeug
 import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
 
+from arcticdb.util.utils import get_logger
+
 from .api import *
 from .utils import (
     get_ephemeral_port,
@@ -38,6 +40,7 @@ from .utils import (
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_gcp_library_to_env, add_s3_library_to_env
 from arcticdb_ext.storage import AWSAuthMethod, NativeVariantStorage, GCPXMLSettings as NativeGCPXMLSettings
+from arcticdb_ext.tools import S3Tool
 
 # All storage client libraries to be imported on-demand to speed up start-up of ad-hoc test runs
 
@@ -113,6 +116,8 @@ class S3Bucket(StorageFixture):
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_bucket(self)
+        if len(self.libs_from_factory) > 0:
+            get_logger().warning(f"Libraries not cleared remaining {self.libs_from_factory.keys()}")
 
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
         cfg = EnvironmentConfigsMap()
@@ -172,6 +177,21 @@ class S3Bucket(StorageFixture):
         for key in self.iter_underlying_object_names():
             dest.copy({"Bucket": self.bucket, "Key": key}, key, SourceClient=source_client)
 
+    def check_bucket(self, assert_on_fail = True):
+        s3_tool = S3Tool(self.bucket, self.factory.default_key.id, 
+                        self.factory.default_key.secret, self.factory.endpoint)
+        content = s3_tool.list_bucket(self.bucket)
+
+        logger.warning(f"Total objects left: {len(content)}")
+        logger.warning(f"First 100: {content[0:100]}")
+        logger.warning(f"BUCKET: {self.bucket}")
+        left_from = set()
+        for key in content:
+            library_name = key.split("/")[1] # get the name from object
+            left_from.add(library_name)
+        logger.warning(f"Left overs from libraries: {left_from}")
+        if assert_on_fail: 
+            assert len(content) < 1
 
 class NfsS3Bucket(S3Bucket):
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
@@ -301,6 +321,7 @@ class BaseS3StorageFixtureFactory(StorageFixtureFactory):
             # We are not writing to buckets in this case
             # and if we try to delete the bucket, it will fail
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+            b.check_bucket(assert_on_fail=True)
 
 
 class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
@@ -335,6 +356,7 @@ class BaseGCPStorageFixtureFactory(StorageFixtureFactory):
             # We are not writing to buckets in this case
             # and if we try to delete the bucket, it will fail
             b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
+            b.check_bucket(assert_on_fail=True)
 
 
 def real_s3_from_environment_variables(
@@ -354,6 +376,7 @@ def real_s3_from_environment_variables(
     else:
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     return out
+
 
 def real_gcp_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
@@ -624,15 +647,14 @@ class HostDispatcherApplication(DomainDispatcherApplication):
 
         with self.lock:
             # Check for x-amz-checksum-mode header
-            if environ.get('HTTP_X_AMZ_CHECKSUM_MODE') == 'enabled':
+            if environ.get("HTTP_X_AMZ_CHECKSUM_MODE") == "enabled":
                 response_body = (
                     b'<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
-                    b'<Error><Code>MissingContentLength</Code>'
-                    b'<Message>You must provide the Content-Length HTTP header.</Message></Error>'
+                    b"<Error><Code>MissingContentLength</Code>"
+                    b"<Message>You must provide the Content-Length HTTP header.</Message></Error>"
                 )
                 start_response(
-                    "411 Length Required", 
-                    [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
+                    "411 Length Required", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
                 )
                 return [response_body]
             # Mock ec2 imds responses for testing
@@ -705,6 +727,7 @@ def run_gcp_server(port, key_file, cert_file):
         ssl_context=(cert_file, key_file) if cert_file and key_file else None,
     )
 
+
 def create_bucket(s3_client, bucket_name, max_retries=15):
     for i in range(max_retries):
         try:
@@ -714,7 +737,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             if i >= max_retries - 1:
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
-            time.sleep(1)   
+            time.sleep(1)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -797,7 +820,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
             ),
         )
         self._p.start()
-        wait_for_server_to_come_up(self.endpoint, "moto", self._p)
+        # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
+        # Due to this, we need to wait for the server to come up for a longer time
+        wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
 
     def _safe_enter(self):
         for _ in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
@@ -883,7 +908,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 )  # If CA cert verify fails, it will take ages for this line to finish
             except Exception:
                 # We clean bucket at session level so failure here does not matter
-                pass            
+                pass
             self._iam_admin = None
 
 
@@ -930,7 +955,9 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
             ),
         )
         self._p.start()
-        wait_for_server_to_come_up(self.endpoint, "moto", self._p)
+        # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
+        # Due to this, we need to wait for the server to come up for a longer time
+        wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")

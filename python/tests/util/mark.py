@@ -23,9 +23,11 @@ WINDOWS = sys.platform.lower().startswith("win32")
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
 ARCTICDB_USING_CONDA = marks.ARCTICDB_USING_CONDA
-MACOS_CONDA_BUILD = sys.platform == "darwin" and ARCTICDB_USING_CONDA
-_MACOS_CONDA_BUILD_SKIP_REASON = (
-    "Tests fail for macOS conda builds, either because Azurite is improperly configured"
+MACOS_CONDA_BUILD = ARCTICDB_USING_CONDA and MACOS
+MACOS_WHEEL_BUILD = not ARCTICDB_USING_CONDA and MACOS
+
+_MACOS_AZURE_TESTS_SKIP_REASON = (
+    "Tests fail for macOS vcpkg builds, either because Azurite is improperly configured"
     "on the CI or because there's problem with Azure SDK for C++ in this configuration."
 )
 
@@ -43,6 +45,7 @@ LOCAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", 
 STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
 STORAGE_AWS_S3 = os.getenv("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
 STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
+
 # Defined shorter logs on errors
 SHORTER_LOGS = marks.SHORTER_LOGS
 
@@ -52,11 +55,12 @@ SLOW_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or DISABLE_SLOW_TESTS, reason="Skipping test as it takes a long time to run"
 )
 
-AZURE_TESTS_MARK = pytest.mark.skipif(FAST_TESTS_ONLY or MACOS_CONDA_BUILD or not LOCAL_STORAGE_TESTS_ENABLED,
-                                      reason=_MACOS_CONDA_BUILD_SKIP_REASON)
-"""Mark to skip all Azure tests when MACOS_CONDA_BUILD or ARCTICDB_FAST_TESTS_ONLY is set."""
+AZURE_TESTS_MARK = pytest.mark.skipif(
+    FAST_TESTS_ONLY or MACOS or not LOCAL_STORAGE_TESTS_ENABLED, reason=_MACOS_AZURE_TESTS_SKIP_REASON
+)
+"""Mark to skip all Azure tests when MACOS or ARCTICDB_FAST_TESTS_ONLY is set."""
 
-# Mongo tests will run under local storage tests 
+# Mongo tests will run under local storage tests
 MONGO_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or sys.platform != "linux" or not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY and if local storage tests are disabled",
@@ -111,22 +115,19 @@ SIM_NFS_TESTS_MARK = pytest.mark.skipif(
 """
 
 
-
-"""Windows and MacOS have different handling of self-signed CA cert for test. 
+"""Windows and MacOS have different handling of self-signed CA cert for test.
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
 SSL_TEST_SUPPORTED = sys.platform == "linux"
 
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
 ## MEMRAY supports linux and macos and python 3.8 and above
-MEMRAY_SUPPORTED = (MACOS or LINUX)
+MEMRAY_SUPPORTED = MACOS or LINUX
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
     not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
 )
 
-ZONE_INFO_MARK = pytest.mark.skipif(
-    sys.version_info < (3, 9),
-    reason="zoneinfo module was introduced in Python 3.9")
+ZONE_INFO_MARK = pytest.mark.skipif(sys.version_info < (3, 9), reason="zoneinfo module was introduced in Python 3.9")
 
 SSL_TESTS_MARK = pytest.mark.skipif(
     not SSL_TEST_SUPPORTED,
@@ -142,7 +143,7 @@ VENV_COMPAT_TESTS_MARK = pytest.mark.skipif(
 
 PANDAS_2_COMPAT_TESTS_MARK = pytest.mark.skipif(
     MACOS_CONDA_BUILD
-    or sys.version.startswith("3.8") # Pandas 2 not available in 3.8
+    or sys.version.startswith("3.8")  # Pandas 2 not available in 3.8
     or sys.version.startswith("3.12")
     or sys.version.startswith("3.13"),  # Waiting for https://github.com/man-group/ArcticDB/issues/2008
     reason="Skipping compatibility tests because macOS conda builds don't have an available PyPi arcticdb version and "

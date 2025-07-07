@@ -81,18 +81,18 @@ struct TransformBatchResultsFlags {
     bool convert_no_data_found_to_key_not_found_{false};
 };
 
+
 /// Used by batch_[append/update/read/append] methods to process the individual results of a batch query.
-/// @param throw_on_error The V1 Library API aborts on the first exception while V2 processes everything and converts
-///     exceptions to DataError
 /// @param stream_ids i-th element of stream_ids corresponds to i-th element of batch_request_versions
-/// @param versoin_queries i-th element corresponds to the i-th element of batch_request_versions. Use to record the
-///     the version query in the DataError for a batch read request
+/// @param flags Flags that control the exception handling on batch operations
+/// @param version_queries i-th element corresponds to the i-th element of batch_request_versions. Use to record the
+///     version query in the DataError for a batch read request
 template<typename ResultValueType>
 std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_throw(
     std::vector<folly::Try<ResultValueType>>&& batch_request_versions,
     std::span<const StreamId> stream_ids,
     TransformBatchResultsFlags flags,
-    std::span<const VersionQuery> versoin_queries = {}
+    std::span<const VersionQuery> version_queries = {}
 ) {
     std::vector<std::variant<ResultValueType, DataError>> result;
     result.reserve(batch_request_versions.size());
@@ -106,15 +106,15 @@ std::vector<std::variant<ResultValueType, DataError>> transform_batch_items_or_t
             if (flags.throw_on_error_ && (!is_missing_version_exception || throw_on_missing_symbol)) {
                 version_or_exception.throwUnlessValue();
             } else {
-                DataError data_error = versoin_queries.empty() ?
-                    DataError(stream_ids[idx], exception.what().toStdString()) :
-                    DataError(stream_ids[idx], exception.what().toStdString(), versoin_queries[idx].content_);
+                DataError data_error = version_queries.empty() ?
+                                       DataError(stream_ids[idx], exception.what().toStdString()) :
+                                       DataError(stream_ids[idx], exception.what().toStdString(), version_queries[idx].content_);
                 if (exception.template is_compatible_with<NoSuchVersionException>()) {
                     data_error.set_error_code(ErrorCode::E_NO_SUCH_VERSION);
                 } else if (exception.template is_compatible_with<storage::KeyNotFoundException>()) {
                     data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
                 } else if(flags.convert_no_data_found_to_key_not_found_ &&
-                        exception.template is_compatible_with<storage::NoDataFoundException>()) {
+                    exception.template is_compatible_with<storage::NoDataFoundException>()) {
                     data_error.set_error_code(ErrorCode::E_KEY_NOT_FOUND);
                 }
                 result.emplace_back(std::move(data_error));
@@ -506,7 +506,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
         descriptor_futures.emplace_back(
             get_descriptor_async(std::move(opt_index_key_fut), stream_ids[idx], version_queries[idx]));
     }
-    auto descriptors = collectAll(descriptor_futures).get();
+    auto descriptors = folly::collectAll(descriptor_futures).get();
     TransformBatchResultsFlags flags;
     flags.throw_on_error_ = *read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
@@ -752,13 +752,9 @@ std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_ver
     const StreamId& stream_id,
     const VersionQuery& version_query
     ) {
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: restore_version");
-    auto version_to_restore = get_version_to_read(stream_id, version_query);
-    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(static_cast<bool>(version_to_restore),
-                                                 "Unable to restore {}@{}: version not found", stream_id, version_query);
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
-    ARCTICDB_DEBUG(log::version(), "restore for stream_id: {} , version_id = {}", stream_id, version_to_restore->key_.version_id());
-    return AsyncRestoreVersionTask{store(), version_map(), stream_id, version_to_restore->key_, maybe_prev}().get();
+    auto res = batch_restore_version_internal({stream_id}, {version_query});
+    util::check(res.size() == 1, "Expected one result from restore version but there were {}. Please report this to ArcticDB team.", res.size());
+    return res.at(0);
 }
 
 VersionedItem LocalVersionedEngine::write_individual_segment(
@@ -1487,6 +1483,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
             })
         );
     }
+
     auto append_versions = folly::collectAll(append_versions_futs).get();
     TransformBatchResultsFlags flags;
     flags.throw_on_error_ = throw_on_error;
@@ -1508,43 +1505,43 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
         update_versions_futs.push_back(
             std::move(stream_update_info_fut)
-            .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
-                auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
-                auto write_options = get_write_options();
-                if (update_info.previous_index_key_.has_value()) {
-                    const bool dynamic_schema = cfg().write_options().dynamic_schema();
-                    const bool empty_types = cfg().write_options().empty_types();
-                    index_key_fut = async_update_impl(
-                        store(),
-                        update_info,
-                        update_query,
-                        std::move(frame),
-                        std::move(write_options),
-                        dynamic_schema,
-                        empty_types);
-                } else {
-                    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-                        upsert,
-                        "Cannot update non-existent symbol {}."
-                        "Using \"upsert=True\" will create create the symbol instead of throwing this exception.",
-                        stream_id);
-                    index_key_fut = async_write_dataframe_impl(
-                        store(),
-                        0,
-                        std::move(frame),
-                        std::move(write_options),
-                        std::make_shared<DeDupMap>(),
-                        false,
-                        true);
-                }
-                return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
-                    return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
-                });
-            })
-            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
-                auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
-            })
+                .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
+                    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+                    auto write_options = get_write_options();
+                    if (update_info.previous_index_key_.has_value()) {
+                        const bool dynamic_schema = cfg().write_options().dynamic_schema();
+                        const bool empty_types = cfg().write_options().empty_types();
+                        index_key_fut = async_update_impl(
+                            store(),
+                            update_info,
+                            update_query,
+                            std::move(frame),
+                            std::move(write_options),
+                            dynamic_schema,
+                            empty_types);
+                    } else {
+                        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                            upsert,
+                            "Cannot update non-existent symbol {}."
+                            "Using \"upsert=True\" will create create the symbol instead of throwing this exception.",
+                            stream_id);
+                        index_key_fut = async_write_dataframe_impl(
+                            store(),
+                            0,
+                            std::move(frame),
+                            std::move(write_options),
+                            std::make_shared<DeDupMap>(),
+                            false,
+                            true);
+                    }
+                    return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
+                        return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                    });
+                })
+                .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
+                    auto&& [index_key, update_info] = index_key_and_update_info;
+                    return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
+                })
         );
     }
 
@@ -1557,28 +1554,13 @@ struct WarnVersionTypeNotHandled {
 
     void warn(const StreamId& stream_id) {
         if (!warned) {
-            log::version().warn("Only exact version numbers are supported when using add_to_snapshot/batch_restore_version calls."
+            log::version().warn("Only exact version numbers are supported when using add_to_snapshot calls."
                                 "The queries passed for '{}', etc. are ignored and the latest versions will be used!",
                                 stream_id);
             warned = true;
         }
     }
 };
-
-std::map<StreamId, VersionId> get_sym_versions_from_query(
-    const std::vector<StreamId>& stream_ids,
-    const std::vector<VersionQuery>& version_queries) {
-    std::map<StreamId, VersionId> sym_versions;
-    WarnVersionTypeNotHandled warner;
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        const auto& query = version_queries[stream_id.index].content_;
-        if(std::holds_alternative<SpecificVersionQuery>(query))
-            sym_versions[*stream_id] = std::get<SpecificVersionQuery>(query).version_id_;
-         else
-            warner.warn(*stream_id);
-    }
-    return sym_versions;
-}
 
 std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
     const std::vector<StreamId>& stream_ids,
@@ -1598,29 +1580,53 @@ std::map<StreamId, VersionVectorType> get_multiple_sym_versions_from_query(
 std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> LocalVersionedEngine::batch_restore_version_internal(
     const std::vector<StreamId>& stream_ids,
     const std::vector<VersionQuery>& version_queries) {
-    util::check(stream_ids.size() == version_queries.size(), "Symbol vs version query size mismatch: {} != {}", stream_ids.size(), version_queries.size());
-    auto sym_versions = get_sym_versions_from_query(stream_ids, version_queries);
-    util::check(sym_versions.size() == version_queries.size(), "Restore versions requires specific version to be supplied");
-    auto previous = batch_get_latest_version(store(), version_map(), stream_ids, true);
-    auto versions_to_restore = batch_get_specific_version(store(), version_map(), sym_versions);
+    std::unordered_set<StreamId> streams_set;
+    std::vector<StreamId> duplicate_streams;
+    for (const auto& stream: stream_ids) {
+        auto&& [it, inserted] = streams_set.insert(stream);
+        if (!inserted) {
+            duplicate_streams.push_back(stream);
+        }
+    }
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(duplicate_streams.empty(), "Duplicate symbols in restore_version request. Symbols submitted more than once [{}]",
+                                                          fmt::join(duplicate_streams, ","));
+
+    auto previous = batch_get_latest_version_with_deletion_info(store(), version_map(), stream_ids, true);
+    auto versions_to_restore = folly::collect(batch_get_versions_async(store(), version_map(), stream_ids, version_queries)).get();
+
+    std::vector<StreamId> symbols_with_missing_versions;
+    for (const auto& [i, opt_key] : folly::enumerate(versions_to_restore)) {
+        if(!opt_key) {
+            symbols_with_missing_versions.push_back(stream_ids.at(i));
+        }
+    }
+
+    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(symbols_with_missing_versions.empty(), "Could not find the requested versions for some symbols during restore_version. "
+                                                                                                 "Symbols with missing versions [{}]",
+                                                          fmt::join(symbols_with_missing_versions, ","));
+
     std::vector<folly::Future<std::pair<VersionedItem, TimeseriesDescriptor>>> fut_vec;
-
-    for(const auto& stream_id : folly::enumerate(stream_ids)) {
-        auto prev = previous->find(*stream_id);
-        auto maybe_prev = prev == std::end(*previous) ? std::nullopt : std::make_optional<AtomKey>(prev->second);
-
-        auto version = versions_to_restore->find(*stream_id);
-        util::check(version != std::end(*versions_to_restore), "Did not find version for symbol {}", *stream_id);
-        fut_vec.emplace_back(async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), *stream_id, version->second, maybe_prev}));
+    for(const std::optional<AtomKey>& key : versions_to_restore) {
+        auto prev_it = previous->find(key->id());
+        auto maybe_prev = prev_it == std::end(*previous) ? std::nullopt : std::make_optional<MaybeDeletedAtomKey>(prev_it->second);
+        auto restore_fut = async::submit_io_task(AsyncRestoreVersionTask{store(), version_map(), key->id(), *key, maybe_prev});
+        if (maybe_prev && maybe_prev->deleted) {
+            // If we're restoring from a snapshot then the symbol may actually be deleted, and we need to add a symbol list entry for it
+            auto overall_fut = std::move(restore_fut).via(&async::io_executor()).thenValue([this](auto&& restore_result) {
+                WriteSymbolTask(store(),
+                                symbol_list_ptr(),
+                                restore_result.first.key_.id(),
+                                restore_result.first.key_.version_id())();
+                return std::move(restore_result);
+            });
+            fut_vec.push_back(std::move(overall_fut));
+        } else {
+            // Otherwise we cannot be restoring a deleted symbol so it must already have a symbol list entry
+            fut_vec.push_back(std::move(restore_fut));
+        }
     }
-    auto output = folly::collect(fut_vec).get();
 
-    std::vector<folly::Future<folly::Unit>> symbol_write_futs;
-    for(const auto& item : output) {
-        symbol_write_futs.emplace_back(async::submit_io_task(WriteSymbolTask(store(), symbol_list_ptr(), item.first.key_.id(), item.first.key_.version_id())));
-    }
-    folly::collect(symbol_write_futs).wait();
-    return output;
+    return folly::collect(fut_vec).get();
 }
 
 timestamp LocalVersionedEngine::get_update_time_internal(

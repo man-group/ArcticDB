@@ -66,8 +66,7 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
              [&](LibraryTool& lt, const VariantKey& key){
                  constexpr OutputFormat output_format = OutputFormat::PANDAS;
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
-                 std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
-                 return adapt_read_df(lt.read(key, handler_data, output_format), &handler);
+                 return adapt_read_df(lt.read(key, handler_data, output_format), &handler_data);
              },
              "Read the most recent dataframe from the store")
              .def("inspect_env_variable", &LibraryTool::inspect_env_variable)

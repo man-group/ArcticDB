@@ -90,7 +90,7 @@ TEST_F(SparseTestStore, SimpleRoundtrip) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<uint32_t>(0, 1);
@@ -182,7 +182,7 @@ TEST_F(SparseTestStore, SimpleRoundtripBackwardsCompat) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), 2);
     auto val1 = frame.scalar_at<uint32_t>(0, 1);
@@ -233,7 +233,7 @@ TEST_F(SparseTestStore, DenseToSparse) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
 
     ASSERT_EQ(frame.row_count(), 7);
@@ -281,7 +281,7 @@ TEST_F(SparseTestStore, SimpleRoundtripStrings) {
     read_query->row_filter = universal_range();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();
+    const auto& frame = std::get<PandasOutputFrame>(read_result.frame_data).frame();
     apply_global_refcounts(handler_data, OutputFormat::PANDAS);
 
     ASSERT_EQ(frame.row_count(), 2);
@@ -336,7 +336,7 @@ TEST_F(SparseTestStore, Multiblock) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
@@ -389,7 +389,7 @@ TEST_F(SparseTestStore, Segment) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     for(size_t i = 0; i < num_rows; i += 2) {
         ASSERT_EQ(frame.row_count(), num_rows);
@@ -449,7 +449,7 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), num_rows);
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -510,7 +510,7 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
     ASSERT_EQ(frame.row_count(), num_rows);
     ASSERT_EQ(frame.descriptor().field_count(), 2);
 
@@ -566,7 +566,7 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame =read_result.frame_data.frame();;
+    const auto& frame =std::get<PandasOutputFrame>(read_result.frame_data).frame();;
 
     ASSERT_EQ(frame.row_count(), 4000);
     for(size_t i = 0; i < frame.row_count(); i += 2) {
@@ -620,7 +620,7 @@ TEST_F(SparseTestStore, Compact) {
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::NATIVE);
     auto read_result = test_store_->read_dataframe_version(stream_id, pipelines::VersionQuery{}, read_query, read_options, handler_data);
-    const auto& frame = read_result.frame_data.frame();
+    const auto& frame = std::get<PandasOutputFrame>(read_result.frame_data).frame();
 
     ASSERT_EQ(frame.row_count(), num_rows);
     for(size_t i = 0; i < num_rows; i += 2) {
@@ -679,7 +679,7 @@ TEST_F(SparseTestStore, CompactWithStrings) {
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
     auto read_result = test_store_->read_dataframe_version(stream_id, VersionQuery{}, read_query, read_options, handler_data);
     apply_global_refcounts(handler_data, OutputFormat::PANDAS);
-    const auto& frame = read_result.frame_data.frame();
+    const auto& frame = std::get<PandasOutputFrame>(read_result.frame_data).frame();
     ASSERT_EQ(frame.row_count(), num_rows);
 
     for(size_t i = 0; i < num_rows; i += 2) {

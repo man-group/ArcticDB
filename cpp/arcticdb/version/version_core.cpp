@@ -100,7 +100,6 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
             std::get<Error>(check_outcome).throw_error();
         }
     }
-
     // Slice the frame according to the write options
     frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
@@ -1444,8 +1443,7 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
-    const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
-    auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
+    auto frame = allocate_frame(pipeline_context, read_options.output_format());
     return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format()).thenValue([frame](auto&&){ return frame; });
 }
 
@@ -1615,8 +1613,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         ARCTICDB_SAMPLE(MarkAndReadDirect, 0)
         util::check_rte(!(pipeline_context->is_pickled() && std::holds_alternative<RowRange>(read_query->row_filter)), "Cannot use head/tail/row_range with pickled data, use plain read instead");
         mark_index_slices(pipeline_context);
-        const auto allocation_type = read_options.output_format() == OutputFormat::ARROW ? AllocationType::DETACHABLE : AllocationType::PRESIZED;
-        auto frame = allocate_frame(pipeline_context, read_options.output_format(), allocation_type);
+        auto frame = allocate_frame(pipeline_context, read_options.output_format());
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
         return fetch_data(std::move(frame), pipeline_context, store, *read_query, read_options, shared_data, handler_data);

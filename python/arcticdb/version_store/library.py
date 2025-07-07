@@ -2273,6 +2273,8 @@ class Library:
             If a symbol or the version of symbol specified in versions does not exist or has been deleted in the library,
             or, the library has no symbol.
         """
+        # We deliberately check the snapshot name only with the v2 API to avoid disruption to legacy users on the v1 API
+        self._nvs.version_store.verify_snapshot(snapshot_name)
         self._nvs.snapshot(snap_name=snapshot_name, metadata=metadata, skip_symbols=skip_symbols, versions=versions)
 
     def delete(self, symbol: str, versions: Optional[Union[int, Iterable[int]]] = None):

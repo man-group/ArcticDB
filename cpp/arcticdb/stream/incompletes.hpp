@@ -17,7 +17,7 @@
 #include <arcticdb/version/version_map.hpp>
 
 namespace arcticdb::pipelines {
-struct PythonOutputFrame;
+struct PandasOutputFrame;
 struct InputTensorFrame;
 using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 }
