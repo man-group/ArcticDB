@@ -13,6 +13,7 @@ from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
+from arcticdb_ext.version_store import OutputFormat
 
 from arcticdb.util.venv import CompatLibrary
 
@@ -364,3 +365,106 @@ def test_compat_resample_updated_data(old_venv_and_arctic_uri, lib_name):
                 .agg({"col": "sum"})
             )
             assert_frame_equal(expected_df, received_df)
+
+
+def test_compat_update_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+    # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
+    # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
+    # instead contained the start of the date_range passed into the update call.
+    # We want to verify updating such data works fine.
+    arctic_uri = s3_ssl_disabled_storage.arctic_uri
+    with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
+        sym = "sym"
+        df_0 = pd.DataFrame(
+            {"col": [0, 0]}, index=[pd.Timestamp("2025-01-02 00:02:00"), pd.Timestamp("2025-01-03 00:01:00")]
+        )
+        df_1 = pd.DataFrame(
+            {"col": [1, 1]}, index=[pd.Timestamp("2025-01-03 00:04:00"), pd.Timestamp("2025-01-04 00:01:00")]
+        )
+        df_2 = pd.DataFrame(
+            {"col": [2, 2]}, index=[pd.Timestamp("2025-01-05 22:00:00"), pd.Timestamp("2025-01-05 23:00:00")]
+        )
+        # Write to library using old version
+        compat.old_lib.write(sym, df_0)
+        compat.old_lib.update(sym, df_1, '(pd.Timestamp("2025-01-03 00:00:00"), None)')
+        compat.old_lib.update(sym, df_2, '(pd.Timestamp("2025-01-04 00:00:00"), None)')
+
+        # Resample using current version
+        with compat.current_version() as curr:
+            index_df = curr.lib._nvs.read_index(sym)
+            # We verify the first two rows in the latest index have the broken behavior from the old version.
+            assert len(index_df) == 3
+            assert index_df["end_index"].iloc[0] == pd.Timestamp("2025-01-03 00:00:00")
+            assert index_df["end_index"].iloc[1] == pd.Timestamp("2025-01-04 00:00:00")
+            assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
+
+            df_update = pd.DataFrame(
+                {"col": [3, 3]}, index=[pd.Timestamp("2025-01-02 00:14:00"), pd.Timestamp("2025-01-04 00:00:00")]
+            )
+            curr.lib.update(sym, df_update)
+
+            index_df = curr.lib._nvs.read_index(sym)
+            # After the update intersecting problematic range update ranges are correct
+            assert len(index_df) == 3
+            assert index_df["end_index"].iloc[0] == pd.Timestamp("2025-01-02 00:02:00") + pd.Timedelta(1, unit="ns")
+            assert index_df["end_index"].iloc[1] == pd.Timestamp("2025-01-04 00:00:00") + pd.Timedelta(1, unit="ns")
+            assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
+
+            result_df = curr.lib.read(sym).data
+            expected_df = pd.DataFrame(
+                {"col": [0, 3, 3, 2, 2]}, index=[
+                    pd.Timestamp("2025-01-02 00:02:00"),
+                    pd.Timestamp("2025-01-02 00:14:00"),
+                    pd.Timestamp("2025-01-04 00:00:00"),
+                    pd.Timestamp("2025-01-05 22:00:00"),
+                    pd.Timestamp("2025-01-05 23:00:00"),
+                ]
+            )
+            assert_frame_equal(result_df, expected_df)
+
+
+@pytest.mark.parametrize("date_range", [
+    (pd.Timestamp("2025-01-02 10:00:00"), pd.Timestamp("2025-01-02 12:00:00")), # Empty result within problematic range
+    (pd.Timestamp("2025-01-02 10:00:00"), None), # Intersects problematic range at beginning
+    (None, pd.Timestamp("2025-01-03 10:00:00")), # Intersects with problematic range at end
+])
+def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, date_range):
+    # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
+    # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
+    # instead contained the start of the date_range passed into the update call.
+    # We want to verify C++ truncation within arrow works with the old broken end index values.
+    arctic_uri = s3_ssl_disabled_storage.arctic_uri
+    with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
+        sym = "sym"
+        df_0 = pd.DataFrame(
+            {"col": [0, 0]}, index=[pd.Timestamp("2025-01-02 00:02:00"), pd.Timestamp("2025-01-03 00:01:00")]
+        )
+        df_1 = pd.DataFrame(
+            {"col": [1, 1]}, index=[pd.Timestamp("2025-01-03 00:04:00"), pd.Timestamp("2025-01-04 00:01:00")]
+        )
+        df_2 = pd.DataFrame(
+            {"col": [2, 2]}, index=[pd.Timestamp("2025-01-05 22:00:00"), pd.Timestamp("2025-01-05 23:00:00")]
+        )
+        # Write to library using old version
+        compat.old_lib.write(sym, df_0)
+        compat.old_lib.update(sym, df_1, '(pd.Timestamp("2025-01-03 00:00:00"), None)')
+        compat.old_lib.update(sym, df_2, '(pd.Timestamp("2025-01-04 00:00:00"), None)')
+
+        # Resample using current version
+        with compat.current_version() as curr:
+            index_df = curr.lib._nvs.read_index(sym)
+            # We verify the first two rows in the latest index have the broken behavior from the old version.
+            assert len(index_df) == 3
+            assert index_df["end_index"].iloc[0] == pd.Timestamp("2025-01-03 00:00:00")
+            assert index_df["end_index"].iloc[1] == pd.Timestamp("2025-01-04 00:00:00")
+            assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
+
+            arrow_table = curr.lib._nvs.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+            df = arrow_table.to_pandas()
+            df["index"] = df["index"].apply(lambda x : pd.Timestamp(x))
+            df["index"] = df["index"].astype("datetime64[ns]")
+            df = df.set_index("index")
+            expected_df = curr.lib.read(sym, date_range=date_range).data
+            expected_df.index.name = "index"
+            assert_frame_equal(df, expected_df)
+

@@ -57,12 +57,13 @@ struct MemBlock {
     }
 
     ~MemBlock() {
-        magic_.check();
+        magic_.check(true);
         if(owns_external_data_) {
-            util::check(is_external(), "Cannot free inline allocated block");
-            if(external_data_ != nullptr) {
+            if (is_external()) {
                 log::version().warn("Unexpected release of detachable block memory");
                 delete[] external_data_;
+            } else {
+                log::version().warn("Cannot free inline allocated block");
             }
         }
     }
