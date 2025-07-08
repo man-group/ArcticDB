@@ -1,0 +1,4 @@
+- Accept the tokens (both old and new APIs) and plumb through
+- Deprecate write with parallel=True or incomplete=True
+- When happy: docs, especially about the upgrade path
+- Compat tests to check that master can unpickle keys written by this binary
