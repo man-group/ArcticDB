@@ -250,7 +250,7 @@ def test_really_large_symbol_for_recursive_data(basic_store, read):
     write_vit = basic_store.write(sym, data, recursive_normalizers=True)
     fl = Flattener()
     metastruct, to_write = fl.create_meta_structure(data, "s" * 100)
-    assert len(list(to_write.keys())[0]) < adb_stream.MAX_SYMBOL_LENGTH
+    assert len(list(to_write.keys())[0]) < fl.MAX_KEY_LENGTH
     read_vit = read(basic_store, sym)
     equals(read_vit.data, data)
     assert read_vit.symbol == sym
