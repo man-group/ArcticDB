@@ -10,7 +10,6 @@
 #include <folly/gen/Base.h>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/entity/serialized_key.hpp>

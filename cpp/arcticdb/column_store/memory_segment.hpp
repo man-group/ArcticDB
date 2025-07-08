@@ -8,9 +8,6 @@
 #pragma once
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/column_store/column.hpp>
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/entity/output_format.hpp>
 

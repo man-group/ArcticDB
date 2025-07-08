@@ -10,7 +10,6 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/codec/protobuf_mappings.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
 namespace arcticdb::storage::memory {
@@ -132,7 +131,9 @@ bool MemoryStorage::do_iterate_type_until_match(KeyType key_type,
                                                 const std::string& prefix) {
     ARCTICDB_SAMPLE(MemoryStorageItType, 0)
     auto& key_vec = data_[key_type];
-    auto prefix_matcher = stream_id_prefix_matcher(prefix);
+    auto prefix_matcher = [&prefix](const StreamId& id) {
+        return prefix.empty() || (std::holds_alternative<std::string>(id) &&
+        std::get<std::string>(id).compare(0u, prefix.size(), prefix) == 0); };
 
     for (auto& key_value : key_vec) {
         auto key = key_value.first;

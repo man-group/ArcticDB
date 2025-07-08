@@ -168,4 +168,16 @@ VariantData dispatch_binary(const VariantData& left, const VariantData& right, O
     }
 }
 
+template VariantData visit_binary_operator<TimesOperator>(const VariantData&, const VariantData&, TimesOperator&&);
+template VariantData visit_binary_operator<PlusOperator>(const VariantData&, const VariantData&, PlusOperator&&);
+template VariantData visit_binary_operator<MinusOperator>(const VariantData&, const VariantData&, MinusOperator&&);
+template VariantData visit_binary_operator<DivideOperator>(const VariantData&, const VariantData&, DivideOperator&&);
+template VariantData visit_binary_comparator<EqualsOperator>(const VariantData&, const VariantData&, EqualsOperator&&);
+template VariantData visit_binary_comparator<NotEqualsOperator>(const VariantData&, const VariantData&, NotEqualsOperator&&);
+template VariantData visit_binary_comparator<LessThanOperator>(const VariantData&, const VariantData&, LessThanOperator&&);
+template VariantData visit_binary_comparator<LessThanEqualsOperator>(const VariantData&, const VariantData&, LessThanEqualsOperator&&);
+template VariantData visit_binary_comparator<GreaterThanOperator>(const VariantData&, const VariantData&, GreaterThanOperator&&);
+template VariantData visit_binary_comparator<GreaterThanEqualsOperator>(const VariantData&, const VariantData&, GreaterThanEqualsOperator&&);
+template VariantData visit_binary_membership<IsInOperator>(const VariantData&, const VariantData&, IsInOperator&&);
+template VariantData visit_binary_membership<IsNotInOperator>(const VariantData&, const VariantData&, IsNotInOperator&&);
 }

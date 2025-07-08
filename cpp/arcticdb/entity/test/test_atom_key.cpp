@@ -73,17 +73,6 @@ TEST(Key, Basic) {
     ASSERT_EQ(build_numeric_key_string_index, string_index_from_bytes);
 }
 
-TEST(Key, StringViewable) {
-    using namespace arcticdb::storage;
-
-    DefaultStringViewable sv{"toto"};
-    DefaultStringViewable sv2{"toto"};
-
-    ASSERT_EQ(sv.hash(), sv2.hash());
-    ASSERT_EQ(sv, sv2);
-
-}
-
 TEST(Key, Library) {
     using namespace arcticdb::storage;
 

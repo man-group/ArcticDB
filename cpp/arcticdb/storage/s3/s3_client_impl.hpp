@@ -8,6 +8,7 @@
 #pragma once
 
 #include <aws/s3/S3Client.h>
+#include <folly/futures/Future.h>
 
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
 
@@ -17,7 +18,6 @@
 #include <arcticdb/util/buffer_pool.hpp>
 
 #include <arcticdb/storage/object_store_utils.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>

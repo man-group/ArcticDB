@@ -10,7 +10,6 @@
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
 
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_impl.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>

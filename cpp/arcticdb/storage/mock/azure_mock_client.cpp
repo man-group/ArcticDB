@@ -4,7 +4,6 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/storage/mock/azure_mock_client.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>

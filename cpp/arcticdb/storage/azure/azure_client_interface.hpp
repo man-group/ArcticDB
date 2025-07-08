@@ -10,8 +10,7 @@
 #include <azure/core/http/curl_transport.hpp>
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
-
-#include <arcticdb/storage/storage_utils.hpp>
+#include <arcticdb/codec/segment.hpp>
 
 
 namespace arcticdb::storage::azure {

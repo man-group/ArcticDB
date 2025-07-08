@@ -11,7 +11,6 @@
 #include <azure/core.hpp>
 #include <azure/storage/blobs.hpp>
 
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 
 namespace arcticdb::storage::azure {

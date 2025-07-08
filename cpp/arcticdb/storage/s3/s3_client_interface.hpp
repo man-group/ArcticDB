@@ -8,6 +8,7 @@
 #pragma once
 
 #include <aws/s3/S3Errors.h>
+#include <folly/futures/Future.h>
 
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
@@ -15,7 +16,6 @@
 #include <arcticdb/util/buffer_pool.hpp>
 
 #include <arcticdb/storage/object_store_utils.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>

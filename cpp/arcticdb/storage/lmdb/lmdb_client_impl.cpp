@@ -10,7 +10,6 @@
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/lmdb/lmdb_client_impl.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/lmdb/lmdb.hpp>
 
 namespace arcticdb::storage::lmdb {
@@ -75,7 +74,9 @@ std::vector<VariantKey> RealLmdbClient::list(const std::string&, const std::stri
         return {};
     }
 
-    auto prefix_matcher = stream_id_prefix_matcher(prefix);
+    auto prefix_matcher = [&prefix](const StreamId& id) {
+        return prefix.empty() || (std::holds_alternative<std::string>(id) &&
+        std::get<std::string>(id).compare(0u, prefix.size(), prefix) == 0); };
     std::vector<VariantKey> found_keys;
     do {
         auto k = variant_key_from_bytes(

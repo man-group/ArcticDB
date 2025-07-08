@@ -14,7 +14,6 @@
 #include <arcticdb/util/buffer_pool.hpp>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/serialized_key.hpp>

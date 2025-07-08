@@ -8,7 +8,6 @@
 #pragma once
 
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
@@ -302,7 +301,9 @@ public:
     }
 
     void iterate_type(KeyType kt, const entity::IterateTypeVisitor& func, const std::string& prefix = "") override {
-        auto prefix_matcher = stream_id_prefix_matcher(prefix);
+        auto prefix_matcher = [&prefix](const StreamId& id) {
+            return prefix.empty() || (std::holds_alternative<std::string>(id) &&
+            std::get<std::string>(id).compare(0u, prefix.size(), prefix) == 0); };
         auto failure_sim = StorageFailureSimulator::instance();
 
         std::lock_guard lock{mutex_};

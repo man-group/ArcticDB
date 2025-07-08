@@ -12,7 +12,6 @@
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>

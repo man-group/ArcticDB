@@ -18,7 +18,6 @@
 #include <arcticdb/util/buffer_pool.hpp>
 
 #include <arcticdb/storage/object_store_utils.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/exponential_backoff.hpp>
 #include <arcticdb/util/configs_map.hpp>

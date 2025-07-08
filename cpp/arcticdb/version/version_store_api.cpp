@@ -12,7 +12,6 @@
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>
 #include <arcticdb/util/name_validation.hpp>
 
@@ -339,6 +338,40 @@ std::optional<google::protobuf::Any> get_user_meta_proto(const py::object &user_
     output.PackFrom(user_meta_proto);
     return output;
 }
+
+std::vector<VariantKey> filter_keys_on_existence(
+    const std::vector<VariantKey>& keys,
+    const std::shared_ptr<Store>& store,
+    bool pred
+    ){
+    auto key_existence = folly::collect(store->batch_key_exists(keys)).get();
+    std::vector<VariantKey> res;
+    for (size_t i = 0; i != keys.size(); i++) {
+        if (key_existence[i] == pred) {
+            res.push_back(keys[i]);
+        }
+    }
+    return res;
+}
+
+void filter_keys_on_existence(std::vector<AtomKey>& keys, const std::shared_ptr<Store>& store, bool pred) {
+    std::vector<VariantKey> var_vector;
+    var_vector.reserve(keys.size());
+    rng::copy(keys, std::back_inserter(var_vector));
+
+    auto key_existence = store->batch_key_exists(var_vector);
+
+    auto keys_itr = keys.begin();
+    for (size_t i = 0; i != var_vector.size(); i++) {
+        bool resolved = key_existence[i].wait().value();
+        if (resolved == pred) {
+            *keys_itr = std::move(std::get<AtomKey>(var_vector[i]));
+            ++keys_itr;
+        }
+    }
+    keys.erase(keys_itr, keys.end());
+}
+
 
 void PythonVersionStore::add_to_snapshot(
     const SnapshotId& snap_name,

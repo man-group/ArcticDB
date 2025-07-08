@@ -324,7 +324,6 @@ set(arcticdb_srcs
         storage/storage.hpp
         storage/storage_override.hpp
         storage/store.hpp
-        storage/storage_utils.hpp
         stream/aggregator.hpp
         stream/aggregator-inl.hpp
         stream/incompletes.hpp
@@ -478,16 +477,6 @@ set(arcticdb_srcs
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
-        processing/operation_dispatch_binary_eq.cpp
-        processing/operation_dispatch_binary_neq.cpp
-        processing/operation_dispatch_binary_gt.cpp
-        processing/operation_dispatch_binary_gte.cpp
-        processing/operation_dispatch_binary_lt.cpp
-        processing/operation_dispatch_binary_lte.cpp
-        processing/operation_dispatch_binary_operator_plus.cpp
-        processing/operation_dispatch_binary_operator_minus.cpp
-        processing/operation_dispatch_binary_operator_times.cpp
-        processing/operation_dispatch_binary_operator_divide.cpp
         processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp
@@ -518,7 +507,6 @@ set(arcticdb_srcs
         storage/s3/s3_client_wrapper.cpp
         storage/s3/s3_client_wrapper.hpp
         storage/storage_factory.cpp
-        storage/storage_utils.cpp
         stream/aggregator.cpp
         stream/incompletes.cpp
         stream/index.cpp

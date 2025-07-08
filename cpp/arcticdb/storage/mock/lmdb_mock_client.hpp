@@ -13,7 +13,6 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/mock/storage_mock_client.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 
 namespace arcticdb::storage::lmdb {
 
