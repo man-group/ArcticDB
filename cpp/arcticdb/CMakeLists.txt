@@ -477,6 +477,16 @@ set(arcticdb_srcs
         processing/expression_node.cpp
         processing/operation_dispatch.cpp
         processing/operation_dispatch_unary.cpp
+        processing/operation_dispatch_binary_eq.cpp
+        processing/operation_dispatch_binary_neq.cpp
+        processing/operation_dispatch_binary_gt.cpp
+        processing/operation_dispatch_binary_gte.cpp
+        processing/operation_dispatch_binary_lt.cpp
+        processing/operation_dispatch_binary_lte.cpp
+        processing/operation_dispatch_binary_operator_plus.cpp
+        processing/operation_dispatch_binary_operator_minus.cpp
+        processing/operation_dispatch_binary_operator_times.cpp
+        processing/operation_dispatch_binary_operator_divide.cpp
         processing/operation_dispatch_binary.cpp
         processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp

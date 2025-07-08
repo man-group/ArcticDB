@@ -7,10 +7,12 @@
 #pragma once
 
 #include <sparrow/sparrow.hpp>
-#include <sparrow/record_batch.hpp>
 
 #include <vector>
 #include <memory>
+namespace sparrow {
+class record_batch;
+}
 
 namespace arcticdb {
 

@@ -6,6 +6,8 @@
 */
 
 
+#include <sparrow/sparrow.hpp>
+#include <sparrow/record_batch.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 
