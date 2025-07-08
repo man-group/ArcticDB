@@ -1130,7 +1130,7 @@ def test_update_times(basic_store):
 
 
 @pytest.mark.storage
-@pytest.mark.parametrize("index_names", [("blah", None), (None, None), (None, "blah"), ("blah1", "blah2")])
+@pytest.mark.parametrize("index_names", [("blah", None), (None, None), (None, "blah"), ("blah1", "blah2"), ("col1", "col2"), ("col1", "col1")])
 def test_get_info_multi_index(basic_store, index_names):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=3)
     vals = np.arange(3, dtype=np.uint32)
@@ -1142,7 +1142,9 @@ def test_get_info_multi_index(basic_store, index_names):
     assert int(info["rows"]) == 3
     assert info["type"] == "pandasdf"
     assert info["col_names"]["columns"] == ["col1"]
-    assert len(info["col_names"]["index"]) == 2
+    actual_index_names = info["col_names"]["index"]
+    assert len(actual_index_names) == 2
+    assert actual_index_names == list(index_names)
     assert info["index_type"] == "multi_index"
 
 

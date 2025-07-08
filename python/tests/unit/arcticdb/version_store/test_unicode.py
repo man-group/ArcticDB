@@ -305,7 +305,7 @@ def test_get_info(lmdb_version_store, batch):
         for sym, df in [("sym_1", df_1), ("sym_2", df_2)]:
             res = lmdb_version_store.get_info(sym)
             assert list(df.columns) == res["col_names"]["columns"]
-            assert res["col_names"]["index"] == [unicode_str]  # index names are not exposed by get_info, seems to be a bug 8667920777
+            assert res["col_names"]["index"] == [unicode_str]
 
 
 def sample_nested_structures():
