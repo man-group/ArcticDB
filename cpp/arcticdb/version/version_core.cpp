@@ -341,11 +341,9 @@ static UpdateRanges compute_update_ranges(
                 // If there are no new keys, then we can't intersect with the existing data.
                 return UpdateRanges{{}, {}, update_frame.index_range};
             }
-            IndexRange back_range = update_slice_and_keys.back().key().index_range();
-            back_range.adjust_open_closed_interval();
             return UpdateRanges{
                 update_slice_and_keys.front().key().index_range(),
-                std::move(back_range),
+                update_slice_and_keys.back().key().index_range(),
                 update_frame.index_range};
         },
         [&](const IndexRange& idx_range) {

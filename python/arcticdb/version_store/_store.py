@@ -824,7 +824,7 @@ class NativeVersionStore:
             If a range is specified, it will clear/delete the data within the
             range and overwrite it with the data in `data`. This allows the user
             to update with data that might only be a subset of the
-            original data.
+            original data. Note date_range is end-inclusive.
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
@@ -1932,10 +1932,11 @@ class NativeVersionStore:
             `str` : snapshot name which contains the version
             `datetime.datetime` : the version of the data that existed as_of the requested point in time
         date_range: `Optional[DateRangeInput]`, default=None
-            DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-            of the data that falls within the given range. The same effect can be achieved by using the date_range
-            clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
-            See the QueryBuilder.date_range docstring for more details.
+            DateRange to read data for. Inclusive both for lower and upper bounds. Applicable only for dataframes with
+            a DateTime index. Returns only the part of the data that falls within the given range.
+            The same effect can  be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
             Only one of date_range or row_range can be provided.
         row_range: `Optional[Tuple[int, int]]`, default=None
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
@@ -1943,7 +1944,7 @@ class NativeVersionStore:
             the handling of negative start/end values.
             Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
-            Applicable only for Pandas data. Determines which columns to return data for.
+            Applicable only for dataframes. Determines which columns to return data for.
         query_builder: 'Optional[QueryBuilder]', default=None
             A QueryBuilder object to apply to the dataframe before it is returned.
             For more information see the documentation for the QueryBuilder class.
