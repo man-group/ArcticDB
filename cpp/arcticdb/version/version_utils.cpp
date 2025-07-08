@@ -24,8 +24,8 @@ VariantKey write_multi_index_entry(
     std::shared_ptr<StreamSink> store,
     std::vector<AtomKey> &keys,
     const StreamId &stream_id,
-    const py::object &metastruct,
-    const py::object &user_meta,
+    std::optional<google::protobuf::Any> metastruct,
+    std::optional<google::protobuf::Any> user_meta,
     VersionId version_id
 ) {
     ARCTICDB_SAMPLE(WriteJournalEntry, 0)
@@ -46,15 +46,17 @@ VariantKey write_multi_index_entry(
     }
     TimeseriesDescriptor timeseries_descriptor;
 
-    if (!metastruct.is_none()) {
-        arcticdb::proto::descriptors::UserDefinedMetadata multi_key_proto;
-        python_util::pb_from_python(metastruct, multi_key_proto);
-        timeseries_descriptor.set_multi_key_metadata(std::move(multi_key_proto));
+    if (metastruct) {
+        arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
+        if (metastruct->UnpackTo(&multi_key_meta)) {
+            timeseries_descriptor.set_multi_key_metadata(std::move(multi_key_meta));
+        }
     }
-    if (!user_meta.is_none()) {
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        python_util::pb_from_python(user_meta, user_meta_proto);
-        timeseries_descriptor.set_user_metadata(std::move(user_meta_proto));
+    if (user_meta) {
+        arcticdb::proto::descriptors::UserDefinedMetadata user_metadata;
+        if (user_meta->UnpackTo(&user_metadata)) {
+            timeseries_descriptor.set_user_metadata(std::move(user_metadata));
+        }
     }
     multi_index_agg.set_timeseries_descriptor(timeseries_descriptor);
     multi_index_agg.commit();

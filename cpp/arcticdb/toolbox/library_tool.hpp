@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <pybind11/pybind11.h>
-
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/variant_key.hpp>

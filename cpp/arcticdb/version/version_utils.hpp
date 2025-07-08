@@ -13,7 +13,6 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 
 #include <utility>
@@ -26,8 +25,8 @@ VariantKey write_multi_index_entry(
     std::shared_ptr<StreamSink> store,
     std::vector<AtomKey> &keys,
     const StreamId &stream_id,
-    const py::object &metastruct,
-    const py::object &user_meta,
+    std::optional<google::protobuf::Any> metastruct,
+    std::optional<google::protobuf::Any> user_meta,
     VersionId version_id
 );
 

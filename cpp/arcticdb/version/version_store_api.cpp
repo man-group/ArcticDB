@@ -612,7 +612,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     auto release_gil = std::make_unique<py::gil_scoped_release>();
     auto index_keys = folly::collect(batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)).get();
     release_gil.reset();
-    auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
+    auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, get_user_meta_proto(metastruct), get_user_meta_proto(user_meta), version_id);
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);
 

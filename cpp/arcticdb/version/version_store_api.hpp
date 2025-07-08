@@ -10,8 +10,7 @@
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <pybind11/pybind11.h>
-#include <arcticdb/python/python_utils.hpp>
+
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/snapshot.hpp>
@@ -24,6 +23,12 @@
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/entity/read_result.hpp>
+
+// forward declarations
+namespace pybind11 {
+    class object;
+    class tuple;
+}
 
 namespace arcticdb::version_store {
 

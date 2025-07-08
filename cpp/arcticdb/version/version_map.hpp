@@ -25,7 +25,6 @@
 #include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/storage/storage.hpp>
