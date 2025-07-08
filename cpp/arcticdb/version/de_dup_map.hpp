@@ -19,9 +19,7 @@ using namespace arcticdb::entity;
 class DeDupMap {
 public:
     DeDupMap() = default;
-    ~DeDupMap() = default;
-    DeDupMap(const DeDupMap&) = delete;
-    DeDupMap& operator=(const DeDupMap&) = delete;
+    ARCTICDB_NO_COPY(DeDupMap);
 
     [[nodiscard]] std::optional<AtomKey> get_key_if_present(const AtomKey &key) const {
         const auto de_dup_candidates = de_dup_map_.find(key.content_hash());
@@ -35,7 +33,7 @@ public:
                                                      return k.start_index() == key.start_index() &&
                                                             k.end_index() == key.end_index();
                                                  });
-        return key_iterator != de_dup_candidates->second.end() ? std::optional{*key_iterator} : std::nullopt;
+        return key_iterator == de_dup_candidates->second.end() ? std::nullopt : std::optional{*key_iterator};
     }
 
     void insert_key(const AtomKey &key) {
