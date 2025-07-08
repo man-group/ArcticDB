@@ -59,10 +59,6 @@ struct RowRange : AxisRange {
     using AxisRange::AxisRange;
 };
 
-inline bool contains(const RowRange& range, size_t row) {
-    return row >= range.first && row <= range.second;
-}
-
  /*
  * This class is mostly (exclusively?) used in SliceAndKey objects, where the duplication of the StreamDescriptor
  * with the SegmentInMemory is confusing and error-prone. Where possible do not add more uses of this class and
