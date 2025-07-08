@@ -15,6 +15,7 @@
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
+#include <arcticdb/codec/segment_header.hpp>
 
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <arcticdb/codec/encode_common.hpp>

@@ -207,6 +207,7 @@ set(arcticdb_srcs
         column_store/column_data.hpp
         column_store/column_data_random_accessor.hpp
         column_store/column.hpp
+        column_store/column_impl.inl
         column_store/column_utils.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp

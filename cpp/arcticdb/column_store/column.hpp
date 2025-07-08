@@ -643,26 +643,12 @@ public:
     }
 
     template<typename T>
-    std::optional<T> scalar_at(position_t row) const {
-        auto physical_row = get_physical_row(row);
-        if(!physical_row)
-            return std::nullopt;
-
-        return *data_.buffer().ptr_cast<T>(bytes_offset(*physical_row), sizeof(T));
-    }
+    std::optional<T> scalar_at(position_t row) const;
 
     // Copies all physical scalars to a std::vector<T>. This is useful if you require many random access operations
     // and you would like to avoid the overhead of computing the exact location every time.
     template<typename T>
-    std::vector<T> clone_scalars_to_vector() const {
-        auto values = std::vector<T>();
-        values.reserve(row_count());
-        const auto& buffer = data_.buffer();
-        for (auto i=0u; i<row_count(); ++i){
-            values.push_back(*buffer.ptr_cast<T>(i*item_size(), sizeof(T)));
-        }
-        return values;
-    }
+    std::vector<T> clone_scalars_to_vector() const;
 
     // N.B. returning a value not a reference here, so it will need to be pre-checked when data is sparse or it
     // will likely 'splode.
@@ -1142,3 +1128,4 @@ inline JiveTable create_jive_table(const std::vector<std::shared_ptr<Column>>& c
 }
 
 } //namespace arcticdb
+#include "column_impl.inl"
