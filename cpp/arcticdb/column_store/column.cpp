@@ -522,6 +522,48 @@ bool Column::is_inflated() const {
     return inflated_;
 }
 
+std::optional<Column::StringArrayData> Column::string_array_at(position_t idx, const StringPool &string_pool) {
+    util::check_arg(idx < row_count(), "Index {} out of bounds for column with {} rows", idx, row_count());
+    
+    if (is_sparse() && !has_value_at(idx)) {
+        return std::nullopt;
+    }
+    
+    auto tensor_data = tensor_at<position_t>(idx);
+    if (!tensor_data) {
+        return std::nullopt;
+    }
+    
+    const auto& string_refs = tensor_data.value();
+    if (string_refs.size() == 0) {
+        return StringArrayData(0, 0, nullptr);
+    }
+    
+    // For fixed-size string arrays, all strings have the same size
+    auto first_offset = string_refs.at(0);
+    if (first_offset == not_a_string() || first_offset == nan_placeholder()) {
+        return std::nullopt;
+    }
+    
+    auto first_string = string_pool.get_const_view(first_offset);
+    auto string_size = first_string.size();
+    
+    // Verify all strings have the same size (for fixed-size arrays)
+    for (int i = 1; i < string_refs.size(); ++i) {
+        auto offset = string_refs.at(i);
+        if (offset == not_a_string() || offset == nan_placeholder()) {
+            return std::nullopt;
+        }
+        auto str = string_pool.get_const_view(offset);
+        if (str.size() != string_size) {
+            return std::nullopt;
+        }
+    }
+    
+    // Return the first string's data pointer as the base
+    return StringArrayData(string_refs.size(), string_size, first_string.data());
+}
+
 void Column::change_type(DataType target_type) {
     util::check(shapes_.empty(), "Can't change type on multi-dimensional column with type {}", type_);
     if(type_.data_type() == target_type)

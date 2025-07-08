@@ -12,6 +12,7 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/version/snapshot.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/storage_lock.hpp>

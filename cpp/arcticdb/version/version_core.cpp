@@ -8,6 +8,7 @@
 #include <folly/futures/FutureSplitter.h>
 
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -1922,7 +1923,7 @@ VersionedItem compact_incomplete_impl(
         options.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
         );
 
-    CompactionResult result = util::variant_match(std::move(policies), [&] (auto &&idx, auto &&schema, auto &&column_policy) {
+    CompactionResult result = util::variant_match(std::move(policies), [&] (auto &&idx, auto &&schema, auto &&column_policy) -> CompactionResult {
         using IndexType = std::remove_reference_t<decltype(idx)>;
         using SchemaType = std::remove_reference_t<decltype(schema)>;
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
@@ -2035,7 +2036,7 @@ VersionedItem defragment_symbol_data_impl(
         );
 
     CompactionResult result = util::variant_match(std::move(policies), [
-        &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) {
+        &slices, &store, &options, &pre_defragmentation_info, segment_size=segment_size] (auto &&idx, auto &&schema) -> CompactionResult {
         pre_defragmentation_info.read_query->clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{pre_defragmentation_info.append_after.value()}));
         auto segments = read_process_and_collect(store, pre_defragmentation_info.pipeline_context,
                                                  pre_defragmentation_info.read_query,

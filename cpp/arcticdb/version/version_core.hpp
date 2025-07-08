@@ -7,23 +7,22 @@
 
 #pragma once
 
-#include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/write_options.hpp>
-#include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/stream/incompletes.hpp>
-#include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
-#include <arcticdb/version/schema_checks.hpp>
 
 #include <string>
+
+namespace arcticdb {
+    struct VersionedItem;
+    struct WriteOptions;
+    struct ReadOptions;
+    class ColumnStats;
+    namespace pipelines {
+        struct PipelineContext;
+    }
+}
 
 namespace arcticdb::version_store {
 
@@ -312,80 +311,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     std::vector<pipelines::FrameSlice>& slices,
     const std::shared_ptr<Store>& store,
     std::optional<size_t> segment_size,
-    const CompactionOptions& options) {
-    CompactionResult result;
-    auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
-
-    std::vector<folly::Future<VariantKey>> write_futures;
-
-    auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
-    stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
-        aggregator{
-        [&slices](pipelines::FrameSlice &&slice) {
-            slices.emplace_back(std::move(slice));
-        },
-        SchemaType{pipeline_context->descriptor(), index},
-        [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory &&segment) {
-            auto local_index_start = IndexType::start_value_for_segment(segment);
-            auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
-            stream::StreamSink::PartialKey
-                pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
-
-            write_futures.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore));
-        },
-        segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
-    };
-
-    [[maybe_unused]] size_t count = 0;
-    for (auto it = to_compact_start; it != to_compact_end; ++it) {
-        auto sk = [&it]() {
-            if constexpr (std::is_same_v<IteratorType, pipelines::PipelineContext::iterator>)
-                return it->slice_and_key();
-            else
-                return *it;
-        }();
-        if (sk.slice().rows().diff() == 0) {
-            continue;
-        }
-
-        const SegmentInMemory& segment = sk.segment(store);
-        ARCTICDB_DEBUG(log::version(), "do_compact Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
-                       pipeline_context->stream_id_, count++, segment.row_count(), segment.columns().size(), segment.descriptor().uncompressed_bytes());
-
-        if(!index_names_match(segment.descriptor(), pipeline_context->descriptor())) {
-            auto written_keys = folly::collect(write_futures).get();
-            remove_written_keys(store.get(), std::move(written_keys));
-            return Error{throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>, fmt::format("Index names in segment {} and pipeline context {} do not match", segment.descriptor(), pipeline_context->descriptor())};
-        }
-
-        if(options.validate_index && is_segment_unsorted(segment)) {
-            auto written_keys = folly::collect(write_futures).get();
-            remove_written_keys(store.get(), std::move(written_keys));
-            return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
-        }
-
-        if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
-            if (options.perform_schema_checks) {
-                CheckOutcome outcome = check_schema_matches_incomplete(segment.descriptor(), pipeline_context->descriptor(), options.convert_int_to_float);
-                if (std::holds_alternative<Error>(outcome)) {
-                    auto written_keys = folly::collect(write_futures).get();
-                    remove_written_keys(store.get(), std::move(written_keys));
-                    return std::get<Error>(std::move(outcome));
-                }
-            }
-        }
-
-        aggregator.add_segment(
-            std::move(sk.segment(store)),
-            sk.slice(),
-            options.convert_int_to_float
-        );
-        sk.unset_segment();
-    }
-
-    aggregator.commit();
-    return folly::collect(std::move(write_futures)).get();
-}
+    const CompactionOptions& options);
 
 }
 

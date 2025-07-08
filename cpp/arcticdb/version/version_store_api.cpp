@@ -14,7 +14,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>
 #include <arcticdb/util/name_validation.hpp>
-
+#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
