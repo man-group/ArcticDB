@@ -117,7 +117,7 @@ jobs:
           git config --global --add safe.directory /__w/ArcticDB/ArcticDB
           git config --global user.name "${GITHUB_ACTOR}"
           git config --global user.email "${GITHUB_ACTOR_ID}+${GITHUB_ACTOR}@users.noreply.github.com"
-          python build_tooling/transform_asv_results.py --mode extract
+          python build_tooling/transform_asv_results.py --mode extract --parallel
           python -m asv publish -v
           python -m asv gh-pages -v --rewrite
   

@@ -125,7 +125,7 @@ jobs:
         shell: bash -el {0}
         run: |
           pip install arcticdb[Testing] "protobuf<6"
-          python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
+          python build_tooling/transform_asv_results.py --mode save --parallel ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_commit]

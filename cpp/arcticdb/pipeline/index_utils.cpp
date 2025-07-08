@@ -201,3 +201,14 @@ uint32_t required_fields_count(
 }
 
 } //namespace arcticdb::pipelines::index
+
+// Explicit template instantiations
+namespace arcticdb::pipelines::index {
+    template IndexValue index_value_from_segment<SegmentInMemory, Fields>(const SegmentInMemory& seg, size_t row_id, Fields field);
+    template IndexValue index_start_from_segment<SegmentInMemory, Fields>(const SegmentInMemory& seg, size_t row_id);
+    template IndexValue index_end_from_segment<SegmentInMemory, Fields>(const SegmentInMemory& seg, size_t row_id);
+    
+    template IndexValue index_value_from_segment<SegmentInMemory, LegacyFields>(const SegmentInMemory& seg, size_t row_id, LegacyFields field);
+    template IndexValue index_start_from_segment<SegmentInMemory, LegacyFields>(const SegmentInMemory& seg, size_t row_id);
+    template IndexValue index_end_from_segment<SegmentInMemory, LegacyFields>(const SegmentInMemory& seg, size_t row_id);
+}

@@ -15,6 +15,10 @@ import json
 from pathlib import Path
 from arcticdb import Arctic
 from argparse import ArgumentParser
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from functools import partial
+import os
 
 
 def setup_machine_folder(json_data, machine_path):
@@ -110,18 +114,42 @@ def save_asv_results(lib, json_path):
         lib.write(commit_hash, df)
 
 
-def extract_asv_results(lib, json_path):
+def extract_asv_results(lib, json_path, parallel=False, num_processes=None):
     syms = lib.list_symbols()
 
-    for sym in syms:
-        print(f"Processing {sym}...")
-        results_df = lib.read(sym).data
-        json_data = df_to_asv_json(results_df)
-        full_json_path = get_result_json_path(json_path, sym, json_data)
+    if not parallel:
+        # Original sequential processing
+        for sym in syms:
+            print(f"Processing {sym}...")
+            results_df = lib.read(sym).data
+            json_data = df_to_asv_json(results_df)
+            full_json_path = get_result_json_path(json_path, sym, json_data)
 
-        print(f"Writing {full_json_path}...")
-        with open(full_json_path, "w") as out:
-            json.dump(json_data, out, indent=4, default=str)
+            print(f"Writing {full_json_path}...")
+            with open(full_json_path, "w") as out:
+                json.dump(json_data, out, indent=4, default=str)
+    else:
+        # Parallel processing
+        if num_processes is None:
+            num_processes = min(32, (os.cpu_count() or 1) * 2)  # Reasonable default for I/O bound tasks
+
+        print(f"Processing {len(syms)} symbols using {num_processes} threads...")
+
+        # Create arguments for each symbol
+        args_list = [(sym, lib, json_path) for sym in syms]
+
+        # Use ThreadPoolExecutor for parallel processing
+        with ThreadPoolExecutor(max_workers=num_processes) as executor:
+            futures = {executor.submit(process_single_symbol, args): args[0] for args in args_list}
+            for future in as_completed(futures):
+                sym = futures[future]
+                try:
+                    result = future.result()
+                    print(f"Completed processing {result}")
+                except Exception as e:
+                    print(f"Error processing {sym}: {e}")
+
+        print(f"Completed processing {len(syms)} symbols")
 
 
 def get_result_json_path(json_path, sym, json_data):
@@ -134,6 +162,20 @@ def get_result_json_path(json_path, sym, json_data):
     result_json_name = f"{sym}-{env_name}.json"
     full_json_path = json_path / machine / result_json_name
     return full_json_path
+
+
+def process_single_symbol(args):
+    """Helper function to process a single symbol - used for parallelization"""
+    sym, lib, json_path = args
+    print(f"Processing {sym}...")
+    results_df = lib.read(sym).data
+    json_data = df_to_asv_json(results_df)
+    full_json_path = get_result_json_path(json_path, sym, json_data)
+
+    print(f"Writing {full_json_path}...")
+    with open(full_json_path, "w") as out:
+        json.dump(json_data, out, indent=4, default=str)
+    return sym
 
 
 if __name__ == "__main__":
@@ -157,6 +199,17 @@ if __name__ == "__main__":
         "--mode",
         help="Mode to run the script in, either 'save' or 'extract', used to save or extract the results",
     )
+    parser.add_argument(
+        "--parallel",
+        action="store_true",
+        help="Enable parallel processing for extract mode",
+    )
+    parser.add_argument(
+        "--num_processes",
+        type=int,
+        default=None,
+        help="Number of threads to use for parallel processing (defaults to min(32, CPU_count * 2))",
+    )
 
     args = parser.parse_args()
     json_path = Path(args.results_path)
@@ -165,6 +218,6 @@ if __name__ == "__main__":
     if args.mode == "save":
         save_asv_results(results_lib, json_path)
     elif args.mode == "extract":
-        extract_asv_results(results_lib, json_path)
+        extract_asv_results(results_lib, json_path, parallel=args.parallel, num_processes=args.num_processes)
     else:
         raise ValueError(f"Invalid mode {args.mode}, must be 'save' or 'extract'")
