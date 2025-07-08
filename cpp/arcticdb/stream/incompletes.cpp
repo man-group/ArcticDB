@@ -10,8 +10,9 @@
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <pipeline/frame_slice.hpp>
-#include <util/key_utils.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/util/name_validation.hpp>
+#include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <iterator>
 #include <arcticdb/pipeline/slicing.hpp>

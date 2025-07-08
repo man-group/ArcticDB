@@ -251,7 +251,7 @@ MongoStorage::MongoStorage(
     db_ = fmt::format("arcticc_{}", *it++);
     std::ostringstream strm;
     for (; it != key_rg.end(); ++it) {
-        strm << *it->get() << "__";
+        strm << *it << "__";
     }
     prefix_ = strm.str();
 }

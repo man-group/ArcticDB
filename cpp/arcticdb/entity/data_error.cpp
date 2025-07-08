@@ -6,6 +6,8 @@
  */
 
 #include <arcticdb/entity/data_error.hpp>
+#include <arcticdb/util/variant.hpp>
+#include <arcticdb/pipeline/query.hpp>
 
 #include <fmt/format.h>
 

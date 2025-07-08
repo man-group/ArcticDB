@@ -14,6 +14,7 @@
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>
+#include <arcticdb/util/name_validation.hpp>
 
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
@@ -328,6 +329,17 @@ std::vector<std::pair<SnapshotId, py::object>> PythonVersionStore::list_snapshot
     return snap_ids;
 }
 
+std::optional<google::protobuf::Any> get_user_meta_proto(const py::object &user_meta) {
+    if (user_meta.is_none()) {
+        return std::nullopt;
+    }
+    arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
+    google::protobuf::Any output = {};
+    python_util::pb_from_python(user_meta, user_meta_proto);
+    output.PackFrom(user_meta_proto);
+    return output;
+}
+
 void PythonVersionStore::add_to_snapshot(
     const SnapshotId& snap_name,
     const std::vector<StreamId>& stream_ids,
@@ -379,7 +391,8 @@ void PythonVersionStore::add_to_snapshot(
             log_delete_snapshot(store(), snap_name);
         }
     }
-    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
+
+    write_snapshot_entry(store(), retained_keys, snap_name, get_user_meta_proto(user_meta), version_map()->log_changes());
 }
 
 void PythonVersionStore::remove_from_snapshot(
@@ -421,7 +434,7 @@ void PythonVersionStore::remove_from_snapshot(
             log_delete_snapshot(store(), snap_name);
         }
     }
-    write_snapshot_entry(store(), retained_keys, snap_name, user_meta, version_map()->log_changes());
+    write_snapshot_entry(store(), retained_keys, snap_name, get_user_meta_proto(user_meta), version_map()->log_changes());
 }
 
 void PythonVersionStore::verify_snapshot(const SnapshotId& snap_name) {
@@ -495,7 +508,7 @@ void PythonVersionStore::snapshot(
     }
 
     ARCTICDB_DEBUG(log::version(), "Total Index keys in snapshot={}", index_keys.size());
-    write_snapshot_entry(store(), index_keys, snap_name, user_meta, version_map()->log_changes());
+    write_snapshot_entry(store(), index_keys, snap_name, get_user_meta_proto(user_meta), version_map()->log_changes());
 }
 
 std::set<StreamId> PythonVersionStore::list_streams(

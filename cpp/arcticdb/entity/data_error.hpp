@@ -9,7 +9,7 @@
 
 #include <string>
 
-#include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb::entity {
 

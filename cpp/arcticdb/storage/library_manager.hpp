@@ -13,6 +13,10 @@
 #include <arcticdb/storage/storage_override.hpp>
 #include <arcticdb/util/lru_cache.hpp>
 
+namespace arcticdb {
+    class Store;
+}
+
 namespace arcticdb::storage {
     enum class ModifiableLibraryOption {
         DEDUP = 1,

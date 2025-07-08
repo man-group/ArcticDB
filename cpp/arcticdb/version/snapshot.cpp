@@ -20,7 +20,7 @@ void write_snapshot_entry(
         std::shared_ptr <StreamSink> store,
         std::vector <AtomKey> &keys,
         const SnapshotId &snapshot_id,
-        const py::object &user_meta,
+        std::optional<google::protobuf::Any> user_meta,
         bool log_changes,
         KeyType key_type
 ) {
@@ -41,12 +41,8 @@ void write_snapshot_entry(
     }
 
     // Serialize and store the python metadata in the journal entry for snapshot.
-    if (!user_meta.is_none()) {
-        arcticdb::proto::descriptors::UserDefinedMetadata user_meta_proto;
-        google::protobuf::Any output = {};
-        python_util::pb_from_python(user_meta, user_meta_proto);
-        output.PackFrom(user_meta_proto);
-        snapshot_agg.set_metadata(std::move(output));
+    if (user_meta) {
+        snapshot_agg.set_metadata(std::move(*user_meta));
 
         // Bewared: Between v4.5.0 and v5.2.1 we only saved this metadata on the
         // timeseries_descriptor user_metadata field and we need to keep support for data serialized like

@@ -29,43 +29,6 @@
 
 namespace arcticdb::pipelines {
 
-
-struct SnapshotVersionQuery {
-    SnapshotId name_;
-};
-
-struct TimestampVersionQuery {
-    timestamp timestamp_;
-    bool iterate_snapshots_if_tombstoned;
-};
-
-struct SpecificVersionQuery {
-    SignedVersionId version_id_;
-    bool iterate_snapshots_if_tombstoned;
-};
-
-using VersionQueryType = std::variant<
-        std::monostate, // Represents "latest"
-        SnapshotVersionQuery,
-        TimestampVersionQuery,
-        SpecificVersionQuery>;
-
-struct VersionQuery {
-    VersionQueryType content_;
-
-    void set_snap_name(const std::string& snap_name) {
-        content_ = SnapshotVersionQuery{snap_name};
-    }
-
-    void set_timestamp(timestamp ts, bool iterate_snapshots_if_tombstoned) {
-        content_ = TimestampVersionQuery{ts, iterate_snapshots_if_tombstoned};
-    }
-
-    void set_version(SignedVersionId version, bool iterate_snapshots_if_tombstoned) {
-        content_ = SpecificVersionQuery{version, iterate_snapshots_if_tombstoned};
-    }
-};
-
 template<typename ContainerType>
 using FilterQuery = folly::Function<std::unique_ptr<util::BitSet>(const ContainerType &, std::unique_ptr<util::BitSet>&&)>;
 

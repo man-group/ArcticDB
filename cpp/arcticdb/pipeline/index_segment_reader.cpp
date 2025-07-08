@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/util/variant.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/slicing.hpp>

@@ -751,6 +751,45 @@ inline bool operator!=(const Field &l, const Field &r) {
 
 } // namespace entity
 
+namespace pipelines {
+    using namespace arcticdb::entity;
+
+    struct SnapshotVersionQuery {
+        SnapshotId name_;
+    };
+    
+    struct TimestampVersionQuery {
+        timestamp timestamp_;
+        bool iterate_snapshots_if_tombstoned;
+    };
+    
+    struct SpecificVersionQuery {
+        SignedVersionId version_id_;
+        bool iterate_snapshots_if_tombstoned;
+    };
+    
+    using VersionQueryType = std::variant<
+            std::monostate, // Represents "latest"
+            SnapshotVersionQuery,
+            TimestampVersionQuery,
+            SpecificVersionQuery>;
+    
+    struct VersionQuery {
+        VersionQueryType content_;
+    
+        void set_snap_name(const std::string& snap_name) {
+            content_ = SnapshotVersionQuery{snap_name};
+        }
+    
+        void set_timestamp(timestamp ts, bool iterate_snapshots_if_tombstoned) {
+            content_ = TimestampVersionQuery{ts, iterate_snapshots_if_tombstoned};
+        }
+    
+        void set_version(SignedVersionId version, bool iterate_snapshots_if_tombstoned) {
+            content_ = SpecificVersionQuery{version, iterate_snapshots_if_tombstoned};
+        }
+    };
+} // namespace pipelines
 } // namespace arcticdb
 
 // StreamId ordering - numbers before strings

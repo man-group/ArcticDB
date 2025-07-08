@@ -14,7 +14,6 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/util/variant.hpp>
@@ -26,7 +25,7 @@ void write_snapshot_entry(
     std::shared_ptr<stream::StreamSink> store,
     std::vector<AtomKey> &keys,
     const SnapshotId &snapshot_id,
-    const py::object &user_meta,
+    std::optional<google::protobuf::Any> user_meta,
     bool log_changes,
     KeyType key_type = KeyType::SNAPSHOT_REF
 );
