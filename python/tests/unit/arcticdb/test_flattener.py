@@ -7,7 +7,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb.flattener import Flattener
 
-from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
@@ -29,10 +28,12 @@ def test_flattened_repr_simple():
     metast, f = fl.create_meta_structure(simple_dict, base_sym)
     assert len(f) == 0
     assert metast["leaf"] is True
+    assert "key_name" not in metast
 
     metast, f = fl.create_meta_structure(simple_list, base_sym)
     assert len(f) == 0
     assert metast["leaf"] is True
+    assert "key_name" not in metast
 
 
 def test_flattened_repr_numpy():
@@ -73,6 +74,38 @@ def test_dict_like_structure():
     recreated = fl.create_original_obj_from_metastruct_new(meta, flattened)
     assert type(recreated) == CustomDict
     clear_registered_normalizers()
+
+
+def test_dict_record_keys():
+    # We limit key length to 100. The "d" * 94 key will not be shortened (stored as sym__ddd...) whereas the "e" * 95 key
+    # trips the threshold and will be shortened (due to the 5 characters in sym__).
+    sample = {
+            "a": pd.DataFrame({"col_dict": np.random.randn(2)}),
+            "b": {"c": pd.DataFrame({"col_dict": np.random.randn(2)})},
+            "d" * 94: pd.DataFrame({"col_dict": np.random.rand(2)}),
+            "e" * 95: pd.DataFrame({"col_dict": np.random.rand(2)})  # key name should be obfuscated for this one
+    }
+
+    meta, flattened = fl.create_meta_structure(sample, "sym")
+    sub_keys = meta["sub_keys"]
+    assert len(sub_keys) == 4
+    assert sub_keys[0]["leaf"]
+    assert sub_keys[0]["key_name"] == "sym__a"
+
+    assert not sub_keys[1]["leaf"]
+    assert "key_name" not in sub_keys[1]
+    nested_subkeys = sub_keys[1]["sub_keys"]
+    assert nested_subkeys[0]["leaf"]
+    assert nested_subkeys[0]["key_name"] == "sym__b__c"
+    assert nested_subkeys[0]["symbol"] == "sym__b__c"
+
+    assert sub_keys[2]["leaf"]
+    assert sub_keys[2]["key_name"] == f"sym__{'d' * 94}"
+    assert sub_keys[2]["symbol"] == f"sym__{'d' * 94}"
+
+    assert sub_keys[3]["leaf"]
+    assert sub_keys[3]["key_name"] == f"sym_eee_583539213776"
+    assert sub_keys[3]["symbol"] == f"sym__{'e' * 95}"
 
 
 def test_pandas_series(lmdb_version_store):

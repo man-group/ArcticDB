@@ -22,12 +22,12 @@ from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer
 from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNormalizer
-import arcticdb_ext.stream as adb_stream
 
 
 class Flattener:
     # Probably a bad idea given the dict key could have this, fine for now as write does not allow this symbol anyways.
     SEPARATOR = "__"
+    MAX_KEY_LENGTH = 100
 
     def __init__(self):
         self.custom_normalizer = get_custom_normalizer(False)
@@ -46,9 +46,7 @@ class Flattener:
 
     def compact_v1(self, symbol):
         hash_length = 12
-        if adb_stream.is_symbol_key_valid(symbol):
-            # If the key is something we consider valid just save it for debuggability's sake
-            # The validity check includes a constraint on length
+        if len(symbol) < self.MAX_KEY_LENGTH:
             return symbol
 
         try:
@@ -57,14 +55,8 @@ class Flattener:
             convert = symbol
 
         tokens = symbol.split(self.SEPARATOR)
-        santized_tokens = []
-        for t in tokens:
-            if adb_stream.is_symbol_key_valid(t):
-                santized_tokens.append(t)
-            else:
-                santized_tokens.append("XXX")
+        vaguely_readable_name = "_".join([token[-3:] for token in tokens])[: (self.MAX_KEY_LENGTH - hash_length)]
 
-        vaguely_readable_name = "_".join([token[-3:] for token in santized_tokens])[: (adb_stream.MAX_SYMBOL_LENGTH - hash_length - 1)]
         shortened_hash = str(int(hashlib.sha256(convert).hexdigest(), 16) % 10**hash_length)
         return "{}_{}".format(vaguely_readable_name, shortened_hash)
 
@@ -178,8 +170,18 @@ class Flattener:
 
         if not iterables:
             # Use the shortened name for the actual writes to avoid having obscenely large key sizes.
-            to_write[self.compact_v1(sym)] = obj
+            key_name = self.compact_v1(sym)
+            to_write[key_name] = obj
             meta_struct["leaf"] = True
+
+            # We currently rely on scrambling (with compact_v1) the symbol name at write time to generate stream IDs for the
+            # data being written under leaf nodes. We also use compact_v1 at read time to look up these stream IDs based on the "symbol"
+            # in the metastruct. This makes it impossible to change compact_v1 in a backwards and forwards compatible way.
+            # To give us a way to improve this in future, for example when recursive normalizers are added to the Library API,
+            # we more recently started recording the key_name explicitly in the metastruct. If using the key_name, you must
+            # bear in mind that old metastructs do not have it.
+            meta_struct["key_name"] = key_name
+
             return meta_struct
 
         meta_struct["sub_keys"] = []
