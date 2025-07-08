@@ -19,6 +19,7 @@ from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictiona
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb_ext.stream as adb_stream
+import arcticdb_ext
 
 from tests.util.mark import MACOS_WHEEL_BUILD
 
@@ -372,28 +373,16 @@ def test_unsupported_characters_in_keys(s3_version_store_v1, key):
 
     data = {key: df}
 
-    # When
-    lib.write("sym", data, recursive_normalizers=True)
+    # When & Then
+    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+        lib.write("sym", data, recursive_normalizers=True)
 
-    # Then
-    res = lib.read("sym").data
-    assert_frame_equal(res[key], df)
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
 
     lt = lib.library_tool()
     multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
-    segment = lt.read_to_dataframe(multi_keys[0])
-    assert segment.shape[0] == 1
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-
-    assert stream_id.startswith("sym_XXX_")
-
-    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
-    assert len(index_keys) == 1
-    segment = lt.read_to_dataframe(index_keys[0])
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-    assert stream_id.startswith("sym_XXX_")
+    assert not multi_keys
 
 
 @pytest.mark.parametrize("key", ("*", "<", ">", chr(31), chr(127)))
@@ -405,28 +394,15 @@ def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key):
     data = {"blah": {key: df}}
 
     # When
-    lib.write("sym", data, recursive_normalizers=True)
+    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+        lib.write("sym", data, recursive_normalizers=True)
 
-    # Then
-    res = lib.read("sym").data
-
-    assert_frame_equal(res["blah"][key], df)
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
 
     lt = lib.library_tool()
     multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
-    segment = lt.read_to_dataframe(multi_keys[0])
-    assert segment.shape[0] == 1
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-
-    assert stream_id.startswith("sym_lah_XXX_")
-
-    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
-    assert len(index_keys) == 1
-    segment = lt.read_to_dataframe(index_keys[0])
-    contents = segment.iloc[0].to_dict()
-    stream_id = contents["stream_id"].decode()
-    assert stream_id.startswith("sym_lah_XXX_")
+    assert not multi_keys
 
 
 def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1):
@@ -717,7 +693,7 @@ class TestRecursiveNormalizersCompat:
             compat.old_lib.execute([
                 f"""
 from arcticdb_ext.storage import KeyType
-lib._nvs.write('sym', {{"a": df_1, "b": df_2}}, recursive_normalizers=True, pickle_on_failure=True)
+lib._nvs.write('sym', {{"a": df_1, "b" * 95: df_2, "c" * 100: df_2}}, recursive_normalizers=True, pickle_on_failure=True)
 lib_tool = lib._nvs.library_tool()
 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 """
@@ -725,7 +701,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 
             with compat.current_version() as curr:
                 data = curr.lib.read(sym).data
-                expected = {"a": dfs["df_1"], "b": dfs["df_2"]}
+                expected = {"a": dfs["df_1"], "b" * 95: dfs["df_2"], "c" * 100: dfs["df_2"]}
                 assert set(data.keys()) == set(expected.keys())
                 for key in data.keys():
                     assert_frame_equal(data[key], expected[key])
@@ -736,7 +712,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
             dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
             with compat.current_version() as curr:
-                curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b": dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
+                curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b" * 95: dfs["df_2"], "c" * 100: dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
                 lib_tool = curr.lib._nvs.library_tool()
                 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 
@@ -744,7 +720,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
                 """
 from pandas.testing import assert_frame_equal
 data = lib.read('sym').data
-expected = {'a': df_1, 'b': df_2}
+expected = {'a': df_1, 'b' * 95: df_2, 'c' * 100: df_2}
 assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])
