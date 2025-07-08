@@ -49,12 +49,6 @@ arcticdb::HashedValue LibraryPath::compute_hash() {
     return accum.digest();
 }
 
-bool operator==(const LibraryPath &l, const LibraryPath &r) {
-    auto l_rg = l.as_range();
-    auto r_rg = r.as_range();
-    return l.hash() == r.hash() && std::equal(l_rg.begin(), l_rg.end(), r_rg.begin());
-}
-
 // Template constructor implementations
 template<class S>
 LibraryPath::LibraryPath(std::initializer_list<S> values):
