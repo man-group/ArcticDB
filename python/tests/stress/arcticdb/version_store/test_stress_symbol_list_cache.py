@@ -26,9 +26,10 @@ def compact_symbols_worker(lib):
 
 @pytest.fixture(params=[
     (0, 0, 0), # Probability of slowdown, min ms, max ms
-    (0.1, 10, 50),
-    (0.5, 300, 700),
-    (0.7, 1100, 1700)
+    (0.3, 10, 50),
+    (0.3, 100, 300),
+    (0.3, 300, 500),
+    (0.3, 700, 1200)
 ])
 def slow_writing_library(request, real_s3_storage, lib_name):
     write_slowdown_prob, write_slowdown_min_ms, write_slowdown_max_ms = request.param
@@ -70,15 +71,35 @@ def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_c
     assert len(result_symbol_list) == len(expected_symbol_list)
     assert result_symbol_list == expected_symbol_list
 
-    lt = slow_writing_library._dev_tools.library_tool()
-    compacted_keys = lt.find_keys_for_id(KeyType.SYMBOL_LIST, "__symbols__")
+@pytest.mark.parametrize("compact_threshold", [1, 3, 8, 10])
+def test_compaction_produces_single_key(real_s3_storage, lib_name, compact_threshold):
+    df = pd.DataFrame({"col": [1]})
+    real_s3_library = real_s3_storage.create_arctic().create_library(lib_name)
+    num_symbols = 10
+    set_config_int("SymbolList.MaxDelta", compact_threshold)
+    for i in range(num_symbols):
+        sym = f"sym_{i}"
+        real_s3_library.write(sym, df)
+        symbols = real_s3_library.list_symbols()
 
-    cfg = slow_writing_library._nvs._lib_cfg
-    if (
-        num_compactors == 1
-        and cfg.lib_desc.version.failure_sim.write_slowdown_prob > 0 
-        and cfg.lib_desc.version.failure_sim.slow_down_max_ms > 500
-        ):
-        assert len(compacted_keys) <= 1 # If we have a single compactor and a big slowdown is possible it either fails or succeeds (depending on the slowdown)
-        return
-    assert len(compacted_keys) == 1
+    expected_symbol_list = { f"sym_{i}" for i in range(num_symbols) }
+
+    result_symbol_list = set(symbols)
+    assert len(result_symbol_list) == len(expected_symbol_list)
+    assert result_symbol_list == expected_symbol_list
+
+    lt = real_s3_library._dev_tools.library_tool()
+    all_keys = lt.find_keys(KeyType.SYMBOL_LIST)
+    compacted_keys = [x for x in all_keys if x.id == "__symbols__"]
+    add_keys = [x for x in all_keys if x.id == "__add__"]
+    delete_keys = [x for x in all_keys if x.id == "__delete__"]
+    other_keys = [x for x in all_keys if x.id != "__delete__" and x.id != "__add__" and x.id != "__symbols__"]
+
+    expected_num_compacted_keys = 1 # First list_symbols call always compacts
+    expected_add_keys = (num_symbols - 1) % compact_threshold
+    expected_delete_keys = 0
+
+    assert len(compacted_keys) == expected_num_compacted_keys
+    assert len(add_keys) == expected_add_keys
+    assert len(delete_keys) == expected_delete_keys
+    assert len(other_keys) == 0

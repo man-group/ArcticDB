@@ -73,13 +73,13 @@ struct ScopedConfig {
         for (auto& config : overrides) {
             auto& [name, new_value] = config;
             const auto old_val = ConfigsMap::instance()->get_int(name);
-            originals.emplace_back(std::move(name), old_val);
             if (new_value.has_value()) {
                 ConfigsMap::instance()->set_int(name, *new_value);
             }
             else {
                 ConfigsMap::instance()->unset_int(name);
             }
+            originals.emplace_back(std::move(name), old_val);
         }
     }
 
