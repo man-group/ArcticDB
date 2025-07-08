@@ -6,6 +6,11 @@
  */
 
 #pragma once
+#include <vector>
+#include <unordered_map>
+#include <optional>
+#include <algorithm>
+#include <arcticdb/entity/atom_key.hpp>
 
 namespace arcticdb {
 
@@ -13,45 +18,36 @@ using namespace arcticdb::entity;
 
 class DeDupMap {
 public:
-    DeDupMap() :
-            de_dup_map_(std::make_unique<std::unordered_map<ContentHash, std::vector<AtomKey>>>()) {
-    }
+    DeDupMap() = default;
+    ~DeDupMap() = default;
+    DeDupMap(const DeDupMap&) = delete;
+    DeDupMap& operator=(const DeDupMap&) = delete;
 
-    std::optional<AtomKey> get_key_if_present(const AtomKey &key) const {
-        if (!de_dup_map_) {
-            util::raise_rte("Invalid de dup map object");
-        }
-        auto de_dup_candidates = de_dup_map_->find(key.content_hash());
-
-        if (de_dup_candidates == de_dup_map_->end()) {
+    [[nodiscard]] std::optional<AtomKey> get_key_if_present(const AtomKey &key) const {
+        const auto de_dup_candidates = de_dup_map_.find(key.content_hash());
+        if (de_dup_candidates == de_dup_map_.end()) {
             return std::nullopt;
         }
         // Just content hash matching isn't enough, start and end index also need to be matched
         // which uniquely identifies the position of the segment
-        auto key_iterator = std::find_if(std::begin(de_dup_candidates->second), std::end(de_dup_candidates->second),
-                                         [&](const auto &k) {
-                                             return k.start_index() == key.start_index() &&
-                                                    k.end_index() == key.end_index();
-                                         });
-        if (key_iterator == de_dup_candidates->second.end()) {
-            return std::nullopt;
-        } else {
-            return std::optional<AtomKey>(*key_iterator);
-        }
+        const auto key_iterator = std::ranges::find_if(de_dup_candidates->second,
+                                                 [&](const auto &k) {
+                                                     return k.start_index() == key.start_index() &&
+                                                            k.end_index() == key.end_index();
+                                                 });
+        return key_iterator != de_dup_candidates->second.end() ? std::optional{*key_iterator} : std::nullopt;
     }
 
     void insert_key(const AtomKey &key) {
-        if (!de_dup_map_) {
-            util::raise_rte("Invalid de dup map object");
+        if (de_dup_map_.contains(key.content_hash())) {
+            de_dup_map_.at(key.content_hash()).push_back(key);
+        } else {
+            de_dup_map_.emplace(key.content_hash(), std::vector{key});
         }
-        if (de_dup_map_->count(key.content_hash()) != 0)
-            de_dup_map_->at(key.content_hash()).push_back(key);
-        else
-            de_dup_map_->insert({key.content_hash(), std::vector<AtomKey>({key})});
     }
 
 private:
-    std::unique_ptr<std::unordered_map<ContentHash, std::vector<AtomKey>>> de_dup_map_;
+    std::unordered_map<ContentHash, std::vector<AtomKey>> de_dup_map_;
 };
 
 }
