@@ -816,4 +816,12 @@ std::optional<util::BitMagic> Column::opt_sparse_map() const {
     return sparse_map_;
 }
 
+ChunkedBuffer&& Column::release_buffer() {
+    return std::move(data_.buffer());
+}
+
+Buffer&& Column::release_shapes() {
+    return std::move(shapes_.buffer());
+}
+
 } //namespace arcticdb

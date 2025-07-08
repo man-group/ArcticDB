@@ -11,7 +11,6 @@
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
-#include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/index.hpp>
 
 #include <folly/futures/Future.h>
@@ -35,53 +34,19 @@ inline std::vector<SliceAndKey> unfiltered_index(const index::IndexSegmentReader
 }
 
 template<typename RowType>
-std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescriptorImpl::Type index_type, int field_num) {
-    switch (index_type) {
-    case IndexDescriptorImpl::Type::TIMESTAMP:
-    case IndexDescriptorImpl::Type::ROWCOUNT: return row.template scalar_at<timestamp>(field_num);
-    case IndexDescriptorImpl::Type::STRING: {
-        auto opt = row.string_at(field_num);
-        return opt ? std::make_optional<IndexValue>(std::string(opt.value())) : std::nullopt;
-    }
-    default:
-        util::raise_rte("Unknown index type {} for column {}", int(index_type), field_num);
-    }
-    return std::nullopt;
-}
+std::optional<IndexValue> index_value_from_row(const RowType &row, IndexDescriptorImpl::Type index_type, int field_num);
 
 template<typename RowType>
-std::optional<IndexValue> index_start_from_row(const RowType &row, IndexDescriptorImpl::Type index_type) {
-    return index_value_from_row(row, index_type, 0);
-}
+std::optional<IndexValue> index_start_from_row(const RowType &row, IndexDescriptorImpl::Type index_type);
 
 template<typename SegmentType, typename FieldType=pipelines::index::Fields>
-IndexValue index_value_from_segment(const SegmentType &seg, size_t row_id, FieldType field) {
-    auto index_type = seg.template scalar_at<uint8_t>(row_id, int(FieldType::index_type));
-    IndexValue index_value;
-    auto type = IndexDescriptor::Type(index_type.value());
-    switch (type) {
-    case IndexDescriptorImpl::Type::TIMESTAMP:
-        case IndexDescriptorImpl::Type::ROWCOUNT:
-        index_value = seg.template scalar_at<timestamp>(row_id, int(field)).value();
-        break;
-    case IndexDescriptorImpl::Type::STRING:
-        index_value = std::string(seg.string_at(row_id, int(field)).value());
-        break;
-    default:
-        util::raise_rte("Unknown index type {} for column {} and row {}", uint32_t(index_type.value()), uint32_t(field), row_id);
-    }
-    return index_value;
-}
+IndexValue index_value_from_segment(const SegmentType &seg, size_t row_id, FieldType field);
 
 template<typename SegmentType, typename FieldType>
-IndexValue index_start_from_segment(const SegmentType &seg, size_t row_id) {
-    return index_value_from_segment(seg, row_id, FieldType::start_index);
-}
+IndexValue index_start_from_segment(const SegmentType &seg, size_t row_id);
 
 template<typename SegmentType, typename FieldType>
-IndexValue index_end_from_segment(const SegmentType &seg, size_t row_id) {
-    return index_value_from_segment(seg, row_id, FieldType::end_index);
-}
+IndexValue index_end_from_segment(const SegmentType &seg, size_t row_id);
 
 template<class IndexType>
 folly::Future<entity::AtomKey> write_index(

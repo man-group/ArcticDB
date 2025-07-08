@@ -33,9 +33,9 @@ struct ExponentialBackoff {
 
     bool wait()
     {
-        thread_local std::uniform_int_distribution<size_t> dist;
         thread_local std::minstd_rand gen(std::random_device{}());
-        const size_t wait = dist(gen, decltype(dist)::param_type{0, curr_wait_ms_});
+        std::uniform_int_distribution<size_t> dist(0, curr_wait_ms_);
+        const size_t wait = dist(gen);
         sleep_ms(wait);
         curr_wait_ms_ = std::min(curr_wait_ms_ * 2, max_wait_ms_);
         return curr_wait_ms_ != max_wait_ms_;

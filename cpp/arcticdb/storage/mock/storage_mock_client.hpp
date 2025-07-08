@@ -29,8 +29,8 @@ inline std::string operation_to_string(StorageOperation operation) {
         case StorageOperation::DELETE_LOCAL: return "DeleteLocal";
         case StorageOperation::LIST: return "List";
         case StorageOperation::EXISTS: return "Exists";
+        default: util::raise_rte("Invalid Storage operation provided for mock client");
     }
-    util::raise_rte("Invalid Storage operation provided for mock client");
 }
 
 }
