@@ -71,6 +71,7 @@ def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_c
     assert len(result_symbol_list) == len(expected_symbol_list)
     assert result_symbol_list == expected_symbol_list
 
+@REAL_S3_TESTS_MARK
 @pytest.mark.parametrize("compact_threshold", [1, 3, 8, 10])
 def test_compaction_produces_single_key(real_s3_storage, lib_name, compact_threshold):
     df = pd.DataFrame({"col": [1]})

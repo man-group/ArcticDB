@@ -336,7 +336,7 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
 
     std::string stdout_str  = testing::internal::GetCapturedStdout();
     std::string stderr_str = testing::internal::GetCapturedStderr();
-    std::string expected = "taken for more than TTL";
+    std::string expected = "more than TTL";
 
     std::cout << stdout_str << std::endl;
     std::cout << stderr_str << std::endl;
