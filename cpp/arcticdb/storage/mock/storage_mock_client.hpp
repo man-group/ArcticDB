@@ -6,7 +6,7 @@
  */
 
 #pragma once
-
+#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/codec/segment.hpp>
 

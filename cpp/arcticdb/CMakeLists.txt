@@ -518,6 +518,7 @@ set(arcticdb_srcs
         storage/s3/s3_client_wrapper.cpp
         storage/s3/s3_client_wrapper.hpp
         storage/storage_factory.cpp
+        storage/storage_utils.cpp
         stream/aggregator.cpp
         stream/incompletes.cpp
         stream/index.cpp

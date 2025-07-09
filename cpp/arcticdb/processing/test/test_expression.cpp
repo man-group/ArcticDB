@@ -10,6 +10,7 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/stream/incompletes.hpp>
 
 TEST(ExpressionNode, AddBasic) {
     using namespace arcticdb;

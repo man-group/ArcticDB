@@ -49,7 +49,7 @@ public:
     // For example: "symbol_1#Failure_Delete_99_1" will trigger a delete failure with code 99 which is retryable.
     static std::string get_failure_trigger(
         const std::string& s3_object_name,
-        StorageOperation operation_to_fail,
+        arcticdb::storage::StorageOperation operation_to_fail,
         Aws::S3::S3Errors error_to_fail_with,
         bool retryable = true);
 

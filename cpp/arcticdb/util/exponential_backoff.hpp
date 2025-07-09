@@ -25,7 +25,7 @@ struct ExponentialBackoff {
     ExponentialBackoff(size_t min_wait_ms, size_t max_wait_ms) :
         min_wait_ms_(min_wait_ms),
         max_wait_ms_(max_wait_ms),
-        curr_wait_ms_(min_wait_ms_){}
+        curr_wait_ms_(min_wait_ms_) {}
 
     void sleep_ms(size_t ms) {
         std::this_thread::sleep_for(std::chrono::milliseconds(ms));
