@@ -12,10 +12,10 @@
 
 #include <aws/s3/S3Errors.h>
 
-namespace as{
+namespace arcticdb::storage {
 
 using namespace object_store_utils;
-namespace as = as;
+namespace as = arcticdb::storage;
 
 namespace s3 {
 
