@@ -60,9 +60,6 @@ template<typename PcreRegexEncode>
 class RegexPattern : protected PcreRegexEncode {
     typename PcreRegexEncode::StringType text_;
     typename PcreRegexEncode::HandleType handle_ = nullptr;
-    const char* help_  = "";
-    int offset_ = 0;
-    int error_ = 0;
     uint32_t options_ = 0;
     uint32_t capturing_groups_ = 0;
 
@@ -98,20 +95,20 @@ public:
 private:
     void compile_regex() {
         PCRE2_SIZE erroroffset;
+        int error = 0;
         handle_ = this->pcre_compile_(
             reinterpret_cast<typename PcreRegexEncode::StringCastingType>(text_.data()),
             PCRE2_ZERO_TERMINATED,
             options_,
-            &error_,
+            &error,
             &erroroffset,
             nullptr
         );
         util::check(
             handle_ != nullptr, 
-            "Error {} compiling regex {}: {} at position {}", 
-            error_, 
+            "Error {} compiling regex {} at position {}", 
+            error, 
             convert_to_utf8_if_needed(text_), 
-            help_,
             erroroffset
         );
         auto result = get_capturing_groups();
