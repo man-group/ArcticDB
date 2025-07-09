@@ -13,6 +13,7 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/index_range.hpp>
+#include <arcticdb/column_store/memory_segment_impl.hpp>
 
 
 namespace arcticdb::pipelines::index {
@@ -211,4 +212,8 @@ namespace arcticdb::pipelines::index {
     template IndexValue index_value_from_segment<SegmentInMemory, LegacyFields>(const SegmentInMemory& seg, size_t row_id, LegacyFields field);
     template IndexValue index_start_from_segment<SegmentInMemory, LegacyFields>(const SegmentInMemory& seg, size_t row_id);
     template IndexValue index_end_from_segment<SegmentInMemory, LegacyFields>(const SegmentInMemory& seg, size_t row_id);
+    
+    // Add explicit instantiations for index_value_from_row with SegmentInMemoryImpl::Row
+    template std::optional<IndexValue> index_value_from_row<SegmentInMemoryImpl::Row>(const SegmentInMemoryImpl::Row& row, IndexDescriptorImpl::Type index_type, int field_num);
+    template std::optional<IndexValue> index_start_from_row<SegmentInMemoryImpl::Row>(const SegmentInMemoryImpl::Row& row, IndexDescriptorImpl::Type index_type);
 }
