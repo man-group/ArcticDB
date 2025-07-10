@@ -9,15 +9,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 import re
 import time
 from multiprocessing import Queue, Process
-from difflib import unified_diff
-from collections import defaultdict
 
 import pytest
 import pandas as pd
 import sys
 
 from arcticdb_ext.exceptions import StorageException
-from arcticdb_ext.storage import NoDataFoundException
 
 from arcticdb_ext import set_config_string
 from arcticdb_ext.storage import KeyType
@@ -25,8 +22,6 @@ from arcticdb.util.test import create_df, assert_frame_equal
 
 from arcticdb.storage_fixtures.s3 import MotoNfsBackedS3StorageFixtureFactory
 from arcticdb.storage_fixtures.s3 import MotoS3StorageFixtureFactory
-
-import arcticdb.toolbox.query_stats as qs
 
 from arcticdb.util.test import config_context, config_context_string
 
@@ -200,22 +195,8 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     lib.write("s", data=create_df())
 
 
-@pytest.fixture(scope="session")
-def test_prefix():
-    return "test_bucket_prefix"
-
-
-@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
-def storage_bucket(test_prefix, request):
-    with request.param(
-        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
-    ) as factory:
-        with factory.create_fixture() as bucket:
-            yield bucket
-
-
-def test_library_get_key_path(lib_name, storage_bucket, test_prefix):
-    lib = storage_bucket.create_version_store_factory(lib_name)()
+def test_library_get_key_path(lib_name, s3_and_nfs_storage_bucket, test_prefix):
+    lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
     lib.write("s", data=create_df())
     lib_tool = lib.library_tool()
 
@@ -229,161 +210,3 @@ def test_library_get_key_path(lib_name, storage_bucket, test_prefix):
             assert path.startswith(test_prefix)
 
     assert keys_count > 0
-
-
-def sum_operations(stats):
-    """Sum up all operations from query stats.
-
-    Args:
-        stats: Dictionary containing query stats
-
-    Returns:
-        Dictionary with total counts, sizes, and times for each operation type
-    """
-    totals = {}
-
-    for op_type, key_types in stats["storage_operations"].items():
-        totals[op_type] = {"count": 0, "size_bytes": 0, "total_time_ms": 0}
-
-        for key_type, metrics in key_types.items():
-            totals[op_type]["count"] += metrics["count"]
-            totals[op_type]["size_bytes"] += metrics["size_bytes"]
-            totals[op_type]["total_time_ms"] += metrics["total_time_ms"]
-
-    return totals
-
-
-def sum_all_operations(stats):
-    totals = sum_operations(stats)
-    total_count = 0
-    for op_type, metrics in totals.items():
-        total_count += metrics["count"]
-    return total_count
-
-
-def visualize_stats_diff(stats1, stats2):
-    """Visualize count differences between two stats dictionaries in a table format.
-
-    Args:
-        stats1: First stats dictionary
-        stats2: Second stats dictionary
-
-    Returns:
-        String containing formatted count differences in a table
-    """
-
-    def get_counts(stats):
-        counts = defaultdict(lambda: defaultdict(int))
-        for op_type, key_types in stats.get("storage_operations", {}).items():
-            for key_type, metrics in key_types.items():
-                counts[op_type][key_type] = metrics.get("count", 0)
-        return counts
-
-    counts1 = get_counts(stats1)
-    counts2 = get_counts(stats2)
-
-    # Get all unique operations and key types
-    all_ops = sorted(set(counts1.keys()) | set(counts2.keys()))
-    all_key_types = set()
-    for op in all_ops:
-        all_key_types.update(counts1[op].keys())
-        all_key_types.update(counts2[op].keys())
-    all_key_types = sorted(all_key_types)
-
-    # Build the table
-    output = []
-    output.append("Count Differences:")
-    output.append("=" * 80)
-
-    # Header
-    header = "Operation".ljust(30) + "Key Type".ljust(20) + "Before".rjust(10) + "After".rjust(10) + "Diff".rjust(10)
-    output.append(header)
-    output.append("-" * 80)
-
-    # Table rows
-    for op in all_ops:
-        for key_type in all_key_types:
-            count1 = counts1[op][key_type]
-            count2 = counts2[op][key_type]
-            if count1 != count2:
-                diff = count2 - count1
-                diff_str = f"{diff:+d}" if diff != 0 else "0"
-                row = f"{op[:28]:<30} {key_type[:18]:<20} {count1:>10} {count2:>10} {diff_str:>10}"
-                output.append(row)
-
-    if len(output) == 3:  # Only header, separator, and header row
-        return "No count differences found"
-
-    # Add summary
-    output.append("-" * 80)
-    total1 = sum(sum(counts.values()) for counts in counts1.values())
-    total2 = sum(sum(counts.values()) for counts in counts2.values())
-    total_diff = total2 - total1
-    diff_str = f"{total_diff:+d}" if total_diff != 0 else "0"
-    summary = f"Total:".ljust(50) + f"{total1:>10} {total2:>10} {diff_str:>10}"
-    output.append(summary)
-
-    return "\n".join(output)
-
-
-def test_delete_over_time(lib_name, storage_bucket, clear_query_stats):
-    qs.enable()
-    expected_ops = 14
-    lib = storage_bucket.create_version_store_factory(lib_name)()
-
-    with config_context("VersionMap.ReloadInterval", 0):
-        # Setup
-        # First write and delete will add an extra couple of version keys
-        lib.write("s", data=create_df())
-        qs.reset_stats()
-        lib.delete("s")
-
-        assert sum_all_operations(qs.get_query_stats()) == expected_ops
-        lib.write("s", data=create_df())
-        qs.reset_stats()
-
-        lib.delete("s")
-        base_stats = qs.get_query_stats()
-        base_ops_count = sum_all_operations(base_stats)
-        # expected_ops + 2 (read the new version and the tombstone all key)
-        assert base_ops_count == (expected_ops + 2)
-        qs.reset_stats()
-
-        iters = 10
-
-        # make sure that the delete makes a constant number of operations
-        for i in range(iters):
-            lib.write("s", data=create_df())
-            qs.reset_stats()
-
-            lib.delete("s")
-            stats = qs.get_query_stats()
-            qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == (expected_ops + 2), visualize_stats_diff(
-                base_stats, stats
-            )
-
-
-def test_write_and_prune_previous_over_time(lib_name, storage_bucket, clear_query_stats):
-    expected_ops = 9
-    with config_context("VersionMap.ReloadInterval", 0):
-        lib = storage_bucket.create_version_store_factory(lib_name)()
-        qs.enable()
-        lib.write("s", data=create_df())
-        qs.reset_stats()
-
-        lib.write("s", data=create_df(), prune_previous=True)
-
-        base_stats = qs.get_query_stats()
-        base_ops_count = sum_all_operations(base_stats)
-        assert base_ops_count == expected_ops
-        qs.reset_stats()
-
-        iters = 10
-
-        # make sure that the write and prune makes a constant number of operations
-        for i in range(iters):
-            lib.write("s", data=create_df(), prune_previous=True)
-            stats = qs.get_query_stats()
-            qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == expected_ops, visualize_stats_diff(base_stats, stats)

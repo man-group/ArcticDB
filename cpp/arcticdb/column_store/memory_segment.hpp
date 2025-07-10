@@ -449,7 +449,7 @@ public:
         impl_->compact_blocks();
     }
 
-    std::shared_ptr<Column> column_ptr(position_t idx) {
+    std::shared_ptr<Column> column_ptr(position_t idx) const {
         return impl_->column_ptr(idx);
     }
 

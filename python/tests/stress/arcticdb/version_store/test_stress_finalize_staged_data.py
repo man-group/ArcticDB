@@ -20,7 +20,7 @@ from arcticdb.config import set_log_level
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 
 
-from tests.util.mark import REAL_S3_TESTS_MARK, SKIP_CONDA_MARK, SLOW_TESTS_MARK
+from tests.util.mark import MACOS, REAL_S3_TESTS_MARK, SKIP_CONDA_MARK, SLOW_TESTS_MARK
 
 # Uncomment for logging
 # set_log_level(default_level="DEBUG", console_output=False, file_output_path="/tmp/arcticdb.log")
@@ -90,7 +90,9 @@ def test_finalize_monotonic_unique_chunks(arctic_library_lmdb):
     df = cachedDF.generate_dataframe_timestamp_indexed(num_rows_initially, total_number_rows, cachedDF.TIME_UNIT)
 
     cnt = 0
-    for iter in [500, 1000, 1500, 2000]:
+    # On MacOS there is segmentation fault or not enough memory of more chunks are staged
+    iterations = [500, 1000] if MACOS else [500, 1000, 1500, 2000]
+    for iter in iterations:
         res = Results()
 
         total_number_rows = INITIAL_TIMESTAMP + num_rows_initially

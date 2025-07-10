@@ -38,9 +38,17 @@ def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
         assert all(name in result for name in created_libraries)
     finally:
         logger.info("Delete started")
+        failed_to_delete = []
         for cnt, lib in enumerate(created_libraries):
             logger.info(f"Deletion: {cnt}/{len(created_libraries)} lib_name [{repr(lib)}] ")
-            ac.delete_library(lib)
+            try:
+                ac.delete_library(lib)
+            except Exception as e:
+                try:
+                    ac.delete_library(lib)
+                except Exception as e:
+                    failed_to_delete.append(lib)
+            assert len(failed_to_delete) < 1, f"Following libraries failed to delete: {failed_to_delete}"
         logger.info("Delete ended")
 
     assert not failed, "There is at least one failure look at the result"

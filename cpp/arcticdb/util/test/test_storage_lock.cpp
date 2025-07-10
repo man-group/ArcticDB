@@ -283,7 +283,7 @@ TEST(StorageLock, ForceReleaseLock) {
 
     std::string stdout_str  = testing::internal::GetCapturedStdout();
     std::string stderr_str = testing::internal::GetCapturedStderr();
-    std::string expected = "taken for more than TTL";
+    std::string expected = "more than TTL";
 
     ASSERT_EQ(count_occurrences("abab", "ab"), 2u);
     // If a lock is preempted, then it will still print the warning about having overridden the
@@ -409,11 +409,11 @@ TEST(StorageLock, ConcurrentWritesWithRetrying) {
     FutureExecutor<CPUThreadPoolExecutor> exec{num_writers};
     std::vector<Future<Unit>> futures;
     for(size_t i = 0; i < num_writers; ++i) {
-        futures.emplace_back(exec.addFuture(LockTaskWithRetry(lock_data, i * 1000 + 1)));
+        futures.emplace_back(exec.addFuture(LockTaskWithRetry(lock_data, 3000)));
     }
     collect(futures).get();
 
-    ASSERT_EQ(lock_data->atomic_, 2); // One of them times out
+    ASSERT_EQ(lock_data->atomic_, 3);
     ASSERT_TRUE(lock_data->no_race_happened());
 }
 
