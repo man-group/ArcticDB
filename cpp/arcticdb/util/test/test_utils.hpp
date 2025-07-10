@@ -51,12 +51,14 @@ consteval auto all_data_types() {
     };
 }
 
-template<typename Pred>
-requires std::predicate<Pred, DataType>
-consteval auto filter_type(Pred pred) {
-    constexpr size_t result_size = std::ranges::count_if(all_data_types(), pred);
-    std::array<DataType, result_size> result{};
-    std::ranges::copy_if(all_data_types(), result.begin(), pred);
+consteval bool is_allowed_mean_input(const DataType dt) {
+    return is_numeric_type(dt) || is_bool_type(dt) || is_empty_type(dt);
+}
+
+consteval auto allowed_mean_input_types() {
+    constexpr size_t count = std::ranges::count_if(all_data_types(), is_allowed_mean_input);
+    std::array<DataType, count> result;
+    std::ranges::copy_if(all_data_types(), result.begin(), is_allowed_mean_input);
     return result;
 }
 

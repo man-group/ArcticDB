@@ -48,10 +48,6 @@ TEST_P(UnsortedAggregationDataTypeParametrizationFixture, Mean) {
 }
 INSTANTIATE_TEST_SUITE_P(AllTypes, UnsortedAggregationDataTypeParametrizationFixture, ::testing::ValuesIn(all_data_types()));
 
-consteval bool is_allowed_mean_input(const DataType dt) {
-    return is_numeric_type(dt) || is_bool_type(dt) || is_empty_type(dt);
-}
-
 class AggregationResult : public ::testing::TestWithParam<DataType> {
 public:
     template<typename InputTypeTag>
@@ -144,7 +140,7 @@ TEST_P(AggregationResult, Mean) {
             ASSERT_EQ(result.field(0).name(), "output");
             const Column& aggregated_column = result.column(0);
             ASSERT_EQ(aggregated_column.row_count(), group_count);
-            constexpr std::array expected = get_expected_result_mean<InputDataTypeTag>();
+            constexpr static std::array expected = get_expected_result_mean<InputDataTypeTag>();
             Column::for_each_enumerated<OutputDataTypeTag>(aggregated_column, [&](const auto& row) {
                 ASSERT_EQ(row.value(), expected[row.idx()]);
             });
@@ -152,5 +148,4 @@ TEST_P(AggregationResult, Mean) {
     });
 }
 
-INSTANTIATE_TEST_SUITE_P(Mean, AggregationResult,
-                         ::testing::ValuesIn(filter_type([](DataType dt){ return is_allowed_mean_input(dt);})));
+INSTANTIATE_TEST_SUITE_P(Mean, AggregationResult, ::testing::ValuesIn(allowed_mean_input_types()));
