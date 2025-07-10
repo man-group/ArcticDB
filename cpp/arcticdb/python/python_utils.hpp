@@ -115,7 +115,7 @@ PyObject** fill_with_none(PyObject** ptr_dest, size_t count, PythonHandlerData& 
 template<typename Msg>
 py::object pb_to_python(const Msg & out){
     std::string_view full_name = out.descriptor()->full_name();
-    auto & name = out.descriptor()->name();
+    const auto & name = out.descriptor()->name();
     std::string_view pkg_name = full_name.substr(0, full_name.size() - name.size());
     if(pkg_name[pkg_name.size()-1] == '.'){
         pkg_name = pkg_name.substr(0, pkg_name.size()-1);
