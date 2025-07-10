@@ -97,9 +97,12 @@ jobs:
           brew install mono
           brew install bison   # required by thrift pulled via vcpkg
 
+          # check openssl installed versions
+          ls -la /opt/homebrew/Cellar/openssl@3/*/lib/libssl.dylib
+
           # link openssl
-          brew install openssl@3
-          brew link openssl@3 --force
+          brew reinstall openssl@3
+          brew unlink openssl@3 && brew link openssl@3
           which openssl
 
           # check openssl installed versions
