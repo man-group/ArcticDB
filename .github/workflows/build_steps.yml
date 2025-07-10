@@ -96,9 +96,15 @@ jobs:
           brew install sccache
           brew install mono
           brew install bison   # required by thrift pulled via vcpkg
+
+          # link openssl
+          brew install openssl@3
+          brew link openssl@3 --force
           which openssl
-          brew reinstall openssl@3.0
-          which openssl
+
+          # check openssl installed versions
+          ls -la /opt/homebrew/Cellar/openssl@3/*/lib/libssl.dylib
+          
           echo "SCCACHE_DIR=/tmp/sccache" >> $GITHUB_ENV
           mkdir -p /tmp/sccache
           # Start sccache server
