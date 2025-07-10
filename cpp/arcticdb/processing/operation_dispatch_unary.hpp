@@ -44,19 +44,16 @@ inline std::string unary_operation_to_string(Func&& func, std::string_view opera
 template <typename Func>
 VariantData unary_operator(const Value& val, Func&& func) {
     auto output = std::make_unique<Value>();
-    output->data_type_ = val.data_type_;
-
-    details::visit_type(val.type().data_type(), [&](auto val_tag) {
+    details::visit_type(val.data_type(), [&](auto val_tag) {
         using type_info = ScalarTypeInfo<decltype(val_tag)>;
         if constexpr (!is_numeric_type(type_info::data_type)) {
             user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform unary operation {} ({})",
                                                                   unary_operation_to_string(func,val.to_string<typename type_info::RawType>()),
-                                                                  get_user_friendly_type_string(val.type()));
+                                                                  get_user_friendly_type_string(val.descriptor()));
         }
-        auto value = *reinterpret_cast<const typename type_info::RawType*>(val.data_);
+        auto value = val.get<typename type_info::RawType>();
         using TargetType = typename unary_operation_promoted_type<typename type_info::RawType, std::remove_reference_t<Func>>::type;
-        output->data_type_ = data_type_from_raw_type<TargetType>();
-        *reinterpret_cast<TargetType*>(output->data_) = func.apply(value);
+        *output = Value{TargetType{func.apply(value)}, data_type_from_raw_type<TargetType>()};
     });
 
     return {std::move(output)};
@@ -136,6 +133,11 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
             } else if constexpr (is_time_type(type_info::data_type)) {
                 return func.template apply<TimeTypeTag>(input_value);
             } else {
+                // This line should not be reached with if the column is of int type because we have an early exit
+                // above https://github.com/man-group/ArcticDB/blob/bc554c9d42c7714bab645a167c4df843bc2672c6/cpp/arcticdb/processing/operation_dispatch_unary.hpp#L117
+                // both null and not null are allowed with integers and return respectively EmptyResult and FullResult.
+                // We must keep the exception though as otherwise not all control paths of this function will return a
+                // value and this won't compile.
                 user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform null check: {} ({})",
                                                                       unary_operation_to_string(func, col.column_name_),
                                                                       get_user_friendly_type_string(col.column_->type()));

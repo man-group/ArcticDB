@@ -11,6 +11,8 @@
 #include <arcticdb/util/test/generators.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/processing/grouper.hpp>
+
 
 template<typename T>
 void segment_scalar_assert_all_values_equal(const arcticdb::ProcessingUnit& proc_unit, const arcticdb::ColumnName& name, const std::unordered_set<T>& expected, size_t expected_row_count) {
@@ -70,59 +72,44 @@ TEST(Clause, AggregationEmptyColumn) {
                                    {"count", "empty_count", "empty_count"}});
     aggregation.set_component_manager(component_manager);
 
-    size_t num_rows{100};
-    size_t unique_grouping_values{10};
+    constexpr size_t num_rows{100};
+    constexpr size_t unique_grouping_values{10};
     auto proc_unit = ProcessingUnit{generate_groupby_testing_empty_segment(num_rows, unique_grouping_values)};
     auto entity_ids = push_entities(*component_manager, std::move(proc_unit));
 
-    auto aggregated = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, aggregation.process(std::move(entity_ids)));
+    const auto aggregated = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, aggregation.process(std::move(entity_ids)));
     ASSERT_TRUE(aggregated.segments_.has_value());
-    auto segments = aggregated.segments_.value();
+    const auto segments = aggregated.segments_.value();
     ASSERT_EQ(1, segments.size());
-    auto segment = segments[0];
+    const auto segment = segments[0];
 
-    // Sum aggregations should produce a float64 column full of zeros
-    auto sum_column_index = segment->column_index("empty_sum");
-    ASSERT_TRUE(sum_column_index.has_value());
-    auto& sum_column = segment->column(*sum_column_index);
-    ASSERT_EQ(DataType::FLOAT64, sum_column.type().data_type());
-    for (size_t idx = 0; idx < unique_grouping_values; idx++) {
-        ASSERT_EQ(double(0), sum_column.scalar_at<double>(idx));
-    }
-
-    // Min, max, mean, count, first and last aggregations should not be present in the output segment
+    // Empty columns are not added to the segment.
+    // Calls to modify_segment are adding the field and then the NullValueReducer will fill in with the correct values
     ASSERT_FALSE(segment->column_index("empty_min").has_value());
     ASSERT_FALSE(segment->column_index("empty_max").has_value());
     ASSERT_FALSE(segment->column_index("empty_mean").has_value());
     ASSERT_FALSE(segment->column_index("empty_count").has_value());
+    ASSERT_FALSE(segment->column_index("empty_sum").has_value());
 }
 
 namespace aggregation_test
 {
     template <class T, class F>
-    void check_column(arcticdb::SegmentInMemory segment, std::string_view column_name, std::size_t ugv, F&& f)
-    {
-        auto column_index = segment.column_index(column_name);
+    void check_column(arcticdb::SegmentInMemory segment, std::string_view column_name, std::size_t ugv, F&& f) {
+        const auto column_index = segment.column_index(column_name);
         ASSERT_TRUE(column_index.has_value());
-        auto& column = segment.column(*column_index);
+        const auto& column = segment.column(*column_index);
         auto dt = arcticdb::data_type_from_raw_type<T>();
         ASSERT_EQ(dt, column.type().data_type());
-        for(std::size_t idx = 0u; idx < ugv; ++idx)
-        {
-            if constexpr (std::is_floating_point_v<T>)
-            {
-                T val = column.scalar_at<T>(idx).value();
-                if (std::isnan(val))
-                {
+        for(std::size_t idx = 0u; idx < ugv; ++idx) {
+            if constexpr (std::is_floating_point_v<T>) {
+                const T val = column.scalar_at<T>(idx).value();
+                if (std::isnan(val)) {
                     ASSERT_TRUE(std::isnan(f(idx)));
-                }
-                else
-                {
+                } else {
                     ASSERT_EQ(f(idx), val);
                 }
-            }
-            else
-            {
+            } else {
                 ASSERT_EQ(f(idx), column.scalar_at<T>(idx));
             }
         }
@@ -142,8 +129,8 @@ TEST(Clause, AggregationColumn)
                                    {"count", "count_int", "count_int"}});
     aggregation.set_component_manager(component_manager);
 
-    size_t num_rows{100};
-    size_t unique_grouping_values{10};
+    constexpr size_t num_rows{100};
+    constexpr size_t unique_grouping_values{10};
     auto proc_unit = ProcessingUnit{generate_groupby_testing_segment(num_rows, unique_grouping_values)};
     auto entity_ids = push_entities(*component_manager, std::move(proc_unit));
 
@@ -173,53 +160,31 @@ TEST(Clause, AggregationSparseColumn)
                                    {"count", "count_int", "count_int"}});
     aggregation.set_component_manager(component_manager);
 
-    size_t num_rows{100};
-    size_t unique_grouping_values{10};
+    constexpr size_t num_rows{100};
+    constexpr size_t unique_grouping_values{10};
     auto proc_unit = ProcessingUnit{generate_groupby_testing_sparse_segment(num_rows, unique_grouping_values)};
     auto entity_ids = push_entities(*component_manager, std::move(proc_unit));
 
-    auto aggregated = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, aggregation.process(std::move(entity_ids)));
+    const auto aggregated = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, aggregation.process(std::move(entity_ids)));
     ASSERT_TRUE(aggregated.segments_.has_value());
-    auto segments = aggregated.segments_.value();
+    const auto segments = aggregated.segments_.value();
     ASSERT_EQ(1, segments.size());
 
     using aggregation_test::check_column;
-    check_column<int64_t>(*segments[0], "sum_int", unique_grouping_values, [](size_t idx) {
-        if (idx%2 == 0) {
-            return 450 + 10*static_cast<int64_t>(idx);
-        } else {
-            return int64_t(0);
-        }
+    check_column<int64_t>(*segments[0], "sum_int", unique_grouping_values, [](size_t idx) -> int64_t {
+        return idx % 2 == 0 ? 450 + 10 * idx : 0;
     });
-    check_column<int64_t>(*segments[0], "min_int", unique_grouping_values, [](size_t idx) {
-        if (idx%2 == 0) {
-            return static_cast<int64_t>(idx);
-        } else {
-            return std::numeric_limits<int64_t>::max();
-        }
+    check_column<int64_t>(*segments[0], "min_int", unique_grouping_values, [](size_t idx) -> std::optional<int64_t> {
+        return idx % 2 == 0 ? std::optional{static_cast<int64_t>(idx)} : std::nullopt;
     });
-    check_column<int64_t>(*segments[0], "max_int", unique_grouping_values, [](size_t idx) {
-        if (idx%2 == 0) {
-            return 90 + static_cast<int64_t>(idx);
-        } else {
-            return std::numeric_limits<int64_t>::lowest();
-        }
+    check_column<int64_t>(*segments[0], "max_int", unique_grouping_values, [](size_t idx) -> std::optional<int64_t>  {
+        return idx % 2 == 0 ? std::optional{static_cast<int64_t>(90 + idx)} : std::nullopt;
     });
-    check_column<double>(*segments[0], "mean_int", unique_grouping_values, [](size_t idx) {
-        if (idx%2 == 0) {
-            return double(45 + idx);
-        }
-        else {
-            return std::numeric_limits<double>::quiet_NaN();
-        }
+    check_column<double>(*segments[0], "mean_int", unique_grouping_values, [](size_t idx) -> double {
+        return idx % 2 == 0 ? 45 + idx : std::numeric_limits<double>::quiet_NaN();
     });
-    check_column<uint64_t>(*segments[0], "count_int", unique_grouping_values, [](size_t idx) {
-        if (idx%2 == 0) {
-            return uint64_t(10);
-        }
-        else {
-            return uint64_t(0);
-        }
+    check_column<uint64_t>(*segments[0], "count_int", unique_grouping_values, [](size_t idx) -> uint64_t {
+        return idx % 2 == 0 ? 10 : 0;
     });
 }
 

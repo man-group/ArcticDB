@@ -8,6 +8,7 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 
 namespace arcticdb {
 

@@ -215,6 +215,8 @@ def test_lazy_resample(lmdb_library):
     received = lazy_df.collect().data
     expected = df.resample("D").agg({"col1": "sum", "col2": "first"})
 
+    expected.sort_index(inplace=True, axis=1)
+    received.sort_index(inplace=True, axis=1)
     assert_frame_equal(expected, received)
 
 
