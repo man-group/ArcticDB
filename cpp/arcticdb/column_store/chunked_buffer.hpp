@@ -481,7 +481,9 @@ class ChunkedBufferImpl {
             block_offsets_.clear();
         }
         block->abandon();
-        delete block;
+        auto timestamp = block->timestamp_;
+        block->~MemBlock();
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
     }
 
     void truncate_first_block(size_t bytes) {
@@ -499,7 +501,9 @@ class ChunkedBufferImpl {
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
         block->abandon();
-        delete block;
+        auto timestamp = block->timestamp_;
+        block->~MemBlock();
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
     }
 
     void truncate_last_block(size_t bytes) {
@@ -512,7 +516,9 @@ class ChunkedBufferImpl {
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
         block->abandon();
-        delete block;
+        auto timestamp = block->timestamp_;
+        block->~MemBlock();
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
     }
 
   private:
@@ -539,8 +545,9 @@ class ChunkedBufferImpl {
     void free_block(BlockType* block) const {
         ARCTICDB_TRACE(log::storage(), "Freeing block at address {:x}", uintptr_t(block));
         block->magic_.check();
+        auto timestamp = block->timestamp_;
         block->~MemBlock();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), block->timestamp_));
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
     }
 
     void free_last_block() {
