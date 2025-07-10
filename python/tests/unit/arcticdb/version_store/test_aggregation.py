@@ -165,6 +165,33 @@ def test_mean_aggregation_float(lmdb_version_store_v1):
     lib.write(symbol, df)
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
 
+def test_mean_aggregation_timestamp(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    symbol = "test_mean_aggregation_float"
+    df = DataFrame(
+        {
+            "grouping_column": ["3", "2", "1", "0", "3", "1", "2", "0", "2", "0", "1", "3", "5", "4"],
+            "to_mean": [
+                pd.Timestamp(0),
+                pd.Timestamp(-4),
+                pd.Timestamp(5),
+                pd.Timestamp(1),
+                pd.Timestamp(-6),
+                pd.Timestamp(0),
+                pd.Timestamp(-5),
+                pd.Timestamp(5),
+                pd.Timestamp(-1),
+                pd.Timestamp(4),
+                pd.Timestamp(6),
+                pd.Timestamp(-5),
+                pd.Timestamp(-10),
+                pd.Timestamp(10)
+            ]
+        },
+        index=np.arange(14),
+    )
+    lib.write(symbol, df)
+    generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
 
 def test_named_agg(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
@@ -569,4 +596,21 @@ def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store
     expected = pd.DataFrame({"agg_column": np.array([default_value, 0], dtype)}, index=["a", "b"])
     expected.index.name = "grouping_column"
     expected = expected.sort_index()
+    assert_frame_equal(data, expected)
+
+def test_mean_timestamp_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "sym"
+    df1 = pd.DataFrame({"agg": [pd.Timestamp(1)], "grouping": [0]})
+    df2 = pd.DataFrame({"grouping": [0, 1, 2]})
+    df3 = pd.DataFrame({"agg": [pd.Timestamp(2), pd.Timestamp(5)], "grouping": [0, 1]})
+    for df in [df1, df2, df3]:
+        lib.append(sym, df)
+    q = QueryBuilder()
+    q = q.groupby("grouping").agg({"agg": "mean"})
+    data = lib.read("sym", query_builder=q).data
+    data.sort_index(inplace=True)
+    expected = pd.DataFrame({"agg": [pd.Timestamp(1), pd.Timestamp(5), pd.NaT]}, index=[0, 1, 2])
+    expected.index.name = "grouping"
+    expected.sort_index(inplace=True)
     assert_frame_equal(data, expected)
