@@ -8,6 +8,7 @@
 #include <gtest/gtest.h>
 #include <string>
 #include <algorithm>
+#include <arcticdb/stream/incompletes.hpp>
 
 #include <arcticdb/util/random.h>
 #include <arcticdb/util/timer.hpp>
