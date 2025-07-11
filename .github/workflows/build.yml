@@ -54,6 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       INPUT_STORAGE: ${{ inputs.persistent_storage }}
+      MACOS_ENABLED: false
     outputs:
       storage: ${{ steps.set-storage.outputs.storage }}
     steps:
@@ -311,6 +312,7 @@ jobs:
 
   cpp-test-macos:
     needs: [common_config]
+    if: ${{ inputs.macos_enabled }}
     name: macOS C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -404,6 +406,7 @@ jobs:
 
   build-python-wheels-macos:
     needs: [common_config]
+    if: ${{ inputs.macos_enabled }}
     strategy:
       fail-fast: false
       matrix:
