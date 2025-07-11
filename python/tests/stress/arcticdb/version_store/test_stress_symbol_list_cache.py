@@ -68,7 +68,11 @@ def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_c
     expected_symbol_list = { f"sym_{i}" for i in range(num_writers) }
 
     result_symbol_list = set(slow_writing_library.list_symbols())
-    assert len(result_symbol_list) == len(expected_symbol_list)
+
+    # Here we only assert that we are not missing symbols from the symbol list (which could happen if the storage lock fails).
+    # We don't check the number of compactions because they are non-deterministic. In fact, with bad timings
+    # it is possible 0 compactions will happen if the slowdowns are big enough.
+    # So we have the `test_compaction_produces_single_key` to verify that compaction works as expected without slowdowns.
     assert result_symbol_list == expected_symbol_list
 
 @REAL_S3_TESTS_MARK
@@ -86,7 +90,6 @@ def test_compaction_produces_single_key(real_s3_storage, lib_name, compact_thres
     expected_symbol_list = { f"sym_{i}" for i in range(num_symbols) }
 
     result_symbol_list = set(symbols)
-    assert len(result_symbol_list) == len(expected_symbol_list)
     assert result_symbol_list == expected_symbol_list
 
     lt = real_s3_library._dev_tools.library_tool()

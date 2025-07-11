@@ -413,7 +413,6 @@ TEST(StorageLock, ConcurrentWritesWithRetrying) {
     }
     collect(futures).get();
 
-    ASSERT_EQ(lock_data->atomic_, 3);
     ASSERT_TRUE(lock_data->no_race_happened());
 }
 

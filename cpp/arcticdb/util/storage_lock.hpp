@@ -78,7 +78,15 @@ class StorageLock {
   public:
     static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24; // 1 Day
     static constexpr int64_t DEFAULT_WAIT_MS = 1000; // After writing the lock, waiting this time before checking if the written lock is still ours.
-    static constexpr double DEFAULT_MAX_DURATION_FACTOR = 1.5; // Controls what factor of the wait time is the maximum time the lock shoud spend. (writing + waiting + reading).
+    /*
+     Variable below controls what factor of the wait time is the maximum time the lock should spend. (writing + waiting + reading).
+
+     Can be configured. 1.5 is chosen as a default because:
+     If the factor is < 1, acquiring the lock always fails since the sleep is longer than factor * sleep time.
+     If the factor is > 2, there will be enough room for a long enough write so that two processes think they hold the lock simultaneously.
+     Choosing 1.5 keeps us equally away from both of these failure conditions.
+    */
+    static constexpr double DEFAULT_MAX_DURATION_FACTOR = 1.5;
     static constexpr int64_t DEFAULT_INITIAL_WAIT_MS = 10;
 
     static void force_release_lock(const StreamId& name, const std::shared_ptr<Store>& store) {
@@ -140,17 +148,17 @@ class StorageLock {
         size_t total_wait = 0;
 
         while (!try_acquire_lock(store)) {
-            wait_ms += dist(gen, decltype(dist)::param_type{0, wait_ms / 2});
-            log::lock().info("Didn't get lock, waiting {}", wait_ms);
-            sleep_ms(wait_ms);
-            total_wait += wait_ms;
-            wait_ms *= 2;
             if (timeout_ms && total_wait > *timeout_ms) {
                 ts_ = 0;
                 log::lock().info("Lock timed out, giving up after {}", wait_ms);
                 mutex_.unlock();
                 throw StorageLockTimeout{fmt::format("Storage lock {} timeout out after {} ms.", name_, total_wait)};
             }
+            wait_ms += dist(gen, decltype(dist)::param_type{0, wait_ms / 2});
+            log::lock().info("Didn't get lock, waiting {}", wait_ms);
+            sleep_ms(wait_ms);
+            total_wait += wait_ms;
+            wait_ms *= 2;
         }
     }
 
