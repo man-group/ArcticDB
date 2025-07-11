@@ -1,4 +1,5 @@
 from collections import defaultdict
+from pprint import pformat
 
 import pytest
 import pandas as pd
@@ -152,35 +153,36 @@ def test_delete_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats
 
 
 def test_write_and_prune_previous_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
-    expected_ops = 9
+    expected_ops = 17
     with config_context("VersionMap.ReloadInterval", 0):
         lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
         qs.enable()
         lib.write("s", data=create_df())
+        lib.write("s", data=create_df(), prune_previous_version=True)
         qs.reset_stats()
 
-        lib.write("s", data=create_df(), prune_previous=True)
+        lib.write("s", data=create_df(), prune_previous_version=True)
 
         base_stats = qs.get_query_stats()
         base_ops_count = sum_all_operations(base_stats)
-        assert base_ops_count == expected_ops
+        assert base_ops_count == expected_ops, pformat(base_stats)
         qs.reset_stats()
 
         iters = 10
 
         # make sure that the write and prune makes a constant number of operations
         for i in range(iters):
-            lib.write("s", data=create_df(), prune_previous=True)
+            lib.write("s", data=create_df(), prune_previous_version=True)
             stats = qs.get_query_stats()
             qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == expected_ops, visualize_stats_diff(base_stats, stats)
+            assert sum_all_operations(stats) == base_ops_count, visualize_stats_diff(base_stats, stats)
 
 
 def test_read_after_write_and_prune_previous(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
     expected_ops = 3
     lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
     lib.write("s", data=create_df())
-    lib.write("s", data=create_df(), prune_previous=True)
+    lib.write("s", data=create_df(), prune_previous_version=True)
 
     with config_context("VersionMap.ReloadInterval", 0):
         qs.enable()
@@ -188,18 +190,18 @@ def test_read_after_write_and_prune_previous(lib_name, s3_and_nfs_storage_bucket
         stats = qs.get_query_stats()
         qs.reset_stats()
 
-        assert sum_all_operations(stats) == expected_ops
+        assert sum_all_operations(stats) == expected_ops, pformat(stats)
         # there should be only get object operations
-        assert stats["storage_operations"].keys() == {"S3_GetObject"}, stats
+        assert stats["storage_operations"].keys() == {"S3_GetObject"}, pformat(stats)
         get_obj_ops = stats["storage_operations"]["S3_GetObject"]
         # We expect 3 get object operations:
         # - 1 for the version ref key
         # - 1 for the index key
         # - 1 for the data key
-        assert len(get_obj_ops.keys()) == 3, stats
-        assert get_obj_ops["VERSION_REF"]["count"] == 1, stats
-        assert get_obj_ops["TABLE_INDEX"]["count"] == 1, stats
-        assert get_obj_ops["TABLE_DATA"]["count"] == 1, stats
+        assert len(get_obj_ops.keys()) == 3, pformat(stats)
+        assert get_obj_ops["VERSION_REF"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_INDEX"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_DATA"]["count"] == 1, pformat(stats)
 
 
 def get_dataframe_for_range_edge_cases():
