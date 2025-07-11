@@ -9,7 +9,8 @@
 - delete_staged_data_on_failure handling /
 - Seemingly an error where validate_index isn't working properly / 
 - Refactor stuff in to incompletes files, and clean up method signatures /
-- Sort out testing, there is already test_parallel.py and test_finalize_staged_data.py and now we have test_stage.py too
+- Merge Ognyan's PR and rebase
+- Rename test_stage.py to test_staged_data_with_tokens.py and put near test_parallel.py
 - PR
 - Accept the tokens in the sort_and_finalize API and test, figure out how to fold in to the existing test suite
 - PR
