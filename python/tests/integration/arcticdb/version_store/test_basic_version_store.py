@@ -450,16 +450,16 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
     assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
 
-def check_write_and_prune_previous_version_keys(lib_tool, sym, ver_key):
+def check_write_and_prune_previous_version_keys(lib_tool, sym, ver_key, latest_version_id=2):
     assert ver_key.type == KeyType.VERSION
     keys_in_tombstone_ver = lib_tool.read_to_keys(ver_key)
     assert len(keys_in_tombstone_ver) == 3
     assert keys_in_tombstone_ver[0].type == KeyType.TABLE_INDEX
     assert keys_in_tombstone_ver[1].type == KeyType.TOMBSTONE_ALL
     assert keys_in_tombstone_ver[2].type == KeyType.VERSION
-    assert keys_in_tombstone_ver[0].version_id == 2
-    assert keys_in_tombstone_ver[1].version_id == 1
-    assert keys_in_tombstone_ver[2].version_id == 1
+    assert keys_in_tombstone_ver[0].version_id == latest_version_id
+    assert keys_in_tombstone_ver[1].version_id == latest_version_id - 1
+    assert keys_in_tombstone_ver[2].version_id == latest_version_id - 1
 
 
 def check_append_ref_key_structure(keys_in_ref, latest_version_id=1):
