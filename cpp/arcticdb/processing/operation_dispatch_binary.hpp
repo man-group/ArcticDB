@@ -280,32 +280,68 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
     return VariantData{std::move(output_bitset)};
 }
 
+template <typename Func>
+VariantData binary_comparator(const ColumnWithStrings& column_with_strings, const util::RegexGeneric& regex_generic, Func&& func) {
+    if (is_empty_type(column_with_strings.column_->type().data_type())) {
+        return EmptyResult{};
+    }
+    if constexpr(std::is_same_v<std::remove_reference_t<Func>, RegexMatchOperator>) {
+        util::BitSet output_bitset;
+        details::visit_type(column_with_strings.column_->type().data_type(), [&](auto col_tag) {
+            using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+            if constexpr(is_sequence_type(col_type_info::data_type)) {
+                auto offset_set = column_with_strings.string_pool_->get_regex_match_offsets_for_column(regex_generic, *column_with_strings.column_);
+                Column::transform<typename col_type_info::TDT>(
+                        *column_with_strings.column_,
+                        output_bitset,
+                        false,
+                        [&offset_set, &func](auto input_value) {
+                    auto offset = static_cast<entity::position_t>(input_value);
+                    return func(offset, offset_set);
+                });
+            } else {
+                user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Cannot perform regex_match with pattern {} on column {} as it has non-string type {}",
+                    regex_generic.text(), column_with_strings.column_name_, get_user_friendly_type_string(column_with_strings.column_->type()));
+            }
+        });
+        ARCTICDB_DEBUG(log::version(), "Filtered column of size {} down to {} bits", column_with_strings.column_->last_row() + 1, output_bitset.count());
+        return VariantData{std::move(output_bitset)};
+    } else {
+        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Invalid operator {} for regex match", func);
+        return EmptyResult{};
+    }
+}
+
 template<typename Func>
 VariantData visit_binary_comparator(const VariantData& left, const VariantData& right, Func&& func) {
     if(std::holds_alternative<EmptyResult>(left) || std::holds_alternative<EmptyResult>(right))
         return EmptyResult{};
 
     return std::visit(util::overload {
-     [&func] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
-        auto result = binary_comparator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
-         return transform_to_placeholder(result);
+        [&func] (const ColumnWithStrings& l, const std::shared_ptr<Value>& r) ->VariantData  {
+            auto result = binary_comparator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
+            return transform_to_placeholder(result);
         },
-        [&] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
-        auto result = binary_comparator<decltype(func)>(l, r, std::forward<decltype(func)>(func));
-        return transform_to_placeholder(result);
+        [&func] (const ColumnWithStrings& l, const ColumnWithStrings& r)  ->VariantData {
+            auto result = binary_comparator<decltype(func)>(l, r, std::forward<decltype(func)>(func));
+            return transform_to_placeholder(result);
         },
-        [&](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
-        auto result =  binary_comparator<decltype(func), true>(r, *l, std::forward<decltype(func)>(func));
-        return transform_to_placeholder(result);
+        [&func](const std::shared_ptr<Value>& l, const ColumnWithStrings& r) ->VariantData {
+            auto result =  binary_comparator<decltype(func), true>(r, *l, std::forward<decltype(func)>(func));
+            return transform_to_placeholder(result);
         },
-        [&] ([[maybe_unused]] const std::shared_ptr<Value>& l, [[maybe_unused]] const std::shared_ptr<Value>& r) ->VariantData  {
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Two value inputs not accepted to binary comparators");
-        return EmptyResult{};
+        [&func](const ColumnWithStrings& l, const std::shared_ptr<util::RegexGeneric>& r) ->VariantData {
+            auto result =  binary_comparator<decltype(func)>(l, *r, std::forward<decltype(func)>(func));
+            return transform_to_placeholder(result);
+        },
+        [] ([[maybe_unused]] const std::shared_ptr<Value>& l, [[maybe_unused]] const std::shared_ptr<Value>& r) ->VariantData  {
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Two value inputs not accepted to binary comparators");
+            return EmptyResult{};
         },
         [](const auto &, const auto&) -> VariantData {
-        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to binary comparators");
-        return EmptyResult{};
-    }
+            user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>("Bitset/ValueSet inputs not accepted to binary comparators");
+            return EmptyResult{};
+        }
     }, left, right);
 }
 
