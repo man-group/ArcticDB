@@ -312,7 +312,7 @@ jobs:
 
   cpp-test-macos:
     needs: [common_config]
-    if: ${{ inputs.macos_enabled }}
+    if: ${{ env.MACOS_ENABLED }}
     name: macOS C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -406,7 +406,7 @@ jobs:
 
   build-python-wheels-macos:
     needs: [common_config]
-    if: ${{ inputs.macos_enabled }}
+    if: ${{ env.MACOS_ENABLED }}
     strategy:
       fail-fast: false
       matrix:
