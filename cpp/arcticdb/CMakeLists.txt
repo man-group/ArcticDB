@@ -1096,6 +1096,7 @@ if(${TEST})
 
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
+            column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_clause.cpp
             processing/test/benchmark_ternary.cpp

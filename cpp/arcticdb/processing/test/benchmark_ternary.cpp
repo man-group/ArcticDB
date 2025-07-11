@@ -1,3 +1,6 @@
+
+
+
 /* Copyright 2023 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
@@ -18,8 +21,8 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-std::random_device rd;
-std::mt19937 gen(rd());
+static std::random_device rd;
+static std::mt19937 gen(rd());
 
 util::BitSet generate_bitset(const size_t num_rows) {
     util::BitSet bitset;

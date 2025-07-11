@@ -96,6 +96,8 @@ jobs:
           brew install sccache
           brew install mono
           brew install bison   # required by thrift pulled via vcpkg
+          brew install openssl@3
+          which openssl
           echo "SCCACHE_DIR=/tmp/sccache" >> $GITHUB_ENV
           mkdir -p /tmp/sccache
           # Start sccache server
@@ -400,11 +402,9 @@ jobs:
         run: |
           ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            echo "Run custom pytest command"
-            python -m pip  install pytest-repeat
-            python -m pip  install setuptools
-            python -m pip  install wheel
+            python -m pip  install pytest-repeat setuptools wheel
             python setup.py protoc --build-lib python
+            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
           else
             build_tooling/parallel_test.sh tests/${{matrix.type}}

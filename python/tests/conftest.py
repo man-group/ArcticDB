@@ -242,6 +242,20 @@ def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFa
 
 
 @pytest.fixture(scope="session")
+def test_prefix():
+    return "test_bucket_prefix"
+
+
+@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+def s3_and_nfs_storage_bucket(test_prefix, request):
+    with request.param(
+            use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
+    ) as factory:
+        with factory.create_fixture() as bucket:
+            yield bucket
+
+
+@pytest.fixture(scope="session")
 def s3_storage(s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with s3_storage_factory.create_fixture() as f:
         yield f
