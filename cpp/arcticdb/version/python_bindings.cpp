@@ -162,13 +162,15 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     .def("__repr__", &AtomKey::view)
     .def(py::self < py::self)
     .def(py::pickle([] (const AtomKey& key) {
-        return py::make_tuple(key.id(), key.version_id(), key.creation_ts(), key.content_hash(), key.start_index(), key.end_index(), key.type());
+        constexpr int serialization_version = 0;
+        return py::make_tuple(serialization_version, key.id(), key.version_id(), key.creation_ts(), key.content_hash(), key.start_index(), key.end_index(), key.type());
     },[](py::tuple t) {
-        util::check(t.size() == 7, "Invalid AtomKey pickle object!");
+        util::check(t.size() >= 7, "Invalid AtomKey pickle object!");
 
-        AtomKey key(t[0].cast<StreamId>(), t[1].cast<VersionId>(), t[2].cast<timestamp>(),
-            t[3].cast<ContentHash>(), t[4].cast<IndexValue>(), t[5].cast<IndexValue>(),
-            t[6].cast<KeyType>());
+        [[maybe_unused]] const int serialization_version = t[0].cast<int>();
+        AtomKey key(t[1].cast<StreamId>(), t[2].cast<VersionId>(), t[3].cast<timestamp>(),
+            t[4].cast<ContentHash>(), t[5].cast<IndexValue>(), t[6].cast<IndexValue>(),
+            t[7].cast<KeyType>());
         return key;
     }
     ));
@@ -345,16 +347,16 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<StageResult>(version, "StageResult")
         .def(py::init([]() { return StageResult({}); }))
 	.def_property_readonly("staged_segments", [](const StageResult& self) { return self.staged_segments; })
-	.def_property_readonly("version", [](const StageResult& self) { return self.version; })
         .def(py::pickle(
             [](const StageResult& s) {
-                return py::make_tuple(s.staged_segments, s.version);
+                constexpr int serialization_version = 0;
+                return py::make_tuple(serialization_version, s.staged_segments);
             },
             [](py::tuple t) {
-                util::check(t.size() == 2, "Invalid StageResult pickle object!");
+                util::check(t.size() >= 1, "Invalid StageResult pickle object!");
 
-                StageResult p(t[0].cast<std::vector<AtomKey>>());
-                p.version = t[1].cast<uint64_t>();
+                [[maybe_unused]] const int serialization_version = t[0].cast<int>();
+                StageResult p(t[1].cast<std::vector<AtomKey>>());
                 return p;
             }
         ));

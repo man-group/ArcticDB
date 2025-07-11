@@ -39,7 +39,7 @@ def test_stage(lmdb_storage, lib_name, new_api_enabled, finalize_mode):
     if not new_api_enabled:
         assert all(x is None for x in staged_results)
     else:
-        assert all(len(staged_result.staged_segments) == 2 and staged_result.version == 0 for staged_result in staged_results)
+        assert all(len(staged_result.staged_segments) == 2 for staged_result in staged_results)
 
     assert_frame_equal(lib.read(sym).data, not_staged, check_freq=False)
     lib.finalize_staged_data(sym, mode=finalize_mode)
