@@ -615,11 +615,14 @@ VersionedItem LocalVersionedEngine::update_internal(
             return VersionedItem(*update_info.previous_index_key_);
         }
 
+        auto write_options = get_write_options();
+        auto de_dup_map = get_de_dup_map(stream_id, update_info.previous_index_key_, write_options);
         auto versioned_item = update_impl(store(),
                                           update_info,
                                           query,
                                           frame,
-                                          get_write_options(),
+                                          std::move(de_dup_map),
+                                          std::move(write_options),
                                           dynamic_schema,
                                           cfg().write_options().empty_types());
         write_version_and_prune_previous(
@@ -1504,43 +1507,45 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
         update_versions_futs.push_back(
             std::move(stream_update_info_fut)
-                .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
-                    auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
-                    auto write_options = get_write_options();
-                    if (update_info.previous_index_key_.has_value()) {
-                        const bool dynamic_schema = cfg().write_options().dynamic_schema();
-                        const bool empty_types = cfg().write_options().empty_types();
-                        index_key_fut = async_update_impl(
-                            store(),
-                            update_info,
-                            update_query,
-                            std::move(frame),
-                            std::move(write_options),
-                            dynamic_schema,
-                            empty_types);
-                    } else {
-                        missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
-                            upsert,
-                            "Cannot update non-existent symbol {}."
-                            "Using \"upsert=True\" will create create the symbol instead of throwing this exception.",
-                            stream_id);
-                        index_key_fut = async_write_dataframe_impl(
-                            store(),
-                            0,
-                            std::move(frame),
-                            std::move(write_options),
-                            std::make_shared<DeDupMap>(),
-                            false,
-                            true);
-                    }
-                    return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
-                        return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
-                    });
-                })
-                .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
-                    auto&& [index_key, update_info] = index_key_and_update_info;
-                    return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
-                })
+            .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert](auto&& update_info) {
+                auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
+                auto write_options = get_write_options();
+                if (update_info.previous_index_key_.has_value()) {
+                    const bool dynamic_schema = cfg().write_options().dynamic_schema();
+                    const bool empty_types = cfg().write_options().empty_types();
+                    auto de_dup_map = get_de_dup_map(stream_id, update_info.previous_index_key_, get_write_options());
+                    index_key_fut = async_update_impl(
+                        store(),
+                        update_info,
+                        update_query,
+                        std::move(frame),
+                        std::move(de_dup_map),
+                        std::move(write_options),
+                        dynamic_schema,
+                        empty_types);
+                } else {
+                    missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
+                        upsert,
+                        "Cannot update non-existent symbol {}."
+                        "Using \"upsert=True\" will create create the symbol instead of throwing this exception.",
+                        stream_id);
+                    index_key_fut = async_write_dataframe_impl(
+                        store(),
+                        0,
+                        std::move(frame),
+                        std::move(write_options),
+                        std::make_shared<DeDupMap>(),
+                        false,
+                        true);
+                }
+                return std::move(index_key_fut).thenValueInline([update_info = std::move(update_info)](auto&& index_key) mutable {
+                    return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                });
+            })
+            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info) {
+                auto&& [index_key, update_info] = index_key_and_update_info;
+                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
+            })
         );
     }
 

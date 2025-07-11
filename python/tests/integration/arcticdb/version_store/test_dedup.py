@@ -62,25 +62,35 @@ def test_basic_de_dup(basic_store_factory):
 
 
 @pytest.mark.storage
-def test_de_dup_same_value_written(basic_store_factory):
+@pytest.mark.parametrize("op_type", ["write", "update"])
+def test_de_dup_same_value_written(basic_store_factory, op_type):
     lib = basic_store_factory(column_group_size=2, segment_row_size=2, de_duplication=True)
     symbol = "test_de_dup_same_value_written"
 
     # This will insert 50 data keys
     d1 = {"x": np.arange(0, 100, dtype=np.int64)}
     df1 = pd.DataFrame(data=d1)
-    lib.write(symbol, df1)
+    if op_type == "write":
+        lib.write(symbol, df1)
+    else:
+        lib.update(symbol, df1)
     vit = lib.read(symbol)
     assert_frame_equal(vit.data, df1)
 
     num_keys = len(get_data_keys(lib, symbol))
 
-    lib.write(symbol, df1)
+    if op_type == "write":
+        lib.write(symbol, df1)
+    else:
+        lib.update(symbol, df1)
 
     assert len(lib.list_versions(symbol)) == 2
     assert len(get_data_keys(lib, symbol)) == num_keys
 
-    lib.write(symbol, df1, prune_previous_version=True)
+    if op_type == "write":
+        lib.write(symbol, df1, prune_previous_version=True)
+    else:
+        lib.update(symbol, df1, prune_previous_version=True)
     assert len(lib.list_versions(symbol)) == 1
     assert len(get_data_keys(lib, symbol)) == num_keys
 
