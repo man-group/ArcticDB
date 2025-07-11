@@ -1,48 +1,5 @@
 name: Build and Test
-on:
-  push:
-    # On push only local storage tests get executed
-    tags: ["v**"]
-    branches: ["master"]
-  pull_request:
-    # On pull requests only local storage tests get executed
-    branches: ["**"]
-  schedule:
-    # IMPORTANT: For scheduled job we execute AWS_S3
-    - cron: '0 23 * * 0,1,2,3,4' # Start previous dat at 23:00 to finish next day
-  workflow_dispatch:
-    inputs:
-      persistent_storage:
-        description: Run the persistent storage tests?
-        type: choice
-        options:
-          - 'no'
-          - 'AWS_S3'
-          - 'GCPXML'
-        default: 'no'
-
-      pypi_publish:
-        type: boolean
-      publish_env:
-        description: Environment to publish to
-        type: environment
-      cmake_preset_type:
-        description: Override CMAKE preset type
-        type: choice
-        options: ["-", debug, release]
-      dev_image_tag:
-        description: Tag of the ArcticDB development image to use for the Linux C++ tests build
-        type: string
-        default: arcticdb-dev-clang:latest
-      pytest_args:
-        description: Rewrite what tests will run or do your own pytest line if string starts with pytest ... (Example -- pytest -n auto -v --count=50 -x python/tests/compat)
-        type: string
-        default: ""
-      version_cache_full_test:
-        description: 'Run tests with both version cache 0 and 2000000000'
-        required: false
-        default: false
-        type: boolean
+on: workflow_call
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:
   group: ${{github.ref}}

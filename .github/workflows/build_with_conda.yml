@@ -1,32 +1,5 @@
 name: Build with conda
-on:
-  push:
-    branches:
-      - master
-  # For Pull-Requests, this runs the CI on merge commit
-  # of HEAD with the target branch instead on HEAD, allowing
-  # testing against potential new states which might have
-  # been introduced in the target branch last commits.
-  # See: https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request
-  pull_request:
-
-  workflow_dispatch:
-    inputs:
-      run_on_arm_mac:
-        description: 'Run on arm macos'
-        type: boolean
-        required: false
-        default: false
-      run_cpp_tests:
-        description: 'Run C++ tests'
-        type: boolean
-        required: true
-        default: true        
-      run_custom_pytest_command:
-        description: 'Run custom pytest command (curdir is project root). Or pass additional arguments to default command'
-        type: string
-        required: false
-        default: ""        
+on: workflow_call
 
 jobs:
 

@@ -1,36 +1,5 @@
 name: Build with analysis tools
-on:
-  workflow_dispatch:
-    inputs:
-      run_all_benchmarks:
-        description: Run all benchmarks
-        type: boolean
-        default: false
-      dev_image_tag:
-        description: Tag of the ArcticDB development image to use for benchmark and code coverage flows
-        type: string
-        default: latest
-      suite_to_run:
-          description: Run LMDB suite or REAL storage (or both - ALL)
-          type: choice
-          options:
-            - 'LMDB'
-            - 'REAL'
-            - 'ALL'
-          default: 'LMDB'
-      suite_overwrite:
-        description: Specify regular expression for specific tests to be executed
-        type: string
-        default: ''
-  
-
-  schedule: # Schedule the job to run at 12 a.m. daily
-    - cron: '0 0 * * *'
-
-  pull_request_target:
-    paths-ignore:
-    - "**/*.md"
-
+on: workflow_call
 jobs:
 
   get_commits_to_benchmark:
