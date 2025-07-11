@@ -43,6 +43,11 @@ on:
         required: false
         default: false
         type: boolean
+      macos_enabled:
+        description: Enable macOS tests
+        required: false
+        default: false
+        type: boolean
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:
   group: ${{github.ref}}
@@ -54,7 +59,6 @@ jobs:
     runs-on: ubuntu-latest
     env:
       INPUT_STORAGE: ${{ inputs.persistent_storage }}
-      MACOS_ENABLED: false
     outputs:
       storage: ${{ steps.set-storage.outputs.storage }}
     steps:
@@ -312,7 +316,7 @@ jobs:
 
   cpp-test-macos:
     needs: [common_config]
-    if: ${{ env.MACOS_ENABLED }}
+    if: ${{ inputs.macos_enabled }}
     name: macOS C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -406,7 +410,7 @@ jobs:
 
   build-python-wheels-macos:
     needs: [common_config]
-    if: ${{ env.MACOS_ENABLED }}
+    if: ${{ inputs.macos_enabled }}
     strategy:
       fail-fast: false
       matrix:
