@@ -153,8 +153,9 @@ def test_unhandled_chars_staged_data(object_version_store, sym):
     assert not object_version_store.list_symbols_with_incomplete_data()
 
 
-@pytest.mark.parametrize("snap", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254,
-                                  chr(127), chr(128), "l" * 255, "*", "<", ">"])
+@pytest.mark.parametrize(
+    "snap", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254, chr(127), chr(128), "l" * 255, "*", "<", ">"]
+)
 def test_snapshot_names(object_version_store, snap):
     """We validate against these snapshot names in the V2 API, but let them go through in the V1 API to avoid disruption
     to legacy users on the V1 API."""
@@ -226,7 +227,9 @@ def test_unhandled_chars_already_present_write(object_version_store, three_col_d
 def test_unhandled_chars_already_present_on_deleted_symbol(object_version_store, three_col_df, unhandled_char, staged):
     sym = f"prefix{unhandled_char}postfix"
     with pytest.raises(UserInputException):
-        object_version_store.write(sym, three_col_df())  # reasonableness check - the sym we're using should fail the validation checks
+        object_version_store.write(
+            sym, three_col_df()
+        )  # reasonableness check - the sym we're using should fail the validation checks
 
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
         object_version_store.write(sym, three_col_df())
@@ -2374,20 +2377,26 @@ def test_batch_restore_version_bad_input_noop(lmdb_version_store, bad_thing):
     if bad_thing == "symbol":
         restore_syms = ["s1", "s2", "bad"]
         as_ofs = [1, second_ts, first_ts]
-        with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[bad\]"):
+        with pytest.raises(
+            NoSuchVersionException, match=r"E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[bad\]"
+        ):
             lib.batch_restore_version(restore_syms, as_ofs)
     elif bad_thing == "as_of":
         as_ofs = [first_ts, second_ts, 7]
-        with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[s3\]"):
+        with pytest.raises(
+            NoSuchVersionException, match=r"E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[s3\]"
+        ):
             lib.batch_restore_version(syms, as_ofs)
     elif bad_thing == "duplicate":
         restore_syms = ["s1", "s1", "s2"]
         as_ofs = [1, second_ts, first_ts]
-        with pytest.raises(UserInputException, match="E_INVALID_USER_ARGUMENT Duplicate symbols in restore_version.*more than once \[s1\]"):
+        with pytest.raises(
+            UserInputException,
+            match=r"E_INVALID_USER_ARGUMENT Duplicate symbols in restore_version.*more than once \[s1\]",
+        ):
             lib.batch_restore_version(restore_syms, as_ofs)
     else:
         raise RuntimeError(f"Unexpected bad_thing={bad_thing}")
-
 
     # Then
     latest = lib.batch_read(syms)
@@ -2409,7 +2418,7 @@ def test_restore_version_not_found(basic_store, ver):
     lib.write("abc", 2)
     lib.write("bcd", 9)
     lib.snapshot("snap", versions={"bcd": 0})
-    with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION.*Symbols with missing versions \[abc\]"):
+    with pytest.raises(NoSuchVersionException, match=r"E_NO_SUCH_VERSION.*Symbols with missing versions \[abc\]"):
         lib.restore_version("abc", ver)
 
 

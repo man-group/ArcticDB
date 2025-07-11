@@ -28,6 +28,7 @@ from arcticdb.util.test import (
 )
 from tests.util.storage_test import get_s3_storage_config
 from arcticdb_ext.storage import KeyType
+from arcticdb.version_store.library import DeleteRequest, WritePayload
 
 
 @pytest.mark.storage
