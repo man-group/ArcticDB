@@ -2252,8 +2252,6 @@ class NativeVersionStore:
               ``compact_incomplete``.
 
             To manually delete staged data, use the ``remove_incomplete`` function.
-        _stage_results : `Optional[List[StageResult]]`, default=None
-            Unused.
         Returns
         -------
         VersionedItem

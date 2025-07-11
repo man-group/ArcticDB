@@ -1522,8 +1522,6 @@ class Library:
               ``finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
-        _stage_results : Optional[List['StageResult']], default=None
-            Unused.
         Returns
         -------
         VersionedItem
