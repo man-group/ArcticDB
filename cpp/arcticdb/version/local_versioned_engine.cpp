@@ -24,6 +24,8 @@
 
 namespace arcticdb::version_store {
 
+namespace ranges = std::ranges;
+
 template<class ClockType>
 LocalVersionedEngine::LocalVersionedEngine(
         const std::shared_ptr<storage::Library>& library,
@@ -523,20 +525,18 @@ std::shared_ptr<DeDupMap> LocalVersionedEngine::get_de_dup_map(
     ){
     auto de_dup_map = std::make_shared<DeDupMap>();
     if (write_options.de_duplication) {
-        auto maybe_undeleted_prev = get_latest_undeleted_version(store(), version_map(), stream_id);
-        if (maybe_undeleted_prev) {
-            // maybe_undeleted_prev is index key
-            auto data_keys = get_data_keys(store(), {*maybe_undeleted_prev}, storage::ReadKeyOpts{});
+        if (auto latest_undeleted_index_key = get_latest_undeleted_version(store(), version_map(), stream_id)) {
+            const auto data_keys = get_data_keys(store(), {std::move(*latest_undeleted_index_key)}, storage::ReadKeyOpts{});
             for (const auto& data_key: data_keys) {
                 de_dup_map->insert_key(data_key);
             }
         } else if(maybe_prev && write_options.snapshot_dedup) {
             // This means we don't have any live versions(all tombstoned), so will try to dedup from snapshot versions
             auto snap_versions = get_index_keys_in_snapshots(store(), stream_id);
-            auto max_iter = std::max_element(std::begin(snap_versions), std::end(snap_versions),
-                                             [](const auto &k1, const auto &k2){return k1.version_id() < k2.version_id();});
-            if (max_iter != snap_versions.end()) {
-                auto data_keys = get_data_keys(store(), {*max_iter}, storage::ReadKeyOpts{});
+            auto latest_snapshot_it = ranges::max_element(snap_versions,
+                                                     [](const auto &k1, const auto &k2){return k1.version_id() < k2.version_id();});
+            if (latest_snapshot_it != snap_versions.end()) {
+                const auto data_keys = get_data_keys(store(), {*latest_snapshot_it}, storage::ReadKeyOpts{});
                 for (const auto& data_key: data_keys) {
                     de_dup_map->insert_key(data_key);
                 }
