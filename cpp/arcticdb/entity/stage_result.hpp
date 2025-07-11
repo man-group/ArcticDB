@@ -1,3 +1,5 @@
+#pragma once
+
 #include <arcticdb/entity/atom_key.hpp>
 #include <string>
 #include <vector>

@@ -724,7 +724,8 @@ VersionedItem PythonVersionStore::compact_incomplete(
         const std::optional<py::object>& user_meta /* = std::nullopt */,
         bool prune_previous_versions,
         bool validate_index,
-        bool delete_staged_data_on_failure) {
+        bool delete_staged_data_on_failure,
+        const std::optional<std::vector<StageResult>>& to_compact) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -739,7 +740,7 @@ VersionedItem PythonVersionStore::compact_incomplete(
         .validate_index_=validate_index,
         .delete_staged_data_on_failure_=delete_staged_data_on_failure
     };
-    return compact_incomplete_dynamic(stream_id, meta, options);
+    return compact_incomplete_dynamic(stream_id, meta, to_compact, options);
 }
 
 VersionedItem PythonVersionStore::sort_merge(
