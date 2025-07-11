@@ -2272,7 +2272,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             delete_staged_data_on_failure,
-            to_compact=_stage_results
+            tokens=_stage_results
         )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 

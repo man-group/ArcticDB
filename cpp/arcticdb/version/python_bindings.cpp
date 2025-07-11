@@ -658,7 +658,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("validate_index") = false,
              py::arg("delete_staged_data_on_failure") = false,
              py::kw_only(),
-             py::arg("to_compact") = std::nullopt,
+             py::arg("tokens") = std::nullopt,
              py::call_guard<SingleThreadMutexHolder>(), "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,
