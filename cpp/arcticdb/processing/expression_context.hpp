@@ -55,9 +55,14 @@ struct ExpressionContext {
         value_sets_.set_value(name, std::move(value_set));
     }
 
+    void add_regex(const std::string& name, std::shared_ptr<util::RegexGeneric> regex) {
+        regex_matches_.set_value(name, std::move(regex));
+    }
+
     ConstantMap<ExpressionNode> expression_nodes_;
     ConstantMap<Value> values_;
     ConstantMap<ValueSet> value_sets_;
+    ConstantMap<util::RegexGeneric> regex_matches_;
     VariantNode root_node_name_;
     bool dynamic_schema_{false};
 };
