@@ -119,9 +119,10 @@ class PythonVersionStore : public LocalVersionedEngine {
             const std::optional<py::object>& user_meta = std::nullopt,
             bool prune_previous_versions = false,
             bool validate_index = false,
-            bool delete_staged_data_on_failure=false);
+            bool delete_staged_data_on_failure=false,
+            const std::optional<std::vector<StageResult>>& tokens = std::nullopt);
 
-    void write_parallel(
+    StageResult write_parallel(
         const StreamId& stream_id,
         const py::tuple& item,
         const py::object& norm,

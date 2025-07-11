@@ -16,6 +16,7 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/stage_result.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
@@ -25,12 +26,56 @@
 
 #include <string>
 
+namespace arcticdb {
+
+struct AppendMapEntry {
+    AppendMapEntry() = default;
+
+    arcticdb::pipelines::SliceAndKey slice_and_key_;
+    std::optional<arcticdb::entity::AtomKey> next_key_;
+    uint64_t total_rows_ = 0;
+
+    const arcticdb::entity::StreamDescriptor& descriptor() const {
+        return *slice_and_key_.slice_.desc();
+    }
+
+    arcticdb::entity::StreamDescriptor& descriptor() {
+        return *slice_and_key_.slice_.desc();
+    }
+
+    const arcticdb::pipelines::FrameSlice& slice() const {
+        return slice_and_key_.slice_;
+    }
+
+    const arcticdb::entity::AtomKey & key() const{
+        return slice_and_key_.key();
+    }
+
+    friend bool operator<(const AppendMapEntry& l, const AppendMapEntry& r) {
+        const auto& right_key = r.key();
+        const auto& left_key = l.key();
+        if(left_key.start_index() == right_key.start_index())
+            return  left_key.end_index() < right_key.end_index();
+
+        return left_key.start_index() < right_key.start_index();
+    }
+};
+
+AppendMapEntry append_map_entry_from_key(
+    const std::shared_ptr<arcticdb::stream::StreamSource>& store,
+    const arcticdb::entity::AtomKey& key,
+    bool load_data);
+
+void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount);
+
+}
+
 namespace arcticdb::version_store {
 
 using namespace arcticdb::entity;
 using namespace arcticdb::pipelines;
 
-struct CompactIncompleteOptions {
+struct CompactIncompleteParameters {
     bool prune_previous_versions_;
     bool append_;
     bool convert_int_to_float_;
@@ -38,6 +83,9 @@ struct CompactIncompleteOptions {
     bool sparsify_;
     bool validate_index_{true}; // Default value as unused in sort_merge
     bool delete_staged_data_on_failure_{false};
+
+    // If provided, compact only keys contained in these tokens. Otherwise compact everything.
+    std::optional<std::vector<StageResult>> tokens;
 };
 
 struct SymbolProcessingResult {
@@ -187,7 +235,7 @@ VersionedItem compact_incomplete_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
-    const CompactIncompleteOptions& options,
+    const CompactIncompleteParameters& compaction_parameters,
     const WriteOptions& write_options,
     std::shared_ptr<PipelineContext>& pipeline_context);
 
@@ -220,7 +268,7 @@ VersionedItem sort_merge_impl(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
-    const CompactIncompleteOptions& options,
+    const CompactIncompleteParameters& compaction_parameters,
     const WriteOptions& write_options,
     std::shared_ptr<PipelineContext>& pipeline_context);
 
@@ -270,7 +318,7 @@ void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store);
 std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const std::shared_ptr<Store>& store,
-    const CompactIncompleteOptions& options);
+    const CompactIncompleteParameters& parameters);
 
 folly::Future<SegmentInMemory> prepare_output_frame(
         std::vector<SliceAndKey>&& items,
@@ -391,21 +439,22 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
 
 namespace fmt {
 template<>
-struct formatter<arcticdb::version_store::CompactIncompleteOptions> {
+struct formatter<arcticdb::version_store::CompactIncompleteParameters> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    auto format(const arcticdb::version_store::CompactIncompleteOptions &opts, FormatContext &ctx) const {
+    auto format(const arcticdb::version_store::CompactIncompleteParameters &params, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "CompactIncompleteOptions append={} convert_int_to_float={}, deleted_staged_data_on_failure={}, "
-                                  "prune_previous_versions={}, sparsify={}, validate_index={}, via_iteration={}",
-                       opts.append_,
-                       opts.convert_int_to_float_,
-                       opts.delete_staged_data_on_failure_,
-                       opts.prune_previous_versions_,
-                       opts.sparsify_,
-                       opts.validate_index_,
-                       opts.via_iteration_);
+                                  "prune_previous_versions={}, sparsify={}, validate_index={}, via_iteration={}, tokens={}",
+                              params.append_,
+                              params.convert_int_to_float_,
+                              params.delete_staged_data_on_failure_,
+                              params.prune_previous_versions_,
+                              params.sparsify_,
+                              params.validate_index_,
+                              params.via_iteration_,
+                              params.tokens ? "present" : "absent");
     }
 };
 }

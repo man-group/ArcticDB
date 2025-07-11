@@ -724,22 +724,24 @@ VersionedItem PythonVersionStore::compact_incomplete(
         const std::optional<py::object>& user_meta /* = std::nullopt */,
         bool prune_previous_versions,
         bool validate_index,
-        bool delete_staged_data_on_failure) {
+        bool delete_staged_data_on_failure,
+        const std::optional<std::vector<StageResult>>& tokens) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(*user_meta, *meta);
     }
-    CompactIncompleteOptions options{
+    CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
         .validate_index_=validate_index,
-        .delete_staged_data_on_failure_=delete_staged_data_on_failure
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure,
+        .tokens=tokens
     };
-    return compact_incomplete_dynamic(stream_id, meta, options);
+    return compact_incomplete_dynamic(stream_id, meta, params);
 }
 
 VersionedItem PythonVersionStore::sort_merge(
@@ -756,18 +758,20 @@ VersionedItem PythonVersionStore::sort_merge(
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(user_meta, *meta);
     }
-    CompactIncompleteOptions options{
+    CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
-        .delete_staged_data_on_failure_=delete_staged_data_on_failure
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure,
+        // TODO aseaton support tokens for sort_and_finalize_staged_data
+        .tokens=std::nullopt
     };
-    return sort_merge_internal(stream_id, meta, options);
+    return sort_merge_internal(stream_id, meta, params);
 }
 
-void PythonVersionStore::write_parallel(
+StageResult PythonVersionStore::write_parallel(
     const StreamId& stream_id,
     const py::tuple& item,
     const py::object& norm,
@@ -775,7 +779,7 @@ void PythonVersionStore::write_parallel(
     bool sort_on_index,
     std::optional<std::vector<std::string>> sort_columns) const {
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, py::none(), cfg().write_options().empty_types());
-    write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
+    return write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {

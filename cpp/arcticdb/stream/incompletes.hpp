@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <arcticdb/entity/stage_result.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
@@ -23,6 +24,14 @@ using FilterRange = std::variant<std::monostate, IndexRange, RowRange>;
 }
 
 namespace arcticdb {
+
+struct ReadIncompletesFlags {
+    bool convert_int_to_float{false};
+    bool via_iteration{false};
+    bool sparsify{false};
+    bool dynamic_schema{false};
+    bool has_active_version{false};
+};
 
 struct WriteIncompleteOptions {
     const bool validate_index;
@@ -56,7 +65,7 @@ void remove_incomplete_segments(
 void remove_incomplete_segments(
     const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& sids, const std::string& common_prefix);
 
-void write_parallel_impl(
+std::vector<AtomKey> write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
@@ -92,5 +101,18 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     bool via_iteration);
+
+/**
+ * Load incomplete segments based on the provided tokens.
+ *
+ * Throws if any of the tokens refer to segments that no longer exist (for example, because they have already been
+ * finalised).
+ */
+std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
+                                                              const std::shared_ptr<PipelineContext>& pipeline_context,
+                                                              const std::optional<std::vector<StageResult>>& tokens,
+                                                              const ReadQuery& read_query,
+                                                              const ReadIncompletesFlags& flags,
+                                                              bool load_data);
 
 } //namespace arcticdb
