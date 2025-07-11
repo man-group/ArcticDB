@@ -168,6 +168,24 @@ def test_index_value_variants(start_index: Union[int, str], end_index: Union[int
     assert key.start_index == unpickled_key.start_index
     assert key.end_index == unpickled_key.end_index
 
+@pytest.mark.parametrize("key_type_name", list(KeyType.__entries.keys()))
+def test_key_type_variants(key_type_name):
+    key_type = getattr(KeyType, key_type_name)
+    key = AtomKey(
+        "test_symbol",
+        1,
+        1,
+        0,
+        1,
+        2,
+        key_type
+    )
+    pickled_data = pickle.dumps(key)
+    unpickled_key = pickle.loads(pickled_data)
+
+    assert key == unpickled_key
+    assert key.type == unpickled_key.type
+
 def test_pickle_protocol_versions():
     key = AtomKey(
         "test_symbol",
