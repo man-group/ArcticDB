@@ -18,49 +18,12 @@
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/version/version_core.hpp>
 
 namespace arcticdb {
 
 using namespace arcticdb::pipelines;
 using namespace arcticdb::stream;
-
-struct AppendMapEntry {
-    AppendMapEntry() = default;
-
-    pipelines::SliceAndKey slice_and_key_;
-    std::optional<entity::AtomKey> next_key_;
-    uint64_t total_rows_ = 0;
-
-    const entity::StreamDescriptor& descriptor() const {
-        return *slice_and_key_.slice_.desc();
-    }
-
-    entity::StreamDescriptor& descriptor() {
-        return *slice_and_key_.slice_.desc();
-    }
-
-    const pipelines::FrameSlice& slice() const {
-        return slice_and_key_.slice_;
-    }
-
-    const entity::AtomKey & key() const{
-        return slice_and_key_.key();
-    }
-
-    friend bool operator<(const AppendMapEntry& l, const AppendMapEntry& r) {
-        const auto& right_key = r.key();
-        const auto& left_key = l.key();
-        if(left_key.start_index() == right_key.start_index())
-            return  left_key.end_index() < right_key.end_index();
-
-        return left_key.start_index() < right_key.start_index();
-    }
-};
-
-AppendMapEntry entry_from_key(
-    const std::shared_ptr<stream::StreamSource>& store,
-    const entity::AtomKey& key,
-    bool load_data);
 
 std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
     const std::shared_ptr<Store> &store,
@@ -81,7 +44,7 @@ inline std::vector<AppendMapEntry> load_via_iteration(
         if(key.id() != stream_id)
             return;
 
-        auto entry = entry_from_key(store, key, load_data);
+        auto entry = append_map_entry_from_key(store, key, load_data);
 
         output.emplace_back(std::move(entry));
     });
@@ -119,12 +82,6 @@ std::set<StreamId> get_active_incomplete_refs(const std::shared_ptr<Store>& stor
         }
     }
     return output;
-}
-
-void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount) {
-    for(auto& entry : entries) {
-        complete_rowcount = entry.slice_and_key_.slice_.fix_row_count(static_cast<ssize_t>(complete_rowcount));
-    }
 }
 
 TimeseriesDescriptor pack_timeseries_descriptor(
@@ -489,7 +446,7 @@ std::vector<AppendMapEntry> load_via_list(
 
     try {
         while (next_key) {
-            auto entry = entry_from_key(store, next_key.value(), load_data);
+            auto entry = append_map_entry_from_key(store, next_key.value(), load_data);
             next_key = entry.next_key_;
             output.emplace_back(std::move(entry));
         }
@@ -514,50 +471,6 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
     }
 
     return output;
-}
-
-std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
-    const std::shared_ptr<StreamSource>& store,
-    const AtomKey& k,
-    bool load_data,
-    storage::ReadKeyOpts opts) {
-    if(load_data) {
-        auto seg = store->read_sync(k, opts).second;
-        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
-    } else {
-        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
-        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
-        return std::make_pair(std::move(*tsd), std::nullopt);
-    }
-}
-
-AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
-    AppendMapEntry entry;
-
-    if(tsd.proto().has_next_key())
-        entry.next_key_ = key_from_proto(tsd.proto().next_key());
-
-    entry.total_rows_ = tsd.total_rows();
-    return entry;
-}
-
-AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const AtomKey& key, bool load_data) {
-    auto opts = storage::ReadKeyOpts{};
-    opts.dont_warn_about_missing_key = true;
-    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
-    auto entry = create_entry(tsd);
-    auto descriptor = std::make_shared<StreamDescriptor>();
-    auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
-    auto index_field_count = desc->index().field_count();
-    auto field_count = desc->fields().size();
-    if (seg) {
-        seg->attach_descriptor(desc);
-    }
-
-    auto frame_slice = FrameSlice{desc, ColRange{index_field_count, field_count}, RowRange{0, entry.total_rows_}};
-    entry.slice_and_key_ = SliceAndKey{std::move(frame_slice), key, std::move(seg)};
-    return entry;
 }
 
 void append_incomplete(

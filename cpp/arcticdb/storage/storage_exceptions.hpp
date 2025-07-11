@@ -44,7 +44,7 @@ public:
         ArcticCategorizedException<ErrorCategory::MISSING_DATA>(msg) {
     }
 
-    explicit NoDataFoundException(const char *msg) :
+    explicit NoDataFoundException(const char* msg) :
         ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
     }
 
@@ -82,12 +82,14 @@ public:
 
     explicit KeyNotFoundException(boost::container::small_vector<VariantKey, 1>& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
-        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()), std::make_move_iterator(keys.end()))) {
+        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()),
+                                                        std::make_move_iterator(keys.end()))) {
     }
 
     explicit KeyNotFoundException(boost::container::small_vector<VariantKey, 1>& keys, const std::string& err_output) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
-        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()), std::make_move_iterator(keys.end()))) {
+        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()),
+                                                        std::make_move_iterator(keys.end()))) {
     }
 
     std::vector<VariantKey>& keys() {
@@ -96,6 +98,45 @@ public:
 private:
     std::shared_ptr<std::vector<VariantKey>> keys_;
     mutable std::string msg_;
+};
+
+struct KeyNotFoundInTokenInfo {
+    uint64_t token_index;
+    VariantKey missing_key;
+};
+
+} // namespace arcticdb::storage
+
+namespace fmt {
+using namespace arcticdb::storage;
+
+template<>
+struct formatter<KeyNotFoundInTokenInfo> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const KeyNotFoundInTokenInfo& k, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "token_index={}, missing_key={}", k.token_index, variant_key_view(k.missing_key));
+    };
+
+};
+} // namespace fmt
+
+namespace arcticdb::storage {
+
+class KeyNotFoundInTokensException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND_IN_TOKEN> {
+public:
+    explicit KeyNotFoundInTokensException(std::vector<KeyNotFoundInTokenInfo>&& keys) :
+        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND_IN_TOKEN>(fmt::format("Keys not found for some tokens: {}", keys)),
+        keys_(std::make_shared<std::vector<KeyNotFoundInTokenInfo>>(std::move(keys))) {
+    }
+
+    std::vector<KeyNotFoundInTokenInfo>& keys() {
+        return *keys_;
+    }
+private:
+    std::shared_ptr<std::vector<KeyNotFoundInTokenInfo>> keys_;
 };
 
 class LibraryPermissionException : public PermissionException {
