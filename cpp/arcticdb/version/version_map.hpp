@@ -297,13 +297,13 @@ public:
 
         std::vector<AtomKey> keys_to_write;
         std::optional<AtomKey> tombstone_all_key;
+        keys_to_write.push_back(key);
         if (!result.empty()) {
             auto first_key_to_tombstone = previous_key ? previous_key : entry->get_first_index(false).first;
             tombstone_all_key = get_tombstone_all_key(first_key_to_tombstone.value(), store->current_timestamp());
             entry->try_set_tombstone_all(tombstone_all_key.value());
             keys_to_write.push_back(tombstone_all_key.value());
         }
-        keys_to_write.push_back(key);
 
         auto previous_index = do_write(store, key.version_id(), key.id(), std::span{keys_to_write}, entry);
         write_symbol_ref(store, *entry->keys_.cbegin(), previous_index, entry->head_.value());
