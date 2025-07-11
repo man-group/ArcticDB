@@ -2261,6 +2261,7 @@ class NativeVersionStore:
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata)
+
         vit = self.version_store.compact_incomplete(
             symbol,
             append,
@@ -2271,6 +2272,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             delete_staged_data_on_failure,
+            to_compact=_stage_results
         )
         return self._convert_thin_cxx_item_to_python(vit, metadata)
 

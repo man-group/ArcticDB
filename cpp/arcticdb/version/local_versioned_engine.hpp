@@ -422,6 +422,7 @@ protected:
     VersionedItem compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+            const std::optional<std::vector<StageResult>>& to_compact,
             const CompactIncompleteOptions& options);
 
     /**

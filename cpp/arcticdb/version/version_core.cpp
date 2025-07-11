@@ -5,9 +5,20 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/version/version_core.hpp>
+#include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/stream/segment_aggregator.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/pipeline/slicing.hpp>
+#include <iterator>
+#include <arcticdb/pipeline/frame_utils.hpp>
+#include <util/key_utils.hpp>
+#include <pipeline/frame_slice.hpp>
+#include <arcticdb/stream/stream_source.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
+#include <arcticdb/codec/codec.hpp>
 #include <folly/futures/FutureSplitter.h>
 
-#include <arcticdb/version/version_core.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -29,6 +40,60 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <ranges>
+
+namespace arcticdb {
+
+static std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
+    const std::shared_ptr<StreamSource>& store,
+    const AtomKey& k,
+    bool load_data,
+    storage::ReadKeyOpts opts) {
+    if(load_data) {
+        auto seg = store->read_sync(k, opts).second;
+        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
+    } else {
+        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
+        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
+        return std::make_pair(std::move(*tsd), std::nullopt);
+    }
+}
+
+static AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
+    AppendMapEntry entry;
+
+    if(tsd.proto().has_next_key())
+        entry.next_key_ = key_from_proto(tsd.proto().next_key());
+
+    entry.total_rows_ = tsd.total_rows();
+    return entry;
+}
+
+AppendMapEntry append_map_entry_from_key(const std::shared_ptr<arcticdb::stream::StreamSource>& store, const arcticdb::entity::AtomKey& key, bool load_data) {
+    auto opts = arcticdb::storage::ReadKeyOpts{};
+    opts.dont_warn_about_missing_key = true;
+    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
+    auto entry = create_entry(tsd);
+    auto descriptor = std::make_shared<arcticdb::entity::StreamDescriptor>();
+    auto desc = std::make_shared<arcticdb::entity::StreamDescriptor>(tsd.as_stream_descriptor());
+    auto index_field_count = desc->index().field_count();
+    auto field_count = desc->fields().size();
+    if (seg) {
+        seg->attach_descriptor(desc);
+    }
+
+    auto frame_slice = arcticdb::pipelines::FrameSlice{desc, arcticdb::pipelines::ColRange{index_field_count, field_count}, arcticdb::pipelines::RowRange{0, entry.total_rows_}};
+    entry.slice_and_key_ = arcticdb::SliceAndKey{std::move(frame_slice), key, std::move(seg)};
+    return entry;
+}
+
+void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount) {
+    for(auto& entry : entries) {
+        complete_rowcount = entry.slice_and_key_.slice_.fix_row_count(static_cast<ssize_t>(complete_rowcount));
+    }
+}
+
+} // arcticdb
 
 namespace arcticdb::version_store {
 
@@ -1089,21 +1154,68 @@ static void read_indexed_keys_to_pipeline(
     ARCTICDB_DEBUG(log::version(), "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows", pipeline_context->slice_and_keys_.size(), pipeline_context->total_rows_, version_info.symbol());
 }
 
+// TODO aseaton this would make more sense in incompletes.hpp
 // Returns true if there are staged segments
 static bool read_incompletes_to_pipeline(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::optional<std::vector<StageResult>>& keys_to_read,
     const ReadQuery& read_query,
     const ReadOptions& read_options,
     const ReadIncompletesFlags& flags) {
 
-    auto incomplete_segments = get_incomplete(
-        store,
-        pipeline_context->stream_id_,
-        read_query.row_filter,
-        pipeline_context->last_row(),
-        flags.via_iteration,
-        false);
+    std::vector<SliceAndKey> incomplete_segments;
+    bool load_data{false};
+    if (keys_to_read) {
+        // TODO aseaton pull out a function for this block
+        util::check(std::holds_alternative<std::monostate>(read_query.row_filter), "read_incompletes_to_pipeline with keys_to_read specified "
+                                                                                   "and a row filter is not supported");
+        // via_iteration false walks a linked list structure of append data keys that is only written by the tick collector
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(flags.via_iteration, "read_incompletes_to_pipeline with keys_to_read specified and not via_iteration is not supported");
+        std::vector<AppendMapEntry> entries;
+        std::vector<storage::KeyNotFoundInTokenInfo> non_existent_keys;
+        for (const auto& [i, staged_result] : folly::enumerate(*keys_to_read)) {
+            for (const auto& staged_key : staged_result.staged_segments) {
+                try {
+                    AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
+                    entries.emplace_back(std::move(entry));
+                } catch (const storage::KeyNotFoundException& e) {
+                    non_existent_keys.emplace_back(i, staged_key);
+                }
+            }
+        }
+
+        if (!non_existent_keys.empty()) {
+            // Future aseaton: More sophisticated error handling
+            // Return back indexes of StagedResult objects with missing keys to the Python layer rather than raising.
+            // Then rethrow in Python layer (enriched with that info) - this pattern does not seem to be supported
+            // by pybind11 so we need to handroll it.
+            // Then we may provide tooling that takes this error and the list of StagedResult tokens being finalized
+            // and gives back a new list of StagedResult objects that could be used to retry.
+            throw storage::KeyNotFoundInTokensException(std::move(non_existent_keys));
+        }
+
+        if(!entries.empty()) {
+            auto index_desc = entries[0].descriptor().index();
+            // Can't sensibly sort rowcount indexes
+            if (index_desc.type() != IndexDescriptorImpl::Type::ROWCOUNT) {
+                std::sort(std::begin(entries), std::end(entries));
+            }
+        }
+
+        fix_slice_rowcounts(entries, pipeline_context->last_row());
+        for (auto& entry : entries) {
+            incomplete_segments.emplace_back(std::move(entry.slice_and_key_));
+        }
+    } else {
+        incomplete_segments = get_incomplete(
+            store,
+            pipeline_context->stream_id_,
+            read_query.row_filter,
+            pipeline_context->last_row(),
+            flags.via_iteration,
+            false);
+    }
 
     ARCTICDB_DEBUG(log::version(), "Symbol {}: Found {} incomplete segments", pipeline_context->stream_id_, incomplete_segments.size());
     if(incomplete_segments.empty()) {
@@ -1755,7 +1867,8 @@ static SortedValue compute_sorted_status(const std::optional<SortedValue>& initi
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& norm_meta,
+    const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+    const std::optional<std::vector<StageResult>>& to_compact,
     const UpdateInfo& update_info,
     const CompactIncompleteOptions& options,
     const WriteOptions& write_options,
@@ -1778,6 +1891,7 @@ VersionedItem sort_merge_impl(
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
         pipeline_context,
+        to_compact,
         read_query,
         ReadOptions{},
         read_incomplete_flags
@@ -1866,14 +1980,16 @@ VersionedItem sort_merge_impl(
         slices,
         keys,
         pipeline_context->incompletes_after(),
-        norm_meta);
+        user_meta);
     return vit;
 }
 
+// TODO aseaton this signature is extremely long
 VersionedItem compact_incomplete_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+    const std::optional<std::vector<StageResult>>& to_compact,
     const UpdateInfo& update_info,
     const CompactIncompleteOptions& options,
     const WriteOptions& write_options,
@@ -1898,6 +2014,7 @@ VersionedItem compact_incomplete_impl(
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
         pipeline_context,
+        to_compact,
         read_query,
         ReadOptions{},
         read_incomplete_flags
@@ -2114,7 +2231,7 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
                     .dynamic_schema=opt_false(read_options.dynamic_schema()),
                     .has_active_version = has_active_version
             };
-            read_incompletes_to_pipeline(store, pipeline_context, read_query, read_options, read_incompletes_flags);
+            read_incompletes_to_pipeline(store, pipeline_context, std::nullopt, read_query, read_options, read_incompletes_flags);
         }
     }
 

@@ -1046,6 +1046,7 @@ void LocalVersionedEngine::add_to_symbol_list_on_compaction(
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+    const std::optional<std::vector<StageResult>>& to_compact,
     const CompactIncompleteOptions& options) {
     log::version().debug("Compacting incomplete symbol {} with options {}", stream_id, options);
 
@@ -1060,7 +1061,8 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     pipeline_context->version_id_ = update_info.next_version_id_;
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
 
-    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
+    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, to_compact,
+                                                  update_info, options, get_write_options(), pipeline_context);
     ARCTICDB_DEBUG(log::version(), "Finished compact_incomplete_impl for symbol {}", stream_id);
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
@@ -1748,7 +1750,8 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     pipeline_context->version_id_ = update_info.next_version_id_;
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
 
-    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, options, get_write_options(), pipeline_context);
+    // TODO aseaton 4th argument is std::nullopt should be tokens to compact
+    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, std::nullopt, update_info, options, get_write_options(), pipeline_context);
     ARCTICDB_DEBUG(log::version(), "Finished sort_merge_impl for symbol {}", stream_id);
 
     write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);

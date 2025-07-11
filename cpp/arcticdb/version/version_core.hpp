@@ -16,6 +16,7 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/stage_result.hpp>
 #include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
@@ -24,6 +25,50 @@
 #include <arcticdb/version/schema_checks.hpp>
 
 #include <string>
+
+namespace arcticdb {
+
+struct AppendMapEntry {
+    AppendMapEntry() = default;
+
+    arcticdb::pipelines::SliceAndKey slice_and_key_;
+    std::optional<arcticdb::entity::AtomKey> next_key_;
+    uint64_t total_rows_ = 0;
+
+    const arcticdb::entity::StreamDescriptor& descriptor() const {
+        return *slice_and_key_.slice_.desc();
+    }
+
+    arcticdb::entity::StreamDescriptor& descriptor() {
+        return *slice_and_key_.slice_.desc();
+    }
+
+    const arcticdb::pipelines::FrameSlice& slice() const {
+        return slice_and_key_.slice_;
+    }
+
+    const arcticdb::entity::AtomKey & key() const{
+        return slice_and_key_.key();
+    }
+
+    friend bool operator<(const AppendMapEntry& l, const AppendMapEntry& r) {
+        const auto& right_key = r.key();
+        const auto& left_key = l.key();
+        if(left_key.start_index() == right_key.start_index())
+            return  left_key.end_index() < right_key.end_index();
+
+        return left_key.start_index() < right_key.start_index();
+    }
+};
+
+AppendMapEntry append_map_entry_from_key(
+    const std::shared_ptr<arcticdb::stream::StreamSource>& store,
+    const arcticdb::entity::AtomKey& key,
+    bool load_data);
+
+void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount);
+
+}
 
 namespace arcticdb::version_store {
 
@@ -186,6 +231,7 @@ VersionedItem compact_incomplete_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+    const std::optional<std::vector<StageResult>>& to_compact,
     const UpdateInfo& update_info,
     const CompactIncompleteOptions& options,
     const WriteOptions& write_options,
@@ -219,6 +265,7 @@ VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+    const std::optional<std::vector<StageResult>>& to_compact,
     const UpdateInfo& update_info,
     const CompactIncompleteOptions& options,
     const WriteOptions& write_options,
