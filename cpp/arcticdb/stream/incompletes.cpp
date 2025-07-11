@@ -594,4 +594,54 @@ std::optional<int64_t> latest_incomplete_timestamp(
 
     return std::nullopt;
 }
+
+std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
+                                                              const std::shared_ptr<PipelineContext>& pipeline_context,
+                                                              const std::optional<std::vector<StageResult>>& tokens,
+                                                              const ReadQuery& read_query,
+                                                              const ReadIncompletesFlags& flags,
+                                                              bool load_data) {
+    util::check(std::holds_alternative<std::monostate>(read_query.row_filter), "read_incompletes_to_pipeline with keys_to_read specified "
+                                                                               "and a row filter is not supported");
+    // via_iteration false walks a linked list structure of append data keys that is only written by the tick collector
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(flags.via_iteration, "read_incompletes_to_pipeline with keys_to_read specified and not via_iteration is not supported");
+    std::vector<AppendMapEntry> entries;
+    std::vector<storage::KeyNotFoundInTokenInfo> non_existent_keys;
+    for (const auto& [i, staged_result] : folly::enumerate(*tokens)) {
+        for (const auto& staged_key : staged_result.staged_segments) {
+            try {
+                AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
+                entries.emplace_back(std::move(entry));
+            } catch (const storage::KeyNotFoundException& e) {
+                non_existent_keys.emplace_back(i, staged_key);
+            }
+        }
+    }
+
+    if (!non_existent_keys.empty()) {
+        // Future aseaton: More sophisticated error handling
+        // Return back indexes of StagedResult objects with missing keys to the Python layer rather than raising.
+        // Then rethrow in Python layer (enriched with that info) - this pattern does not seem to be supported
+        // by pybind11 so we need to handroll it.
+        // Then we may provide tooling that takes this error and the list of StagedResult tokens being finalized
+        // and gives back a new list of StagedResult objects that could be used to retry.
+        throw storage::KeyNotFoundInTokensException(std::move(non_existent_keys));
+    }
+
+    if(!entries.empty()) {
+        auto index_desc = entries[0].descriptor().index();
+        // Can't sensibly sort rowcount indexes
+        if (index_desc.type() != IndexDescriptorImpl::Type::ROWCOUNT) {
+            std::sort(std::begin(entries), std::end(entries));
+        }
+    }
+
+    std::vector<SliceAndKey> incomplete_segments;
+    fix_slice_rowcounts(entries, pipeline_context->last_row());
+    for (auto& entry : entries) {
+        incomplete_segments.emplace_back(std::move(entry.slice_and_key_));
+    }
+    return incomplete_segments;
 }
+
+}  // namespace arcticdb

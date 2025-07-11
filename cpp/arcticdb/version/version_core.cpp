@@ -99,14 +99,6 @@ namespace arcticdb::version_store {
 
 namespace ranges = std::ranges;
 
-struct ReadIncompletesFlags {
-    bool convert_int_to_float{false};
-    bool via_iteration{false};
-    bool sparsify{false};
-    bool dynamic_schema{false};
-    bool has_active_version{false};
-};    
-
 static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, const ReadOptions& read_options) {
 
     if (opt_false(read_options.force_strings_to_object()) || opt_false(read_options.force_strings_to_fixed()))
@@ -1155,59 +1147,26 @@ static void read_indexed_keys_to_pipeline(
     ARCTICDB_DEBUG(log::version(), "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows", pipeline_context->slice_and_keys_.size(), pipeline_context->total_rows_, version_info.symbol());
 }
 
-// TODO aseaton this would make more sense in incompletes.hpp
 // Returns true if there are staged segments
+// When tokens is present, only read keys represented by those tokens.
 static bool read_incompletes_to_pipeline(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::optional<std::vector<StageResult>>& keys_to_read,
+    const std::optional<std::vector<StageResult>>& tokens,
     const ReadQuery& read_query,
     const ReadOptions& read_options,
     const ReadIncompletesFlags& flags) {
 
     std::vector<SliceAndKey> incomplete_segments;
     bool load_data{false};
-    if (keys_to_read) {
-        // TODO aseaton pull out a function for this block
-        util::check(std::holds_alternative<std::monostate>(read_query.row_filter), "read_incompletes_to_pipeline with keys_to_read specified "
-                                                                                   "and a row filter is not supported");
-        // via_iteration false walks a linked list structure of append data keys that is only written by the tick collector
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(flags.via_iteration, "read_incompletes_to_pipeline with keys_to_read specified and not via_iteration is not supported");
-        std::vector<AppendMapEntry> entries;
-        std::vector<storage::KeyNotFoundInTokenInfo> non_existent_keys;
-        for (const auto& [i, staged_result] : folly::enumerate(*keys_to_read)) {
-            for (const auto& staged_key : staged_result.staged_segments) {
-                try {
-                    AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
-                    entries.emplace_back(std::move(entry));
-                } catch (const storage::KeyNotFoundException& e) {
-                    non_existent_keys.emplace_back(i, staged_key);
-                }
-            }
-        }
+    if (tokens) {
+        incomplete_segments = get_incomplete_segments_using_tokens(store,
+                                                                   pipeline_context,
+                                                                   tokens,
+                                                                   read_query,
+                                                                   flags,
+                                                                   load_data);
 
-        if (!non_existent_keys.empty()) {
-            // Future aseaton: More sophisticated error handling
-            // Return back indexes of StagedResult objects with missing keys to the Python layer rather than raising.
-            // Then rethrow in Python layer (enriched with that info) - this pattern does not seem to be supported
-            // by pybind11 so we need to handroll it.
-            // Then we may provide tooling that takes this error and the list of StagedResult tokens being finalized
-            // and gives back a new list of StagedResult objects that could be used to retry.
-            throw storage::KeyNotFoundInTokensException(std::move(non_existent_keys));
-        }
-
-        if(!entries.empty()) {
-            auto index_desc = entries[0].descriptor().index();
-            // Can't sensibly sort rowcount indexes
-            if (index_desc.type() != IndexDescriptorImpl::Type::ROWCOUNT) {
-                std::sort(std::begin(entries), std::end(entries));
-            }
-        }
-
-        fix_slice_rowcounts(entries, pipeline_context->last_row());
-        for (auto& entry : entries) {
-            incomplete_segments.emplace_back(std::move(entry.slice_and_key_));
-        }
     } else {
         incomplete_segments = get_incomplete(
             store,
@@ -1313,6 +1272,55 @@ static bool read_incompletes_to_pipeline(
     generate_filtered_field_descriptors(pipeline_context, read_query.columns);
     pipeline_context->total_rows_ = pipeline_context->calc_rows();
     return true;
+}
+
+std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
+                                                 const std::shared_ptr<PipelineContext>& pipeline_context,
+                                                 const std::optional<std::vector<StageResult>>& keys_to_read,
+                                                 const ReadQuery& read_query,
+                                                 const ReadIncompletesFlags& flags,
+                                                 bool load_data) {
+    util::check(std::holds_alternative<std::monostate>(read_query.row_filter), "read_incompletes_to_pipeline with keys_to_read specified "
+                                                                               "and a row filter is not supported");
+    // via_iteration false walks a linked list structure of append data keys that is only written by the tick collector
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(flags.via_iteration, "read_incompletes_to_pipeline with keys_to_read specified and not via_iteration is not supported");
+    std::vector<AppendMapEntry> entries;
+    std::vector<storage::KeyNotFoundInTokenInfo> non_existent_keys;
+    for (const auto& [i, staged_result] : folly::enumerate(*keys_to_read)) {
+        for (const auto& staged_key : staged_result.staged_segments) {
+            try {
+                AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
+                entries.emplace_back(std::move(entry));
+            } catch (const storage::KeyNotFoundException&) {
+                non_existent_keys.emplace_back(i, staged_key);
+            }
+        }
+    }
+
+    if (!non_existent_keys.empty()) {
+        // Future aseaton: More sophisticated error handling
+        // Return back indexes of StagedResult objects with missing keys to the Python layer rather than raising.
+        // Then rethrow in Python layer (enriched with that info) - this pattern does not seem to be supported
+        // by pybind11 so we need to handroll it.
+        // Then we may provide tooling that takes this error and the list of StagedResult tokens being finalized
+        // and gives back a new list of StagedResult objects that could be used to retry.
+        throw storage::KeyNotFoundInTokensException(std::move(non_existent_keys));
+    }
+
+    if(!entries.empty()) {
+        auto index_desc = entries[0].descriptor().index();
+        // Can't sensibly sort rowcount indexes
+        if (index_desc.type() != IndexDescriptorImpl::Type::ROWCOUNT) {
+            std::sort(std::begin(entries), std::end(entries));
+        }
+    }
+
+    std::vector<SliceAndKey> incomplete_segments;
+    fix_slice_rowcounts(entries, pipeline_context->last_row());
+    for (auto& entry : entries) {
+        incomplete_segments.emplace_back(std::move(entry.slice_and_key_));
+    }
+    return incomplete_segments;
 }
 
 static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -1819,34 +1827,34 @@ DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
 std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
     const std::shared_ptr<PipelineContext>& pipeline_context,
     const std::shared_ptr<Store>& store,
-    const CompactIncompleteOptions& options) {
-    if(options.delete_staged_data_on_failure_)
-        return std::make_optional<DeleteIncompleteKeysOnExit>(pipeline_context, store, options.via_iteration_);
+    const CompactIncompleteParameters& parameters) {
+    if(parameters.delete_staged_data_on_failure_)
+        return std::make_optional<DeleteIncompleteKeysOnExit>(pipeline_context, store, parameters.via_iteration_);
     else
         return std::nullopt;
 }
 
 static void read_indexed_keys_for_compaction(
-    const CompactIncompleteOptions &options,
+    const CompactIncompleteParameters &parameters,
     const UpdateInfo &update_info,
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<PipelineContext> &pipeline_context,
     ReadQuery& read_query,
     const ReadOptions& read_options
 ) {
-    const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
+    const bool append_to_existing = parameters.append_ && update_info.previous_index_key_.has_value();
     if(append_to_existing) {
         read_indexed_keys_to_pipeline(store, pipeline_context, *(update_info.previous_index_key_), read_query, read_options);
     }
 }
 
 static void validate_slicing_policy_for_compaction(
-    const CompactIncompleteOptions &options,
+    const CompactIncompleteParameters &parameters,
     const UpdateInfo &update_info,
     const std::shared_ptr<PipelineContext> &pipeline_context,
     const WriteOptions& write_options
 ) {
-    const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
+    const bool append_to_existing = parameters.append_ && update_info.previous_index_key_.has_value();
     if(append_to_existing) {
         if (!write_options.dynamic_schema && !pipeline_context->slice_and_keys_.empty()) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
@@ -1870,30 +1878,29 @@ VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-    const std::optional<std::vector<StageResult>>& to_compact,
     const UpdateInfo& update_info,
-    const CompactIncompleteOptions& options,
+    const CompactIncompleteParameters& compaction_parameters,
     const WriteOptions& write_options,
     std::shared_ptr<PipelineContext>& pipeline_context) {
     auto read_query = ReadQuery{};
 
-    read_indexed_keys_for_compaction(options, update_info, store, pipeline_context, read_query, ReadOptions{});
-    validate_slicing_policy_for_compaction(options, update_info, pipeline_context, write_options);
+    read_indexed_keys_for_compaction(compaction_parameters, update_info, store, pipeline_context, read_query, ReadOptions{});
+    validate_slicing_policy_for_compaction(compaction_parameters, update_info, pipeline_context, write_options);
     const auto num_versioned_rows = pipeline_context->total_rows_;
-    const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
+    const bool append_to_existing = compaction_parameters.append_ && update_info.previous_index_key_.has_value();
     // Cache this before calling read_incompletes_to_pipeline as it changes the descripor
     const std::optional<SortedValue> initial_index_sorted_status = append_to_existing ? std::optional{pipeline_context->desc_->sorted()} : std::nullopt;
     const ReadIncompletesFlags read_incomplete_flags{
-        .convert_int_to_float = options.convert_int_to_float_,
-        .via_iteration = options.via_iteration_,
-        .sparsify = options.sparsify_,
+        .convert_int_to_float = compaction_parameters.convert_int_to_float_,
+        .via_iteration = compaction_parameters.via_iteration_,
+        .sparsify = compaction_parameters.sparsify_,
         .dynamic_schema = write_options.dynamic_schema,
         .has_active_version = update_info.previous_index_key_.has_value()
     };
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
         pipeline_context,
-        to_compact,
+        compaction_parameters.tokens,
         read_query,
         ReadOptions{},
         read_incomplete_flags
@@ -1922,7 +1929,7 @@ VersionedItem sort_merge_impl(
             ReadOptions read_options;
             read_options.set_dynamic_schema(write_options.dynamic_schema);
             auto segments = read_process_and_collect(store, pipeline_context, std::make_shared<ReadQuery>(std::move(read_query)), read_options).get();
-            if (options.append_ && update_info.previous_index_key_ && !segments.empty()) {
+            if (compaction_parameters.append_ && update_info.previous_index_key_ && !segments.empty()) {
                 const timestamp last_index_on_disc = update_info.previous_index_key_->end_time() - 1;
                 const timestamp incomplete_start =
                     std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment(store)));
@@ -1965,7 +1972,7 @@ VersionedItem sort_merge_impl(
                     segment.drop_empty_columns();
                 }
 
-                aggregator.add_segment(std::move(segment), sk.slice(), options.convert_int_to_float_);
+                aggregator.add_segment(std::move(segment), sk.slice(), compaction_parameters.convert_int_to_float_);
             }
             aggregator.commit();
             pipeline_context->desc_->set_sorted(compute_sorted_status(initial_index_sorted_status));
@@ -1986,14 +1993,12 @@ VersionedItem sort_merge_impl(
     return vit;
 }
 
-// TODO aseaton this signature is extremely long
 VersionedItem compact_incomplete_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-    const std::optional<std::vector<StageResult>>& to_compact,
     const UpdateInfo& update_info,
-    const CompactIncompleteOptions& options,
+    const CompactIncompleteParameters& compaction_parameters,
     const WriteOptions& write_options,
     std::shared_ptr<PipelineContext>& pipeline_context) {
 
@@ -2001,22 +2006,22 @@ VersionedItem compact_incomplete_impl(
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
     std::optional<SegmentInMemory> last_indexed;
-    read_indexed_keys_for_compaction(options, update_info, store, pipeline_context, read_query, ReadOptions{});
-    validate_slicing_policy_for_compaction(options, update_info, pipeline_context, write_options);
-    const bool append_to_existing = options.append_ && update_info.previous_index_key_.has_value();
+    read_indexed_keys_for_compaction(compaction_parameters, update_info, store, pipeline_context, read_query, ReadOptions{});
+    validate_slicing_policy_for_compaction(compaction_parameters, update_info, pipeline_context, write_options);
+    const bool append_to_existing = compaction_parameters.append_ && update_info.previous_index_key_.has_value();
     // Cache this before calling read_incompletes_to_pipeline as it changes the descriptor.
     const std::optional<SortedValue> initial_index_sorted_status = append_to_existing ? std::optional{pipeline_context->desc_->sorted()} : std::nullopt;
     const ReadIncompletesFlags read_incomplete_flags{
-        .convert_int_to_float = options.convert_int_to_float_,
-        .via_iteration = options.via_iteration_,
-        .sparsify = options.sparsify_,
+        .convert_int_to_float = compaction_parameters.convert_int_to_float_,
+        .via_iteration = compaction_parameters.via_iteration_,
+        .sparsify = compaction_parameters.sparsify_,
         .dynamic_schema = write_options.dynamic_schema,
         .has_active_version = update_info.previous_index_key_.has_value()
     };
     const bool has_incomplete_segments = read_incompletes_to_pipeline(
         store,
         pipeline_context,
-        to_compact,
+        compaction_parameters.tokens,
         read_query,
         ReadOptions{},
         read_incomplete_flags
@@ -2025,7 +2030,7 @@ VersionedItem compact_incomplete_impl(
         has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"
     );
-    if (options.validate_index_) {
+    if (compaction_parameters.validate_index_) {
         check_incompletes_index_ranges_dont_overlap(pipeline_context, initial_index_sorted_status, append_to_existing);
     }
     const auto& first_seg = pipeline_context->slice_and_keys_.begin()->segment(store);
@@ -2036,7 +2041,7 @@ VersionedItem compact_incomplete_impl(
     auto policies = std::make_tuple(
         index,
         dynamic_schema ? VariantSchema{DynamicSchema::default_schema(index, stream_id)} : VariantSchema{FixedSchema::default_schema(index, stream_id)},
-        options.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
+        compaction_parameters.sparsify_ ? VariantColumnPolicy{SparseColumnPolicy{}} : VariantColumnPolicy{DenseColumnPolicy{}}
         );
 
     CompactionResult result = util::variant_match(std::move(policies), [&] (auto &&idx, auto &&schema, auto &&column_policy) {
@@ -2045,7 +2050,7 @@ VersionedItem compact_incomplete_impl(
         using ColumnPolicyType = std::remove_reference_t<decltype(column_policy)>;
         constexpr bool validate_index_sorted = IndexType::type() == IndexDescriptorImpl::Type::TIMESTAMP;
         const CompactionOptions compaction_options {
-            .convert_int_to_float = options.convert_int_to_float_,
+            .convert_int_to_float = compaction_parameters.convert_int_to_float_,
             .validate_index = validate_index_sorted,
             .perform_schema_checks = true
         };

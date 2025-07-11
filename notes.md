@@ -8,7 +8,7 @@
 - out of order tokens /
 - delete_staged_data_on_failure handling /
 - Seemingly an error where validate_index isn't working properly / 
-- Refactor stuff in to incompletes files, and clean up method signatures
+- Refactor stuff in to incompletes files, and clean up method signatures /
 - Sort out testing, there is already test_parallel.py and test_finalize_staged_data.py and now we have test_stage.py too
 - PR
 - Accept the tokens in the sort_and_finalize API and test, figure out how to fold in to the existing test suite

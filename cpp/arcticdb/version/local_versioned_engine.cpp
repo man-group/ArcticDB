@@ -1034,10 +1034,10 @@ StageResult LocalVersionedEngine::write_parallel_frame(
 
 void LocalVersionedEngine::add_to_symbol_list_on_compaction(
         const StreamId& stream_id,
-        const CompactIncompleteOptions& options,
+        const CompactIncompleteParameters& parameters,
         const UpdateInfo& update_info) {
     if(cfg_.symbol_list()) {
-        if (!options.append_ || !update_info.previous_index_key_.has_value()) {
+        if (!parameters.append_ || !update_info.previous_index_key_.has_value()) {
             symbol_list().add_symbol(store_, stream_id, update_info.next_version_id_);
         }
     }
@@ -1046,9 +1046,8 @@ void LocalVersionedEngine::add_to_symbol_list_on_compaction(
 VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-    const std::optional<std::vector<StageResult>>& to_compact,
-    const CompactIncompleteOptions& options) {
-    log::version().debug("Compacting incomplete symbol {} with options {}", stream_id, options);
+    const CompactIncompleteParameters& parameters) {
+    log::version().debug("Compacting incomplete symbol {} with options {}", stream_id, parameters);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_) {
@@ -1059,16 +1058,16 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
-    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
+    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), parameters);
 
-    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta, to_compact,
-                                                  update_info, options, get_write_options(), pipeline_context);
+    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta,
+                                                  update_info, parameters, get_write_options(), pipeline_context);
     ARCTICDB_DEBUG(log::version(), "Finished compact_incomplete_impl for symbol {}", stream_id);
 
-    write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
+    write_version_and_prune_previous(parameters.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     ARCTICDB_DEBUG(log::version(), "Finished write_version_and_prune_previous for symbol {}", stream_id);
 
-    add_to_symbol_list_on_compaction(stream_id, options, update_info);
+    add_to_symbol_list_on_compaction(stream_id, parameters, update_info);
     if (delete_keys_on_failure)
         delete_keys_on_failure->release();
     delete_incomplete_keys(*pipeline_context, *store());
@@ -1780,8 +1779,8 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
 VersionedItem LocalVersionedEngine::sort_merge_internal(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-    const CompactIncompleteOptions& options) {
-    log::version().debug("Sort merge for symbol {} with options {}", stream_id, options);
+    const CompactIncompleteParameters& parameters) {
+    log::version().debug("Sort merge for symbol {} with options {}", stream_id, parameters);
 
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_) {
@@ -1793,16 +1792,15 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     auto pipeline_context = std::make_shared<PipelineContext>();
     pipeline_context->stream_id_ = stream_id;
     pipeline_context->version_id_ = update_info.next_version_id_;
-    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), options);
+    auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), parameters);
 
-    // TODO aseaton 4th argument is std::nullopt should be tokens to compact
-    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, std::nullopt, update_info, options, get_write_options(), pipeline_context);
+    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, parameters, get_write_options(), pipeline_context);
     ARCTICDB_DEBUG(log::version(), "Finished sort_merge_impl for symbol {}", stream_id);
 
-    write_version_and_prune_previous(options.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
+    write_version_and_prune_previous(parameters.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     ARCTICDB_DEBUG(log::version(), "Finished write_version_and_prune_previous for symbol {}", stream_id);
 
-    add_to_symbol_list_on_compaction(stream_id, options, update_info);
+    add_to_symbol_list_on_compaction(stream_id, parameters, update_info);
     if (delete_keys_on_failure)
         delete_keys_on_failure->release();
     delete_incomplete_keys(*pipeline_context, *store());

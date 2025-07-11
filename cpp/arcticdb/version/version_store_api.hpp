@@ -120,7 +120,7 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool prune_previous_versions = false,
             bool validate_index = false,
             bool delete_staged_data_on_failure=false,
-            const std::optional<std::vector<StageResult>>& to_compact = std::nullopt);
+            const std::optional<std::vector<StageResult>>& tokens = std::nullopt);
 
     StageResult write_parallel(
         const StreamId& stream_id,
