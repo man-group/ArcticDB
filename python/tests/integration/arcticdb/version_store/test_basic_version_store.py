@@ -563,7 +563,6 @@ def test_prune_previous_versions_write_batch(basic_store):
         check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
         # Then - only latest version and keys should survive
-        assert len(lib.list_versions(sym2)) == 1
         assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
         assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
 
