@@ -767,7 +767,7 @@ VersionedItem PythonVersionStore::sort_merge(
     return sort_merge_internal(stream_id, meta, options);
 }
 
-void PythonVersionStore::write_parallel(
+StageResult PythonVersionStore::write_parallel(
     const StreamId& stream_id,
     const py::tuple& item,
     const py::object& norm,
@@ -775,7 +775,7 @@ void PythonVersionStore::write_parallel(
     bool sort_on_index,
     std::optional<std::vector<std::string>> sort_columns) const {
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, py::none(), cfg().write_options().empty_types());
-    write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
+    return write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {

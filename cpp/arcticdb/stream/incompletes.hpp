@@ -56,7 +56,7 @@ void remove_incomplete_segments(
 void remove_incomplete_segments(
     const std::shared_ptr<Store>& store, const std::unordered_set<StreamId>& sids, const std::string& common_prefix);
 
-void write_parallel_impl(
+std::vector<AtomKey> write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<pipelines::InputTensorFrame>& frame,
