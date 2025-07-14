@@ -561,21 +561,17 @@ def test_delete_batch_comprehensive(arctic_library):
     assert not lib.has_symbol("sym5")
 
     # Test 4: Delete all including the ones that are already deleted
-    result = lib.delete_batch(["sym1", "sym2", "sym3", "sym4", "sym5"])
-    # assert len(result) == 5
-    # assert result[0] is None
-    # assert result[1] is None
-    # assert result[2] is None
-    # assert result[3] is None
-    # assert result[4] is None
-    assert not lib.has_symbol("sym1")
-    assert not lib.has_symbol("sym2")
-    assert not lib.has_symbol("sym3")
-    assert not lib.has_symbol("sym4")
-    assert not lib.has_symbol("sym5")
+    syms = ["sym1", "sym2", "sym3", "sym4", "sym5"]
+    result = lib.delete_batch(syms)
+    assert len(result) == 5
+    for r in result:
+        assert r is None
+
+    for sym in syms:
+        assert not lib.has_symbol(sym)
     assert lib.list_symbols() == []
     lt = lib._nvs.library_tool()
-    for sym in ["sym1", "sym2", "sym3", "sym4", "sym5"]:
+    for sym in syms:
         assert not [ver for ver in lib._nvs.list_versions() if ver["symbol"] == sym]
         assert not lt.find_keys_for_id(KeyType.TABLE_DATA, sym)
 
