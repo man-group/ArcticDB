@@ -752,7 +752,8 @@ VersionedItem PythonVersionStore::sort_merge(
         bool via_iteration,
         bool sparsify,
         bool prune_previous_versions,
-        bool delete_staged_data_on_failure) {
+        bool delete_staged_data_on_failure,
+        const std::optional<std::vector<StageResult>>& tokens) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
@@ -765,8 +766,7 @@ VersionedItem PythonVersionStore::sort_merge(
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
         .delete_staged_data_on_failure_=delete_staged_data_on_failure,
-        // TODO aseaton support tokens for sort_and_finalize_staged_data
-        .tokens=std::nullopt
+        .tokens=tokens
     };
     return sort_merge_internal(stream_id, meta, params);
 }
