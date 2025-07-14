@@ -285,6 +285,43 @@ def test_finalize_missing_keys(arctic_client_lmdb, arctic_api_version, new_stage
         finalize(arctic_api_version, lib, sym, _stage_results=[stage_result_1], mode="write")
 
 
+def test_finalize_noop_if_any_missing_keys(arctic_client_lmdb, arctic_api_version, new_staged_data_api_enabled, lib_name):
+    sym = "sym"
+    ac = arctic_client_lmdb
+    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    indexes = DATE_RANGE_INDEXES
+    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
+    df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
+    df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2])
+    stage_result_1 = lib.stage(sym, df_1)
+    stage_result_2 = lib.stage(sym, df_2)
+    stage_result_3 = lib.stage(sym, df_3)
+
+    lt = lib._dev_tools.library_tool()
+    assert len(lt.find_keys(KeyType.APPEND_DATA)) == 4
+    finalize(arctic_api_version, lib, sym, _stage_results=[stage_result_3], mode="write")
+    assert len(lt.find_keys(KeyType.APPEND_DATA)) == 3
+
+    # Do we raise if someone finalizes a key that no longer exists?
+    # Future: More sophisticated exception, containing information about which tokens and keys failed
+    with pytest.raises(StorageException):
+        finalize(arctic_api_version, lib, sym, _stage_results=[stage_result_1, stage_result_2, stage_result_3], mode="write")
+
+    # Do we leave everything that was on disk alone?
+    res = lib.read(sym)
+    assert res.version == 0
+    assert_frame_equal(res.data, df_3)
+    assert len(lt.find_keys(KeyType.APPEND_DATA)) == 3
+
+    # Can we still go ahead and finalize without the missing key?
+    finalize(arctic_api_version, lib, sym, _stage_results=[stage_result_1, stage_result_2], mode="write")
+
+    res = lib.read(sym)
+    assert res.version == 1
+    assert_frame_equal(res.data, pd.concat([df_1, df_2]))
+    assert len(lt.find_keys(KeyType.APPEND_DATA)) == 0
+
+
 def test_finalize_with_tokens_and_prune_previous(arctic_client_lmdb, arctic_api_version,
                                                  new_staged_data_api_enabled, lib_name, prune_previous_versions):
     """Do we respect pruning when we also have tokens? This test also checks that we support metadata with tokens."""
