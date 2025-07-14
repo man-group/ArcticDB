@@ -203,7 +203,7 @@ TEST_F(VersionStoreTest, SortMerge) {
             .tokens=std::nullopt
     };
 
-    test_store_->sort_merge_internal(symbol, params);
+    test_store_->sort_merge_internal(symbol, std::nullopt, params);
 }
 
 TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
