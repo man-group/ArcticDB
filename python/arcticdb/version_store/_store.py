@@ -11,6 +11,8 @@ from dataclasses import dataclass
 import datetime
 import os
 import sys
+from warnings import warn
+
 import pandas as pd
 import numpy as np
 import pytz
@@ -26,13 +28,14 @@ from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import SortedValue
+from arcticdb_ext.version_store import SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb_ext import get_config_int
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -529,9 +532,14 @@ class NativeVersionStore:
             norm_failure_options_msg=norm_failure_options_msg,
         )
         if isinstance(item, NPDDataFrame):
-            self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+            is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
+            result = self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+            if is_new_stage_api_enabled:
+                return result
+            return None
         else:
             log.warning("The data could not be normalized to an ArcticDB format and has not been written")
+            return None
 
     def write(
         self,
@@ -657,6 +665,9 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             if parallel or incomplete:
+                is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
+                if is_new_stage_api_enabled:
+                    warn('Staging data with write() is deprecated. Use stage() instead.', DeprecationWarning, stacklevel=2)
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
@@ -824,7 +835,7 @@ class NativeVersionStore:
             If a range is specified, it will clear/delete the data within the
             range and overwrite it with the data in `data`. This allows the user
             to update with data that might only be a subset of the
-            original data.
+            original data. Note date_range is end-inclusive.
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
@@ -1932,10 +1943,11 @@ class NativeVersionStore:
             `str` : snapshot name which contains the version
             `datetime.datetime` : the version of the data that existed as_of the requested point in time
         date_range: `Optional[DateRangeInput]`, default=None
-            DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-            of the data that falls within the given range. The same effect can be achieved by using the date_range
-            clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
-            See the QueryBuilder.date_range docstring for more details.
+            DateRange to read data for. Inclusive both for lower and upper bounds. Applicable only for dataframes with
+            a DateTime index. Returns only the part of the data that falls within the given range.
+            The same effect can  be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
             Only one of date_range or row_range can be provided.
         row_range: `Optional[Tuple[int, int]]`, default=None
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
@@ -1943,7 +1955,7 @@ class NativeVersionStore:
             the handling of negative start/end values.
             Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
-            Applicable only for Pandas data. Determines which columns to return data for.
+            Applicable only for dataframes. Determines which columns to return data for.
         query_builder: 'Optional[QueryBuilder]', default=None
             A QueryBuilder object to apply to the dataframe before it is returned.
             For more information see the documentation for the QueryBuilder class.
@@ -2202,6 +2214,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         delete_staged_data_on_failure: bool = False,
+        _stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel

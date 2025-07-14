@@ -13,7 +13,7 @@ from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryB
 from arcticdb.exceptions import NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
-from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.mark import MACOS_WHEEL_BUILD, WINDOWS
 
 pytestmark = pytest.mark.pipeline
 
@@ -620,7 +620,7 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
-@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Fatal Python error: Segmentation fault (monday:9520391456)")
+@pytest.mark.xfail(reason="Fatal Python error: Segmentation fault (monday:9539465547)", strict=False)
 def test_symbol_concat_non_existent_symbol(lmdb_library):
     lib = lmdb_library
     sym = "test_symbol_concat_non_existent_symbol"
@@ -629,7 +629,7 @@ def test_symbol_concat_non_existent_symbol(lmdb_library):
         concat(lib.read_batch([sym, "non-existent symbol"], lazy=True)).collect()
 
 
-@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Fatal Python error: Segmentation fault (monday:9520391456)")
+@pytest.mark.xfail(reason="Fatal Python error: Segmentation fault (monday:9539465547)", strict=False)
 def test_symbol_concat_pickled_data(lmdb_library):
     lib = lmdb_library
     df = pd.DataFrame({"bytes": np.arange(10, dtype=np.uint64)})

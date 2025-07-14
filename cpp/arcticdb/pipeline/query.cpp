@@ -35,7 +35,7 @@ IndexValue end_index(const std::vector<SliceAndKey> &sk, std::size_t row) {
 template<typename ContainerType, typename IdxType>
 std::unique_ptr<util::BitSet> build_bitset_for_index(
         const ContainerType& container,
-        IndexRange rg,
+        IndexRange rg, // IndexRange is expected to be inclusive on both ends
         bool dynamic_schema,
         bool column_groups,
         std::unique_ptr<util::BitSet>&& input) {
@@ -56,16 +56,19 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         const auto range_start = std::get<timestamp>(rg.start_);
         const auto range_end = std::get<timestamp>(rg.end_);
 
+        // End index column is exclusive. We want to find the last position where `range_start` is < end_index at position.
+        // This is equivalent to finding the first position where range_start + 1 >= end_index at position.
         auto start_pos = std::lower_bound(
             end_index_col_begin,
             end_index_col_end,
-            range_start
+            range_start + 1
         );
 
         if(start_pos == end_idx_col.template end<IndexTagType>()) {
             ARCTICDB_DEBUG(log::version(), "Returning as start pos is at end");
             return res;
         }
+        auto begin_offset = std::distance(end_index_col_begin, start_pos);
 
         auto end_pos = std::upper_bound(
             start_idx_col.template begin<IndexTagType>(),
@@ -78,33 +81,9 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
             return res;
         }
 
-        using RawType = typename IndexTagType::DataTypeTag::raw_type;
-        auto begin_offset = std::distance(end_index_col_begin, start_pos);
-        ARCTICDB_DEBUG(log::version(), "start_pos at {} of {}", begin_offset, end_idx_col.row_count());
+        // `upper_bound` gives us the exclusive end of positions with values < range_end. We need the inclusive end.
+        --end_pos;
         auto end_offset = std::distance(start_idx_col.template begin<IndexTagType>(), end_pos);
-        if(end_offset == start_idx_col.row_count()) {
-            --end_pos;
-            --end_offset;
-        }
-        ARCTICDB_DEBUG(log::version(), "end offset at {} of {}", end_offset, start_idx_col.row_count());
-
-        auto start_range_begin = start_idx_col.template begin<IndexTagType>();
-        std::advance(start_range_begin, begin_offset);
-        while(begin_offset <= end_offset && !range_intersects<RawType>(range_start, range_end, *start_range_begin, *start_pos)) {
-            ARCTICDB_DEBUG(log::version(), "increasing start index");
-            ++start_range_begin;
-            ++start_pos;
-            ++begin_offset;
-        }
-
-        auto end_range_last = end_idx_col.template begin<IndexTagType>();
-        std::advance(end_range_last, end_offset);
-        while(!range_intersects<RawType>(range_start, range_end, *end_pos, *end_range_last) && begin_offset < end_offset) {
-            ARCTICDB_DEBUG(log::version(), "decreasing end index");
-            --end_pos;
-            --end_range_last;
-            --end_offset;
-        }
 
         if(begin_offset > end_offset) {
             ARCTICDB_DEBUG(log::version(), "Returning as start and end pos crossed, no intersecting ranges");
@@ -124,7 +103,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         const auto range_start = std::get<timestamp>(rg.start_);
         const auto range_end = std::get<timestamp>(rg.end_);
         for(auto i = 0u; i < container.size(); ++i) {
-            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos);
+            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos - 1);
             (*res)[i] = intersects;
             if(intersects)
                 ARCTICDB_DEBUG(log::version(), "range intersects at {}", i);

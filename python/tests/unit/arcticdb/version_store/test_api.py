@@ -115,6 +115,7 @@ def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
         "prune_previous_version": False,
         "validate_index": True,
         "delete_staged_data_on_failure": False,
+        "_stage_results": None
     }
 
     arctic_library_lmdb._nvs.compact_incomplete.assert_called_once_with(symbol, append=expected_append, **default_args)

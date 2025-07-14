@@ -27,7 +27,7 @@ dependencies:
   - libmongocxx <3.9
   - zstd
   - pybind11
-  - pcre
+  - pcre2
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
@@ -35,7 +35,7 @@ dependencies:
   - openssl
   - libcurl
   - bitmagic
-  - sparrow >=0.9.0
+  - sparrow
   - spdlog
   - azure-core-cpp
   - azure-identity-cpp

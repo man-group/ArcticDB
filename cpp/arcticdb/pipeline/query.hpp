@@ -361,12 +361,14 @@ inline std::vector<SliceAndKey> strictly_before(const FilterRange &range, std::s
     util::variant_match(range,
                         [&](const RowRange &row_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
-                                return sk.slice_.row_range.second < row_range.first;
+                                // Key's row ranges are end exclusive
+                                return sk.slice_.row_range.second <= row_range.first;
                             });
                         },
                         [&](const IndexRange &index_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
-                                return sk.key().index_range().end_ < index_range.start_;
+                                // Key's index ranges are end exclusive
+                                return sk.key().index_range().end_ <= index_range.start_;
                             });
                         },
                         [&](const auto &) {
@@ -380,11 +382,13 @@ inline std::vector<SliceAndKey> strictly_after(const FilterRange &range, std::sp
     util::variant_match(range,
                         [&input, &output](const RowRange &row_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
-                                return sk.slice_.row_range.first > row_range.second;
+                                // Row range filters are end exclusive
+                                return sk.slice_.row_range.first >= row_range.second;
                             });
                         },
                         [&input, &output](const IndexRange &index_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                                // Index range filters are end inclusive
                                 return sk.key().index_range().start_ > index_range.end_;
                             });
                         },
