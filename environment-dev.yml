@@ -27,7 +27,7 @@ dependencies:
   - libmongocxx <3.9
   - zstd
   - pybind11
-  - pcre2
+  - pcre
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
