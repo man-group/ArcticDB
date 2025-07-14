@@ -9,17 +9,18 @@
 - delete_staged_data_on_failure handling /
 - Seemingly an error where validate_index isn't working properly / 
 - Refactor stuff in to incompletes files, and clean up method signatures /
-- Merge Ognyan's PR and rebase
-- Rename test_stage.py to test_staged_data_with_tokens.py and put near test_parallel.py
+- Merge Ognyan's PR and rebase /
 - PR
+- Rename test_stage.py to test_staged_data_with_tokens.py and put near test_parallel.py
 - Accept the tokens in the sort_and_finalize API and test, figure out how to fold in to the existing test suite
 - PR
 - Raise error with key info up to user
 - Tooling to help with the error handling of missing keys
 - PR
+- Later - after beta testing
 - Deprecate write with parallel=True or incomplete=True
 - PR (standalone)
 - When happy: docs and docstrings, especially about the upgrade path. Promote to proper API. Docs for E_KEY_NOT_FOUND_IN_TOKEN
 - PR
 
-- Compat tests to check that master can unpickle keys written by this binary (Ognyan ought to do this)
+- Compat tests to check that master can unpickle keys written by this binary

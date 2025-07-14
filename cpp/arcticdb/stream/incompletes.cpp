@@ -612,7 +612,7 @@ std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_
             try {
                 AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
                 entries.emplace_back(std::move(entry));
-            } catch (const storage::KeyNotFoundException& e) {
+            } catch (const storage::KeyNotFoundException&) {
                 non_existent_keys.emplace_back(i, staged_key);
             }
         }
