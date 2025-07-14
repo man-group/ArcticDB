@@ -1621,7 +1621,7 @@ class Library:
     def sort_and_finalize_staged_data(
         self,
         symbol: str,
-        mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
+        mode: Optional[Union[StagedDataFinalizeMethod, str]] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
         delete_staged_data_on_failure: bool = False,
@@ -1723,12 +1723,21 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
+        if (
+                mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"]
+                and mode is not None
+        ):
+            raise ArcticInvalidApiUsageException(
+                "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
+            )
+
         vit = self._nvs.version_store.sort_merge(
             symbol,
             normalize_metadata(metadata),
-            mode == StagedDataFinalizeMethod.APPEND,
+            append=mode == StagedDataFinalizeMethod.APPEND or mode == "append",
             prune_previous_versions=prune_previous_versions,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
+            tokens=_stage_results
         )
         return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
 
