@@ -26,12 +26,6 @@ def new_staged_data_api_enabled():
         yield True
 
 
-@pytest.fixture
-def new_staged_data_api_disabled():
-    with config_context("dev.stage_new_api_disabled", 0):
-        yield False
-
-
 @pytest.fixture(scope="function", params=["v1", "v2-regular", "v2-sort"])
 def arctic_api(request):
     return request.param
@@ -259,7 +253,7 @@ def test_finalize_with_tokens_then_without(arctic_client_lmdb, arctic_api, new_s
         raise RuntimeError(f"Unexpected mode {mode}")
 
 
-def test_finalize_with_tokens_new_api_disabled(arctic_client_lmdb, arctic_api, new_staged_data_api_disabled, lib_name):
+def test_finalize_with_tokens_new_api_disabled(arctic_client_lmdb, arctic_api, lib_name):
     """We should raise if anyone attempts to use the new API without the feature flag."""
     sym = "sym"
     ac = arctic_client_lmdb
@@ -272,8 +266,9 @@ def test_finalize_with_tokens_new_api_disabled(arctic_client_lmdb, arctic_api, n
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 2
 
     # Any exception is fine, it's just a developer facing feature flag
-    with pytest.raises(Exception):
-        finalize(arctic_api, lib, sym, _stage_results=[stage_result_1])
+    with config_context("dev.stage_new_api_disabled", 0):
+        with pytest.raises(Exception):
+            finalize(arctic_api, lib, sym, _stage_results=[stage_result_1])
 
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 2
     assert not lib.has_symbol(sym)
