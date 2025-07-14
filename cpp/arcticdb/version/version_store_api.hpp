@@ -169,7 +169,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool via_iteration,
             bool sparsify,
             bool prune_previous_versions,
-            bool delete_staged_data_on_failure);
+            bool delete_staged_data_on_failure,
+            const std::optional<std::vector<StageResult>>& tokens = std::nullopt);
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
