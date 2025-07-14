@@ -14,7 +14,6 @@
 #include <arcticdb/stream/python_bindings.hpp>
 #include <arcticdb/toolbox/python_bindings.hpp>
 #include <arcticdb/version/python_bindings.hpp>
-#include <arcticdb/util/python_bindings.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/trace.hpp>
@@ -349,7 +348,6 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m, base_exception);
-    arcticdb::util::register_bindings(m);
 
     m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
 

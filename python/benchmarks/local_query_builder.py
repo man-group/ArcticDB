@@ -70,12 +70,6 @@ class LocalQueryBuilderFunctions:
         q = q[q["id1"].isin(string_set)]
         self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
 
-    def time_filtering_string_regex_match(self, num_rows):
-        pattern = f"^id\d\d\d$"
-        q = QueryBuilder()
-        q = q[q["id1"].regex_match(pattern)]
-        self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
-
     def time_projection(self, num_rows):
         q = QueryBuilder()
         q = q.apply("new_col", q["v2"] * q["v3"])
