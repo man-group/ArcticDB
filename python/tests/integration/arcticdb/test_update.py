@@ -38,14 +38,17 @@ DEFAULT_FREQ = 's'
 class UpdatePositionType(Enum):
     '''Enum specifying relative position of an update start or end time relative to
     original dataframe start and end time'''
-    BEFORE = 0 
-    RIGHT_BEFORE = 1 
-    INSIDE_OVERLAP_BEGINNING = 3
-    TOTAL_OVERLAP = 4
-    INSIDE = 5
-    INSIDE_OVERLAP_END = 6
-    RIGHT_AFTER = 7
-    AFTER = 8
+    BEFORE = 0  # End of the update is much before start of original DF
+    RIGHT_BEFORE = 1  # End of the update is exactly before start of original DF
+    BEFORE_OVERLAP_START = 2 # End of the update overlaps with the start of the original DF
+    INSIDE_OVERLAP_BEGINNING = 3 # Start of update overlaps with the start of the original DF, no restrictions on end
+    TOTAL_OVERLAP = 4 # Exact same start and end and number of rows as the original DF
+    OVERSHADOW_ORIGINAL = 5 # Starts before start of original and ends after the original DF
+    INSIDE = 6 # literally inside the original DF, update does not overlap neither start nor end
+    INSIDE_OVERLAP_END = 7 # end of both update and original overlap, no restrictions for start
+    AFTER_OVERLAP_END = 8 # end of original overlaps with start of of update
+    RIGHT_AFTER = 9 # start of update is exactly next to original
+    AFTER = 104 # start of the update is after at least 1 duration of end of original
 
 class DataFrameGenerator(ABC):
 
@@ -83,7 +86,7 @@ class UpgradeDataFrameTypesGenerator(DataFrameGenerator):
 
     def __init__(self, seed=None):
         super().__init__()
-        self._type_conversion_dict: Dict[type, type] = self.no_upgrade_types()
+        self.no_upgrade_types()
         self.seed = seed
 
     def define_upgrade_types(self, mappings: Dict[type, type]):
@@ -91,8 +94,7 @@ class UpgradeDataFrameTypesGenerator(DataFrameGenerator):
 
     def no_upgrade_types(self):
         """Resets upgrades and generates original dataframe types"""
-        self._type_conversion_dict = dict()
-        return self._type_conversion_dict
+        self._type_conversion_dict: Dict[type, type]  = dict()
 
     def _resolve(self, base_type):
         return self._type_conversion_dict.get(base_type, base_type)
@@ -114,7 +116,7 @@ class UpgradeDataFrameTypesGenerator(DataFrameGenerator):
                 elif 'float' in str(desired_type):
                     gen.add_float_col(f"col_{i}", desired_type)
                 else:
-                    return f"Unsupported type {dtype}"
+                    raise TypeError("Unsupported type {dtype}")
         if start_time is not None:
             if isinstance(start_time, TimestampNumber):
                 start_time = start_time.to_timestamp()
@@ -159,7 +161,7 @@ class UpdatesGenerator:
         """
         sequence: List[pd.DataFrame] = list()
 
-        for count, position_type in enumerate(UpdatePositionType):
+        for position_type in UpdatePositionType:
             df = self.generate_update(original_dataframe, position_type, number_cols, number_rows)
             sequence.append(df)
 
@@ -179,17 +181,28 @@ class UpdatesGenerator:
             update_df = self.generator.get_dataframe(number_cols, number_rows, start.dec(number_rows+1))
         elif position_type == UpdatePositionType.RIGHT_BEFORE:
             update_df = self.generator.get_dataframe(number_cols, number_rows, start.dec(number_rows))
+        elif position_type == UpdatePositionType.BEFORE_OVERLAP_START:
+            update_df = self.generator.get_dataframe(number_cols, number_rows, start.dec(number_rows-1))
         elif position_type == UpdatePositionType.INSIDE_OVERLAP_BEGINNING:
             update_df = self.generator.get_dataframe(number_cols, number_rows, start)
         elif position_type == UpdatePositionType.INSIDE:
+            # inside is completely inside the dataframe no overlaps with start and end.
+            # If requested number of rows is more than original dataframe they will be reduced to fit
             to_update = number_rows if (number_rows + 2) <= rows else rows - 2
-            to_update = max(to_update, 1) # if the dataframe is tiny
+            to_update = max(to_update, 1) # if the dataframe is tiny we will generate a one line dataframe
             update_df = self.generator.get_dataframe(number_cols, to_update, start.inc(1))
         elif position_type == UpdatePositionType.TOTAL_OVERLAP:
             # In this case we generate total overlap
             update_df = self.generator.get_dataframe(number_cols, rows, start) 
+        elif position_type == UpdatePositionType.OVERSHADOW_ORIGINAL:
+            # The update df will be bigger than original at least with 2 rows
+            # at start and at end
+            to_update = number_rows if number_rows > rows + 2 else rows + 2
+            update_df = self.generator.get_dataframe(number_cols, to_update, start.dec(1)) 
         elif position_type == UpdatePositionType.INSIDE_OVERLAP_END:
             update_df = self.generator.get_dataframe(number_cols, number_rows, end.dec(number_rows-1))
+        elif position_type == UpdatePositionType.AFTER_OVERLAP_END:
+            update_df = self.generator.get_dataframe(number_cols, number_rows, end)
         elif position_type == UpdatePositionType.RIGHT_AFTER:
             update_df = self.generator.get_dataframe(number_cols, number_rows, end.inc(1))
         elif position_type == UpdatePositionType.AFTER:
@@ -199,7 +212,7 @@ class UpdatesGenerator:
         return update_df
     
 
-def read_batch(lib: Library, symbol_names: List[str]) -> Dict[str, VersionedItem]:
+def read_batch_as_dict(lib: Library, symbol_names: List[str]) -> Dict[str, Union[VersionedItem, DataError]]:
     read_results = lib.read_batch(symbol_names)
     read_data = dict()
     for result in read_results:
@@ -373,7 +386,7 @@ def test_update_batch_types_upgrade(custom_library):
 
     logger.info("Scenario 2: Update with upsert should now create symbols")
     update_result = lib.update_batch(update_batch, upsert=True)
-    read_data = read_batch(lib, symbol_names)
+    read_data = read_batch_as_dict(lib, symbol_names)
     for index, result in enumerate(update_result):
         assert result.version == 0
         assert_frame_equal(update_batch[index].data, read_data[symbol_names[index]].data)
@@ -381,7 +394,7 @@ def test_update_batch_types_upgrade(custom_library):
     logger.info("Scenario 3: Write original dataframes, then update symbols")
     lib.write_batch(write_batch)
     update_result = lib.update_batch(update_batch, upsert=True)
-    read_data = read_batch(lib, symbol_names)
+    read_data = read_batch_as_dict(lib, symbol_names)
     for index, result in enumerate(update_result):
         symbol = symbol_names[index]
         assert result.version == 2
@@ -395,7 +408,7 @@ def test_update_batch_types_upgrade(custom_library):
         previous_day = start_index - pd.Timedelta(days=1)
         update.date_range = (previous_day, start_index)
     update_result = lib.update_batch(update_batch, prune_previous_versions=True)
-    read_data = read_batch(lib, symbol_names)
+    read_data = read_batch_as_dict(lib, symbol_names)
     for index, result in enumerate(update_result):
         symbol = symbol_names[index]
         if not hasattr(result, "version"):
@@ -412,18 +425,107 @@ def test_update_batch_types_upgrade(custom_library):
     for update in update_batch:
         update.date_range = (update.data.index[0], update.data.index[-1])
     update_result = lib.update_batch(update_batch, prune_previous_versions=True)
-    read_data = read_batch(lib, symbol_names)
+    read_data = read_batch_as_dict(lib, symbol_names)
     for index, result in enumerate(update_result):
         symbol = symbol_names[index]
         assert result.version == 6
         assert_frame_equal(expected_results[symbol], read_data[symbol].data)
 
 
+@pytest.mark.storage
+@pytest.mark.parametrize("custom_library", [
+            {'library_options': LibraryOptions(dynamic_schema=True)}
+        ], indirect=True)
+@pytest.mark.only_fixture_params(["lmdb", "real_s3", "real_gcp"])
+def test_update_batch_types_upgrade_error(custom_library):
+    """
+    The goal of this test is to confirm that update_batch can successfully upgrade
+    different types to a new type required by the update dataframe.
+    Additional checks are done for prune_previous_version, upsert and date_range of
+    the updates in step by step approach
+    """
+    lib: Library = custom_library
+    symbol_prefix = "some heck of a symbol!.!"
+    number_columns = 20
+    number_rows = 100
+    seed(3120949)
+    
+    upgrade_path_simple = { 
+        np.int16: np.int32,
+        np.int32: np.int64,
+        np.uint16: np.uint32,
+        np.uint32: np.uint64,
+        np.float32: np.float64
+    }
+    
+    upgrade_path_mix = { 
+        np.int16: np.int64,
+        np.int32: np.float64,
+        np.uint16: np.int32,
+        np.uint32: np.int64,
+        np.float32: np.float64
+    }
+
+    upgrade_path_float = { 
+        np.int16: np.float32,
+        np.int32: np.float64,
+        np.uint16: np.float32,
+        np.uint32: np.float64,
+        np.float32: np.float64
+    }
+
+    types_to_try = [upgrade_path_mix, upgrade_path_simple, upgrade_path_float]
+    original_dataframes = dict()
+    symbol_names = []
+    update_batch:List[UpdatePayload] = []
+    write_batch:List[UpdatePayload] = []
+    expected_results = dict()
+
+
+    logger.info("Prepare updates and calculate expected dataframes")
+    for index, upgrade in enumerate(types_to_try): 
+        g = UpgradeDataFrameTypesGenerator()
+        df1 = g.get_dataframe(number_columns, number_rows)
+        g.define_upgrade_types(upgrade)
+        df2 = g.get_dataframe(number_columns, number_rows // 3)
+        symbol_name = symbol_prefix + str(index)
+        symbol_names.append(symbol_name)
+        original_dataframes[symbol_name] = df1
+        # Calculate expected dataframe
+        upgrade_dataframe_types(df1, upgrade)
+        expected_results[symbol_name] = dataframe_simulate_arcticdb_update_static(df1, df2)
+        update_batch.append(UpdatePayload(symbol_name, df2))
+        write_batch.append(WritePayload(symbol_name, df1))    
+
+
+    logger.info("Write original dataframes, then update symbols, with date range outside of update boundaries")
+    logger.info("Result will be original dataframe")
+    lib.write_batch(write_batch)
+    for update in update_batch:
+        start_index = original_dataframes[update.symbol].index[0] - pd.Timedelta(days=1)
+        previous_day = start_index - pd.Timedelta(days=1)
+        update.date_range = (previous_day, start_index)
+    update_result = lib.update_batch(update_batch, prune_previous_versions=True)
+    read_data = read_batch_as_dict(lib, symbol_names)
+    for index, result in enumerate(update_result):
+        symbol = symbol_names[index]
+        logger.info(f" symbol : {symbol}")
+        if not hasattr(result, "version"):
+            # To catch rare problem on 3.8
+            logger.error(f"Expected {result} with version attribute {repr(result)}\n {str(result)}")
+        assert result.version == 1
+        assert_frame_equal(original_dataframes[symbol], read_data[symbol].data)
+
+
 def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
     """ Simulates partially dynamic update, when update df has new columns.
     The scenario where there are type promotions of existing columns is not covered yet
     """
-    def add_missing_ending_columns(to_df: pd.DataFrame, from_df: pd.DataFrame) -> pd.DataFrame:
+    def add_missing_ending_columns(to_df: pd.DataFrame, from_df: pd.DataFrame):
+        """
+        Modifies `to_df` adding all missing columns at from `from_df` at the end.
+        Note that it checks first that first common column of both are same
+        """
         assert len(from_df.columns) >= len(to_df.columns)
         for index, col in enumerate(from_df.columns):
             if index < len(to_df.columns):
@@ -439,7 +541,6 @@ def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update
                     to_df[col] = np.full(len(to_df), False, dtype=dtype)
                 elif dtype == object or pd.api.types.is_string_dtype(dtype):
                     to_df[col] = [None] * len(to_df)
-        return to_df
     add_missing_ending_columns(expected_df, update_df)
     return dataframe_simulate_arcticdb_update_static(expected_df, update_df)
 
@@ -492,7 +593,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     update_result = lib.update_batch(update_batch)
 
     logger.info(f"Read symbols")
-    read_data = read_batch(lib, symbol_names)
+    read_data = read_batch_as_dict(lib, symbol_names)
 
     logger.info(f"Verify expected results for updates with rows count: {number_rows}")
     for index, result in enumerate(update_result):
