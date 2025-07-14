@@ -500,7 +500,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("GE", OperationType::GE)
             .value("ISIN", OperationType::ISIN)
             .value("ISNOTIN", OperationType::ISNOTIN)
-            .value("REGEX_MATCH", OperationType::REGEX_MATCH)
             .value("AND", OperationType::AND)
             .value("OR", OperationType::OR)
             .value("XOR", OperationType::XOR)
@@ -536,11 +535,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return ExpressionName(name);
             }));
 
-    py::class_<RegexName>(version, "RegexName")
-            .def(py::init([](const std::string& name) {
-                return RegexName(name);
-            }));
-
     py::class_<ExpressionNode, std::shared_ptr<ExpressionNode>>(version, "ExpressionNode")
             .def(py::init([](VariantNode condition, VariantNode left, VariantNode right, OperationType operation_type) {
                 return ExpressionNode(condition, left, right, operation_type);
@@ -561,7 +555,6 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def("add_expression_node", &ExpressionContext::add_expression_node)
             .def("add_value", &ExpressionContext::add_value)
             .def("add_value_set", &ExpressionContext::add_value_set)
-            .def("add_regex", &ExpressionContext::add_regex)
             .def_readwrite("root_node_name", &ExpressionContext::root_node_name_);
 
     py::class_<UpdateQuery>(version, "PythonVersionStoreUpdateQuery")
