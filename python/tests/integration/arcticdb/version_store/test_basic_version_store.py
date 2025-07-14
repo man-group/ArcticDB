@@ -533,6 +533,45 @@ def test_prune_previous_versions_write(basic_store, sym):
 
 
 @pytest.mark.storage
+@pytest.mark.parametrize("versions_to_delete", [[0], [1], [0, 1]])
+def test_tombstone_versions_ref_key_structure(basic_store, sym, versions_to_delete):
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
+    # Given
+    lib = basic_store
+    lib_tool = lib.library_tool()
+    df = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    num_writes = 3
+
+    # When
+    for _ in range(num_writes):
+        lib.write(sym, df)
+    lib.delete_versions(sym, versions=versions_to_delete)
+
+    # Then - only latest version and keys should survive
+    assert len(lib.list_versions(sym)) == num_writes - len(versions_to_delete)
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == num_writes - len(versions_to_delete)
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == num_writes - len(versions_to_delete)
+
+    ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+    keys_in_ref = lib_tool.read_to_keys(ref_key)
+    assert len(keys_in_ref) == 2
+    # the tombstone key and version key should be the highest version id
+    assert keys_in_ref[0].type == KeyType.TOMBSTONE
+    assert keys_in_ref[0].version_id == max(versions_to_delete)
+    assert keys_in_ref[1].type == KeyType.VERSION
+    assert keys_in_ref[1].version_id == max(versions_to_delete)
+    keys_in_ver = lib_tool.read_to_keys(keys_in_ref[1])
+    assert len(keys_in_ver) == len(versions_to_delete) + 1
+    for key in keys_in_ver[:-1]:
+        assert key.type == KeyType.TOMBSTONE
+        assert key.version_id in versions_to_delete
+
+    # the last key should be the version and it should point to the previous version
+    assert keys_in_ver[-1].type == KeyType.VERSION
+    assert keys_in_ver[-1].version_id == num_writes - 1
+
+
+@pytest.mark.storage
 def test_prune_previous_versions_write_batch(basic_store):
     """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
     # Given

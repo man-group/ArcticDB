@@ -204,6 +204,45 @@ def test_read_after_write_and_prune_previous(lib_name, s3_and_nfs_storage_bucket
         assert get_obj_ops["TABLE_DATA"]["count"] == 1, pformat(stats)
 
 
+@pytest.mark.parametrize("version_to_read", [0, 1, 2, 3])
+def test_read_as_of_version(lib_name, s3_and_nfs_storage_bucket, clear_query_stats, version_to_read):
+    # The we should be reading less, if we are reading a newer version
+    # 2 and 3 are special cases, because they are both in the ref key
+    expected_version_ops = 4 - version_to_read if version_to_read < 2 else 0
+    expected_ops = 3 + expected_version_ops
+    lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
+    lib.write("s", data=create_df())
+    lib.write("s", data=create_df(), prune_previous_version=False)
+    lib.write("s", data=create_df(), prune_previous_version=False)
+    lib.write("s", data=create_df(), prune_previous_version=False)
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        lib.read("s", as_of=version_to_read)
+        stats = qs.get_query_stats()
+        qs.reset_stats()
+
+        assert sum_all_operations(stats) == expected_ops, pformat(stats)
+        # there should be only get object operations
+        assert stats["storage_operations"].keys() == {"S3_GetObject"}, pformat(stats)
+        get_obj_ops = stats["storage_operations"]["S3_GetObject"]
+        # We expect 3 get object operations:
+        # - 1 for the version ref key
+        # - 1 for the index key
+        # - 1 for the data key
+        # - 3 - the version number that we are reading
+
+        if expected_version_ops:
+            assert len(get_obj_ops.keys()) == 4, pformat(stats)
+        else:
+            assert len(get_obj_ops.keys()) == 3, pformat(stats)
+        assert get_obj_ops["VERSION_REF"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_INDEX"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_DATA"]["count"] == 1, pformat(stats)
+        if expected_version_ops:
+            assert get_obj_ops["VERSION"]["count"] == expected_version_ops, pformat(stats)
+
+
 def get_dataframe_for_range_edge_cases():
     index = [pd.Timestamp(x) for x in [10, 11, 11, 13, 13, 13, 13, 14, 14, 15, 16, 16, 16, 16, 18]]
     data = {f"col_{i}": np.arange(i, i + 15) for i in range(5)}
