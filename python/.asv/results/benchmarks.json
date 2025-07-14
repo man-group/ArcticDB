@@ -1492,7 +1492,7 @@
         "warmup_time": -1
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_regex_match": {
-        "code": "class LocalQueryBuilderFunctions:\n    def time_filtering_string_regex_match(self, num_rows):\n        pattern = f\"^id\\d\\d\\d$\"\n        q = QueryBuilder()\n        q = q[q[\"id1\"].regex_match(pattern)]\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = LocalQueryBuilderFunctions.LIB_NAME\n        self.ac.delete_library(self.lib_name)\n        lib = self.ac.create_library(self.lib_name)\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "code": "class LocalQueryBuilderFunctions:\n    def time_filtering_string_regex_match(self, num_rows):\n        pattern = f\"^id\\d\\d\\d\"\n        q = QueryBuilder()\n        q = q[q[\"id1\"].regex_match(pattern)]\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = LocalQueryBuilderFunctions.LIB_NAME\n        self.ac.delete_library(self.lib_name)\n        lib = self.ac.create_library(self.lib_name)\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
         "min_run_count": 2,
         "name": "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_regex_match",
         "number": 5,
@@ -1512,7 +1512,7 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "5206453b05dddbb325596b08eae2200fd2193c2e2382ae66982838b1cc97859b",
+        "version": "b774ecc513864a515ea749a0cdbcb093b1f6f0458298bf1b4d9e23857cd1fb82",
         "warmup_time": -1
     },
     "local_query_builder.LocalQueryBuilderFunctions.time_projection": {
