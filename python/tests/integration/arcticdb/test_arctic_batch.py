@@ -510,20 +510,6 @@ def test_delete_batch_comprehensive(arctic_library):
 
     # Write multiple versions of symbols
     lib.write("sym1", df1)
-
-
-@pytest.mark.storage
-def test_delete_batch_comprehensive(arctic_library):
-    """Test delete_batch with both string symbols and DeleteRequest objects."""
-    lib = arctic_library
-
-    # Create test data
-    df1 = pd.DataFrame({"col": [1, 2, 3]})
-    df2 = pd.DataFrame({"col": [4, 5, 6]})
-    df3 = pd.DataFrame({"col": [7, 8, 9]})
-
-    # Write multiple versions of symbols
-    lib.write("sym1", df1)
     lib.write("sym1", df2)
     lib.write("sym2", df3)
 

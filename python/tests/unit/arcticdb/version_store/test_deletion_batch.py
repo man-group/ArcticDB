@@ -9,7 +9,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 import pandas as pd
 import numpy as np
-from arcticdb.exceptions import NoDataFoundException, InternalException
+from arcticdb.exceptions import NoDataFoundException, InternalException, UserInputException
+
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 
@@ -203,6 +204,15 @@ def test_batch_delete_versions_invalid_input(basic_store):
     # Test with invalid version number for sym1
     with pytest.raises(TypeError):
         lib.batch_delete_versions(["sym1", "sym2"], [[-1], [0]])
+
+    with pytest.raises(TypeError):
+        lib.batch_delete_versions([None, "sym2"], [[0], [0]])
+
+    with pytest.raises(TypeError):
+        lib.batch_delete_versions(["sym2"], [[None]])
+
+    with pytest.raises(UserInputException):
+        lib.batch_delete_versions([], [[0]])
 
 
 @pytest.mark.storage
