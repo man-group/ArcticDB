@@ -48,6 +48,10 @@ def validate_index(request):
     return request.param
 
 
+@pytest.fixture(scope="function", params=[True, False])
+def should_enable_new_api(request):
+    return request.param
+
 
 def finalize(api_version, lib: Library, sym, mode="write", _stage_results=None, metadata=None,
              prune_previous_versions=False, validate_index=True, delete_staged_data_on_failure=False):
@@ -65,10 +69,9 @@ def finalize(api_version, lib: Library, sym, mode="write", _stage_results=None, 
         raise RuntimeError(f"Unexpected api_version {api_version}")
 
 
-@pytest.mark.parametrize("new_api_enabled", [True, False])
 @pytest.mark.parametrize("finalize_mode", ["write", "append"])
-def test_stage(lmdb_storage, lib_name, new_api_enabled, finalize_mode, arctic_api):
-    with config_context("dev.stage_new_api_enabled", 1 if new_api_enabled else 0):
+def test_stage(lmdb_storage, lib_name, should_enable_new_api, finalize_mode, arctic_api):
+    with config_context("dev.stage_new_api_enabled", 1 if should_enable_new_api else 0):
         sym = "sym"
         ac = lmdb_storage.create_arctic()
         lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=1))
@@ -83,7 +86,7 @@ def test_stage(lmdb_storage, lib_name, new_api_enabled, finalize_mode, arctic_ap
 
         staged_results = [lib.stage(sym, df) for df in data_to_stage]
 
-    if new_api_enabled:
+    if should_enable_new_api:
         assert all(len(staged_result.staged_segments) == 2 for staged_result in staged_results)
 
         assert_frame_equal(lib.read(sym).data, not_staged, check_freq=False)
@@ -116,7 +119,7 @@ DATE_RANGE_INDEXES = [pd.date_range("2025-01-01", periods=3),
                       ]
 
 
-ROWCOUNT_INDEXES = [np.arange(0, 3), np.arange(4, 6), np.arange(6, 7), np.arange(7, 12)]
+ROWCOUNT_INDEXES = [np.arange(0, 3, dtype=np.int64), np.arange(4, 6, dtype=np.int64), np.arange(6, 7, dtype=np.int64), np.arange(7, 12, dtype=np.int64)]
 
 
 STRING_INDEXES = [["a", "b", "c"], ["d", "e"], ["f"], ["g", "h", "i", "j", "k"]]
@@ -131,10 +134,10 @@ def test_finalize_with_tokens_append_mode(arctic_client_lmdb, lib_name, new_stag
     sym = "sym"
     ac = arctic_client_lmdb
     lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2, dynamic_schema=dynamic_schema))
-    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
-    df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
-    df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2])
-    df_4 = pd.DataFrame({"col1": np.arange(11, 16), "col2": np.arange(12, 17)}, index=indexes[3])
+    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
+    df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
+    df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2], dtype=np.int64)
+    df_4 = pd.DataFrame({"col1": np.arange(11, 16), "col2": np.arange(12, 17)}, index=indexes[3], dtype=np.int64)
 
     stage_result_1 = lib.stage(sym, df_1)
     stage_result_2 = lib.stage(sym, df_2)
@@ -182,10 +185,10 @@ def test_finalize_with_tokens_write_mode(arctic_client_lmdb, arctic_api, lib_nam
     ac = arctic_client_lmdb
     lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
-    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
-    df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
-    df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2])
-    df_4 = pd.DataFrame({"col1": np.arange(11, 16), "col2": np.arange(12, 17)}, index=indexes[3])
+    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
+    df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
+    df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2], dtype=np.int64)
+    df_4 = pd.DataFrame({"col1": np.arange(11, 16), "col2": np.arange(12, 17)}, index=indexes[3], dtype=np.int64)
 
     stage_result_1 = lib.stage(sym, df_1)
     stage_result_2 = lib.stage(sym, df_2)
@@ -267,7 +270,7 @@ def test_finalize_with_tokens_new_api_disabled(arctic_client_lmdb, arctic_api, l
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 2
 
     # Any exception is fine, it's just a developer facing feature flag
-    with config_context("dev.stage_new_api_disabled", 0):
+    with config_context("dev.stage_new_api_enabled", 0):
         with pytest.raises(Exception):
             finalize(arctic_api, lib, sym, _stage_results=[stage_result_1])
 
