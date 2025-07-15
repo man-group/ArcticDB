@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/async/async_store.hpp>
-#include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/version/de_dup_map.hpp>
 
