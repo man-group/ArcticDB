@@ -43,6 +43,7 @@ from arcticdb.util.test import (
     assert_series_equal,
     config_context,
     distinct_timestamps,
+    subset_permutations
 )
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
@@ -2749,9 +2750,6 @@ def test_dynamic_schema_column_hash(basic_store_column_buckets):
 
     read_df = lib.read("symbol", columns=["a", "c"]).data
     assert_equal(df[["a", "c"]], read_df)
-
-def subset_permutations(input_data):
-    return (p for r in range(1, len(input_data)+1) for p in itertools.permutations(input_data, r))
 
 @pytest.mark.parametrize("bucketize_dynamic", [pytest.param(True, marks=pytest.mark.xfail(reason="Bucketize dynamic is not used in production. There are bugs")), False])
 def test_dynamic_schema_read_columns(version_store_factory, lib_name, bucketize_dynamic):

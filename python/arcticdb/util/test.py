@@ -44,6 +44,7 @@ from arcticdb_ext import (
     unset_config_string,
 )
 from packaging.version import Version
+import itertools
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
@@ -215,18 +216,19 @@ def maybe_not_check_freq(f):
         try:
             return f(*args, **kwargs)
         except AssertionError as ae:
-            df = []
-            if "left" in kwargs:
-                df = kwargs["left"]
-            else:
-                df = args[0]
-            dataframe_dump_to_log("LEFT dataframe (expected)", df)
-            if "right" in kwargs:
-                df = kwargs["right"]
-            else:
-                df = args[1]
-            dataframe_dump_to_log("RIGHT dataframe (actual)", df)
-            raise ae
+            if os.getenv("ARCTICDB_TESTING_PRINT_DIFFERENT_DF", 1) == 1:
+                df = []
+                if "left" in kwargs:
+                    df = kwargs["left"]
+                else:
+                    df = args[0]
+                dataframe_dump_to_log("LEFT dataframe (expected)", df)
+                if "right" in kwargs:
+                    df = kwargs["right"]
+                else:
+                    df = args[1]
+                dataframe_dump_to_log("RIGHT dataframe (actual)", df)
+            raise
 
     return wrapper
 
@@ -1100,3 +1102,10 @@ def compute_common_type_for_columns(segment_columns: List[dict]):
             else:
                 common_types[name] = valid_common_type(common_types[name], np.dtype(dtype))
     return common_types
+
+def subset_permutations(input_data):
+    return (p for r in range(1, len(input_data)+1) for p in itertools.permutations(input_data, r))
+
+def powerset(iterable):
+    s = list(iterable)
+    return itertools.chain.from_iterable(itertools.combinations(s, r) for r in range(len(s)+1))
