@@ -132,7 +132,8 @@ TEST(ArithmeticTypePromotion, Plus) {
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, PlusOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, PlusOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, PlusOperator>::type, int64_t>);
-    // Mixed integral and floating point types should promote to the floating point type
+    // Mixed integral and floating point types should promote to the double to avoid loss of precission. This is what
+    // Pandas.
 
     static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  float, PlusOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, PlusOperator>::type, double>);
@@ -262,8 +263,8 @@ TEST(ArithmeticTypePromotion, Minus) {
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, MinusOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, MinusOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, MinusOperator>::type, int64_t>);
-    // Mixed integral and floating point types should promote to the floating point type
-
+    // Mixed integral and floating point types should promote to the double to avoid loss of precission. This is what
+    // Pandas.
     static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  float, MinusOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, MinusOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, float, MinusOperator>::type, double>);
@@ -392,8 +393,8 @@ TEST(ArithmeticTypePromotion, Times) {
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, TimesOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, TimesOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, TimesOperator>::type, int64_t>);
-    // Mixed integral and floating point types should promote to the floating point type
-
+    // Mixed integral and floating point types should promote to the double to avoid loss of precission. This is what
+    // Pandas.
     static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  float, TimesOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, TimesOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, float, TimesOperator>::type, double>);
@@ -655,7 +656,9 @@ TEST(ArithmeticTypePromotion, IsIn) {
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, IsInOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, IsInOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, IsInOperator>::type, uint64_t>);
-    // Mixed integral and floating point types should promote to the floating point type
+    // Mixed integral and floating point types should promote to the double to avoid loss of precission. This is what
+    // Pandas.
+
     static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  float, IsInOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, IsInOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, float, IsInOperator>::type, double>);
@@ -788,7 +791,9 @@ TEST(ArithmeticTypePromotion, IsNotIn) {
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint16_t, IsNotInOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint32_t, IsNotInOperator>::type, int64_t>);
     static_assert(std::is_same_v<binary_operation_promoted_type<int64_t, uint64_t, IsNotInOperator>::type, uint64_t>);
-    // Mixed integral and floating point types should promote to the floating point type
+    // Mixed integral and floating point types should promote to the double to avoid loss of precission. This is what
+    // Pandas.
+
     static_assert(std::is_same_v<binary_operation_promoted_type<uint8_t,  float, IsNotInOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint16_t, float, IsNotInOperator>::type, double>);
     static_assert(std::is_same_v<binary_operation_promoted_type<uint32_t, float, IsNotInOperator>::type, double>);
@@ -919,7 +924,9 @@ TEST(ArithmeticTypePromotion, Ternary) {
     static_assert(std::is_same_v<ternary_operation_promoted_type<int64_t, uint16_t>::type, int64_t>);
     static_assert(std::is_same_v<ternary_operation_promoted_type<int64_t, uint32_t>::type, int64_t>);
     static_assert(std::is_same_v<ternary_operation_promoted_type<int64_t, uint64_t>::type, double>);
-    // Mixed integral and floating point types should promote to the floating point type
+    // Mixed integral and floating point types should promote to the double to avoid loss of precission. This is what
+    // Pandas.
+
     static_assert(std::is_same_v<ternary_operation_promoted_type<uint8_t,  float>::type, double>);
     static_assert(std::is_same_v<ternary_operation_promoted_type<uint16_t, float>::type, double>);
     static_assert(std::is_same_v<ternary_operation_promoted_type<uint32_t, float>::type, double>);
