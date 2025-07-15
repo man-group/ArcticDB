@@ -28,6 +28,13 @@ def verify_list_symbol_stats(list_symbol_call_counts):
     #                 "total_time_ms": 31
     #             }
     #         },
+    #         "S3_HeadObject": {
+    #             "LOCK": {
+    #                 "count": 1,
+    #                 "size_bytes": 0,
+    #                 "total_time_ms": 4
+    #             }
+    #         },
     #         "S3_ListObjectsV2": {
     #             "SYMBOL_LIST": {
     #                 "count": 2,
@@ -58,6 +65,7 @@ def verify_list_symbol_stats(list_symbol_call_counts):
 
     assert "S3_DeleteObjects" in storage_operations, storage_operations
     assert "S3_GetObject" in storage_operations, storage_operations
+    assert "S3_HeadObject" in storage_operations, storage_operations
     assert "S3_ListObjectsV2" in storage_operations, storage_operations
     assert "S3_PutObject" in storage_operations, storage_operations
 
