@@ -620,7 +620,6 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
-@pytest.mark.xfail(reason="Fatal Python error: Segmentation fault (monday:9539465547)", strict=False)
 def test_symbol_concat_non_existent_symbol(lmdb_library):
     lib = lmdb_library
     sym = "test_symbol_concat_non_existent_symbol"
