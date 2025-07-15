@@ -442,7 +442,8 @@ def test_update_batch_types_upgrade(custom_library):
             {'library_options': LibraryOptions(dynamic_schema=True)}
         ], indirect=True)
 @pytest.mark.only_fixture_params(["lmdb", "real_s3", "real_gcp"])
-@pytest.mark.xfail(LINUX and sys.version_info == (3, 8),
+# Problem is on Linux and Python 3.8 only
+@pytest.mark.xfail(LINUX and (sys.version_info[:2] == (3, 8)), 
                    reason = "update_batch return unexpected exception (9589648728)",
                    strict=False)
 def test_update_batch_types_upgrade_error(custom_library):
