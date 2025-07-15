@@ -411,7 +411,6 @@ std::optional<Value> MinAggregatorData::get_default_value() {
  **********************/
 
 void MeanAggregatorData::add_data_type(DataType data_type) {
-    // Mean values are always doubles so just check a numeric type was provided
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             is_numeric_type(data_type) || is_bool_type(data_type) || is_empty_type(data_type),
             "Mean aggregation not supported with type {}",
