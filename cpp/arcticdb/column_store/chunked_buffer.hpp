@@ -481,9 +481,7 @@ class ChunkedBufferImpl {
             block_offsets_.clear();
         }
         block->abandon();
-        auto timestamp = block->timestamp_;
-        block->~MemBlock();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
+        free_block(block);
     }
 
     void truncate_first_block(size_t bytes) {
@@ -501,9 +499,7 @@ class ChunkedBufferImpl {
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
         block->abandon();
-        auto timestamp = block->timestamp_;
-        block->~MemBlock();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
+        free_block(block);
     }
 
     void truncate_last_block(size_t bytes) {
@@ -516,9 +512,7 @@ class ChunkedBufferImpl {
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
         block->abandon();
-        auto timestamp = block->timestamp_;
-        block->~MemBlock();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
+        free_block(block);
     }
 
   private:
