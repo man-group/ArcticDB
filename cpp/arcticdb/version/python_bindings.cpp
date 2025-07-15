@@ -817,8 +817,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_and_join",
              [&](PythonVersionStore& v,
-                 std::vector<StreamId>&& stream_ids,
-                 std::vector<VersionQuery>&& version_queries,
+                 std::vector<StreamId> stream_ids,
+                 std::vector<VersionQuery> version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options,
                  std::vector<ClauseVariant> clauses
