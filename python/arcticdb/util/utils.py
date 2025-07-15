@@ -20,6 +20,7 @@ import pandas as pd
 
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
 from arcticdb.version_store.library import Library
+import itertools
 
 
 # Types supported by arctic

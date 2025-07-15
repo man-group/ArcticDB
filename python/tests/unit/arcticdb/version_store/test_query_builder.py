@@ -6,7 +6,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import copy
+import itertools
 from functools import partial
+
+import arcticdb
 import numpy as np
 import pandas as pd
 import pytest
@@ -15,7 +18,7 @@ import datetime
 import dateutil
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, subset_permutations, powerset
 
 pytestmark = pytest.mark.pipeline
 
@@ -1113,3 +1116,153 @@ def test_to_strings():
 
     q = QueryBuilder().resample('1min').agg({"col": "sum"})
     assert str(q) == 'RESAMPLE(1min) | AGGREGATE {col: (col, sum), }'
+
+def input_segments_for_column_selection_by_schema(dynamic_schema, column_names):
+    """
+    Generate a list of tuples, both elements are dataframes that are going to be appended. The columns in the dataframes
+    are generated so that they are all permutations of all subsets of column_names. For static schema both segments have
+    the same columns and we don't do permutations.
+    """
+    column_values_seg_1 = {col: np.array([i], np.dtype("float64")) for (i, col) in enumerate(column_names)}
+    column_values_seg_2 = {col: np.array([len(column_names) - i - 1], np.dtype("float64")) for (i, col) in enumerate(column_names)}
+    if dynamic_schema:
+        return ((pd.DataFrame({col: column_values_seg_1[col] for col in seg1}), pd.DataFrame({col: column_values_seg_2[col] for col in seg2})) for seg1 in subset_permutations(column_names) for seg2 in subset_permutations(column_names))
+    else:
+        return ((pd.DataFrame({col: column_values_seg_1[col] for col in seg1}), pd.DataFrame({col: column_values_seg_2[col] for col in seg1})) for seg1 in powerset(column_names))
+
+def input_segments_for_processing(column_names):
+    dynamic_schema_segments = ((True, segment_pair) for segment_pair in input_segments_for_column_selection_by_schema(True, column_names))
+    static_schema_segments = ((False, segment_pair) for segment_pair in input_segments_for_column_selection_by_schema(False, column_names))
+    return itertools.chain(dynamic_schema_segments, static_schema_segments)
+
+def input_segments_for_concat(column_names):
+    sym_1_dynamic = input_segments_for_column_selection_by_schema(dynamic_schema=True, column_names=column_names)
+    sym_2_dynamic = input_segments_for_column_selection_by_schema(dynamic_schema=True, column_names=column_names)
+    sym_1_2_dynamic = ((True, (sym_1_segments, sym_2_segments)) for sym_1_segments in sym_1_dynamic for sym_2_segments in sym_2_dynamic)
+
+    sym_1_static = input_segments_for_column_selection_by_schema(dynamic_schema=False, column_names=column_names)
+    sym_2_static = input_segments_for_column_selection_by_schema(dynamic_schema=False, column_names=column_names)
+    sym_1_2_static = ((False, (sym_1_segments, sym_2_segments)) for sym_1_segments in sym_1_static for sym_2_segments in sym_2_static)
+    return itertools.chain(sym_1_2_dynamic, sym_1_2_static)
+
+class TestColumnSelection:
+
+    @pytest.mark.parametrize("dynamic_schema, input_segments", input_segments_for_processing(["a", "b", "c"]))
+    def test_filter(self, version_store_factory, dynamic_schema, input_segments):
+        """
+        Test filtering by each column on disk and then try all possible combinations of column selection. The output
+        must contain only the columns in the columns parameter of read even if the column that's being filtered is not
+        in that list. The filtering must be applied even if the column that's being filtered is in the columns list.
+        """
+        lib = version_store_factory(dynamic_schema=dynamic_schema, col_per_group=2)
+        df_seg_1, df_seg_2 = input_segments
+        lib.write("sym", df_seg_1)
+        lib.append("sym", df_seg_2)
+        pandas_df = pd.concat([df_seg_1, df_seg_2])
+        columns_in_df = set(list(df_seg_1.columns) + list(df_seg_2.columns))
+        for column_to_filter in columns_in_df:
+            for columns_to_select in subset_permutations(columns_in_df):
+                q = QueryBuilder()
+                q = q[q[column_to_filter] >= 2.0]
+                result = lib.read("sym", query_builder=q, columns=columns_to_select).data
+                result.sort_index(axis=1, inplace=True)
+                expected = pandas_df[pandas_df[column_to_filter] >= 2][list(columns_to_select)]
+                expected.sort_index(axis=1, inplace=True)
+                assert set(columns_to_select) == set(result.columns)
+                assert_frame_equal(expected, result)
+
+    @pytest.mark.parametrize("dynamic_schema, input_segments", input_segments_for_processing(["a", "b", "c"]))
+    def test_project(self, version_store_factory, dynamic_schema, input_segments):
+        """
+        Test projection each column on disk onto a new_column that's the value of the column + 2. Then try selecting all
+        possible combinations of selection columns.
+        """
+        lib = version_store_factory(dynamic_schema=dynamic_schema, col_per_group=2)
+        df_seg_1, df_seg_2 = input_segments
+        lib.write("sym", df_seg_1)
+        lib.append("sym", df_seg_2)
+        pandas_df = pd.concat([df_seg_1, df_seg_2])
+        pandas_df.index = pd.RangeIndex(start=0, stop=2)
+        columns_in_df = set(list(df_seg_1.columns) + list(df_seg_2.columns))
+        for column_to_project in columns_in_df:
+            columns_in_output = columns_in_df | {"new_column"}
+            for columns_to_select in subset_permutations(columns_in_output):
+                q = QueryBuilder()
+                q = q.apply("new_column", q[column_to_project] + 2)
+                result = lib.read("sym", query_builder=q, columns=columns_to_select).data
+                result.sort_index(axis=1, inplace=True)
+                expected = pandas_df.copy(True)
+                expected["new_column"] = expected[column_to_project] + 2
+                expected = expected[list(columns_to_select)]
+                expected.sort_index(axis=1, inplace=True)
+                if "new_column" in columns_to_select:
+                    # This is a known bug. See Monday issue: 9492480789
+                    buggy = expected.copy(True)
+                    buggy.drop(["new_column"], axis=1, inplace=True)
+                    if len(buggy.columns) == 0:
+                        buggy = pd.DataFrame()
+                    assert_frame_equal(result, buggy)
+                else:
+                    assert set(columns_to_select) == set(result.columns)
+                    assert_frame_equal(expected, result)
+
+    @pytest.mark.parametrize("dynamic_schema, input_segments", input_segments_for_processing(["a", "b", "c"]))
+    def test_filter_projected(self, version_store_factory, dynamic_schema, input_segments):
+        """
+        Test projection each column on disk onto a new_column that's the value of the column + 2 and then filtering on
+        the value of that new column. Then try selecting all possible combinations of selection columns.
+        """
+        lib = version_store_factory(dynamic_schema=dynamic_schema, col_per_group=2)
+        df_seg_1, df_seg_2 = input_segments
+        lib.write("sym", df_seg_1)
+        lib.append("sym", df_seg_2)
+        pandas_df = pd.concat([df_seg_1, df_seg_2])
+        columns_in_df = set(list(df_seg_1.columns) + list(df_seg_2.columns))
+        for column_to_project in columns_in_df:
+            columns_in_output = columns_in_df | {"new_column"}
+            for columns_to_select in subset_permutations(columns_in_output):
+                q = QueryBuilder()
+                q = q.apply("new_column", q[column_to_project] + 2)
+                q = q[q["new_column"] >= 3.0]
+                result = lib.read("sym", query_builder=q, columns=columns_to_select).data
+                result.sort_index(axis=1, inplace=True)
+                expected = pandas_df.copy(True)
+                expected["new_column"] = expected[column_to_project] + 2
+                expected = expected[expected["new_column"] >= 3.0][list(columns_to_select)]
+                expected.sort_index(axis=1, inplace=True)
+                expected.index = pd.RangeIndex(start=0, stop=len(expected.index))
+                if "new_column" in columns_to_select:
+                    # This is a known bug. See Monday issue: 9492480789
+                    buggy = expected.copy(True)
+                    buggy.drop(["new_column"], axis=1, inplace=True)
+                    if len(buggy.columns) == 0:
+                        buggy = pd.DataFrame()
+                    assert_frame_equal(result, buggy)
+                else:
+                    assert set(columns_to_select) == set(result.columns)
+                    assert_frame_equal(expected, result)
+
+    @pytest.mark.xfail(reason="Column selection not working properly. Check also tests: test_symbol_concat_column_slicing and test_symbol_concat_filtering_with_column_selection")
+    @pytest.mark.parametrize("dynamic_schema, input_symbols", input_segments_for_concat(["a", "b", "c"]))
+    @pytest.mark.parametrize("join", ["inner"])
+    def test_concat(self, lmdb_library_factory, dynamic_schema, input_symbols, join):
+        lib = lmdb_library_factory(library_options=arcticdb.LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=2))
+        symbol_names = ["sym_0", "sym_1"]
+        input_dfs = []
+        for (index, symbol_name) in enumerate(symbol_names):
+            for segment in input_symbols[index]:
+                lib.append(symbol_name, segment)
+            input_dfs.append(pd.concat(input_symbols[index]))
+
+        for columns_to_select_0 in subset_permutations(set(list(input_dfs[0]))):
+            for columns_to_select_1 in subset_permutations(set(list(input_dfs[1]))):
+                lazy_df_0 = lib.read("sym_0", columns=columns_to_select_0, lazy=True)
+                lazy_df_1 = lib.read("sym_1", columns=columns_to_select_1, lazy=True)
+
+                received = arcticdb.concat([lazy_df_0, lazy_df_1], join).collect().data
+                received.sort_index(axis=1, inplace=True)
+
+                expected = pd.concat([input_dfs[0].loc[:, columns_to_select_0], input_dfs[0].loc[:, columns_to_select_1]])
+                expected.index = pd.RangeIndex(len(expected))
+
+                assert_frame_equal(expected, received)
