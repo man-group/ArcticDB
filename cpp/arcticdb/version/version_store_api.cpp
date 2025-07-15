@@ -715,7 +715,7 @@ ColumnStats PythonVersionStore::get_column_stats_info_version(
     return get_column_stats_info_version_internal(stream_id, version_query);
 }
 
-VersionedItem PythonVersionStore::compact_incomplete(
+std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incomplete(
         const StreamId& stream_id,
         bool append,
         bool convert_int_to_float,
@@ -741,10 +741,20 @@ VersionedItem PythonVersionStore::compact_incomplete(
         .delete_staged_data_on_failure_=delete_staged_data_on_failure,
         .tokens=tokens
     };
-    return compact_incomplete_dynamic(stream_id, meta, params);
+
+    try {
+        return compact_incomplete_dynamic(stream_id, meta, params);
+    } catch (KeyNotFoundInTokensException& e) {
+        CompactionError result;
+        result.reserve(e.keys().size());
+        for (auto&& k : std::move(e.keys())) {
+            result.emplace_back(std::move(k));
+        }
+        return result;
+    }
 }
 
-VersionedItem PythonVersionStore::sort_merge(
+std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
         const StreamId& stream_id,
         const py::object& user_meta,
         bool append,
@@ -768,7 +778,17 @@ VersionedItem PythonVersionStore::sort_merge(
         .delete_staged_data_on_failure_=delete_staged_data_on_failure,
         .tokens=tokens
     };
-    return sort_merge_internal(stream_id, meta, params);
+
+    try {
+        return sort_merge_internal(stream_id, meta, params);
+    } catch (KeyNotFoundInTokensException& e) {
+        CompactionError result;
+        result.reserve(e.keys().size());
+        for (auto&& k : std::move(e.keys())) {
+            result.emplace_back(std::move(k));
+        }
+        return result;
+    }
 }
 
 StageResult PythonVersionStore::write_parallel(

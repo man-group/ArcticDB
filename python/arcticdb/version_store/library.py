@@ -14,7 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInTokensError
 from numpy import datetime64
 
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -25,7 +25,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat, StageResult
+from arcticdb_ext.version_store import DataError, OutputFormat, StageResult, KeyNotFoundInTokenInfo
 from arcticdb_ext import get_config_int
 
 import pandas as pd
@@ -33,6 +33,7 @@ import numpy as np
 import logging
 from arcticdb.version_store._normalization import normalize_metadata
 from arcticdb.version_store.admin_tools import AdminTools
+import arcticdb_ext as _ae
 
 logger = logging.getLogger(__name__)
 
@@ -1731,7 +1732,7 @@ class Library:
                 "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
             )
 
-        vit = self._nvs.version_store.sort_merge(
+        compaction_result = self._nvs.version_store.sort_merge(
             symbol,
             normalize_metadata(metadata),
             append=mode == StagedDataFinalizeMethod.APPEND or mode == "append",
@@ -1739,7 +1740,16 @@ class Library:
             delete_staged_data_on_failure=delete_staged_data_on_failure,
             tokens=_stage_results
         )
-        return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
+        if isinstance(compaction_result, _ae.version_store.VersionedItem):
+            return self._nvs._convert_thin_cxx_item_to_python(compaction_result, metadata)
+        elif isinstance(compaction_result, List):
+            # We expect this to be a list of errors
+            assert compaction_result, "List of errors in compaction result should never be empty"
+            assert isinstance(compaction_result[0], KeyNotFoundInTokenInfo), "Compaction errors should always be KeyNotFoundInTokenInfo"
+            raise MissingKeysInTokensError("Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result)
+        else:
+            raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
+
 
     def get_staged_symbols(self) -> List[str]:
         """

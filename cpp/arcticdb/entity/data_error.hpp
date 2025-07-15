@@ -54,4 +54,5 @@ private:
     std::string exception_string_;
     std::optional<ErrorCode> error_code_;
 };
-}
+
+}  // namespace arcticdb::entity
