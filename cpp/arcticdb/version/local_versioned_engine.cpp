@@ -1199,33 +1199,33 @@ std::shared_ptr<PipelineContext> setup_join_pipeline_context(
 }
 
 MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
-        const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries,
+        std::shared_ptr<std::vector<StreamId>> stream_ids,
+        std::shared_ptr<std::vector<VersionQuery>> version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
         std::vector<std::shared_ptr<Clause>>&& clauses,
         std::any& handler_data) {
     py::gil_scoped_release release_gil;
     util::check(!clauses.empty(), "Cannot join with no joining clause provided");
-    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), *stream_ids, *version_queries);
     std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
     symbol_processing_result_futs.reserve(opt_index_key_futs.size());
     auto component_manager = std::make_shared<ComponentManager>();
     for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
         symbol_processing_result_futs.emplace_back(
                 std::move(opt_index_key_fut).thenValue([store = store(),
-                                                        &stream_ids,
-                                                        &version_queries,
+                                                        stream_ids,
+                                                        version_queries,
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         idx,
                                                         read_options,
                                                         &component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
                     auto version_info = get_version_identifier(
-                            stream_ids[idx],
-                            version_queries[idx],
+                            (*stream_ids)[idx],
+                            (*version_queries)[idx],
                             read_options,
                             opt_index_key.has_value() ? std::make_optional<VersionedItem>(std::move(*opt_index_key)) : std::nullopt);
-                    return read_and_process(store, version_info, read_query, read_options, component_manager);
+                    return read_and_process(store, std::move(version_info), read_query, read_options, component_manager);
                 })
         );
     }
