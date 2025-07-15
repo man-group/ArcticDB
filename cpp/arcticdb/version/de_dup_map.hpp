@@ -37,8 +37,8 @@ public:
     }
 
     void insert_key(const AtomKey &key) {
-        if (de_dup_map_.contains(key.content_hash())) {
-            de_dup_map_.at(key.content_hash()).push_back(key);
+        if (const auto it = de_dup_map_.find(key.content_hash()); it != de_dup_map_.end()) {
+            it->second.push_back(key);
         } else {
             de_dup_map_.emplace(key.content_hash(), std::vector{key});
         }
