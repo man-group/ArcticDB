@@ -21,32 +21,32 @@ using namespace arcticdb::proto::config;
 
 class ConfigsMap {
 public:
+    static std::shared_ptr<ConfigsMap> instance_;
+    static std::once_flag init_flag_;
+
     static void init();
-    static std::shared_ptr<ConfigsMap>& instance() { 
-        static auto instance_ = std::make_shared<ConfigsMap>();
-        return instance_;
+    static std::shared_ptr<ConfigsMap> instance();
+
+    ConfigsMap() :
+        mutex_(std::make_unique<std::mutex>()) {
     }
 
 #define HANDLE_TYPE(LABEL, TYPE)     \
     void set_##LABEL(const std::string& label, TYPE val) { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         map_of_##LABEL[boost::to_upper_copy<std::string>(label)] = val; \
     } \
 \
     TYPE get_##LABEL(const std::string& label, TYPE default_val) const { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label)); \
         return it == map_of_##LABEL.cend() ? default_val : it->second; \
     } \
  \
     std::optional<TYPE> get_##LABEL(const std::string& label) const { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label)); \
         return it == map_of_##LABEL.cend() ? std::nullopt : std::make_optional(it->second); \
     } \
 \
     void unset_##LABEL(const std::string& label) { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         map_of_##LABEL.erase(boost::to_upper_copy<std::string>(label)); \
     } \
 
@@ -60,37 +60,24 @@ private:
     std::unordered_map<std::string, uint64_t> map_of_int;
     std::unordered_map<std::string, std::string> map_of_string;
     std::unordered_map<std::string, double> map_of_double;
-    mutable std::mutex mutex_;
+    std::unique_ptr<std::mutex> mutex_;
 };
 
 struct ScopedConfig {
-    using ConfigOptions = std::vector<std::pair<std::string, std::optional<int64_t>>>;
-    ConfigOptions originals;
-    ScopedConfig(std::string name, int64_t val) : ScopedConfig({{ std::move(name), std::make_optional(val) }}) {
-    }
+    std::string name_;
+    std::optional<int64_t> original_;
 
-    explicit ScopedConfig(ConfigOptions overrides) {
-        for (auto& config : overrides) {
-            auto& [name, new_value] = config;
-            const auto old_val = ConfigsMap::instance()->get_int(name);
-            if (new_value.has_value()) {
-                ConfigsMap::instance()->set_int(name, *new_value);
-            }
-            else {
-                ConfigsMap::instance()->unset_int(name);
-            }
-            originals.emplace_back(std::move(name), old_val);
-        }
+    ScopedConfig(const std::string& name, int64_t val) :
+            name_(name),
+            original_(ConfigsMap::instance()->get_int(name)) {
+        ConfigsMap::instance()->set_int(name_, val);
     }
 
     ~ScopedConfig() {
-        for (const auto& config : originals) {
-            const auto& [name, original_value] = config;
-            if(original_value.has_value())
-                ConfigsMap::instance()->set_int(name, *original_value);
-            else
-                ConfigsMap::instance()->unset_int(name);
-        }
+        if(original_)
+            ConfigsMap::instance()->set_int(name_, original_.value());
+        else
+            ConfigsMap::instance()->unset_int(name_);
     }
 };
 
