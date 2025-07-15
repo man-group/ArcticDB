@@ -153,8 +153,9 @@ def test_unhandled_chars_staged_data(object_version_store, sym):
     assert not object_version_store.list_symbols_with_incomplete_data()
 
 
-@pytest.mark.parametrize("snap", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254,
-                                  chr(127), chr(128), "l" * 255, "*", "<", ">"])
+@pytest.mark.parametrize(
+    "snap", [chr(32), chr(33), chr(125), chr(126), "fine", "l" * 254, chr(127), chr(128), "l" * 255, "*", "<", ">"]
+)
 def test_snapshot_names(object_version_store, snap):
     """We validate against these snapshot names in the V2 API, but let them go through in the V1 API to avoid disruption
     to legacy users on the V1 API."""
@@ -226,7 +227,9 @@ def test_unhandled_chars_already_present_write(object_version_store, three_col_d
 def test_unhandled_chars_already_present_on_deleted_symbol(object_version_store, three_col_df, unhandled_char, staged):
     sym = f"prefix{unhandled_char}postfix"
     with pytest.raises(UserInputException):
-        object_version_store.write(sym, three_col_df())  # reasonableness check - the sym we're using should fail the validation checks
+        object_version_store.write(
+            sym, three_col_df()
+        )  # reasonableness check - the sym we're using should fail the validation checks
 
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
         object_version_store.write(sym, three_col_df())
@@ -447,16 +450,125 @@ def test_prune_previous_versions_multiple_times(basic_store, symbol):
     assert len([ver for ver in basic_store.list_versions() if not ver["deleted"]]) == 1
 
 
-def check_write_and_prune_previous_version_keys(lib_tool, sym, ver_key):
+def check_write_and_prune_previous_version_keys(lib_tool, sym, ver_key, latest_version_id=2):
     assert ver_key.type == KeyType.VERSION
     keys_in_tombstone_ver = lib_tool.read_to_keys(ver_key)
     assert len(keys_in_tombstone_ver) == 3
-    assert keys_in_tombstone_ver[0].type == KeyType.TOMBSTONE_ALL
-    assert keys_in_tombstone_ver[1].type == KeyType.TABLE_INDEX
+    assert keys_in_tombstone_ver[0].type == KeyType.TABLE_INDEX
+    assert keys_in_tombstone_ver[1].type == KeyType.TOMBSTONE_ALL
     assert keys_in_tombstone_ver[2].type == KeyType.VERSION
-    assert keys_in_tombstone_ver[0].version_id == 0
-    assert keys_in_tombstone_ver[1].version_id == 1
-    assert keys_in_tombstone_ver[2].version_id == 0
+    assert keys_in_tombstone_ver[0].version_id == latest_version_id
+    assert keys_in_tombstone_ver[1].version_id == latest_version_id - 1
+    assert keys_in_tombstone_ver[2].version_id == latest_version_id - 1
+
+
+def check_append_ref_key_structure(keys_in_ref, latest_version_id=1):
+    """
+    The ref key for an append/write(without prune) should have the following structure:
+    - TABLE_INDEX: latest index
+    - TABLE_INDEX: previous index
+    - VERSION: latest version
+    This is due to an optimisation that we have, for more info see:
+    https://github.com/man-group/ArcticDB/pull/1355
+    """
+    assert len(keys_in_ref) == 3
+    assert keys_in_ref[0].type == KeyType.TABLE_INDEX
+    assert keys_in_ref[0].version_id == latest_version_id
+    assert keys_in_ref[1].type == KeyType.TABLE_INDEX
+    assert keys_in_ref[1].version_id == latest_version_id - 1
+    assert keys_in_ref[2].type == KeyType.VERSION
+    assert keys_in_ref[2].version_id == latest_version_id
+
+
+def check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=1):
+    """
+    The ref key for after a regular write with prune should have the following structure:
+    - TABLE_INDEX: latest index
+    - VERSION: latest version
+    """
+    assert len(keys_in_ref) == 2
+    assert keys_in_ref[0].type == KeyType.TABLE_INDEX
+    assert keys_in_ref[0].version_id == latest_version_id
+    assert keys_in_ref[1].type == KeyType.VERSION
+    assert keys_in_ref[1].version_id == latest_version_id
+
+
+@pytest.mark.storage
+def test_prune_previous_versions_write(basic_store, sym):
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
+    # Given
+    lib = basic_store
+    lib_tool = lib.library_tool()
+    df0 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    df1 = pd.DataFrame({"col_0": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_0": ["e", "f"]}, index=pd.date_range("2000-01-05", periods=2))
+
+    # When
+    lib.write(sym, df0)
+    lib.write(sym, df1)
+    ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+    keys_in_ref = lib_tool.read_to_keys(ref_key)
+    assert len(lib.list_versions(sym)) == 2
+    check_append_ref_key_structure(keys_in_ref)
+
+    lib.write(sym, df2, prune_previous_version=True)
+
+    # Then - only latest version and keys should survive
+    assert len(lib.list_versions(sym)) == 1
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 1
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 1
+
+    ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+    keys_in_ref = lib_tool.read_to_keys(ref_key)
+    check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
+
+    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
+    keys_for_sym = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
+
+    assert len(keys_for_sym) == 3
+    latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
+    check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
+    # Then - we got 3 symbol keys: 1 for each of the writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
+
+
+@pytest.mark.storage
+@pytest.mark.parametrize("versions_to_delete", [[0], [1], [0, 1]])
+def test_tombstone_versions_ref_key_structure(basic_store, sym, versions_to_delete):
+    """Verify that the batch write method correctly prunes previous versions when the corresponding option is specified."""
+    # Given
+    lib = basic_store
+    lib_tool = lib.library_tool()
+    df = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
+    num_writes = 3
+
+    # When
+    for _ in range(num_writes):
+        lib.write(sym, df)
+    lib.delete_versions(sym, versions=versions_to_delete)
+
+    # Then - only latest version and keys should survive
+    assert len(lib.list_versions(sym)) == num_writes - len(versions_to_delete)
+    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == num_writes - len(versions_to_delete)
+    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == num_writes - len(versions_to_delete)
+
+    ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+    keys_in_ref = lib_tool.read_to_keys(ref_key)
+    assert len(keys_in_ref) == 2
+    # the tombstone key and version key should be the highest version id
+    assert keys_in_ref[0].type == KeyType.TOMBSTONE
+    assert keys_in_ref[0].version_id == max(versions_to_delete)
+    assert keys_in_ref[1].type == KeyType.VERSION
+    assert keys_in_ref[1].version_id == max(versions_to_delete)
+    keys_in_ver = lib_tool.read_to_keys(keys_in_ref[1])
+    assert len(keys_in_ver) == len(versions_to_delete) + 1
+    for key in keys_in_ver[:-1]:
+        assert key.type == KeyType.TOMBSTONE
+        assert key.version_id in versions_to_delete
+
+    # the last key should be the version and it should point to the previous version
+    assert keys_in_ver[-1].type == KeyType.VERSION
+    assert keys_in_ver[-1].version_id == num_writes - 1
 
 
 @pytest.mark.storage
@@ -467,31 +579,40 @@ def test_prune_previous_versions_write_batch(basic_store):
     lib_tool = lib.library_tool()
     sym1 = "test_symbol1"
     sym2 = "test_symbol2"
+    syms = [sym1, sym2]
     df0 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_0": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_0": ["e", "f"]}, index=pd.date_range("2000-01-05", periods=2))
 
     # When
-    lib.batch_write([sym1, sym2], [df0, df0])
-    lib.batch_write([sym1, sym2], [df1, df1], prune_previous_version=True)
+    lib.batch_write(syms, [df0, df0])
+    lib.batch_write(syms, [df1, df1])
 
-    # Then - only latest version and keys should survive
-    assert len(lib.list_versions(sym1)) == 1
-    assert len(lib.list_versions(sym2)) == 1
-    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
-    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
+    for sym in syms:
+        ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+        keys_in_ref = lib_tool.read_to_keys(ref_key)
+        assert len(lib.list_versions(sym)) == 2
+        check_append_ref_key_structure(keys_in_ref)
 
-    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
-    keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
-    keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
+    lib.batch_write(syms, [df2, df2], prune_previous_version=True)
+    for sym in syms:
+        ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+        keys_in_ref = lib_tool.read_to_keys(ref_key)
+        assert len(lib.list_versions(sym)) == 1
+        check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-    assert len(keys_for_sym1) == 2
-    latest_ver_key = max(keys_for_sym1, key=lambda x: x.version_id)
-    check_write_and_prune_previous_version_keys(lib_tool, sym1, latest_ver_key)
-    assert len(keys_for_sym2) == 2
-    latest_ver_key = max(keys_for_sym2, key=lambda x: x.version_id)
-    check_write_and_prune_previous_version_keys(lib_tool, sym2, latest_ver_key)
-    # Then - we got 4 symbol keys: 2 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
+        # Then - only latest version and keys should survive
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
+
+        # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
+        keys_for_sym = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
+
+        assert len(keys_for_sym) == 3
+        latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
+        check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
+    # Then - we got 6 symbol keys: 1 for each of the writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
 
 
 @pytest.mark.storage
@@ -502,31 +623,42 @@ def test_prune_previous_versions_batch_write_metadata(basic_store):
     lib_tool = lib.library_tool()
     sym1 = "test_symbol1"
     sym2 = "test_symbol2"
+    syms = [sym1, sym2]
     meta0 = {"a": 0}
     meta1 = {"a": 1}
+    meta2 = {"a": 2}
 
     # When
     lib.batch_write([sym1, sym2], [None, None], metadata_vector=[meta0, meta0])
-    lib.batch_write_metadata([sym1, sym2], [meta1, meta1], prune_previous_version=True)
+    lib.batch_write([sym1, sym2], [None, None], metadata_vector=[meta1, meta1])
+    for sym in syms:
+        ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+        keys_in_ref = lib_tool.read_to_keys(ref_key)
+        assert len(lib.list_versions(sym)) == 2
+        check_append_ref_key_structure(keys_in_ref)
 
-    # Then - only latest version and keys should survive
-    assert len(lib.list_versions(sym1)) == 1
-    assert len(lib.list_versions(sym2)) == 1
-    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
-    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 2
+    lib.batch_write_metadata([sym1, sym2], [meta2, meta2], prune_previous_version=True)
 
-    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
-    keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
-    keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
+    for sym in syms:
+        ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+        keys_in_ref = lib_tool.read_to_keys(ref_key)
+        assert len(lib.list_versions(sym)) == 1
+        check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
 
-    assert len(keys_for_sym1) == 2
-    latest_ver_key = max(keys_for_sym1, key=lambda x: x.version_id)
-    check_write_and_prune_previous_version_keys(lib_tool, sym1, latest_ver_key)
-    assert len(keys_for_sym2) == 2
-    latest_ver_key = max(keys_for_sym2, key=lambda x: x.version_id)
-    check_write_and_prune_previous_version_keys(lib_tool, sym2, latest_ver_key)
-    # Then - we got 2 symbol keys: 1 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
+        # Then - only latest version and keys should survive
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 1
+
+        # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
+        keys_for_sym = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
+
+        assert len(keys_for_sym) == 3
+        latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
+        check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
+
+    # Then - we got 4 symbol keys: 1 for each of the batch_write calls
+    # batch_write_metadata should not create any new symbol keys
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
 
 
 @pytest.mark.storage
@@ -537,31 +669,42 @@ def test_prune_previous_versions_append_batch(basic_store):
     lib_tool = lib.library_tool()
     sym1 = "test_symbol1"
     sym2 = "test_symbol2"
+    syms = [sym1, sym2]
     df0 = pd.DataFrame({"col_0": ["a", "b"]}, index=pd.date_range("2000-01-01", periods=2))
     df1 = pd.DataFrame({"col_0": ["c", "d"]}, index=pd.date_range("2000-01-03", periods=2))
+    df2 = pd.DataFrame({"col_0": ["e", "f"]}, index=pd.date_range("2000-01-05", periods=2))
 
     # When
-    lib.batch_write([sym1, sym2], [df0, df0])
-    lib.batch_append([sym1, sym2], [df1, df1], prune_previous_version=True)
+    lib.batch_write(syms, [df0, df0])
+    lib.batch_append(syms, [df1, df1])
 
-    # Then - only latest version and index keys should survive. Data keys remain the same
-    assert len(lib.list_versions(sym1)) == 1
-    assert len(lib.list_versions(sym2)) == 1
-    assert len(lib_tool.find_keys(KeyType.TABLE_INDEX)) == 2
-    assert len(lib_tool.find_keys(KeyType.TABLE_DATA)) == 4
+    for sym in syms:
+        ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+        keys_in_ref = lib_tool.read_to_keys(ref_key)
+        assert len(lib.list_versions(sym)) == 2
+        check_append_ref_key_structure(keys_in_ref)
 
-    # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
-    keys_for_sym1 = lib_tool.find_keys_for_id(KeyType.VERSION, sym1)
-    keys_for_sym2 = lib_tool.find_keys_for_id(KeyType.VERSION, sym2)
+    lib.batch_append(syms, [df2, df2], prune_previous_version=True)
 
-    assert len(keys_for_sym1) == 2
-    latest_ver_key = max(keys_for_sym1, key=lambda x: x.version_id)
-    check_write_and_prune_previous_version_keys(lib_tool, sym1, latest_ver_key)
-    assert len(keys_for_sym2) == 2
-    latest_ver_key = max(keys_for_sym2, key=lambda x: x.version_id)
-    check_write_and_prune_previous_version_keys(lib_tool, sym2, latest_ver_key)
-    # Then - we got 4 symbol keys: 2 for each of the writes
-    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 4
+    for sym in syms:
+        ref_key = lib_tool.find_keys_for_id(KeyType.VERSION_REF, sym)[0]
+        keys_in_ref = lib_tool.read_to_keys(ref_key)
+        assert len(lib.list_versions(sym)) == 1
+        check_regular_write_ref_key_structure(keys_in_ref, latest_version_id=2)
+
+        # Then - only latest version and index keys should survive. Data keys remain the same
+        assert len(lib.list_versions(sym)) == 1
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, sym)) == 1
+        assert len(lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)) == 3
+
+        # Then - we got 2 version keys per symbol: version 0, version 1 that contains the tombstone_all
+        keys_for_sym = lib_tool.find_keys_for_id(KeyType.VERSION, sym)
+
+        assert len(keys_for_sym) == 3
+        latest_ver_key = max(keys_for_sym, key=lambda x: x.version_id)
+        check_write_and_prune_previous_version_keys(lib_tool, sym, latest_ver_key)
+    # Then - we got 6 symbol keys: 1 for each of the writes
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
 
 
 @pytest.mark.storage
@@ -2374,20 +2517,26 @@ def test_batch_restore_version_bad_input_noop(lmdb_version_store, bad_thing):
     if bad_thing == "symbol":
         restore_syms = ["s1", "s2", "bad"]
         as_ofs = [1, second_ts, first_ts]
-        with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[bad\]"):
+        with pytest.raises(
+            NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[bad\]"
+        ):
             lib.batch_restore_version(restore_syms, as_ofs)
     elif bad_thing == "as_of":
         as_ofs = [first_ts, second_ts, 7]
-        with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[s3\]"):
+        with pytest.raises(
+            NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[s3\]"
+        ):
             lib.batch_restore_version(syms, as_ofs)
     elif bad_thing == "duplicate":
         restore_syms = ["s1", "s1", "s2"]
         as_ofs = [1, second_ts, first_ts]
-        with pytest.raises(UserInputException, match="E_INVALID_USER_ARGUMENT Duplicate symbols in restore_version.*more than once \[s1\]"):
+        with pytest.raises(
+            UserInputException,
+            match="E_INVALID_USER_ARGUMENT Duplicate symbols in restore_version.*more than once \[s1\]",
+        ):
             lib.batch_restore_version(restore_syms, as_ofs)
     else:
         raise RuntimeError(f"Unexpected bad_thing={bad_thing}")
-
 
     # Then
     latest = lib.batch_read(syms)
