@@ -24,7 +24,7 @@
 #include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
-
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 namespace arcticdb::version_store {
 
@@ -319,6 +319,29 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("error_category", &DataError::error_category)
             .def_property_readonly("exception_string", &DataError::exception_string)
             .def("__str__", &DataError::to_string);
+
+    py::class_<storage::KeyNotFoundInTokenInfo, std::shared_ptr<storage::KeyNotFoundInTokenInfo>>(version, "KeyNotFoundInTokenInfo", R"pbdoc(
+        Internal type. Information about a token that failed during staged data finalization, because a key that it refers
+        to is not present in storage.
+
+        Attributes
+        ----------
+        token_index: int
+            Index of the token that containing a key that was not found, an index in to the tokens provided to the finalization
+            method.
+        missing_key: AtomKey
+            The key that was in the token but missing in storage.
+    )pbdoc")
+        .def(py::init([](uint64_t token_index, const VariantKey& missing_key) {
+            return storage::KeyNotFoundInTokenInfo(token_index, missing_key);
+        }))
+        .def_property_readonly("token_index", &storage::KeyNotFoundInTokenInfo::token_index)
+        .def_property_readonly("missing_key", &storage::KeyNotFoundInTokenInfo::missing_key)
+        .def("__repr__", &storage::KeyNotFoundInTokenInfo::to_string)
+        .def("__str__", &storage::KeyNotFoundInTokenInfo::to_string)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        ;
 
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")

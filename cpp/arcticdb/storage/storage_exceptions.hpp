@@ -101,9 +101,29 @@ private:
 };
 
 struct KeyNotFoundInTokenInfo {
-    uint64_t token_index;
-    VariantKey missing_key;
+    uint64_t token_index_;
+    VariantKey missing_key_;
+
+    [[nodiscard]] uint64_t token_index() const {
+        return token_index_;
+    }
+
+    [[nodiscard]] VariantKey missing_key() const {
+        return missing_key_;
+    }
+
+    [[nodiscard]] std::string to_string() const {
+        return fmt::format("token_index=[{}] missing_key=[{}]", token_index_, missing_key_);
+    }
 };
+
+inline bool operator==(const KeyNotFoundInTokenInfo& left, const KeyNotFoundInTokenInfo& right) {
+    return left.token_index_ == right.token_index_ && left.missing_key_ == right.missing_key_;
+}
+
+inline bool operator!=(const KeyNotFoundInTokenInfo& left, const KeyNotFoundInTokenInfo& right) {
+    return !(left == right);
+}
 
 } // namespace arcticdb::storage
 
@@ -117,7 +137,7 @@ struct formatter<KeyNotFoundInTokenInfo> {
 
     template<typename FormatContext>
     auto format(const KeyNotFoundInTokenInfo& k, FormatContext& ctx) const {
-        return fmt::format_to(ctx.out(), "token_index={}, missing_key={}", k.token_index, variant_key_view(k.missing_key));
+        return fmt::format_to(ctx.out(), "token_index={}, missing_key={}", k.token_index(), variant_key_view(k.missing_key()));
     };
 
 };
