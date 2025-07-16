@@ -216,10 +216,7 @@ class UpdatesGenerator:
 
 def read_batch_as_dict(lib: Library, symbol_names: List[str]) -> Dict[str, Union[VersionedItem, DataError]]:
     read_results = lib.read_batch(symbol_names)
-    read_data = dict()
-    for result in read_results:
-        read_data[result.symbol] = result
-    return read_data
+    return {result.symbol: result for result in read_results}
 
 
 @pytest.fixture
