@@ -495,6 +495,7 @@ set(arcticdb_srcs
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
+        storage/failure_simulation.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
         storage/azure/azure_client_impl.cpp
@@ -528,6 +529,7 @@ set(arcticdb_srcs
         util/allocator.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
+        util/configs_map.cpp
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
