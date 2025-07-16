@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/Poly.h>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb{
 
@@ -18,16 +19,23 @@ struct IGroupingAggregatorData {
 
         DataType get_output_data_type() { return folly::poly_call<1>(*this); };
 
-        void aggregate(const std::optional<ColumnWithStrings>& input_column, const std::vector<size_t>& groups, size_t unique_values) {
+        void aggregate(const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values) {
             folly::poly_call<2>(*this, input_column, groups, unique_values);
         }
         [[nodiscard]] SegmentInMemory finalize(const ColumnName& output_column_name, bool dynamic_schema, size_t unique_values) {
             return folly::poly_call<3>(*this, output_column_name, dynamic_schema, unique_values);
         }
+
+        /// @returns std::nullopt if the aggregation's default value is the same as the default value of the underlying
+        ///   type. If the aggregation type has a special default value return it encoded in an Value object. This value
+        ///   will later be used by the NullValueReducer to fill in sparse data.
+        [[nodiscard]] std::optional<Value> get_default_value() {
+            return folly::poly_call<4>(*this);
+        }
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::add_data_type, &T::get_output_data_type, &T::aggregate, &T::finalize>;
+    using Members = folly::PolyMembers<&T::add_data_type, &T::get_output_data_type, &T::aggregate, &T::finalize, &T::get_default_value>;
 };
 
 using GroupingAggregatorData = folly::Poly<IGroupingAggregatorData>;

@@ -255,7 +255,7 @@ inline void build_row_read_query_filters(
 }
 
 template <typename ContainerType>
-inline void build_col_read_query_filters(
+void build_col_read_query_filters(
     std::shared_ptr<PipelineContext> pipeline_context,
     bool dynamic_schema,
     bool column_groups,
@@ -282,7 +282,6 @@ inline void build_col_read_query_filters(
         queries.push_back(std::move(query));
     } else if (pipeline_context->overall_column_bitset_) {
         util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
-
         if (column_groups)
             queries.emplace_back(create_dynamic_col_filter(std::move(pipeline_context)));
         else
