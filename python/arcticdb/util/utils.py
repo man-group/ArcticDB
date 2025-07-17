@@ -164,6 +164,8 @@ def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[
                 assert False == value, f"column {col}:{dtype} -> False == {value}"
             elif 'object' in str(dtype):
                 assert value is None , f"column {col}:{dtype} -> None == {value}"
+            elif 'datetime' in str(dtype):
+                assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
             else:
                 raise TypeError(f"Unsupported dtype: {dtype}")
             

@@ -23,6 +23,8 @@ from datetime import timedelta, timezone
 from arcticdb.exceptions import (
     ArcticNativeException,
 )
+from arcticdb_ext.version_store import StreamDescriptorMismatch
+
 from arcticdb_ext.exceptions import (
     InternalException,
     NormalizationException,
@@ -242,9 +244,9 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
 
 @pytest.mark.parametrize("schema", [True, False])
 @pytest.mark.storage
-def test_append_scenario_error_messages_and_exceptions(version_store_and_real_s3_basic_store_factory, schema):
+def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic_store_factory, schema):
     """
-    Test error messages and exception types for various failure scenarios.
+    Test error messages and exception types for various failure scenarios mixed with 
     
     Verifies:
     - Appropriate exception types are raised
@@ -252,13 +254,16 @@ def test_append_scenario_error_messages_and_exceptions(version_store_and_real_s3
     - Exceptions are same across all storage types
     """
     lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
-            dynamic_schema=True, dynamic_strings=schema, segment_row_size=1)
+            dynamic_schema=schema, dynamic_strings=schema, segment_row_size=1)
     symbol = "test_append_errors"
     
     df = pd.DataFrame({'value': [1, 2, 3]}, index=pd.date_range('2023-01-01', periods=3, freq='s'))
     df_2 = pd.DataFrame({'value': [3, 4, 5]}, index=pd.date_range('2023-01-02', periods=3, freq='s'))
+    df_different_schema = pd.DataFrame({'value': [3.1, 44, 5.324]}, index=pd.date_range('2023-01-03', periods=3, freq='s'))
     df_empty = df.iloc[0:0]
     df_same_index = pd.DataFrame({'value': [10, 982]}, index=pd.date_range('2023-01-01', periods=2, freq='s'))
+    pickled_data = [34243, 3253, 53425]
+    pickled_data_2 = get_metadata()
     df_different_index = pd.DataFrame(
         {'value': [4, 5, 6]}, 
         index=['a', 'b', 'c']  # String index instead of datetime
@@ -299,14 +304,7 @@ def test_append_scenario_error_messages_and_exceptions(version_store_and_real_s3
     for frame in [df_different_index, df_no_index]:
         with pytest.raises((NormalizationException)):
             lib.append(symbol, frame)
-    assert len(lib.list_symbols()) == 1
-    assert len(lib.list_versions()) == 2
-
-    # Test append overlapping indexes
-    for frame in [df_same_index]:
-        with pytest.raises((InternalException)):
-            lib.append(symbol, frame)
-    assert len(lib.list_symbols()) == 1
+    assert lib.list_symbols() == [symbol]
     assert len(lib.list_versions()) == 2
 
     before_append = pd.Timestamp.now(tz=timezone.utc).value 
@@ -325,9 +323,98 @@ def test_append_scenario_error_messages_and_exceptions(version_store_and_real_s3
     assert before_append <= result.timestamp <= after_append
     assert len(lib.list_symbols()) == 1
     assert len(lib.list_versions()) == 3
+    assert lib.list_symbols_with_incomplete_data() == []          
+
+    # Test append overlapping indexes
+    for frame in [df_same_index]:
+        with pytest.raises((InternalException)):
+            lib.append(symbol, frame)
+    # Append can happen only as incomplete
+    lib.append(symbol, frame, validate_index=False, incomplete=True) 
+    assert lib.list_symbols_with_incomplete_data() == [symbol]          
+    assert len(lib.list_versions()) == 3
+
+    # Cannot append pickle data to dataframe
+    for pick in [pickled_data, pickled_data_2]:
+        with pytest.raises(NormalizationException):
+            lib.append(symbol, pick)
+
+    if schema:
+        lib.append(symbol, df_different_schema)    
+        assert len(lib.list_versions()) == 4
+    else:
+        # Should raise StreamDescriptorMismatch
+        with pytest.raises(StreamDescriptorMismatch):
+            lib.append(symbol, df_different_schema)    
 
     # Append empty dataframe to symbol with content does not increase version
     # but as we saw previously it will create symbol 
     result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
-    assert len(lib.list_versions()) == 3
+    assert len(lib.list_versions()) == 4 if schema else 3
+
+
+def test_update_date_range_exhaustive(lmdb_version_store):
+    """Test update with open-ended and closed date ranges,
+    and verifications over the result dataframe what remains"""
+
+    lib = lmdb_version_store
+    symbol = "test_date_range_open"
+    start_date_original_df = "2023-01-01"
+    start_date_update_df = "2023-01-05"
+
+    update_data = pd.DataFrame(
+        {"value": [999]},
+        index=pd.date_range(start_date_update_df, periods=1, freq="D")
+    )
+
+    def run_test(lib, initial_data, start, end, update_expected_at_index, length_of_result_df, scenario):
+        nonlocal update_data
+        lib.write(symbol, initial_data) # always reset symbol
+        
+        lib.update(symbol, update_data, date_range=(start, end))
+        
+        result =  lib.read(symbol).data
+        
+        assert result.iloc[update_expected_at_index]["value"] == 999, f"Failed for {scenario} Scenario"
+        assert len(result) == length_of_result_df 
+        return result      
+
+    initial_data = pd.DataFrame(
+        {"value": range(10)},
+        index=pd.date_range(start_date_original_df, periods=10, freq="D")
+    )
+    lib.write(symbol, initial_data)
+    
+    # Test an open end scenario - where the start date is the start date of the update
+    # all data from original dataframe from its start date until  the update start date is removed
+    # and what is left is from update start date until end fate of original dataframe
+    run_test(lib, initial_data, 
+                start=pd.Timestamp(start_date_update_df), end=None, 
+                update_expected_at_index=4, length_of_result_df=5, 
+                scenario="open end")
+    
+    # Test an open end scenario, where data is way before initial timestamp
+    # of original dataframe - in this case only the update will be present in the symbol
+    # and no parts of the dataframe that was updated    
+    result_df = run_test(lib, initial_data, 
+                start=update_data.index[0] - timedelta(days=300), end=None, 
+                update_expected_at_index=0, length_of_result_df=1, 
+                scenario="open end - way before initial dataframe")
+    assert_frame_equal(update_data.head(1), result_df)
+
+    # Test an open start scenario where end date overlaps with the start date
+    # of the update. In that case all original start until the update start will be preserved 
+    # in the result
+    run_test(lib, initial_data, 
+                start=None, end=pd.Timestamp(start_date_update_df), 
+                update_expected_at_index=0, length_of_result_df=6, 
+                scenario="open start")
+
+    # Both start and end are open - in this case only the update will be the result
+    result_df = run_test(lib, initial_data, 
+                start=None, end=None, 
+                update_expected_at_index=0, length_of_result_df=update_data.shape[0], 
+                scenario="both open")
+    assert_frame_equal(update_data, result_df)
+    

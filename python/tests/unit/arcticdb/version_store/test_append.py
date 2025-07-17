@@ -7,6 +7,8 @@ import sys
 from numpy.testing import assert_array_equal
 
 from pandas import MultiIndex
+import arcticdb
+import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
 from arcticdb_ext.exceptions import (
     InternalException,
@@ -17,6 +19,7 @@ from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.config import set_log_level
 from arcticdb.util.utils import generate_random_numpy_array, get_logger, supported_types_list
+from tests.util.mark import WINDOWS
 
 
 def test_append_simple(lmdb_version_store):
@@ -267,7 +270,13 @@ def test_append_numpy_array(lmdb_version_store):
         logger.info(f"Storing type: {_type} in symbol: {sym}")
         #np1 = random_integers(10, t)
         np1 = generate_random_numpy_array(10, _type)
-        lmdb_version_store.write(sym, np1)
+        try: 
+            lmdb_version_store.write(sym, np1)
+        except arcticdb.exceptions.ArcticDbNotYetImplemented as e:
+            if WINDOWS:
+                logger.info(f"not supported on windows: {str(e)}")
+                next
+            raise                
         #np2 = random_integers(10, t)
         np2 = generate_random_numpy_array(10, _type)
         logger.info(f"Appending {np2}")
