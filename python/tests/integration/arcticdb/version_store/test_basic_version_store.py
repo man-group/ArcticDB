@@ -2374,16 +2374,16 @@ def test_batch_restore_version_bad_input_noop(lmdb_version_store, bad_thing):
     if bad_thing == "symbol":
         restore_syms = ["s1", "s2", "bad"]
         as_ofs = [1, second_ts, first_ts]
-        with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[bad\]"):
+        with pytest.raises(NoSuchVersionException, match=r"E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[bad\]"):
             lib.batch_restore_version(restore_syms, as_ofs)
     elif bad_thing == "as_of":
         as_ofs = [first_ts, second_ts, 7]
-        with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[s3\]"):
+        with pytest.raises(NoSuchVersionException, match=r"E_NO_SUCH_VERSION Could not find.*restore_version.*missing versions \[s3\]"):
             lib.batch_restore_version(syms, as_ofs)
     elif bad_thing == "duplicate":
         restore_syms = ["s1", "s1", "s2"]
         as_ofs = [1, second_ts, first_ts]
-        with pytest.raises(UserInputException, match="E_INVALID_USER_ARGUMENT Duplicate symbols in restore_version.*more than once \[s1\]"):
+        with pytest.raises(UserInputException, match=r"E_INVALID_USER_ARGUMENT Duplicate symbols in restore_version.*more than once \[s1\]"):
             lib.batch_restore_version(restore_syms, as_ofs)
     else:
         raise RuntimeError(f"Unexpected bad_thing={bad_thing}")
@@ -2409,7 +2409,7 @@ def test_restore_version_not_found(basic_store, ver):
     lib.write("abc", 2)
     lib.write("bcd", 9)
     lib.snapshot("snap", versions={"bcd": 0})
-    with pytest.raises(NoSuchVersionException, match="E_NO_SUCH_VERSION.*Symbols with missing versions \[abc\]"):
+    with pytest.raises(NoSuchVersionException, match=r"E_NO_SUCH_VERSION.*Symbols with missing versions \[abc\]"):
         lib.restore_version("abc", ver)
 
 

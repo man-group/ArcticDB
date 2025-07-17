@@ -158,19 +158,26 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
         print("-" * 80)
 
 
-def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
+def dataframe_simulate_arcticdb_update_static(existing_df: Union[pd.DataFrame, pd.Series], 
+                                              update_df: Union[pd.DataFrame, pd.Series]) -> Union[pd.DataFrame, pd.Series]:
     """
-    Does implement arctic logic of update() method functionality over pandas dataframes.
-    In other words the result, new data frame will have the content of 'existing_df' dataframe
+    Does implement arctic logic of update() method functionality over pandas dataframes/series.
+    In other words the result, new data frame will have the content of 'existing_df' dataframe/series
     updated with the content of "update_df" dataframe the same way that arctic is supposed to work.
     Useful for prediction of result content of arctic database after update operation
     NOTE: you have to pass indexed dataframe
     """
 
-    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
-        "Dataframe must have identical columns types in same order"
-    )
-    assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
+    if isinstance(existing_df, pd.Series):
+        if len(update_df) < 1:
+            return existing_df # Nothing to update
+        assert existing_df.dtype == update_df.dtype, f"Series must have same type {existing_df.dtype} == {update_df.dtype}"
+        assert existing_df.name == update_df.name, "Series name must be same"
+    else:
+        assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
+            "Dataframe must have identical columns types in same order"
+        )
+        assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
 
     start2 = update_df.first_valid_index()
     end2 = update_df.last_valid_index()

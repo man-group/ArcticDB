@@ -13,7 +13,7 @@ import re
 import string
 import time
 import sys
-from typing import Dict 
+from typing import Dict, Set 
 from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
 import pandas as pd
@@ -25,7 +25,7 @@ from arcticdb.version_store.library import Library
 # Types supported by arctic
 ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
 ArcticFloatType = Union[np.float64, np.float32]
-ArcticTypes = Union[ArcticIntType, ArcticFloatType, str]
+ArcticTypes = Union[ArcticIntType, ArcticFloatType, bool, str]
 supported_int_types_list = list(get_args(ArcticIntType))
 supported_float_types_list = list(get_args(ArcticFloatType))
 supported_types_list = list(get_args(ArcticTypes))
@@ -85,6 +85,72 @@ def get_logger(bencmhark_cls: Union[str, Any] = None):
     loggers[name] = logger
     return logger
 
+
+def set_seed(seed=None):
+    """Sets seed to random libraries if not None"""
+    if seed is not None:
+       np.random.seed(seed)
+       random.seed(seed)
+
+
+def generate_random_numpy_array(size, _type, seed=8238):
+    """ Generates random numpy array of specified type
+    """
+    set_seed(seed)
+    arr = []
+    if 'int' in str(_type):
+        arr = random_integers(size, _type)
+    elif 'float' in str(_type):
+        arr = np.arange(size, dtype=_type)
+    elif 'bool' in str(_type):
+        arr = np.random.randn(size) > 0
+    elif 'str' in str(_type):
+        length = 10
+        arr = [random_string(length) for _ in range(size)]
+        arr = np.array(arr, dtype=f"U{size}")
+    else:
+        raise TypeError("Unsupported type {dtype}")        
+    return arr
+
+
+def generate_random_series(type: ArcticTypes, length: int, name: str, 
+                    start_time: pd.Timestamp=None, freq: str='s', seed=3247) -> pd.Series:
+    """Generates random series of specified type with or without index"""
+    set_seed(seed)
+    index = None
+    if start_time:
+        index = pd.date_range(start_time, periods=length, freq=freq)
+    return pd.Series(generate_random_numpy_array(length, type, seed), 
+                           index=index,
+                           name=name)
+
+
+def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[int, pd.Timestamp],
+                                     new_columns_to_verify: Set[str]):
+    """ Verifies the value of dynamically added columns to dataframes 
+    after append/update operation with dataframe that is having additional new rows
+
+    row_index is either location of the row in dataframe or its index (timestamp)
+    """
+    updated_df_columns = set(updated_df.columns.to_list())
+    assert updated_df_columns.issuperset(new_columns_to_verify)
+    for col in new_columns_to_verify:
+            dtype = updated_df[col].dtype
+            if isinstance(row_index, pd.Timestamp):
+                value = updated_df[col].loc[row_index]
+            else:
+                value = updated_df[col].iloc[row_index]
+            if 'int' in str(dtype):
+                assert 0 == value, f"column {col}:{dtype} -> 0 == {value}"
+            elif 'float' in str(dtype):
+                assert pd.isna(value), f"column {col}:{dtype} -> Nan == {value}"
+            elif 'bool' in str(dtype):
+                assert False == value, f"column {col}:{dtype} -> False == {value}"
+            elif 'object' in str(dtype):
+                assert value is None , f"column {col}:{dtype} -> None == {value}"
+            else:
+                raise TypeError(f"Unsupported dtype: {dtype}")
+            
 
 class GitHubSanitizingException(Exception):
     def __init__(self, message: str):
@@ -525,9 +591,7 @@ class DFGenerator:
         self.__types = {}
         self.__df = None
         self.__index = None
-        if seed is not None:
-            np.random.seed(seed)
-            random.seed(seed)
+        set_seed(seed)
 
     def generate_dataframe(self) -> pd.DataFrame:
         if self.__df is None:

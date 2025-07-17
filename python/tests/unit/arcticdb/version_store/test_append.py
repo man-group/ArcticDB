@@ -16,6 +16,7 @@ from arcticdb_ext.exceptions import (
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.config import set_log_level
+from arcticdb.util.utils import generate_random_numpy_array, get_logger, supported_types_list
 
 
 def test_append_simple(lmdb_version_store):
@@ -259,13 +260,21 @@ def test_upsert_with_delete(lmdb_version_store_big_map):
 
 
 def test_append_numpy_array(lmdb_version_store):
-    np1 = random_integers(10, np.uint32)
-    lmdb_version_store.write("test_append_numpy_array", np1)
-    np2 = random_integers(10, np.uint32)
-    lmdb_version_store.append("test_append_numpy_array", np2)
-    vit = lmdb_version_store.read("test_append_numpy_array")
-    expected = np.concatenate((np1, np2))
-    assert_array_equal(vit.data, expected)
+    '''Tests append will all supported by arctic data types'''
+    logger = get_logger()
+    for index, _type in enumerate(supported_types_list):
+        sym = f"test_append_numpy_array_{index}"
+        logger.info(f"Storing type: {_type} in symbol: {sym}")
+        #np1 = random_integers(10, t)
+        np1 = generate_random_numpy_array(10, _type)
+        lmdb_version_store.write(sym, np1)
+        #np2 = random_integers(10, t)
+        np2 = generate_random_numpy_array(10, _type)
+        logger.info(f"Appending {np2}")
+        lmdb_version_store.append(sym, np2)
+        vit = lmdb_version_store.read(sym)
+        expected = np.concatenate((np1, np2))
+        assert_array_equal(vit.data, expected)
 
 
 def test_append_pickled_symbol(lmdb_version_store):
