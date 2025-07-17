@@ -457,7 +457,8 @@ def _denormalize_columns_names(columns_names, norm_meta):
                 columns_names[idx] = ""
             elif col_data.is_int:
                 columns_names[idx] = int(col_data.original_name)
-            else:
+            elif col_data.original_name:
+                # Very old clients may not have written the original_name, so if it's not there just leave the name alone
                 columns_names[idx] = col_data.original_name
 
     return columns_names
@@ -483,7 +484,7 @@ def _denormalize_columns(item, norm_meta, idx_type, n_indexes):
     return columns, denormed_columns, data
 
 
-def _normalize_columns_names(columns_names, norm_meta, dynamic_schema=False):
+def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_schema=False):
     counter = Counter(columns_names)
     for idx in range(len(columns_names)):
         col = columns_names[idx]
@@ -512,7 +513,7 @@ def _normalize_columns_names(columns_names, norm_meta, dynamic_schema=False):
             if dynamic_schema and (counter[col] > 1):
                 raise ArcticNativeException("Same column names not allowed in dynamic_schema")
             new_name = col_str
-            if counter[col] > 1:
+            if counter[col] > 1 or col in index_names:
                 new_name = "__col_{}__{}".format(col, 0 if dynamic_schema else idx)
             if isinstance(col, int):
                 norm_meta.common.col_names[new_name].is_int = True
@@ -530,14 +531,16 @@ def _normalize_columns(
     dynamic_strings=None,
     string_max_len=None,
     dynamic_schema=False,
-    index_names=[],
+    index_names=None,
 ):
+    if index_names is None:
+        index_names = []
     # TODO optimize this away when RangeIndex for columns and gen in c++
     columns_names_norm = list(map(str, columns_names))
     if not isinstance(columns_names, RangeIndex):
         if coerce_columns is not None and (set(columns_names_norm) != set(coerce_columns.keys())):
             raise ArcticNativeException("Keys in coerce column dictionary must match columns in dataframes")
-        columns_names_norm = _normalize_columns_names(list(columns_names), norm_meta, dynamic_schema)
+        columns_names_norm = _normalize_columns_names(list(columns_names), index_names, norm_meta, dynamic_schema)
 
         if columns_names_norm != list(columns_names):
             log.debug("Dataframe column names normalized")

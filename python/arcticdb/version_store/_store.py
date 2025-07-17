@@ -76,7 +76,7 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
-    _denormalize_single_index,
+    _denormalize_columns_names,
 )
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
@@ -2991,7 +2991,12 @@ class NativeVersionStore:
         index_dtype = []
         input_type = timeseries_descriptor.normalization.WhichOneof("input_type")
         index_type = "NA"
-        if input_type == "df":
+        if input_type == "series":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.series)
+        elif input_type == "ts":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.ts)
+        elif input_type == "df":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.df)
             index_type = timeseries_descriptor.normalization.df.common.WhichOneof("index_type")
             if index_type == "index":
                 index_metadata = timeseries_descriptor.normalization.df.common.index

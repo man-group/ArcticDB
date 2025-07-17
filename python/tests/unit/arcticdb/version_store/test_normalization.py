@@ -18,6 +18,8 @@ import pandas as pd
 import dateutil as du
 import pytest
 import pytz
+from arcticdb_ext.types import IndexKind
+
 if sys.version_info >= (3, 9):
     import zoneinfo
 from numpy.testing import assert_equal, assert_array_equal
@@ -45,8 +47,6 @@ from arcticdb.version_store._normalization import (
     NPDDataFrame,
 )
 from arcticdb.version_store._common import TimeFrame
-from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.version_store.library import Library
 from arcticdb.util.test import (
     CustomThing,
     TestCustomNormalizer,
@@ -55,6 +55,7 @@ from arcticdb.util.test import (
 )
 from arcticdb.util._versions import IS_PANDAS_ZERO, IS_PANDAS_TWO
 from arcticdb.exceptions import ArcticNativeException
+import arcticc.pb2.descriptors_pb2 as descriptors_pb2
 
 from tests.util.mark import param_dict, ZONE_INFO_MARK
 
@@ -1091,3 +1092,180 @@ def test_pandas_consolidation_v2(lmdb_library_factory, monkeypatch, env_var_set)
         assert isinstance(df._mgr, BlockManagerUnconsolidated)
     else:
         assert isinstance(df._mgr, pd.core.internals.managers.BlockManager)
+
+
+@pytest.mark.parametrize("use_col_name_for_index", (True, False))
+def test_norm_meta_column_and_index_names_df(lmdb_version_store, use_col_name_for_index):
+    lib = lmdb_version_store
+
+    start = pd.Timestamp("2018-01-02")
+    index = pd.date_range(start=start, periods=2)
+
+    df = pd.DataFrame(
+        index=index,
+        data=[[1, 2, 3, 4, 5]],
+        columns=["col_one", "col_two", "col_two", "col_one", "col_three"]
+    )
+
+    if use_col_name_for_index:
+        index_name = "col_one"
+        df.index.set_names([index_name], inplace=True)
+    else:
+        index_name = "index_name"
+        df.index.set_names([index_name], inplace=True)
+
+    lib.write("sym", df)
+
+    res = lib.get_info("sym")
+    assert list(df.columns) == res["col_names"]["columns"]
+    assert res["col_names"]["index"] == [index_name]
+
+    version_query = lib._get_version_query(None)
+    descriptor = lib.version_store.read_descriptor("sym", version_query)
+
+    norm_meta = descriptor.timeseries_descriptor.normalization
+    assert norm_meta.df.common.index.name == index_name
+    assert norm_meta.df.common.index.is_physically_stored
+    assert dict(norm_meta.df.common.col_names) == {
+        "__col_col_one__0": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_one"),
+        "__col_col_two__1": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_two"),
+        "__col_col_two__2": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_two"),
+        "__col_col_one__3": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_one"),
+        "col_three": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_three"),
+    }
+
+    assert_frame_equal(lib.read("sym").data, df)
+
+
+@pytest.mark.parametrize("use_col_name_for_index", (True, False))
+def test_norm_meta_column_and_index_names_series(lmdb_version_store_static_and_dynamic, use_col_name_for_index):
+    lib = lmdb_version_store_static_and_dynamic
+
+    start = pd.Timestamp("2018-01-02")
+    index = pd.date_range(start=start, periods=2)
+
+    series = pd.Series(
+        index=index,
+        data=[1, 2],
+        name="col_one"
+    )
+
+    if use_col_name_for_index:
+        index_name = "col_one"
+        series.index.set_names([index_name], inplace=True)
+    else:
+        index_name = "index_name"
+        series.index.set_names([index_name], inplace=True)
+
+    lib.write("sym", series)
+
+    res = lib.get_info("sym")
+
+    # For some reason the index name appears only under col_names
+    assert [index_name, "col_one"] == res["col_names"]["columns"]
+    assert res["col_names"]["index"] == []
+
+    version_query = lib._get_version_query(None)
+    descriptor = lib.version_store.read_descriptor("sym", version_query)
+
+    norm_meta = descriptor.timeseries_descriptor.normalization
+    assert norm_meta.series.common.index.name == index_name
+    assert norm_meta.series.common.index.is_physically_stored
+    if use_col_name_for_index:
+        assert dict(norm_meta.series.common.col_names) == {
+            "__col_col_one__0": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_one"),
+        }
+    else:
+        assert dict(norm_meta.series.common.col_names) == {
+            "col_one": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_one"),
+        }
+
+    assert_series_equal(lib.read("sym").data, series)
+
+
+@pytest.mark.parametrize("use_col_name_for_index", (True, False))
+def test_norm_meta_column_and_index_names_df_dynamic_schema(lmdb_version_store_dynamic_schema, use_col_name_for_index):
+    lib = lmdb_version_store_dynamic_schema
+
+    start = pd.Timestamp("2018-01-02")
+    index = pd.date_range(start=start, periods=2)
+
+    df = pd.DataFrame(
+        index=index,
+        data=[[1, 2]],
+        columns=["col_one", "col_two"]
+    )
+
+    if use_col_name_for_index:
+        index_name = "col_one"
+        df.index.set_names([index_name], inplace=True)
+    else:
+        index_name = "index_name"
+        df.index.set_names([index_name], inplace=True)
+
+    lib.write("sym", df)
+
+    res = lib.get_info("sym")
+    assert list(df.columns) == res["col_names"]["columns"]
+    assert res["col_names"]["index"] == [index_name]
+
+    version_query = lib._get_version_query(None)
+    descriptor = lib.version_store.read_descriptor("sym", version_query)
+
+    norm_meta = descriptor.timeseries_descriptor.normalization
+    assert norm_meta.df.common.index.name == index_name
+    assert norm_meta.df.common.index.is_physically_stored
+
+    if use_col_name_for_index:
+        assert dict(norm_meta.df.common.col_names) == {
+            "__col_col_one__0": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_one"),
+            "col_two": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_two"),
+        }
+    else:
+        assert dict(norm_meta.df.common.col_names) == {
+            "col_one": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_one"),
+            "col_two": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_two"),
+        }
+
+    assert_frame_equal(lib.read("sym").data, df)
+
+
+def test_norm_meta_column_and_index_names_df_multi_index(lmdb_version_store_static_and_dynamic):
+    lib = lmdb_version_store_static_and_dynamic
+    is_dynamic_schema = lib.lib_cfg().lib_desc.version.write_options.dynamic_schema
+
+    start = pd.Timestamp("2018-01-02")
+    num_rows = 4
+    index = pd.MultiIndex.from_arrays([[start + datetime.timedelta(days=i) for i in range(num_rows)], ["a", "b", "c", "d"]])
+
+    df = pd.DataFrame(
+        index=index,
+        data={"col_one": [1, 2, 3, 4], "col_two": [1, 2, 3, 4], "col_three": [5, 6, 7, 8]}
+    )
+    df.index.set_names(["col_one", "col_two"], inplace=True)
+    lib.write("sym", df)
+
+    res = lib.get_info("sym")
+    assert list(df.columns) == res["col_names"]["columns"]
+    assert res["col_names"]["index"] == ["col_one", "col_two"]
+
+    version_query = lib._get_version_query(None)
+    descriptor = lib.version_store.read_descriptor("sym", version_query)
+
+    norm_meta = descriptor.timeseries_descriptor.normalization
+    index_meta = norm_meta.df.common.multi_index
+    assert index_meta.name == "col_one"
+
+    expected_col_one_name = "__col_col_one__0" if is_dynamic_schema else "__col_col_one__1"
+    assert dict(norm_meta.df.common.col_names) == {
+        "__idx__col_two": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="__idx__col_two"),
+        expected_col_one_name: descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_one"),
+        "col_two": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_two"),
+        "col_three": descriptors_pb2.NormalizationMetadata.Pandas.ColumnName(original_name="col_three"),
+    }
+
+    stream_descriptor = descriptor.timeseries_descriptor.as_stream_descriptor
+    field_names = [f.name for f in stream_descriptor.fields()]
+    assert field_names == ["col_one", "__idx__col_two", expected_col_one_name, "col_two", "col_three"]
+    assert stream_descriptor.index.field_count() == 1
+    assert stream_descriptor.index.kind() == IndexKind.TIMESTAMP
