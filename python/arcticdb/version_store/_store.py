@@ -474,10 +474,8 @@ class NativeVersionStore:
             # No items to write can happen if the entire structure is msgpack serializable. eg: [1,2] doesn't
             # need to go through a multi key process as the msgpack normalizer can handle it as is.
             metastruct, to_write = fl.create_meta_structure(data, symbol)
-
-            def is_recursive_normalize_preferred(to_write):
-                return len(to_write) > 0
-            return is_recursive_normalize_preferred(to_write), metastruct, to_write
+            is_recursive_normalize_preferred = len(to_write) > 0
+            return is_recursive_normalize_preferred, metastruct, to_write
         else:
             return False, None, None
 
