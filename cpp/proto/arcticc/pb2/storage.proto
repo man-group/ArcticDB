@@ -112,9 +112,6 @@ message VersionStoreConfig {
         double write_failure_prob = 40;
         double read_failure_prob = 41;
         bool give_s3_slowdown_error_in_iter = 42;
-        double write_slowdown_prob = 43;
-        uint32 slow_down_min_ms = 44;
-        uint32 slow_down_max_ms = 45;
     }
 
     StorageFailureSimulator failure_sim = 6;
