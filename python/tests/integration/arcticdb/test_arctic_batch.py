@@ -521,6 +521,7 @@ def test_delete_batch_comprehensive(arctic_library):
     # Verify sym1 is deleted
     assert not lib.has_symbol("sym1")
     assert lib.has_symbol("sym2")  # sym2 should still exist
+    assert lib.list_symbols() == ["sym2"]
 
     # Test 2: Delete specific versions using DeleteRequest
     lib.write("sym3", df1)
@@ -606,10 +607,12 @@ def test_snapshots_with_delete_batch(arctic_library):
     # This version of sym3 is not in a snapshot
     lib.write("sym3", v1_data)
 
-    # This should NOT delete sym1 and shoud return an error
+    # This should NOT delete sym1 and sym3 v0,
     # but should delete sym3 v1, which is not in a snapshot
     res = lib.delete_batch([DeleteRequest("sym1", [0]), "sym3"])
     assert len(res) == 2
+    assert res[0] is None
+    assert res[1] is None
 
     # sym1 and sym3 shouldn't be readable now without going through the snapshot.
     with pytest.raises(Exception):

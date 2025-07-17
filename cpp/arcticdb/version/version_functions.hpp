@@ -274,7 +274,7 @@ inline folly::Future<version_store::TombstoneVersionResult> process_tombstone_ve
     version_store::TombstoneVersionResult res = populate_tombstone_result(entry, version_ids, stream_id, store);
     
     // Submit the write tombstone task
-    return async::submit_io_task(WriteTombstoneTask{store,
+    return async::submit_io_task(WriteTombstonesTask{store,
                                     version_map,
                                     res.keys_to_delete,
                                     stream_id,

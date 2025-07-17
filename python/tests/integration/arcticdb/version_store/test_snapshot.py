@@ -9,17 +9,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 import numpy as np
 import pandas as pd
-import datetime as dt
 import re
 
-from typing import Any
-from arcticdb.arctic import Arctic
-from arcticdb.arctic import Library
 from arcticdb_ext.exceptions import InternalException
 from arcticdb_ext.version_store import NoSuchVersionException
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb.util.test import distinct_timestamps
-from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.util.test import (
     assert_frame_equal,
     create_df_index_rownum,
@@ -28,7 +23,6 @@ from arcticdb.util.test import (
 )
 from tests.util.storage_test import get_s3_storage_config
 from arcticdb_ext.storage import KeyType
-from arcticdb.version_store.library import DeleteRequest, WritePayload
 
 
 @pytest.mark.storage

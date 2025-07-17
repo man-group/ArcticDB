@@ -533,7 +533,9 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
-            result = self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+            result = self.version_store.write_parallel(
+                symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
+            )
             if is_new_stage_api_enabled:
                 return result
             return None
@@ -667,7 +669,11 @@ class NativeVersionStore:
             if parallel or incomplete:
                 is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
                 if is_new_stage_api_enabled:
-                    warn('Staging data with write() is deprecated. Use stage() instead.', DeprecationWarning, stacklevel=2)
+                    warn(
+                        "Staging data with write() is deprecated. Use stage() instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
@@ -2668,7 +2674,7 @@ class NativeVersionStore:
         Raises
         ------
         ValueError
-            If version_ids is empty for any symbol.
+            If versions is empty for any symbol.
         """
         # make sure that the versions are not empty
         for symbol, version_ids in zip(symbols, versions):

@@ -13,7 +13,6 @@ import os
 import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
-from dataclasses import dataclass
 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from numpy import datetime64

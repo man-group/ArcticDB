@@ -154,14 +154,14 @@ struct WriteVersionTask : async::BaseTask {
     }
 };
 
-struct WriteTombstoneTask : async::BaseTask {
+struct WriteTombstonesTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     const std::shared_ptr<VersionMap> version_map_;
     const std::vector<AtomKey> keys_;
     const StreamId stream_id_;
     const std::shared_ptr<VersionMapEntry> entry_;
 
-    WriteTombstoneTask(
+    WriteTombstonesTask(
         std::shared_ptr<Store> store,
         std::shared_ptr<VersionMap> version_map,
         std::vector<AtomKey> keys,
