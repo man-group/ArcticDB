@@ -122,6 +122,7 @@ private:
     }
 };
 
+// Each thread should create its own Regex object as Regex::match is not thread-safe
 template<typename PcreRegexEncode>
 class Regex : private PcreRegexEncode {
     const RegexPattern<PcreRegexEncode>& pattern_;
@@ -176,6 +177,7 @@ public:
         pattern_utf8_(pattern),
         pattern_utf32_(boost::locale::conv::utf_to_utf<char32_t>(pattern)) {
     }
+    // Each thread should create its own Regex object as Regex::match is not thread-safe
     [[nodiscard]] RegexUTF8 get_utf8_match_object() const {
         return RegexUTF8(pattern_utf8_);
     }
