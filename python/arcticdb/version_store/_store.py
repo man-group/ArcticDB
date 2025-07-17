@@ -2888,7 +2888,7 @@ class NativeVersionStore:
         Parameters
         ----------
         item : `Any`
-            Data to be check.
+            Data to be checked.
         recursive_normalizers : `Optional[bool]`, default=False
             Is recursive normalizer enabled.
 
