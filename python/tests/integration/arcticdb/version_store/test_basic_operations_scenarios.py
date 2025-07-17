@@ -22,6 +22,7 @@ from datetime import timedelta, timezone
 
 from arcticdb.exceptions import (
     ArcticNativeException,
+    SortingException
 )
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 
@@ -259,7 +260,11 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     
     df = pd.DataFrame({'value': [1, 2, 3]}, index=pd.date_range('2023-01-01', periods=3, freq='s'))
     df_2 = pd.DataFrame({'value': [3, 4, 5]}, index=pd.date_range('2023-01-02', periods=3, freq='s'))
-    df_different_schema = pd.DataFrame({'value': [3.1, 44, 5.324]}, index=pd.date_range('2023-01-03', periods=3, freq='s'))
+    df_not_sorted = pd.DataFrame({"value": [11, 24, 1]}, index=[pd.Timestamp("2024-01-04"), 
+                                                                pd.Timestamp("2024-01-03"), 
+                                                                pd.Timestamp("2024-01-05")])
+    df_different_schema = pd.DataFrame({'value': [3.1, 44, 5.324]}, 
+                                       index=pd.date_range('2023-01-03', periods=3, freq='s'))
     df_empty = df.iloc[0:0]
     df_same_index = pd.DataFrame({'value': [10, 982]}, index=pd.date_range('2023-01-01', periods=2, freq='s'))
     pickled_data = [34243, 3253, 53425]
@@ -275,7 +280,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     # Test append to non-existent symbol
     for sym in [symbol, None, ""]:
         try:
-            lib.append(symbol)
+            lib.append(sym)
             assert False, "Expected exception was not raised"
         except Exception as e:
             # Verify exception type and message content
@@ -283,9 +288,10 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     assert len(lib.list_symbols()) == 0
 
     # Empty dataframe will create symbol with one version
-    version = lib.append(symbol, df_empty)
+    result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
     assert len(lib.list_versions()) == 1
+    assert 0 == result.version
     assert_frame_equal(df_empty, lib.read(symbol).data)
 
     # Create symbol for further tests
@@ -310,7 +316,6 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     before_append = pd.Timestamp.now(tz=timezone.utc).value 
     result = lib.append(symbol, df_2)
     after_append = pd.Timestamp.now(tz=timezone.utc).value  
-
     # Verify VersionedItem structure
     assert isinstance(result, VersionedItem)
     assert result.symbol == symbol
@@ -324,6 +329,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     assert len(lib.list_symbols()) == 1
     assert len(lib.list_versions()) == 3
     assert lib.list_symbols_with_incomplete_data() == []          
+    assert_frame_equal( pd.concat([df, df_2], sort=True), lib.read(symbol).data)
 
     # Test append overlapping indexes
     for frame in [df_same_index]:
@@ -339,9 +345,11 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
         with pytest.raises(NormalizationException):
             lib.append(symbol, pick)
 
+    # Append with different schema works on dynamic schema only
     if schema:
         lib.append(symbol, df_different_schema)    
         assert len(lib.list_versions()) == 4
+        assert_frame_equal( pd.concat([df, df_2, df_different_schema], sort=True), lib.read(symbol).data)
     else:
         # Should raise StreamDescriptorMismatch
         with pytest.raises(StreamDescriptorMismatch):
@@ -352,6 +360,14 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
     assert len(lib.list_versions()) == 4 if schema else 3
+
+    # Validate that validate_index works as expected
+    with pytest.raises(SortingException):
+        lib.append(symbol, df_not_sorted, validate_index=True)
+    with pytest.raises(SortingException):
+        lib.append(symbol, df_not_sorted, validate_index=True, incomplete=True)
+    result2 = lib.append(symbol, df_not_sorted, validate_index=False)
+    assert result2.version == result.version + 1
 
 
 def test_update_date_range_exhaustive(lmdb_version_store):
@@ -417,4 +433,4 @@ def test_update_date_range_exhaustive(lmdb_version_store):
                 update_expected_at_index=0, length_of_result_df=update_data.shape[0], 
                 scenario="both open")
     assert_frame_equal(update_data, result_df)
-    
+

@@ -275,15 +275,17 @@ def test_append_numpy_array(lmdb_version_store):
         except arcticdb.exceptions.ArcticDbNotYetImplemented as e:
             if WINDOWS:
                 logger.info(f"not supported on windows: {str(e)}")
-                next
-            raise                
-        #np2 = random_integers(10, t)
+                # never mind lets do something even if it is not main subject of the test
+                lmdb_version_store.write(sym, np1, pickle_on_failure=True)
+                assert_array_equal(np1, lmdb_version_store.read(sym).data)
+                next                
+            else:
+                raise                
         np2 = generate_random_numpy_array(10, _type)
         logger.info(f"Appending {np2}")
         lmdb_version_store.append(sym, np2)
-        vit = lmdb_version_store.read(sym)
         expected = np.concatenate((np1, np2))
-        assert_array_equal(vit.data, expected)
+        assert_array_equal(lmdb_version_store.read(sym).data, expected)
 
 
 def test_append_pickled_symbol(lmdb_version_store):
