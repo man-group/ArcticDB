@@ -2883,7 +2883,7 @@ class NativeVersionStore:
     def will_item_be_pickled(self, item: Any, recursive_normalizers: Optional[bool] = False):
         """
         Check if the data will be pickled.
-        Note that item can be normalized with msgpack, is considered pickled as well
+        Note that if item can be normalized with msgpack, it is considered pickled as well
 
         Parameters
         ----------
