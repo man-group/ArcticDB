@@ -13,14 +13,22 @@ import pandas as pd
 import numpy as np
 
 from arcticdb.util.test import (
-    assert_frame_equal,
     assert_series_equal,
     dataframe_simulate_arcticdb_update_static,
 )
-from arcticdb.util.utils import ArcticTypes, generate_random_series, set_seed, supported_types_list, generate_random_numpy_array, verify_dynamically_added_columns
-from arcticdb.version_store._store import NativeVersionStore
-from datetime import datetime, timedelta
+from arcticdb.util.utils import ArcticTypes, generate_random_series, set_seed, supported_types_list, verify_dynamically_added_columns
+from arcticdb.version_store._store import NativeVersionStore, VersionedItem
+from datetime import timedelta, timezone
 
+from arcticdb.exceptions import (
+    ArcticNativeException,
+)
+from arcticdb_ext.exceptions import (
+    InternalException,
+    NormalizationException,
+)
+
+from benchmarks.bi_benchmarks import assert_frame_equal
 from tests.util.mark import SLOW_TESTS_MARK
 
 
@@ -79,6 +87,12 @@ def get_metadata():
 def test_write_append_update_read_scenario_with_different_series_combinations(version_store_factory, dtype, schema):
     """This test covers series with timestamp index of all supported arcticdb types.
     Write, append and read combinations of different boundary length sizes of series
+
+    Verifies:
+     - append/update operations over symbol containing timestamped series
+     - append/update operations with different types of series - empty, one element, many elements
+     - tests repeated over each supported arcticdb type - ints, floats, str, bool, datetime
+     - tests work as expected over static and dynamic schema with small segment row size 
     """
     segment_row_size = 3
     lib: NativeVersionStore = version_store_factory(dynamic_schema=schema, segment_row_size=segment_row_size)
@@ -124,6 +138,11 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
     The test does series of append operations with new columns of all supported column types.
     The resulting symbol will have additional columns each time added, with predefined default 
     values for different data types
+
+    Verifies:
+     - continuous appends/updates with new columns works as expected across dynamic and static schema
+     - updates/appends with new columns and combinations incomplete, metadata and prune previous
+       always deliver desired result
     """
 
     set_seed(32432)
@@ -221,3 +240,94 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
         verify_dynamically_added_columns(read_data, update_timestamp, new_columns_to_update_df)
 
 
+@pytest.mark.parametrize("schema", [True, False])
+@pytest.mark.storage
+def test_append_scenario_error_messages_and_exceptions(version_store_and_real_s3_basic_store_factory, schema):
+    """
+    Test error messages and exception types for various failure scenarios.
+    
+    Verifies:
+    - Appropriate exception types are raised
+    - Edge cases are handled gracefully
+    - Exceptions are same across all storage types
+    """
+    lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
+            dynamic_schema=True, dynamic_strings=schema, segment_row_size=1)
+    symbol = "test_append_errors"
+    
+    df = pd.DataFrame({'value': [1, 2, 3]}, index=pd.date_range('2023-01-01', periods=3, freq='s'))
+    df_2 = pd.DataFrame({'value': [3, 4, 5]}, index=pd.date_range('2023-01-02', periods=3, freq='s'))
+    df_empty = df.iloc[0:0]
+    df_same_index = pd.DataFrame({'value': [10, 982]}, index=pd.date_range('2023-01-01', periods=2, freq='s'))
+    df_different_index = pd.DataFrame(
+        {'value': [4, 5, 6]}, 
+        index=['a', 'b', 'c']  # String index instead of datetime
+    )
+    df_no_index = pd.DataFrame(
+        {'value': [4, 5, 6]}
+    )
+
+    # Test append to non-existent symbol
+    for sym in [symbol, None, ""]:
+        try:
+            lib.append(symbol)
+            assert False, "Expected exception was not raised"
+        except Exception as e:
+            # Verify exception type and message content
+            assert isinstance(e, TypeError)
+    assert len(lib.list_symbols()) == 0
+
+    # Empty dataframe will create symbol with one version
+    version = lib.append(symbol, df_empty)
+    assert len(lib.list_symbols()) == 1
+    assert len(lib.list_versions()) == 1
+    assert_frame_equal(df_empty, lib.read(symbol).data)
+
+    # Create symbol for further tests
+    lib.write(symbol, df)
+    assert len(lib.list_symbols()) == 1
+    assert len(lib.list_versions()) == 2
+    assert_frame_equal(df, lib.read(symbol).data)
+    
+    # Test append with invalid data type
+    with pytest.raises(ArcticNativeException):
+        lib.append(symbol, "invalid_data_type")
+    assert len(lib.list_symbols()) == 1
+    assert len(lib.list_versions()) == 2
+    
+    # Test append with mismatched index type
+    for frame in [df_different_index, df_no_index]:
+        with pytest.raises((NormalizationException)):
+            lib.append(symbol, frame)
+    assert len(lib.list_symbols()) == 1
+    assert len(lib.list_versions()) == 2
+
+    # Test append overlapping indexes
+    for frame in [df_same_index]:
+        with pytest.raises((InternalException)):
+            lib.append(symbol, frame)
+    assert len(lib.list_symbols()) == 1
+    assert len(lib.list_versions()) == 2
+
+    before_append = pd.Timestamp.now(tz=timezone.utc).value 
+    result = lib.append(symbol, df_2)
+    after_append = pd.Timestamp.now(tz=timezone.utc).value  
+
+    # Verify VersionedItem structure
+    assert isinstance(result, VersionedItem)
+    assert result.symbol == symbol
+    assert result.version == 2
+    assert result.metadata == None
+    assert result.data is None  
+    assert result.library == lib._library.library_path
+    assert result.host == lib.env
+    # Verify timestamp is reasonable (within the append operation timeframe)
+    assert before_append <= result.timestamp <= after_append
+    assert len(lib.list_symbols()) == 1
+    assert len(lib.list_versions()) == 3
+
+    # Append empty dataframe to symbol with content does not increase version
+    # but as we saw previously it will create symbol 
+    result = lib.append(symbol, df_empty)
+    assert len(lib.list_symbols()) == 1
+    assert len(lib.list_versions()) == 3

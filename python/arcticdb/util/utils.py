@@ -16,6 +16,7 @@ import sys
 from typing import Dict, Set 
 from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
@@ -25,7 +26,7 @@ from arcticdb.version_store.library import Library
 # Types supported by arctic
 ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
 ArcticFloatType = Union[np.float64, np.float32]
-ArcticTypes = Union[ArcticIntType, ArcticFloatType, bool, str]
+ArcticTypes = Union[ArcticIntType, ArcticFloatType, bool, str, np.datetime64]
 supported_int_types_list = list(get_args(ArcticIntType))
 supported_float_types_list = list(get_args(ArcticFloatType))
 supported_types_list = list(get_args(ArcticTypes))
@@ -93,7 +94,20 @@ def set_seed(seed=None):
        random.seed(seed)
 
 
-def generate_random_numpy_array(size, _type, seed=8238):
+def generate_random_timestamp_array(size: int, 
+                               start: str = '2020-01-01', 
+                               end: str = '2030-01-01', 
+                               seed: int = 432432) -> npt.NDArray[np.datetime64]:
+    """ Generates an array of random timestamps"""
+    if seed: 
+        np.random.seed(seed)
+    start_ts = pd.Timestamp(start).value // 10**9
+    end_ts = pd.Timestamp(end).value // 10**9
+    random_seconds = np.random.randint(start_ts, end_ts, size=size)
+    return np.array(pd.to_datetime(random_seconds, unit='s'))
+
+
+def generate_random_numpy_array(size: int, _type, seed: int = 8238) -> npt.NDArray[Any]:
     """ Generates random numpy array of specified type
     """
     set_seed(seed)
@@ -108,6 +122,8 @@ def generate_random_numpy_array(size, _type, seed=8238):
         length = 10
         arr = [random_string(length) for _ in range(size)]
         arr = np.array(arr, dtype=f"U{size}")
+    elif 'datetime' in str(_type):
+        arr = generate_random_timestamp_array(size, seed=seed)
     else:
         raise TypeError("Unsupported type {dtype}")        
     return arr
