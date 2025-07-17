@@ -36,7 +36,7 @@ async::AsyncStore<>& LibraryTool::async_store() {
 
 ReadResult LibraryTool::read(const VariantKey& key, std::any& handler_data, OutputFormat output_format) {
     auto segment = read_to_segment(key);
-    auto segment_in_memory = decode_segment(segment);
+    auto segment_in_memory = decode_segment(segment, AllocationType::DETACHABLE);
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
     const auto& atom_key = util::variant_match(
             key,

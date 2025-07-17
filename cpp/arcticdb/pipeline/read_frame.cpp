@@ -117,7 +117,7 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
 SegmentInMemory allocate_contiguous_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    SegmentInMemory output{get_filtered_descriptor(context, output_format),  row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
+    SegmentInMemory output{get_filtered_descriptor(context, output_format), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
 }
@@ -849,7 +849,22 @@ struct ReduceColumnTask : async::BaseTask {
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(read_options_.output_format(), column.type()); handler) {
                 handler->default_initialize(column.buffer(), 0, frame_.row_count() * handler->type_size(), shared_data_, handler_data_);
             } else {
-                column.default_initialize_rows(0, frame_.row_count(), false);
+                if (is_fixed_string_type(field_type)) {
+                    // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
+                    // where this column was not present in any of the read row-slices)
+                    // All other column types are allocated in the output frame as detachable by default since we know
+                    // we will be handing them off to Python to free. This is not the case for fixed-width string
+                    // columns, since the buffer still contains string pool offsets at this point, and so will usually
+                    // be swapped out with the inflated strings buffer. However, if there are no strings to inflate, we
+                    // still need to make this buffer detachable and full of nulls of the correct length
+                    auto buffer_size = frame_.row_count() * (field_type == DataType::UTF_FIXED64 ? 4 : 1);
+                    ChunkedBuffer new_buffer(buffer_size, AllocationType::DETACHABLE);
+                    memset(new_buffer.data(), 0, buffer_size);
+                    auto& prev_buffer = column.buffer();
+                    swap(prev_buffer, new_buffer);
+                } else {
+                    column.default_initialize_rows(0, frame_.row_count(), false);
+                }
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema) {

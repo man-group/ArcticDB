@@ -174,10 +174,6 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
     std::vector<std::vector<size_t>>&& processing_unit_indexes,
     std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
 
-FrameAndDescriptor read_segment_impl(
-    const std::shared_ptr<Store>& store,
-    const VariantKey& key);
-
 FrameAndDescriptor read_index_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& version);

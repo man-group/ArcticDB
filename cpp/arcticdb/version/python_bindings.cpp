@@ -9,6 +9,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <arcticdb/column_store/column_utils.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -20,6 +21,7 @@
 #include <arcticdb/processing/query_planner.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
+#include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 
@@ -251,26 +253,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             return adapt_read_df(read_dataframe_from_file(sid, path, read_query, read_options, handler_data), &handler_data);
         });
 
-    using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
-    py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
-            .def_property_readonly("data", &FrameDataWrapper::data);
+    py::class_<NumpyBufferHolder, std::shared_ptr<NumpyBufferHolder>>(version, "NumpyBufferHolder");
 
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
-        .def(py::init<>([](const SegmentInMemory& segment_in_memory) {
-            return PandasOutputFrame(segment_in_memory);
-        }))
-        .def_property_readonly("value", [](py::object & obj){
-            auto& fd = obj.cast<PandasOutputFrame&>();
-            return fd.arrays(obj);
+        .def("extract_numpy_arrays", [](PandasOutputFrame& self) {
+            return python_util::extract_numpy_arrays(self);
         })
-        .def_property_readonly("offset", [](PandasOutputFrame& self) {
-            return self.frame().offset(); })
-        .def_property_readonly("names", &PandasOutputFrame::names, py::return_value_policy::reference)
-        .def_property_readonly("index_columns", &PandasOutputFrame::index_columns, py::return_value_policy::reference)
-        .def_property_readonly("row_count", [](PandasOutputFrame& self) {
-            return self.frame().row_count();
-        });
+        ;
 
         py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
         .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches)

@@ -88,7 +88,7 @@ void SegmentInMemoryImpl::generate_column_map() const {
 void SegmentInMemoryImpl::create_columns(
         size_t old_size,
         size_t expected_column_size,
-        AllocationType presize,
+        AllocationType allocation_type,
         Sparsity allow_sparse,
         OutputFormat output_format,
         DataTypeMode mode) {
@@ -96,8 +96,17 @@ void SegmentInMemoryImpl::create_columns(
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
         auto type = descriptor_->fields(i).type();
         util::check(type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type");
-        columns_.emplace_back(
-                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse, output_format, mode));
+        if (allocation_type == AllocationType::DETACHABLE && is_fixed_string_type(descriptor_->fields(i).type().data_type())) {
+            // Do not use detachable blocks for fixed width string columns as they are not yet inflated and will not be
+            // passed back to the Python layer "as is"
+            columns_.emplace_back(
+                    std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, AllocationType::PRESIZED, allow_sparse,
+                                             output_format, mode));
+        } else {
+            columns_.emplace_back(
+                    std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, allocation_type, allow_sparse,
+                                             output_format, mode));
+        }
     }
     generate_column_map();
 }
