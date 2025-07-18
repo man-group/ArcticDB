@@ -110,7 +110,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const py::object & user_meta,
         bool validate_index) const;
 
-    VersionedItem compact_incomplete(
+    std::variant<VersionedItem, CompactionError> compact_incomplete(
             const StreamId& stream_id,
             bool append,
             bool convert_int_to_float,
@@ -119,7 +119,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             const std::optional<py::object>& user_meta = std::nullopt,
             bool prune_previous_versions = false,
             bool validate_index = false,
-            bool delete_staged_data_on_failure=false);
+            bool delete_staged_data_on_failure=false,
+            const std::optional<std::vector<StageResult>>& stage_results = std::nullopt);
 
     StageResult write_parallel(
         const StreamId& stream_id,
@@ -160,7 +161,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const ReadOptions& read_options,
         std::any& handler_data);
 
-    VersionedItem sort_merge(
+    std::variant<VersionedItem, CompactionError> sort_merge(
             const StreamId& stream_id,
             const py::object& user_meta,
             bool append,
@@ -168,7 +169,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool via_iteration,
             bool sparsify,
             bool prune_previous_versions,
-            bool delete_staged_data_on_failure);
+            bool delete_staged_data_on_failure,
+            const std::optional<std::vector<StageResult>>& stage_results = std::nullopt);
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,

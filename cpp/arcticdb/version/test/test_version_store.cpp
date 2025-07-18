@@ -194,15 +194,16 @@ TEST_F(VersionStoreTest, SortMerge) {
         test_store_->append_incomplete_frame(symbol, std::move(frame.input_frame_), true);
     }
 
-    CompactIncompleteOptions options{
+    CompactIncompleteParameters params{
             .prune_previous_versions_=false,
             .append_=true,
             .convert_int_to_float_=false,
             .via_iteration_=false,
-            .sparsify_=false
+            .sparsify_=false,
+            .stage_results=std::nullopt
     };
 
-    test_store_->sort_merge_internal(symbol, std::nullopt, options);
+    test_store_->sort_merge_internal(symbol, std::nullopt, params);
 }
 
 TEST_F(VersionStoreTest, CompactIncompleteDynamicSchema) {
