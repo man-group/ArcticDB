@@ -41,60 +41,6 @@
 #include <arcticdb/processing/component_manager.hpp>
 #include <ranges>
 
-namespace arcticdb {
-
-static std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
-    const std::shared_ptr<StreamSource>& store,
-    const AtomKey& k,
-    bool load_data,
-    storage::ReadKeyOpts opts) {
-    if(load_data) {
-        auto seg = store->read_sync(k, opts).second;
-        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
-    } else {
-        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
-        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
-        return std::make_pair(std::move(*tsd), std::nullopt);
-    }
-}
-
-static AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
-    AppendMapEntry entry;
-
-    if(tsd.proto().has_next_key())
-        entry.next_key_ = key_from_proto(tsd.proto().next_key());
-
-    entry.total_rows_ = tsd.total_rows();
-    return entry;
-}
-
-AppendMapEntry append_map_entry_from_key(const std::shared_ptr<arcticdb::stream::StreamSource>& store, const arcticdb::entity::AtomKey& key, bool load_data) {
-    auto opts = arcticdb::storage::ReadKeyOpts{};
-    opts.dont_warn_about_missing_key = true;
-    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
-    auto entry = create_entry(tsd);
-    auto descriptor = std::make_shared<arcticdb::entity::StreamDescriptor>();
-    auto desc = std::make_shared<arcticdb::entity::StreamDescriptor>(tsd.as_stream_descriptor());
-    auto index_field_count = desc->index().field_count();
-    auto field_count = desc->fields().size();
-    if (seg) {
-        seg->attach_descriptor(desc);
-    }
-
-    auto frame_slice = arcticdb::pipelines::FrameSlice{desc, arcticdb::pipelines::ColRange{index_field_count, field_count}, arcticdb::pipelines::RowRange{0, entry.total_rows_}};
-    entry.slice_and_key_ = arcticdb::SliceAndKey{std::move(frame_slice), key, std::move(seg)};
-    return entry;
-}
-
-void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount) {
-    for(auto& entry : entries) {
-        complete_rowcount = entry.slice_and_key_.slice_.fix_row_count(static_cast<ssize_t>(complete_rowcount));
-    }
-}
-
-} // arcticdb
-
 namespace arcticdb::version_store {
 
 namespace ranges = std::ranges;

@@ -29,7 +29,7 @@ void merge_frames_for_keys_impl(
     ARCTICDB_DEBUG(log::version(), "Merging keys");
     using namespace arcticdb::pipelines;
     using KeySupplier = folly::Function<std::vector<entity::AtomKey>()>;
-    using StreamReaderType = arcticdb::stream::StreamReader<AtomKey, KeySupplier, SegmentInMemory::Row>;
+    using StreamReaderType = stream::StreamReader<AtomKey, KeySupplier, SegmentInMemory::Row>;
 
     struct StreamMergeWrapper {
         StreamMergeWrapper(

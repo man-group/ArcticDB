@@ -5,25 +5,85 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/codec/codec.hpp>
+#include <ranges>
+#include <iterator>
 #include <arcticdb/stream/incompletes.hpp>
+#include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/stream/schema.hpp>
+#include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/pipeline/pipeline_context.hpp>
+#include <arcticdb/util/name_validation.hpp>
+#include <arcticdb/util/key_utils.hpp>
+#include <arcticdb/async/tasks.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/pipeline/write_options.hpp>
+#include <folly/futures/FutureSplitter.h>
+#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <pipeline/frame_slice.hpp>
-#include <util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <iterator>
+#include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/version/version_functions.hpp>
-#include <arcticdb/version/version_core.hpp>
 
 namespace arcticdb {
 
-using namespace arcticdb::pipelines;
-using namespace arcticdb::stream;
+using namespace pipelines;
+using namespace stream;
+
+static std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
+    const std::shared_ptr<StreamSource>& store,
+    const AtomKey& k,
+    bool load_data,
+    storage::ReadKeyOpts opts) {
+    if(load_data) {
+        auto seg = store->read_sync(k, opts).second;
+        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
+    } else {
+        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
+        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
+        return std::make_pair(std::move(*tsd), std::nullopt);
+    }
+}
+
+static AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
+    AppendMapEntry entry;
+
+    if(tsd.proto().has_next_key())
+        entry.next_key_ = key_from_proto(tsd.proto().next_key());
+
+    entry.total_rows_ = tsd.total_rows();
+    return entry;
+}
+
+AppendMapEntry append_map_entry_from_key(const std::shared_ptr<stream::StreamSource>& store, const entity::AtomKey& key, bool load_data) {
+    auto opts = storage::ReadKeyOpts{};
+    opts.dont_warn_about_missing_key = true;
+    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
+    auto entry = create_entry(tsd);
+    auto descriptor = std::make_shared<entity::StreamDescriptor>();
+    auto desc = std::make_shared<entity::StreamDescriptor>(tsd.as_stream_descriptor());
+    auto index_field_count = desc->index().field_count();
+    auto field_count = desc->fields().size();
+    if (seg) {
+        seg->attach_descriptor(desc);
+    }
+
+    auto frame_slice = pipelines::FrameSlice{desc, pipelines::ColRange{index_field_count, field_count}, pipelines::RowRange{0, entry.total_rows_}};
+    entry.slice_and_key_ = SliceAndKey{std::move(frame_slice), key, std::move(seg)};
+    return entry;
+}
+void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount) {
+    for(auto& entry : entries) {
+        complete_rowcount = entry.slice_and_key_.slice_.fix_row_count(static_cast<ssize_t>(complete_rowcount));
+    }
+}
 
 std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
     const std::shared_ptr<Store> &store,

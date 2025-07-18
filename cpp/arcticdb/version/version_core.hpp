@@ -26,71 +26,14 @@
 
 #include <string>
 
-namespace arcticdb {
-
-struct AppendMapEntry {
-    AppendMapEntry() = default;
-
-    arcticdb::pipelines::SliceAndKey slice_and_key_;
-    std::optional<arcticdb::entity::AtomKey> next_key_;
-    uint64_t total_rows_ = 0;
-
-    const arcticdb::entity::StreamDescriptor& descriptor() const {
-        return *slice_and_key_.slice_.desc();
-    }
-
-    arcticdb::entity::StreamDescriptor& descriptor() {
-        return *slice_and_key_.slice_.desc();
-    }
-
-    const arcticdb::pipelines::FrameSlice& slice() const {
-        return slice_and_key_.slice_;
-    }
-
-    const arcticdb::entity::AtomKey & key() const{
-        return slice_and_key_.key();
-    }
-
-    friend bool operator<(const AppendMapEntry& l, const AppendMapEntry& r) {
-        const auto& right_key = r.key();
-        const auto& left_key = l.key();
-        if(left_key.start_index() == right_key.start_index())
-            return  left_key.end_index() < right_key.end_index();
-
-        return left_key.start_index() < right_key.start_index();
-    }
-};
-
-AppendMapEntry append_map_entry_from_key(
-    const std::shared_ptr<arcticdb::stream::StreamSource>& store,
-    const arcticdb::entity::AtomKey& key,
-    bool load_data);
-
-void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount);
-
-}
-
 namespace arcticdb::version_store {
 
-using namespace arcticdb::entity;
-using namespace arcticdb::pipelines;
-
-struct CompactIncompleteParameters {
-    bool prune_previous_versions_;
-    bool append_;
-    bool convert_int_to_float_;
-    bool via_iteration_;
-    bool sparsify_;
-    bool validate_index_{true}; // Default value as unused in sort_merge
-    bool delete_staged_data_on_failure_{false};
-
-    // If provided, compact only keys contained in these tokens. Otherwise compact everything.
-    std::optional<std::vector<StageResult>> tokens;
-};
+using namespace entity;
+using namespace pipelines;
 
 struct SymbolProcessingResult {
     VersionedItem versioned_item_;
-    arcticdb::proto::descriptors::UserDefinedMetadata metadata_;
+    proto::descriptors::UserDefinedMetadata metadata_;
     OutputSchema output_schema_;
     std::vector<EntityId> entity_ids_;
 };
@@ -111,7 +54,7 @@ struct MultiSymbolReadOutput {
     MultiSymbolReadOutput() = delete;
     MultiSymbolReadOutput(
             std::vector<VersionedItem>&& versioned_items,
-            std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>&& metadatas,
+            std::vector<proto::descriptors::UserDefinedMetadata>&& metadatas,
             FrameAndDescriptor&& frame_and_descriptor):
             versioned_items_(std::move(versioned_items)),
             metadatas_(std::move(metadatas)),
@@ -120,7 +63,7 @@ struct MultiSymbolReadOutput {
     ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
 
     std::vector<VersionedItem> versioned_items_;
-    std::vector<arcticdb::proto::descriptors::UserDefinedMetadata> metadatas_;
+    std::vector<proto::descriptors::UserDefinedMetadata> metadatas_;
     FrameAndDescriptor frame_and_descriptor_;
 };
 
@@ -229,7 +172,7 @@ FrameAndDescriptor read_index_impl(
 VersionedItem compact_incomplete_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+    const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
     const CompactIncompleteParameters& compaction_parameters,
     const WriteOptions& write_options,
@@ -262,7 +205,7 @@ VersionedItem defragment_symbol_data_impl(
 VersionedItem sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
+    const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta,
     const UpdateInfo& update_info,
     const CompactIncompleteParameters& compaction_parameters,
     const WriteOptions& write_options,
@@ -431,28 +374,6 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     return folly::collect(std::move(write_futures)).get();
 }
 
-}
-
-namespace fmt {
-template<>
-struct formatter<arcticdb::version_store::CompactIncompleteParameters> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
-
-    template<typename FormatContext>
-    auto format(const arcticdb::version_store::CompactIncompleteParameters &params, FormatContext &ctx) const {
-        return fmt::format_to(ctx.out(), "CompactIncompleteOptions append={} convert_int_to_float={}, deleted_staged_data_on_failure={}, "
-                                  "prune_previous_versions={}, sparsify={}, validate_index={}, via_iteration={}, tokens={}",
-                              params.append_,
-                              params.convert_int_to_float_,
-                              params.delete_staged_data_on_failure_,
-                              params.prune_previous_versions_,
-                              params.sparsify_,
-                              params.validate_index_,
-                              params.via_iteration_,
-                              params.tokens ? "present" : "absent");
-    }
-};
 }
 
 #define ARCTICDB_VERSION_CORE_H_
