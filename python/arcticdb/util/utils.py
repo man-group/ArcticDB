@@ -87,7 +87,7 @@ def get_logger(bencmhark_cls: Union[str, Any] = None):
     return logger
 
 
-def list_installed_packages() -> list[str]:
+def list_installed_packages() -> List[str]:
     """ Lists installed packaged along with thir versions.
 
     Sample usage:
