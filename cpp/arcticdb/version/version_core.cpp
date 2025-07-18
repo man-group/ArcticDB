@@ -1094,24 +1094,24 @@ static void read_indexed_keys_to_pipeline(
 }
 
 // Returns true if there are staged segments
-// When tokens is present, only read keys represented by those tokens.
+// When stage_results is present, only read keys represented by them.
 static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::optional<std::vector<StageResult>>& tokens,
+    const std::optional<std::vector<StageResult>>& stage_results,
     const ReadQuery& read_query,
     const ReadOptions& read_options,
     const ReadIncompletesFlags& flags) {
 
     std::vector<SliceAndKey> incomplete_segments;
     bool load_data{false};
-    if (tokens) {
-        auto res = get_incomplete_segments_using_tokens(store,
-                                                        pipeline_context,
-                                                        *tokens,
-                                                        read_query,
-                                                        flags,
-                                                        load_data);
+    if (stage_results) {
+        auto res = get_incomplete_segments_using_stage_results(store,
+                                                               pipeline_context,
+                                                               *stage_results,
+                                                               read_query,
+                                                               flags,
+                                                               load_data);
         if (std::holds_alternative<CompactionError>(res)) {
             return std::get<CompactionError>(res);
         } else {
@@ -1801,7 +1801,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
     const auto read_incompletes_result = read_incompletes_to_pipeline(
         store,
         pipeline_context,
-        compaction_parameters.tokens,
+        compaction_parameters.stage_results,
         read_query,
         ReadOptions{},
         read_incomplete_flags
@@ -1931,7 +1931,7 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
     const auto read_incompletes_result = read_incompletes_to_pipeline(
         store,
         pipeline_context,
-        compaction_parameters.tokens,
+        compaction_parameters.stage_results,
         read_query,
         ReadOptions{},
         read_incomplete_flags

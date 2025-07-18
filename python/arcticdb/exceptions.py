@@ -12,7 +12,7 @@ from arcticdb_ext.exceptions import ArcticException as ArcticNativeException, Du
 from arcticdb_ext.storage import NoDataFoundException
 from arcticdb_ext.storage import UnknownLibraryOption, UnsupportedLibraryOptionValue
 from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch
-from arcticdb_ext.version_store import KeyNotFoundInTokenInfo as _KeyNotFoundInTokenInfo
+from arcticdb_ext.version_store import KeyNotFoundInStageResultInfo as _KeyNotFoundInStageResultInfo
 
 
 class ArcticDbNotYetImplemented(ArcticException):
@@ -43,21 +43,21 @@ class UnsupportedKeyInDictionary(UserInputException):
     pass
 
 
-class MissingKeysInTokensError(ArcticException):
+class MissingKeysInStageResultsError(ArcticException):
     """This error is only raised when finalizing staged data using StageResult tokens. This describes which
     tokens failed to finalize because they refer to keys that no longer exist in storage. This is probably
     because they have been removed or finalized already."""
 
-    def __init__(self, msg, tokens_with_missing_keys: _List[_KeyNotFoundInTokenInfo]):
+    def __init__(self, msg, tokens_with_missing_keys: _List[_KeyNotFoundInStageResultInfo]):
         super().__init__(msg)
         self.msg = msg
-        self.tokens_with_missing_keys = tokens_with_missing_keys
+        self.stage_results_with_missing_keys = tokens_with_missing_keys
 
     def __repr__(self):
-        return f"MissingKeysInTokensError(msg={repr(self.msg)}, tokens_with_missing_keys={repr(self.tokens_with_missing_keys)})"
+        return f"MissingKeysInStageResultsError(msg={repr(self.msg)}, stage_results_with_missing_keys={repr(self.stage_results_with_missing_keys)})"
 
     def __str__(self):
-        return f"Tokens with missing keys are [{self.tokens_with_missing_keys}] msg={str(self.msg)}"
+        return f"Stage results with missing keys are [{self.stage_results_with_missing_keys}] msg={str(self.msg)}"
 
-    def __eq__(self, other: "MissingKeysInTokensError"):
-        return self.msg == other.msg and self.tokens_with_missing_keys == other.tokens_with_missing_keys
+    def __eq__(self, other: "MissingKeysInStageResultsError"):
+        return self.msg == other.msg and self.stage_results_with_missing_keys == other.stage_results_with_missing_keys

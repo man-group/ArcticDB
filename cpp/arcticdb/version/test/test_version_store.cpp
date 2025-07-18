@@ -200,7 +200,7 @@ TEST_F(VersionStoreTest, SortMerge) {
             .convert_int_to_float_=false,
             .via_iteration_=false,
             .sparsify_=false,
-            .tokens=std::nullopt
+            .stage_results=std::nullopt
     };
 
     test_store_->sort_merge_internal(symbol, std::nullopt, params);

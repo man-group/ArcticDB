@@ -120,7 +120,7 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool prune_previous_versions = false,
             bool validate_index = false,
             bool delete_staged_data_on_failure=false,
-            const std::optional<std::vector<StageResult>>& tokens = std::nullopt);
+            const std::optional<std::vector<StageResult>>& stage_results = std::nullopt);
 
     StageResult write_parallel(
         const StreamId& stream_id,
@@ -170,7 +170,7 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool sparsify,
             bool prune_previous_versions,
             bool delete_staged_data_on_failure,
-            const std::optional<std::vector<StageResult>>& tokens = std::nullopt);
+            const std::optional<std::vector<StageResult>>& stage_results = std::nullopt);
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
