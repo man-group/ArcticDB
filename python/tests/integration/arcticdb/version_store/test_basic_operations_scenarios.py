@@ -7,10 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import re
+import sys
 from typing import Set
 import pytest
 import pandas as pd
 import numpy as np
+import pkg_resources
 
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
@@ -32,7 +34,8 @@ from arcticdb_ext.exceptions import (
 )
 
 from benchmarks.bi_benchmarks import assert_frame_equal
-from tests.util.mark import SLOW_TESTS_MARK
+from tests.util.mark import LINUX, SLOW_TESTS_MARK
+
 
 
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
@@ -97,6 +100,16 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
      - tests repeated over each supported arcticdb type - ints, floats, str, bool, datetime
      - tests work as expected over static and dynamic schema with small segment row size 
     """
+    if LINUX and (sys.version_info[:2] == (3, 8)) and dtype == np.float64 and schema == False:
+        """ https://github.com/man-group/ArcticDB/actions/runs/16363364782/job/46235614310?pr=2470
+        E                   arcticdb_ext.version_store.StreamDescriptorMismatch: The columns (names and types) in the argument are not identical to that of the existing version: APPEND
+        E                   stream_id="symbol-_class__numpy_float64__"
+        E                   (Showing only the mismatch. Full col list saved in the `last_mismatch_msg` attribute of the lib instance.
+        E                   '-' marks columns missing from the argument, '+' for unexpected.)
+        E                   -FD<name=some_name!, type=TD<type=UTF_DYNAMIC64, dim=0>, idx=1>"
+        E                   +FD<name=some_name!, type=TD<type=FLOAT64, dim=0>, idx=1>"
+        """
+        pytest.xfail("Test fails due to issue (9589648728)")
     segment_row_size = 3
     lib: NativeVersionStore = version_store_factory(dynamic_schema=schema, segment_row_size=segment_row_size)
     set_seed(3484356)
@@ -133,6 +146,30 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
             ver = lib.read(symbol)
             assert_series_equal_pandas_1(result_series, ver.data, check_index_type=(len(result_series) > 0))
             assert meta == ver.metadata
+
+
+def test_for_9589648728(version_store_factory):
+    lib: NativeVersionStore = version_store_factory(dynamic_schema=False, segment_row_size=3)
+    symbol = "32"
+    set_seed(3484356)
+    timestamp = pd.Timestamp(4839275892348)
+    dtype = np.float64
+    name = "dsf"
+    series = generate_random_series(dtype, 0, name, start_time=timestamp, seed=None)
+    print("Series to write:", series.info(verbose=True))
+    lib.write(symbol, series)
+    print("Series read:", lib.read(symbol).data.info(verbose=True))
+    append_series = generate_random_series(dtype, 0, name, 
+                                                   start_time=timestamp + timedelta(seconds=0), seed=None)
+    print("Series to append:", append_series.info(verbose=True))
+    try:
+        lib.append(symbol, append_series)
+        lib.update(symbol, append_series)
+    except Exception as e:
+        for dist in pkg_resources.working_set:
+            print(f"{dist.project_name}=={dist.version}")
+        raise
+
 
 
 @pytest.mark.storage
@@ -433,5 +470,7 @@ def test_update_date_range_exhaustive(lmdb_version_store):
                 update_expected_at_index=0, length_of_result_df=update_data.shape[0], 
                 scenario="both open")
     assert_frame_equal(update_data, result_df)
+
+    lib.list_symbols_with_incomplete_data
 
     
