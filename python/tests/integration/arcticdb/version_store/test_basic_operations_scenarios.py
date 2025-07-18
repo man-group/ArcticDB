@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import re
 import sys
-from typing import Set
+from typing import List, Set
 import pytest
 import pandas as pd
 import numpy as np
@@ -17,7 +17,7 @@ from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     dataframe_simulate_arcticdb_update_static,
 )
-from arcticdb.util.utils import DFGenerator, generate_random_series, list_installed_packages, set_seed, supported_types_list, verify_dynamically_added_columns
+from arcticdb.util.utils import DFGenerator, generate_random_series, generate_random_timestamp_array, list_installed_packages, set_seed, supported_types_list, verify_dynamically_added_columns
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
@@ -28,6 +28,7 @@ from arcticdb.exceptions import (
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 
 from arcticdb_ext.exceptions import (
+    UnsortedDataException,
     InternalException,
     NormalizationException,
 )
@@ -483,7 +484,7 @@ def test_update_date_range_exhaustive(lmdb_version_store):
     lib.list_symbols_with_incomplete_data
 
     
-def split_dataframe_into_random_chunks(df: pd.DataFrame, min_size: int = 1, max_size: int = 30) -> list[pd.DataFrame]:
+def split_dataframe_into_random_chunks(df: pd.DataFrame, min_size: int = 1, max_size: int = 30) -> List[pd.DataFrame]:
     chunks = []
     i = 0
     while i < len(df):
@@ -498,7 +499,7 @@ def split_dataframe_into_random_chunks(df: pd.DataFrame, min_size: int = 1, max_
 @pytest.mark.storage
 def test_stage_any_size_dataframes_timestamp_indexed(version_store_and_real_s3_basic_store_factory, num_columns):   
     """
-    Tests  if different size chunks of dataframe can be staged
+    Tests  if different size chunks of dataframe can be successfully staged
     """ 
     lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
         dynamic_schema=False, segment_row_size=5, column_group_size=3)
@@ -520,3 +521,64 @@ def test_stage_any_size_dataframes_timestamp_indexed(version_store_and_real_s3_b
     expected_data = pd.concat(chunks).sort_index()
     assert_frame_equal(expected_data, lib.read(symbol).data)
 
+
+@pytest.mark.storage
+def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_factory):   
+    """
+    Tests  if different size chunks of dataframe can be staged
+    """ 
+    lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
+        dynamic_schema=False, segment_row_size=5, column_group_size=3)
+    
+    set_seed(321546556)
+    symbol="32545fsddf"
+    df_size = 500
+
+    def check_incomplete_staged(sym: str, remove_staged: bool = True) -> None:
+        assert lib.list_symbols_with_incomplete_data() == [sym]
+        lib.remove_incomplete(sym)
+        assert lib.list_symbols_with_incomplete_data() == []
+
+
+    df = (DFGenerator(size=df_size).add_int_col("int8", dtype=np.int8)
+          .add_int_col("uint64", dtype=np.uint64)
+          .add_string_col("str", str_size=1, include_unicode=True)
+          .add_float_col("float64")
+          .add_bool_col("bool")
+          .add_timestamp_col("ts", start_date=None)
+          .generate_dataframe())
+
+    #df.index = generate_random_timestamp_array(size=df_size, seed=None)
+    
+    df_index_ts = df.copy(deep=True).set_index("ts")
+    
+    # Unsorted dataframe with index will trigger error if validate_index=True
+    with pytest.raises(UnsortedDataException):
+        lib.stage(symbol, df_index_ts, validate_index=True)
+    assert lib.list_symbols_with_incomplete_data() == []
+
+    # Unsorted dataframe without index will trigger error if sort_on_index=True
+    for frame in [df, []]:
+        with pytest.raises(InternalException):
+            lib.stage(symbol, frame, sort_on_index=True)
+        assert lib.list_symbols_with_incomplete_data() == []
+
+    # Unsorted dataframe with index will be staged if both validate_index=True, sort_on_index=True
+    lib.stage(symbol, df_index_ts, validate_index=True, sort_on_index=True)
+    check_incomplete_staged(symbol)
+
+    # Unsorted dataframe without index will be staged if both validate_index=False, sort_on_index=False
+    lib.stage(symbol, df, validate_index=False, sort_on_index=False)
+    check_incomplete_staged(symbol)
+
+    # Empty dataframe can be staged by default
+    lib.stage(symbol, [])
+    check_incomplete_staged(symbol)
+
+    # None can be staged can be staged by default
+    lib.stage(symbol, None)
+    check_incomplete_staged(symbol)
+
+    # Complex structures can be staged by default
+    lib.stage(symbol, get_metadata())
+    check_incomplete_staged(symbol)

@@ -693,7 +693,14 @@ class DFGenerator:
         return self
     
     def add_timestamp_col(self, name: str, start_date = "2020-1-1", freq = 's') -> 'DFGenerator':
-        list = pd.date_range(start=start_date, periods=self.__size, freq=freq) 
+        """ Adds a timestamp column
+        if start_date is None then the timestamps will be random, 
+        otherwise will start from date provided
+        """
+        if start_date:
+            list = pd.date_range(start=start_date, periods=self.__size, freq=freq) 
+        else:
+            list = generate_random_timestamp_array(size=self.__size, seed=None)
         self.__data[name] = list
         self.__types[name] = pd.Timestamp
         return self
