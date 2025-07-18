@@ -13,7 +13,7 @@ import pandas as pd
 import pytest
 
 from arcticdb import LibraryOptions
-from arcticdb_ext.exceptions import UserInputException, StorageException, UnsortedDataException, SortingException
+from arcticdb_ext.exceptions import UserInputException, UnsortedDataException, SortingException
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import StageResult, NoSuchVersionException, KeyNotFoundInTokenInfo, AtomKey, RefKey
 from arcticdb.version_store.library import Library
