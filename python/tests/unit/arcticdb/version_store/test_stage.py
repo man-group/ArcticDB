@@ -32,27 +32,6 @@ def arctic_api(request):
     return request.param
 
 
-@pytest.fixture(scope="function", params=["regular", "sort"])
-def flavour(request):
-    """What sort of finalization to do - regular, or sort_and_finalize_staged_data."""
-    return request.param
-
-
-@pytest.fixture(scope="function", params=[True, False])
-def prune_previous_versions(request):
-    return request.param
-
-
-@pytest.fixture(scope="function", params=[True, False])
-def validate_index(request):
-    return request.param
-
-
-@pytest.fixture(scope="function", params=[True, False])
-def should_enable_new_api(request):
-    return request.param
-
-
 def finalize(api_version, lib: Library, sym, mode="write", _stage_results=None, metadata=None,
              prune_previous_versions=False, validate_index=True, delete_staged_data_on_failure=False):
     if api_version == "v1":
@@ -69,6 +48,7 @@ def finalize(api_version, lib: Library, sym, mode="write", _stage_results=None, 
         raise RuntimeError(f"Unexpected api_version {api_version}")
 
 
+@pytest.mark.parametrize("should_enable_new_api", [True, False])
 @pytest.mark.parametrize("finalize_mode", ["write", "append"])
 def test_stage(lmdb_library_factory, should_enable_new_api, finalize_mode, arctic_api):
     with config_context("dev.stage_new_api_enabled", 1 if should_enable_new_api else 0):
@@ -410,6 +390,7 @@ def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api, new
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 0
 
 
+@pytest.mark.parametrize("prune_previous_versions", (True, False))
 def test_finalize_with_tokens_and_prune_previous(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, prune_previous_versions):
     """Do we respect pruning when we also have tokens? This test also checks that we support metadata with tokens."""
     sym = "sym"
@@ -440,6 +421,7 @@ def test_finalize_with_tokens_and_prune_previous(lmdb_library_factory, arctic_ap
         assert_frame_equal(res.data, df_1)
 
 
+@pytest.mark.parametrize("validate_index", (True, False))
 def test_finalize_with_tokens_and_validate_index_all_ok(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, validate_index):
     sym = "good_sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
@@ -522,6 +504,7 @@ def test_sorting_of_result_without_tokens(lmdb_library_factory, arctic_api, new_
         assert set(res.data["col2"]) == {3, 4, 5, 6, 9}
 
 
+@pytest.mark.parametrize("validate_index", (True, False))
 def test_finalize_with_tokens_and_validate_index_out_of_order(lmdb_library_factory, arctic_api, new_staged_data_api_enabled,
                                                  validate_index):
     # Given a symbol starting in 2026
@@ -567,7 +550,7 @@ def test_compact_incomplete_with_tokens_without_via_iteration_not_ok(lmdb_librar
     assert len(keys) == 2
 
 
-def test_delete_staged_data_on_failure_with_tokens_overlap(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, lib_name):
+def test_delete_staged_data_on_failure_with_tokens_overlap(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     """Check what happens to staged tokens when we fail due to an overlapping index in the staged segments."""
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
