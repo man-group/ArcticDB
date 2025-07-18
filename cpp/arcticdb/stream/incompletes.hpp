@@ -171,7 +171,7 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
  * Throws if any of the tokens refer to segments that no longer exist (for example, because they have already been
  * finalised).
  */
-std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
+std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
                                                               const std::shared_ptr<PipelineContext>& pipeline_context,
                                                               const std::vector<StageResult>& tokens,
                                                               const ReadQuery& read_query,

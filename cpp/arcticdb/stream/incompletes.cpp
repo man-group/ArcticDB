@@ -655,7 +655,7 @@ std::optional<int64_t> latest_incomplete_timestamp(
     return std::nullopt;
 }
 
-std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
+std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
                                                               const std::shared_ptr<PipelineContext>& pipeline_context,
                                                               const std::vector<StageResult>& tokens,
                                                               const ReadQuery& read_query,
@@ -679,13 +679,9 @@ std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_
     }
 
     if (!non_existent_keys.empty()) {
-        // Future aseaton: More sophisticated error handling
-        // Return back indexes of StagedResult objects with missing keys to the Python layer rather than raising.
-        // Then rethrow in Python layer (enriched with that info) - this pattern does not seem to be supported
-        // by pybind11 so we need to handroll it.
-        // Then we may provide tooling that takes this error and the list of StagedResult tokens being finalized
+        // In future we may provide tooling that takes this error and the list of StagedResult tokens being finalized
         // and gives back a new list of StagedResult objects that could be used to retry.
-        throw storage::KeyNotFoundInTokensException(std::move(non_existent_keys));
+        return non_existent_keys;
     }
 
     if(!entries.empty()) {

@@ -1780,7 +1780,7 @@ std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> Local
     return get_metadata(std::move(key)).get();
 }
 
-VersionedItem LocalVersionedEngine::sort_merge_internal(
+std::variant<VersionedItem, CompactionError> LocalVersionedEngine::sort_merge_internal(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const CompactIncompleteParameters& parameters) {
@@ -1798,8 +1798,12 @@ VersionedItem LocalVersionedEngine::sort_merge_internal(
     pipeline_context->version_id_ = update_info.next_version_id_;
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), parameters);
 
-    auto versioned_item = sort_merge_impl(store_, stream_id, user_meta, update_info, parameters, get_write_options(), pipeline_context);
+    auto sort_merge_result = sort_merge_impl(store_, stream_id, user_meta, update_info, parameters, get_write_options(), pipeline_context);
     ARCTICDB_DEBUG(log::version(), "Finished sort_merge_impl for symbol {}", stream_id);
+    if (std::holds_alternative<CompactionError>(sort_merge_result)) {
+        return sort_merge_result;
+    }
+    auto versioned_item = std::get<VersionedItem>(sort_merge_result);
 
     write_version_and_prune_previous(parameters.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
     ARCTICDB_DEBUG(log::version(), "Finished write_version_and_prune_previous for symbol {}", stream_id);

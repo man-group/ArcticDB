@@ -254,7 +254,7 @@ public:
 
     void flush_version_map() override;
 
-    VersionedItem sort_merge_internal(
+    std::variant<VersionedItem, CompactionError> sort_merge_internal(
         const StreamId& stream_id,
         const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
         const CompactIncompleteParameters& parameters);
@@ -429,7 +429,7 @@ protected:
         const std::shared_ptr<Store>& store,
         const ClockType& = ClockType{});
 
-    VersionedItem compact_incomplete_dynamic(
+    std::variant<VersionedItem, CompactionError> compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
             const CompactIncompleteParameters& parameters);

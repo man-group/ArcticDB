@@ -169,7 +169,7 @@ FrameAndDescriptor read_index_impl(
     const std::shared_ptr<Store>& store,
     const VersionedItem& version);
 
-VersionedItem compact_incomplete_impl(
+std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta,
@@ -202,7 +202,7 @@ VersionedItem defragment_symbol_data_impl(
         size_t segment_size);
 
         
-VersionedItem sort_merge_impl(
+std::variant<VersionedItem, CompactionError> sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta,

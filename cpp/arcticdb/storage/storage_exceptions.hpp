@@ -145,20 +145,6 @@ struct formatter<KeyNotFoundInTokenInfo> {
 
 namespace arcticdb::storage {
 
-class KeyNotFoundInTokensException : public ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND_IN_TOKEN> {
-public:
-    explicit KeyNotFoundInTokensException(std::vector<KeyNotFoundInTokenInfo>&& keys) :
-        ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND_IN_TOKEN>(fmt::format("Keys not found for some tokens: {}", keys)),
-        keys_(std::make_shared<std::vector<KeyNotFoundInTokenInfo>>(std::move(keys))) {
-    }
-
-    std::vector<KeyNotFoundInTokenInfo>& keys() {
-        return *keys_;
-    }
-private:
-    std::shared_ptr<std::vector<KeyNotFoundInTokenInfo>> keys_;
-};
-
 class LibraryPermissionException : public PermissionException {
 public:
     LibraryPermissionException(const LibraryPath& path, OpenMode mode, std::string_view operation) :
