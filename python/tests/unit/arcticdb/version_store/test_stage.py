@@ -225,10 +225,10 @@ def test_finalize_with_tokens_then_without(arctic_client_lmdb, arctic_api, new_s
     ac = arctic_client_lmdb
     lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
-    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
-    df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
-    df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2])
-    df_4 = pd.DataFrame({"col1": np.arange(11, 16), "col2": np.arange(12, 17)}, index=indexes[3])
+    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
+    df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
+    df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2], dtype=np.int64)
+    df_4 = pd.DataFrame({"col1": np.arange(11, 16), "col2": np.arange(12, 17)}, index=indexes[3], dtype=np.int64)
 
     stage_result_1 = lib.stage(sym, df_1)
     stage_result_2 = lib.stage(sym, df_2)
