@@ -715,6 +715,19 @@ ColumnStats PythonVersionStore::get_column_stats_info_version(
     return get_column_stats_info_version_internal(stream_id, version_query);
 }
 
+static void validate_tokens(const std::optional<std::vector<StageResult>>& tokens, const StreamId& stream_id) {
+    if (!tokens) {
+        return;
+    }
+
+    for (const auto& stage_result : *tokens) {
+        for (const auto& staged_segment : stage_result.staged_segments) {
+            user_input::check<ErrorCode::E_TOKEN_WITH_INCORRECT_SYMBOL>(staged_segment.id() == stream_id, fmt::format("Expected all stage_result objects submitted for compaction to have "
+                                                          "the specified symbol {} but found one with symbol {}", stream_id, staged_segment.id()));
+        }
+    }
+}
+
 std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incomplete(
         const StreamId& stream_id,
         bool append,
@@ -731,6 +744,9 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(*user_meta, *meta);
     }
+
+    validate_tokens(tokens, stream_id);
+
     CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,
@@ -761,6 +777,9 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(user_meta, *meta);
     }
+
+    validate_tokens(tokens, stream_id);
+
     CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,

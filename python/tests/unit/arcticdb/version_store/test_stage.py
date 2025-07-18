@@ -70,11 +70,10 @@ def finalize(api_version, lib: Library, sym, mode="write", _stage_results=None, 
 
 
 @pytest.mark.parametrize("finalize_mode", ["write", "append"])
-def test_stage(lmdb_storage, lib_name, should_enable_new_api, finalize_mode, arctic_api):
+def test_stage(lmdb_library_factory, should_enable_new_api, finalize_mode, arctic_api):
     with config_context("dev.stage_new_api_enabled", 1 if should_enable_new_api else 0):
         sym = "sym"
-        ac = lmdb_storage.create_arctic()
-        lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=1))
+        lib = lmdb_library_factory(LibraryOptions(rows_per_segment=1))
         not_staged = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}, index=pd.date_range("2025-01-01", periods=2))
 
         lib.write(sym, not_staged)
@@ -97,10 +96,9 @@ def test_stage(lmdb_storage, lib_name, should_enable_new_api, finalize_mode, arc
         assert all(x is None for x in staged_results)
 
 
-def test_stage_result_pickle(lmdb_storage, lib_name, new_staged_data_api_enabled):
+def test_stage_result_pickle(lmdb_library_factory, new_staged_data_api_enabled):
     sym = "sym"
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=1))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=1))
     df = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}, index=pd.date_range("2025-01-01", periods=2))
     stage_result = lib.stage(sym, df)
     assert len(stage_result.staged_segments) == 2
@@ -109,6 +107,31 @@ def test_stage_result_pickle(lmdb_storage, lib_name, new_staged_data_api_enabled
     segments_after_pickling = stage_result_after_pickling.staged_segments
 
     assert segments == segments_after_pickling
+
+
+def test_stage_submit_tokens_for_wrong_symbol(lmdb_library_factory, new_staged_data_api_enabled, arctic_api):
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=1))
+
+    data_to_stage = [
+        pd.DataFrame({"col1": [5, 6], "col2": [7, 8]}, index=pd.date_range("2025-01-03", periods=2)),
+        pd.DataFrame({"col1": [9, 10], "col2": [11, 12]}, index=pd.date_range("2025-01-05", periods=2)),
+        pd.DataFrame({"col1": [13, 14], "col2": [15, 16]}, index=pd.date_range("2025-01-07", periods=2)),
+    ]
+
+    staged_results = [lib.stage("sym", data_to_stage[0]), lib.stage("other_sym", data_to_stage[1]), lib.stage("sym", data_to_stage[2])]
+
+    with pytest.raises(UserInputException, match="E_TOKEN_WITH_INCORRECT_SYMBOL"):
+        finalize(arctic_api, lib, "sym", _stage_results=staged_results)
+
+    assert not lib.has_symbol("sym")
+    staged_segments = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
+    assert len(staged_segments) == 6
+
+    finalize(arctic_api, lib, "sym", _stage_results=[staged_results[0], staged_results[2]])
+    assert_frame_equal(lib.read("sym").data, pd.concat([data_to_stage[0], data_to_stage[2]]), check_freq=False)
+
+    staged_segments = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
+    assert len(staged_segments) == 2
 
 
 # The tests below us rows_per_segment=2. Choose some index ranges that cover subsets of those indexes.
@@ -127,13 +150,12 @@ STRING_INDEXES = [["a", "b", "c"], ["d", "e"], ["f"], ["g", "h", "i", "j", "k"]]
 
 @pytest.mark.parametrize("dynamic_schema", (True, False))
 @pytest.mark.parametrize("indexes", [DATE_RANGE_INDEXES, ROWCOUNT_INDEXES, STRING_INDEXES])
-def test_finalize_with_tokens_append_mode(arctic_client_lmdb, lib_name, new_staged_data_api_enabled, indexes, dynamic_schema, arctic_api):
+def test_finalize_with_tokens_append_mode(lmdb_library_factory, new_staged_data_api_enabled, indexes, dynamic_schema, arctic_api):
     if arctic_api == "v2-sort" and indexes is not DATE_RANGE_INDEXES:
         pytest.skip("sort_and_finalize_staged_data only supports datetime indexed data")
 
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2, dynamic_schema=dynamic_schema))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2, dynamic_schema=dynamic_schema))
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
     df_3 = pd.DataFrame({"col1": [7], "col2": [9]}, index=indexes[2], dtype=np.int64)
@@ -180,10 +202,9 @@ def test_finalize_with_tokens_append_mode(arctic_client_lmdb, lib_name, new_stag
         finalize(arctic_api, lib, sym)
 
 
-def test_finalize_with_tokens_write_mode(arctic_client_lmdb, arctic_api, lib_name, new_staged_data_api_enabled):
+def test_finalize_with_tokens_write_mode(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
@@ -220,10 +241,9 @@ def test_finalize_with_tokens_write_mode(arctic_client_lmdb, arctic_api, lib_nam
 
 
 @pytest.mark.parametrize("mode", ("write", "append"))
-def test_finalize_with_tokens_then_without(arctic_client_lmdb, arctic_api, new_staged_data_api_enabled, lib_name, mode):
+def test_finalize_with_tokens_then_without(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, mode):
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0], dtype=np.int64)
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1], dtype=np.int64)
@@ -257,11 +277,10 @@ def test_finalize_with_tokens_then_without(arctic_client_lmdb, arctic_api, new_s
         raise RuntimeError(f"Unexpected mode {mode}")
 
 
-def test_finalize_with_tokens_new_api_disabled(arctic_client_lmdb, arctic_api, lib_name):
+def test_finalize_with_tokens_new_api_disabled(lmdb_library_factory, arctic_api):
     """We should raise if anyone attempts to use the new API without the feature flag."""
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
     stage_result_1 = lib.stage(sym, df_1)
@@ -278,10 +297,9 @@ def test_finalize_with_tokens_new_api_disabled(arctic_client_lmdb, arctic_api, l
     assert not lib.has_symbol(sym)
 
 
-def test_finalize_missing_keys(arctic_client_lmdb, arctic_api, new_staged_data_api_enabled, lib_name):
+def test_finalize_missing_keys(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
@@ -357,10 +375,9 @@ def test_missing_keys_error():
     assert error.tokens_with_missing_keys == [info_one, info_two]
 
 
-def test_finalize_noop_if_any_missing_keys(arctic_client_lmdb, arctic_api, new_staged_data_api_enabled, lib_name):
+def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
@@ -393,12 +410,10 @@ def test_finalize_noop_if_any_missing_keys(arctic_client_lmdb, arctic_api, new_s
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 0
 
 
-def test_finalize_with_tokens_and_prune_previous(arctic_client_lmdb, arctic_api,
-                                                 new_staged_data_api_enabled, lib_name, prune_previous_versions):
+def test_finalize_with_tokens_and_prune_previous(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, prune_previous_versions):
     """Do we respect pruning when we also have tokens? This test also checks that we support metadata with tokens."""
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
@@ -425,11 +440,9 @@ def test_finalize_with_tokens_and_prune_previous(arctic_client_lmdb, arctic_api,
         assert_frame_equal(res.data, df_1)
 
 
-def test_finalize_with_tokens_and_validate_index_all_ok(arctic_client_lmdb, arctic_api, new_staged_data_api_enabled,
-                                                 lib_name, validate_index):
+def test_finalize_with_tokens_and_validate_index_all_ok(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, validate_index):
     sym = "good_sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     existing = pd.date_range("2024-01-01", periods=1)
     df_0 = pd.DataFrame({"col1": [1], "col2": [2]}, index=existing)
@@ -449,7 +462,7 @@ def test_finalize_with_tokens_and_validate_index_all_ok(arctic_client_lmdb, arct
 
 
 @pytest.mark.parametrize("indexes", [DATE_RANGE_INDEXES, ROWCOUNT_INDEXES, STRING_INDEXES])
-def test_ordering_of_tokens_should_not_matter(arctic_client_lmdb, arctic_api, new_staged_data_api_enabled, lib_name, indexes):
+def test_ordering_of_tokens_should_not_matter(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, indexes):
     """The order that users submit the tokens in should not matter for date range indexes. For rowcount and string
     indexes the result will be saved with an arbitrary order."""
     is_datetime = isinstance(indexes[0], pd.DatetimeIndex)
@@ -457,8 +470,7 @@ def test_ordering_of_tokens_should_not_matter(arctic_client_lmdb, arctic_api, ne
         pytest.skip("sort_and_finalize_staged_data only supports datetime indexed data")
 
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
 
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
@@ -483,15 +495,14 @@ def test_ordering_of_tokens_should_not_matter(arctic_client_lmdb, arctic_api, ne
 
 
 @pytest.mark.parametrize("indexes", [DATE_RANGE_INDEXES, ROWCOUNT_INDEXES, STRING_INDEXES])
-def test_sorting_of_result_without_tokens(arctic_client_lmdb, arctic_api, new_staged_data_api_enabled, lib_name, indexes):
+def test_sorting_of_result_without_tokens(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, indexes):
     """Same as the test above but without tokens, checking both paths through the API are interoperable when we finalize
     everything. """
     is_datetime = isinstance(indexes[0], pd.DatetimeIndex)
     if arctic_api == "v2-sort" and not is_datetime:
         pytest.skip("sort_and_finalize_staged_data only supports datetime indexed data")
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
 
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=indexes[1])
@@ -511,12 +522,11 @@ def test_sorting_of_result_without_tokens(arctic_client_lmdb, arctic_api, new_st
         assert set(res.data["col2"]) == {3, 4, 5, 6, 9}
 
 
-def test_finalize_with_tokens_and_validate_index_out_of_order(arctic_client_lmdb, arctic_api, new_staged_data_api_enabled,
-                                                 lib_name, validate_index):
+def test_finalize_with_tokens_and_validate_index_out_of_order(lmdb_library_factory, arctic_api, new_staged_data_api_enabled,
+                                                 validate_index):
     # Given a symbol starting in 2026
     sym = "bad_sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
     existing = pd.date_range("2026-01-01", periods=1)
     df_0 = pd.DataFrame({"col1": [1], "col2": [2]}, index=existing)
@@ -538,12 +548,11 @@ def test_finalize_with_tokens_and_validate_index_out_of_order(arctic_client_lmdb
         assert not res.data.index.is_monotonic_increasing
 
 
-def test_compact_incomplete_with_tokens_without_via_iteration_not_ok(arctic_client_lmdb, new_staged_data_api_enabled, lib_name):
+def test_compact_incomplete_with_tokens_without_via_iteration_not_ok(lmdb_library_factory, new_staged_data_api_enabled):
     """We validate against submitting with tokens and via_iteration False as this is not a required use case (and doesn't
     make a great deal of sense)."""
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
 
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=DATE_RANGE_INDEXES[0])
     stage_result_1 = lib.stage(sym, df_1)
@@ -558,11 +567,10 @@ def test_compact_incomplete_with_tokens_without_via_iteration_not_ok(arctic_clie
     assert len(keys) == 2
 
 
-def test_delete_staged_data_on_failure_with_tokens_overlap(arctic_client_lmdb, new_staged_data_api_enabled, lib_name, arctic_api):
+def test_delete_staged_data_on_failure_with_tokens_overlap(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, lib_name):
     """Check what happens to staged tokens when we fail due to an overlapping index in the staged segments."""
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
 
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=[pd.Timestamp(10_000), pd.Timestamp(11_000), pd.Timestamp(12_000)])
 
@@ -599,11 +607,10 @@ def test_delete_staged_data_on_failure_with_tokens_overlap(arctic_client_lmdb, n
         assert res.version == 0
 
 
-def test_delete_staged_data_on_failure_with_tokens_out_of_order_append(arctic_client_lmdb, new_staged_data_api_enabled, lib_name, arctic_api):
+def test_delete_staged_data_on_failure_with_tokens_out_of_order_append(lmdb_library_factory, new_staged_data_api_enabled, arctic_api):
     """Check what happens to staged tokens when we fail due to an out of order append."""
     sym = "sym"
-    ac = arctic_client_lmdb
-    lib = ac.create_library(lib_name, library_options=LibraryOptions(rows_per_segment=2))
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
 
     df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=pd.date_range("2025-01-01", periods=3))
     df_2 = pd.DataFrame({"col1": [3, 4], "col2": [5, 6]}, index=pd.date_range("2024-01-02", periods=2))
