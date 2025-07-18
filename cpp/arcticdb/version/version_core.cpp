@@ -1095,7 +1095,7 @@ static void read_indexed_keys_to_pipeline(
 
 // Returns true if there are staged segments
 // When tokens is present, only read keys represented by those tokens.
-static bool read_incompletes_to_pipeline(
+static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     const std::shared_ptr<Store>& store,
     std::shared_ptr<PipelineContext>& pipeline_context,
     const std::optional<std::vector<StageResult>>& tokens,
@@ -1106,13 +1106,17 @@ static bool read_incompletes_to_pipeline(
     std::vector<SliceAndKey> incomplete_segments;
     bool load_data{false};
     if (tokens) {
-        incomplete_segments = get_incomplete_segments_using_tokens(store,
-                                                                   pipeline_context,
-                                                                   *tokens,
-                                                                   read_query,
-                                                                   flags,
-                                                                   load_data);
-
+        auto res = get_incomplete_segments_using_tokens(store,
+                                                        pipeline_context,
+                                                        *tokens,
+                                                        read_query,
+                                                        flags,
+                                                        load_data);
+        if (std::holds_alternative<CompactionError>(res)) {
+            return std::get<CompactionError>(res);
+        } else {
+            incomplete_segments = std::get<std::vector<SliceAndKey>>(res);
+        }
     } else {
         incomplete_segments = get_incomplete(
             store,
@@ -1771,7 +1775,7 @@ static SortedValue compute_sorted_status(const std::optional<SortedValue>& initi
     return staged_segments_sorted_status;
 }
 
-VersionedItem sort_merge_impl(
+std::variant<VersionedItem, CompactionError> sort_merge_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
@@ -1794,7 +1798,7 @@ VersionedItem sort_merge_impl(
         .dynamic_schema = write_options.dynamic_schema,
         .has_active_version = update_info.previous_index_key_.has_value()
     };
-    const bool has_incomplete_segments = read_incompletes_to_pipeline(
+    const auto read_incompletes_result = read_incompletes_to_pipeline(
         store,
         pipeline_context,
         compaction_parameters.tokens,
@@ -1802,6 +1806,14 @@ VersionedItem sort_merge_impl(
         ReadOptions{},
         read_incomplete_flags
     );
+
+    bool has_incomplete_segments;
+    if (std::holds_alternative<CompactionError>(read_incompletes_result)) {
+        return std::get<CompactionError>(read_incompletes_result);
+    } else {
+        has_incomplete_segments = std::get<bool>(read_incompletes_result);
+    }
+
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"
@@ -1890,7 +1902,7 @@ VersionedItem sort_merge_impl(
     return vit;
 }
 
-VersionedItem compact_incomplete_impl(
+std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
@@ -1915,7 +1927,8 @@ VersionedItem compact_incomplete_impl(
         .dynamic_schema = write_options.dynamic_schema,
         .has_active_version = update_info.previous_index_key_.has_value()
     };
-    const bool has_incomplete_segments = read_incompletes_to_pipeline(
+
+    const auto read_incompletes_result = read_incompletes_to_pipeline(
         store,
         pipeline_context,
         compaction_parameters.tokens,
@@ -1923,6 +1936,14 @@ VersionedItem compact_incomplete_impl(
         ReadOptions{},
         read_incomplete_flags
     );
+
+    bool has_incomplete_segments;
+    if (std::holds_alternative<CompactionError>(read_incompletes_result)) {
+        return std::get<CompactionError>(read_incompletes_result);
+    } else {
+        has_incomplete_segments = std::get<bool>(read_incompletes_result);
+    }
+
     user_input::check<ErrorCode::E_NO_STAGED_SEGMENTS>(
         has_incomplete_segments,
         "Finalizing staged data is not allowed with empty staging area"

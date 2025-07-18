@@ -771,16 +771,7 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
         .tokens=tokens
     };
 
-    try {
-        return sort_merge_internal(stream_id, meta, params);
-    } catch (KeyNotFoundInTokensException& e) {
-        CompactionError result;
-        result.reserve(e.keys().size());
-        for (auto&& k : std::move(e.keys())) {
-            result.emplace_back(std::move(k));
-        }
-        return result;
-    }
+    return sort_merge_internal(stream_id, meta, params);
 }
 
 StageResult PythonVersionStore::write_parallel(
