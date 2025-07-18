@@ -934,18 +934,57 @@ def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
     assert_equal(expected, received)
 
 
+@pytest.mark.parametrize("index_name", ["blah", None, "col1"])
 @pytest.mark.storage
-def test_get_info(basic_store):
+def test_get_info(basic_store, index_name):
     sym = "get_info_test"
     df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
-    df.index.name = "dt_index"
+    df.index.name = index_name
     basic_store.write(sym, df)
     info = basic_store.get_info(sym)
     assert int(info["rows"]) == 10
     assert info["type"] == "pandasdf"
     assert info["col_names"]["columns"] == ["col1"]
-    assert info["col_names"]["index"] == ["dt_index"]
+    assert info["col_names"]["index"] == [index_name]
     assert info["index_type"] == "index"
+
+
+@pytest.mark.parametrize("index_name", ["blah", None, "col1"])
+@pytest.mark.storage
+def test_get_info_series(basic_store, index_name):
+    """Index names are not handled very well at the moment for series. Since the normalization metadata is complex,
+    and any changes need to be backwards compatible with old readers, it does not seem worthwhile changing these
+    odd behaviours now."""
+    sym = "get_info_series_test"
+    series = pd.Series(np.arange(10), name="col1", index=pd.date_range(pd.Timestamp(0), periods=10))
+    series.index.name = index_name
+    basic_store.write(sym, series)
+    info = basic_store.get_info(sym)
+    assert int(info["rows"]) == 10
+    assert info["type"] == "pandasseries"
+    assert info["col_names"]["columns"] == [index_name, "col1"] if index_name else ["col1"]
+    assert info["col_names"]["index"] == []
+    assert info["index_type"] == "NA"
+
+
+@pytest.mark.storage
+@pytest.mark.parametrize("index_name", ["blah", None])
+def test_get_info_series_multiindex(basic_store, index_name):
+    """Index names are not handled very well at the moment for series. Since the normalization metadata is complex,
+    and any changes need to be backwards compatible with old readers, it does not seem worthwhile changing these
+    odd behaviours now."""
+    sym = "get_info_series_test"
+    dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=10)
+    vals = np.arange(10, dtype=np.uint32)
+    series = pd.Series(np.arange(10), name="col1", index=pd.MultiIndex.from_arrays([dtidx, vals]))
+    series.index.name = index_name
+    basic_store.write(sym, series)
+    info = basic_store.get_info(sym)
+    assert int(info["rows"]) == 10
+    assert info["type"] == "pandasseries"
+    assert info["col_names"]["columns"] == ['index', '__fkidx__1', 'col1'] if index_name else ["col1"]
+    assert info["col_names"]["index"] == []
+    assert info["index_type"] == "NA"
 
 
 @pytest.mark.storage
@@ -1091,17 +1130,21 @@ def test_update_times(basic_store):
 
 
 @pytest.mark.storage
-def test_get_info_multi_index(basic_store):
+@pytest.mark.parametrize("index_names", [("blah", None), (None, None), (None, "blah"), ("blah1", "blah2"), ("col1", "col2"), ("col1", "col1")])
+def test_get_info_multi_index(basic_store, index_names):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=3)
     vals = np.arange(3, dtype=np.uint32)
     multi_df = pd.DataFrame({"col1": [1, 4, 9]}, index=pd.MultiIndex.from_arrays([dtidx, vals]))
+    multi_df.index.set_names(index_names, inplace=True)
     sym = "multi_info_test"
     basic_store.write(sym, multi_df)
     info = basic_store.get_info(sym)
     assert int(info["rows"]) == 3
     assert info["type"] == "pandasdf"
     assert info["col_names"]["columns"] == ["col1"]
-    assert len(info["col_names"]["index"]) == 2
+    actual_index_names = info["col_names"]["index"]
+    assert len(actual_index_names) == 2
+    assert actual_index_names == list(index_names)
     assert info["index_type"] == "multi_index"
 
 

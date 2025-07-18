@@ -457,7 +457,8 @@ def _denormalize_columns_names(columns_names, norm_meta):
                 columns_names[idx] = ""
             elif col_data.is_int:
                 columns_names[idx] = int(col_data.original_name)
-            else:
+            elif col_data.original_name:
+                # Very old clients may not have written the original_name, so if it's not there just leave the name alone
                 columns_names[idx] = col_data.original_name
 
     return columns_names
@@ -530,8 +531,10 @@ def _normalize_columns(
     dynamic_strings=None,
     string_max_len=None,
     dynamic_schema=False,
-    index_names=[],
+    index_names=None,
 ):
+    if index_names is None:
+        index_names = []
     # TODO optimize this away when RangeIndex for columns and gen in c++
     columns_names_norm = list(map(str, columns_names))
     if not isinstance(columns_names, RangeIndex):

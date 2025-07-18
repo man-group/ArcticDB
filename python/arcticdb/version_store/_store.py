@@ -76,7 +76,7 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
-    _denormalize_single_index,
+    _denormalize_columns_names,
 )
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
@@ -2981,9 +2981,7 @@ class NativeVersionStore:
 
     def _process_info(
         self,
-        symbol: str,
         dit,
-        as_of: VersionQueryInput,
         date_range_ns_precision: bool,
     ) -> Dict[str, Any]:
         timeseries_descriptor = dit.timeseries_descriptor
@@ -2993,7 +2991,12 @@ class NativeVersionStore:
         index_dtype = []
         input_type = timeseries_descriptor.normalization.WhichOneof("input_type")
         index_type = "NA"
-        if input_type == "df":
+        if input_type == "series":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.series)
+        elif input_type == "ts":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.ts)
+        elif input_type == "df":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.df)
             index_type = timeseries_descriptor.normalization.df.common.WhichOneof("index_type")
             if index_type == "index":
                 index_metadata = timeseries_descriptor.normalization.df.common.index
@@ -3080,7 +3083,7 @@ class NativeVersionStore:
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
         version_query = self._get_version_query(version, **kwargs)
         dit = self.version_store.read_descriptor(symbol, version_query)
-        return self._process_info(symbol, dit, version, date_range_ns_precision)
+        return self._process_info(dit, date_range_ns_precision)
 
     def batch_get_info(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
@@ -3137,7 +3140,7 @@ class NativeVersionStore:
             if isinstance(dit, DataError):
                 description_results.append(dit)
             else:
-                description_results.append(self._process_info(symbol, dit, as_of, date_range_ns_precision))
+                description_results.append(self._process_info(dit, date_range_ns_precision))
         return description_results
 
     def write_metadata(
