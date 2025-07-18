@@ -33,6 +33,8 @@
 
 namespace arcticdb {
 
+using CompactionError = std::vector<storage::KeyNotFoundInTokenInfo>;
+
 struct AppendMapEntry {
     AppendMapEntry() = default;
 
