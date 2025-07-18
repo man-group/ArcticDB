@@ -18,7 +18,7 @@ from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     dataframe_simulate_arcticdb_update_static,
 )
-from arcticdb.util.utils import generate_random_series, set_seed, supported_types_list, verify_dynamically_added_columns
+from arcticdb.util.utils import generate_random_series, list_installed_packages, set_seed, supported_types_list, verify_dynamically_added_columns
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
@@ -90,7 +90,8 @@ def get_metadata():
 @SLOW_TESTS_MARK
 @pytest.mark.parametrize("dtype", supported_types_list)
 @pytest.mark.parametrize("schema", [True, False])
-def test_write_append_update_read_scenario_with_different_series_combinations(version_store_factory, dtype, schema):
+@pytest.mark.parametrize("append_type", ["append", "stage"])
+def test_write_append_update_read_scenario_with_different_series_combinations(version_store_factory, dtype, schema, append_type):
     """This test covers series with timestamp index of all supported arcticdb types.
     Write, append and read combinations of different boundary length sizes of series
 
@@ -131,7 +132,12 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
         for append_series_length in series_length:
             append_series = generate_random_series(dtype, append_series_length, name, 
                                                    start_time=timestamp + timedelta(seconds=total_length), seed=None)
-            lib.append(symbol, append_series, metadata=meta)
+            if append_type == "append":
+                lib.append(symbol, append_series, metadata=meta)
+            else:
+                meta = None # Metadata is not added to version with stage method
+                lib.stage(symbol, append_series, validate_index=False, sort_on_index=False) 
+                lib.compact_incomplete(symbol, append=True, convert_int_to_float=False)
             result_series = pd.concat([result_series, append_series])
             ver = lib.read(symbol)
             assert_series_equal_pandas_1(result_series, ver.data, check_index_type=(len(result_series) > 0))
@@ -153,22 +159,26 @@ def test_for_9589648728(version_store_factory):
     symbol = "32"
     set_seed(3484356)
     timestamp = pd.Timestamp(4839275892348)
+    series_length = [ 1, 0, 2, 10]
     dtype = np.float64
     name = "dsf"
-    series = generate_random_series(dtype, 0, name, start_time=timestamp, seed=None)
-    print("Series to write:", series.info(verbose=True))
-    lib.write(symbol, series)
-    print("Series read:", lib.read(symbol).data.info(verbose=True))
-    append_series = generate_random_series(dtype, 0, name, 
-                                                   start_time=timestamp + timedelta(seconds=0), seed=None)
-    print("Series to append:", append_series.info(verbose=True))
-    try:
-        lib.append(symbol, append_series)
-        lib.update(symbol, append_series)
-    except Exception as e:
-        for dist in pkg_resources.working_set:
-            print(f"{dist.project_name}=={dist.version}")
-        raise
+    for length in series_length:
+        total_length = 0
+        series = generate_random_series(dtype, 4, name, start_time=timestamp, seed=None)
+        total_length += length
+        print("Series to write:", series.info(verbose=True))
+        lib.write(symbol, series)
+        print("Series read:", lib.read(symbol).data.info(verbose=True))
+        append_series = generate_random_series(dtype, 0, name, 
+                                                    start_time=timestamp + timedelta(seconds=total_length), seed=None)
+        print("Series to append:", append_series.info(verbose=True))
+        try:
+            lib.append(symbol, append_series)
+            lib.update(symbol, append_series)
+        except Exception as e:
+            for package in list_installed_packages():
+                print(package)
+            raise
 
 
 

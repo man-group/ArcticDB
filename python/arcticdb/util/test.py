@@ -28,7 +28,7 @@ except ImportError:
     from pandas.core.computation.ops import UndefinedVariableError
 
 from arcticdb import QueryBuilder
-from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -247,7 +247,7 @@ def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwarg
     """For Pandas 1 type of empty series will be float64 when returned by arctic"""
     print (f" Pandas version : {PANDAS_VERSION} < {CHECK_FREQ_VERSION}")
     print (f" Series types: {expected.dtype} and  {actual.dtype}")
-    if PANDAS_VERSION < CHECK_FREQ_VERSION:
+    if IS_PANDAS_ONE:
         if (("object" in str(expected.dtype)) and ("float" in str(actual.dtype)) or
             ("float" in str(expected.dtype)) and ("object" in str(actual.dtype))):
             if (expected.size == 0) and (actual.size == 0):

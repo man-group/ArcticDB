@@ -87,6 +87,26 @@ def get_logger(bencmhark_cls: Union[str, Any] = None):
     return logger
 
 
+def list_installed_packages() -> list[str]:
+    """ Lists installed packaged along with thir versions.
+
+    Sample usage:
+        for package in list_installed_packages():
+            print(package)
+    """
+    try:
+        # Python 3.8+
+        from importlib.metadata import distributions
+        return [f"{dist.metadata['Name']}=={dist.version}" for dist in distributions()]
+    except ImportError:
+        # Previous pythons
+        try:
+            import pkg_resources
+            return [f"{dist.project_name}=={dist.version}" for dist in pkg_resources.working_set]
+        except ImportError:
+            raise RuntimeError("Neither importlib.metadata nor pkg_resources is available.")
+
+
 def set_seed(seed=None):
     """Sets seed to random libraries if not None"""
     if seed is not None:
