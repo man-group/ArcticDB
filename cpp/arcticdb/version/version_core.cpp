@@ -1162,7 +1162,7 @@ static bool read_incompletes_to_pipeline(
     if (tokens) {
         incomplete_segments = get_incomplete_segments_using_tokens(store,
                                                                    pipeline_context,
-                                                                   tokens,
+                                                                   *tokens,
                                                                    read_query,
                                                                    flags,
                                                                    load_data);

@@ -1,4 +1,4 @@
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2025 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
@@ -597,7 +597,7 @@ std::optional<int64_t> latest_incomplete_timestamp(
 
 std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
                                                               const std::shared_ptr<PipelineContext>& pipeline_context,
-                                                              const std::optional<std::vector<StageResult>>& tokens,
+                                                              const std::vector<StageResult>& tokens,
                                                               const ReadQuery& read_query,
                                                               const ReadIncompletesFlags& flags,
                                                               bool load_data) {
@@ -607,7 +607,7 @@ std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(flags.via_iteration, "read_incompletes_to_pipeline with keys_to_read specified and not via_iteration is not supported");
     std::vector<AppendMapEntry> entries;
     std::vector<storage::KeyNotFoundInTokenInfo> non_existent_keys;
-    for (const auto& [i, staged_result] : folly::enumerate(*tokens)) {
+    for (const auto& [i, staged_result] : folly::enumerate(tokens)) {
         for (const auto& staged_key : staged_result.staged_segments) {
             try {
                 AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
@@ -630,8 +630,8 @@ std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_
 
     if(!entries.empty()) {
         auto index_desc = entries[0].descriptor().index();
-        // Can't sensibly sort rowcount indexes
-        if (index_desc.type() != IndexDescriptorImpl::Type::ROWCOUNT) {
+        // Can't sensibly sort non-timestamp indexes
+        if (index_desc.type() == IndexDescriptorImpl::Type::TIMESTAMP) {
             std::sort(std::begin(entries), std::end(entries));
         }
     }

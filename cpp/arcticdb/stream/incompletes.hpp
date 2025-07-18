@@ -110,7 +110,7 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
  */
 std::vector<SliceAndKey> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
                                                               const std::shared_ptr<PipelineContext>& pipeline_context,
-                                                              const std::optional<std::vector<StageResult>>& tokens,
+                                                              const std::vector<StageResult>& tokens,
                                                               const ReadQuery& read_query,
                                                               const ReadIncompletesFlags& flags,
                                                               bool load_data);
