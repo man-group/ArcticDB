@@ -22,8 +22,8 @@
 
 namespace arcticdb::version_store {
 
-using namespace arcticdb::entity;
-using namespace arcticdb::pipelines;
+using namespace entity;
+using namespace pipelines;
 
 struct DeleteRangeOptions {
     bool dynamic_schema_;
