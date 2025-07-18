@@ -278,7 +278,7 @@ def test_append_numpy_array(lmdb_version_store):
                 # never mind lets do something even if it is not main subject of the test
                 lmdb_version_store.write(sym, np1, pickle_on_failure=True)
                 assert_array_equal(np1, lmdb_version_store.read(sym).data)
-                next                
+                continue                
             else:
                 raise                
         np2 = generate_random_numpy_array(10, _type)

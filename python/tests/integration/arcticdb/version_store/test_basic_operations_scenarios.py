@@ -13,10 +13,10 @@ import pandas as pd
 import numpy as np
 
 from arcticdb.util.test import (
-    assert_series_equal,
+    assert_series_equal_pandas_1,
     dataframe_simulate_arcticdb_update_static,
 )
-from arcticdb.util.utils import ArcticTypes, generate_random_series, set_seed, supported_types_list, verify_dynamically_added_columns
+from arcticdb.util.utils import generate_random_series, set_seed, supported_types_list, verify_dynamically_added_columns
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
@@ -113,7 +113,7 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
         total_length += length
         lib.write(symbol, series)
         result_series = series
-        assert_series_equal(lib.read(symbol).data, series, check_index_type=(len(series) > 0))
+        assert_series_equal_pandas_1(series, lib.read(symbol).data, check_index_type=(len(series) > 0))
         
         for append_series_length in series_length:
             append_series = generate_random_series(dtype, append_series_length, name, 
@@ -121,7 +121,7 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
             lib.append(symbol, append_series, metadata=meta)
             result_series = pd.concat([result_series, append_series])
             ver = lib.read(symbol)
-            assert_series_equal(result_series, ver.data, check_index_type=(len(result_series) > 0))
+            assert_series_equal_pandas_1(result_series, ver.data, check_index_type=(len(result_series) > 0))
             assert meta == ver.metadata
             # Note update is of same length but starts in previous period
 
@@ -131,7 +131,7 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
             lib.update(symbol, update_series, metadata=meta)
             result_series = dataframe_simulate_arcticdb_update_static(result_series, update_series)
             ver = lib.read(symbol)
-            assert_series_equal(result_series, ver.data, check_index_type=(len(result_series) > 0))
+            assert_series_equal_pandas_1(result_series, ver.data, check_index_type=(len(result_series) > 0))
             assert meta == ver.metadata
 
 
@@ -434,3 +434,4 @@ def test_update_date_range_exhaustive(lmdb_version_store):
                 scenario="both open")
     assert_frame_equal(update_data, result_df)
 
+    

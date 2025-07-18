@@ -243,6 +243,16 @@ assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
 
+def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
+    """For Pandas 1 type of empty series will be float64 when returned by arctic"""
+    if PANDAS_VERSION < CHECK_FREQ_VERSION:
+        if expected.empty and actual.empty:
+            assert expected.name == actual.name
+            assert expected.index == actual.index
+            return
+    assert_series_equal(expected, actual, **kwargs)
+
+
 def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.DataFrame) -> None:
     """
     Use for dataframes that have index row range and you
@@ -254,6 +264,7 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     if PANDAS_VERSION < CHECK_FREQ_VERSION:
         if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
             assert expected.columns.equals(expected.columns)    
+            assert expected.index == actual.index
             return
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
