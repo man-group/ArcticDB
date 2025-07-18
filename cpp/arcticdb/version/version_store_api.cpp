@@ -742,16 +742,8 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incompl
         .tokens=tokens
     };
 
-    try {
-        return compact_incomplete_dynamic(stream_id, meta, params);
-    } catch (KeyNotFoundInTokensException& e) {
-        CompactionError result;
-        result.reserve(e.keys().size());
-        for (auto&& k : std::move(e.keys())) {
-            result.emplace_back(std::move(k));
-        }
-        return result;
-    }
+    return compact_incomplete_dynamic(stream_id, meta, params);
+
 }
 
 std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(

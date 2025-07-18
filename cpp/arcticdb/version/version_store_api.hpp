@@ -30,8 +30,6 @@ namespace arcticdb::version_store {
 using namespace arcticdb::entity;
 namespace as = arcticdb::stream;
 
-using CompactionError = std::vector<storage::KeyNotFoundInTokenInfo>;
-
 /**
  * The purpose of this class is to perform python-specific translations into either native C++ or protobuf objects
  * so that the LocalVersionedEngine contains only partable C++ code.

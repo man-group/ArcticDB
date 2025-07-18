@@ -1043,7 +1043,7 @@ void LocalVersionedEngine::add_to_symbol_list_on_compaction(
     }
 }
 
-VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
+std::variant<VersionedItem, CompactionError> LocalVersionedEngine::compact_incomplete_dynamic(
     const StreamId& stream_id,
     const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
     const CompactIncompleteParameters& parameters) {
@@ -1060,8 +1060,12 @@ VersionedItem LocalVersionedEngine::compact_incomplete_dynamic(
     pipeline_context->version_id_ = update_info.next_version_id_;
     auto delete_keys_on_failure = get_delete_keys_on_failure(pipeline_context, store(), parameters);
 
-    auto versioned_item = compact_incomplete_impl(store_, stream_id, user_meta,
+    auto versioned_item_or_error = compact_incomplete_impl(store_, stream_id, user_meta,
                                                   update_info, parameters, get_write_options(), pipeline_context);
+    if (std::holds_alternative<CompactionError>(versioned_item_or_error)) {
+        return versioned_item_or_error;
+    }
+    auto versioned_item = std::get<VersionedItem>(versioned_item_or_error);
     ARCTICDB_DEBUG(log::version(), "Finished compact_incomplete_impl for symbol {}", stream_id);
 
     write_version_and_prune_previous(parameters.prune_previous_versions_, versioned_item.key_, update_info.previous_index_key_);
