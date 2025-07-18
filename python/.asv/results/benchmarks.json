@@ -1575,6 +1575,30 @@
         "version": "a0f79b58b7744e63b2b7df3562f57094fa4ff3a111c172fbe0b03aec197afec8",
         "warmup_time": -1
     },
+    "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_regex_match": {
+        "code": "class LocalQueryBuilderFunctions:\n    def time_filtering_string_regex_match(self, num_rows):\n        pattern = f\"^id\\d\\d\\d$\"\n        q = QueryBuilder()\n        q = q[q[\"id1\"].regex_match(pattern)]\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"v3\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = LocalQueryBuilderFunctions.LIB_NAME\n        self.ac.delete_library(self.lib_name)\n        lib = self.ac.create_library(self.lib_name)\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
+        "min_run_count": 2,
+        "name": "local_query_builder.LocalQueryBuilderFunctions.time_filtering_string_regex_match",
+        "number": 5,
+        "param_names": [
+            "num_rows"
+        ],
+        "params": [
+            [
+                "1000000",
+                "10000000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 2,
+        "sample_time": 0.01,
+        "setup_cache_key": "local_query_builder:25",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5206453b05dddbb325596b08eae2200fd2193c2e2382ae66982838b1cc97859b",
+        "warmup_time": -1
+    },
     "local_query_builder.LocalQueryBuilderFunctions.time_projection": {
         "code": "class LocalQueryBuilderFunctions:\n    def time_projection(self, num_rows):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        self.lib.read(f\"{num_rows}_rows\", columns=[\"new_col\"], query_builder=q)\n\n    def setup(self, num_rows):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n        self.lib = self.ac[LocalQueryBuilderFunctions.LIB_NAME]\n\n    def setup_cache(self):\n        self.ac = Arctic(LocalQueryBuilderFunctions.CONNECTION_STRING)\n    \n        num_rows = LocalQueryBuilderFunctions.params\n        self.lib_name = LocalQueryBuilderFunctions.LIB_NAME\n        self.ac.delete_library(self.lib_name)\n        lib = self.ac.create_library(self.lib_name)\n        for rows in num_rows:\n            lib.write(f\"{rows}_rows\", generate_benchmark_df(rows))",
         "min_run_count": 2,

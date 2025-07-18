@@ -75,6 +75,9 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
         [&](const ValueSetName &value_set_name) {
         return VariantData(expression_context_->value_sets_.get_value(value_set_name.value));
         },
+        [&](const RegexName &regex_name) {
+        return VariantData(expression_context_->regex_matches_.get_value(regex_name.value));
+        },
         [&](const ExpressionName &expression_name) {
         if (auto computed = computed_data_.find(expression_name.value);
         computed != std::end(computed_data_)) {
