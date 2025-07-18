@@ -2287,8 +2287,8 @@ class NativeVersionStore:
             return self._convert_thin_cxx_item_to_python(compaction_result, metadata)
         elif isinstance(compaction_result, List):
             # We expect this to be a list of errors
-            assert compaction_result, "List of errors in compaction result should never be empty"
-            assert isinstance(compaction_result[0], KeyNotFoundInTokenInfo), "Compaction errors should always be KeyNotFoundInTokenInfo"
+            check(compaction_result, "List of errors in compaction result should never be empty")
+            check(all(isinstance(c, KeyNotFoundInTokenInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInTokenInfo")
             raise MissingKeysInTokensError("Missing keys during compaction", tokens_with_missing_keys=compaction_result)
         else:
             raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
