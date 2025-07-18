@@ -28,7 +28,7 @@ except ImportError:
     from pandas.core.computation.ops import UndefinedVariableError
 
 from arcticdb import QueryBuilder
-from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -158,19 +158,26 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
         print("-" * 80)
 
 
-def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
+def dataframe_simulate_arcticdb_update_static(existing_df: Union[pd.DataFrame, pd.Series], 
+                                              update_df: Union[pd.DataFrame, pd.Series]) -> Union[pd.DataFrame, pd.Series]:
     """
-    Does implement arctic logic of update() method functionality over pandas dataframes.
-    In other words the result, new data frame will have the content of 'existing_df' dataframe
+    Does implement arctic logic of update() method functionality over pandas dataframes/series.
+    In other words the result, new data frame will have the content of 'existing_df' dataframe/series
     updated with the content of "update_df" dataframe the same way that arctic is supposed to work.
     Useful for prediction of result content of arctic database after update operation
     NOTE: you have to pass indexed dataframe
     """
 
-    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
-        "Dataframe must have identical columns types in same order"
-    )
-    assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
+    if isinstance(existing_df, pd.Series):
+        if len(update_df) < 1:
+            return existing_df # Nothing to update
+        assert existing_df.dtype == update_df.dtype, f"Series must have same type {existing_df.dtype} == {update_df.dtype}"
+        assert existing_df.name == update_df.name, "Series name must be same"
+    else:
+        assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
+            "Dataframe must have identical columns types in same order"
+        )
+        assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
 
     start2 = update_df.first_valid_index()
     end2 = update_df.last_valid_index()
@@ -236,6 +243,20 @@ assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
 
+def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
+    """For Pandas 1 type of empty series will be float64 when returned by arctic"""
+    print (f" Pandas version : {PANDAS_VERSION} < {CHECK_FREQ_VERSION}")
+    print (f" Series types: {expected.dtype} and  {actual.dtype}")
+    if IS_PANDAS_ONE:
+        if (("object" in str(expected.dtype)) and ("float" in str(actual.dtype)) or
+            ("float" in str(expected.dtype)) and ("object" in str(actual.dtype))):
+            if (expected.size == 0) and (actual.size == 0):
+                assert expected.name == actual.name
+                assert expected.index == actual.index
+                return
+    assert_series_equal(expected, actual, **kwargs)
+
+
 def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.DataFrame) -> None:
     """
     Use for dataframes that have index row range and you
@@ -247,6 +268,7 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     if PANDAS_VERSION < CHECK_FREQ_VERSION:
         if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
             assert expected.columns.equals(expected.columns)    
+            assert expected.index == actual.index
             return
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)

@@ -13,9 +13,10 @@ import re
 import string
 import time
 import sys
-from typing import Dict 
+from typing import Dict, Set 
 from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
 
 from arcticdb.util.test import create_datetime_index, get_sample_dataframe, random_integers, random_string
@@ -25,7 +26,7 @@ from arcticdb.version_store.library import Library
 # Types supported by arctic
 ArcticIntType = Union[np.uint8, np.uint16, np.uint32, np.uint64, np.int8, np.int16, np.int32, np.int64]
 ArcticFloatType = Union[np.float64, np.float32]
-ArcticTypes = Union[ArcticIntType, ArcticFloatType, str]
+ArcticTypes = Union[ArcticIntType, ArcticFloatType, bool, str, np.datetime64]
 supported_int_types_list = list(get_args(ArcticIntType))
 supported_float_types_list = list(get_args(ArcticFloatType))
 supported_types_list = list(get_args(ArcticTypes))
@@ -85,6 +86,109 @@ def get_logger(bencmhark_cls: Union[str, Any] = None):
     loggers[name] = logger
     return logger
 
+
+def list_installed_packages() -> List[str]:
+    """ Lists installed packaged along with thir versions.
+
+    Sample usage:
+        for package in list_installed_packages():
+            print(package)
+    """
+    try:
+        # Python 3.8+
+        from importlib.metadata import distributions
+        return [f"{dist.metadata['Name']}=={dist.version}" for dist in distributions()]
+    except ImportError:
+        # Previous pythons
+        try:
+            import pkg_resources
+            return [f"{dist.project_name}=={dist.version}" for dist in pkg_resources.working_set]
+        except ImportError:
+            raise RuntimeError("Neither importlib.metadata nor pkg_resources is available.")
+
+
+def set_seed(seed=None):
+    """Sets seed to random libraries if not None"""
+    if seed is not None:
+       np.random.seed(seed)
+       random.seed(seed)
+
+
+def generate_random_timestamp_array(size: int, 
+                               start: str = '2020-01-01', 
+                               end: str = '2030-01-01', 
+                               seed: int = 432432) -> npt.NDArray[np.datetime64]:
+    """ Generates an array of random timestamps"""
+    if seed: 
+        np.random.seed(seed)
+    start_ts = pd.Timestamp(start).value // 10**9
+    end_ts = pd.Timestamp(end).value // 10**9
+    random_seconds = np.random.randint(start_ts, end_ts, size=size)
+    return np.array(pd.to_datetime(random_seconds, unit='s'))
+
+
+def generate_random_numpy_array(size: int, _type, seed: int = 8238) -> npt.NDArray[Any]:
+    """ Generates random numpy array of specified type
+    """
+    set_seed(seed)
+    arr = []
+    if 'int' in str(_type):
+        arr = random_integers(size, _type)
+    elif 'float' in str(_type):
+        arr = np.arange(size, dtype=_type)
+    elif 'bool' in str(_type):
+        arr = np.random.randn(size) > 0
+    elif 'str' in str(_type):
+        length = 10
+        arr = [random_string(length) for _ in range(size)]
+        arr = np.array(arr, dtype=f"U{size}")
+    elif 'datetime' in str(_type):
+        arr = generate_random_timestamp_array(size, seed=seed)
+    else:
+        raise TypeError("Unsupported type {dtype}")        
+    return arr
+
+
+def generate_random_series(type: ArcticTypes, length: int, name: str, 
+                    start_time: pd.Timestamp=None, freq: str='s', seed=3247) -> pd.Series:
+    """Generates random series of specified type with or without index"""
+    set_seed(seed)
+    index = None
+    if start_time:
+        index = pd.date_range(start_time, periods=length, freq=freq)
+    return pd.Series(generate_random_numpy_array(length, type, seed), 
+                           index=index,
+                           name=name)
+
+
+def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[int, pd.Timestamp],
+                                     new_columns_to_verify: Set[str]):
+    """ Verifies the value of dynamically added columns to dataframes 
+    after append/update operation with dataframe that is having additional new rows
+
+    row_index is either location of the row in dataframe or its index (timestamp)
+    """
+    updated_df_columns = set(updated_df.columns.to_list())
+    assert updated_df_columns.issuperset(new_columns_to_verify)
+    for col in new_columns_to_verify:
+            dtype = updated_df[col].dtype
+            if isinstance(row_index, pd.Timestamp):
+                value = updated_df[col].loc[row_index]
+            else:
+                value = updated_df[col].iloc[row_index]
+            if 'int' in str(dtype):
+                assert 0 == value, f"column {col}:{dtype} -> 0 == {value}"
+            elif 'float' in str(dtype):
+                assert pd.isna(value), f"column {col}:{dtype} -> Nan == {value}"
+            elif 'bool' in str(dtype):
+                assert False == value, f"column {col}:{dtype} -> False == {value}"
+            elif 'object' in str(dtype):
+                assert value is None , f"column {col}:{dtype} -> None == {value}"
+            elif 'datetime' in str(dtype):
+                assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
+            else:
+                raise TypeError(f"Unsupported dtype: {dtype}")
+            
 
 class GitHubSanitizingException(Exception):
     def __init__(self, message: str):
@@ -525,9 +629,7 @@ class DFGenerator:
         self.__types = {}
         self.__df = None
         self.__index = None
-        if seed is not None:
-            np.random.seed(seed)
-            random.seed(seed)
+        set_seed(seed)
 
     def generate_dataframe(self) -> pd.DataFrame:
         if self.__df is None:
@@ -591,7 +693,14 @@ class DFGenerator:
         return self
     
     def add_timestamp_col(self, name: str, start_date = "2020-1-1", freq = 's') -> 'DFGenerator':
-        list = pd.date_range(start=start_date, periods=self.__size, freq=freq) 
+        """ Adds a timestamp column
+        if start_date is None then the timestamps will be random, 
+        otherwise will start from date provided
+        """
+        if start_date:
+            list = pd.date_range(start=start_date, periods=self.__size, freq=freq) 
+        else:
+            list = generate_random_timestamp_array(size=self.__size, seed=None)
         self.__data[name] = list
         self.__types[name] = pd.Timestamp
         return self
@@ -755,6 +864,9 @@ class DFGenerator:
                     gen.add_float_col(f"col_{i}", dtype)
                 elif 'str' in str(dtype):
                     gen.add_string_col(name=f"col_{i}", str_size=10)
+                elif 'datetime' in str(dtype):
+                    start_at = np.random.default_rng().integers(low=2**30, high=2**60, size=1, dtype=np.int64)
+                    gen.add_timestamp_col(name=f"col_{i}", start_date=pd.Timestamp(start_at[0]))
                 else:
                     return f"Unsupported type {dtype}"
         if start_time is not None:
