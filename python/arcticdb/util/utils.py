@@ -857,6 +857,9 @@ class DFGenerator:
                     gen.add_float_col(f"col_{i}", dtype)
                 elif 'str' in str(dtype):
                     gen.add_string_col(name=f"col_{i}", str_size=10)
+                elif 'datetime' in str(dtype):
+                    start_at = np.random.default_rng().integers(low=2**30, high=2**60, size=1, dtype=np.int64)
+                    gen.add_timestamp_col(name=f"col_{i}", start_date=pd.Timestamp(start_at[0]))
                 else:
                     return f"Unsupported type {dtype}"
         if start_time is not None:

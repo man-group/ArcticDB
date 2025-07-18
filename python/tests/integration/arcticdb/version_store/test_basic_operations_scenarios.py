@@ -12,13 +12,12 @@ from typing import Set
 import pytest
 import pandas as pd
 import numpy as np
-import pkg_resources
 
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     dataframe_simulate_arcticdb_update_static,
 )
-from arcticdb.util.utils import generate_random_series, list_installed_packages, set_seed, supported_types_list, verify_dynamically_added_columns
+from arcticdb.util.utils import DFGenerator, generate_random_series, list_installed_packages, set_seed, supported_types_list, verify_dynamically_added_columns
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
@@ -302,7 +301,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     - Exceptions are same across all storage types
     """
     lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
-            dynamic_schema=schema, dynamic_strings=schema, segment_row_size=1)
+            dynamic_schema=schema, dynamic_strings=True, segment_row_size=1)
     symbol = "test_append_errors"
     
     df = pd.DataFrame({'value': [1, 2, 3]}, index=pd.date_range('2023-01-01', periods=3, freq='s'))
@@ -484,3 +483,40 @@ def test_update_date_range_exhaustive(lmdb_version_store):
     lib.list_symbols_with_incomplete_data
 
     
+def split_dataframe_into_random_chunks(df: pd.DataFrame, min_size: int = 1, max_size: int = 30) -> list[pd.DataFrame]:
+    chunks = []
+    i = 0
+    while i < len(df):
+        chunk_size = np.random.randint(min_size, max_size + 1)
+        chunk = df.iloc[i:i + chunk_size]
+        if not chunk.empty:
+            chunks.append(chunk)
+        i += chunk_size
+    return chunks
+
+@pytest.mark.parametrize("num_columns", [1, 50])
+@pytest.mark.storage
+def test_stage_any_size_dataframes_timestamp_indexed(version_store_and_real_s3_basic_store_factory, num_columns):   
+    """
+    Tests  if different size chunks of dataframe can be staged
+    """ 
+    lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
+        dynamic_schema=False, segment_row_size=5, column_group_size=3)
+    set_seed(321546556)
+    symbol = "experimental 342143"
+    num_cols = num_columns
+    num_rows = 200
+    start_time = pd.Timestamp(7364876)
+    df = DFGenerator.generate_normal_dataframe(num_rows=num_rows, num_cols=num_cols, start_time=start_time, seed=None)
+    df_0col = df[0:0]
+    df_1col = DFGenerator.generate_normal_dataframe(num_rows=num_rows, num_cols=num_cols, start_time=df.index[-1] + timedelta(seconds=123), seed=None)
+    chunks = split_dataframe_into_random_chunks(df, max_size=20)
+    chunks.append(df_0col)
+    chunks.append(df_1col)
+    np.random.shuffle(chunks)
+    for chnk in chunks:
+        lib.stage(symbol, chnk, validate_index=True)
+    lib.compact_incomplete(symbol, append=False, prune_previous_version=True, convert_int_to_float=False)
+    expected_data = pd.concat(chunks).sort_index()
+    assert_frame_equal(expected_data, lib.read(symbol).data)
+
