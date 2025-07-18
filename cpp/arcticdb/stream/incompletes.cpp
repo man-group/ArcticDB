@@ -655,9 +655,9 @@ std::optional<int64_t> latest_incomplete_timestamp(
     return std::nullopt;
 }
 
-std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
+std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_stage_results(const std::shared_ptr<Store>& store,
                                                               const std::shared_ptr<PipelineContext>& pipeline_context,
-                                                              const std::vector<StageResult>& tokens,
+                                                              const std::vector<StageResult>& stage_results,
                                                               const ReadQuery& read_query,
                                                               const ReadIncompletesFlags& flags,
                                                               bool load_data) {
@@ -666,8 +666,8 @@ std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_
     // via_iteration false walks a linked list structure of append data keys that is only written by the tick collector
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(flags.via_iteration, "read_incompletes_to_pipeline with keys_to_read specified and not via_iteration is not supported");
     std::vector<AppendMapEntry> entries;
-    std::vector<storage::KeyNotFoundInTokenInfo> non_existent_keys;
-    for (const auto& [i, staged_result] : folly::enumerate(tokens)) {
+    std::vector<storage::KeyNotFoundInStageResultInfo> non_existent_keys;
+    for (const auto& [i, staged_result] : folly::enumerate(stage_results)) {
         for (const auto& staged_key : staged_result.staged_segments) {
             try {
                 AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
@@ -679,7 +679,7 @@ std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_
     }
 
     if (!non_existent_keys.empty()) {
-        // In future we may provide tooling that takes this error and the list of StagedResult tokens being finalized
+        // In future we may provide tooling that takes this error and the list of StagedResult objects being finalized
         // and gives back a new list of StagedResult objects that could be used to retry.
         return non_existent_keys;
     }

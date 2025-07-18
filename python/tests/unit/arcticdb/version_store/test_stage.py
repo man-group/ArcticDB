@@ -15,10 +15,10 @@ import pytest
 from arcticdb import LibraryOptions
 from arcticdb_ext.exceptions import UserInputException, UnsortedDataException, SortingException
 from arcticdb_ext.storage import KeyType
-from arcticdb_ext.version_store import StageResult, NoSuchVersionException, KeyNotFoundInTokenInfo, AtomKey, RefKey
+from arcticdb_ext.version_store import StageResult, NoSuchVersionException, KeyNotFoundInStageResultInfo, AtomKey, RefKey
 from arcticdb.version_store.library import Library
 from arcticdb.util.test import assert_frame_equal, config_context
-from arcticdb.exceptions import MissingKeysInTokensError
+from arcticdb.exceptions import MissingKeysInStageResultsError
 
 
 @pytest.fixture
@@ -100,7 +100,7 @@ def test_stage_submit_tokens_for_wrong_symbol(lmdb_library_factory, new_staged_d
 
     staged_results = [lib.stage("sym", data_to_stage[0]), lib.stage("other_sym", data_to_stage[1]), lib.stage("sym", data_to_stage[2])]
 
-    with pytest.raises(UserInputException, match="E_TOKEN_WITH_INCORRECT_SYMBOL"):
+    with pytest.raises(UserInputException, match="E_STAGE_RESULT_WITH_INCORRECT_SYMBOL"):
         finalize(arctic_api, lib, "sym", _stage_results=staged_results)
 
     assert not lib.has_symbol("sym")
@@ -296,18 +296,18 @@ def test_finalize_missing_keys(lmdb_library_factory, arctic_api, new_staged_data
     # Do we raise if someone finalizes a key that no longer exists?
     try:
         finalize(arctic_api, lib, sym, _stage_results=[stage_result_3, stage_result_2, stage_result_1], mode="write")
-    except MissingKeysInTokensError as e:
-        bad_tokens = e.tokens_with_missing_keys
+    except MissingKeysInStageResultsError as e:
+        bad_tokens = e.stage_results_with_missing_keys
         assert len(bad_tokens) == 3
         first_bad_token = bad_tokens[0]
         assert first_bad_token.missing_key == stage_result_2.staged_segments[0]
-        assert first_bad_token.token_index == 1
+        assert first_bad_token.stage_result_index == 1
         second_bad_token = bad_tokens[1]
         assert second_bad_token.missing_key == stage_result_1.staged_segments[0]
-        assert second_bad_token.token_index == 2
+        assert second_bad_token.stage_result_index == 2
         third_bad_token = bad_tokens[2]
         assert third_bad_token.missing_key == stage_result_1.staged_segments[1]
-        assert third_bad_token.token_index == 2
+        assert third_bad_token.stage_result_index == 2
 
     assert lib.read(sym).version == 0
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 1
@@ -316,7 +316,7 @@ def test_finalize_missing_keys(lmdb_library_factory, arctic_api, new_staged_data
 
 
 def test_missing_keys_error():
-    """Test the MissingKeysInTokensError type."""
+    """Test the MissingKeysInStageResultsError type."""
     # Given
     missing_key_one = AtomKey(
         "key_one",
@@ -330,29 +330,29 @@ def test_missing_keys_error():
 
     missing_key_two = RefKey("key_two", KeyType.VERSION_REF)
 
-    info_one = KeyNotFoundInTokenInfo(44, missing_key_one)
-    info_two = KeyNotFoundInTokenInfo(3, missing_key_two)
+    info_one = KeyNotFoundInStageResultInfo(44, missing_key_one)
+    info_two = KeyNotFoundInStageResultInfo(3, missing_key_two)
 
     # When
-    error = MissingKeysInTokensError("my message", [info_one, info_two])
-    equal_error = MissingKeysInTokensError("my message", [info_one, info_two])
-    non_equal_error = MissingKeysInTokensError("my message", [info_one])
+    error = MissingKeysInStageResultsError("my message", [info_one, info_two])
+    equal_error = MissingKeysInStageResultsError("my message", [info_one, info_two])
+    non_equal_error = MissingKeysInStageResultsError("my message", [info_one])
 
     # Then - check the error object behaves correctly
     as_str = str(error)
     assert "msg=my message" in as_str
-    assert "Tokens with missing keys" in as_str
+    assert "Stage results with missing keys" in as_str
 
     rep = repr(error)
-    assert "MissingKeysInTokensError(" in rep
+    assert "MissingKeysInStageResultsError(" in rep
     assert "msg='my message'" in rep
-    assert "tokens_with_missing_keys=" in rep
+    assert "stage_results_with_missing_keys=" in rep
 
     assert error == equal_error
     assert error != non_equal_error
 
     assert error.msg == "my message"
-    assert error.tokens_with_missing_keys == [info_one, info_two]
+    assert error.stage_results_with_missing_keys == [info_one, info_two]
 
 
 def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
@@ -372,7 +372,7 @@ def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api, new
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 3
 
     # Do we raise if someone finalizes a key that no longer exists?
-    with pytest.raises(MissingKeysInTokensError):
+    with pytest.raises(MissingKeysInStageResultsError):
         finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2, stage_result_3], mode="write")
 
     # Do we leave everything that was on disk alone?

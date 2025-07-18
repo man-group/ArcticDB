@@ -33,7 +33,7 @@
 
 namespace arcticdb {
 
-using CompactionError = std::vector<storage::KeyNotFoundInTokenInfo>;
+using CompactionError = std::vector<storage::KeyNotFoundInStageResultInfo>;
 
 struct AppendMapEntry {
     AppendMapEntry() = default;
@@ -84,8 +84,8 @@ struct CompactIncompleteParameters {
     bool validate_index_{true}; // Default value as unused in sort_merge
     bool delete_staged_data_on_failure_{false};
 
-    // If provided, compact only keys contained in these tokens. Otherwise compact everything.
-    std::optional<std::vector<StageResult>> tokens;
+    // If provided, compact only keys contained in these stage results. Otherwise compact everything.
+    std::optional<std::vector<StageResult>> stage_results;
 };
 
 struct ReadIncompletesFlags {
@@ -166,17 +166,17 @@ std::vector<VariantKey> read_incomplete_keys_for_symbol(
     bool via_iteration);
 
 /**
- * Load incomplete segments based on the provided tokens.
+ * Load incomplete segments based on the provided stage results.
  *
- * Throws if any of the tokens refer to segments that no longer exist (for example, because they have already been
+ * Throws if any of the stage results refer to segments that no longer exist (for example, because they have already been
  * finalised).
  */
-std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_tokens(const std::shared_ptr<Store>& store,
-                                                              const std::shared_ptr<PipelineContext>& pipeline_context,
-                                                              const std::vector<StageResult>& tokens,
-                                                              const ReadQuery& read_query,
-                                                              const ReadIncompletesFlags& flags,
-                                                              bool load_data);
+std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_stage_results(const std::shared_ptr<Store>& store,
+                                                                                                    const std::shared_ptr<PipelineContext>& pipeline_context,
+                                                                                                    const std::vector<StageResult>& stage_results,
+                                                                                                    const ReadQuery& read_query,
+                                                                                                    const ReadIncompletesFlags& flags,
+                                                                                                    bool load_data);
 
 } //namespace arcticdb
 
@@ -189,7 +189,7 @@ struct formatter<arcticdb::CompactIncompleteParameters> {
     template<typename FormatContext>
     auto format(const arcticdb::CompactIncompleteParameters &params, FormatContext &ctx) const {
         return fmt::format_to(ctx.out(), "CompactIncompleteOptions append={} convert_int_to_float={}, deleted_staged_data_on_failure={}, "
-                                         "prune_previous_versions={}, sparsify={}, validate_index={}, via_iteration={}, tokens={}",
+                                         "prune_previous_versions={}, sparsify={}, validate_index={}, via_iteration={}, stage_results={}",
                               params.append_,
                               params.convert_int_to_float_,
                               params.delete_staged_data_on_failure_,
@@ -197,7 +197,7 @@ struct formatter<arcticdb::CompactIncompleteParameters> {
                               params.sparsify_,
                               params.validate_index_,
                               params.via_iteration_,
-                              params.tokens ? "present" : "absent");
+                              params.stage_results ? "present" : "absent");
     }
 };
 }

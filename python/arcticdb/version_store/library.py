@@ -14,7 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInTokensError
+from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -25,7 +25,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat, StageResult, KeyNotFoundInTokenInfo
+from arcticdb_ext.version_store import DataError, OutputFormat, StageResult, KeyNotFoundInStageResultInfo
 
 import pandas as pd
 import numpy as np
@@ -1729,15 +1729,15 @@ class Library:
             append=mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
-            tokens=_stage_results
+            stage_results=_stage_results
         )
         if isinstance(compaction_result, _ae.version_store.VersionedItem):
             return self._nvs._convert_thin_cxx_item_to_python(compaction_result, metadata)
         elif isinstance(compaction_result, List):
             # We expect this to be a list of errors
             check(compaction_result, "List of errors in compaction result should never be empty")
-            check(all(isinstance(c, KeyNotFoundInTokenInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInTokenInfo")
-            raise MissingKeysInTokensError("Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result)
+            check(all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInStageResultInfo")
+            raise MissingKeysInStageResultsError("Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result)
         else:
             raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
 
