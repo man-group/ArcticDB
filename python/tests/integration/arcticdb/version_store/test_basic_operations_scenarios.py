@@ -150,34 +150,6 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
             assert meta == ver.metadata
 
 
-def test_for_9589648728(version_store_factory):
-    lib: NativeVersionStore = version_store_factory(dynamic_schema=False, segment_row_size=3)
-    symbol = "32"
-    set_seed(3484356)
-    timestamp = pd.Timestamp(4839275892348)
-    series_length = [ 1, 0, 2, 10]
-    dtype = np.float64
-    name = "dsf"
-    for length in series_length:
-        total_length = 0
-        series = generate_random_series(dtype, 4, name, start_time=timestamp, seed=None)
-        total_length += length
-        print("Series to write:", series.info(verbose=True))
-        lib.write(symbol, series)
-        print("Series read:", lib.read(symbol).data.info(verbose=True))
-        append_series = generate_random_series(dtype, 0, name, 
-                                                    start_time=timestamp + timedelta(seconds=total_length), seed=None)
-        print("Series to append:", append_series.info(verbose=True))
-        try:
-            lib.append(symbol, append_series)
-            lib.update(symbol, append_series)
-        except Exception as e:
-            for package in list_installed_packages():
-                print(package)
-            raise
-
-
-
 @pytest.mark.storage
 def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_real_s3_basic_store_factory):
     """
@@ -520,6 +492,34 @@ def test_stage_any_size_dataframes_timestamp_indexed(version_store_and_real_s3_b
     lib.compact_incomplete(symbol, append=False, prune_previous_version=True, convert_int_to_float=False)
     expected_data = pd.concat(chunks).sort_index()
     assert_frame_equal_rebuild_index_first(expected_data, lib.read(symbol).data)
+
+# Problem is on Linux and Python 3.8 with pandas 1.5.3
+@pytest.mark.xfail(LINUX and (sys.version_info[:2] == (3, 8)), 
+                   reason = "update_batch return unexpected exception (9589648728)",
+                   strict=False)
+def test_stage_error(version_store_and_real_s3_basic_store_factory):   
+    """
+    Isolated test for stage() - compact_cincomplete() problem on Linux and Python 3.8 with pandas 1.5.3
+    """ 
+    lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
+        dynamic_schema=False, segment_row_size=5, column_group_size=3)
+    symbol = "experimental 342143"
+    data = {
+        "col_5": [-2.356538e+38, 2.220219e+38]
+    }
+
+    index = pd.to_datetime([
+        "2033-12-11 00:00:00",
+        "2033-12-11 00:00:01",
+    ])
+    df = pd.DataFrame(data, index=index)
+    df_0col = df[0:0]
+    chunks = [df, df_0col]
+    for chnk in chunks:
+        lib.stage(symbol, chnk, validate_index=True)
+    lib.compact_incomplete(symbol, append=False, prune_previous_version=True, convert_int_to_float=False)
+    expected_data = pd.concat(chunks).sort_index()
+    assert_frame_equal_rebuild_index_first(expected_data, lib.read(symbol).data)    
 
 
 @pytest.mark.storage
