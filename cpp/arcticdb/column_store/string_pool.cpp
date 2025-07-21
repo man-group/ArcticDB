@@ -8,6 +8,7 @@
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/segment_utils.hpp>
+#include <arcticdb/util/regex_filter.hpp>
 #include <ankerl/unordered_dense.h>
 
 #include <pybind11/pybind11.h>
@@ -208,22 +209,18 @@ py::buffer_info StringPool::as_buffer_info() const {
     };
 }
 
-std::optional<position_t> StringPool::get_offset_for_column(std::string_view string, const Column& column) {
+std::optional<position_t> StringPool::get_offset_for_column(std::string_view string, const Column& column) const {
     auto unique_values = unique_values_for_string_column(column);
     remove_nones_and_nans(unique_values);
-    ankerl::unordered_dense::map<std::string_view, offset_t> col_values;
-    col_values.reserve(unique_values.size());
     for(auto pos : unique_values) {
-        col_values.emplace(block_.const_at(pos), pos);
+        if (block_.const_at(pos) == string) {
+            return pos;
+        }
     }
-
-    std::optional<position_t> output;
-    if(auto loc = col_values.find(string); loc != col_values.end())
-        output = loc->second;
-    return output;
+    return std::nullopt;
 }
 
-ankerl::unordered_dense::set<position_t> StringPool::get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) {
+ankerl::unordered_dense::set<position_t> StringPool::get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) const {
     auto unique_values = unique_values_for_string_column(column);
     remove_nones_and_nans(unique_values);
     ankerl::unordered_dense::map<std::string_view, offset_t> col_values;
@@ -237,6 +234,30 @@ ankerl::unordered_dense::set<position_t> StringPool::get_offsets_for_column(cons
         auto loc = col_values.find(string);
         if(loc != col_values.end())
             output.insert(loc->second);
+    }
+    return output;
+}
+
+ankerl::unordered_dense::set<position_t> StringPool::get_regex_match_offsets_for_column(const util::RegexGeneric& regex_generic, const Column& column) const {
+    auto unique_values = unique_values_for_string_column(column);
+    remove_nones_and_nans(unique_values);
+
+    ankerl::unordered_dense::set<position_t> output;
+    if (is_fixed_string_type(column.type().value_type())) {
+        auto regex_utf32 = regex_generic.get_utf32_match_object();
+        for(auto pos : unique_values) {
+            auto match_text = block_.const_at(pos);
+            if (regex_utf32.match(std::u32string_view(reinterpret_cast<const char32_t*>(match_text.data()), match_text.size() / sizeof(char32_t)))) {
+                output.insert(pos);
+            }
+        }
+    } else {
+        auto regex_utf8 = regex_generic.get_utf8_match_object();
+        for(auto pos : unique_values) {
+            if (regex_utf8.match(block_.const_at(pos))) {
+                output.insert(pos);
+            }
+        }
     }
     return output;
 }

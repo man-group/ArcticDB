@@ -129,7 +129,7 @@ class TestConcurrentHandlingOfNoneAndNan:
         lt = lib._dev_tools.library_tool()
         keys = [key for payload in write_payload for key in lt.find_keys_for_symbol(KeyType.TABLE_DATA, payload.symbol)]
         with ThreadPool(10) as pool:
-            for _ in pool.imap_unordered(lambda key: lt.read_to_read_result(key), keys):
+            for _ in pool.imap_unordered(lambda key: lt.read_to_dataframe(key), keys):
                 pass
             self.done_reading.set()
         none_nan_background_creator.join()

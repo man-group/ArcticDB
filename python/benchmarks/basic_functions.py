@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import time
 from typing import List
-from arcticdb import Arctic
+from arcticdb import Arctic, QueryBuilder
 from arcticdb.version_store.library import UpdatePayload, WritePayload, ReadRequest
 from arcticdb.util.test import config_context
 from arcticdb_ext.version_store import DataError
@@ -33,6 +33,7 @@ class BasicFunctions:
     number = 5
     timeout = 6000
     CONNECTION_STRING = "lmdb://basic_functions?map_size=20GB"
+    ULTRA_SHORT_WIDE_DF_ROWS = 1
     WIDE_DF_ROWS = WIDE_DF_ROWS
     WIDE_DF_COLS = WIDE_DF_COLS
     DATE_RANGE = DATE_RANGE
@@ -57,6 +58,14 @@ class BasicFunctions:
         lib.write(
             "short_wide_sym",
             generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),
+        )
+
+        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)
+        self.ac.delete_library(lib_name)
+        lib = self.ac.create_library(lib_name)
+        lib.write(
+            "ultra_short_wide_sym",
+            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),
         )
 
     def teardown(self, rows):
@@ -106,6 +115,14 @@ class BasicFunctions:
         lib = self.ac[get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)]
         lib.read("short_wide_sym").data
 
+    def time_read_ultra_short_wide(self, rows):
+        lib = self.ac[get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)]
+        lib.read("ultra_short_wide_sym").data
+
+    def peakmem_read_ultra_short_wide(self, rows):
+        lib = self.ac[get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)]
+        lib.read("ultra_short_wide_sym").data
+
     def time_read_with_columns(self, rows):
         COLS = ["value"]
         self.lib.read(f"sym", columns=COLS).data
@@ -119,6 +136,14 @@ class BasicFunctions:
 
     def peakmem_read_with_date_ranges(self, rows):
         self.lib.read(f"sym", date_range=BasicFunctions.DATE_RANGE).data
+
+    def time_read_with_date_ranges_query_builder(self, rows):
+        q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)
+        self.lib.read(f"sym", query_builder=q).data
+
+    def peakmem_read_with_date_ranges_query_builder(self, rows):
+        q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)
+        self.lib.read(f"sym", query_builder=q).data
 
     def time_write_staged(self, rows):
         self.fresh_lib.write(f"sym", self.df, staged=True)

@@ -121,6 +121,9 @@ void register_types(py::module &m) {
             return field_collection_to_ref_vector(desc.fields());
         })
         .def("sorted", &StreamDescriptor::sorted)
+        .def_property_readonly("index", [](const StreamDescriptor& self) {
+            return self.index();
+        })
     );
 
     py::class_<TimeseriesDescriptor>(m, "TimeseriesDescriptor")
@@ -139,7 +142,7 @@ void register_types(py::module &m) {
                 return key_from_proto(self.proto().next_key());
             }
             return std::nullopt;
-        });
+        }).def_property_readonly("as_stream_descriptor", &TimeseriesDescriptor::as_stream_descriptor);
 
     py::class_<PyTimestampRange>(m, "TimestampRange")
         .def(py::init<const py::object &, const py::object &>())
@@ -378,6 +381,12 @@ void register_stream_bindings(py::module &m) {
             .def_property_readonly("row_count", &TickReader::row_count)
             .def("add_segment", &TickReader::add_segment)
             .def("at", &TickReader::at);
+
+    m.def("is_symbol_key_valid", [](const StreamId& symbol_key) {
+        return std::holds_alternative<std::monostate>(verify_symbol_key(symbol_key));
+    });
+
+    m.attr("MAX_SYMBOL_LENGTH") = MAX_SYMBOL_LENGTH;
 }
 
 } // namespace arcticdb::stream
