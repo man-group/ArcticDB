@@ -307,8 +307,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool upsert);
 
     ReadResult batch_read_and_join(
-            const std::vector<StreamId>& stream_ids,
-            const std::vector<VersionQuery>& version_queries,
+            std::shared_ptr<std::vector<StreamId>> stream_ids,
+            std::shared_ptr<std::vector<VersionQuery>> version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries,
             const ReadOptions& read_options,
             std::vector<std::shared_ptr<Clause>>&& clauses,
