@@ -47,6 +47,18 @@ ReadResult LibraryTool::read(const VariantKey& key, std::any& handler_data, Outp
     return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format);
 }
 
+py::tuple LibraryTool::segment_to_read_result(arcticdb::SegmentInMemory& segment) {
+    constexpr OutputFormat output_format = OutputFormat::PANDAS;
+
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+    std::pair<std::any &, OutputFormat> handler{handler_data, output_format};
+    const auto &atom_key = AtomKeyBuilder().build<KeyType::VERSION_REF>(segment.descriptor().id());
+    auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment));
+
+    auto interm = pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format);
+    return arcticdb::adapt_read_df(std::move(interm), &handler_data);
+}
+
 Segment LibraryTool::read_to_segment(const VariantKey& key) {
     auto kv = store()->read_compressed_sync(key);
     util::check(kv.has_segment(), "Failed to read key: {}", key);

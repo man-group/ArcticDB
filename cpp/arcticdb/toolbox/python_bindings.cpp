@@ -70,7 +70,8 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
              },
              "Read the most recent dataframe from the store")
              .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
-             .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg);
+             .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg)
+             .def("segment_to_read_result", &LibraryTool::segment_to_read_result);
 
     // Reliable storage lock exposed for integration testing. It is intended for use in C++
     using namespace arcticdb::lock;

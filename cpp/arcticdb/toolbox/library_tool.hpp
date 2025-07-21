@@ -16,6 +16,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
+#include <arcticdb/python/adapt_read_dataframe.hpp>
 
 #include <memory>
 
@@ -35,6 +36,8 @@ public:
     explicit LibraryTool(std::shared_ptr<storage::Library> lib);
 
     ReadResult read(const VariantKey& key, std::any& handler_data, OutputFormat output_format);
+
+    py::tuple segment_to_read_result(arcticdb::SegmentInMemory& segment);
 
     Segment read_to_segment(const VariantKey& key);
 
