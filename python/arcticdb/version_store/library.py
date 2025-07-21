@@ -2909,6 +2909,9 @@ class Library:
 
     @staticmethod
     def _normalize_staged_data_mode(mode: Union[StagedDataFinalizeMethod, str]) -> StagedDataFinalizeMethod:
+        if mode is None:
+            return StagedDataFinalizeMethod.WRITE
+
         if isinstance(mode, StagedDataFinalizeMethod):
             return mode
 

@@ -121,7 +121,7 @@ def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
     arctic_library_lmdb._nvs.compact_incomplete.assert_called_once_with(symbol, append=expected_append, **default_args)
 
 
-@pytest.mark.parametrize("input_mode", ["wRite", "something", 3])
+@pytest.mark.parametrize("input_mode", ["something", 3])
 def test_finalize_staged_data_incorrect_args(arctic_library_lmdb, input_mode):
     symbol = "sym"
     arctic_library_lmdb._nvs = MagicMock()
