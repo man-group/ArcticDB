@@ -1,0 +1,46 @@
+commit 8ea2b0febc99d94101bb8a56327a6bd802cf5d27
+Author: Ivo <ivo.dilov@man.com>
+Date:   Thu Jul 17 15:02:23 2025 +0100
+
+    Fix segfault during encoding sparse data
+    
+    There was a segfault during desctruction of `bm::buffer` used during
+    encoding of bitmap.
+    
+    This commit instead doesn't use the bm::buffer at all but directly
+    serializes the bitmap on top of the buffer we're encoding to.
+    
+    BitMagic documentation is relatively poor but follows example shown
+    [here](https://github.com/tlk00/BitMagic/blob/6dfdcbd1222b3919c2a3b71bfde38db5c7862f97/samples/bvsample04/sample4.cpp#L78-L102).
+
+diff --git a/arcticcxx_impl/codec/codec.cpp b/arcticcxx_impl/codec/codec.cpp
+index 38225130..c1d171d9 100644
+--- a/arcticcxx_impl/codec/codec.cpp
++++ b/arcticcxx_impl/codec/codec.cpp
+@@ -239,18 +239,17 @@ class MetaBuffer {
+ 
+ size_t encode_bitmap(const util::BitMagic &sparse_map, Buffer &out, std::ptrdiff_t &pos) {
+     ARCTICC_DEBUG(log::version(), "Encoding sparse map of count: {}", sparse_map.count());
+-    bm::serializer<bm::bvector<> > bvs;
+-    bm::serializer<bm::bvector<> >::buffer sbuf;
+-    bvs.serialize(sparse_map, sbuf);
+-    auto sz = sbuf.size();
+-    auto total_sz = sz + sizeof(util::BitMagicStart) + sizeof(util::BitMagicEnd);
+-    out.assert_size(pos + total_sz);
+-
+-    uint8_t* target = out.data() + pos;
++    bm::serializer<bm::bvector<> > bvs; // TODO: It is inefficient to create the serializer every time.
++    bm::bvector<>::statistics st;
++    sparse_map.calc_stat(&st);
++    auto total_max_size = st.max_serialize_mem + sizeof(util::BitMagicStart) + sizeof(util::BitMagicEnd);
++    out.assert_size(pos + total_max_size);
++    uint8_t *target = out.data() + pos;
+     util::write_magic<util::BitMagicStart>(target);
+-    std::memcpy(target, sbuf.data(), sz);
++    auto sz = bvs.serialize(sparse_map, target, st.max_serialize_mem);
+     target += sz;
+     util::write_magic<util::BitMagicEnd>(target);
++    auto total_sz = sz + sizeof(util::BitMagicStart) + sizeof(util::BitMagicEnd);
+     pos = pos + static_cast<ptrdiff_t>(total_sz);
+     return total_sz;
+ }
