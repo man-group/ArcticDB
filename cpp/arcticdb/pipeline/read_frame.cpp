@@ -267,10 +267,20 @@ void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& 
     auto& sparse_buffer = dest_column.create_extra_buffer(
         offset,
         ExtraBufferType::BITMAP,
-        bitset_unpacked_size(sparse_map.count() * sizeof(uint64_t)),
+        bitset_packed_size_bytes(sparse_map.size()),
         allocation_type);
 
-    bitset_to_packed_bits(sparse_map, reinterpret_cast<uint64_t*>(sparse_buffer.data()));
+    bitset_to_packed_bits(sparse_map, sparse_buffer.data());
+}
+
+void create_dense_bitmap_all_zeros(size_t offset, size_t num_bits, Column& dest_column, AllocationType allocation_type) {
+    auto num_bytes = bitset_packed_size_bytes(num_bits);
+    auto& sparse_buffer = dest_column.create_extra_buffer(
+            offset,
+            ExtraBufferType::BITMAP,
+            num_bytes,
+            allocation_type);
+    std::memset(sparse_buffer.data(), 0, num_bytes);
 }
 
 void decode_or_expand(
@@ -750,6 +760,8 @@ void decode_into_frame_dynamic(
  */
 class NullValueReducer {
     Column &column_;
+    const int type_bytes_;
+    const std::vector<size_t>& block_offsets_;
     std::shared_ptr<PipelineContext> context_;
     SegmentInMemory frame_;
     size_t pos_;
@@ -766,6 +778,8 @@ public:
         std::any& handler_data,
         OutputFormat output_format) :
             column_(column),
+            type_bytes_(column_.type().get_type_bytes()),
+            block_offsets_(column_.block_offsets()),
             context_(context),
             frame_(std::move(frame)),
             pos_(frame_.offset()),
@@ -778,6 +792,22 @@ public:
         return context_row.slice_and_key().slice_.row_range.first;
     }
 
+    void backfill_all_zero_validity_bitmaps(size_t offset_bytes_start, size_t offset_bytes_end) {
+        // Explanation: offset_bytes_start and offset_bytes_end should both be elements of block_offsets_ by
+        // construction. We must add an all zeros validity bitmap for each row-slice read from storage where this
+        // column was missing, in order to correctly populate the Arrow record-batches for the output
+        auto it = std::ranges::lower_bound(block_offsets_, offset_bytes_start);
+        auto end_it = std::ranges::lower_bound(block_offsets_, offset_bytes_end);
+        util::check(it != block_offsets_.cend() && *it == offset_bytes_start &&
+                    end_it != block_offsets_.cend() && *end_it == offset_bytes_end,
+                    "NullValueReducer: Failed to find one of offset_bytes ({} or {}) in block_offsets_ {}",
+                    offset_bytes_start, offset_bytes_end, block_offsets_);
+        for (; it != end_it; ++it) {
+            auto rows = (*std::next(it) - *it) / type_bytes_;
+            create_dense_bitmap_all_zeros(*it, rows, column_, AllocationType::DETACHABLE);
+        }
+    }
+
     void reduce(PipelineContextRow &context_row){
         auto &slice_and_key = context_row.slice_and_key();
         auto sz_to_advance = slice_and_key.slice_.row_range.diff();
@@ -787,13 +817,17 @@ public:
             const auto start_row = pos_ - frame_.offset();
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
-            } else {
+            } else if (output_format_ != OutputFormat::ARROW) {
+                // Arrow does not care what values are in the main buffer where the validity bitmap is zero
                 column_.default_initialize_rows(start_row, num_rows, false);
             }
+            if (output_format_ == OutputFormat::ARROW) {
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, block_offsets_.at(context_row.index()));
+            }
             pos_ = current_pos + sz_to_advance;
-        }
-        else
+        } else {
             pos_ += sz_to_advance;
+        }
     }
 
     void finalize() {
@@ -805,8 +839,12 @@ public:
             const auto start_row = pos_ - frame_.offset();
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
-            } else {
+            } else if (output_format_ != OutputFormat::ARROW) {
+                // Arrow does not care what values are in the main buffer where the validity bitmap is zero
                 column_.default_initialize_rows(start_row, num_rows, false);
+            }
+            if (output_format_ == OutputFormat::ARROW) {
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, block_offsets_.back());
             }
         }
     }

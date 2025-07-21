@@ -21,20 +21,11 @@ sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::stri
         using RawType = typename DataTagType::raw_type;
         std::optional<sparrow::validity_bitmap> validity_bitmap;
         if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-            // TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
-            //  consistent when there are zero rows. But sparrow (or possibly Arrow) requires at least one key-value
-            //  pair in the dictionary, even if there are zero rows
-            std::unique_ptr<int64_t[]> offset_ptr(new int64_t[2]);
-            offset_ptr[0] = 0;
-            offset_ptr[1] = 1;
-            std::unique_ptr<char[]> strings_ptr(new char[1]);
-            strings_ptr[0] = 'a';
-            sparrow::u8_buffer<int64_t> offset_buffer(offset_ptr.release(), 2);
-            sparrow::u8_buffer<char> strings_buffer(strings_ptr.release(), 1);
+            auto [offsets_buffer, strings_buffer] = minimal_strings_dict();
             sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
             sparrow::big_string_array dict_values_array(
                     std::move(strings_buffer),
-                    std::move(offset_buffer)
+                    std::move(offsets_buffer)
             );
             return sparrow::array{
                 create_dict_array<int32_t>(
@@ -61,7 +52,7 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
             vec.emplace_back(empty_arrow_array_from_type(column.type(), name));
         }
         while (auto block = column_data.next<TagType>()) {
-            auto bitmap = create_validity_bitmap(block->offset(), column);
+            auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
                 vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, bitmap));
             } else {
