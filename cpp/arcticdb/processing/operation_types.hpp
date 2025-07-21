@@ -183,11 +183,10 @@ struct binary_operation_promoted_type {
                     double,
                     float
                 >,
-                // Otherwise, if only one type is floating point, promote to this type
-                std::conditional_t<std::is_floating_point_v<LHS>,
-                    LHS,
-                    RHS
-                >
+                // Otherwise, if only one type is floating point, always promote to double
+                // For example when combining int32 and float32 the result can only fit in float64 without loss of precision
+                // Special cases like int16 and float32 can fit in float32, but we always promote up to float64 (as does Pandas)
+                double
             >,
             // Otherwise, both types are integers
             std::conditional_t<std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
@@ -252,11 +251,9 @@ struct ternary_operation_promoted_type {
                         double,
                         float
                 >,
-                // Otherwise, if only one type is floating point, promote to this type
-                std::conditional_t<std::is_floating_point_v<LHS>,
-                        LHS,
-                        RHS
-                >
+                // Otherwise, if only one type is floating point, promote to double to avoid data loss when the integer
+                // cannot be represented by float32
+                double
             >,
             // Otherwise, both types are integers
             std::conditional_t<std::is_unsigned_v<LHS> && std::is_unsigned_v<RHS>,
@@ -316,8 +313,7 @@ bool apply(int64_t t) {
         return t >= string_nan;
     }
 }
-template<std::floating_point T>
-bool apply(T t) {
+bool apply(std::floating_point auto t) {
     return std::isnan(t);
 }
 };
@@ -441,11 +437,11 @@ bool operator()(T t, U u) const {
     return t < u;
 }
 template<typename T>
-bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
+bool operator()(std::optional<T>, T) const {
     util::raise_rte("Less than operator not supported with strings");
 }
 template<typename T>
-bool operator()([[maybe_unused]] T t, [[maybe_unused]] std::optional<T> u) const {
+bool operator()(T, std::optional<T>) const {
     util::raise_rte("Less than operator not supported with strings");
 }
 bool operator()(uint64_t t, int64_t u) const {
@@ -462,11 +458,11 @@ bool operator()(T t, U u) const {
     return t <= u;
 }
 template<typename T>
-bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
+bool operator()(std::optional<T>, T) const {
     util::raise_rte("Less than equals operator not supported with strings");
 }
 template<typename T>
-bool operator()([[maybe_unused]] T t, [[maybe_unused]] std::optional<T> u) const {
+bool operator()(T, std::optional<T>) const {
     util::raise_rte("Less than equals operator not supported with strings");
 }
 bool operator()(uint64_t t, int64_t u) const {
@@ -483,11 +479,11 @@ bool operator()(T t, U u) const {
     return t > u;
 }
 template<typename T>
-bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
+bool operator()(std::optional<T>, T) const {
     util::raise_rte("Greater than operator not supported with strings");
 }
 template<typename T>
-bool operator()([[maybe_unused]] T t, [[maybe_unused]] std::optional<T> u) const {
+bool operator()(T, std::optional<T>) const {
     util::raise_rte("Greater than operator not supported with strings");
 }
 bool operator()(uint64_t t, int64_t u) const {
@@ -504,11 +500,11 @@ bool operator()(T t, U u) const {
     return t >= u;
 }
 template<typename T>
-bool operator()([[maybe_unused]] std::optional<T> t, [[maybe_unused]] T u) const {
+bool operator()(std::optional<T>, T) const {
     util::raise_rte("Greater than equals operator not supported with strings");
 }
 template<typename T>
-bool operator()([[maybe_unused]] T t, [[maybe_unused]] std::optional<T> u) const {
+bool operator()(T, std::optional<T>) const {
     util::raise_rte("Greater than equals operator not supported with strings");
 }
 bool operator()(uint64_t t, int64_t u) const {
@@ -549,21 +545,22 @@ struct UInt64SpecialHandlingTag {};
 struct IsInOperator: MembershipOperator {
 template<typename T, typename U>
 bool operator()(T t, const std::unordered_set<U>& u) const {
-    return u.count(t) > 0;
+    return u.contains(t);
 }
 
-template<typename U, typename=std::enable_if_t<is_signed_int<U>>>
+template<typename U>
+requires is_signed_int<U>
 bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
     if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
         return false;
     else
-        return u.count(t) > 0;
+        return u.contains(t);
 }
 bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialHandlingTag = {}) const {
     if (t < 0)
         return false;
     else
-        return u.count(t) > 0;
+        return u.contains(t);
 }
 
 #ifdef _WIN32
@@ -590,21 +587,22 @@ bool operator()(T t, const ankerl::unordered_dense::set<U>& u) const {
 struct IsNotInOperator: MembershipOperator {
 template<typename T, typename U>
 bool operator()(T t, const std::unordered_set<U>& u) const {
-    return u.count(t) == 0;
+    return !u.contains(t);
 }
 
-template<typename U, typename = std::enable_if_t<is_signed_int<U>>>
+template<typename U>
+requires is_signed_int<U>
 bool operator()(uint64_t t, const std::unordered_set<U>& u, UInt64SpecialHandlingTag = {}) const {
     if (t > static_cast<uint64_t>(std::numeric_limits<U>::max()))
         return true;
     else
-        return u.count(t) == 0;
+        return !u.contains(t);
 }
 bool operator()(int64_t t, const std::unordered_set<uint64_t>& u, UInt64SpecialHandlingTag = {}) const {
     if (t < 0)
         return true;
     else
-        return u.count(t) == 0;
+        return !u.contains(t);
 }
 
 #ifdef _WIN32
