@@ -60,7 +60,9 @@ struct MemBlock {
         magic_.check(true);
         if(owns_external_data_) {
             if (is_external()) {
-                log::version().warn("Unexpected release of detachable block memory");
+                // Previously warn level, but would then show up in a read_batch when some of the returned values are
+                // DataError objects if the read is racing with a delete
+                log::version().debug("Unexpected release of detachable block memory");
                 delete[] external_data_;
             } else {
                 log::version().warn("Cannot free inline allocated block");

@@ -9,6 +9,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <arcticdb/column_store/column_utils.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -20,10 +21,9 @@
 #include <arcticdb/processing/query_planner.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
+#include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
-#include <arcticdb/python/python_handler_data.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
 
 
 namespace arcticdb::version_store {
@@ -163,7 +163,19 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     .def(pybind11::self != pybind11::self)
     .def("__repr__", &AtomKey::view)
     .def(py::self < py::self)
-    ;
+    .def(py::pickle([] (const AtomKey& key) {
+        constexpr int serialization_version = 0;
+        return py::make_tuple(serialization_version, key.id(), key.version_id(), key.creation_ts(), key.content_hash(), key.start_index(), key.end_index(), key.type());
+    },[](py::tuple t) {
+        util::check(t.size() >= 7, "Invalid AtomKey pickle object!");
+
+        [[maybe_unused]] const int serialization_version = t[0].cast<int>();
+        AtomKey key(t[1].cast<StreamId>(), t[2].cast<VersionId>(), t[3].cast<timestamp>(),
+            t[4].cast<ContentHash>(), t[5].cast<IndexValue>(), t[6].cast<IndexValue>(),
+            t[7].cast<KeyType>());
+        return key;
+    }
+    ));
 
     py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
     .def(py::init())
@@ -241,26 +253,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             return adapt_read_df(read_dataframe_from_file(sid, path, read_query, read_options, handler_data), &handler_data);
         });
 
-    using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
-    py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
-            .def_property_readonly("data", &FrameDataWrapper::data);
+    py::class_<NumpyBufferHolder, std::shared_ptr<NumpyBufferHolder>>(version, "NumpyBufferHolder");
 
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
-        .def(py::init<>([](const SegmentInMemory& segment_in_memory) {
-            return PandasOutputFrame(segment_in_memory);
-        }))
-        .def_property_readonly("value", [](py::object & obj){
-            auto& fd = obj.cast<PandasOutputFrame&>();
-            return fd.arrays(obj);
+        .def("extract_numpy_arrays", [](PandasOutputFrame& self) {
+            return python_util::extract_numpy_arrays(self);
         })
-        .def_property_readonly("offset", [](PandasOutputFrame& self) {
-            return self.frame().offset(); })
-        .def_property_readonly("names", &PandasOutputFrame::names, py::return_value_policy::reference)
-        .def_property_readonly("index_columns", &PandasOutputFrame::index_columns, py::return_value_policy::reference)
-        .def_property_readonly("row_count", [](PandasOutputFrame& self) {
-            return self.frame().row_count();
-        });
+        ;
 
         py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
         .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches)
@@ -333,6 +333,23 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end_index", &DescriptorItem::end_index)
         .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
         .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
+
+    py::class_<StageResult>(version, "StageResult")
+        .def(py::init([]() { return StageResult({}); }))
+	.def_property_readonly("staged_segments", [](const StageResult& self) { return self.staged_segments; })
+        .def(py::pickle(
+            [](const StageResult& s) {
+                constexpr int serialization_version = 0;
+                return py::make_tuple(serialization_version, s.staged_segments);
+            },
+            [](py::tuple t) {
+                util::check(t.size() >= 1, "Invalid StageResult pickle object!");
+
+                [[maybe_unused]] const int serialization_version = t[0].cast<int>();
+                StageResult p(t[1].cast<std::vector<AtomKey>>());
+                return p;
+            }
+        ));
 
     py::class_<pipelines::FrameSlice, std::shared_ptr<pipelines::FrameSlice>>(version, "FrameSlice")
         .def_property_readonly("col_range", &pipelines::FrameSlice::columns)
@@ -473,6 +490,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("GE", OperationType::GE)
             .value("ISIN", OperationType::ISIN)
             .value("ISNOTIN", OperationType::ISNOTIN)
+            .value("REGEX_MATCH", OperationType::REGEX_MATCH)
             .value("AND", OperationType::AND)
             .value("OR", OperationType::OR)
             .value("XOR", OperationType::XOR)
@@ -508,6 +526,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return ExpressionName(name);
             }));
 
+    py::class_<RegexName>(version, "RegexName")
+            .def(py::init([](const std::string& name) {
+                return RegexName(name);
+            }));
+
     py::class_<ExpressionNode, std::shared_ptr<ExpressionNode>>(version, "ExpressionNode")
             .def(py::init([](VariantNode condition, VariantNode left, VariantNode right, OperationType operation_type) {
                 return ExpressionNode(condition, left, right, operation_type);
@@ -528,6 +551,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def("add_expression_node", &ExpressionContext::add_expression_node)
             .def("add_value", &ExpressionContext::add_value)
             .def("add_value_set", &ExpressionContext::add_value_set)
+            .def("add_regex", &ExpressionContext::add_regex)
             .def_readwrite("root_node_name", &ExpressionContext::root_node_name_);
 
     py::class_<UpdateQuery>(version, "PythonVersionStoreUpdateQuery")

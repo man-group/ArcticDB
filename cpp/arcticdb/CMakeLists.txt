@@ -43,6 +43,7 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+find_package(PCRE2 REQUIRED COMPONENTS 8BIT 32BIT)
 
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
@@ -53,7 +54,6 @@ endif()
 add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
 if(NOT ${ARCTICDB_USING_CONDA})
-    find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
@@ -67,7 +67,6 @@ else()
     SET(HIDE_LINKED_SYMBOLS OFF)
 
     find_package(pybind11 REQUIRED)
-    find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
 
@@ -106,7 +105,6 @@ set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_I
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
-find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
 if (WIN32)
     find_package(Iconv)
 else ()
@@ -227,6 +225,7 @@ set(arcticdb_srcs
         entity/read_result.hpp
         entity/ref_key.hpp
         entity/serialized_key.hpp
+        entity/stage_result.hpp
         entity/type_conversion.hpp
         entity/types.hpp
         entity/type_utils.hpp
@@ -241,7 +240,6 @@ set(arcticdb_srcs
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_stats.hpp
-        pipeline/frame_data_wrapper.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
         pipeline/index_fields.hpp
@@ -249,9 +247,9 @@ set(arcticdb_srcs
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
         pipeline/input_tensor_frame.hpp
+        pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
-        pipeline/pandas_output_frame.cpp
         pipeline/query.hpp
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
@@ -261,6 +259,7 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
+        python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
         python/python_utils.hpp
@@ -456,7 +455,6 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
         pipeline/pipeline_context.cpp
-        pipeline/pandas_output_frame.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
         pipeline/read_pipeline.cpp
@@ -672,7 +670,7 @@ if(${ARCTICDB_USE_PCH})
         <ankerl/unordered_dense.h>
         <third_party/recycle/src/recycle/shared_pool.hpp>
         <xxhash.h>
-        <pcre.h>
+        <pcre2.h>
     )
     target_precompile_headers(arcticdb_core_object PRIVATE ${BASE_PCH})
 endif()
@@ -708,6 +706,8 @@ set (arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
         sparrow::sparrow
+        PCRE2::8BIT
+        PCRE2::32BIT
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
@@ -729,7 +729,6 @@ endif()
 if(${ARCTICDB_USING_CONDA})
 
     list (APPEND arcticdb_core_libraries
-        pcre
         msgpack-c
         ${LMDB_LIBRARIES}
     )
@@ -741,7 +740,6 @@ if(${ARCTICDB_USING_CONDA})
 else()
 
     list (APPEND arcticdb_core_libraries
-        unofficial::pcre::pcre
         msgpackc-cxx
         EnTT::EnTT
         lmdb
@@ -821,6 +819,7 @@ set(arcticdb_python_srcs
         stream/python_bindings.cpp
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
+        util/python_bindings.cpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
         python/python_handlers.hpp
@@ -1097,7 +1096,9 @@ if(${TEST})
             stream/test/stream_test_common.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp
+            processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp
+            processing/test/benchmark_common.cpp
             processing/test/benchmark_ternary.cpp
             version/test/benchmark_write.cpp)
 

@@ -403,7 +403,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         write_window_size())).via(&async::io_executor());
 }
 
-void write_parallel_impl(
+std::vector<AtomKey> write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
@@ -414,11 +414,9 @@ void write_parallel_impl(
         std::get<Error>(check_outcome).throw_error();
     }
 
-    if (options.sort_on_index || (options.sort_columns && !options.sort_columns->empty())) {
-        write_incomplete_frame_with_sorting(store, stream_id, frame, options).get();
-    } else {
-        write_incomplete_frame(store, stream_id, frame, options ).get();
-    }
+    const bool should_sort = options.sort_on_index || (options.sort_columns && !options.sort_columns->empty());
+    auto write_incomplete_func = should_sort ? &write_incomplete_frame_with_sorting : &write_incomplete_frame;
+    return write_incomplete_func(store, stream_id, frame, options).get();
 }
 
 std::vector<SliceAndKey> get_incomplete(

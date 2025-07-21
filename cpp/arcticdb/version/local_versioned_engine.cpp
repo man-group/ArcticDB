@@ -1016,7 +1016,7 @@ void LocalVersionedEngine::append_incomplete_segment(
     arcticdb::append_incomplete_segment(store_, stream_id, std::move(seg));
 }
 
-void LocalVersionedEngine::write_parallel_frame(
+StageResult LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     bool validate_index,
@@ -1028,7 +1028,8 @@ void LocalVersionedEngine::write_parallel_frame(
         .write_options=get_write_options(),
         .sort_on_index=sort_on_index,
         .sort_columns=sort_columns};
-    write_parallel_impl(store_, stream_id, frame, options);
+    auto staged_keys = write_parallel_impl(store_, stream_id, frame, options);
+    return StageResult(std::move(staged_keys));
 }
 
 void LocalVersionedEngine::add_to_symbol_list_on_compaction(
