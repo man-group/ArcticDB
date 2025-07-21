@@ -310,14 +310,7 @@ class NativeVersionStore:
         if nfh is None or nfh == "msg_pack":
             if nfh is not None:
                 nfh = getattr(self._cfg, nfh, None)
-
-            use_norm_failure_handler_known_types = (
-                self._cfg.use_norm_failure_handler_known_types if self._cfg is not None else False
-            )
-
-            self._normalizer = CompositeNormalizer(
-                MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
-            )
+            self._normalizer = CompositeNormalizer(MsgPackNormalizer(nfh))
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
@@ -619,10 +612,8 @@ class NativeVersionStore:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
+        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
 
-        pickle_on_failure = resolve_defaults(
-            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
-        )
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
@@ -697,6 +688,27 @@ class NativeVersionStore:
                 )
             dynamic_strings = True
         return dynamic_strings
+
+    def _resolve_pickle_on_failure(self, existing_value):
+        """
+        The parameter name is pickle_on_failure, but the protobuf field is use_norm_failure_handler_known_types, and
+        for safety we should check both env vars, so resolve_defaults is insufficient for this case
+        """
+        if existing_value is not None:
+            return existing_value
+        env_value_1 = os.getenv("USE_NORM_FAILURE_HANDLER_KNOWN_TYPES")
+        if env_value_1 is not None:
+            return env_value_1 not in ("", "0") and not env_value_1.lower().startswith("f")
+        env_value_2 = os.getenv("PICKLE_ON_FAILURE")
+        if env_value_2 is not None:
+            return env_value_2 not in ("", "0") and not env_value_2.lower().startswith("f")
+        try:
+            config_value = getattr(self._lib_cfg.lib_desc.version, "use_norm_failure_handler_known_types")
+            if config_value is not None:
+                return config_value
+        except AttributeError:
+            pass
+        return False
 
     last_mismatch_msg: Optional[str] = None
 
@@ -1538,9 +1550,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = resolve_defaults(
-            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
-        )
+        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
