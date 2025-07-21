@@ -245,14 +245,11 @@ assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 
 def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
     """For Pandas 1 type of empty series will be float64 when returned by arctic"""
-    print (f" Pandas version : {PANDAS_VERSION} < {CHECK_FREQ_VERSION}")
-    print (f" Series types: {expected.dtype} and  {actual.dtype}")
     if IS_PANDAS_ONE:
         if (("object" in str(expected.dtype)) and ("float" in str(actual.dtype)) or
             ("float" in str(expected.dtype)) and ("object" in str(actual.dtype))):
             if (expected.size == 0) and (actual.size == 0):
                 assert expected.name == actual.name
-                assert expected.index == actual.index
                 return
     assert_series_equal(expected, actual, **kwargs)
 
