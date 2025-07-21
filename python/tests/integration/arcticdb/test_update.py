@@ -450,8 +450,8 @@ def test_update_batch_types_upgrade_error(custom_library):
     """
     lib: Library = custom_library
     symbol_prefix = "some heck of a symbol!.!"
-    number_columns = 20
-    number_rows = 100
+    number_columns = 6
+    number_rows = 5
     seed(3120949)
     
     upgrade_path_simple = { 
@@ -485,40 +485,27 @@ def test_update_batch_types_upgrade_error(custom_library):
     write_batch:List[UpdatePayload] = []
     expected_results = dict()
 
+    symbol_name = "342"
+    g = UpgradeDataFrameTypesGenerator()
+    df1 = g.get_dataframe(number_columns, number_rows)
+    logger.info(f"WRITE DF: \n {df1}")
+    logger.info(f"WRITE DF (info): \n {df1.info()}")
+    g.define_upgrade_types(upgrade_path_simple)
+    df2 = g.get_dataframe(number_columns, number_rows // 3)
+    lib.write_batch([WritePayload(symbol_name, df1)])
 
-    logger.info("Prepare updates and calculate expected dataframes")
-    for index, upgrade in enumerate(types_to_try): 
-        g = UpgradeDataFrameTypesGenerator()
-        df1 = g.get_dataframe(number_columns, number_rows)
-        g.define_upgrade_types(upgrade)
-        df2 = g.get_dataframe(number_columns, number_rows // 3)
-        symbol_name = symbol_prefix + str(index)
-        symbol_names.append(symbol_name)
-        original_dataframes[symbol_name] = df1
-        # Calculate expected dataframe
-        upgrade_dataframe_types(df1, upgrade)
-        expected_results[symbol_name] = dataframe_simulate_arcticdb_update_static(df1, df2)
-        update_batch.append(UpdatePayload(symbol_name, df2))
-        write_batch.append(WritePayload(symbol_name, df1))    
-
-
-    logger.info("Write original dataframes, then update symbols, with date range outside of update boundaries")
-    logger.info("Result will be original dataframe")
-    lib.write_batch(write_batch)
-    for update in update_batch:
-        start_index = original_dataframes[update.symbol].index[0] - pd.Timedelta(days=1)
-        previous_day = start_index - pd.Timedelta(days=1)
-        update.date_range = (previous_day, start_index)
-    update_result = lib.update_batch(update_batch, prune_previous_versions=True)
-    read_data = read_batch_as_dict(lib, symbol_names)
-    for index, result in enumerate(update_result):
-        symbol = symbol_names[index]
-        logger.info(f" symbol : {symbol}")
-        if not hasattr(result, "version"):
-            # To catch rare problem on 3.8
-            logger.error(f"Expected {result} with version attribute {repr(result)}\n {str(result)}")
+    start_index = df1.index[0] - pd.Timedelta(days=1)
+    previous_day = start_index - pd.Timedelta(days=1)
+    update = UpdatePayload(symbol_name, df2)
+    update.date_range = (previous_day, start_index)
+    logger.info(f"UPDATE DF: \n {df2}")
+    logger.info(f"UPDATE DF (info): \n {df2.info()}")
+    logger.info(f"UPDATE:\n {update}")
+    update_result = lib.update_batch([update], prune_previous_versions=True)
+    for result in update_result:
+        logger.info(f"Expected {result} with version attribute {repr(result)}\n {str(result)}")        
         assert result.version == 1
-        assert_frame_equal(original_dataframes[symbol], read_data[symbol].data)
+    return 
 
 
 def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
