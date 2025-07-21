@@ -56,7 +56,7 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError
 from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame, PandasOutputFrame
+from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
 from arcticdb.flattener import Flattener
@@ -76,7 +76,7 @@ from arcticdb.version_store._normalization import (
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
-    _denormalize_single_index,
+    _denormalize_columns_names,
 )
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
@@ -2079,9 +2079,10 @@ class NativeVersionStore:
             # post filter
             start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
             data = []
-            for c in read_result.frame_data.value.data:
+            for c in read_result.frame_data.data:
                 data.append(c[start_idx:end_idx])
-            read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns)
+            row_count = len(data[0]) if len(data) else 0
+            read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns, row_count, read_result.frame_data.offset)
 
         vitem = self._adapt_read_res(read_result)
 
@@ -2110,7 +2111,7 @@ class NativeVersionStore:
             start_idx = read_query.row_filter.start - read_result.frame_data.offset
             end_idx = read_query.row_filter.end - read_result.frame_data.offset
         elif isinstance(read_query.row_filter, _IndexRange):
-            index = read_result.frame_data.value.data[0]
+            index = read_result.frame_data.data[0]
             if len(index) != 0:
                 start_idx = index.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
                 end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
@@ -2303,8 +2304,7 @@ class NativeVersionStore:
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
             data = pa.Table.from_batches(record_batches)
         else:
-            frame_data = FrameData.from_cpp(read_result.frame_data)
-            data = self._normalizer.denormalize(frame_data, read_result.norm)
+            data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):
                 data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
 
@@ -2937,9 +2937,7 @@ class NativeVersionStore:
         given_version = max([v["version"] for v in self.list_versions(symbol)]) if version is None else version
         version_query = self._get_version_query(given_version)
 
-        i = self.version_store.read_index(symbol, version_query)
-        frame_data = ReadResult(*i).frame_data
-        index_data = FrameData.from_cpp(frame_data).data
+        index_data = ReadResult(*self.version_store.read_index(symbol, version_query)).frame_data.data
         if len(index_data[0]) == 0:
             return datetime64("nat"), datetime64("nat")
 
@@ -2984,9 +2982,7 @@ class NativeVersionStore:
 
     def _process_info(
         self,
-        symbol: str,
         dit,
-        as_of: VersionQueryInput,
         date_range_ns_precision: bool,
     ) -> Dict[str, Any]:
         timeseries_descriptor = dit.timeseries_descriptor
@@ -2996,7 +2992,12 @@ class NativeVersionStore:
         index_dtype = []
         input_type = timeseries_descriptor.normalization.WhichOneof("input_type")
         index_type = "NA"
-        if input_type == "df":
+        if input_type == "series":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.series)
+        elif input_type == "ts":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.ts)
+        elif input_type == "df":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.df)
             index_type = timeseries_descriptor.normalization.df.common.WhichOneof("index_type")
             if index_type == "index":
                 index_metadata = timeseries_descriptor.normalization.df.common.index
@@ -3083,7 +3084,7 @@ class NativeVersionStore:
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
         version_query = self._get_version_query(version, **kwargs)
         dit = self.version_store.read_descriptor(symbol, version_query)
-        return self._process_info(symbol, dit, version, date_range_ns_precision)
+        return self._process_info(dit, date_range_ns_precision)
 
     def batch_get_info(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
@@ -3140,7 +3141,7 @@ class NativeVersionStore:
             if isinstance(dit, DataError):
                 description_results.append(dit)
             else:
-                description_results.append(self._process_info(symbol, dit, as_of, date_range_ns_precision))
+                description_results.append(self._process_info(dit, date_range_ns_precision))
         return description_results
 
     def write_metadata(
