@@ -1025,9 +1025,7 @@ def valid_common_type(left, right):
     right = np.dtype(right)
     if left == right:
         return left
-    # Strings are represented via object dtype. Numeric types and strings do not have valid common type
-    if (is_numeric_type(left) and not is_numeric_type(right)) or (is_numeric_type(right) and not is_numeric_type(left)):
-        return None
+
     if pd.api.types.is_bool_dtype(left):
         if pd.api.types.is_bool_dtype(right):
             return left
@@ -1056,6 +1054,12 @@ def valid_common_type(left, right):
             # Numpy promotes int* and uint64 to float64. ArcticDB does not allow such promotion
             return None if left.itemsize >= 8 else np.promote_types(left, right)
         elif pd.api.types.is_bool_dtype(right):
+            return None
+        raise Exception(f"Unexpected right dtype: {right}")
+    elif pd.api.types.is_datetime64_any_dtype(left):
+        if pd.api.types.is_datetime64_any_dtype(right):
+            return np.promote_types(left, right)
+        elif is_numeric_type(right) or pd.api.types.is_bool_dtype(right):
             return None
         raise Exception(f"Unexpected right dtype: {right}")
     raise Exception(f"Unexpected left dtype: {left}")
