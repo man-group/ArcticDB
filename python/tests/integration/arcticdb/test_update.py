@@ -434,78 +434,49 @@ def test_update_batch_types_upgrade(custom_library):
         assert_frame_equal(expected_results[symbol], read_data[symbol].data)
 
 
-@pytest.mark.storage
-@pytest.mark.parametrize("custom_library", [
-            {'library_options': LibraryOptions(dynamic_schema=True)}
-        ], indirect=True)
-@pytest.mark.only_fixture_params(["lmdb", "real_s3", "real_gcp"])
-# Problem is on Linux and Python 3.8 only
+
 @pytest.mark.xfail(LINUX and (sys.version_info[:2] == (3, 8)), 
                    reason = "update_batch return unexpected exception (9589648728)",
                    strict=False)
-def test_update_batch_types_upgrade_error(custom_library):
-    """
-    This is scenario 4 from above test, once resolved, please 
-    add to previous test and delete this
-    """
-    lib: Library = custom_library
-    symbol_prefix = "some heck of a symbol!.!"
-    number_columns = 6
-    number_rows = 5
-    seed(3120949)
-    
-    upgrade_path_simple = { 
-        np.int16: np.int32,
-        np.int32: np.int64,
-        np.uint16: np.uint32,
-        np.uint32: np.uint64,
-        np.float32: np.float64
-    }
-    
-    upgrade_path_mix = { 
-        np.int16: np.int64,
-        np.int32: np.float64,
-        np.uint16: np.int32,
-        np.uint32: np.int64,
-        np.float32: np.float64
+def test_update_batch_error_scenario1(arctic_library):   
+    lib= arctic_library
+    symbol = "experimental 342143"
+    data = {
+        "col_5": [-2.356538e+38, 2.220219e+38]
     }
 
-    upgrade_path_float = { 
-        np.int16: np.float32,
-        np.int32: np.float64,
-        np.uint16: np.float32,
-        np.uint32: np.float64,
-        np.float32: np.float64
-    }
-
-    types_to_try = [upgrade_path_mix, upgrade_path_simple, upgrade_path_float]
-    original_dataframes = dict()
-    symbol_names = []
-    update_batch:List[UpdatePayload] = []
-    write_batch:List[UpdatePayload] = []
-    expected_results = dict()
-
-    symbol_name = "342"
-    g = UpgradeDataFrameTypesGenerator()
-    df1 = g.get_dataframe(number_columns, number_rows)
-    logger.info(f"WRITE DF: \n {df1}")
-    logger.info(f"WRITE DF (info): \n {df1.info()}")
-    g.define_upgrade_types(upgrade_path_simple)
-    df2 = g.get_dataframe(number_columns, number_rows // 3)
-    lib.write_batch([WritePayload(symbol_name, df1)])
-
-    start_index = df1.index[0] - pd.Timedelta(days=1)
-    previous_day = start_index - pd.Timedelta(days=1)
-    update = UpdatePayload(symbol_name, df2)
-    update.date_range = (previous_day, start_index)
-    logger.info(f"UPDATE DF: \n {df2}")
-    logger.info(f"UPDATE DF (info): \n {df2.info()}")
-    logger.info(f"UPDATE:\n {update}")
+    index = pd.to_datetime([
+        "2033-12-11 00:00:00",
+        "2033-12-11 00:00:01",
+    ])
+    df = pd.DataFrame(data, index=index)
+    df_0col = df[0:0]
+    lib.write_batch([WritePayload(symbol, df)])
+    update = UpdatePayload(symbol, df_0col)
     update_result = lib.update_batch([update], prune_previous_versions=True)
-    for result in update_result:
-        logger.info(f"Expected {result} with version attribute {repr(result)}\n {str(result)}")        
-        assert result.version == 1
-    return 
+    assert update_result[0].version == 1
+
+
+@pytest.mark.xfail(LINUX and (sys.version_info[:2] == (3, 8)), 
+                   reason = "update_batch return unexpected exception (9589648728)",
+                   strict=False)
+def test_update_batch_error_scenario2(arctic_library):   
+    lib= arctic_library
+    symbol = "experimental 342143"
+    data = {
+        "col_5": [-2.356538e+38, 2.220219e+38]
+    }
+
+    index = pd.to_datetime([
+        "2033-12-11 00:00:00",
+        "2033-12-11 00:00:01",
+    ])
+    df = pd.DataFrame(data, index=index)
+    df_0col = df[0:0]
+    lib.write_batch([WritePayload(symbol, df)])
+    update = UpdatePayload(symbol, df[0:1], date_range=(pd.Timestamp("2030-12-11 00:00:00"), pd.Timestamp("2030-12-11 00:00:01")))
+    update_result = lib.update_batch([update], prune_previous_versions=True)
+    assert update_result[0].version == 1    
 
 
 def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
