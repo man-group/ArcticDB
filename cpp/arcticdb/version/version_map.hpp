@@ -360,7 +360,7 @@ public:
 
         std::advance(latest_version, 1);
 
-        for (const auto &key : folly::Range{latest_version, entry->keys_.end()}) {
+        for (const auto &key : std::ranges::subrange{latest_version, entry->keys_.end()}) {
             if (is_index_key_type(key.type())) {
                 const auto tombstone = entry->get_tombstone(key.version_id());
                 if (tombstone) {
