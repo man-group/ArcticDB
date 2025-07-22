@@ -10,12 +10,12 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/ref_key.hpp>
 #include <variant>
-#include <folly/Range.h>
+#include <ranges>
 
 namespace arcticdb::entity {
 
 template<class It>
-using Range = folly::Range<It>;
+using Range = std::ranges::subrange<It>;
 
 using VariantKey = std::variant<entity::AtomKey, entity::RefKey>;
 

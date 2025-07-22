@@ -14,7 +14,6 @@
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/util/test/config_common.hpp>
-#include "folly/Range.h"
 
 #include <unordered_map>
 #include <vector>

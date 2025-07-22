@@ -11,7 +11,6 @@
 #include <arcticdb/util/name_validation.hpp>
 
 #include <boost/container/small_vector.hpp>
-#include <folly/Range.h>
 #include <fmt/format.h>
 #include <memory>
 #include <string>
@@ -131,7 +130,7 @@ class LibraryPathImpl {
     }
 
     auto as_range() const {
-        return folly::range(parts_.cbegin(), parts_.cend());
+        return std::views::all(parts_);
     }
 
     auto hash() const { return hash_; }

@@ -46,7 +46,7 @@ namespace detail {
 static const size_t DELETE_OBJECTS_LIMIT = 1000;
 
 template<class It>
-using Range = folly::Range<It>;
+using Range = std::ranges::subrange<It>;
 
 inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
     return error == Aws::S3::S3Errors::NO_SUCH_KEY || error == Aws::S3::S3Errors::RESOURCE_NOT_FOUND;

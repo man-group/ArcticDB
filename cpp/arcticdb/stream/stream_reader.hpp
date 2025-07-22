@@ -96,7 +96,7 @@ class StreamReader {
 
     IdxSegmentIteratorType iterator_indexes() {
         auto idx_key_container = key_gen_();
-        auto idx_key_rg = folly::range(idx_key_container.begin(), idx_key_container.end());
+        auto idx_key_rg = std::views::all(idx_key_container);
         auto key_it = KeyRangeIteratorType(index_range_, idx_key_rg);
         auto idx_seg_it = IdxSegmentIteratorType(index_range_, std::move(key_it), store_);
         return idx_seg_it;

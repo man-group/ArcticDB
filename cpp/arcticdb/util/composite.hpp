@@ -11,7 +11,7 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
 
-#include <folly/Range.h>
+#include <ranges>
 #include <folly/container/Enumerate.h>
 #include <boost/iterator/iterator_facade.hpp>
 
@@ -28,11 +28,11 @@ struct Composite {
     using ValueVector = std::vector<ValueType>;
     ValueVector values_;
 
-        using RangeType = folly::Range<typename ValueVector::iterator>;
-        using RangePair = std::pair<RangeType, typename RangeType::iterator>;
+        using RangeType = std::ranges::subrange<typename ValueVector::iterator>;
+        using RangePair = std::pair<RangeType, std::ranges::iterator_t<RangeType>>;
 
         RangeType get_range() const {
-            return folly::Range(values_);
+            return std::ranges::subrange(values_);
         }
 
        RangePair range_pair() const {
