@@ -5,6 +5,13 @@
 // are provided. folly::Ranges triggers the instantiation of
 // std::char_traits<unsigned char>, resulting in a compilation error.
 
+#if defined(__clang__)
+#pragma message("========== CLANG DETECTED ==========")
+#if (__clang_major__ == 19)
+#pragma message("========== CLANG 19 ============")
+#endif
+#endif
+
 #if defined(__clang__) && (__clang_major__ == 19)
 
 #include <string>
