@@ -28,7 +28,7 @@
 
 #include <boost/interprocess/streams/bufferstream.hpp>
 
-#include <folly/gen/Base.h>
+#include <arcticdb/util/std_ranges_utils.hpp>
 
 #undef GetMessage
 
@@ -212,8 +212,6 @@ KeySegmentPair do_read_impl(
     return KeySegmentPair{};
 }
 
-namespace fg = folly::gen;
-
 template<class KeyBucketizer>
 void do_remove_impl(
     std::span<VariantKey> variant_keys,
@@ -237,18 +235,22 @@ void do_remove_impl(
         to_delete.clear();
     };
 
-    (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db)).foreach(
-        [&root_folder, b=std::move(bucketizer), delete_object_limit=delete_object_limit, &to_delete, &submit_batch] (auto&& group) {//bypass incorrect 'set but no used" error for delete_object_limit
-            auto key_type_dir = key_type_folder(root_folder, group.key());
-            for (auto k : folly::enumerate(group.values())) {
-                auto blob_name = object_path(b.bucketize(key_type_dir, *k), *k);
-                to_delete.emplace_back(std::move(blob_name));
-                if (to_delete.size() == delete_object_limit) {
-                    submit_batch(to_delete);
-                }
+    // Group keys by type using standard library
+    auto grouped_keys = arcticdb::util::group_by(variant_keys, fmt_db);
+    
+    // Process each group
+    arcticdb::util::foreach_group(grouped_keys, [&](auto&& key_type, auto&& keys) {
+        auto key_type_dir = key_type_folder(root_folder, key_type);
+        for (size_t i = 0; i < keys.size(); ++i) {
+            auto& k = keys[i];
+            auto blob_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+            to_delete.emplace_back(std::move(blob_name));
+            if (to_delete.size() == delete_object_limit) {
+                submit_batch(to_delete);
             }
         }
-    );
+    });
+    
     if (!to_delete.empty()) {
         submit_batch(to_delete);
     }

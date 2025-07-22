@@ -20,7 +20,7 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 
-#include <folly/gen/Base.h>
+#include <arcticdb/util/std_ranges_utils.hpp>
 #include <folly/Function.h>
 #include <folly/Range.h>
 #include <folly/futures/Future.h>
@@ -202,41 +202,45 @@ class KeyRangeIterator : public IndexRangeFilter {
 
 inline auto generate_segments_from_keys(
     arcticdb::stream::StreamSource &read_store,
-    std::size_t prefetch_window,
+    ARCTICDB_UNUSED std::size_t prefetch_window,
     const storage::ReadKeyOpts& opts) {
-    using namespace folly::gen;
-    return
-        map([&read_store](auto &&key) {
+
+    return [&read_store, opts](auto&& keys) {
+        std::vector<std::pair<entity::VariantKey, SegmentInMemory>> result;
+        result.reserve(keys.size());
+
+        for (auto&& key : keys) {
             ARCTICDB_DEBUG(log::inmem(), "Getting segment for key {}: {}", key.type(), key.view());
-            return read_store.read_sync(std::forward<decltype(key)>(key));
-        })
-            | window(prefetch_window)
-            | move
-            | map([opts](auto &&key_seg) {
-                try {
-                    return std::make_optional(std::forward<decltype(key_seg)>(key_seg));
-                } catch(storage::KeyNotFoundException& e) {
-                    if (opts.ignores_missing_key_) {
-                        return std::optional<std::pair<entity::VariantKey, SegmentInMemory>>();
-                    }
+            try {
+                auto key_seg = read_store.read_sync(std::forward<decltype(key)>(key));
+                result.push_back(std::move(key_seg));
+            } catch(storage::KeyNotFoundException& e) {
+                if (!opts.ignores_missing_key_) {
                     throw storage::KeyNotFoundException(std::move(e.keys()));
                 }
-            })
-            | filter() // By default removes falsy
-            | map([](auto&& opt) { return std::forward<decltype(opt)>(opt).value(); });
+                // Skip missing keys if ignores_missing_key_ is true
+            }
+        }
+
+        return result;
+    };
 }
 
 inline auto generate_keys_from_segments(
     arcticdb::stream::StreamSource &read_store,
     entity::KeyType expected_key_type,
     std::optional<entity::KeyType> expected_index_type = std::nullopt) {
-    return folly::gen::map([expected_key_type, expected_index_type, &read_store](auto &&key_seg) {
-        return folly::gen::detail::GeneratorBuilder<entity::AtomKey>() + [&](auto &&yield) {
-            std::stack<std::pair<entity::VariantKey, SegmentInMemory>> key_segs;
-            key_segs.push(std::forward<decltype(key_seg)>(key_seg));
-            while(!key_segs.empty()) {
-                auto [key, seg] = std::move(key_segs.top());
-                key_segs.pop();
+    return [expected_key_type, expected_index_type, &read_store](auto&& key_segs) {
+        std::vector<entity::AtomKey> result;
+
+        for (auto&& key_seg : key_segs) {
+            std::stack<std::pair<entity::VariantKey, SegmentInMemory>> processing_stack;
+            processing_stack.push(std::forward<decltype(key_seg)>(key_seg));
+
+            while(!processing_stack.empty()) {
+                auto [key, seg] = std::move(processing_stack.top());
+                processing_stack.pop();
+
                 for (ssize_t i = 0; i < ssize_t(seg.row_count()); ++i) {
                     auto read_key = read_key_row(seg, i);
                     if(read_key.type() != expected_key_type) {
@@ -244,14 +248,16 @@ inline auto generate_keys_from_segments(
                             "Found unsupported key type in index segment. Expected {} or (index) {}, actual {}",
                             expected_key_type, expected_index_type.value_or(KeyType::UNDEFINED), read_key
                         );
-                        key_segs.push(read_store.read_sync(read_key));
+                        processing_stack.push(read_store.read_sync(read_key));
+                    } else {
+                        result.push_back(read_key);
                     }
-                    yield(read_key);
                 }
             }
-        };
-    })
-     | folly::gen::concat;
+        }
+
+        return result;
+    };
 }
 
 template<typename SegmentIteratorType>

@@ -7,7 +7,7 @@
 #include <arcticdb/util/buffer_pool.hpp>
 
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
-#include <folly/gen/Base.h>
+#include <arcticdb/util/std_ranges_utils.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
@@ -40,7 +40,6 @@ using namespace object_store_utils;
 
 namespace s3 {
 
-namespace fg = folly::gen;
 namespace detail {
 
 static const size_t DELETE_OBJECTS_LIMIT = 1000;
@@ -289,39 +288,42 @@ void do_remove_impl(
 
     to_delete.reserve(std::min(ks.size(), delete_object_limit));
 
-    (fg::from(ks) | fg::move | fg::groupBy(fmt_db)).foreach(
-        [&s3_client, &root_folder, &bucket_name, &to_delete,
-            b = std::forward<KeyBucketizer>(bucketizer), &failed_deletes](auto&& group) {
-            auto key_type_dir = key_type_folder(root_folder, group.key());
-            for (auto k : folly::enumerate(group.values())) {
-                auto s3_object_name = object_path(b.bucketize(key_type_dir, *k), *k);
-                to_delete.emplace_back(std::move(s3_object_name));
+    // Group keys by type using standard library
+    auto grouped_keys = arcticdb::util::group_by(ks, fmt_db);
+    
+    // Process each group
+    arcticdb::util::foreach_group(grouped_keys, [&](auto&& key_type, auto&& keys) {
+        auto key_type_dir = key_type_folder(root_folder, key_type);
+        for (size_t i = 0; i < keys.size(); ++i) {
+            auto& k = keys[i];
+            auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
+            to_delete.emplace_back(std::move(s3_object_name));
 
-                if (to_delete.size() == delete_object_limit || k.index + 1 == group.size()) {
-                    auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects, group.key());
-                    auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
-                    if (delete_object_result.is_success()) {
-                        ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects, one of which with key '{}'",
-                                               to_delete.size(),
-                                               variant_key_view(*k));
-                        for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
-                            auto bad_key_name = bad_key.s3_object_name.substr(key_type_dir.size(),
-                                                                              std::string::npos);
-                            failed_deletes.emplace_back(
-                                variant_key_from_bytes(
-                                    reinterpret_cast<const uint8_t *>(bad_key_name.data()),
-                                    bad_key_name.size(), group.key()),
-                                std::move(bad_key.error_message));
-                        }
-                    } else {
-                        auto& error = delete_object_result.get_error();
-                        std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
-                        raise_s3_exception(error, failed_objects);
+            if (to_delete.size() == delete_object_limit || i + 1 == keys.size()) {
+                auto query_stat_operation_time = query_stats::add_task_count_and_time(query_stats::TaskType::S3_DeleteObjects, key_type);
+                auto delete_object_result = s3_client.delete_objects(to_delete, bucket_name);
+                if (delete_object_result.is_success()) {
+                    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted {} objects, one of which with key '{}'",
+                                           to_delete.size(),
+                                           variant_key_view(k));
+                    for (auto& bad_key : delete_object_result.get_output().failed_deletes) {
+                        auto bad_key_name = bad_key.s3_object_name.substr(key_type_dir.size(),
+                                                                          std::string::npos);
+                        failed_deletes.emplace_back(
+                            variant_key_from_bytes(
+                                reinterpret_cast<const uint8_t *>(bad_key_name.data()),
+                                bad_key_name.size(), key_type),
+                            std::move(bad_key.error_message));
                     }
-                    to_delete.clear();
+                } else {
+                    auto& error = delete_object_result.get_error();
+                    std::string failed_objects = fmt::format("{}", fmt::join(to_delete, ", "));
+                    raise_s3_exception(error, failed_objects);
                 }
+                to_delete.clear();
             }
-        });
+        }
+    });
 
     util::check(to_delete.empty(), "Have {} segment that have not been removed", to_delete.size());
     raise_if_failed_deletes(failed_deletes);
@@ -359,8 +361,8 @@ void do_remove_no_batching_impl(
     auto delete_results = folly::collect(std::move(delete_object_results)).via(&inline_executor).get();
 
     boost::container::small_vector<FailedDelete, 1> failed_deletes;
-    auto keys_and_delete_results = folly::gen::from(ks) | folly::gen::move | folly::gen::zip(std::move(delete_results)) | folly::gen::as<std::vector>();
-    for (auto&& [k, delete_object_result] : std::move(keys_and_delete_results)) {
+    auto keys_and_delete_results = arcticdb::util::zip_move(ks, std::move(delete_results));
+    for (auto&& [k, delete_object_result] : keys_and_delete_results) {
         if (delete_object_result.is_success()) {
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Deleted object with key '{}'", variant_key_view(k));
         } else if (const auto& error = delete_object_result.get_error(); !is_not_found_error(error.GetErrorType())) {
@@ -553,7 +555,7 @@ void do_visit_object_sizes_for_type_impl(
 
             ARCTICDB_RUNTIME_DEBUG(log::storage(), "Received object list");
 
-            auto zipped = folly::gen::from(output.s3_object_sizes) | folly::gen::zip(output.s3_object_names) | folly::gen::as<std::vector>();
+            auto zipped = arcticdb::util::zip_move(output.s3_object_sizes, output.s3_object_names);
             for (const auto& [size, name] : zipped) {
                 auto key = name.substr(path_info.path_to_key_size_);
                 auto k = variant_key_from_bytes(

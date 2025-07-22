@@ -19,7 +19,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/stream/piloted_clock.hpp>
 
-#include <folly/gen/Base.h>
+#include <arcticdb/util/std_ranges_utils.hpp>
 #include <folly/futures/Future.h>
 #include <filesystem>
 #include <span>
