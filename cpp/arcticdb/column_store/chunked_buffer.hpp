@@ -481,7 +481,7 @@ class ChunkedBufferImpl {
             block_offsets_.clear();
         }
         block->abandon();
-        free_block(block);
+        delete block;
     }
 
     void truncate_first_block(size_t bytes) {
@@ -499,7 +499,7 @@ class ChunkedBufferImpl {
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
         block->abandon();
-        free_block(block);
+        delete block;
     }
 
     void truncate_last_block(size_t bytes) {
@@ -512,7 +512,7 @@ class ChunkedBufferImpl {
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
         block->abandon();
-        free_block(block);
+        delete block;
     }
 
   private:
