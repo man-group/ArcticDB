@@ -249,7 +249,7 @@ inline void fill_test_frame(SegmentInMemory &segment,
 
 template<typename IndexType>
 StreamDescriptor get_test_descriptor(const StreamId &id, std::span<const FieldRef> fields) {
-    return IndexType::default_index().create_stream_descriptor(id, folly::Range(fields.begin(), fields.end()));
+    return IndexType::default_index().create_stream_descriptor(id, std::ranges::subrange(fields.begin(), fields.end()));
 }
 
 template<typename IndexType>
