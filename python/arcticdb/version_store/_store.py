@@ -533,7 +533,9 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
-            result = self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+            result = self.version_store.write_parallel(
+                symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
+            )
             if is_new_stage_api_enabled:
                 return result
             return None
@@ -667,7 +669,11 @@ class NativeVersionStore:
             if parallel or incomplete:
                 is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
                 if is_new_stage_api_enabled:
-                    warn('Staging data with write() is deprecated. Use stage() instead.', DeprecationWarning, stacklevel=2)
+                    warn(
+                        "Staging data with write() is deprecated. Use stage() instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
@@ -2297,6 +2303,7 @@ class NativeVersionStore:
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
             import pyarrow as pa
+
             frame_data = read_result.frame_data
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
@@ -2643,6 +2650,59 @@ class NativeVersionStore:
         """
         self.version_store.delete_versions(symbol, versions)
 
+    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]) -> List[Optional[DataError]]:
+        """
+        Delete the given versions of the given symbols.
+        Batch equivalent of `delete_version` and `delete_versions`.
+
+        see `delete_version` and `delete_versions` for more details.
+
+        Parameters
+        ----------
+        symbols : `List[str]`
+            Symbols to delete versions for.
+        versions : `List[List[int]]`
+            Versions to delete for each symbol.
+            If there are no versions left for the symbol, the symbol will be deleted.
+
+        Returns
+        -------
+        `List[DataError]`
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
+
+        Raises
+        ------
+        ValueError
+            If versions is empty for any symbol.
+        """
+        # make sure that the versions are not empty
+        for symbol, version_ids in zip(symbols, versions):
+            if not version_ids:
+                raise ValueError(f"version_ids cannot be empty for symbol '{symbol}'")
+        return self.version_store.batch_delete(symbols, versions)
+
+    def batch_delete_symbols(self, symbols: List[str]) -> List[Optional[DataError]]:
+        """
+        Delete all versions of the given symbols.
+
+        Batch equivalent of `delete`.
+
+        see `delete` for more details.
+
+        Parameters
+        ----------
+        symbols : `List[str]`
+            Symbols to delete all versions for.
+
+        Returns
+        -------
+        `List[DataError]`
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
+        """
+        return self.version_store.batch_delete(symbols, [[] for _ in symbols])
+
     def prune_previous_versions(self, symbol: str):
         """
         Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
@@ -2972,7 +3032,7 @@ class NativeVersionStore:
 
     def lib_cfg(self):
         return self._lib_cfg
-    
+
     def lib_native_cfg(self):
         return self._native_cfg
 

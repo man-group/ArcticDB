@@ -381,6 +381,15 @@ public:
         bool throw_on_error
     );
 
+    std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> batch_delete_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<std::vector<VersionId>>& version_ids
+    );
+
+    std::vector<std::variant<folly::Unit, DataError>> batch_delete_symbols_internal(
+        const std::vector<std::pair<StreamId, VersionId>>& symbols_to_delete
+    );
+
     VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
         const version_store::UpdateInfo&& update_info, 
         const StreamId& stream_id, 
