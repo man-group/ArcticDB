@@ -11,7 +11,7 @@
 #include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/util/pb_util.hpp>

@@ -13,7 +13,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 
 namespace arcticdb::storage::mongo {
 

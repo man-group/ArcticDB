@@ -19,10 +19,10 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/util/folly_ranges.hpp>
 
 #include <folly/gen/Base.h>
 #include <folly/Function.h>
-#include <folly/Range.h>
 #include <folly/futures/Future.h>
 #include <boost/circular_buffer.hpp>
 

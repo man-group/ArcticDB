@@ -13,7 +13,7 @@
 #include <google/protobuf/any.pb.h>
 #include <google/protobuf/util/message_differencer.h>
 #include <arcticdb/util/preconditions.hpp>
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 
 #include <exception>
 #include <optional>

@@ -19,8 +19,8 @@
 #include <arcticdb/storage/single_file_storage.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/composite.hpp>
+#include <arcticdb/util/folly_ranges.hpp>
 
-#include <folly/Range.h>
 #include <folly/concurrency/ConcurrentHashMap.h>
 #include <boost/core/noncopyable.hpp>
 #include <filesystem>

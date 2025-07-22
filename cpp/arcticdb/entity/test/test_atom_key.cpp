@@ -12,8 +12,7 @@
 
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
-
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::entity;

@@ -13,7 +13,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 #include <filesystem>
 
 namespace arcticdb::storage {

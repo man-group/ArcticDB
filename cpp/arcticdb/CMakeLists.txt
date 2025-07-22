@@ -364,6 +364,7 @@ set(arcticdb_srcs
         util/flatten_utils.hpp
         util/format_bytes.hpp
         util/format_date.hpp
+        util/folly_ranges.hpp
         util/hash.hpp
         util/spinlock.hpp
         util/key_utils.hpp

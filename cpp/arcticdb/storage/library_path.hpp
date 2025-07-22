@@ -9,9 +9,9 @@
 
 #include <arcticdb/util/hash.hpp>
 #include <arcticdb/util/name_validation.hpp>
+#include <arcticdb/util/folly_ranges.hpp>
 
 #include <boost/container/small_vector.hpp>
-#include <folly/Range.h>
 #include <fmt/format.h>
 #include <memory>
 #include <string>

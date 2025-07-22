@@ -9,7 +9,7 @@
 
 #include <folly/futures/Future.h>
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <unordered_map>
 #include <any>

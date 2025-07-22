@@ -10,8 +10,8 @@
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/variant.hpp>
+#include <arcticdb/util/folly_ranges.hpp>
 
-#include <folly/Range.h>
 #include <folly/container/Enumerate.h>
 #include <boost/iterator/iterator_facade.hpp>
 

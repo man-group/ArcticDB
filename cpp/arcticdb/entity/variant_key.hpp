@@ -10,7 +10,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/ref_key.hpp>
 #include <variant>
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 
 namespace arcticdb::entity {
 

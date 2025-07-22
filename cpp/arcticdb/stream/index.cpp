@@ -11,7 +11,7 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
-#include <folly/Range.h>
+#include <arcticdb/util/folly_ranges.hpp>
 
 namespace arcticdb::stream {
 
