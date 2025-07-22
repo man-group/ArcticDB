@@ -1200,33 +1200,33 @@ std::shared_ptr<PipelineContext> setup_join_pipeline_context(
 }
 
 MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
-        const std::vector<StreamId>& stream_ids,
-        const std::vector<VersionQuery>& version_queries,
+        std::shared_ptr<std::vector<StreamId>> stream_ids,
+        std::shared_ptr<std::vector<VersionQuery>> version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
         const ReadOptions& read_options,
         std::vector<std::shared_ptr<Clause>>&& clauses,
         std::any& handler_data) {
     py::gil_scoped_release release_gil;
     util::check(!clauses.empty(), "Cannot join with no joining clause provided");
-    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
+    auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), *stream_ids, *version_queries);
     std::vector<folly::Future<SymbolProcessingResult>> symbol_processing_result_futs;
     symbol_processing_result_futs.reserve(opt_index_key_futs.size());
     auto component_manager = std::make_shared<ComponentManager>();
     for (auto&& [idx, opt_index_key_fut]: folly::enumerate(opt_index_key_futs)) {
         symbol_processing_result_futs.emplace_back(
                 std::move(opt_index_key_fut).thenValue([store = store(),
-                                                        &stream_ids,
-                                                        &version_queries,
+                                                        stream_ids,
+                                                        version_queries,
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         idx,
-                                                        &read_options,
+                                                        read_options,
                                                         &component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
                     auto version_info = get_version_identifier(
-                            stream_ids[idx],
-                            version_queries[idx],
+                            (*stream_ids)[idx],
+                            (*version_queries)[idx],
                             read_options,
                             opt_index_key.has_value() ? std::make_optional<VersionedItem>(std::move(*opt_index_key)) : std::nullopt);
-                    return read_and_process(store, version_info, read_query, read_options, component_manager);
+                    return read_and_process(store, std::move(version_info), read_query, read_options, component_manager);
                 })
         );
     }
@@ -1391,6 +1391,51 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     return transform_batch_items_or_throw(std::move(write_versions), stream_ids, flags);
 }
 
+std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> LocalVersionedEngine::batch_delete_internal(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<std::vector<VersionId>>& version_ids) {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_internal, stream_ids and version_ids must have the same size");
+
+    if (stream_ids.empty()) {
+        return {};
+    }
+    
+    std::vector<std::unordered_set<VersionId>> version_sets;
+    version_sets.reserve(version_ids.size());
+    for (const auto& version_list : version_ids) {
+        version_sets.emplace_back(version_list.begin(), version_list.end());
+    }
+    
+    std::vector<folly::Future<version_store::TombstoneVersionResult>> futures;
+    for (size_t i = 0; i < stream_ids.size(); ++i) {
+        if (!version_sets[i].empty()) {
+            futures.push_back(tombstone_versions_async(store(), version_map(), stream_ids[i], version_sets[i]));
+        } else {
+            futures.push_back(tombstone_all_async(store(), version_map(), stream_ids[i]));
+        }
+    }
+
+    auto tombstone_results = folly::collectAll(futures).get();
+    return transform_batch_items_or_throw<version_store::TombstoneVersionResult>(
+        std::move(tombstone_results),
+        stream_ids,
+        TransformBatchResultsFlags{}
+    );
+}
+
+std::vector<std::variant<folly::Unit, DataError>> LocalVersionedEngine::batch_delete_symbols_internal(
+    const std::vector<std::pair<StreamId, VersionId>>& symbols_to_delete
+) {
+    std::vector<folly::Future<folly::Unit>> remove_symbol_tasks;
+    std::vector<StreamId> stream_ids;
+
+    for(const auto& [stream_id, latest_version] : symbols_to_delete) {
+        stream_ids.push_back(stream_id);
+        remove_symbol_tasks.push_back(async::submit_io_task(DeleteSymbolTask{store(), symbol_list_ptr(), stream_id, latest_version}));
+    }   
+    auto remove_symbol_results = folly::collectAll(remove_symbol_tasks).get();
+    return transform_batch_items_or_throw<folly::Unit>(std::move(remove_symbol_results), std::move(stream_ids), TransformBatchResultsFlags{});
+}
 
 VersionedItem LocalVersionedEngine::append_internal(
     const StreamId& stream_id,

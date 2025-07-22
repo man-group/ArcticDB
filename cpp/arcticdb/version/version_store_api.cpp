@@ -821,13 +821,13 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
     }
 
 ReadResult PythonVersionStore::batch_read_and_join(
-    const std::vector<StreamId>& stream_ids,
-    const std::vector<VersionQuery>& version_queries,
+    std::shared_ptr<std::vector<StreamId>> stream_ids,
+    std::shared_ptr<std::vector<VersionQuery>> version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
     const ReadOptions& read_options,
     std::vector<std::shared_ptr<Clause>>&& clauses,
     std::any& handler_data) {
-    auto versions_and_frame = batch_read_and_join_internal(stream_ids, version_queries, read_queries, read_options, std::move(clauses), handler_data);
+    auto versions_and_frame = batch_read_and_join_internal(std::move(stream_ids), std::move(version_queries), read_queries, read_options, std::move(clauses), handler_data);
     return create_python_read_result(
             versions_and_frame.versioned_items_,
             read_options.output_format(),
@@ -956,6 +956,61 @@ void PythonVersionStore::delete_versions(
     }
 }
 
+std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<std::vector<VersionId>>& version_ids) {
+    // This error can only be triggered when the function is called from batch_delete_versions
+    // The other code paths make checks that prevents us getting to this point
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions, stream_ids and version_ids must have the same size");
+    
+    auto results = batch_delete_internal(stream_ids, version_ids);
+    
+    std::vector<std::optional<DataError>> return_results;
+
+    std::vector<IndexTypeKey> keys_to_delete;
+    std::vector<std::pair<StreamId, VersionId>> symbols_to_delete;
+
+    for (const auto& result : results) {
+        util::variant_match(result,
+            [&](const version_store::TombstoneVersionResult& tombstone_result) {
+                return_results.emplace_back(std::nullopt);
+
+                if(tombstone_result.keys_to_delete.empty()) {
+                    log::version().warn("Nothing to delete for symbol '{}'", tombstone_result.symbol);
+                    return;
+                }
+
+                if (!cfg().write_options().delayed_deletes()) {
+                    keys_to_delete.insert(keys_to_delete.end(), tombstone_result.keys_to_delete.begin(), tombstone_result.keys_to_delete.end());
+                }
+
+                if(tombstone_result.no_undeleted_left && cfg().symbol_list() && !tombstone_result.keys_to_delete.empty()) {
+                    symbols_to_delete.emplace_back(tombstone_result.symbol, tombstone_result.latest_version_);
+                }
+            },
+            [&](const DataError& data_error) {
+                return_results.emplace_back(std::make_optional(std::move(data_error)));
+            }
+        );
+    }
+
+    // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
+    if(!keys_to_delete.empty()) {
+        delete_tree(keys_to_delete, TombstoneVersionResult{true});
+    }
+
+    auto sym_delete_results = batch_delete_symbols_internal(symbols_to_delete);
+    
+    for(size_t i = 0; i < symbols_to_delete.size(); ++i) {
+        const auto& result = sym_delete_results[i];
+        if(std::holds_alternative<DataError>(result)) {
+            return_results[i] = std::make_optional(std::get<DataError>(result));
+        }
+    }
+    
+    return return_results;
+}
+
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {
     auto snaps = get_master_snapshots_map(store());
     for (const auto& sym : symbols) {
@@ -998,7 +1053,10 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
     try {
-        auto [version_id, all_index_keys] = version_map()->delete_all_versions(store(), stream_id);
+        auto res = tombstone_all_async(store(), version_map(), stream_id).get();
+        auto version_id = res.latest_version_;
+        auto all_index_keys = res.keys_to_delete;
+        
         if (all_index_keys.empty()) {
             log::version().warn("Nothing to delete for symbol '{}'", stream_id);
             return;

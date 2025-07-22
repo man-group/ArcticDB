@@ -595,6 +595,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("delete_versions",
              &PythonVersionStore::delete_versions,
              py::call_guard<SingleThreadMutexHolder>(), "Delete specific versions of the given symbol")
+        .def("batch_delete",
+             &PythonVersionStore::batch_delete,
+             py::arg("stream_ids"),
+             py::arg("version_ids"),
+             py::call_guard<SingleThreadMutexHolder>(), "Delete specific versions of the given symbols")
          .def("prune_previous_versions",
               &PythonVersionStore::prune_previous_versions,
               py::call_guard<SingleThreadMutexHolder>(), "Delete all but the latest version of the given symbol")
@@ -841,8 +846,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_and_join",
              [&](PythonVersionStore& v,
-                 const std::vector<StreamId>& stream_ids,
-                 const std::vector<VersionQuery>& version_queries,
+                 std::vector<StreamId> stream_ids,
+                 std::vector<VersionQuery> version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options,
                  std::vector<ClauseVariant> clauses
@@ -865,13 +870,21 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                              !clause->clause_info().multi_symbol_,
                                              "Multi-symbol clause cannot be used on a single symbol");
                                  }
-                                 _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                                 _clauses.emplace_back(std::make_shared<Clause>(*std::forward<decltype(clause)>(clause)));
                              }
                      );
                  }
                  const OutputFormat output_format = read_options.output_format();
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
-                 return adapt_read_df(v.batch_read_and_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data), &handler_data);
+                 return adapt_read_df(
+                     v.batch_read_and_join(
+                         std::make_shared<std::vector<StreamId>>(std::move(stream_ids)),
+                         std::make_shared<std::vector<VersionQuery>>(std::move(version_queries)),
+                         read_queries,
+                         read_options,
+                         std::move(_clauses),
+                         handler_data),
+                     &handler_data);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Join multiple symbols from the store")
         .def("batch_read_keys",

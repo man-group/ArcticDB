@@ -298,8 +298,8 @@ public:
         std::any& handler_data);
 
     MultiSymbolReadOutput batch_read_and_join_internal(
-            const std::vector<StreamId>& stream_ids,
-            const std::vector<VersionQuery>& version_queries,
+            std::shared_ptr<std::vector<StreamId>> stream_ids,
+            std::shared_ptr<std::vector<VersionQuery>> version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries,
             const ReadOptions& read_options,
             std::vector<std::shared_ptr<Clause>>&& clauses,
@@ -379,6 +379,15 @@ public:
         bool prune_previous_versions,
         bool validate_index,
         bool throw_on_error
+    );
+
+    std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> batch_delete_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<std::vector<VersionId>>& version_ids
+    );
+
+    std::vector<std::variant<folly::Unit, DataError>> batch_delete_symbols_internal(
+        const std::vector<std::pair<StreamId, VersionId>>& symbols_to_delete
     );
 
     VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
