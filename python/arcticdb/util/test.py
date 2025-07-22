@@ -28,7 +28,7 @@ except ImportError:
     from pandas.core.computation.ops import UndefinedVariableError
 
 from arcticdb import QueryBuilder
-from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -244,10 +244,13 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     First will rebuild index for dataframes to assure we
     have same index in both frames when row range index is used
     """
-    if PANDAS_VERSION < CHECK_FREQ_VERSION:
-        if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
-            assert expected.columns.equals(expected.columns)    
-            return
+    if IS_PANDAS_ONE:
+        if (("object" in str(expected.dtype)) and ("float" in str(actual.dtype)) or
+            ("float" in str(expected.dtype)) and ("object" in str(actual.dtype))):
+            if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
+                assert expected.columns.equals(expected.columns)    
+                assert expected.index == actual.index
+                return
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
@@ -450,7 +453,6 @@ def get_wide_dataframe(size=10000, seed=0):
             "bool": np.random.randn(size) > 0,
         }
     )
-
 
 def get_pickle():
     return (
