@@ -70,7 +70,7 @@ class LibraryTool(LibraryToolImpl):
         return decode_segment(self.read_to_segment(key))
 
     def segment_in_memory_to_dataframe(self, segment: SegmentInMemory) -> pd.DataFrame:
-        return denormalize_dataframe(self.segment_to_read_result(segment))
+        return denormalize_dataframe(self.segment_in_memory_to_normalized_dataframe(segment))
 
     def read_to_dataframe(self, key: VariantKey) -> pd.DataFrame:
         """
