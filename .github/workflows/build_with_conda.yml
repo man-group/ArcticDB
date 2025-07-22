@@ -133,7 +133,7 @@ jobs:
     strategy:
       matrix:
         include:
-          - os: macos-15
+          - os: macos-14
 
       fail-fast: false
     runs-on: ${{ matrix.os }}
