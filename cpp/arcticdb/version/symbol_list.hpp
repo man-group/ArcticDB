@@ -203,6 +203,29 @@ struct WriteSymbolTask : async::BaseTask {
     }
 };
 
+struct DeleteSymbolTask : async::BaseTask {
+    const std::shared_ptr<Store> store_;
+    const std::shared_ptr<SymbolList> symbol_list_;
+    const StreamId& stream_id_;
+    const entity::VersionId reference_id_;
+
+    DeleteSymbolTask(
+        std::shared_ptr<Store> store,
+        std::shared_ptr<SymbolList> symbol_list,
+        const StreamId& stream_id,
+        entity::VersionId reference_id) :
+        store_(std::move(store)),
+        symbol_list_(std::move(symbol_list)),
+        stream_id_(stream_id),
+        reference_id_(reference_id) {
+    }
+
+    folly::Future<folly::Unit> operator()() {
+        SymbolList::remove_symbol(store_, stream_id_, reference_id_);
+        return folly::Unit{};
+    }
+};
+
 } //namespace arcticdb
 
 namespace fmt {

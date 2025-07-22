@@ -153,6 +153,38 @@ struct WriteVersionTask : async::BaseTask {
         return folly::Unit{};
     }
 };
+
+struct WriteTombstonesTask : async::BaseTask {
+    const std::shared_ptr<Store> store_;
+    const std::shared_ptr<VersionMap> version_map_;
+    const std::vector<AtomKey> keys_;
+    const StreamId stream_id_;
+    const std::shared_ptr<VersionMapEntry> entry_;
+
+    WriteTombstonesTask(
+        std::shared_ptr<Store> store,
+        std::shared_ptr<VersionMap> version_map,
+        std::vector<AtomKey> keys,
+        StreamId stream_id,
+        std::shared_ptr<VersionMapEntry> entry) :
+        store_(std::move(store)),
+        version_map_(std::move(version_map)),
+        keys_(std::move(keys)),
+        stream_id_(std::move(stream_id)),
+        entry_(std::move(entry)) {
+    }
+
+    folly::Future<AtomKey> operator()() {
+        ScopedLock lock(version_map_->get_lock_object(stream_id_));
+        return version_map_->write_tombstones(
+            store_,
+            keys_,
+            stream_id_,
+            entry_
+        );
+    }
+};
+
 struct WriteAndPrunePreviousTask : async::BaseTask {
     const std::shared_ptr<Store> store_;
     const std::shared_ptr<VersionMap> version_map_;
@@ -173,6 +205,32 @@ struct WriteAndPrunePreviousTask : async::BaseTask {
     folly::Future<std::vector<AtomKey>> operator()() {
         ScopedLock lock(version_map_->get_lock_object(key_.id()));
         return version_map_->write_and_prune_previous(store_, key_, maybe_prev_);
+    }
+};
+
+struct TombstoneAllTask : async::BaseTask {
+    const std::shared_ptr<Store> store_;
+    const std::shared_ptr<VersionMap> version_map_;
+    const StreamId stream_id_;
+    const std::optional<AtomKey> maybe_prev_;
+    const std::optional<std::shared_ptr<VersionMapEntry>> entry_;
+
+    TombstoneAllTask(
+        std::shared_ptr<Store> store,
+        std::shared_ptr<VersionMap> version_map,
+        StreamId stream_id,
+        std::optional<AtomKey> maybe_prev,
+        std::optional<std::shared_ptr<VersionMapEntry>> entry) :
+        store_(std::move(store)),
+        version_map_(std::move(version_map)),
+        stream_id_(std::move(stream_id)),
+        maybe_prev_(std::move(maybe_prev)),
+        entry_(std::move(entry)) {
+    }
+
+    folly::Future<std::pair<VersionId, std::vector<AtomKey>>> operator()() {
+        ScopedLock lock(version_map_->get_lock_object(stream_id_));
+        return version_map_->tombstone_from_key_or_all(store_, stream_id_, maybe_prev_, entry_);
     }
 };
 
