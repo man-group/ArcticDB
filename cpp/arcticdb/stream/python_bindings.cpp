@@ -150,7 +150,7 @@ void register_types(py::module &m) {
         .def_property_readonly("end_nanos_utc", &PyTimestampRange::end_nanos_utc);
 
     m.def("create_timestamp_index_stream_descriptor", [](StreamId tsid, const std::vector<FieldRef>& fields) {
-        auto rg = folly::range(fields.begin(), fields.end());
+        auto rg = std::views::all(fields);
         const auto index = stream::TimeseriesIndex::default_index();
         return index.create_stream_descriptor(tsid, fields_from_range(rg));
     });
