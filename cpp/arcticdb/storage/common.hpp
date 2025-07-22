@@ -8,7 +8,6 @@
 #pragma once
 
 #include <variant>
-#include <folly/Range.h>
 #include <arcticdb/util/string_wrapping_value.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
