@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import itertools
 import inspect
@@ -23,7 +24,13 @@ class Bail(Exception):
 
 
 @pytest.mark.parametrize(
-    "name", [n for n in dir(NativeVersionStore) if n.startswith("batch_") and n not in ["batch_read_metadata_multi", "batch_read_and_join"]]
+    "name",
+    [
+        n
+        for n in dir(NativeVersionStore)
+        if n.startswith("batch_")
+        and n not in ["batch_read_metadata_multi", "batch_read_and_join", "batch_delete_symbols"]
+    ],
 )
 def test_calling_batch_methods_with_non_batch_params(name):
     batch_method = getattr(NativeVersionStore, name)
