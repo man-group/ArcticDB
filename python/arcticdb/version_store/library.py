@@ -17,7 +17,7 @@ from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
-from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
+from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
@@ -25,7 +25,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat, StageResult, KeyNotFoundInStageResultInfo
+from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
 
 import pandas as pd
 import numpy as np
@@ -281,6 +281,7 @@ class ReadRequest(NamedTuple):
     row_range: Optional[Tuple[int, int]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
+    output_format: Optional[OutputFormat] = None
 
     def __repr__(self):
         res = f"ReadRequest(symbol={self.symbol}"
@@ -289,6 +290,7 @@ class ReadRequest(NamedTuple):
         res += f", row_range={self.row_range}" if self.row_range is not None else ""
         res += f", columns={self.columns}" if self.columns is not None else ""
         res += f", query_builder={self.query_builder}" if self.query_builder is not None else ""
+        res += f", output_format={self.output_format}" if self.output_format is not None else ""
         res += ")"
         return res
 
@@ -421,6 +423,7 @@ class LazyDataFrame(QueryBuilder):
             date_range=self.read_request.date_range,
             row_range=self.read_request.row_range,
             columns=self.read_request.columns,
+            output_format=self.read_request.output_format,
             query_builder=q,
         )
 
@@ -1767,7 +1770,8 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-        lazy: bool = False,
+        output_format : Optional[OutputFormat] = None,
+        lazy: bool = False
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1814,6 +1818,8 @@ class Library:
             A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
             documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).
 
+        TODO: Add docs
+
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation
             on `LazyDataFrame` for more details.
@@ -1853,6 +1859,7 @@ class Library:
                     row_range=row_range,
                     columns=columns,
                     query_builder=query_builder,
+                    output_format=output_format,
                 ),
             )
         else:
@@ -1863,6 +1870,7 @@ class Library:
                 row_range=row_range,
                 columns=columns,
                 query_builder=query_builder,
+                output_format=output_format,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
