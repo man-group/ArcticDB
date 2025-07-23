@@ -1113,3 +1113,26 @@ def test_to_strings():
 
     q = QueryBuilder().resample('1min').agg({"col": "sum"})
     assert str(q) == 'RESAMPLE(1min) | AGGREGATE {col: (col, sum), }'
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_column_select_projected_column(version_store_factory, dynamic_schema):
+    lib = version_store_factory(dynamic_schema=dynamic_schema)
+    sym = "sym_0"
+    lib.write(sym, pd.DataFrame({"a": [1, 2]}))
+    qb = QueryBuilder()
+    qb = qb.apply("new_column", qb["a"] + 2)
+    result = lib.read(sym, columns=["new_column"], query_builder=qb).data
+    expected = pd.DataFrame({"new_column": [3, 4]})
+    assert_frame_equal(expected, result)
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_column_select_projected_column_and_filter_it(version_store_factory, dynamic_schema):
+    lib = version_store_factory(dynamic_schema=dynamic_schema)
+    sym = "sym_0"
+    lib.write(sym, pd.DataFrame({"a": [1, 2]}))
+    qb = QueryBuilder()
+    qb = qb.apply("new_column", qb["a"] + 2)
+    qb = qb[qb["new_column"] > 3]
+    result = lib.read(sym, columns=["new_column"], query_builder=qb).data
+    expected = pd.DataFrame({"new_column": [4]})
+    assert_frame_equal(expected, result)
