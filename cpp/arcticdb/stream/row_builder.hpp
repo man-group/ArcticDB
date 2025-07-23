@@ -19,7 +19,6 @@
 #include <pybind11/numpy.h>
 #include <pybind11/stl.h> // for auto return type conversion
 
-#include <folly/Range.h>
 #include <folly/Function.h>
 #include <folly/ScopeGuard.h>
 

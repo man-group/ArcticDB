@@ -628,7 +628,6 @@ def test_symbol_concat_non_existent_symbol(lmdb_library):
         concat(lib.read_batch([sym, "non-existent symbol"], lazy=True)).collect()
 
 
-@pytest.mark.xfail(reason="Fatal Python error: Segmentation fault (monday:9539465547)", strict=False)
 def test_symbol_concat_pickled_data(lmdb_library):
     lib = lmdb_library
     df = pd.DataFrame({"bytes": np.arange(10, dtype=np.uint64)})
