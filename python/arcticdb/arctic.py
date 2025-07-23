@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import logging
 from typing import List, Optional, Any, Union
 
-from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions
+from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions, RuntimeOptions, OutputFormat
 from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
@@ -46,7 +46,7 @@ class Arctic:
     # It is set by the LmdbStorageFixture
     _accessed_libs: Optional[List[NativeVersionStore]] = None
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, output_format: OutputFormat = OutputFormat.PANDAS):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -62,6 +62,12 @@ class Arctic:
         encoding_version: EncodingVersion, default DEFAULT_ENCODING_VERSION
             When creating new libraries with this Arctic instance, the default encoding version to use.
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
+
+        output_format: OutputFormat, default OutputFormat.PANDAS
+            Controls the output format of all operations returning a dataframe.
+            The default behavior (OutputFormat.PANDAS) is to return `pandas.DataFrame`s backed by numpy arrays.
+            OutputFormat.EXPERIMENTAL_ARROW will return all dataframes as `pyarrow.Table`s. The arrow API is still
+            experimental and the arrow layout might change in a minor release.
 
         Examples
         --------
@@ -89,6 +95,7 @@ class Arctic:
         self._library_adapter: ArcticLibraryAdapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
+        self._runtime_options = RuntimeOptions(output_format=output_format)
 
     def __getitem__(self, name: str) -> Library:
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
@@ -100,7 +107,8 @@ class Arctic:
             self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
-            native_cfg=self._library_adapter.native_config()
+            native_cfg=self._library_adapter.native_config(),
+            runtime_options=self._runtime_options
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)

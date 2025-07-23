@@ -57,7 +57,8 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame
+from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat
+from arcticdb.options import RuntimeOptions, OutputFormat, output_format_to_internal
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
 from arcticdb.flattener import Flattener
@@ -89,9 +90,9 @@ import arcticdb_ext as ae
 IS_WINDOWS = sys.platform == "win32"
 
 
-def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, runtime_options=None, **kwargs):
     """
-    Precedence: existing_value > kwargs > env > proto_cfg > global_default
+    Precedence: existing_value > kwargs > runtime_defaults > env > proto_cfg > global_default
 
     Parameters
     ----------
@@ -106,6 +107,9 @@ def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None,
     uppercase
         If true (default), will look for `param_name.upper()` in OS environment variables; otherwise, the original
         case.
+    runtime_options:
+        The RuntimeOptions to use for the library.
+        Uses the param_name attribute of runtime_options.
     kwargs
         For passing through the caller's kwargs in which we look for `param_name`
         *Deprecating: use `existing_value`*
@@ -117,6 +121,14 @@ def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None,
     param_value = kwargs.get(param_name)
     if param_value is not None:
         return param_value
+
+    try:
+        if runtime_options is not None:
+            option_value = getattr(runtime_options, param_name)
+            if option_value is not None:
+                return option_value
+    except AttributeError:
+        pass
 
     env_name = param_name.upper() if uppercase else param_name
     env_value = os.getenv(env_name)
@@ -300,11 +312,11 @@ class NativeVersionStore:
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
 
-    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None):
+    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
         fail_on_missing = library.config.fail_on_missing_custom_normalizer if library.config is not None else False
         custom_normalizer = get_custom_normalizer(fail_on_missing)
-        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg)
+        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options)
 
     def _init_norm_failure_handler(self):
         # init normalization failure handler
@@ -316,7 +328,7 @@ class NativeVersionStore:
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
-    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None):
+    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None, runtime_options=None):
         self._library = library
         self._cfg = library.config
         self.version_store = _PythonVersionStore(self._library)
@@ -327,6 +339,12 @@ class NativeVersionStore:
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
+        self._runtime_options=runtime_options
+
+    def set_output_format(self, output_format: OutputFormat):
+        if self._runtime_options is None:
+            self._runtime_options = RuntimeOptions()
+        self._runtime_options.set_output_format(output_format)
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
@@ -504,7 +522,10 @@ class NativeVersionStore:
 
     @staticmethod
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
-        return resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs)
+        return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, **kwargs)
+
+    def resolve_runtime_defaults(self, param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+        return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, runtime_options=self._runtime_options, **kwargs)
 
     def _write_options(self):
         return self._lib_cfg.lib_desc.version.write_options
@@ -1932,7 +1953,11 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        read_options.set_output_format(kwargs.get("_output_format") or OutputFormat.PANDAS)
+        read_options.set_output_format(
+            output_format_to_internal(
+                self.resolve_runtime_defaults("output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs)
+            )
+        )
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
@@ -1963,6 +1988,7 @@ class NativeVersionStore:
         else:
             index = pd.DatetimeIndex([])
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+
         return VersionedItem(
             symbol=read_result.version.symbol,
             library=self._library.library_path,
@@ -1982,6 +2008,7 @@ class NativeVersionStore:
         if not implement_read_index and is_columns_empty:
             columns = None
         return columns
+
 
     def read(
         self,
@@ -2369,6 +2396,7 @@ class NativeVersionStore:
 
         return index_columns
 
+
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
             import pyarrow as pa
@@ -2412,6 +2440,7 @@ class NativeVersionStore:
                 host=self.env,
                 timestamp=read_result.version.timestamp,
             )
+
 
     def list_versions(
         self,
