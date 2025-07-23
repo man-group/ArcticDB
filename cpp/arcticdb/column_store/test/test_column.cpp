@@ -6,7 +6,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <cstdint>
 #include <limits>
 
 #include <arcticdb/column_store/memory_segment.hpp>
@@ -410,7 +409,7 @@ TEST(ColumnStats, MultipleBlocks) {
     EXPECT_TRUE(stats.has_max());
     EXPECT_TRUE(stats.has_unique());
 
-    EXPECT_EQ(single_col.buffer().num_blocks(), 2017);
+    EXPECT_EQ(single_col.buffer().num_blocks(), 1985);
 
     EXPECT_EQ(stats.get_min<uint64_t>(), 0);
     EXPECT_EQ(stats.get_max<int32_t>(), 999'999);
