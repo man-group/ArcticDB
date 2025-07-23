@@ -641,18 +641,17 @@ void add_bitmagic_compressed_size(
 /// will not improve anything and in fact it might worsen the encoding.
 [[nodiscard]] static size_t encode_bitmap(const util::BitMagic& sparse_map, Buffer& out, std::ptrdiff_t& pos) {
     ARCTICDB_DEBUG(log::version(), "Encoding sparse map of count: {}", sparse_map.count());
-    bm::serializer<bm::bvector<> > bvs;
-    bm::serializer<bm::bvector<> >::buffer sbuf;
-    bvs.serialize(sparse_map, sbuf);
-    auto sz = sbuf.size();
-    auto total_sz = sz + util::combined_bit_magic_delimiters_size();
-    out.assert_size(pos + total_sz);
-
-    uint8_t* target = out.data() + pos;
+    bm::serializer<bm::bvector<> > bvs; // TODO: It is inefficient to create the serializer every time.
+    bm::bvector<>::statistics st;
+    sparse_map.calc_stat(&st);
+    auto total_max_size = st.max_serialize_mem + util::combined_bit_magic_delimiters_size();
+    out.assert_size(pos + total_max_size);
+    uint8_t *target = out.data() + pos;
     util::write_magic<util::BitMagicStart>(target);
-    std::memcpy(target, sbuf.data(), sz);
+    auto sz = bvs.serialize(sparse_map, target, st.max_serialize_mem);
     target += sz;
     util::write_magic<util::BitMagicEnd>(target);
+    auto total_sz = sz + util::combined_bit_magic_delimiters_size();
     pos = pos + static_cast<ptrdiff_t>(total_sz);
     return total_sz;
 }

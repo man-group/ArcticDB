@@ -13,8 +13,6 @@
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 
-#include <folly/Range.h>
-
 using namespace arcticdb;
 using namespace arcticdb::entity;
 
@@ -88,7 +86,7 @@ TEST(Key, Library) {
     using namespace arcticdb::storage;
 
     LibraryPath lib{"a", "b"};
-    LibraryPath lib2(folly::range({"a", "b"}));
+    LibraryPath lib2(std::views::all(std::vector<std::string>{"a", "b"}));
 
     ASSERT_EQ(lib.hash(), lib2.hash());
     ASSERT_EQ(lib, lib2);
