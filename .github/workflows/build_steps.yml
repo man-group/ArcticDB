@@ -113,7 +113,7 @@ jobs:
           maximum-size: 6GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
-
+          
       - name: Extra envs
         # This has to come after msvc-dev-cmd to overwrite the bad VCPKG_ROOT it sets
         run: |
@@ -131,7 +131,7 @@ jobs:
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
-
+      
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
         run: rm $(which ccache) || true
@@ -330,7 +330,7 @@ jobs:
         if: matrix.os == 'linux'
         run: |
           #there are cp313 and cp313t
-          if [[ "${{env.python_impl_name}}" == "cp313" ]]; then
+          if [[ "${{env.python_impl_name}}" == "cp313" ]]; then 
             echo /opt/python/cp313-cp313/bin >> $GITHUB_PATH;
           else
             echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH;
@@ -381,7 +381,7 @@ jobs:
 
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
-        if: ${{ env.real_tests_storage_type != 'no' }}
+        if: ${{ env.real_tests_storage_type != 'no' }} 
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -390,9 +390,9 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
-
+        
       - name: Set s3 sts AWS S3 variables for Windows
-        if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }}
+        if: ${{ env.real_tests_storage_type == 'AWS_S3' && matrix.os == 'windows' }} 
         uses: ./.github/actions/set_s3_sts_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -402,7 +402,10 @@ jobs:
         run: |
           ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            python -m pip  install pytest-repeat setuptools wheel
+            echo "Run custom pytest command"
+            python -m pip  install pytest-repeat
+            python -m pip  install setuptools 
+            python -m pip  install wheel
             python setup.py protoc --build-lib python
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
