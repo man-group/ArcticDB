@@ -587,11 +587,13 @@ class ArrowTableNormalizer(Normalizer):
     def construct_pandas_metadata(
             self,
             fields,
-            range_index: Optional[Dict[str, Union[str, int]]],
+            range_index: Optional[Dict[str, Any]],
             pandas_indexes: Optional[int],
-            pandas_renames: Mapping[int, Optional[str]]
+            pandas_renames: Mapping[int, Union[int, str, None]]
     ):
         import pyarrow as pa
+
+        # Construct index_columns metadata
         if range_index is not None:
             index_columns = [dict(range_index, kind="range")]
         elif pandas_indexes is not None:
@@ -599,6 +601,7 @@ class ArrowTableNormalizer(Normalizer):
         else:
             index_columns = []
 
+        # Construct pandas_columns metadata
         pandas_columns = []
         for i, field in enumerate(fields):
             name = field.name
@@ -629,15 +632,26 @@ class ArrowTableNormalizer(Normalizer):
                 "metadata": metadata,
             })
 
+        # Construct column_index metadata
+        column_index = {
+            "name": None,
+            "field_name": None,
+            "pandas_type": 'unicode',
+            "numpy_type": 'object',
+            "metadata": {'encoding': 'UTF-8'}
+        }
+        renames_to_ints = len([new_name for new_name in pandas_renames.values() if isinstance(new_name, int)])
+        if renames_to_ints == len(fields):
+            column_index["pandas_type"] = "int64"
+            column_index["numpy_type"] = "int64"
+            column_index["metadata"] = None
+        elif renames_to_ints > 1:
+            column_index["pandas_type"] = "mixed-integer"
+            column_index["metadata"] = None
+
         return {
             "index_columns": index_columns,
-            "column_indexes": [{
-                'name': None,
-                'field_name': None,
-                'pandas_type': 'unicode',
-                'numpy_type': 'object',
-                'metadata': {'encoding': 'UTF-8'}
-            }],
+            "column_indexes": [column_index],
             "columns": pandas_columns
         }
 
@@ -703,8 +717,9 @@ class ArrowTableNormalizer(Normalizer):
                     if index_meta.fake_name:
                         pandas_renames[0] = None
                 else:
+                    index_name = index_meta.name if index_meta.name else None
                     range_index = {
-                        "name": index_meta.name,
+                        "name": index_name,
                         "start": index_meta.start,
                         "step": index_meta.step,
                         "stop": index_meta.start + len(item)*index_meta.step,
@@ -736,6 +751,8 @@ class ArrowTableNormalizer(Normalizer):
                         pandas_renames[i] = ""
                     elif col_data.is_int:
                         pandas_renames[i] = int(col)
+                    elif col_data.original_name != col:
+                        pandas_renames[i] = col_data.original_name
 
 
         elif input_type == "series":
