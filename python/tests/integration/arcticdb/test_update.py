@@ -124,9 +124,9 @@ class UpgradeDataFrameTypesGenerator(DataFrameGenerator):
         for i in range(number_columns):
                 dtype = upgradable_dtypes[i % len(upgradable_dtypes)]
                 desired_type = self._resolve(dtype)
-                if 'int' in str(desired_type):
+                if np.issubdtype(desired_type, np.integer):
                     gen.add_int_col(f"col_{i}", desired_type)
-                elif 'float' in str(desired_type):
+                elif np.issubdtype(desired_type, np.floating):
                     gen.add_float_col(f"col_{i}", desired_type)
                 else:
                     raise TypeError("Unsupported type {dtype}")

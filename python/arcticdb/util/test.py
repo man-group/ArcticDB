@@ -424,7 +424,7 @@ def populate_db(version_store):
 def random_integers(size, dtype, min_value: int = None, max_value: int = None):
     # We do not generate integers outside the int64 range
     iinfo = np.iinfo(dtype)
-    if "uint" not in str(dtype):
+    if not np.issubdtype(dtype, np.unsignedinteger):
         platform_int_info = np.iinfo("int_")
     else:
         platform_int_info = iinfo
