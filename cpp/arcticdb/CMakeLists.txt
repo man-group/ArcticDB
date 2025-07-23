@@ -385,6 +385,7 @@ set(arcticdb_srcs
         util/simple_string_hash.hpp
         util/slab_allocator.hpp
         util/sparse_utils.hpp
+        util/std_ranges_utils.hpp
         util/storage_lock.hpp
         util/reliable_storage_lock.hpp
         util/reliable_storage_lock-inl.hpp
@@ -650,8 +651,6 @@ if(${ARCTICDB_USE_PCH})
         <folly/Poly.h>
         <folly/ScopeGuard.h>
         <folly/portability/Time.h>
-        <folly/gen/Base.h>
-
 
         # FMT
         <fmt/core.h>
