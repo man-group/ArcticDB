@@ -52,6 +52,22 @@ inline sparrow::primitive_array<bool> create_primitive_array(
 }
 
 template <typename T>
+sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
+        T* data_ptr,
+        size_t data_size,
+        std::optional<sparrow::validity_bitmap>& validity_bitmap) {
+    // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
+    // applied during normalization in python layer.
+    sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
+        reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr), data_size);
+    if(validity_bitmap) {
+        return sparrow::timestamp_without_timezone_nanoseconds_array{std::move(buffer), data_size, std::move(*validity_bitmap)};
+    } else {
+        return sparrow::timestamp_without_timezone_nanoseconds_array{std::move(buffer), data_size};
+    }
+}
+
+template <typename T>
 sparrow::dictionary_encoded_array<T> create_dict_array(
     sparrow::array&& dict_values_array,
     sparrow::u8_buffer<T>&& dict_keys_buffer,
@@ -142,8 +158,15 @@ sparrow::array arrow_array_from_block(
     using RawType = typename DataTagType::raw_type;
     auto *data_ptr = block.release();
     const auto data_size = block.row_count();
-    auto primitive_array = create_primitive_array<RawType>(data_ptr, data_size, maybe_bitmap);
-    auto arr = sparrow::array{std::move(primitive_array)};
+    auto arr = [&]() {
+        if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
+            auto timestamp_array = create_timestamp_array<RawType>(data_ptr, data_size, maybe_bitmap);
+            return sparrow::array{std::move(timestamp_array)};
+        } else {
+            auto primitive_array = create_primitive_array<RawType>(data_ptr, data_size, maybe_bitmap);
+            return sparrow::array{std::move(primitive_array)};
+        }
+    }();
     arr.set_name(name);
     return arr;
 }
