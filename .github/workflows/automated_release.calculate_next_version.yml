@@ -1,12 +1,13 @@
 name: "__Automated Release: calculate next version"
 
 on:
-  workflow_call:
+  workflow_dispatch:
     inputs:
       regex:
         required: true
         type: string
         description: "Regex to match tags to compare with"
+        default: ^v\d+\.\d+\.\d+(\+man\d+)?$
       regex_match_only_releases:
         required: false
         default: false
@@ -15,6 +16,23 @@ on:
       from_branch:
         required: true
         type: string
+        default: 0e9a36381
+  workflow_call:
+    inputs:
+      regex:
+        required: true
+        type: string
+        description: "Regex to match tags to compare with"
+        default: ^v\d+\.\d+\.\d+(\+man\d+)?$
+      regex_match_only_releases:
+        required: false
+        default: false
+        type: boolean
+        description: "Whether regex to match only releases or all tags"
+      from_branch:
+        required: true
+        type: string
+        default: 0e9a36381
     outputs:
       version:
         description: "Calculated next version"
@@ -54,8 +72,17 @@ jobs:
           if [ -z "$PULL_REQUESTS" ] || [ ! -f "$PULL_REQUESTS" ]; then
             echo "Error: No PRs found between branches" && exit 1
           fi
-          labels=$(jq -r '.[].labels[].name' "$PULL_REQUESTS")
-          echo Labels: $labels
+          pr_numbers=$(jq -r '.[].number' "$PULL_REQUESTS")
+          for pr in $pr_numbers; do
+            pr_json=$(gh api /repos/man-group/arcticdb/pulls/$pr)
+            base_ref=$(echo "$pr_json" | jq -r '.base.ref')
+            if [ "$base_ref" != "master" ]; then
+              echo "Skipping PR #$pr (base.ref=$base_ref) as it is not merged into master"
+              continue
+            fi
+            pr_labels=$(echo "$pr_json" | jq -r '.labels[].name')
+            labels="$labels $pr_labels"
+          done
           increment_type="patch"
           case "$labels" in
             *"${{ env.MAJOR_LABEL }}"*) increment_type="major"; echo "Major changes found! Should increase major version." ;;
