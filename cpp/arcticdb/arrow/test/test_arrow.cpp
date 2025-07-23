@@ -13,7 +13,7 @@
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
-#include <boost/multiprecision/detail/min_max.hpp>
+#include <sparrow/sparrow.hpp>
 
 using namespace arcticdb;
 
