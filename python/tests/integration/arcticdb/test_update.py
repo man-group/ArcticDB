@@ -11,13 +11,14 @@ from abc import ABC, abstractmethod
 from enum import Enum
 import random
 import sys
-from typing import Dict, Generator, List, Union
+from typing import Dict, Generator, List, Type, Union
 from pandas import Timestamp
 import pytest
 import pandas as pd
 import numpy as np
 
 from arcticdb.options import LibraryOptions
+from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb.util.test import dataframe_simulate_arcticdb_update_static
 from arcticdb.util.utils import DFGenerator, TimestampNumber, get_logger
 from arcticdb.version_store._store import VersionedItem
@@ -32,14 +33,27 @@ logger = get_logger()
 SEED = 1001
 
 
-NUMBER_ROW_SEGMENTS = 10
-NUMBER_COL_SEGMENTS = 10
+ROWS_PER_SEGMENT = 10
+COLS_PER_SEGMENT  = 10
 DEFAULT_FREQ = 's'
 
 
 class UpdatePositionType(Enum):
     '''Enum specifying relative position of an update start or end time relative to
-    original dataframe start and end time'''
+    original dataframe start and end time
+
+    Example:
+    If we have a dataframe with index [5, 10]. The following would be true:
+
+        BEFORE -> [1, 3]
+        RIGHT_BEFORE -> [2, 4]
+        BEFORE_OVERLAP_START -> [2, 5]
+        INSIDE_OVERLAP_BEGINNING -> [5, 7]
+        TOTAL_OVERLAP -> [5, 10]
+        INSIDE -> [6,8]
+        etc .... ()
+    
+    '''
     BEFORE = 0  # End of the update is much before start of original DF
     RIGHT_BEFORE = 1  # End of the update is exactly before start of original DF
     BEFORE_OVERLAP_START = 2 # End of the update overlaps with the start of the original DF
@@ -91,7 +105,7 @@ class UpgradeDataFrameTypesGenerator(DataFrameGenerator):
         self.no_upgrade_types()
         self.seed = seed
 
-    def define_upgrade_types(self, mappings: Dict[type, type]):
+    def define_upgrade_types(self, mappings: Dict[Type, Type]):
         self._type_conversion_dict = mappings
 
     def no_upgrade_types(self):
@@ -105,16 +119,13 @@ class UpgradeDataFrameTypesGenerator(DataFrameGenerator):
                       start_time: Union[Timestamp, TimestampNumber] = Timestamp("2033-12-11"), **kwargs) -> pd.DataFrame:
         freq = TimestampNumber.DEFAULT_FREQ if isinstance(start_time, Timestamp) else start_time.get_type()
 
-        cols=int(number_columns)
-        rows=int(number_rows)
         upgradable_dtypes = [np.int8, np.int16, np.int32, np.uint16, np.uint32, np.float32]
-        gen = DFGenerator(size=rows, seed=self.seed) 
-        for i in range(cols):
+        gen = DFGenerator(size=number_rows, seed=self.seed) 
+        for i in range(number_columns):
                 dtype = upgradable_dtypes[i % len(upgradable_dtypes)]
                 desired_type = self._resolve(dtype)
                 if 'int' in str(desired_type):
                     gen.add_int_col(f"col_{i}", desired_type)
-                    pass
                 elif 'float' in str(desired_type):
                     gen.add_float_col(f"col_{i}", desired_type)
                 else:
@@ -137,7 +148,7 @@ def upgrade_dataframe_types(df: pd.DataFrame, upgrade_types_dict: Dict[type, typ
             df[col] = df[col].astype(upgrade_to)
 
 
-def seed(_seed):
+def set_seed(_seed):
     np.random.seed(_seed)
     random.seed(_seed)
 
@@ -242,8 +253,8 @@ def custom_library(arctic_client, lib_name, request) -> Generator[Library, None,
 
 @pytest.mark.storage
 @pytest.mark.parametrize("custom_library", [
-            {'library_options': LibraryOptions(rows_per_segment=NUMBER_ROW_SEGMENTS, 
-                                               columns_per_segment=NUMBER_COL_SEGMENTS)}
+            {'library_options': LibraryOptions(rows_per_segment=ROWS_PER_SEGMENT, 
+                                               columns_per_segment=COLS_PER_SEGMENT )}
         ], indirect=True)
 @pytest.mark.only_fixture_params(["lmdb", "real_s3", "real_gcp"])
 def test_update_batch_all_supported_datatypes_over_several_segments(custom_library):
@@ -253,41 +264,41 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     same updates does not alter the result
     '''
     lib: Library = custom_library
-    seed(SEED)
+    set_seed(SEED)
     start_time = TimestampNumber.from_timestamp(timestamp=Timestamp("10/10/2007"))
     g = BasicDataFrameGenerator()
     ug = UpdatesGenerator(g)
     
     # Update above 'rows_per_segment'
     sym1 = '_s_1'
-    df1_num_cols = NUMBER_COL_SEGMENTS*5
-    df1_num_rows = NUMBER_ROW_SEGMENTS*5
+    df1_num_cols = COLS_PER_SEGMENT *5
+    df1_num_rows = ROWS_PER_SEGMENT*5
     df1 = g.get_dataframe(number_columns=df1_num_cols, number_rows=df1_num_rows, start_time=start_time)
-    update1 = ug.generate_update(df1, UpdatePositionType.INSIDE, df1_num_cols, NUMBER_ROW_SEGMENTS * 3)
+    update1 = ug.generate_update(df1, UpdatePositionType.INSIDE, df1_num_cols, ROWS_PER_SEGMENT * 3)
     expected_updated_df1 = dataframe_simulate_arcticdb_update_static(df1, update1) 
 
     # Update exactly at 'rows_per_segment'
     sym2 = '_s_2'
-    df2_num_cols = NUMBER_COL_SEGMENTS-1
-    df2_num_rows = NUMBER_ROW_SEGMENTS-1
+    df2_num_cols = COLS_PER_SEGMENT -1
+    df2_num_rows = ROWS_PER_SEGMENT-1
     df2 = g.get_dataframe(number_columns=df2_num_cols, number_rows=df2_num_rows, start_time=start_time)
-    update2 = ug.generate_update(df2, UpdatePositionType.AFTER, df2_num_cols, NUMBER_ROW_SEGMENTS)
+    update2 = ug.generate_update(df2, UpdatePositionType.AFTER, df2_num_cols, ROWS_PER_SEGMENT)
     metadata2 = {1, 2, 3, "something", UpdatesGenerator, ug}
     expected_updated_df2 = dataframe_simulate_arcticdb_update_static(df2, update2) 
 
     # Update below 'rows_per_segment'
     sym3 = '_s_3'
     df3_num_cols = 1
-    df3_num_rows = NUMBER_ROW_SEGMENTS*2 - 1
+    df3_num_rows = ROWS_PER_SEGMENT*2 - 1
     df3 = g.get_dataframe(number_columns=df3_num_cols, number_rows=df3_num_rows, start_time=start_time)
-    update3 = ug.generate_update(df3, UpdatePositionType.INSIDE_OVERLAP_END, df3_num_cols, NUMBER_ROW_SEGMENTS - 2)
+    update3 = ug.generate_update(df3, UpdatePositionType.INSIDE_OVERLAP_END, df3_num_cols, ROWS_PER_SEGMENT - 2)
     metadata3 = df2.to_json()
     expected_updated_df3 = dataframe_simulate_arcticdb_update_static(df3, update3) 
 
     # Error update due to mismatch in columns
     sym4 = '_s_4'
-    df4_num_cols = NUMBER_COL_SEGMENTS*2
-    df4_num_rows = NUMBER_ROW_SEGMENTS*2
+    df4_num_cols = COLS_PER_SEGMENT *2
+    df4_num_rows = ROWS_PER_SEGMENT*2
     df4 = g.get_dataframe(number_columns=df4_num_cols, number_rows=df4_num_rows, start_time=start_time)
     update4_err = ug.generate_update(df4, UpdatePositionType.INSIDE, df4_num_cols - 2, 5)
 
@@ -329,7 +340,7 @@ def test_update_batch_types_upgrade(custom_library):
     symbol_prefix = "some heck of a symbol!.!"
     number_columns = 20
     number_rows = 100
-    seed(3120949)
+    set_seed(SEED)
     
     upgrade_path_simple = { 
         np.int16: np.int32,
@@ -435,9 +446,8 @@ def test_update_batch_types_upgrade(custom_library):
 
 
 
-@pytest.mark.xfail(LINUX and (sys.version_info[:2] == (3, 8)), 
-                   reason = "update_batch return unexpected exception (9589648728)",
-                   strict=False)
+@pytest.mark.xfail(IS_PANDAS_ONE, 
+                   reason = "update_batch return unexpected exception (9589648728)")
 def test_update_batch_error_scenario1(arctic_library):   
     lib= arctic_library
     symbol = "experimental 342143"
@@ -457,9 +467,8 @@ def test_update_batch_error_scenario1(arctic_library):
     assert update_result[0].version == 1
 
 
-@pytest.mark.xfail(LINUX and (sys.version_info[:2] == (3, 8)), 
-                   reason = "update_batch return unexpected exception (9589648728)",
-                   strict=False)
+@pytest.mark.xfail(IS_PANDAS_ONE, 
+                   reason = "update_batch return unexpected exception (9589648728)")
 def test_update_batch_error_scenario2(arctic_library):   
     lib= arctic_library
     symbol = "experimental 342143"
@@ -519,7 +528,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     sizes compared to original dataframe. Only batch operations are used here
     """
     lib: Library = custom_library
-    seed(SEED)
+    set_seed(SEED)
     start_time = TimestampNumber.from_timestamp(timestamp=Timestamp("1/2/2017"))
     g = BasicDataFrameGenerator()
     ug = UpdatesGenerator(g)
@@ -536,7 +545,6 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     for iter, number_rows in enumerate(dataframes_lenghts):
         original_dataframe = g.get_dataframe(original_num_cols, original_number_rows, start_time)
         updates_sequence = ug.generate_sequence(original_dataframe, original_num_cols * 4, number_rows)
-
 
         logger.info(f"Prepare updates (rows count: {number_rows}) and calculate expected dataframes")
         for index, update in enumerate(updates_sequence): 

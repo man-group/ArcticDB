@@ -245,8 +245,8 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     have same index in both frames when row range index is used
     """
     if IS_PANDAS_ONE:
-        if (("object" in str(expected.dtype)) and ("float" in str(actual.dtype)) or
-            ("float" in str(expected.dtype)) and ("object" in str(actual.dtype))):
+        if (np.issubdtype(expected.dtype, np.object_) and np.issubdtype(actual.dtype, np.floating) or
+            np.issubdtype(expected.dtype, np.floating) and np.issubdtype(actual.dtype, np.object_)):
             if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
                 assert expected.columns.equals(expected.columns)    
                 assert expected.index == actual.index
