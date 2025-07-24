@@ -363,7 +363,7 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     assert read_append_data_keys_from_ref(sym) == []
     assert_frame_equal(lib.read(sym).data, get_df(18, 0, np.int64))
 
-def test_read_segment_to_dataframe(lmdb_version_store_v1):
+def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
     df = sample_dataframe()
     lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()
@@ -376,10 +376,10 @@ def test_read_segment_to_dataframe(lmdb_version_store_v1):
 
     assert isinstance(segment_in_memory, SegmentInMemory)
 
-    dataframe = lib_tool.segment_in_memory_to_dataframe(segment_in_memory).data
+    dataframe = lib_tool.segment_in_memory_to_dataframe(segment_in_memory)
 
     assert isinstance(dataframe, pd.DataFrame)
 
     expected_df = lib_tool.read_to_dataframe(tdata_key)
 
-    assert assert_frame_equal(expected_df, dataframe)
+    assert_frame_equal(expected_df, dataframe)
