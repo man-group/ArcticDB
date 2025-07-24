@@ -17,7 +17,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.types import DataType
 
-from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.mark import MACOS
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -242,7 +242,7 @@ def test_type_promotion_int64_and_float64_up_to_float64(lmdb_version_store_dynam
     data = lib.read("test").data.astype(original_type)
 
     # Then
-    if MACOS_WHEEL_BUILD:
+    if MACOS:
         # This test gives other results on MacOS, but it's not a problem for us as the assertions below are meant
         # for illustrating the issue, not for testing the behaviour strictly.
         return
