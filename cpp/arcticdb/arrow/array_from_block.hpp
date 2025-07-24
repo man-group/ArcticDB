@@ -8,8 +8,8 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 
-#include <sparrow.hpp>
-#include <sparrow/layout/primitive_data_access.hpp>
+#include <sparrow/sparrow.hpp>
+#include <sparrow/layout/primitive_layout/primitive_data_access.hpp>
 
 namespace arcticdb {
 
