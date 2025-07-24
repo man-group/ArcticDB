@@ -240,6 +240,7 @@ set(arcticdb_srcs
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_stats.hpp
+        pipeline/frame_data_wrapper.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
         pipeline/index_fields.hpp
@@ -247,9 +248,9 @@ set(arcticdb_srcs
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
         pipeline/input_tensor_frame.hpp
-        pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.hpp
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
@@ -259,7 +260,6 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
-        python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
         python/python_utils.hpp
@@ -455,6 +455,7 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
         pipeline/pipeline_context.cpp
+        pipeline/pandas_output_frame.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
         pipeline/read_pipeline.cpp

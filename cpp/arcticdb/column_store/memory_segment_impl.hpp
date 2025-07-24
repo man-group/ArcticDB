@@ -408,7 +408,7 @@ public:
     void create_columns(
         size_t old_size,
         size_t expected_column_size,
-        AllocationType allocation_type,
+        AllocationType presize,
         Sparsity allow_sparse,
         OutputFormat output_format,
         DataTypeMode mode);

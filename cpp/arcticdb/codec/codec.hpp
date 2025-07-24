@@ -57,7 +57,7 @@ EncodedFieldCollection decode_encoded_fields(
     const uint8_t* data,
     const uint8_t* begin ARCTICDB_UNUSED);
 
-SegmentInMemory decode_segment(Segment& segment, AllocationType allocation_type = AllocationType::DYNAMIC);
+SegmentInMemory decode_segment(Segment& segment);
 
 void decode_into_memory_segment(
     const Segment& segment,

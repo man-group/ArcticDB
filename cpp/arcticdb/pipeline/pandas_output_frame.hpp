@@ -7,11 +7,8 @@
 
 #pragma once
 
-#include <pybind11/pybind11.h>
-
-#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/pipeline/frame_data_wrapper.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
-#include <arcticdb/util/global_lifetimes.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -19,30 +16,29 @@ namespace py = pybind11;
 
 struct ARCTICDB_VISIBILITY_HIDDEN PandasOutputFrame {
 
-    PandasOutputFrame(const SegmentInMemory &frame) :
-            module_data_(ModuleData::instance()),
-            frame_(frame) {
-    }
+    PandasOutputFrame(const SegmentInMemory& frame);
+
+    ~PandasOutputFrame();
 
     ARCTICDB_MOVE_ONLY_DEFAULT(PandasOutputFrame)
 
-    SegmentInMemory frame() {
-        util::check(frame_.has_value(), "PandasOutputFrame contains no frame");
-        return *frame_;
-    }
+    std::shared_ptr<FrameDataWrapper> arrays(py::object &ref);
 
-    SegmentInMemory release_frame() {
-        // Only needed so that we're not relying on Python's garbage collection to destroy this object and thus free
-        // the SegmentInMemory
-        util::check(frame_.has_value(), "PandasOutputFrame contains no frame");
-        auto res = *frame_;
-        frame_.reset();
-        return res;
-    }
+    std::vector<std::string> &names() { return names_; }
+
+    std::vector<std::string> &index_columns() { return index_columns_; }
+
+    SegmentInMemory frame() { return frame_; }
 
 private:
+    std::shared_ptr<FrameDataWrapper> initialize_array(py::object &ref);
+    py::array array_at(std::size_t col_pos, py::object &anchor);
+
     std::shared_ptr<ModuleData> module_data_;
-    std::optional<SegmentInMemory> frame_;
+    SegmentInMemory frame_;
+    std::vector<std::string> names_;
+    std::vector<std::string> index_columns_;
+    std::weak_ptr<FrameDataWrapper> arrays_;
 };
 
 }

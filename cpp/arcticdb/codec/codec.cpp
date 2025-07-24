@@ -560,13 +560,13 @@ void decode_into_memory_segment(
         decode_v1(segment, hdr, res, desc);
 }
 
-SegmentInMemory decode_segment(Segment& segment, AllocationType allocation_type) {
+SegmentInMemory decode_segment(Segment& segment) {
     auto &hdr = segment.header();
     ARCTICDB_TRACE(log::codec(), "Decoding descriptor: {}", segment.descriptor());
     auto descriptor = segment.descriptor();
     descriptor.fields().regenerate_offsets();
     ARCTICDB_TRACE(log::codec(), "Creating segment");
-    SegmentInMemory res(std::move(descriptor), 0, allocation_type);
+    SegmentInMemory res(std::move(descriptor));
     ARCTICDB_TRACE(log::codec(), "Decoding segment");
     decode_into_memory_segment(segment, hdr, res, res.descriptor());
     ARCTICDB_TRACE(log::codec(), "Returning segment");

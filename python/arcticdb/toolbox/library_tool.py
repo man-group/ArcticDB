@@ -92,7 +92,7 @@ class LibraryTool(LibraryToolImpl):
           start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type
         0  2023-01-01 2023-01-02 00:00:00.000000001           0      None  1681399019580103187  3563433649738173789          84         3
         """
-        return denormalize_dataframe(self._read_to_read_result(key))
+        return denormalize_dataframe(self.read_to_read_result(key))
 
     def read_to_keys(
         self, key: VariantKey, id: Optional[Union[str, int]] = None, filter_key_type: Optional[KeyType] = None
