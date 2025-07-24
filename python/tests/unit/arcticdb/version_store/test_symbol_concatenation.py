@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -24,7 +25,11 @@ pytestmark = pytest.mark.pipeline
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=12)])
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index, join):
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    lib = lmdb_library_factory(
+        LibraryOptions(
+            dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment
+        )
+    )
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -65,8 +70,12 @@ def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segm
         assert version.metadata == (None if idx == 1 else idx)
 
 
-@pytest.mark.parametrize("first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"])
-@pytest.mark.parametrize("second_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"])
+@pytest.mark.parametrize(
+    "first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]
+)
+@pytest.mark.parametrize(
+    "second_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]
+)
 def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type):
     lib = lmdb_library
     df0 = pd.DataFrame({"col": np.arange(1, dtype=np.dtype(first_type))})
@@ -85,7 +94,7 @@ def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type):
         None,
         pd.date_range("2025-01-01", periods=8),
         pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=2), [0, 1], ["hello", "goodbye"]]),
-    ]
+    ],
 )
 @pytest.mark.parametrize("name_0", [None, "", "s1", "s2"])
 @pytest.mark.parametrize("name_1", [None, "", "s1", "s2"])
@@ -217,7 +226,9 @@ def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=5)])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_schema, columns_per_segment, index, join):
+def test_symbol_concat_empty_column_intersection(
+    lmdb_library_factory, dynamic_schema, columns_per_segment, index, join
+):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
     df_0 = pd.DataFrame(
         {
@@ -253,10 +264,18 @@ def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_s
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
-@pytest.mark.parametrize("columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]])
+@pytest.mark.parametrize(
+    "columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]]
+)
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns, join):
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+def test_symbol_concat_column_slicing(
+    lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns, join
+):
+    lib = lmdb_library_factory(
+        LibraryOptions(
+            dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment
+        )
+    )
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -289,11 +308,20 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
 def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes, join):
     lib = lmdb_library
     if not only_incompletes:
-        df_0 = pd.DataFrame({"col1": np.arange(3, dtype=np.float64), "col2": np.arange(3, 6, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=3))
+        df_0 = pd.DataFrame(
+            {"col1": np.arange(3, dtype=np.float64), "col2": np.arange(3, 6, dtype=np.float64)},
+            index=pd.date_range("2025-01-01", periods=3),
+        )
         lib.write("sym0", df_0)
-    df_1 = pd.DataFrame({"col1": np.arange(6, 9, dtype=np.float64), "col2": np.arange(9, 12, dtype=np.float64)}, index=pd.date_range("2025-01-04", periods=3))
+    df_1 = pd.DataFrame(
+        {"col1": np.arange(6, 9, dtype=np.float64), "col2": np.arange(9, 12, dtype=np.float64)},
+        index=pd.date_range("2025-01-04", periods=3),
+    )
     lib._dev_tools.library_tool().append_incomplete("sym0", df_1)
-    df_2 = pd.DataFrame({"col2": np.arange(12, 15, dtype=np.float64), "col3": np.arange(15, 18, dtype=np.float64)}, index=pd.date_range("2025-01-07", periods=3))
+    df_2 = pd.DataFrame(
+        {"col2": np.arange(12, 15, dtype=np.float64), "col3": np.arange(15, 18, dtype=np.float64)},
+        index=pd.date_range("2025-01-07", periods=3),
+    )
     lib.write("sym1", df_2)
     # incomplete kwarg Not part of the V2 API
     received = lib._nvs.batch_read_and_join(
@@ -304,7 +332,7 @@ def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes
         [None, None],
         [None, None],
         [None, None],
-        incomplete=True
+        incomplete=True,
     )
     if only_incompletes:
         expected = pd.concat([df_1, df_2], join=join)
@@ -323,15 +351,23 @@ def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_multiindex_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+def test_symbol_concat_multiindex_basic(
+    lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join
+):
+    lib = lmdb_library_factory(
+        LibraryOptions(
+            dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment
+        )
+    )
     df = pd.DataFrame(
         {
             "col1": np.arange(12, dtype=np.int64),
             "col2": np.arange(100, 112, dtype=np.int64),
             "col3": np.arange(1000, 1012, dtype=np.int64),
         },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=["datetime", "level"]),
+        index=pd.MultiIndex.from_product(
+            [pd.date_range("2025-01-01", periods=4), [0, 1, 2]], names=["datetime", "level"]
+        ),
     )
     lib.write("sym0", df[:3])
     lib.write("sym1", df[3:7])
@@ -375,28 +411,32 @@ def test_symbol_concat_with_date_range(lmdb_library, join):
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
-    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    lib = lmdb_library_factory(
+        LibraryOptions(
+            dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment
+        )
+    )
     df_0 = pd.DataFrame(
         {
-        "col1": np.arange(3, dtype=np.int64),
-        "col2": np.arange(100, 103, dtype=np.int64),
-        "col3": np.arange(1000, 1003, dtype=np.int64),
+            "col1": np.arange(3, dtype=np.int64),
+            "col2": np.arange(100, 103, dtype=np.int64),
+            "col3": np.arange(1000, 1003, dtype=np.int64),
         },
         index=pd.date_range(pd.Timestamp(0), freq="1000ns", periods=3),
     )
     df_1 = pd.DataFrame(
         {
-        "col1": np.arange(4, dtype=np.int64),
-        "col2": np.arange(200, 204, dtype=np.int64),
-        "col3": np.arange(2000, 2004, dtype=np.int64),
+            "col1": np.arange(4, dtype=np.int64),
+            "col2": np.arange(200, 204, dtype=np.int64),
+            "col3": np.arange(2000, 2004, dtype=np.int64),
         },
         index=pd.date_range(pd.Timestamp(2000), freq="1000ns", periods=4),
     )
     df_2 = pd.DataFrame(
         {
-        "col1": np.arange(5, dtype=np.int64),
-        "col2": np.arange(300, 305, dtype=np.int64),
-        "col3": np.arange(3000, 3005, dtype=np.int64),
+            "col1": np.arange(5, dtype=np.int64),
+            "col2": np.arange(300, 305, dtype=np.int64),
+            "col3": np.arange(3000, 3005, dtype=np.int64),
         },
         index=pd.date_range(pd.Timestamp(6000), freq="1000ns", periods=5),
     )
@@ -415,7 +455,9 @@ def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_se
 
     received = lazy_df.collect().data
     received = received.reindex(columns=sorted(received.columns))
-    expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    expected = (
+        pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    )
     assert_frame_equal(expected, received)
 
 
@@ -458,16 +500,23 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library):
     received = lib.read_batch_and_join([sym_0, read_request_1, read_request_2], query_builder=q).data
 
     received = received.reindex(columns=sorted(received.columns))
-    expected = pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    expected = (
+        pd.concat([df_0, df_1[1:], df_2[:4]]).resample("2000ns").agg({"col1": "sum", "col2": "mean", "col3": "min"})
+    )
     assert_frame_equal(expected, received)
+
 
 @pytest.mark.parametrize("index_name_0", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("index_name_1", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, index_name_1, join):
     lib = lmdb_library
-    df_0 = pd.DataFrame({"col1": np.arange(1, dtype=np.float64), "col2": np.arange(1, 2, dtype=np.float64)}, index=[pd.Timestamp(0)])
-    df_1 = pd.DataFrame({"col1": np.arange(2, 3, dtype=np.float64), "col3": np.arange(3, 4, dtype=np.float64)}, index=[pd.Timestamp(1)])
+    df_0 = pd.DataFrame(
+        {"col1": np.arange(1, dtype=np.float64), "col2": np.arange(1, 2, dtype=np.float64)}, index=[pd.Timestamp(0)]
+    )
+    df_1 = pd.DataFrame(
+        {"col1": np.arange(2, 3, dtype=np.float64), "col3": np.arange(3, 4, dtype=np.float64)}, index=[pd.Timestamp(1)]
+    )
     df_0.index.name = index_name_0
     df_1.index.name = index_name_1
     lib.write("sym0", df_0)
@@ -484,27 +533,28 @@ def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, 
 @pytest.mark.parametrize("index_name_1_level_1", [None, "hello", "goodbye"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_differently_named_multiindexes(
-        lmdb_library,
-        index_name_0_level_0,
-        index_name_0_level_1,
-        index_name_1_level_0,
-        index_name_1_level_1,
-        join
+    lmdb_library, index_name_0_level_0, index_name_0_level_1, index_name_1_level_0, index_name_1_level_1, join
 ):
     lib = lmdb_library
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(1, dtype=np.float64),
             "col2": np.arange(1, 2, dtype=np.float64),
-         },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), ["hello", None, "goodbye"]], names=[index_name_0_level_0, index_name_0_level_1])
+        },
+        index=pd.MultiIndex.from_product(
+            [pd.date_range("2025-01-01", periods=4), ["hello", None, "goodbye"]],
+            names=[index_name_0_level_0, index_name_0_level_1],
+        ),
     )
     df_1 = pd.DataFrame(
         {
             "col1": np.arange(2, 3, dtype=np.float64),
             "col2": np.arange(3, 4, dtype=np.float64),
-         },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4), ["bonjour", "au revoir", None]], names=[index_name_1_level_0, index_name_1_level_1])
+        },
+        index=pd.MultiIndex.from_product(
+            [pd.date_range("2025-01-01", periods=4), ["bonjour", "au revoir", None]],
+            names=[index_name_1_level_0, index_name_1_level_1],
+        ),
     )
     lib.write("sym0", df_0)
     lib.write("sym1", df_1)
@@ -519,12 +569,7 @@ def test_symbol_concat_differently_named_multiindexes(
 @pytest.mark.parametrize("tz_0", [None, "Europe/Amsterdam", "US/Eastern"])
 @pytest.mark.parametrize("tz_1", [None, "Europe/Amsterdam", "US/Eastern"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_timezone_handling(
-        lmdb_library,
-        tz_0,
-        tz_1,
-        join
-):
+def test_symbol_concat_timezone_handling(lmdb_library, tz_0, tz_1, join):
     lib = lmdb_library
     df_0 = pd.DataFrame(
         {
@@ -554,12 +599,7 @@ def test_symbol_concat_timezone_handling(
 @pytest.mark.parametrize("tz_1_level_1", [None, "Europe/Amsterdam", "Australia/Sydney"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_multiindex_timezone_handling(
-        lmdb_library,
-        tz_0_level_0,
-        tz_0_level_1,
-        tz_1_level_0,
-        tz_1_level_1,
-        join
+    lmdb_library, tz_0_level_0, tz_0_level_1, tz_1_level_0, tz_1_level_1, join
 ):
     lib = lmdb_library
     df_0 = pd.DataFrame(
@@ -567,21 +607,39 @@ def test_symbol_concat_multiindex_timezone_handling(
             "col1": np.arange(1, dtype=np.float64),
             "col2": np.arange(1, 2, dtype=np.float64),
         },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4, tz=tz_0_level_0), pd.date_range("2025-01-01", periods=3, tz=tz_0_level_1)])
+        index=pd.MultiIndex.from_product(
+            [
+                pd.date_range("2025-01-01", periods=4, tz=tz_0_level_0),
+                pd.date_range("2025-01-01", periods=3, tz=tz_0_level_1),
+            ]
+        ),
     )
     df_1 = pd.DataFrame(
         {
             "col1": np.arange(2, 3, dtype=np.float64),
             "col2": np.arange(3, 4, dtype=np.float64),
         },
-        index=pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=4, tz=tz_1_level_0), pd.date_range("2025-01-01", periods=3, tz=tz_1_level_1)])
+        index=pd.MultiIndex.from_product(
+            [
+                pd.date_range("2025-01-01", periods=4, tz=tz_1_level_0),
+                pd.date_range("2025-01-01", periods=3, tz=tz_1_level_1),
+            ]
+        ),
     )
     lib.write("sym0", df_0)
     lib.write("sym1", df_1)
     received = concat(lib.read_batch(["sym0", "sym1"], lazy=True), join).collect().data
 
-    expected_level_0_tz = f"datetime64[ns, {tz_0_level_0}]" if (tz_0_level_0 == tz_1_level_0 and tz_0_level_0 is not None) else "datetime64[ns]"
-    expected_level_1_tz = f"datetime64[ns, {tz_0_level_1}]" if (tz_0_level_1 == tz_1_level_1 and tz_0_level_1 is not None) else "datetime64[ns]"
+    expected_level_0_tz = (
+        f"datetime64[ns, {tz_0_level_0}]"
+        if (tz_0_level_0 == tz_1_level_0 and tz_0_level_0 is not None)
+        else "datetime64[ns]"
+    )
+    expected_level_1_tz = (
+        f"datetime64[ns, {tz_0_level_1}]"
+        if (tz_0_level_1 == tz_1_level_1 and tz_0_level_1 is not None)
+        else "datetime64[ns]"
+    )
     assert str(received.index.dtypes[0]) == expected_level_0_tz
     assert str(received.index.dtypes[1]) == expected_level_1_tz
 

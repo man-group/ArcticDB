@@ -9,7 +9,7 @@ on:
     branches: ["**"]
   schedule:
     # IMPORTANT: For scheduled job we execute AWS_S3
-    - cron: '0 23 * * 0,1,2,3,4' # Start previous dat at 23:00 to finish next day
+    - cron: '0 1 * * 1,2,3,4' # Mon-Thu at 1 am
   workflow_dispatch:
     inputs:
       persistent_storage:
@@ -69,9 +69,9 @@ jobs:
           _storage='not_scheduled'
           day=$(date +'%a')
           echo "Today is $day"
-          if [[ "$day" == "Sun" || "$day" == "Tue" || "$day" == "Thu" ]]; then
+          if [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
             _storage='AWS_S3'
-          elif [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
+          elif [[ "$day" == "Tue" || "$day" == "Thu" ]]; then
             _storage='GCPXML'
           else
             echo "UNSPECIFIED RESULT for this day (assumed LMDB)"
