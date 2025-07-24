@@ -14,7 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -25,14 +25,14 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat, StageResult
-from arcticdb_ext import get_config_int
+from arcticdb_ext.version_store import DataError, OutputFormat, StageResult, KeyNotFoundInStageResultInfo
 
 import pandas as pd
 import numpy as np
 import logging
 from arcticdb.version_store._normalization import normalize_metadata
 from arcticdb.version_store.admin_tools import AdminTools
+import arcticdb_ext as _ae
 
 logger = logging.getLogger(__name__)
 
@@ -1526,9 +1526,12 @@ class Library:
         symbol : `str`
             Symbol to finalize data for.
 
-        mode : Union[`StagedDataFinalizeMethod`, str], default=StagedDataFinalizeMethod.WRITE
-            Finalize mode. Valid options are StagedDataFinalizeMethod.WRITE or StagedDataFinalizeMethod.APPEND. Write collects the staged data and writes them to a
-            new version. Append collects the staged data and appends them to the latest version. Also accepts "write" and "append".
+        mode : Union[str, StagedDataFinalizeMethod], default=StagedDataFinalizeMethod.WRITE
+            Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
+            new timeseries. Append collects the staged data and appends them to the latest version.
+
+            Also accepts strings "write" or "append" (case-insensitive).
+
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
         metadata : Any, default=None
@@ -1599,17 +1602,11 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        if (
-            mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"]
-            and mode is not None
-        ):
-            raise ArcticInvalidApiUsageException(
-                "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
-            )
+        mode = Library._normalize_staged_data_mode(mode)
 
         return self._nvs.compact_incomplete(
             symbol,
-            append=mode == StagedDataFinalizeMethod.APPEND or mode == "append",
+            append=mode == StagedDataFinalizeMethod.APPEND,
             convert_int_to_float=False,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
@@ -1621,7 +1618,7 @@ class Library:
     def sort_and_finalize_staged_data(
         self,
         symbol: str,
-        mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
+        mode: Optional[Union[StagedDataFinalizeMethod, str]] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
         delete_staged_data_on_failure: bool = False,
@@ -1651,9 +1648,11 @@ class Library:
         symbol : str
             Symbol to finalize data for.
 
-        mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
+        mode : Union[str, StagedDataFinalizeMethod], default=StagedDataFinalizeMethod.WRITE
             Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
+
+            Also accepts strings "write" or "append" (case-insensitive).
 
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
@@ -1723,14 +1722,25 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        vit = self._nvs.version_store.sort_merge(
+        mode = Library._normalize_staged_data_mode(mode)
+        compaction_result = self._nvs.version_store.sort_merge(
             symbol,
             normalize_metadata(metadata),
-            mode == StagedDataFinalizeMethod.APPEND,
+            append=mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
+            stage_results=_stage_results
         )
-        return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
+        if isinstance(compaction_result, _ae.version_store.VersionedItem):
+            return self._nvs._convert_thin_cxx_item_to_python(compaction_result, metadata)
+        elif isinstance(compaction_result, List):
+            # We expect this to be a list of errors
+            check(compaction_result, "List of errors in compaction result should never be empty")
+            check(all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInStageResultInfo")
+            raise MissingKeysInStageResultsError("Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result)
+        else:
+            raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
+
 
     def get_staged_symbols(self) -> List[str]:
         """
@@ -2896,3 +2906,23 @@ class Library:
     def admin_tools(self):
         """Administrative utilities that operate on this library."""
         return AdminTools(self._nvs)
+
+    @staticmethod
+    def _normalize_staged_data_mode(mode: Union[StagedDataFinalizeMethod, str]) -> StagedDataFinalizeMethod:
+        if mode is None:
+            return StagedDataFinalizeMethod.WRITE
+
+        if isinstance(mode, StagedDataFinalizeMethod):
+            return mode
+
+        if isinstance(mode, str):
+            mode = mode.lower()
+
+        if mode == "write":
+            return StagedDataFinalizeMethod.WRITE
+        elif mode == "append":
+            return StagedDataFinalizeMethod.APPEND
+        else:
+            raise ArcticInvalidApiUsageException(
+                "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
+            )

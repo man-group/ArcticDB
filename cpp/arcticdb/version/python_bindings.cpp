@@ -24,7 +24,7 @@
 #include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
-
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 namespace arcticdb::version_store {
 
@@ -319,6 +319,29 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("error_category", &DataError::error_category)
             .def_property_readonly("exception_string", &DataError::exception_string)
             .def("__str__", &DataError::to_string);
+
+    py::class_<storage::KeyNotFoundInStageResultInfo, std::shared_ptr<storage::KeyNotFoundInStageResultInfo>>(version, "KeyNotFoundInStageResultInfo", R"pbdoc(
+        Internal type. Information about a stage result that failed during staged data finalization, because a key that it refers
+        to is not present in storage.
+
+        Attributes
+        ----------
+        stage_result_index: int
+            Index of the stage result that containing a key that was not found, an index in to the stage_results provided to the finalization
+            method.
+        missing_key: AtomKey
+            The key that was in the stage result but missing in storage.
+    )pbdoc")
+        .def(py::init([](uint64_t stage_result_index, const VariantKey& missing_key) {
+            return storage::KeyNotFoundInStageResultInfo(stage_result_index, missing_key);
+        }))
+        .def_property_readonly("stage_result_index", &storage::KeyNotFoundInStageResultInfo::stage_result_index)
+        .def_property_readonly("missing_key", &storage::KeyNotFoundInStageResultInfo::missing_key)
+        .def("__repr__", &storage::KeyNotFoundInStageResultInfo::to_string)
+        .def("__str__", &storage::KeyNotFoundInStageResultInfo::to_string)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        ;
 
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
@@ -652,6 +675,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("prune_previous_versions") = false,
              py::arg("validate_index") = false,
              py::arg("delete_staged_data_on_failure") = false,
+             py::kw_only(),
+             py::arg("stage_results") = std::nullopt,
              py::call_guard<SingleThreadMutexHolder>(), "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,
@@ -663,6 +688,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("sparsify") = false,
              py::arg("prune_previous_versions") = false,
              py::arg("delete_staged_data_on_failure") = false,
+             py::kw_only(),
+             py::arg("stage_results") = std::nullopt,
              py::call_guard<SingleThreadMutexHolder>(), "sort_merge will sort and merge incomplete segments. The segments do not have to be ordered - incomplete segments can contain interleaved time periods but the final result will be fully ordered")
         .def("compact_library",
              &PythonVersionStore::compact_library,

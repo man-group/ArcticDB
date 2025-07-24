@@ -444,4 +444,3 @@ def test_finalize_staged_data_mode_append(basic_arctic_library, mode):
     lib.finalize_staged_data(symbol="symbol", mode=mode)
     expected = pd.concat([df_initial, df_staged])
     assert_frame_equal(lib.read(symbol).data, expected)
-
