@@ -19,6 +19,7 @@ on:
           - 'no'
           - 'AWS_S3'
           - 'GCPXML'
+          - 'AZURE'
         default: 'no'
 
       pypi_publish:
@@ -73,6 +74,8 @@ jobs:
             _storage='AWS_S3'
           elif [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
             _storage='GCPXML'
+          elif [[ "$day" == "Fri"]]; then
+            _storage='AZURE'
           else
             echo "UNSPECIFIED RESULT for this day (assumed LMDB)"
             _storage='no'

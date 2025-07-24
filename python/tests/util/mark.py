@@ -45,6 +45,7 @@ LOCAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", 
 STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
 STORAGE_AWS_S3 = os.getenv("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
 STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
+STORAGE_AZURE = os.getenv("ARCTICDB_STORAGE_AZURE") == "1"
 
 # Defined shorter logs on errors
 SHORTER_LOGS = marks.SHORTER_LOGS
@@ -77,6 +78,13 @@ REAL_GCP_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED or not STORAGE_GCP,
     reason="Real GCP can be used only when persistent storage is enabled",
 )
+"""Mark on tests using the real Azure.
+Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
+REAL_AZURE_TESTS_MARK = pytest.mark.skipif(
+    FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED or not STORAGE_AZURE,
+    reason="Real Azure can be used only when persistent storage is enabled",
+)
+
 """Mark on tests using the real GCP storage.
 """
 """Mark on tests using S3 model storage.
