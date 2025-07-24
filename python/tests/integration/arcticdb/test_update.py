@@ -66,15 +66,8 @@ class UpdatePositionType(Enum):
     RIGHT_AFTER = 9 # start of update is exactly next to original
     AFTER = 104 # start of the update is after at least 1 duration of end of original
 
-class DataFrameGenerator(ABC):
 
-    @abstractmethod
-    def get_dataframe(self, number_columns:int, number_rows: int, 
-                      start_time: Union[Timestamp, TimestampNumber], **kwargs) -> pd.DataFrame:
-        pass    
-
-
-class BasicDataFrameGenerator(DataFrameGenerator):
+class BasicDataFrameGenerator:
     """Generates the dataframe based on repetition of all arcticdb supported types
     The repetition assures that dataframes generated with certain number of columns will 
     always have exact same columns. A Dataframe which is slightly bigger then will have same 
@@ -90,7 +83,8 @@ class BasicDataFrameGenerator(DataFrameGenerator):
                                                 num_rows=number_rows, start_time=start_time, 
                                                 seed=None, freq=DEFAULT_FREQ)   
     
-class UpgradeDataFrameTypesGenerator(DataFrameGenerator):
+
+class UpgradeDataFrameTypesGenerator(BasicDataFrameGenerator):
     """Special generator that can be used to test type promotions during
     update operations. The dataframes generated are always one and the same 
     for a specified number of columns. But then via type mapping dictionary
@@ -160,13 +154,13 @@ class UpdatesGenerator:
     intersect, just before - will share only first element of the original dataframe etc.
     """
 
-    def __init__(self, gen: DataFrameGenerator):
+    def __init__(self, gen: BasicDataFrameGenerator):
         """
         Initialize with instance to generator. The generator have to be able to generate dataframes with the 
         same shape. It should be able to generate also fewer columns or more columns than the original dataframe
         but both original and generated dataframe should have same names and types of columns as the smaller dataframe of both
         """
-        self.generator: DataFrameGenerator = gen
+        self.generator: BasicDataFrameGenerator = gen
 
     def generate_sequence(self, original_dataframe: pd.DataFrame, number_cols:int,  number_rows:int) -> List[pd.DataFrame]:
         """
