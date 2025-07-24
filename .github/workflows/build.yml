@@ -74,7 +74,7 @@ jobs:
             _storage='AWS_S3'
           elif [[ "$day" == "Mon" || "$day" == "Wed" ]]; then
             _storage='GCPXML'
-          elif [[ "$day" == "Fri"]]; then
+          elif [[ "$day" == "Fri" ]]; then
             _storage='AZURE'
           else
             echo "UNSPECIFIED RESULT for this day (assumed LMDB)"
