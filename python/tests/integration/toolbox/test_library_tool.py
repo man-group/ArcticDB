@@ -12,7 +12,7 @@ from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType
 from arcticdb_ext.exceptions import SchemaException, InternalException
-from arcticdb.version_store._normalization import denormalize_dataframe
+from arcticdb_ext.stream import SegmentInMemory
 
 
 def get_ref_key_types():
@@ -370,7 +370,16 @@ def test_read_segment_to_dataframe(lmdb_version_store_v1):
     sym = "sym"
     lib.write(sym, sample_dataframe)
 
-    segment_in_memory = lib_tool.read_to_segment_in_memory(lib_tool.find_keys(KeyType.TABLE_DATA)[0])
-    dataframe = lib_tool.segment_in_memory_to_dataframe(segment_in_memory)
+    tdata_key = lib_tool.find_keys(KeyType.TABLE_DATA)[0]
+
+    segment_in_memory = lib_tool.read_to_segment_in_memory(tdata_key)
+
+    assert isinstance(segment_in_memory, SegmentInMemory)
+
+    dataframe = lib_tool.segment_in_memory_to_dataframe(segment_in_memory).data
 
     assert isinstance(dataframe, pd.DataFrame)
+
+    expected_df = lib_tool.read_to_dataframe(tdata_key)
+
+    assert assert_frame_equal(expected_df, dataframe)

@@ -6,7 +6,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 
-from arcticdb.version_store._normalization import FrameData
 from arcticdb.supported_types import ExplicitlySupportedDates
 from arcticdb_ext.codec import decode_segment
 from arcticdb_ext.storage import KeyType
@@ -70,7 +69,7 @@ class LibraryTool(LibraryToolImpl):
         return decode_segment(self.read_to_segment(key))
 
     def segment_in_memory_to_dataframe(self, segment: SegmentInMemory) -> pd.DataFrame:
-        return denormalize_dataframe(self.segment_in_memory_to_normalized_dataframe(segment))
+        return denormalize_dataframe(self.segment_in_memory_to_read_result(segment))
 
     def read_to_dataframe(self, key: VariantKey) -> pd.DataFrame:
         """
