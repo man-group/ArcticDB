@@ -1,19 +1,31 @@
-/* Copyright 2023 Man Group Operations Limited
+/* Copyright 2025 Man Group Operations Limited
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/codec/codec.hpp>
+#include <ranges>
+#include <iterator>
 #include <arcticdb/stream/incompletes.hpp>
+#include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/pipeline/index_utils.hpp>
+#include <arcticdb/stream/schema.hpp>
+#include <arcticdb/stream/stream_sink.hpp>
+#include <arcticdb/pipeline/pipeline_context.hpp>
+#include <arcticdb/util/name_validation.hpp>
+#include <arcticdb/util/key_utils.hpp>
+#include <arcticdb/async/tasks.hpp>
+#include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/pipeline/write_options.hpp>
+#include <folly/futures/FutureSplitter.h>
+#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/stream/index.hpp>
-#include <pipeline/frame_slice.hpp>
-#include <util/key_utils.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <iterator>
+#include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
@@ -21,46 +33,57 @@
 
 namespace arcticdb {
 
-using namespace arcticdb::pipelines;
-using namespace arcticdb::stream;
+using namespace pipelines;
+using namespace stream;
 
-struct AppendMapEntry {
-    AppendMapEntry() = default;
+static std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
+    const std::shared_ptr<StreamSource>& store,
+    const AtomKey& k,
+    bool load_data,
+    storage::ReadKeyOpts opts) {
+    if(load_data) {
+        auto seg = store->read_sync(k, opts).second;
+        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
+    } else {
+        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
+        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
+        return std::make_pair(std::move(*tsd), std::nullopt);
+    }
+}
 
-    pipelines::SliceAndKey slice_and_key_;
-    std::optional<entity::AtomKey> next_key_;
-    uint64_t total_rows_ = 0;
+static AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
+    AppendMapEntry entry;
 
-    const entity::StreamDescriptor& descriptor() const {
-        return *slice_and_key_.slice_.desc();
+    if(tsd.proto().has_next_key())
+        entry.next_key_ = key_from_proto(tsd.proto().next_key());
+
+    entry.total_rows_ = tsd.total_rows();
+    return entry;
+}
+
+AppendMapEntry append_map_entry_from_key(const std::shared_ptr<stream::StreamSource>& store, const entity::AtomKey& key, bool load_data) {
+    auto opts = storage::ReadKeyOpts{};
+    opts.dont_warn_about_missing_key = true;
+    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
+    auto entry = create_entry(tsd);
+    auto descriptor = std::make_shared<entity::StreamDescriptor>();
+    auto desc = std::make_shared<entity::StreamDescriptor>(tsd.as_stream_descriptor());
+    auto index_field_count = desc->index().field_count();
+    auto field_count = desc->fields().size();
+    if (seg) {
+        seg->attach_descriptor(desc);
     }
 
-    entity::StreamDescriptor& descriptor() {
-        return *slice_and_key_.slice_.desc();
+    auto frame_slice = pipelines::FrameSlice{desc, pipelines::ColRange{index_field_count, field_count}, pipelines::RowRange{0, entry.total_rows_}};
+    entry.slice_and_key_ = SliceAndKey{std::move(frame_slice), key, std::move(seg)};
+    return entry;
+}
+void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount) {
+    for(auto& entry : entries) {
+        complete_rowcount = entry.slice_and_key_.slice_.fix_row_count(static_cast<ssize_t>(complete_rowcount));
     }
-
-    const pipelines::FrameSlice& slice() const {
-        return slice_and_key_.slice_;
-    }
-
-    const entity::AtomKey & key() const{
-        return slice_and_key_.key();
-    }
-
-    friend bool operator<(const AppendMapEntry& l, const AppendMapEntry& r) {
-        const auto& right_key = r.key();
-        const auto& left_key = l.key();
-        if(left_key.start_index() == right_key.start_index())
-            return  left_key.end_index() < right_key.end_index();
-
-        return left_key.start_index() < right_key.start_index();
-    }
-};
-
-AppendMapEntry entry_from_key(
-    const std::shared_ptr<stream::StreamSource>& store,
-    const entity::AtomKey& key,
-    bool load_data);
+}
 
 std::vector<AppendMapEntry> get_incomplete_append_slices_for_stream_id(
     const std::shared_ptr<Store> &store,
@@ -81,7 +104,7 @@ inline std::vector<AppendMapEntry> load_via_iteration(
         if(key.id() != stream_id)
             return;
 
-        auto entry = entry_from_key(store, key, load_data);
+        auto entry = append_map_entry_from_key(store, key, load_data);
 
         output.emplace_back(std::move(entry));
     });
@@ -119,12 +142,6 @@ std::set<StreamId> get_active_incomplete_refs(const std::shared_ptr<Store>& stor
         }
     }
     return output;
-}
-
-void fix_slice_rowcounts(std::vector<AppendMapEntry>& entries, size_t complete_rowcount) {
-    for(auto& entry : entries) {
-        complete_rowcount = entry.slice_and_key_.slice_.fix_row_count(static_cast<ssize_t>(complete_rowcount));
-    }
 }
 
 TimeseriesDescriptor pack_timeseries_descriptor(
@@ -489,7 +506,7 @@ std::vector<AppendMapEntry> load_via_list(
 
     try {
         while (next_key) {
-            auto entry = entry_from_key(store, next_key.value(), load_data);
+            auto entry = append_map_entry_from_key(store, next_key.value(), load_data);
             next_key = entry.next_key_;
             output.emplace_back(std::move(entry));
         }
@@ -514,50 +531,6 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
     }
 
     return output;
-}
-
-std::pair<TimeseriesDescriptor, std::optional<SegmentInMemory>> get_descriptor_and_data(
-    const std::shared_ptr<StreamSource>& store,
-    const AtomKey& k,
-    bool load_data,
-    storage::ReadKeyOpts opts) {
-    if(load_data) {
-        auto seg = store->read_sync(k, opts).second;
-        return std::make_pair(seg.index_descriptor(), std::make_optional<SegmentInMemory>(seg));
-    } else {
-        auto seg_ptr = store->read_compressed_sync(k, opts).segment_ptr();
-        auto tsd = decode_timeseries_descriptor_for_incompletes(*seg_ptr);
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(tsd.has_value(), "Failed to decode timeseries descriptor");
-        return std::make_pair(std::move(*tsd), std::nullopt);
-    }
-}
-
-AppendMapEntry create_entry(const TimeseriesDescriptor& tsd) {
-    AppendMapEntry entry;
-
-    if(tsd.proto().has_next_key())
-        entry.next_key_ = key_from_proto(tsd.proto().next_key());
-
-    entry.total_rows_ = tsd.total_rows();
-    return entry;
-}
-
-AppendMapEntry entry_from_key(const std::shared_ptr<StreamSource>& store, const AtomKey& key, bool load_data) {
-    auto opts = storage::ReadKeyOpts{};
-    opts.dont_warn_about_missing_key = true;
-    auto [tsd, seg] = get_descriptor_and_data(store, key, load_data, opts);
-    auto entry = create_entry(tsd);
-    auto descriptor = std::make_shared<StreamDescriptor>();
-    auto desc = std::make_shared<StreamDescriptor>(tsd.as_stream_descriptor());
-    auto index_field_count = desc->index().field_count();
-    auto field_count = desc->fields().size();
-    if (seg) {
-        seg->attach_descriptor(desc);
-    }
-
-    auto frame_slice = FrameSlice{desc, ColRange{index_field_count, field_count}, RowRange{0, entry.total_rows_}};
-    entry.slice_and_key_ = SliceAndKey{std::move(frame_slice), key, std::move(seg)};
-    return entry;
 }
 
 void append_incomplete(
@@ -681,4 +654,50 @@ std::optional<int64_t> latest_incomplete_timestamp(
 
     return std::nullopt;
 }
+
+std::variant<std::vector<SliceAndKey>, CompactionError> get_incomplete_segments_using_stage_results(const std::shared_ptr<Store>& store,
+                                                              const std::shared_ptr<PipelineContext>& pipeline_context,
+                                                              const std::vector<StageResult>& stage_results,
+                                                              const ReadQuery& read_query,
+                                                              const ReadIncompletesFlags& flags,
+                                                              bool load_data) {
+    util::check(std::holds_alternative<std::monostate>(read_query.row_filter), "read_incompletes_to_pipeline with keys_to_read specified "
+                                                                               "and a row filter is not supported");
+    // via_iteration false walks a linked list structure of append data keys that is only written by the tick collector
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(flags.via_iteration, "read_incompletes_to_pipeline with keys_to_read specified and not via_iteration is not supported");
+    std::vector<AppendMapEntry> entries;
+    std::vector<storage::KeyNotFoundInStageResultInfo> non_existent_keys;
+    for (const auto& [i, staged_result] : folly::enumerate(stage_results)) {
+        for (const auto& staged_key : staged_result.staged_segments) {
+            try {
+                AppendMapEntry entry = append_map_entry_from_key(store, staged_key, load_data);
+                entries.emplace_back(std::move(entry));
+            } catch (const storage::KeyNotFoundException&) {
+                non_existent_keys.emplace_back(i, staged_key);
+            }
+        }
+    }
+
+    if (!non_existent_keys.empty()) {
+        // In future we may provide tooling that takes this error and the list of StagedResult objects being finalized
+        // and gives back a new list of StagedResult objects that could be used to retry.
+        return non_existent_keys;
+    }
+
+    if(!entries.empty()) {
+        auto index_desc = entries[0].descriptor().index();
+        // Can't sensibly sort non-timestamp indexes
+        if (index_desc.type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+            std::sort(std::begin(entries), std::end(entries));
+        }
+    }
+
+    std::vector<SliceAndKey> incomplete_segments;
+    fix_slice_rowcounts(entries, pipeline_context->last_row());
+    for (auto& entry : entries) {
+        incomplete_segments.emplace_back(std::move(entry.slice_and_key_));
+    }
+    return incomplete_segments;
 }
+
+}  // namespace arcticdb

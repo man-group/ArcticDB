@@ -40,6 +40,7 @@ from arcticdb.version_store.library import (
     DeleteRequest,
 )
 
+from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from ...util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -355,7 +356,22 @@ def test_write_metadata_with_none(arctic_library):
     assert read_symbol.version == 0
 
 
-@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
+@pytest.mark.parametrize("sort", (True, False))
+def test_staged_data_bad_mode(arctic_library, sort):
+    lib = arctic_library
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.stage("sym", df_0)
+
+    if sort:
+        fn = lib.sort_and_finalize_staged_data
+    else:
+        fn = lib.finalize_staged_data
+
+    with pytest.raises(ArcticInvalidApiUsageException):
+        fn("sym", mode="bad_mode")
+
+
+@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, "write", "wRite"))
 @pytest.mark.storage
 def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
@@ -367,14 +383,13 @@ def test_staged_data(arctic_library, finalize_method):
     df_2 = pd.DataFrame({"col": [5, 6]}, index=pd.date_range("2024-01-05", periods=2))
     expected = pd.concat([df_0, df_1, df_2])
 
-    if finalize_method == StagedDataFinalizeMethod.WRITE:
+    if finalize_method == StagedDataFinalizeMethod.APPEND:
+        lib.write(sym_with_metadata, df_0, staged=False)
+        lib.write(sym_without_metadata, df_0, staged=False)
+    else:
         lib.write(sym_with_metadata, df_0, staged=True)
         lib.write(sym_without_metadata, df_0, staged=True)
         lib.write(sym_unfinalized, df_0, staged=True)
-    else:
-        # finalize_method == StagedDataFinalizeMethod.APPEND
-        lib.write(sym_with_metadata, df_0, staged=False)
-        lib.write(sym_without_metadata, df_0, staged=False)
 
     lib.write(sym_with_metadata, df_1, staged=True)
     lib.write(sym_with_metadata, df_2, staged=True)
@@ -458,7 +473,8 @@ class TestAppendStagedData:
         assert "append" in str(exception_info.value)
 
     @pytest.mark.storage
-    def test_appended_df_start_same_as_df_end(self, arctic_library):
+    @pytest.mark.parametrize("mode", (StagedDataFinalizeMethod.APPEND, "append", "aPpend"))
+    def test_appended_df_start_same_as_df_end(self, arctic_library, mode):
         lib = arctic_library
         df = pd.DataFrame(
             {"col": [1, 2, 3]},
@@ -476,7 +492,7 @@ class TestAppendStagedData:
             ),
         )
         lib.write("sym", df_to_append, staged=True)
-        lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        lib.finalize_staged_data("sym", mode=mode)
         res = lib.read("sym").data
         expected_df = pd.concat([df, df_to_append])
         assert_frame_equal(lib.read("sym").data, expected_df)

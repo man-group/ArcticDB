@@ -715,7 +715,20 @@ ColumnStats PythonVersionStore::get_column_stats_info_version(
     return get_column_stats_info_version_internal(stream_id, version_query);
 }
 
-VersionedItem PythonVersionStore::compact_incomplete(
+static void validate_stage_results(const std::optional<std::vector<StageResult>>& stage_results, const StreamId& stream_id) {
+    if (!stage_results) {
+        return;
+    }
+
+    for (const auto& stage_result : *stage_results) {
+        for (const auto& staged_segment : stage_result.staged_segments) {
+            user_input::check<ErrorCode::E_STAGE_RESULT_WITH_INCORRECT_SYMBOL>(staged_segment.id() == stream_id, fmt::format("Expected all stage_result objects submitted for compaction to have "
+                                                          "the specified symbol {} but found one with symbol {}", stream_id, staged_segment.id()));
+        }
+    }
+}
+
+std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incomplete(
         const StreamId& stream_id,
         bool append,
         bool convert_int_to_float,
@@ -724,25 +737,32 @@ VersionedItem PythonVersionStore::compact_incomplete(
         const std::optional<py::object>& user_meta /* = std::nullopt */,
         bool prune_previous_versions,
         bool validate_index,
-        bool delete_staged_data_on_failure) {
+        bool delete_staged_data_on_failure,
+        const std::optional<std::vector<StageResult>>& stage_results) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(*user_meta, *meta);
     }
-    CompactIncompleteOptions options{
+
+    validate_stage_results(stage_results, stream_id);
+
+    CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
         .validate_index_=validate_index,
-        .delete_staged_data_on_failure_=delete_staged_data_on_failure
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure,
+        .stage_results=stage_results
     };
-    return compact_incomplete_dynamic(stream_id, meta, options);
+
+    return compact_incomplete_dynamic(stream_id, meta, params);
+
 }
 
-VersionedItem PythonVersionStore::sort_merge(
+std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
         const StreamId& stream_id,
         const py::object& user_meta,
         bool append,
@@ -750,21 +770,27 @@ VersionedItem PythonVersionStore::sort_merge(
         bool via_iteration,
         bool sparsify,
         bool prune_previous_versions,
-        bool delete_staged_data_on_failure) {
+        bool delete_staged_data_on_failure,
+        const std::optional<std::vector<StageResult>>& stage_results) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(user_meta, *meta);
     }
-    CompactIncompleteOptions options{
+
+    validate_stage_results(stage_results, stream_id);
+
+    CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
-        .delete_staged_data_on_failure_=delete_staged_data_on_failure
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure,
+        .stage_results=stage_results
     };
-    return sort_merge_internal(stream_id, meta, options);
+
+    return sort_merge_internal(stream_id, meta, params);
 }
 
 StageResult PythonVersionStore::write_parallel(

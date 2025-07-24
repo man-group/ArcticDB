@@ -254,10 +254,10 @@ public:
 
     void flush_version_map() override;
 
-    VersionedItem sort_merge_internal(
+    std::variant<VersionedItem, CompactionError> sort_merge_internal(
         const StreamId& stream_id,
         const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-        const CompactIncompleteOptions& options);
+        const CompactIncompleteParameters& parameters);
 
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         const std::vector<VersionId>& version_ids,
@@ -428,10 +428,11 @@ protected:
     explicit LocalVersionedEngine(
         const std::shared_ptr<Store>& store,
         const ClockType& = ClockType{});
-    VersionedItem compact_incomplete_dynamic(
+
+    std::variant<VersionedItem, CompactionError> compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-            const CompactIncompleteOptions& options);
+            const CompactIncompleteParameters& parameters);
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion
@@ -467,7 +468,7 @@ protected:
 
 private:
     void initialize(const std::shared_ptr<storage::Library>& library);
-    void add_to_symbol_list_on_compaction(const StreamId& stream_id, const CompactIncompleteOptions& options, const UpdateInfo& update_info);
+    void add_to_symbol_list_on_compaction(const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

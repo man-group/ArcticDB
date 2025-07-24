@@ -44,7 +44,7 @@ public:
         ArcticCategorizedException<ErrorCategory::MISSING_DATA>(msg) {
     }
 
-    explicit NoDataFoundException(const char *msg) :
+    explicit NoDataFoundException(const char* msg) :
         ArcticCategorizedException<ErrorCategory::MISSING_DATA>(std::string(msg)) {
     }
 
@@ -82,12 +82,14 @@ public:
 
     explicit KeyNotFoundException(boost::container::small_vector<VariantKey, 1>& keys) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(fmt::format("Not found: {}", keys)),
-        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()), std::make_move_iterator(keys.end()))) {
+        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()),
+                                                        std::make_move_iterator(keys.end()))) {
     }
 
     explicit KeyNotFoundException(boost::container::small_vector<VariantKey, 1>& keys, const std::string& err_output) :
         ArcticSpecificException<ErrorCode::E_KEY_NOT_FOUND>(err_output),
-        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()), std::make_move_iterator(keys.end()))) {
+        keys_(std::make_shared<std::vector<VariantKey>>(std::make_move_iterator(keys.begin()),
+                                                        std::make_move_iterator(keys.end()))) {
     }
 
     std::vector<VariantKey>& keys() {
@@ -97,6 +99,52 @@ private:
     std::shared_ptr<std::vector<VariantKey>> keys_;
     mutable std::string msg_;
 };
+
+struct KeyNotFoundInStageResultInfo {
+    uint64_t stage_result_index_;
+    VariantKey missing_key_;
+
+    [[nodiscard]] uint64_t stage_result_index() const {
+        return stage_result_index_;
+    }
+
+    [[nodiscard]] VariantKey missing_key() const {
+        return missing_key_;
+    }
+
+    [[nodiscard]] std::string to_string() const {
+        return fmt::format("stage_result_index=[{}] missing_key=[{}]", stage_result_index_, missing_key_);
+    }
+};
+
+inline bool operator==(const KeyNotFoundInStageResultInfo& left, const KeyNotFoundInStageResultInfo& right) {
+    return left.stage_result_index_ == right.stage_result_index_ && left.missing_key_ == right.missing_key_;
+}
+
+inline bool operator!=(const KeyNotFoundInStageResultInfo& left, const KeyNotFoundInStageResultInfo& right) {
+    return !(left == right);
+}
+
+} // namespace arcticdb::storage
+
+namespace fmt {
+using namespace arcticdb::storage;
+
+template<>
+struct formatter<KeyNotFoundInStageResultInfo> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const KeyNotFoundInStageResultInfo& k, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "stage_result_index={}, missing_key={}",
+                              k.stage_result_index(), variant_key_view(k.missing_key()));
+    };
+
+};
+} // namespace fmt
+
+namespace arcticdb::storage {
 
 class LibraryPermissionException : public PermissionException {
 public:
