@@ -92,7 +92,3 @@ def test_int_column_name(lmdb_version_store_v1):
     assert table.schema.field(2).name == "x"
     assert table.schema.field(2).type == pa.float64()
     assert_frame_equal_with_arrow(table, expected_df)
-
-# TODO: Add more tests for:
-# - Int column name
-# - Missing index name for normalization metadata
