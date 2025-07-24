@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import re
 import shutil
 import uuid
@@ -79,7 +80,6 @@ class AzureContainer(StorageFixture):
             self.client.create_container()
 
     def is_real_azure(self) -> bool:
-        print("REAL AZURE")
         return isinstance(self.factory, AzureStorageFixtureFactory)
 
     def _safe_enter(self):
@@ -231,6 +231,7 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         self.native_config = native_config
         if LINUX:
             AzureStorageFixtureFactory.client_cert_file = "/etc/ssl/certs/ca-certificates.crt"
+            os.path.exists(AzureStorageFixtureFactory.client_cert_file), f"CA file: {AzureStorageFixtureFactory.client_cert_file} not found!"
 
     def _safe_enter(self):
         pass
@@ -255,7 +256,9 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
             AzureStorageFixtureFactory.default_prefix = prefix
 
     def get_arctic_uri(self):
-        url = f"azure://CA_cert_path={self.client_cert_file};Container={self.default_container};Path_prefix={self.default_prefix}"
+        url = f"azure://Container={self.default_container};Path_prefix={self.default_prefix}"
+        if self.client_cert_file:
+           url += f";CA_cert_path={self.client_cert_file}"
         if self.connection_string:
             url += f"{url};{self.connection_string}"
         else:

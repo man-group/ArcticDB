@@ -189,8 +189,6 @@ def normalize_lib_name(lib_name):
 def get_seed_libraries(ac=None):
     if ac is None:
         ac = Arctic(get_real_uri())
-    print(get_real_uri())  
-    print(ac.list_libraries())  
     return [lib for lib in ac.list_libraries() if lib.startswith("seed_")]
 
 
