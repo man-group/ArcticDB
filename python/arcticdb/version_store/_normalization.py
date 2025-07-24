@@ -583,21 +583,40 @@ class Normalizer(object):
 _IDX_PREFIX = "__idx__"
 _IDX_PREFIX_LEN = len(_IDX_PREFIX)
 
+
+class ArrowNormalizationOperations(NamedTuple):
+    """
+    ArrowNormalizationOperations holds all operations which needs to be applied to an arrow table from C++ layer.
+
+    Attributes
+    ----------
+    renames : Mapping[int, str]
+        Column renames coming from normalization metadata. E.g. index names
+    timezones: Mapping[int, str]
+        Timezones to apply to timezone-naive timestamp columns
+    range_index: Optional[Dict[str, Any]]
+        Range index details to place in pandas_metadata
+    pandas_indexes: Optional[int]
+        Num index columns to place in pandas_metadata
+    pandas_renames: Mapping[int, Union[int, str, None]]
+        Column renames which only apply to pandas_metadata. E.g. renaming a column to an int
+    """
+    renames : Mapping[int, str]
+    timezones: Mapping[int, str]
+    range_index: Optional[Dict[str, Any]]
+    pandas_indexes: Optional[int]
+    pandas_renames: Mapping[int, Union[int, str, None]]
+
+
 class ArrowTableNormalizer(Normalizer):
-    def construct_pandas_metadata(
-            self,
-            fields,
-            range_index: Optional[Dict[str, Any]],
-            pandas_indexes: Optional[int],
-            pandas_renames: Mapping[int, Union[int, str, None]]
-    ):
+    def construct_pandas_metadata(self, fields, op : ArrowNormalizationOperations) -> Dict[str, Any]:
         import pyarrow as pa
 
         # Construct index_columns metadata
-        if range_index is not None:
-            index_columns = [dict(range_index, kind="range")]
-        elif pandas_indexes is not None:
-            index_columns = [field.name for field in fields[:pandas_indexes]]
+        if op.range_index is not None:
+            index_columns = [dict(op.range_index, kind="range")]
+        elif op.pandas_indexes is not None:
+            index_columns = [field.name for field in fields[:op.pandas_indexes]]
         else:
             index_columns = []
 
@@ -605,8 +624,8 @@ class ArrowTableNormalizer(Normalizer):
         pandas_columns = []
         for i, field in enumerate(fields):
             name = field.name
-            if i in pandas_renames:
-                name = pandas_renames[i]
+            if i in op.pandas_renames:
+                name = op.pandas_renames[i]
 
             pandas_type = str(field.type)
             numpy_type = str(field.type)
@@ -640,7 +659,7 @@ class ArrowTableNormalizer(Normalizer):
             "numpy_type": 'object',
             "metadata": {'encoding': 'UTF-8'}
         }
-        renames_to_ints = len([new_name for new_name in pandas_renames.values() if isinstance(new_name, int)])
+        renames_to_ints = len([new_name for new_name in op.pandas_renames.values() if isinstance(new_name, int)])
         if renames_to_ints == len(fields):
             column_index["pandas_type"] = "int64"
             column_index["numpy_type"] = "int64"
@@ -656,18 +675,15 @@ class ArrowTableNormalizer(Normalizer):
         }
 
 
-    def apply_pyarrow_operations(
-            self,
-            table,
-            renames : Mapping[int, str],
-            timezones: Mapping[int, str],
-            range_index: Optional[Dict[str, Union[str, int]]],
-            pandas_indexes: Optional[int],
-            pandas_renames: Mapping[int, Optional[str]]
-    ):
+    def apply_pyarrow_operations(self, table, op: ArrowNormalizationOperations):
+        # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
         import pyarrow as pa
 
-        if len(renames) == 0 and len(timezones) == 0 and range_index is None and pandas_indexes is None and len(pandas_renames) == 0:
+        if (len(op.renames) == 0 and
+            len(op.timezones) == 0 and
+            op.range_index is None and
+            op.pandas_indexes is None and
+            len(op.pandas_renames) == 0):
             return table
 
         new_columns = []
@@ -675,10 +691,10 @@ class ArrowTableNormalizer(Normalizer):
 
         for i, col in enumerate(table.columns):
             field = table.field(i)
-            if i in renames:
-                field = field.with_name(renames[i])
-            if i in timezones:
-                timezone = timezones[i]
+            if i in op.renames:
+                field = field.with_name(op.renames[i])
+            if i in op.timezones:
+                timezone = op.timezones[i]
                 # All arcticdb timestamps are stored as UTC for timezone aware timestamps.
                 col = pa.compute.assume_timezone(col, timezone="UTC")
                 col = col.cast(pa.timestamp("ns", timezone))
@@ -686,7 +702,7 @@ class ArrowTableNormalizer(Normalizer):
             new_columns.append(col)
             new_fields.append(field)
 
-        pandas_metadata = self.construct_pandas_metadata(new_fields, range_index, pandas_indexes, pandas_renames)
+        pandas_metadata = self.construct_pandas_metadata(new_fields, op)
 
         return pa.Table.from_arrays(
             new_columns,
@@ -696,7 +712,7 @@ class ArrowTableNormalizer(Normalizer):
         raise NotImplementedError("Arrow write is not yet implemented")
 
     def denormalize(self, item, norm_meta):
-        # type: (pa.Table, NormalizationMetadata)->pa.Table
+        # type: (pa.Table, NormalizationMetadata) -> pa.Table
         renames = {}
         timezones = {}
         range_index = None
@@ -761,7 +777,8 @@ class ArrowTableNormalizer(Normalizer):
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
 
-        item = self.apply_pyarrow_operations(item, renames, timezones, range_index, pandas_indexes, pandas_renames)
+        op = ArrowNormalizationOperations(renames, timezones, range_index, pandas_indexes, pandas_renames)
+        item = self.apply_pyarrow_operations(item, op)
         return item
 
 
