@@ -78,15 +78,6 @@ class StorageLock {
   public:
     static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24; // 1 Day
     static constexpr int64_t DEFAULT_WAIT_MS = 1000; // After writing the lock, waiting this time before checking if the written lock is still ours.
-    /*
-     Variable below controls what factor of the wait time is the maximum time the lock should spend. (writing + waiting + reading).
-
-     Can be configured. 1.5 is chosen as a default because:
-     If the factor is < 1, acquiring the lock always fails since the sleep is longer than factor * sleep time.
-     If the factor is > 2, there will be enough room for a long enough write so that two processes think they hold the lock simultaneously.
-     Choosing 1.5 keeps us equally away from both of these failure conditions.
-    */
-    static constexpr double DEFAULT_MAX_DURATION_FACTOR = 1.5;
     static constexpr int64_t DEFAULT_INITIAL_WAIT_MS = 10;
 
     static void force_release_lock(const StreamId& name, const std::shared_ptr<Store>& store) {
@@ -163,40 +154,23 @@ class StorageLock {
     }
 
     bool try_acquire_lock(const std::shared_ptr<Store>& store) {
-        auto start = ClockType::coarse_nanos_since_epoch();
-        if(!exists_active_lock(store)) {
-            ts_= create_ref_key(store);
+        if (!exists_active_lock(store)) {
+            ts_ = create_ref_key(store);
             const auto lock_sleep_ms = ConfigsMap::instance()->get_int("StorageLock.WaitMs", DEFAULT_WAIT_MS);
-            const auto max_duartion_factor = ConfigsMap::instance()->get_double("StorageLock.MaxDurationFactor", DEFAULT_MAX_DURATION_FACTOR);
-            const auto max_allowed_duration_ms = max_duartion_factor * lock_sleep_ms;
             ARCTICDB_DEBUG(log::lock(), "Waiting for {} ms..", lock_sleep_ms);
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep_ms));
             ARCTICDB_DEBUG(log::lock(), "Waited for {} ms", lock_sleep_ms);
             auto read_ts = read_timestamp(store);
-            auto duration = ClockType::coarse_nanos_since_epoch() - start;
-            [[maybe_unused]] auto duration_ms = duration / ONE_MILLISECOND;
-            ARCTICDB_DEBUG(log::lock(), "Took {} ms", duration_ms);
-            ARCTICDB_DEBUG(log::lock(), "Max is {} ms", max_allowed_duration_ms);
-            if (duration_ms > max_allowed_duration_ms) {
-                /*
-                  If we spend a long time taking the lock (writing, reading) there is a high chance of
-                  another process pre-empting us and taking the lock as well so we want to prevent that.
-                */   
-                ARCTICDB_DEBUG(log::lock(), "Took too long to read and write the lock. Aborting.");
-                return false;
-            }
             if(read_ts && *read_ts == ts_) {
                 ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded, written_timestamp: {} current_timestamp: {}", ts_, read_ts);
                 return true;
-            } else {
-                ARCTICDB_DEBUG(log::lock(), "Storage lock: pre-empted, written_timestamp: {} current_timestamp: {}", ts_, read_ts);
-                ts_ = 0;
-                return false;
             }
-        } else {
-            ARCTICDB_DEBUG(log::lock(), "Storage lock: failed, lock already taken");
+            ARCTICDB_DEBUG(log::lock(), "Storage lock: pre-empted, written_timestamp: {} current_timestamp: {}", ts_, read_ts);
+            ts_ = 0;
             return false;
         }
+        ARCTICDB_DEBUG(log::lock(), "Storage lock: failed, lock already taken");
+        return false;
     }
 
     void sleep_ms(size_t ms) const {
