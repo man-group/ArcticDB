@@ -246,8 +246,10 @@ assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
     """For Pandas 1 type of empty series will be float64 when returned by arctic"""
     if IS_PANDAS_ONE:
-        if (("object" in str(expected.dtype)) and ("float" in str(actual.dtype)) or
-            ("float" in str(expected.dtype)) and ("object" in str(actual.dtype))):
+        if (
+            (np.issubdtype(expected.dtype, np.object_) and np.issubdtype(actual.dtype, np.floating)) or
+            (np.issubdtype(expected.dtype, np.floating) and np.issubdtype(actual.dtype, np.object_))
+            ):
             if (expected.size == 0) and (actual.size == 0):
                 assert expected.name == actual.name
                 return
@@ -262,11 +264,10 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     First will rebuild index for dataframes to assure we
     have same index in both frames when row range index is used
     """
-    if PANDAS_VERSION < CHECK_FREQ_VERSION:
+    if IS_PANDAS_ONE:
+        # On zero size frames some column types will not match when pandas 1.x is used
         if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
-            assert expected.columns.equals(expected.columns)    
-            assert expected.index == actual.index
-            return
+            assert_frame_equal(left=expected, right=actual, check_dtype=False)
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
