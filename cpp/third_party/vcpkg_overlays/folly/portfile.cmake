@@ -14,6 +14,7 @@ vcpkg_from_github(
         0003-fix-unistd-include.patch
         0004-fix-absolute-dir.patch
         0005-Deactivate-libunwind-features.patch
+        0006-fix-Ignore-features-based-on-demangle.h.patch
 )
 file(REMOVE "${SOURCE_PATH}/CMake/FindFastFloat.cmake")
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")
