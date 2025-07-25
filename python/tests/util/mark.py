@@ -184,12 +184,20 @@ def param_dict(fields, cases=None):
     return pytest.mark.parametrize(fields, params, ids=ids)
 
 
-def xfail_azure_chars(nvs, char):
+def xfail_azure_chars(nvs, symbol_name):
+
+    def contains_problem_chars(text: str) -> list:
+        target_chars = [chr(c) for c in range(0, 32)] + [
+            chr(126), chr(127), chr(140), chr(142), chr(143), chr(156)
+        ]
+        found = [(ord(char), repr(char)) for char in text if char in target_chars]
+        return found
+
     storage_is_azure = False
     try:
         storage_is_azure = "azure" in nvs.get_backing_store()
     except:
         # for v2 API
         storage_is_azure = "azure" in nvs._nvs.get_backing_store()
-    if (storage_is_azure) and (char in [chr(0), chr(30), chr(127)]):
+    if (storage_is_azure) and (contains_problem_chars(symbol_name)):
         pytest.xfail("Char is not supported by azure and filtered by arcticdb (see 9669996138)")
