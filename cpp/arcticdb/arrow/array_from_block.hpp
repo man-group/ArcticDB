@@ -74,7 +74,7 @@ sparrow::dictionary_encoded_array<T> create_dict_array(
 // TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
 //  consistent when there are zero rows or the validity bitmap is all zeros. But sparrow (or possibly Arrow) requires at
 //  least one key-value pair in the dictionary, even if there are zero rows
-std::pair<sparrow::u8_buffer<int64_t>, sparrow::u8_buffer<char>> minimal_strings_dict() {
+inline std::pair<sparrow::u8_buffer<int64_t>, sparrow::u8_buffer<char>> minimal_strings_dict() {
     std::unique_ptr<int64_t[]> offset_ptr(new int64_t[2]);
     offset_ptr[0] = 0;
     offset_ptr[1] = 1;

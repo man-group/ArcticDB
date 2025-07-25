@@ -213,7 +213,7 @@ TEST(Arrow, ConvertSegmentBasic) {
 void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std::span<std::string>& expected) {
     EXPECT_EQ(arr.size(), expected.size());
     for (auto i = 0u; i < arr.size(); i++) {
-        const auto& value = std::get<sparrow::nullable<std::string_view>>(arr[i]);
+        const auto value = std::get<sparrow::nullable<std::string_view>>(arr[i]);
         EXPECT_TRUE(value.has_value());
         EXPECT_EQ(value.get(), std::string_view(expected[i]));
     }
