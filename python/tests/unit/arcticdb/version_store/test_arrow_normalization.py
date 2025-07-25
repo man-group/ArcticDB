@@ -21,7 +21,7 @@ def test_index_with_timezone(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
         {"x": np.arange(10)},
-        index=pd.date_range(pd.Timestamp(2025, 1, 1, tz="America/New_York"), periods=10)
+        index=pd.date_range(pd.Timestamp(year=2025, month=1, day=1, tz="America/New_York"), periods=10)
     )
     lib.write("arrow", df)
     table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
@@ -53,7 +53,7 @@ def test_multi_index_with_tz(lmdb_version_store_v1):
         {"x": np.arange(10)},
         index = [
             [chr(ord('a') + i//5) for i in range(10)],
-            [pd.Timestamp(2025, 1, 1+i%5, tz="America/Los_Angeles") for i in range(10)],
+            [pd.Timestamp(year=2025, month=1, day=1+i%5, tz="America/Los_Angeles") for i in range(10)],
         ]
     )
     df.index.names = ["index1", "index2"]
