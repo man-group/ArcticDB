@@ -13,7 +13,6 @@
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
-#include <sparrow/sparrow.hpp>
 
 using namespace arcticdb;
 
