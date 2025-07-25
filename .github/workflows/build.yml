@@ -60,6 +60,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       INPUT_STORAGE: ${{ inputs.persistent_storage }}
+      CONN_STR: ${{ secrets.AZURE_CONNECTION_STRING }}
     outputs:
       storage: ${{ steps.set-storage.outputs.storage }}
     steps:
@@ -96,6 +97,22 @@ jobs:
 
           echo "Final storage type for workflow execution: $_storage"
           echo "storage=$_storage" >> $GITHUB_OUTPUT
+
+          connection_string=$CONN_STR
+
+          # Expected keys
+          keys=("DefaultEndpointsProtocol" "AccountName" "AccountKey" "EndpointSuffix")
+
+          # Check for presence of each key and extract value
+          for key in "${keys[@]}"; do
+              if [[ "$connection_string" =~ ${key}=([^;]+) ]]; then
+                  value="${BASH_REMATCH[1]}"
+                  echo "$key: $value"
+              else
+                  echo "❌ Key missing: $key"
+              fi
+          done
+          
 
   cibw_docker_image:
     uses: ./.github/workflows/cibw_docker_image.yml
