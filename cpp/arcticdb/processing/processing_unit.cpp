@@ -17,9 +17,7 @@ void ProcessingUnit::apply_filter(
     auto filter_down_stringpool = optimisation == PipelineOptimisation::MEMORY;
 
     for (auto&& [idx, segment]: folly::enumerate(*segments_)) {
-        auto seg = filter_segment(*segment,
-                                  bitset,
-                                  filter_down_stringpool);
+        auto seg = filter_segment(*segment, bitset, filter_down_stringpool);
         auto num_rows = seg.is_null() ? 0 : seg.row_count();
         auto& row_range = row_ranges_->at(idx);
         row_range = std::make_shared<pipelines::RowRange>(row_range->first, row_range->first + num_rows);
@@ -51,10 +49,9 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
         [&](const ColumnName &column_name) {
         for (const auto& segment: *segments_) {
             segment->init_column_map();
-            if (auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
+            if (const auto opt_idx = segment->column_index_with_name_demangling(column_name.value)) {
                 return VariantData(ColumnWithStrings(
-                        segment->column_ptr(
-                        position_t(position_t(*opt_idx))),
+                        segment->column_ptr(static_cast<position_t>(*opt_idx)),
                         segment->string_pool_ptr(),
                         column_name.value));
             }
@@ -79,8 +76,7 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
         return VariantData(expression_context_->regex_matches_.get_value(regex_name.value));
         },
         [&](const ExpressionName &expression_name) {
-        if (auto computed = computed_data_.find(expression_name.value);
-        computed != std::end(computed_data_)) {
+        if (auto computed = computed_data_.find(expression_name.value); computed != std::end(computed_data_)) {
             return computed->second;
         } else {
             auto expr = expression_context_->expression_nodes_.get_value(expression_name.value);
@@ -89,7 +85,7 @@ VariantData ProcessingUnit::get(const VariantNode &name) {
             return data;
         }
         },
-        [&]([[maybe_unused]] const std::monostate &unused) -> VariantData {
+        [&](const std::monostate&) -> VariantData {
         util::raise_rte("ProcessingUnit::get called with monostate VariantNode");
     }
     );

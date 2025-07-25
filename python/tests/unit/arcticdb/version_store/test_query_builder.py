@@ -16,6 +16,7 @@ import dateutil
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import assert_frame_equal
+import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
 
@@ -1073,6 +1074,8 @@ def test_query_builder_vwap(lmdb_version_store_v1):
     expected["product"] = expected["price"] * expected["volume"]
     expected = expected.resample(freq).agg(aggs)
     expected["vwap"] = expected["product"] / expected["volume"]
+    expected.sort_index(inplace=True, axis=1)
+    received.sort_index(inplace=True, axis=1)
     assert_frame_equal(expected, received, check_dtype=False)
 
 
@@ -1111,3 +1114,58 @@ def test_to_strings():
 
     q = QueryBuilder().resample('1min').agg({"col": "sum"})
     assert str(q) == 'RESAMPLE(1min) | AGGREGATE {col: (col, sum), }'
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_column_select_projected_column(s3_store_factory, dynamic_schema):
+    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+    sym = "sym_0"
+    lib.write(sym, pd.DataFrame({"a": [1, 2], "b": ["a", "b"], "c": [5, 6]}))
+    qb = QueryBuilder()
+    qb = qb.apply("new_column", qb["a"] + 2)
+    with qs.query_stats():
+        result = lib.read(sym, columns=["new_column"], query_builder=qb).data
+        stats = qs.get_query_stats()
+    qs.reset_stats()
+    expected = pd.DataFrame({"new_column": [3, 4]})
+    assert_frame_equal(expected, result)
+    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_schema):
+    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+    sym = "sym_0"
+    lib.write(sym, pd.DataFrame({"b": ["a", "b"], "c": [5, 6], "a": [1, 2]}))
+    qb = QueryBuilder()
+    qb = qb.apply("new_column", qb["a"] + 2)
+    qb = qb[qb["new_column"] > 3]
+    with qs.query_stats():
+        result = lib.read(sym, columns=["new_column"], query_builder=qb).data
+        stats = qs.get_query_stats()
+    qs.reset_stats()
+    expected = pd.DataFrame({"new_column": [4]})
+    assert_frame_equal(expected, result)
+    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("column_to_read", ["b", "c"])
+def test_filter_synthetic_column_and_select_on_disk_column(s3_store_factory, dynamic_schema, column_to_read):
+    lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
+    sym = "sym_0"
+    df = pd.DataFrame({"a": [1, 2], "b": [7, 8], "c": [5, 6]})
+    lib.write(sym, df)
+    qb = QueryBuilder()
+    qb = qb.apply("new_column", qb["a"] + 2)
+    qb = qb[qb["new_column"] > 3]
+    with qs.query_stats():
+        result = lib.read(sym, columns=[column_to_read], query_builder=qb).data
+        stats = qs.get_query_stats()
+    qs.reset_stats()
+    expected = pd.DataFrame({column_to_read: [df[column_to_read][1]]})
+    assert_frame_equal(expected, result)
+    if dynamic_schema or column_to_read == "b":
+        data_keys_count = 1
+    elif column_to_read == "c" and not dynamic_schema:
+        # Column c is in the second column slice. This means that we must read the first column slice to perform the
+        # filter and then read the second column slice to return the requested column
+        data_keys_count = 2
+    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == data_keys_count

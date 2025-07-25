@@ -14,6 +14,7 @@
 #include <arcticdb/processing/operation_dispatch_binary.hpp>
 #include <arcticdb/processing/operation_dispatch_ternary.hpp>
 #include <arcticdb/processing/operation_dispatch_unary.hpp>
+#include <arcticdb/stream/index.hpp>
 
 namespace arcticdb {
 
@@ -117,11 +118,6 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         std::holds_alternative<DataType>(left_type),
                         "Unexpected bitset input to {}", operation_type_);
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        is_floating_point_type(std::get<DataType>(left_type)) || is_sequence_type(std::get<DataType>(left_type)) ||
-                        is_time_type(std::get<DataType>(left_type)),
-                        "Unexpected data type {} input to {}",
-                        std::get<DataType>(left_type), operation_type_);
                 break;
             case OperationType::IDENTITY:
             case OperationType::NOT:
@@ -295,13 +291,18 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             child,
             [&column_types] (const ColumnName& column_name) -> std::variant<BitSetTag, DataType> {
                 auto it = column_types.find(column_name.value);
+                if (it == column_types.end()) {
+                    // The column might be a part of multi-index. In that case the name gets mangled so it won't be
+                    // found by column_types.find(column_name.value). We need to retry with the mangled name.
+                    it = column_types.find(stream::mangled_name(column_name.value));
+                }
                 schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(it != column_types.end(),
                                                                 "Clause requires column '{}' to exist in input data"
                         ,column_name.value);
                 return it->second;
             },
             [&expression_context] (const ValueName& value_name) -> std::variant<BitSetTag, DataType> {
-                return expression_context.values_.get_value(value_name.value)->data_type_;
+                return expression_context.values_.get_value(value_name.value)->data_type();
             },
             [&expression_context, &value_set_state] (const ValueSetName& value_set_name) -> std::variant<BitSetTag, DataType> {
                 auto value_set = expression_context.value_sets_.get_value(value_set_name.value);

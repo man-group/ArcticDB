@@ -191,6 +191,7 @@ constexpr uint8_t combine_val_bits(ValueType v, SizeBits b = SizeBits::UNKNOWN_S
 
 } // namespace anonymous
 
+// When adding DataType here add it to the all_data_types function
 enum class DataType : uint8_t {
     UINT8 = detail::combine_val_bits(ValueType::UINT, SizeBits::S8),
     UINT16 = detail::combine_val_bits(ValueType::UINT, SizeBits::S16),
@@ -524,9 +525,8 @@ inline TypeDescriptor make_array_type(DataType dt) {
 }
 
 template<typename DT, typename D>
+requires std::is_base_of_v<DataTypeTagBase, DT> && std::is_base_of_v<DimensionTagBase, D>
 struct TypeDescriptorTag {
-    static_assert(std::is_base_of_v<DataTypeTagBase, DT>);
-    static_assert(std::is_base_of_v<DimensionTagBase, D>);
     using DataTypeTag = DT;
     using DimensionTag = D;
     explicit constexpr operator TypeDescriptor() const {

@@ -151,7 +151,7 @@ inline void get_column_bitset_in_context(
 }
 
 template<class ContainerType>
-inline std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_functions(
+std::vector<FilterQuery<ContainerType>> get_column_bitset_and_query_functions(
     const ReadQuery& query,
     const std::shared_ptr<PipelineContext>& pipeline_context,
     bool dynamic_schema,
