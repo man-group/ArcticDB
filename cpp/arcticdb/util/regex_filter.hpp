@@ -7,7 +7,10 @@
 
 #pragma once
 
-#define PCRE2_CODE_UNIT_WIDTH 0 //Disable default api so both UTF-8 and UTF-32 can be supported
+#if !defined(PCRE2_CODE_UNIT_WIDTH) || PCRE2_CODE_UNIT_WIDTH != 0
+#error "ArcticDB requires PCRE2_CODE_UNIT_WIDTH to be 0"
+#endif
+
 #include <pcre2.h>
 #include <boost/locale.hpp>
 #include <arcticdb/util/constructors.hpp>
