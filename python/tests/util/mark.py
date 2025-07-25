@@ -45,6 +45,7 @@ LOCAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", 
 STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
 STORAGE_AWS_S3 = os.getenv("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
 STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
+STORAGE_AZURE = os.getenv("ARCTICDB_STORAGE_AZURE") == "1"
 
 # Defined shorter logs on errors
 SHORTER_LOGS = marks.SHORTER_LOGS
@@ -77,6 +78,13 @@ REAL_GCP_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED or not STORAGE_GCP,
     reason="Real GCP can be used only when persistent storage is enabled",
 )
+"""Mark on tests using the real Azure.
+Currently controlled by the ARCTICDB_PERSISTENT_STORAGE_TESTS and ARCTICDB_FAST_TESTS_ONLY env vars."""
+REAL_AZURE_TESTS_MARK = pytest.mark.skipif(
+    FAST_TESTS_ONLY or not PERSISTENT_STORAGE_TESTS_ENABLED or not STORAGE_AZURE,
+    reason="Real Azure can be used only when persistent storage is enabled",
+)
+
 """Mark on tests using the real GCP storage.
 """
 """Mark on tests using S3 model storage.
@@ -174,3 +182,22 @@ def param_dict(fields, cases=None):
         ids, params = [], []
 
     return pytest.mark.parametrize(fields, params, ids=ids)
+
+
+def xfail_azure_chars(nvs, symbol_name):
+
+    def contains_problem_chars(text: str) -> list:
+        target_chars = [chr(c) for c in range(0, 32)] + [
+            chr(126), chr(127), chr(140), chr(142), chr(143), chr(156)
+        ]
+        found = [(ord(char), repr(char)) for char in text if char in target_chars]
+        return found
+
+    storage_is_azure = False
+    try:
+        storage_is_azure = "azure" in nvs.get_backing_store()
+    except:
+        # for v2 API
+        storage_is_azure = "azure" in nvs._nvs.get_backing_store()
+    if (storage_is_azure) and (contains_problem_chars(symbol_name)):
+        pytest.xfail("Char is not supported by azure and filtered by arcticdb (see 9669996138)")

@@ -47,7 +47,7 @@ from arcticdb.util.test import (
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
-from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.mark import MACOS_WHEEL_BUILD, xfail_azure_chars
 
 
 @pytest.fixture()
@@ -106,6 +106,7 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
     corrupting the db.
     """
+    xfail_azure_chars(object_version_store, breaking_char)
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
     with pytest.raises(UserInputException):
@@ -121,6 +122,7 @@ def test_s3_breaking_chars_staged(object_version_store, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
     corrupting the db.
     """
+    xfail_azure_chars(object_version_store, breaking_char)
     sym = f"prefix{breaking_char}postfix"
     df = sample_dataframe()
     with pytest.raises(UserInputException):
@@ -134,6 +136,7 @@ def test_s3_breaking_chars_staged(object_version_store, breaking_char):
 @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Halts execution on MacOS ARM")
 def test_unhandled_chars_default(object_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
+    xfail_azure_chars(object_version_store, unhandled_char)
     sym = f"prefix{unhandled_char}postfix"
     df = sample_dataframe()
     with pytest.raises(UserInputException):
@@ -146,6 +149,7 @@ def test_unhandled_chars_default(object_version_store, unhandled_char):
 @pytest.mark.storage
 @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Halts execution on MacOS ARM")
 def test_unhandled_chars_staged_data(object_version_store, sym):
+    xfail_azure_chars(object_version_store, sym)
     """Test that by default, the problematic chars are raising an exception at staging time."""
     df = sample_dataframe()
     with pytest.raises(UserInputException):
@@ -159,6 +163,7 @@ def test_unhandled_chars_staged_data(object_version_store, sym):
 def test_snapshot_names(object_version_store, snap):
     """We validate against these snapshot names in the V2 API, but let them go through in the V1 API to avoid disruption
     to legacy users on the V1 API."""
+    xfail_azure_chars(object_version_store, snap)
     df = sample_dataframe()
     object_version_store.write("sym", df)
     object_version_store.snapshot(snap)
@@ -179,6 +184,7 @@ def test_empty_snapshot_name_not_allowed(object_version_store):
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 @pytest.mark.storage
 def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
+    xfail_azure_chars(object_version_store, unhandled_char)
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
     )
@@ -192,6 +198,7 @@ def test_unhandled_chars_update_upsert(object_version_store, unhandled_char):
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 @pytest.mark.storage
 def test_unhandled_chars_append(object_version_store, unhandled_char):
+    xfail_azure_chars(object_version_store, unhandled_char)
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
     )
@@ -205,6 +212,7 @@ def test_unhandled_chars_append(object_version_store, unhandled_char):
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
 @pytest.mark.storage
 def test_unhandled_chars_already_present_write(object_version_store, three_col_df, unhandled_char):
+    xfail_azure_chars(object_version_store, unhandled_char)
     sym = f"prefix{unhandled_char}postfix"
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
         object_version_store.write(sym, three_col_df())
@@ -225,6 +233,7 @@ def test_unhandled_chars_already_present_write(object_version_store, three_col_d
 @pytest.mark.parametrize("staged", (True, False))
 @pytest.mark.storage
 def test_unhandled_chars_already_present_on_deleted_symbol(object_version_store, three_col_df, unhandled_char, staged):
+    xfail_azure_chars(object_version_store, unhandled_char)
     sym = f"prefix{unhandled_char}postfix"
     with pytest.raises(UserInputException):
         object_version_store.write(
@@ -250,6 +259,7 @@ def test_unhandled_chars_already_present_on_deleted_symbol(object_version_store,
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
 @pytest.mark.storage
 def test_unhandled_chars_already_present_append(object_version_store, three_col_df, unhandled_char):
+    xfail_azure_chars(object_version_store, unhandled_char)
     sym = f"prefix{unhandled_char}postfix"
     with config_context("VersionStore.NoStrictSymbolCheck", 1):
         object_version_store.write(sym, three_col_df(1))
@@ -264,6 +274,7 @@ def test_unhandled_chars_already_present_append(object_version_store, three_col_
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
 @pytest.mark.storage
 def test_unhandled_chars_already_present_update(object_version_store, unhandled_char):
+    xfail_azure_chars(object_version_store, unhandled_char)
     df = pd.DataFrame(
         {"col_1": ["a", "b"], "col_2": [0.1, 0.2]}, index=[pd.Timestamp("2022-01-01"), pd.Timestamp("2022-01-02")]
     )

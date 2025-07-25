@@ -3,7 +3,7 @@ import sys
 from arcticdb.util.utils import get_logger
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb.util.test import sample_dataframe
-from tests.util.mark import SLOW_TESTS_MARK
+from tests.util.mark import SLOW_TESTS_MARK, xfail_azure_chars
 
 
 @SLOW_TESTS_MARK
@@ -60,6 +60,7 @@ def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
 @pytest.mark.skip_fixture_params(["real_gcp"], "Skipped because of issues with lib names containing \\n and \\r (8794791598)")
 def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
     # Create symbol names with each character (except '\' because Azure replaces it with '/' in some cases)
+    xfail_azure_chars(object_version_store, chr(127)) # xfail azure
     names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
     df = sample_dataframe()
     print("LEN: ", len(names))

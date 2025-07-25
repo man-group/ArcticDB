@@ -4,7 +4,14 @@ import os
 from arcticdb.arctic import Arctic, Library
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.utils import get_logger
-from tests.conftest import real_gcp_storage, real_gcp_storage_without_clean_up, real_s3_storage, real_s3_storage_without_clean_up
+from tests.conftest import (
+    real_gcp_storage, 
+    real_gcp_storage_without_clean_up, 
+    real_s3_storage, 
+    real_s3_storage_without_clean_up,
+    real_azure_storage,
+    real_azure_storage_without_clean_up,
+)
 from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
 from tests.util.storage_test import (
     PersistentTestType,
@@ -35,6 +42,8 @@ def shared_persistent_arctic_client(request):
             return request.getfixturevalue(real_gcp_storage_without_clean_up.__name__).create_arctic()
         elif persistent_test_type() == PersistentTestType.AWS_S3:
             return request.getfixturevalue(real_s3_storage_without_clean_up.__name__).create_arctic()
+        elif persistent_test_type() == PersistentTestType.AZURE:
+            return request.getfixturevalue(real_azure_storage_without_clean_up.__name__).create_arctic()
     except Exception as e:
         print(e)
         pytest.skip("No persistence tests selected or error during configuration.")
@@ -69,6 +78,8 @@ def persistent_arctic_library(request, encoding_version, lib_name) -> Generator[
             ac: Arctic = request.getfixturevalue(real_gcp_storage.__name__).create_arctic(encoding_version=encoding_version)
         elif persistent_test_type() == PersistentTestType.AWS_S3:
             ac: Arctic =  request.getfixturevalue(real_s3_storage.__name__).create_arctic(encoding_version=encoding_version)
+        elif persistent_test_type() == PersistentTestType.AZURE:
+            ac: Arctic =  request.getfixturevalue(real_azure_storage.__name__).create_arctic(encoding_version=encoding_version)
     except Exception as e:
         logger.info("An error occurred", exc_info=True)
         pytest.skip("No persistence tests selected or error during configuration.")   
