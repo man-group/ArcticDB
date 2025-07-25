@@ -790,20 +790,18 @@ public:
         return context_row.slice_and_key().slice_.row_range.first;
     }
 
-    void backfill_all_zero_validity_bitmaps(size_t offset_bytes_start, size_t offset_bytes_end) {
+    void backfill_all_zero_validity_bitmaps(size_t offset_bytes_start, size_t offset_bytes_end_idx) {
         // Explanation: offset_bytes_start and offset_bytes_end should both be elements of block_offsets by
         // construction. We must add an all zeros validity bitmap for each row-slice read from storage where this
         // column was missing, in order to correctly populate the Arrow record-batches for the output
         const auto& block_offsets = column_.block_offsets();
-        auto it = std::ranges::lower_bound(block_offsets, offset_bytes_start);
-        auto end_it = std::ranges::lower_bound(block_offsets, offset_bytes_end);
-        util::check(it != block_offsets.cend() && *it == offset_bytes_start &&
-                    end_it != block_offsets.cend() && *end_it == offset_bytes_end,
-                    "NullValueReducer: Failed to find one of offset_bytes ({} or {}) in block_offsets {}",
-                    offset_bytes_start, offset_bytes_end, block_offsets);
-        for (; it != end_it; ++it) {
-            auto rows = (*std::next(it) - *it) / type_bytes_;
-            create_dense_bitmap_all_zeros(*it, rows, column_, AllocationType::DETACHABLE);
+        auto start_it = std::ranges::lower_bound(block_offsets, offset_bytes_start);
+        util::check(start_it != block_offsets.cend() && *start_it == offset_bytes_start,
+                    "NullValueReducer: Failed to find offset_bytes_start {} in block_offsets {}",
+                    offset_bytes_start, block_offsets);
+        for (auto idx = static_cast<size_t>(std::distance(block_offsets.begin(), start_it)); idx < offset_bytes_end_idx; ++idx) {
+            auto rows = (block_offsets.at(idx + 1) - block_offsets.at(idx)) / type_bytes_;
+            create_dense_bitmap_all_zeros(block_offsets.at(idx), rows, column_, AllocationType::DETACHABLE);
         }
     }
 
@@ -821,7 +819,7 @@ public:
                 column_.default_initialize_rows(start_row, num_rows, false);
             }
             if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().at(context_row.index()));
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, context_row.index());
             }
             pos_ = current_pos + sz_to_advance;
         } else {
@@ -843,7 +841,7 @@ public:
                 column_.default_initialize_rows(start_row, num_rows, false);
             }
             if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().back());
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().size() - 1);
             }
         }
     }
