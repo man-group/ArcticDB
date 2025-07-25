@@ -16,6 +16,7 @@ vcpkg_from_github(
         0005-Deactivate-libunwind-features.patch
         0006-fix-Ignore-features-based-on-demangle.h.patch
         0007-fix-windows-minmax.patch
+        0008-win-dont-propagate-cpp-version.patch
 )
 file(REMOVE "${SOURCE_PATH}/CMake/FindFastFloat.cmake")
 file(REMOVE "${SOURCE_PATH}/CMake/FindFmt.cmake")

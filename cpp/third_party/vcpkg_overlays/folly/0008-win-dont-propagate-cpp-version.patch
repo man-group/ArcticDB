@@ -1,0 +1,18 @@
+diff --git a/CMake/FollyCompilerMSVC.cmake b/CMake/FollyCompilerMSVC.cmake
+index a7933d9e1..034a2b206 100644
+--- a/CMake/FollyCompilerMSVC.cmake
++++ b/CMake/FollyCompilerMSVC.cmake
+@@ -118,11 +118,11 @@ function(apply_folly_compile_options_to_target THETARGET)
+       /Zc:threadSafeInit # Enable thread-safe function-local statics initialization.
+       /Zc:throwingNew # Assume operator new throws on failure.
+ 
+-      /permissive- # Be mean, don't allow bad non-standard stuff (C++/CLI, __declspec, etc. are all left intact).
+-      /std:${MSVC_LANGUAGE_VERSION} # Build in the requested version of C++
+       /utf-8 # fmt needs unicode support, which requires compiling with /utf-8
+ 
+     PRIVATE
++      /permissive- # Be mean, don't allow bad non-standard stuff (C++/CLI, __declspec, etc. are all left intact).
++      /std:${MSVC_LANGUAGE_VERSION} # Build in the requested version of C++
+       /bigobj # Support objects with > 65k sections. Needed due to templates.
+       /favor:${MSVC_FAVORED_ARCHITECTURE} # Architecture to prefer when generating code.
+       /Zc:inline # Have the compiler eliminate unreferenced COMDAT functions and data before emitting the object file.
