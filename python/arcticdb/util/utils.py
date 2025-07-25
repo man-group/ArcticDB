@@ -47,6 +47,7 @@ class GitHubSanitizingHandler(logging.StreamHandler):
             # Use regex to find and replace sensitive access keys
             sanitized_message = re.sub(r'(secret=)[^\s&]+', r'\1***', message)
             sanitized_message = re.sub(r'(access=)[^\s&]+', r'\1***', sanitized_message)
+            sanitized_message = re.sub(r'AccountKey=([^;]+)', r'AccountKey=***', sanitized_message) 
             return sanitized_message
         return message
 

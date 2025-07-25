@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Union
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
-from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
+from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_azure_from_environment_variables, real_s3_from_environment_variables
 from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber
 from arcticdb.version_store.library import Library
 
@@ -24,7 +24,8 @@ from arcticdb.version_store.library import Library
 ## Amazon s3 storage bucket dedicated for ASV performance tests
 AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 GCP_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
-
+AZURE_DEFAULT_CONTAINER = 'githubasvtests' # defined at 'arcticdbgithub' storage account
+AZURE_ACCOUNT_NAME = 'arcticdbgithub'
 
 class GitHubSanitizingHandler(logging.StreamHandler):
     """
@@ -42,6 +43,7 @@ class GitHubSanitizingHandler(logging.StreamHandler):
             # Use regex to find and replace sensitive access keys
             sanitized_message = re.sub(r'(secret=)[^\s&]+', r'\1***', message)
             sanitized_message = re.sub(r'(access=)[^\s&]+', r'\1***', sanitized_message)
+            sanitized_message = re.sub(r'AccountKey=([^;]+)', r'AccountKey=***', sanitized_message) 
             return sanitized_message
         return message
 
@@ -85,6 +87,7 @@ class Storage(Enum):
     AMAZON = 1
     LMDB = 2
     GOOGLE = 3
+    AZURE = 4
 
 
 class StorageSpace(Enum):
@@ -138,6 +141,15 @@ class StorageSetup:
             cls._gcp_secret = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
             cls._gcp_access = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
             cls._gcp_bucket = GCP_S3_DEFAULT_BUCKET
+
+            # Azure variable setup
+            cls._azure_factory = real_azure_from_environment_variables(shared_path=True)
+            # Under this account name 
+            assert AZURE_ACCOUNT_NAME in cls._azure_factory.account_name, "Account name is not expected one"
+            cls._aws_default_factory.default_prefix = None
+            cls._aws_default_factory.default_bucket = AZURE_DEFAULT_CONTAINER
+            cls._aws_default_factory.clean_bucket_on_fixture_exit = False
+            
    
     @classmethod
     def get_machine_id(cls):
@@ -183,6 +195,9 @@ class StorageSetup:
             s = cls._gcp_secret
             a = cls._gcp_access
             return f"gcpxml://storage.googleapis.com:{cls._gcp_bucket}?access={a}&secret={s}&path_prefix={prefix}"
+        elif storage == Storage.AZURE:
+            cls._azure_factory.default_prefix = prefix
+            return cls._azure_factory.create_fixture().arctic_uri
         else:
             raise Exception("Unsupported storage type :", storage)
 
@@ -830,3 +845,4 @@ class TestsForTestLibraryManager:
         assert len(ac.list_libraries()) == 0, "All libraries from child processes deleted"
 
         print("All processes completed successfully:", list(result_list))        
+
