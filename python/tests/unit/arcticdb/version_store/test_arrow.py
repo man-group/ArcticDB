@@ -1,21 +1,22 @@
-from arcticdb_ext.version_store import OutputFormat
 import pandas as pd
 import numpy as np
 import pytest
 
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.options import OutputFormat
 import pyarrow as pa
 from arcticdb.util.test import get_sample_dataframe
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
 
 
+# TODO: Add appropriate fixtures
 def test_basic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": np.arange(10)})
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -23,7 +24,7 @@ def test_basic_with_index(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -31,7 +32,7 @@ def test_basic_small_slices(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     df = pd.DataFrame({"x": np.arange(10)})
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -39,7 +40,7 @@ def test_basic_small_slices_with_index(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -47,7 +48,7 @@ def test_double_columns(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": np.arange(10), "y": np.arange(10.0, 20.0)})
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -55,7 +56,7 @@ def test_bool_columns(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": [i%3 == 0 for i in range(10)], "y": [i%2 == 0 for i in range(10)]})
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -63,7 +64,7 @@ def test_column_filtering(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": np.arange(10), "y": np.arange(10.0, 20.0)})
     lib.write("arrow", df)
-    table = lib.read("arrow", columns=['y'], _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", columns=['y'], output_format=OutputFormat.ARROW).data
     df = df.drop('x', axis=1)
     assert_frame_equal_with_arrow(table, df)
 
@@ -76,7 +77,7 @@ def test_strings_basic(lmdb_version_store_v1, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
     lib.write("arrow", df, dynamic_strings=dynamic_strings)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -93,7 +94,7 @@ def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, 
         "z": [f"z_{i//5}" for i in range(100)],
     })
     lib.write("arrow", df, dynamic_strings=dynamic_strings)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -104,7 +105,7 @@ def test_all_types(lmdb_version_store_v1):
     # sample dataframe contains all dtypes + unicode strings
     df = get_sample_dataframe()
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(table, df)
 
 
@@ -121,8 +122,8 @@ def test_date_range_corner_cases(version_store_factory, date_range_start, date_r
     query_end_ts = pd.Timestamp(date_range_start + date_range_width)
 
     date_range = (query_start_ts, query_end_ts)
-    expected_df = lib.read(sym, date_range=date_range, _output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    expected_df = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
+    data_closed_table = lib.read(sym, date_range=date_range, output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
@@ -133,8 +134,8 @@ def test_date_range_between_index_values(lmdb_version_store_tiny_segment):
     lib.write(sym, df)
 
     date_range = (pd.Timestamp(4), pd.Timestamp(5))
-    expected_df = lib.read(sym, date_range=date_range, _output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    expected_df = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
+    data_closed_table = lib.read(sym, date_range=date_range, output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
@@ -150,8 +151,8 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
     query_end_ts = pd.Timestamp(date_range_start + 1)
 
     date_range = (query_start_ts, query_end_ts)
-    expected_df = lib.read(sym, date_range=date_range, _output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    expected_df = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
+    data_closed_table = lib.read(sym, date_range=date_range, output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
@@ -168,7 +169,7 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
     query_end_ts = initial_timestamp + pd.DateOffset(end_offset)
 
     date_range = (query_start_ts, query_end_ts)
-    data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    data_closed_table = lib.read(sym, date_range=date_range, output_format=OutputFormat.ARROW).data
     df = data_closed_table.to_pandas()
     assert query_start_ts == df.index[0]
     assert query_end_ts == df.index[-1]
@@ -195,7 +196,7 @@ def test_date_range_with_duplicates(version_store_factory, segment_row_size, sta
     query_end_ts = pd.Timestamp(2025, 1, end_date)
 
     date_range = (query_start_ts, query_end_ts)
-    arrow_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    arrow_table = lib.read(sym, date_range=date_range, output_format=OutputFormat.ARROW).data
     expected_df = df[(df.index >= query_start_ts) & (df.index <= query_end_ts)]
     assert_frame_equal_with_arrow(arrow_table, expected_df)
 
@@ -211,8 +212,8 @@ def test_row_range_corner_cases(version_store_factory, row_range_start, row_rang
     lib.write(sym, df)
 
     row_range = (row_range_start, row_range_start + row_range_width + 1)
-    expected_df = lib.read(sym, row_range=row_range, _output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    expected_df = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
+    data_closed_table = lib.read(sym, row_range=row_range, output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
@@ -226,8 +227,8 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
     lib.write(sym, df)
 
     row_range = (row_range_start, row_range_start + 1)
-    expected_df = lib.read(sym, row_range=row_range, _output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    expected_df = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
+    data_closed_table = lib.read(sym, row_range=row_range, output_format=OutputFormat.ARROW).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
@@ -241,7 +242,7 @@ def test_row_range(version_store_factory, segment_row_size, start_offset, end_of
     lib.write(sym, df)
 
     row_range = (start_offset, end_offset)
-    data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    data_closed_table = lib.read(sym, row_range=row_range, output_format=OutputFormat.ARROW).data
     df = data_closed_table.to_pandas()
 
     start_ts = initial_timestamp + pd.DateOffset(start_offset)
@@ -258,7 +259,7 @@ def test_with_querybuilder(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q[q["x"] < 5]
     lib.write("arrow", df)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW, query_builder=q).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW, query_builder=q).data
     expected = df[df["x"] < 5]
     assert_frame_equal_with_arrow(table, expected)
 
@@ -270,7 +271,7 @@ def test_dynamic_schema(lmdb_version_store_dynamic_schema):
     lib.write("arrow", df1)
     df2 = pd.DataFrame({"y": np.arange(20.0, 30.0), "z": np.arange(10.0, 20.0)})
     lib.append("arrow", df2)
-    table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     result = table.to_pandas()
     expected = pd.concat([df1, df2], ignore_index=True)
     assert_frame_equal(result.astype(float).fillna(0), expected.fillna(0))
@@ -283,7 +284,7 @@ def test_dynamic_schema_column_change(lmdb_version_store_dynamic_schema):
     lib.write("arrow", df1)
     df2 = pd.DataFrame({"x": np.arange(20.0, 30.0, dtype=np.float64)})
     lib.append("arrow", df2)
-    arrow_table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
+    arrow_table = lib.read("arrow", output_format=OutputFormat.ARROW).data
     batches = arrow_table.to_batches()
     assert len(batches) == 2
     for record_batch in batches:
@@ -304,7 +305,7 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
     data_keys = lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")
     assert len(data_keys) == num_rows//2
 
-    arrow_table = lib.read("sym", _output_format=OutputFormat.ARROW).data
+    arrow_table = lib.read("sym", output_format=OutputFormat.ARROW).data
     batches = arrow_table.to_batches()
     assert len(batches) == num_rows//2
     for record_batch in batches:
