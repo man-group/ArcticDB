@@ -8,7 +8,7 @@ from packaging import version
 import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
@@ -460,13 +460,8 @@ def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_sto
             assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
 
             arrow_table = curr.lib._nvs.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
-            df = arrow_table.to_pandas()
-            df["index"] = df["index"].apply(lambda x : pd.Timestamp(x))
-            df["index"] = df["index"].astype("datetime64[ns]")
-            df = df.set_index("index")
             expected_df = curr.lib.read(sym, date_range=date_range).data
-            expected_df.index.name = "index"
-            assert_frame_equal(df, expected_df)
+            assert_frame_equal_with_arrow(arrow_table, expected_df)
 
 
 def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):
