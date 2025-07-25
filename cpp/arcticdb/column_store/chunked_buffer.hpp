@@ -184,6 +184,8 @@ class ChunkedBufferImpl {
 
     [[nodiscard]] const auto &blocks() const { return blocks_; }
 
+    [[nodiscard]] const auto &block_offsets() const { return block_offsets_; }
+
     BlockType* block(size_t pos) {
         util::check(pos < blocks_.size(), "Requested block {} out of range {}", pos, blocks_.size());
         return blocks_[pos];
@@ -531,7 +533,9 @@ class ChunkedBufferImpl {
 
     MemBlock* create_detachable_block(size_t capacity, size_t offset) const {
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        auto* data = new uint8_t[capacity];
+        // TODO: Use new again when sparrow bug is fixed
+        auto* data = std::allocator<uint8_t>().allocate(capacity);
+//        auto* data = new uint8_t[capacity];
         new(ptr) MemBlock(data, capacity, offset, ts, true);
         return reinterpret_cast<BlockType*>(ptr);
     }
