@@ -1147,17 +1147,25 @@ def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_
     assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_filter_synthetic_column_and_select_on_disk_column(s3_store_factory, dynamic_schema):
+@pytest.mark.parametrize("column_to_read", ["b", "c"])
+def test_filter_synthetic_column_and_select_on_disk_column(s3_store_factory, dynamic_schema, column_to_read):
     lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     sym = "sym_0"
-    lib.write(sym, pd.DataFrame({"a": [1, 2], "b": [7, 8], "c": [5, 6]}))
+    df = pd.DataFrame({"a": [1, 2], "b": [7, 8], "c": [5, 6]})
+    lib.write(sym, df)
     qb = QueryBuilder()
     qb = qb.apply("new_column", qb["a"] + 2)
     qb = qb[qb["new_column"] > 3]
     with qs.query_stats():
-        result = lib.read(sym, columns=["b"], query_builder=qb).data
+        result = lib.read(sym, columns=[column_to_read], query_builder=qb).data
         stats = qs.get_query_stats()
     qs.reset_stats()
-    expected = pd.DataFrame({"b": [8]})
+    expected = pd.DataFrame({column_to_read: [df[column_to_read][1]]})
     assert_frame_equal(expected, result)
-    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+    if dynamic_schema or column_to_read == "b":
+        data_keys_count = 1
+    elif column_to_read == "c" and not dynamic_schema:
+        # Column c is in the second column slice. This means that we must read the first column slice to perform the
+        # filter and then read the second column slice to return the requested column
+        data_keys_count = 2
+    assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == data_keys_count
