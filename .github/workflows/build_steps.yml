@@ -400,7 +400,6 @@ jobs:
 
       - name: Run test
         run: |
-          ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             python -m pip  install pytest-repeat setuptools wheel
             python setup.py protoc --build-lib python

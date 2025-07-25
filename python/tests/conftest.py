@@ -8,7 +8,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import enum
 from typing import Callable, Generator, Union
-from arcticdb.util.environment_setup import get_console_logger
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -55,7 +54,6 @@ from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
 from .util.mark import (
     LMDB_TESTS_MARK,
-    MACOS_WHEEL_BUILD,
     MEM_TESTS_MARK,
     SIM_GCP_TESTS_MARK,
     SIM_NFS_TESTS_MARK,
@@ -151,7 +149,6 @@ def pytest_generate_tests(metafunc):
 
 # endregion
 # region ======================================= Storage Fixtures =======================================
-
 @pytest.fixture(scope="session")
 def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
     tmp_path = tmp_path_factory.mktemp("lmdb")
@@ -578,6 +575,26 @@ def arctic_client_v1(request) -> Arctic:
 
 @pytest.fixture(
     scope="function",
+    params=[
+        pytest.param("s3", marks=SIM_S3_TESTS_MARK),
+        pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
+        pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
+        pytest.param("mem", marks=MEM_TESTS_MARK),
+        pytest.param("azurite", marks=AZURE_TESTS_MARK),
+        pytest.param("mongo", marks=MONGO_TESTS_MARK),
+        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
+    ],
+)
+def arctic_client_no_lmdb(request, encoding_version) -> Arctic:
+    filter_out_unwanted_mark(request, request.param)
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=encoding_version)
+    return ac
+
+
+@pytest.fixture(
+    scope="function",
     params=["lmdb"],
 )
 def arctic_client_lmdb(request, encoding_version) -> Arctic:
@@ -587,26 +604,26 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
 
 
 @pytest.fixture
-def arctic_library(arctic_client, lib_name) -> Generator[Library, None, None]:
+def arctic_library(arctic_client, lib_name) -> Library:
     yield arctic_client.create_library(lib_name)
     arctic_client.delete_library(lib_name)
 
 
 @pytest.fixture
-def arctic_library_dynamic(arctic_client, lib_name) -> Generator[Library, None, None]:
+def arctic_library_dynamic(arctic_client, lib_name) -> Library:
     lib_opts = LibraryOptions(dynamic_schema=True)
     yield arctic_client.create_library(lib_name, library_options=lib_opts)
     arctic_client.delete_library(lib_name)
 
 
 @pytest.fixture
-def arctic_library_v1(arctic_client_v1, lib_name) -> Generator[Library, None, None]:
+def arctic_library_v1(arctic_client_v1, lib_name) -> Library:
     yield arctic_client_v1.create_library(lib_name)
     arctic_client_v1.delete_library(lib_name)
 
 
 @pytest.fixture
-def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Generator[Library, None, None]:
+def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Library:
     yield arctic_client_lmdb.create_library(lib_name)
     arctic_client_lmdb.delete_library(lib_name)
 
@@ -647,22 +664,9 @@ def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
 
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
-def _store_factory(lib_name, bucket, delete_bucket = True) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield bucket.create_version_store_factory(lib_name)
-    if delete_bucket: 
-        try:
-            bucket.slow_cleanup()
-        except Exception as e:
-            get_console_logger().warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
-
-
 @pytest.fixture
-def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    # Do not delete LMDB library on windows
-    # Otherwise there will be no storage space left for unit tests
-    # very peculiar behavior for LMDB, not investigated yet
-    # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))     
+def version_store_factory(lib_name, lmdb_storage) -> Callable[..., NativeVersionStore]:
+    return lmdb_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
@@ -679,55 +683,55 @@ def s3_store_factory_mock_storage_exception(lib_name, s3_storage):
 
 
 @pytest.fixture
-def s3_store_factory(lib_name, s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, s3_storage)
+def s3_store_factory(lib_name, s3_storage) -> Callable[..., NativeVersionStore]:
+    return s3_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, s3_no_ssl_storage)
+def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Callable[..., NativeVersionStore]:
+    return s3_no_ssl_storage.create_version_store_factory(lib_name)
+
 
 @pytest.fixture
 def mock_s3_store_with_error_simulation_factory(
     lib_name, mock_s3_storage_with_error_simulation
-)  -> Callable[..., NativeVersionStore]:
-    # NOTE: this store simulates errors, therefore there is no way to delete it
+) -> Callable[..., NativeVersionStore]:
     return mock_s3_storage_with_error_simulation.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def real_s3_store_factory(lib_name, real_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, real_s3_storage)
+def real_s3_store_factory(lib_name, real_s3_storage) -> Callable[..., NativeVersionStore]:
+    return real_s3_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, nfs_backed_s3_storage)
+def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Callable[..., NativeVersionStore]:
+    return nfs_backed_s3_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def real_gcp_store_factory(lib_name, real_gcp_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, real_gcp_storage)
+def real_gcp_store_factory(lib_name, real_gcp_storage) -> Callable[..., NativeVersionStore]:
+    return real_gcp_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, real_s3_sts_storage)
+def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> Callable[..., NativeVersionStore]:
+    return real_s3_sts_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def azure_store_factory(lib_name, azurite_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, azurite_storage)
+def azure_store_factory(lib_name, azurite_storage) -> Callable[..., NativeVersionStore]:
+    return azurite_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def mongo_store_factory(mongo_storage, lib_name) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, mongo_storage)
+def mongo_store_factory(mongo_storage, lib_name):
+    return mongo_storage.create_version_store_factory(lib_name)
 
 
 @pytest.fixture
-def in_memory_store_factory(mem_storage, lib_name) -> Generator[Callable[..., NativeVersionStore], None, None]:
-    yield from _store_factory(lib_name, mem_storage)
+def in_memory_store_factory(mem_storage, lib_name) -> Callable[..., NativeVersionStore]:
+    return mem_storage.create_version_store_factory(lib_name)
 
 
 # endregion
@@ -738,42 +742,42 @@ def real_s3_version_store(real_s3_store_factory):
 
 
 @pytest.fixture
-def real_s3_version_store_dynamic_schema(real_s3_store_factory) -> NativeVersionStore:
+def real_s3_version_store_dynamic_schema(real_s3_store_factory):
     return real_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def real_gcp_version_store(real_gcp_store_factory) -> NativeVersionStore:
+def real_gcp_version_store(real_gcp_store_factory):
     return real_gcp_store_factory()
 
 
 @pytest.fixture
-def real_gcp_version_store_dynamic_schema(real_gcp_store_factory) -> NativeVersionStore:
+def real_gcp_version_store_dynamic_schema(real_gcp_store_factory):
     return real_gcp_store_factory(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def real_s3_sts_version_store(real_s3_sts_store_factory) -> NativeVersionStore:
+def real_s3_sts_version_store(real_s3_sts_store_factory):
     return real_s3_sts_store_factory()
 
 
 @pytest.fixture
-def mock_s3_store_with_error_simulation(mock_s3_store_with_error_simulation_factory) -> NativeVersionStore:
+def mock_s3_store_with_error_simulation(mock_s3_store_with_error_simulation_factory):
     return mock_s3_store_with_error_simulation_factory()
 
 
 @pytest.fixture
-def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exception) -> NativeVersionStore:
+def mock_s3_store_with_mock_storage_exception(s3_store_factory_mock_storage_exception):
     return s3_store_factory_mock_storage_exception()
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory) -> NativeVersionStore:
+def nfs_backed_s3_version_store_v1(nfs_backed_s3_store_factory):
     return nfs_backed_s3_store_factory(dynamic_strings=True)
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name) -> NativeVersionStore:
+def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name):
     library_name = lib_name + "_v2"
     return nfs_backed_s3_store_factory(
         dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name
@@ -781,23 +785,23 @@ def nfs_backed_s3_version_store_v2(nfs_backed_s3_store_factory, lib_name) -> Nat
 
 
 @pytest.fixture
-def s3_version_store_v1(s3_store_factory) -> NativeVersionStore:
+def s3_version_store_v1(s3_store_factory):
     return s3_store_factory(dynamic_strings=True)
 
 
 @pytest.fixture
-def s3_version_store_v2(s3_store_factory, lib_name) -> NativeVersionStore:
+def s3_version_store_v2(s3_store_factory, lib_name):
     library_name = lib_name + "_v2"
     return s3_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
 @pytest.fixture
-def s3_version_store_dynamic_schema_v1(s3_store_factory) -> NativeVersionStore:
+def s3_version_store_dynamic_schema_v1(s3_store_factory):
     return s3_store_factory(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def s3_version_store_dynamic_schema_v2(s3_store_factory, lib_name) -> NativeVersionStore:
+def s3_version_store_dynamic_schema_v2(s3_store_factory, lib_name):
     library_name = lib_name + "_v2"
     return s3_store_factory(
         dynamic_strings=True, dynamic_schema=True, encoding_version=int(EncodingVersion.V2), name=library_name
@@ -805,7 +809,7 @@ def s3_version_store_dynamic_schema_v2(s3_store_factory, lib_name) -> NativeVers
 
 
 @pytest.fixture
-def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version) -> NativeVersionStore:
+def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version):
     if encoding_version == EncodingVersion.V1:
         return s3_version_store_v1
     elif encoding_version == EncodingVersion.V2:
@@ -815,12 +819,12 @@ def s3_version_store(s3_version_store_v1, s3_version_store_v2, encoding_version)
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_dynamic_schema_v1(nfs_backed_s3_store_factory) -> NativeVersionStore:
+def nfs_backed_s3_version_store_dynamic_schema_v1(nfs_backed_s3_store_factory):
     return nfs_backed_s3_store_factory(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, lib_name) -> NativeVersionStore:
+def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, lib_name):
     library_name = lib_name + "_v2"
     return nfs_backed_s3_store_factory(
         dynamic_strings=True, dynamic_schema=True, encoding_version=int(EncodingVersion.V2), name=library_name
@@ -828,7 +832,7 @@ def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, l
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version) -> NativeVersionStore:
+def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version):
     if encoding_version == EncodingVersion.V1:
         return nfs_backed_s3_version_store_v1
     elif encoding_version == EncodingVersion.V2:
@@ -838,7 +842,7 @@ def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_ve
 
 
 @pytest.fixture(scope="function")
-def mongo_version_store(mongo_store_factory) -> NativeVersionStore:
+def mongo_version_store(mongo_store_factory):
     return mongo_store_factory()
 
 
@@ -892,7 +896,7 @@ def local_object_store_factory(request):
 
 
 @pytest.fixture
-def local_object_version_store(local_object_store_factory) -> NativeVersionStore:
+def local_object_version_store(local_object_store_factory):
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
@@ -901,7 +905,7 @@ def local_object_version_store(local_object_store_factory) -> NativeVersionStore
 
 
 @pytest.fixture
-def local_object_version_store_prune_previous(local_object_store_factory) -> NativeVersionStore:
+def local_object_version_store_prune_previous(local_object_store_factory):
     """
     Designed to test all local object stores and their simulations
     Doesn't support LMDB or persistent storages
@@ -951,12 +955,12 @@ def basic_store(basic_store_factory) -> NativeVersionStore:
 
 
 @pytest.fixture
-def azure_version_store(azure_store_factory) -> NativeVersionStore:
+def azure_version_store(azure_store_factory):
     return azure_store_factory()
 
 
 @pytest.fixture
-def azure_version_store_dynamic_schema(azure_store_factory) -> NativeVersionStore:
+def azure_version_store_dynamic_schema(azure_store_factory):
     return azure_store_factory(dynamic_schema=True, dynamic_strings=True)
 
 
@@ -977,7 +981,7 @@ def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore
 
 
 @pytest.fixture(scope="function", params=("lmdb_version_store_v1", "lmdb_version_store_v2"))
-def lmdb_version_store(request) -> Generator[NativeVersionStore, None, None]:
+def lmdb_version_store(request):
     yield request.getfixturevalue(request.param)
 
 
@@ -1017,7 +1021,7 @@ def lmdb_version_store_dynamic_schema_v2(version_store_factory, lib_name) -> Nat
 @pytest.fixture
 def lmdb_version_store_dynamic_schema(
     lmdb_version_store_dynamic_schema_v1, lmdb_version_store_dynamic_schema_v2, encoding_version
-) -> NativeVersionStore:
+):
     if encoding_version == EncodingVersion.V1:
         return lmdb_version_store_dynamic_schema_v1
     elif encoding_version == EncodingVersion.V2:
@@ -1279,7 +1283,7 @@ def get_wide_df():
         "lmdb_version_store_empty_types_dynamic_schema_v2",
     ),
 )
-def lmdb_version_store_static_and_dynamic(request) -> Generator[NativeVersionStore, None, None]:
+def lmdb_version_store_static_and_dynamic(request):
     """
     Designed to test all combinations between schema and encoding version for LMDB
     """
@@ -1302,7 +1306,7 @@ def lmdb_version_store_static_and_dynamic(request) -> Generator[NativeVersionSto
         pytest.param("real_gcp_version_store", marks=REAL_GCP_TESTS_MARK),
     ),
 )
-def object_and_mem_and_lmdb_version_store(request) -> Generator[NativeVersionStore, None, None]:
+def object_and_mem_and_lmdb_version_store(request):
     """
     Designed to test all supported stores
     """
@@ -1325,7 +1329,7 @@ def object_and_mem_and_lmdb_version_store(request) -> Generator[NativeVersionSto
         pytest.param("real_gcp_version_store_dynamic_schema", marks=REAL_GCP_TESTS_MARK),
     ),
 )
-def object_and_mem_and_lmdb_version_store_dynamic_schema(request) -> Generator[NativeVersionStore, None, None]:
+def object_and_mem_and_lmdb_version_store_dynamic_schema(request):
     filter_out_unwanted_mark(request, request.param)
     """
     Designed to test all supported stores
@@ -1334,22 +1338,22 @@ def object_and_mem_and_lmdb_version_store_dynamic_schema(request) -> Generator[N
 
 
 @pytest.fixture
-def in_memory_version_store(in_memory_store_factory) -> NativeVersionStore:
+def in_memory_version_store(in_memory_store_factory):
     return in_memory_store_factory()
 
 
 @pytest.fixture
-def in_memory_version_store_dynamic_schema(in_memory_store_factory) -> NativeVersionStore:
+def in_memory_version_store_dynamic_schema(in_memory_store_factory):
     return in_memory_store_factory(dynamic_schema=True)
 
 
 @pytest.fixture
-def in_memory_version_store_tiny_segment(in_memory_store_factory) -> NativeVersionStore:
+def in_memory_version_store_tiny_segment(in_memory_store_factory):
     return in_memory_store_factory(column_group_size=2, segment_row_size=2)
 
 
 @pytest.fixture(params=["lmdb_version_store_tiny_segment", "in_memory_version_store_tiny_segment"])
-def lmdb_or_in_memory_version_store_tiny_segment(request) -> NativeVersionStore:
+def lmdb_or_in_memory_version_store_tiny_segment(request):
     return request.getfixturevalue(request.param)
 
 
