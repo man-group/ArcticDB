@@ -561,15 +561,20 @@ def test_will_item_be_pickled_msgpack(lmdb_version_store_v1, sym):
     assert lib.will_item_be_pickled(list_data) == True # msgpacked
 
 
-def test_will_item_be_pickled_recursive_normalizer(lmdb_version_store_v1, sym):
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"a": {"b": {"c": {"d": np.arange(24)}}}},
+        {"a": [1, 2, 3], "b": {"c": np.arange(24)}, "d": [TestCustomNormalizer()]} # A random item that will be pickled
+    ]
+)
+def test_will_item_be_pickled_recursive_normalizer(lmdb_version_store_v1, sym, data):
     lib = lmdb_version_store_v1
-
-    list_data  = {"a": {"b": {"c": {"d": np.arange(24)}}}}
-    lib.write(sym, list_data, recursive_normalizers=True)
-    will_item_be_pickled = lib.will_item_be_pickled(list_data, recursive_normalizers=True)
+    lib.write(sym, data, recursive_normalizers=True)
+    will_item_be_pickled = lib.will_item_be_pickled(data, recursive_normalizers=True)
     assert lib.is_symbol_pickled(sym) == will_item_be_pickled
     assert will_item_be_pickled == False
-    assert lib.will_item_be_pickled(list_data) == True
+    assert lib.will_item_be_pickled(data) == True
 
 
 def test_numpy_ts_col_with_none(lmdb_version_store):

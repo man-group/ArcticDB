@@ -12,6 +12,7 @@ import datetime
 import os
 import sys
 from warnings import warn
+from collections import namedtuple
 
 import pandas as pd
 import numpy as np
@@ -84,6 +85,8 @@ from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
 
 IS_WINDOWS = sys.platform == "win32"
+
+FlattenResult = namedtuple("FlattenResult", ["is_recursive_normalize_preferred", "metastruct", "to_write"])
 
 
 def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
@@ -475,9 +478,9 @@ class NativeVersionStore:
             # need to go through a multi key process as the msgpack normalizer can handle it as is.
             metastruct, to_write = fl.create_meta_structure(data, symbol)
             is_recursive_normalize_preferred = len(to_write) > 0
-            return is_recursive_normalize_preferred, metastruct, to_write
+            return FlattenResult(is_recursive_normalize_preferred, metastruct, to_write)
         else:
-            return False, None, None
+            return FlattenResult(False, None, None)
 
     def _try_flatten_and_write_composite_object(
         self, symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous
@@ -2880,16 +2883,17 @@ class NativeVersionStore:
         """
         return self._normalizer.get_normalizer_for_type(item)
 
-    def will_item_be_pickled(self, item: Any, recursive_normalizers: Optional[bool] = False):
+    def will_item_be_pickled(self, item: Any, recursive_normalizers: Optional[bool] = None):
         """
         Check if the data will be pickled.
-        Note that if item can be normalized with msgpack, it is considered pickled as well
+        Note that if item can be normalized with msgpack, it is considered pickled as well.
+        And partially pickled needed items will be returned False for this method.
 
         Parameters
         ----------
         item : `Any`
             Data to be checked.
-        recursive_normalizers : `Optional[bool]`, default=False
+        recursive_normalizers : `Optional[bool]`, default=None
             Whether recursive normalizer is enabled.
             This should be provided if `recursive_normalizers` is also provided to `write`.
             Otherwise, the fallback logic for environment variables, library config
@@ -2911,7 +2915,7 @@ class NativeVersionStore:
                 return False
 
         try:
-            _, _, norm_meta = self._try_normalize(
+            _udm, _item, norm_meta = self._try_normalize(
                 symbol="",
                 dataframe=item,
                 metadata=None,
