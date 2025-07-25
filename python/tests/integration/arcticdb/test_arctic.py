@@ -50,6 +50,7 @@ from ...util.mark import (
     SSL_TEST_SUPPORTED,
     FORK_SUPPORTED,
     ARCTICDB_USING_CONDA,
+    xfail_azure_chars,
 )
 
 logger = logging.getLogger(__name__)
@@ -1486,6 +1487,7 @@ def test_unhandled_chars_snapshots(arctic_library_v1, snap):
 
 @pytest.mark.parametrize("snap", [chr(127), chr(128), "*<>"])
 def test_unhandled_chars_snapshots_validation_skipped(arctic_library_v1, snap):
+    xfail_azure_chars(arctic_library_v1, snap)
     arctic_library = arctic_library_v1
     df = sample_dataframe()
     arctic_library.write("sym", df)
