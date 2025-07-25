@@ -662,7 +662,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
     # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))     
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS))     
 
 
 @pytest.fixture
