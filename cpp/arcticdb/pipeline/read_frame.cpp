@@ -761,7 +761,6 @@ void decode_into_frame_dynamic(
 class NullValueReducer {
     Column &column_;
     const int type_bytes_;
-    const std::vector<size_t>& block_offsets_;
     std::shared_ptr<PipelineContext> context_;
     SegmentInMemory frame_;
     size_t pos_;
@@ -779,7 +778,6 @@ public:
         OutputFormat output_format) :
             column_(column),
             type_bytes_(column_.type().get_type_bytes()),
-            block_offsets_(column_.block_offsets()),
             context_(context),
             frame_(std::move(frame)),
             pos_(frame_.offset()),
@@ -793,15 +791,16 @@ public:
     }
 
     void backfill_all_zero_validity_bitmaps(size_t offset_bytes_start, size_t offset_bytes_end) {
-        // Explanation: offset_bytes_start and offset_bytes_end should both be elements of block_offsets_ by
+        // Explanation: offset_bytes_start and offset_bytes_end should both be elements of block_offsets by
         // construction. We must add an all zeros validity bitmap for each row-slice read from storage where this
         // column was missing, in order to correctly populate the Arrow record-batches for the output
-        auto it = std::ranges::lower_bound(block_offsets_, offset_bytes_start);
-        auto end_it = std::ranges::lower_bound(block_offsets_, offset_bytes_end);
-        util::check(it != block_offsets_.cend() && *it == offset_bytes_start &&
-                    end_it != block_offsets_.cend() && *end_it == offset_bytes_end,
-                    "NullValueReducer: Failed to find one of offset_bytes ({} or {}) in block_offsets_ {}",
-                    offset_bytes_start, offset_bytes_end, block_offsets_);
+        const auto& block_offsets = column_.block_offsets();
+        auto it = std::ranges::lower_bound(block_offsets, offset_bytes_start);
+        auto end_it = std::ranges::lower_bound(block_offsets, offset_bytes_end);
+        util::check(it != block_offsets.cend() && *it == offset_bytes_start &&
+                    end_it != block_offsets.cend() && *end_it == offset_bytes_end,
+                    "NullValueReducer: Failed to find one of offset_bytes ({} or {}) in block_offsets {}",
+                    offset_bytes_start, offset_bytes_end, block_offsets);
         for (; it != end_it; ++it) {
             auto rows = (*std::next(it) - *it) / type_bytes_;
             create_dense_bitmap_all_zeros(*it, rows, column_, AllocationType::DETACHABLE);
@@ -822,7 +821,7 @@ public:
                 column_.default_initialize_rows(start_row, num_rows, false);
             }
             if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, block_offsets_.at(context_row.index()));
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().at(context_row.index()));
             }
             pos_ = current_pos + sz_to_advance;
         } else {
@@ -844,7 +843,7 @@ public:
                 column_.default_initialize_rows(start_row, num_rows, false);
             }
             if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, block_offsets_.back());
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().back());
             }
         }
     }
