@@ -1884,7 +1884,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1907,7 +1907,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1930,7 +1930,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1953,7 +1953,7 @@
                 "50000"
             ]
         ],
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1981,7 +1981,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2010,7 +2010,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2039,7 +2039,7 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
@@ -2068,43 +2068,11 @@
         "repeat": 1,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:56",
+        "setup_cache_key": "real_batch_functions:53",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
         "version": "7dc9bf11079cd6affdcf109a9d3f2ea057c2f52f63593fd9260004930ac7a6e6",
-        "warmup_time": 0
-    },
-    "real_batch_functions.AWSUpdateBatch.time_update_batch": {
-        "code": "class AWSUpdateBatch:\n    def time_update_batch(self, num_symbols, update_at_pp):\n        results = self.lib.update_batch(self.update_reqs)\n        assert results[0].version > 0\n        assert results[-1].version > 0\n\n    def setup(self, num_symbols, update_at_pp):\n        self.manager = self.get_library_manager()\n        self.update_df = self.generate_dataframe((update_at_pp/100) * AWSUpdateBatch.number_of_versions)\n        self.lib = self.manager.get_library(LibraryType.PERSISTENT)\n    \n        #Construct update payloads (will equal to number of symbols)\n        self.update_reqs = [UpdatePayload(symbol=f\"symbol_lib{num_symbols}_sym{sym_num}\", data=self.update_df)\n                            for sym_num in range(num_symbols)]\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        logger = self.get_logger()\n        library_type = LibraryType.PERSISTENT\n        number_symbols_list, update_at_pp_list = AWSUpdateBatch.params\n        if not manager.has_library(library_type):\n            # All libraries are missing we have to recreate them\n            stime = time.time()\n            logger.info(f\"Start library generation\")\n            for version in range(AWSUpdateBatch.number_of_versions):\n                vtime = time.time()\n                logger.info(f\"Version {version}/{AWSUpdateBatch.number_of_versions} started\")\n                df = self.generate_dataframe(version)\n                write_batch = []\n                for number_symbols in number_symbols_list:\n                    for index in range(number_symbols):\n                        write_batch.append(WritePayload(f\"symbol_lib{number_symbols}_sym{index}\", df))\n                lib = manager.get_library(library_type)\n                if version == 0:\n                    results = lib.write_batch(write_batch)\n                    print(results[0])\n                    assert results[0].version == 0\n                    assert results[0].version == 0\n                else:\n                    print(results[0])\n                    results = lib.append_batch(write_batch)\n                    assert results[0].version > 0\n                    assert results[0].version > 0\n                logger.info(f\"End generation for version {version}/{AWSUpdateBatch.number_of_versions} : {time.time() - vtime}\")\n            logger.info(f\"End library generation: {time.time() - stime}\")\n        else:\n            logger.info(f\"Library exists will reuse it\")\n            symbols = manager.get_library(library_type).list_symbols()\n            expected_num_symbols = sum(number_symbols_list)\n            assert number_symbols_list == len(symbols), f\"There are not enough symbols ({len(symbols)}) as expected ({expected_num_symbols})\"\n            number_versions = len(manager.get_library(library_type).list_symbols())\n            expected_number_versions = AWSUpdateBatch.number_of_versions * expected_num_symbols\n            assert expected_number_versions <= number_versions, \"There are not enough number of versions\"\n        manager.log_info() # Always log the ArcticURIs",
-        "min_run_count": 1,
-        "name": "real_batch_functions.AWSUpdateBatch.time_update_batch",
-        "number": 3,
-        "param_names": [
-            "num_symbols",
-            "update_at_pp"
-        ],
-        "params": [
-            [
-                "10",
-                "50",
-                "250"
-            ],
-            [
-                "10",
-                "30",
-                "60",
-                "90"
-            ]
-        ],
-        "repeat": 1,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "real_batch_functions:199",
-        "timeout": 1200,
-        "type": "time",
-        "unit": "seconds",
-        "version": "d95b9f44435b473584d0d95b7a0e03b5df560016d4929c87a3de061f2a675f4d",
         "warmup_time": 0
     },
     "real_comparison_benchmarks.RealComparisonBenchmarks.peakmem_create_then_write_dataframe": {
