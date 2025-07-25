@@ -69,7 +69,7 @@ class AzureContainer(StorageFixture):
 
         super().__init__()
         self.factory = factory
-        if self.is_real_azure:
+        if self.is_real_azure():
             self.container = self.factory.default_container
             self.arctic_uri = self.factory.get_arctic_uri()
             self.client = ContainerClient.from_connection_string(self.arctic_uri, self.container, **self._get_policy())
@@ -173,7 +173,9 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
     enforcing_permissions = False
     """Set to True to create AzureContainer with SAS authentication"""
 
-    clean_bucket_on_fixture_exit = True
+    clean_bucket_on_fixture_exit: bool = True
+
+    default_prefix: str = None
 
     def __init__(self, port=0, working_dir: Optional[str] = None, use_ssl: bool = True, ssl_test_support: bool = True):
         self.http_protocol = "https" if use_ssl else "http"
