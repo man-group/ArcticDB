@@ -250,7 +250,6 @@ def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_s
         assert_frame_equal(expected, received)
 
 
-@pytest.mark.xfail(reason="Column selection not working properly with dynamic schema. See Monday issue: 9492480789")
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
@@ -285,7 +284,6 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
     assert_frame_equal(expected, received)
 
 
-@pytest.mark.xfail(reason="Column selection not working properly with dynamic schema. See Monday issue: 9492480789")
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("join", ["inner", "outer"])
 def test_symbol_concat_filtering_with_column_selection(lmdb_library_factory, dynamic_schema, join):
