@@ -366,12 +366,15 @@ def test_arrow_dynamic_schema_changing_types(lmdb_version_store_dynamic_schema_v
     assert expected.equals(received)
 
 
-@pytest.mark.parametrize("rows_per_row_slice", [1, 7, 8, 9, 100_000])
-def test_arrow_dynamic_schema_missing_columns_numeric(lmdb_version_store_dynamic_schema_v1, rows_per_row_slice):
-    lib = lmdb_version_store_dynamic_schema_v1
+@pytest.mark.parametrize("rows_per_column", [1, 7, 8, 9, 100_000])
+@pytest.mark.parametrize("segment_row_size", [1, 2, 100_000])
+def test_arrow_dynamic_schema_missing_columns_numeric(version_store_factory, rows_per_column, segment_row_size):
+    if rows_per_column == 100_000 and segment_row_size != 100_000:
+        pytest.skip("Slow to write and doesn't tell us anything the other variants do not")
+    lib = version_store_factory(segment_row_size=segment_row_size, dynamic_schema=True)
     sym = "test_arrow_dynamic_schema_missing_columns_numeric"
-    write_table = pa.table({"col1": pa.array([1] * rows_per_row_slice, pa.int64())})
-    append_table = pa.table({"col2": pa.array([2] * rows_per_row_slice, pa.int32())})
+    write_table = pa.table({"col1": pa.array([1] * rows_per_column, pa.int64())})
+    append_table = pa.table({"col2": pa.array([2] * rows_per_column, pa.int32())})
     # TODO: Remove to_pandas() when we support writing Arrow structures directly
     lib.write(sym, write_table.to_pandas())
     lib.append(sym, append_table.to_pandas())
@@ -380,12 +383,12 @@ def test_arrow_dynamic_schema_missing_columns_numeric(lmdb_version_store_dynamic
     assert expected.equals(received)
 
 
-@pytest.mark.parametrize("rows_per_row_slice", [1, 7, 8, 9, 100_000])
-def test_arrow_dynamic_schema_missing_columns_strings(lmdb_version_store_dynamic_schema_v1, rows_per_row_slice):
+@pytest.mark.parametrize("rows_per_column", [1, 7, 8, 9, 100_000])
+def test_arrow_dynamic_schema_missing_columns_strings(lmdb_version_store_dynamic_schema_v1, rows_per_column):
     lib = lmdb_version_store_dynamic_schema_v1
     sym = "test_arrow_dynamic_schema_missing_columns_strings"
-    write_table = pa.table({"col1": pa.array(["hello"] * rows_per_row_slice, pa.string())})
-    append_table = pa.table({"col2": pa.array(["goodbye"] * rows_per_row_slice, pa.string())})
+    write_table = pa.table({"col1": pa.array(["hello"] * rows_per_column, pa.string())})
+    append_table = pa.table({"col2": pa.array(["goodbye"] * rows_per_column, pa.string())})
     # TODO: Remove to_pandas() when we support writing Arrow structures directly
     lib.write(sym, write_table.to_pandas())
     lib.append(sym, append_table.to_pandas())
