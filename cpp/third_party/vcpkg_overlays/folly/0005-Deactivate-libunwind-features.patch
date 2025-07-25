@@ -1,0 +1,12 @@
+diff --git a/folly/debugging/symbolizer/StackTrace.cpp b/folly/debugging/symbolizer/StackTrace.cpp
+index 625499f9f..db46d26ec 100644
+--- a/folly/debugging/symbolizer/StackTrace.cpp
++++ b/folly/debugging/symbolizer/StackTrace.cpp
+@@ -24,6 +24,7 @@
+ #include <folly/portability/Config.h>
+ #include <folly/tracing/AsyncStack.h>
+ 
++#define FOLLY_HAVE_LIBUNWIND 0
+ #if FOLLY_HAVE_LIBUNWIND
+ // Must be first to ensure that UNW_LOCAL_ONLY is defined
+ #define UNW_LOCAL_ONLY 1
