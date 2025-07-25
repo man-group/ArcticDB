@@ -21,12 +21,8 @@ sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::stri
         using RawType = typename DataTagType::raw_type;
         std::optional<sparrow::validity_bitmap> validity_bitmap;
         if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-            auto [offsets_buffer, strings_buffer] = minimal_strings_dict();
             sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
-            sparrow::big_string_array dict_values_array(
-                    std::move(strings_buffer),
-                    std::move(offsets_buffer)
-            );
+            auto dict_values_array = minimal_strings_dict();
             return sparrow::array{
                 create_dict_array<int32_t>(
                     sparrow::array{std::move(dict_values_array)},
