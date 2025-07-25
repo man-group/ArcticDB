@@ -717,6 +717,19 @@ def test_append_batch_missing_keys(arctic_library):
     assert read_dataframe.metadata == "great_metadata_s2"
     assert_frame_equal(read_dataframe.data, pd.concat([df2_write, df2_append]))
 
+def test_append_batch_empty_dataframe_does_not_increase_version(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib.batch_write(["sym1", "sym2"], [pd.DataFrame({"a": [1, 2, 3]}), pd.DataFrame({"b": [1, 2, 3, 4]})])
+    append_result = lib.batch_append(["sym1", "sym2"], [pd.DataFrame({"a": [5, 6, 7]}), pd.DataFrame({"b": []})])
+    assert append_result[0].version == 1
+    assert append_result[1].version == 0
+
+    sym_1_vit, sym_2_vit = lib.read("sym1"), lib.read("sym2")
+    assert sym_1_vit.version == 1
+    assert sym_2_vit.version == 0
+    assert_frame_equal(sym_1_vit.data, pd.DataFrame({"a": [1, 2, 3, 5, 6, 7]}))
+    assert_frame_equal(sym_2_vit.data, pd.DataFrame({"b": [1, 2, 3, 4]}))
+
 
 @pytest.mark.storage
 def test_read_batch_time_stamp(arctic_library):

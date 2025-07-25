@@ -854,6 +854,26 @@ class TestBatchUpdate:
         assert "symbol_1" in str(ex_info.value)
         assert "symbol_2" not in str(ex_info.value)
 
+    @pytest.mark.parametrize("upsert", [True, False])
+    def test_empty_dataframe_does_not_increase_version(self, lmdb_library, upsert):
+        lib = lmdb_library
+        df1 = pd.DataFrame({"a": range(5)}, index=pd.date_range("2024-01-01", periods=5))
+        df2 = pd.DataFrame({"b": range(5)}, index=pd.date_range("2023-01-01", periods=5))
+        lib.write_batch([UpdatePayload("symbol_1", df1), UpdatePayload("symbol_2", df2)])
+
+        update_1 = pd.DataFrame({"a": []}, index=pd.date_range("2024-01-01", periods=0))
+        update_2 = pd.DataFrame({"b": [10, 20]}, index=pd.date_range("2023-01-02", periods=2))
+        res = lib.update_batch([UpdatePayload("symbol_1", update_1), UpdatePayload("symbol_2", update_2)], upsert=upsert)
+        assert res[0].version == 0
+        assert res[1].version == 1
+
+        sym_1_vit, sym_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
+        assert sym_1_vit.version == 0
+        assert_frame_equal(sym_1_vit.data, df1)
+
+        assert sym_2_vit.version == 1
+        assert_frame_equal(sym_2_vit.data, pd.DataFrame({"b": [0, 10, 20, 3, 4]}, index=pd.date_range("2023-01-01", periods=5)))
+
 
 def test_regular_update_dynamic_schema_named_index(
     lmdb_version_store_tiny_segment_dynamic,
