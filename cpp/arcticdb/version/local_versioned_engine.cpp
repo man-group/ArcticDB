@@ -1509,7 +1509,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     for (const auto&& [idx, stream_update_info_fut] : folly::enumerate(stream_update_info_futures)) {
         append_versions_futs.push_back(
             std::move(stream_update_info_fut)
-            .thenValue([this, frame = std::move(frames[idx]), validate_index, stream_id = stream_ids[idx], upsert](auto&& update_info) mutable -> folly::Future<IndexKeyAndUpdateInfo> {
+            .thenValue([this, frame = std::move(frames[idx]), validate_index, stream_id = stream_ids[idx], upsert, prune_previous_versions](auto&& update_info) -> folly::Future<VersionedItem> {
                 auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                 auto write_options = get_write_options();
                 if (update_info.previous_index_key_.has_value()) {
@@ -1517,26 +1517,19 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                         ARCTICDB_DEBUG(log::version(), "Appending an empty item to existing data has no effect. \n"
                                "No new version has been created for symbol='{}', "
                                "and the last version is returned", stream_id);
-                        return IndexKeyAndUpdateInfo{*update_info.previous_index_key_, update_info};
-                    } else {
-                        index_key_fut = async_append_impl(store(), update_info, frame, write_options, validate_index, cfg().write_options().empty_types());
+                        return VersionedItem{*std::move(update_info.previous_index_key_)};
                     }
+                    index_key_fut = async_append_impl(store(), update_info, frame, write_options, validate_index, cfg().write_options().empty_types());
                 } else {
                     missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                     upsert,
                     "Cannot append to non-existent symbol {}", stream_id);
-                    auto version_id = 0;
-                    auto de_dup_map = std::make_shared<DeDupMap>();
-                    index_key_fut = async_write_dataframe_impl(store(), version_id, frame, write_options, de_dup_map, false, validate_index);
+                    constexpr static auto version_id = 0;
+                    index_key_fut = async_write_dataframe_impl(store(), version_id, frame, write_options, std::make_shared<DeDupMap>(), false, validate_index);
                 }
-                return std::move(index_key_fut)
-                .thenValue([update_info = std::move(update_info)](auto&& index_key) mutable -> IndexKeyAndUpdateInfo {
-                    return IndexKeyAndUpdateInfo{std::move(index_key), std::move(update_info)};
+                return std::move(index_key_fut).thenValue([this, prune_previous_versions, update_info = std::move(update_info)](AtomKey&& index_key) mutable -> folly::Future<VersionedItem> {
+                    return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
                 });
-            })
-            .thenValue([this, prune_previous_versions](auto&& index_key_and_update_info)  -> folly::Future<VersionedItem> {
-                auto&& [index_key, update_info] = index_key_and_update_info;
-                return write_index_key_to_version_map_async(version_map(), std::move(index_key), std::move(update_info), prune_previous_versions);
             })
         );
     }
