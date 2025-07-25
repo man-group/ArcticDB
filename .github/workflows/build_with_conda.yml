@@ -134,7 +134,6 @@ jobs:
       always() &&
       !cancelled()
     runs-on: macos-14
-    fail-fast: false
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
