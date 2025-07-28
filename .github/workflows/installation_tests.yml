@@ -193,7 +193,7 @@ jobs:
             $RETRY="--resume-retries 5"
         fi
         python -m pip install --upgrade pip $RETRY
-        pip install wheel setuptools pytest pytest-xdist $RETRY
+        pip install wheel setuptools pytest pytest-xdist azure-storage-blob requests $RETRY
 
       # Install conda environment
     - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
@@ -211,8 +211,9 @@ jobs:
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}
       shell: bash -l {0}
       run: |
-          micromamba activate arcticdb
+          micromamba activate arcticdb 
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
+          micromamba install --no-pin azure-storage-blob requests -c conda-forge
 
     - name: Set persistent storage variables
       # Should be executed for all persistent storages but not for LMDB
