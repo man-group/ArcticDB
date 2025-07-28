@@ -6,13 +6,8 @@ dependencies:
   - sel(win): ninja
   - wheel
   - setuptools
-  - sel(linux): cxx-compiler
-  - sel(linux): c-compiler
-  # ArcticDB cannot be compiled with clang++ 19 or higher for now
-  # which is first distributed with cxx-compiler 1.11.
-  # See: https://github.com/conda-forge/compilers-feedstock/pull/73/files#diff-f3725a55bf339595bf865fec73bda8ac99f283b0810c205442021f29c06eea9aR29
-  - sel(osx): cxx-compiler <1.11
-  - sel(osx): c-compiler <1.11
+  - cxx-compiler
+  - c-compiler
   - cmake
   - gtest
   - gflags
@@ -61,10 +56,6 @@ dependencies:
   - libiconv
   - aws-c-s3
   # Build dependencies for tests
-  # Use libarrow==18.0.0 only on Linux and MacOS (resolution problem on Windows)
-  # TODO: Remove this when the issue is resolved
-  #- sel(unix): libarrow==18.0.0
-  #- sel(win): libarrow
   - libarrow
   # Python dependences
   - python >=3.12,<3.14
