@@ -246,14 +246,14 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     """
     if PANDAS_VERSION < CHECK_FREQ_VERSION:
         if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
-            assert expected.columns.equals(expected.columns)    
+            assert expected.columns.equals(expected.columns)
             return
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
 
 
-unicode_symbol = "\u00A0"  # start of latin extensions
+unicode_symbol = "\u00a0"  # start of latin extensions
 unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
 
 
@@ -384,8 +384,10 @@ class TestCustomNormalizer(CustomNormalizer):
     def denormalize(self, item: Any, norm_meta: NormalizationMetadata.CustomNormalizerMeta) -> Any:
         return CustomThing(custom_index=item.index, custom_columns=item.columns, custom_values=item.values)
 
+
 class CustomDict(dict):
     pass
+
 
 class CustomDictNormalizer(CustomNormalizer):
     NESTED_STRUCTURE = True
@@ -397,6 +399,7 @@ class CustomDictNormalizer(CustomNormalizer):
 
     def denormalize(self, item, norm_meta):
         return CustomDict(item)
+
 
 def sample_dataframe(size=1000, seed=0):
     return get_sample_dataframe(size, seed)
@@ -613,8 +616,20 @@ def compare_data(source_data, source_metadata, target_data, target_metadata):
     else:
         # Recursive normalised symbol is a tuple of ndarrays
         assert len(source_data) == len(target_data)
-        for idx in range(len(source_data)):
-            assert np.allclose(source_data[idx], target_data[idx])
+        if type(source_data) == dict:
+            for key in source_data.keys():
+                src = source_data[key]
+                tgt = target_data[key]
+                if isinstance(src, np.ndarray):
+                    assert np.allclose(src, tgt)
+                else:
+                    assert src == tgt
+        else:
+            assert len(source_data) == len(target_data)
+            for idx in range(len(source_data)):
+                assert np.allclose(source_data[idx], target_data[idx]), (
+                    f"source_data[idx] != target_data[idx]: {source_data[idx]} != {target_data[idx]}"
+                )
     assert source_metadata == target_metadata
 
 
@@ -871,15 +886,19 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame):
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
     for col in left_no_inf_and_nan.columns:
-        print(f"Column [{col}] series comparison starting.")        
+        print(f"Column [{col}] series comparison starting.")
         if pd.api.types.is_integer_dtype(left_no_inf_and_nan[col].dtype) and pd.api.types.is_integer_dtype(
             right_no_inf_and_nan[col].dtype
         ):
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags, obj=f"Column [{col}]")
+            pd.testing.assert_series_equal(
+                left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags, obj=f"Column [{col}]"
+            )
         else:
             if PANDAS_VERSION >= Version("1.1"):
                 check_equals_flags["rtol"] = 3e-4
-            pd.testing.assert_series_equal(left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags, obj=f"Column [{col}]")
+            pd.testing.assert_series_equal(
+                left_no_inf_and_nan[col], right_no_inf_and_nan[col], **check_equals_flags, obj=f"Column [{col}]"
+            )
 
 
 def generic_resample_test(
