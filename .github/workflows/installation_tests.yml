@@ -202,13 +202,16 @@ jobs:
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
   
     - name: Set persistent storage variables
-      if: ${{ env.SKIP_JOB != 'true' }}
+      # Should be executed for all persistent storages but not for LMDB
+      if: ${{ env.real_tests_storage_type != 'no' }}
       uses: ./.github/actions/set_persistent_storage_env_vars
       with:
         aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
         aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
         gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
         gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+        azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+        azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
         persistent_storage: "true"
 
     - name: Set environment variables 

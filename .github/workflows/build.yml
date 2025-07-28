@@ -49,6 +49,12 @@ on:
         required: false
         default: false
         type: boolean
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with tmate debugging enabled'
+        required: false
+        default: false                  
+
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:
   group: ${{github.ref}}
