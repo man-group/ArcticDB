@@ -366,6 +366,7 @@ def test_arrow_dynamic_schema_changing_types(lmdb_version_store_dynamic_schema_v
     assert expected.equals(received)
 
 
+@pytest.mark.skipif(WINDOWS, reason="Segfault as sparrow fails to free memory created by new uint8_t[capacity] (Monday issue 9685477375)")
 @pytest.mark.parametrize("rows_per_column", [1, 7, 8, 9, 100_000])
 @pytest.mark.parametrize("segment_row_size", [1, 2, 100_000])
 def test_arrow_dynamic_schema_missing_columns_numeric(version_store_factory, rows_per_column, segment_row_size):
@@ -383,6 +384,7 @@ def test_arrow_dynamic_schema_missing_columns_numeric(version_store_factory, row
     assert expected.equals(received)
 
 
+@pytest.mark.skipif(WINDOWS, reason="Segfault as sparrow fails to free memory created by new uint8_t[capacity] (Monday issue 9685477375)")
 @pytest.mark.parametrize("rows_per_column", [1, 7, 8, 9, 100_000])
 def test_arrow_dynamic_schema_missing_columns_strings(lmdb_version_store_dynamic_schema_v1, rows_per_column):
     lib = lmdb_version_store_dynamic_schema_v1
