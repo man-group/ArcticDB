@@ -748,6 +748,30 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     return versioned_item;
 }
 
+VersionedItem LocalVersionedEngine::write_versioned_segment_in_memory_internal(
+        const SegmentInMemory& segment,
+        bool prune_previous_versions
+) {
+    auto stream_id = segment.descriptor().id();
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
+    auto version_id = get_next_version_from_key(maybe_prev);
+    ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
+    auto write_options = get_write_options();
+    auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
+
+    auto versioned_item = write_segment_in_memory_impl(
+            store(),
+            version_id,
+            segment,
+            de_dup_map);
+
+    if(cfg().symbol_list())
+        symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
+
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
+    return versioned_item;
+}
+
 std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
     const StreamId& stream_id,
     const VersionQuery& version_query

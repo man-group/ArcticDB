@@ -186,6 +186,11 @@ public:
         bool validate_index
     ) override;
 
+    VersionedItem write_versioned_segment_in_memory_internal(
+            const SegmentInMemory& segment,
+            bool prune_previous_versions
+    );
+
     VersionedItem write_versioned_metadata_internal(
         const StreamId& stream_id,
         bool prune_previous_versions,

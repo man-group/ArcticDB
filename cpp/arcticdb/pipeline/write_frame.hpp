@@ -75,6 +75,20 @@ folly::Future<entity::AtomKey> write_frame(
     bool allow_sparse = false
 );
 
+folly::Future<entity::AtomKey> write_segment(
+        IndexPartialKey &&key,
+        const SegmentInMemory& segment,
+        const std::shared_ptr<Store> &store,
+        const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
+        VersionId version_id = 0
+);
+
+folly::Future<std::vector<SliceAndKey>> write_segment(
+        const SegmentInMemory& segment,
+        const std::shared_ptr<stream::StreamSink>& sink,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        VersionId version_id);
+
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key,
         const std::shared_ptr<InputTensorFrame>& frame,
