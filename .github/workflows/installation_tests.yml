@@ -54,7 +54,11 @@ on:
         options:
           - "1"
           - "0"
-                  
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        required: false
+        default: false                  
 
 jobs:
 
@@ -200,7 +204,7 @@ jobs:
       run: |
           micromamba activate arcticdb
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
-  
+
     - name: Set persistent storage variables
       # Should be executed for all persistent storages but not for LMDB
       if: ${{ env.real_tests_storage_type != 'no' }}
@@ -223,6 +227,10 @@ jobs:
         echo "ARCTICDB_STORAGE_AWS_S3=${{ env.real_s3 }}" >> $GITHUB_ENV        
         echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
       if: ${{ env.SKIP_JOB != 'true' }}
