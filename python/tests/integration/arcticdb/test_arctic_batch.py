@@ -727,6 +727,8 @@ def test_append_batch_empty_dataframe_does_not_increase_version(lmdb_version_sto
         assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1)
         assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1)
         assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1)
+    # One symbol list entry for sym1 and one for sym2
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
     append_result = lib.batch_append(["sym1", "sym2"], [pd.DataFrame({"a": [5, 6, 7]}), pd.DataFrame({"b": []})])
     assert append_result[0].version == 1
@@ -745,6 +747,11 @@ def test_append_batch_empty_dataframe_does_not_increase_version(lmdb_version_sto
     assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "sym2")) == 1)
     assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym2")) == 1)
     assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym2")) == 1)
+
+    # This result is wrong. The correct value is 2. This is due to a bug Monday: 9682041273, append_batch and
+    # update_batch should not create symbol list keys for already existing symbols. Since append_batch is noop when
+    # the input is empty, there is no key for sym_2, but there is a new key for sym_1 and that is wrong.
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
 
 
 @pytest.mark.storage

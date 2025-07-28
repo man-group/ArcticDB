@@ -866,7 +866,8 @@ class TestBatchUpdate:
             assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1)
             assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1)
             assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1)
-
+        # One symbol list entry for symbol_1 and one for symbol_2
+        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
         update_1 = pd.DataFrame({"a": []}, index=pd.date_range("2024-01-01", periods=0))
         update_2 = pd.DataFrame({"b": [10, 20]}, index=pd.date_range("2023-01-02", periods=2))
         res = lib.update_batch([UpdatePayload("symbol_1", update_1), UpdatePayload("symbol_2", update_2)], upsert=upsert)
@@ -891,6 +892,12 @@ class TestBatchUpdate:
         # update range (values 3, 4). The fourth segment is the original data segment
         assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_2")) == 4)
         assert(len(lib_tool.read_index("symbol_2")) == 3)
+
+        # This result is wrong. The correct value is 2. This is due to a bug Monday: 9682041273, append_batch and
+        # update_batch should not create symbol list keys for already existing symbols. Since update_batch is noop when
+        # the input is empty, there is no key for symbol_1, but there is a new key for symbol_2 and that is wrong.
+        assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
+
 
 
 def test_regular_update_dynamic_schema_named_index(
