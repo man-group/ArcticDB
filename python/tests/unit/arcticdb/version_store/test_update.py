@@ -898,6 +898,16 @@ class TestBatchUpdate:
         # the input is empty, there is no key for symbol_1, but there is a new key for symbol_2 and that is wrong.
         assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
 
+    def test_empty_dataframe_with_daterange_does_not_delete_data(self, lmdb_library):
+        sym = "symbol_1"
+        input_df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range(start=pd.Timestamp("2024-01-02"), periods=2))
+        lmdb_library.write(sym, input_df)
+        payload = UpdatePayload(sym, pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])), date_range=(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-04")))
+        lmdb_library.update_batch([payload])
+        vit = lmdb_library.read(sym)
+        assert vit.version == 0
+        assert_frame_equal(vit.data, input_df)
+
 
 
 def test_regular_update_dynamic_schema_named_index(
