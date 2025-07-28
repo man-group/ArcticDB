@@ -1417,7 +1417,8 @@ void copy_frame_data_to_buffer(
 
         });
     } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE) ||
-               (src_column.type().data_type() == DataType::UINT64 && dst_column.type().data_type() == DataType::INT64)) {
+               (src_column.type().data_type() == DataType::UINT64 && dst_column.type().data_type() == DataType::INT64) ||
+               (src_column.type().data_type() == DataType::FLOAT64 && dst_column.type().data_type() == DataType::FLOAT32)) {
         // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type between
         // these types. This means that the second condition cannot happen during a regular read. The processing
         // pipeline, however, can produce a set of segments where some are int64 and other uint64. This can happen in
@@ -1427,6 +1428,13 @@ void copy_frame_data_to_buffer(
         // uint8 -> int64. We have decided to allow this and assign a common type of int64 (done in the modify_schema
         // procedure). This is what pyarrow does as well. Because of the above, we allow here copying uint64 buffer in
         // an int64 buffer.
+        //
+        // Having float64 as a source and float32 as a destination should not appear during a regular read however it
+        // can happen in the processing pipeline. E.g., performing a first/last/min/max aggregations in resampling or
+        // groupby. There might be 4 segments float32, uint16, int8 and float32, if the first segment is in a separate
+        // group/bucket and the second 3 segments are in the same group the processing pipeline will output two segments
+        // one with float32 dtype and one with dtype:
+        // common_type(common_type(uint16, int8), float32) = common_type(int32, float32) = float64
         details::visit_type(dst_column.type().data_type() ,[&] (auto dest_desc_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dest_desc_tag)>;
             using DestinationRawType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
