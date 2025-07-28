@@ -194,6 +194,15 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                         "Unexpected data types {} {} input to {}",
                         std::get<DataType>(left_type), std::get<DataType>(right_type), operation_type_);
                 break;
+            case OperationType::REGEX_MATCH:
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input as left operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type), "Unexpected bitset input as right operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(right_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    is_sequence_type(std::get<DataType>(left_type)) && is_sequence_type(std::get<DataType>(right_type)),
+                    "Unexpected data types {} {} input to {}",
+                    std::get<DataType>(left_type), std::get<DataType>(right_type), operation_type_);
+                break;
             case OperationType::ISIN:
             case OperationType::ISNOTIN:
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input as left operand to {}", operation_type_);
@@ -305,13 +314,16 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                 return expression_context.values_.get_value(value_name.value)->data_type();
             },
             [&expression_context, &value_set_state] (const ValueSetName& value_set_name) -> std::variant<BitSetTag, DataType> {
-                auto value_set = expression_context.value_sets_.get_value(value_set_name.value);
+                const auto value_set = expression_context.value_sets_.get_value(value_set_name.value);
                 value_set_state = value_set->empty() ? ValueSetState::EMPTY_SET : ValueSetState::NON_EMPTY_SET;
                 return value_set->base_type().data_type();
             },
             [&expression_context, &column_types] (const ExpressionName& expression_name) -> std::variant<BitSetTag, DataType> {
-                auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
+                const auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
                 return expr->compute(expression_context, column_types);
+            },
+            [] (const RegexName&) -> std::variant<BitSetTag, DataType> {
+                return DataType::UTF_DYNAMIC64;
             },
             [] (auto&&) -> std::variant<BitSetTag, DataType> {
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected expression argument type");
