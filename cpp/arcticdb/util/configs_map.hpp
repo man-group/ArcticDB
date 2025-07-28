@@ -29,24 +29,20 @@ public:
 
 #define HANDLE_TYPE(LABEL, TYPE)     \
     void set_##LABEL(const std::string& label, TYPE val) { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         map_of_##LABEL[boost::to_upper_copy<std::string>(label)] = val; \
     } \
 \
     TYPE get_##LABEL(const std::string& label, TYPE default_val) const { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label)); \
         return it == map_of_##LABEL.cend() ? default_val : it->second; \
     } \
  \
     std::optional<TYPE> get_##LABEL(const std::string& label) const { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         auto it = map_of_##LABEL.find(boost::to_upper_copy<std::string>(label)); \
         return it == map_of_##LABEL.cend() ? std::nullopt : std::make_optional(it->second); \
     } \
 \
     void unset_##LABEL(const std::string& label) { \
-        std::lock_guard<std::mutex> lock(mutex_); \
         map_of_##LABEL.erase(boost::to_upper_copy<std::string>(label)); \
     } \
 
