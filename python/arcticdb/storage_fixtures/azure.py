@@ -244,7 +244,7 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
     def __str__(self):
         return f"[{type(self)}=Container:{self.default_container}], ConnectionString:{self.connection_string}"
 
-    def initialize_from_connection_sting(self, constr: str, container: str, prefix: str = None) -> None:
+    def initialize_from_connection_sting(self, constr: str, container: str, prefix: str = None) -> "AzureStorageFixtureFactory":
         assert constr, "Azure connection string not available"
         assert container, "Azure container not available"
         AzureStorageFixtureFactory.connection_string = constr
@@ -256,6 +256,7 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         AzureStorageFixtureFactory.default_container = container
         if prefix:
             AzureStorageFixtureFactory.default_prefix = prefix
+        return self
 
     def get_arctic_uri(self):
         url = f"azure://Container={self.default_container};Path_prefix={self.default_prefix}"

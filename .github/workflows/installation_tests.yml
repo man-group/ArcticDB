@@ -54,9 +54,17 @@ on:
         options:
           - "1"
           - "0"
+      run_on_real_azure:
+        description: 'Execute tests on Azure'
+        required: true
+        default: '1'
+        type: choice
+        options:
+          - "1"
+          - "0"
       debug_enabled:
         type: boolean
-        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        description: 'Run the build with debugging enabled'
         required: false
         default: false                  
 
@@ -97,6 +105,7 @@ jobs:
       arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
+      real_azure: ${{ inputs.run_on_real_azure || '1' }}
 
     steps:
 
@@ -225,6 +234,7 @@ jobs:
         echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_AWS_S3=${{ env.real_s3 }}" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_AZURE=${{ env.real_azure }}" >> $GITHUB_ENV        
         echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
 

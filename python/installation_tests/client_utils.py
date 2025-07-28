@@ -17,15 +17,21 @@ from arcticdb.arctic import Arctic
 from datetime import datetime
 from packaging import version
 
+from arcticdb.storage_fixtures.azure import AzureStorageFixtureFactory
+
 
 CONDITION_GCP_AVAILABLE = (
     True if "dev" in arcticdb.__version__ else version.Version(arcticdb.__version__) >= version.Version("5.3.0")
 )
 
+CONDITION_AZURE_AVAILABLE = (
+    True if "dev" in arcticdb.__version__ else version.Version(arcticdb.__version__) >= version.Version("5.0.0")
+)
 
 __temp_paths = []
 ## Session scoped clients
 __ARCTIC_CLIENT_AWS_S3: Arctic = None
+__ARCTIC_CLIENT_AZURE: Arctic = None
 __ARCTIC_CLIENT_GPC: Arctic = None
 
 
@@ -46,12 +52,19 @@ def __cleanup_temp_paths():
 atexit.register(__cleanup_temp_paths)    
 
 
-if CONDITION_GCP_AVAILABLE:
-    print("VERSION with GCP")
+if CONDITION_GCP_AVAILABLE and CONDITION_AZURE_AVAILABLE:
+    print("VERSION with AZURE and GCP")
     class StorageTypes(Enum):
         LMDB = 1,
         REAL_AWS_S3 = 2,
         REAL_GCP = 3,
+        REAL_AZURE = 4,
+elif CONDITION_AZURE_AVAILABLE:
+    print("VERSION with AZURE")
+    class StorageTypes(Enum):
+        LMDB = 1,
+        REAL_AWS_S3 = 2,
+        REAL_AZURE = 4,
 else:
     print("NO GCP")
     class StorageTypes(Enum):
@@ -67,6 +80,13 @@ def is_storage_enabled(storage_type: StorageTypes) -> bool:
     if CONDITION_GCP_AVAILABLE:
         if storage_type == StorageTypes.REAL_GCP:
             if os.getenv("ARCTICDB_STORAGE_GCP", "0") == "1":        
+                return True
+            else:
+                return False
+            
+    if CONDITION_AZURE_AVAILABLE:
+        if storage_type == StorageTypes.REAL_AZURE:
+            if os.getenv("ARCTICDB_STORAGE_AZURE", "0") == "1":        
                 return True
             else:
                 return False
@@ -97,24 +117,6 @@ def real_s3_credentials(shared_path: bool = True):
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
 
     clear = str(os.getenv("ARCTICDB_REAL_S3_CLEAR")).lower() in ("true", "1")
-
-    return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
-
-
-def real_gcp_credentials(shared_path: bool = True):
-    endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
-    if endpoint is not None and "://" in endpoint:
-       endpoint = endpoint.split("://")[1] 
-    bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
-    region = os.getenv("ARCTICDB_REAL_GCP_REGION")
-    access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
-    secret_key = os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY")
-    if shared_path:
-        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
-    else:
-        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX")
-
-    clear = str(os.getenv("ARCTICDB_REAL_GCP_CLEAR")).lower() in ("true", "1")
 
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
@@ -168,6 +170,26 @@ def get_real_gcp_uri(shared_path: bool = True):
     )
     return aws_uri
 
+def real_azure_credentials(shared_path: bool = True):
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "")
+    connection_str = os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING")
+    container = os.getenv("ARCTICDB_REAL_AZURE_CONTAINER")
+    return container, connection_str, path_prefix
+
+
+def get_real_azure_uri(shared_path: bool = True):
+    (
+        container,
+        connection_str,
+        path_prefix,
+    ) = real_azure_credentials(shared_path)
+    azure_uri = AzureStorageFixtureFactory().initialize_from_connection_sting(
+        constr=connection_str, container=container, prefix=path_prefix).get_arctic_uri()
+    return azure_uri
+
 
 def create_arctic_client(storage: StorageTypes, **extras) -> Arctic:
 
@@ -177,6 +199,13 @@ def create_arctic_client(storage: StorageTypes, **extras) -> Arctic:
             if __ARCTIC_CLIENT_GPC is None:
                 __ARCTIC_CLIENT_GPC = Arctic(get_real_gcp_uri(shared_path=False), **extras)
             return __ARCTIC_CLIENT_GPC
+
+    if CONDITION_AZURE_AVAILABLE:
+        if storage == StorageTypes.REAL_AZURE and is_storage_enabled(storage):
+            global __ARCTIC_CLIENT_AZURE
+            if __ARCTIC_CLIENT_AZURE is None:
+                __ARCTIC_CLIENT_AZURE = Arctic(get_real_azure_uri(shared_path=False), **extras)
+            return __ARCTIC_CLIENT_AZURE
 
 
     if storage == StorageTypes.LMDB and is_storage_enabled(storage):
