@@ -1198,3 +1198,36 @@ class TestResampleDynamicSchema:
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for="_empty_bucket_tracker_",
             expected_types=expected_types)
+
+    def test_int_float_promotion(self, lmdb_version_store_dynamic_schema_v1):
+        lib = lmdb_version_store_dynamic_schema_v1
+        sym = "test_int_float_promotion"
+        rule = "10ns"
+        origin = "epoch"
+        # This first value is in a separate bucket. The dtype for that bucket is float32
+        df1 = pd.DataFrame({"to_resample": np.array(1, dtype=np.float32)}, index=pd.DatetimeIndex([pd.Timestamp(1)]))
+        # The next 3 values are in the same bucket, and the dtype is computed as follows:
+        # common dtype of uint16 and int8 = int32
+        # common dtype of float32 and int32 = int64
+        # The TSD will have float32 as the global type for the "to_resample" column it does not contain any values not
+        # representable via float32, however, the order of which types appear matters and that bucket will have float64
+        # dtype even though in practice all values are representable by float32
+        df2 = pd.DataFrame({"to_resample": np.array(2, dtype=np.uint16)}, index=pd.DatetimeIndex([pd.Timestamp(11)]))
+        df3 = pd.DataFrame({"to_resample": np.array(3, dtype=np.int8)}, index=pd.DatetimeIndex([pd.Timestamp(12)]))
+        df4 = pd.DataFrame({"to_resample": np.array(4, dtype=np.float32)}, index=pd.DatetimeIndex([pd.Timestamp(13)]))
+        df_list = [df1, df2, df3, df4]
+        for df in df_list:
+            lib.append(sym, df)
+        agg = {"to_resample_first": ("to_resample", "first")}
+        expected_types = {"to_resample_first": np.float32}
+        generic_resample_test(
+            lib,
+            sym,
+            rule,
+            agg,
+            pd.concat(df_list),
+            origin=origin,
+            closed="left",
+            label="left",
+            expected_types=expected_types)
+
