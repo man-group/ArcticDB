@@ -14,11 +14,10 @@ from typing import TYPE_CHECKING, Optional, Union
 from tempfile import mkdtemp
 
 from arcticdb.util.utils import get_logger
-from tests.util.mark import LINUX
 
 
 from .api import *
-from .utils import get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
+from .utils import _LINUX, get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_azure_library_to_env
 
@@ -231,7 +230,7 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
 
     def __init__(self, native_config: Optional[dict] = None):
         self.native_config = native_config
-        if LINUX:
+        if _LINUX:
             AzureStorageFixtureFactory.client_cert_file = "/etc/ssl/certs/ca-certificates.crt"
             os.path.exists(AzureStorageFixtureFactory.client_cert_file), f"CA file: {AzureStorageFixtureFactory.client_cert_file} not found!"
 

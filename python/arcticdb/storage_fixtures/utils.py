@@ -25,7 +25,9 @@ import trustme
 from arcticdb.util.marks import ARCTICDB_USING_CONDA
 
 _WINDOWS = platform.system() == "Windows"
-_DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
+_MACOS = sys.platform.lower().startswith("darwin")
+_LINUX = sys.platform.lower().startswith("linux")
+DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
 
 
 def get_ephemeral_port(seed=0):
