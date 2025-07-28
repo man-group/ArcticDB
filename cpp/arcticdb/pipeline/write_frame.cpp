@@ -165,6 +165,23 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     }, write_window)).via(&async::io_executor());
 }
 
+folly::Future<std::vector<SliceAndKey>> write_segment(
+        const SegmentInMemory& segment,
+        const std::shared_ptr<stream::StreamSink>& sink,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        VersionId version_id) {
+    ARCTICDB_SAMPLE(WriteSlices, 0)
+
+    auto slice = FrameSlice(segment);
+    using PartialKey = stream::StreamSink::PartialKey;
+    using KeyType = entity::KeyType;
+    auto pkey = PartialKey{KeyType::TABLE_DATA, version_id, segment.descriptor().id(), 0, static_cast<int64_t>(segment.row_count())};
+    auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{pkey, segment, slice};
+    return std::move(sink -> async_write(ks, de_dup_map)).thenValue([](SliceAndKey sk) {
+        return std::vector<SliceAndKey> {std::move(sk)};
+    });
+}
+
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputTensorFrame> &frame,
         const SlicingPolicy &slicing,
@@ -196,6 +213,34 @@ write_frame(
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
     return std::move(fut_slice_keys).thenValue([frame=frame, key=std::move(key), &store](auto&& slice_keys) mutable {
         return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
+    });
+}
+
+folly::Future<entity::AtomKey>
+write_segment(
+        IndexPartialKey&& key,
+        const SegmentInMemory& segment,
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        VersionId version_id) {
+    ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
+    auto fut_slice_keys = write_segment(segment, store, de_dup_map, version_id);
+    // Write the keys of the slices into an index segment
+    ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
+    auto index =  stream::index_type_from_descriptor(segment.descriptor());
+    auto tsd = TimeseriesDescriptor();
+    tsd.set_stream_descriptor(segment.descriptor());
+    tsd.set_total_rows(segment.row_count());
+
+    // Create some basic normalization metadata that we need to be able to read the segment as a pandas dataframe later
+    arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
+    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(false);
+    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_start(0);
+    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
+    tsd.set_normalization_metadata(std::move(norm_meta));
+
+    return std::move(fut_slice_keys).thenValue([segment=segment, key=std::move(key), &store, tsd, index=std::move(index)](auto&& slice_keys) mutable {
+        return index::write_index(index, tsd, std::forward<decltype(slice_keys)>(slice_keys), key, store);
     });
 }
 

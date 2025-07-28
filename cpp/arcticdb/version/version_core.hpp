@@ -96,6 +96,20 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     bool validate_index
 );
 
+VersionedItem write_segment_in_memory_impl(
+        const std::shared_ptr<Store>& store,
+        VersionId version_id,
+        const SegmentInMemory& segment,
+        const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>()
+);
+
+folly::Future<entity::AtomKey> async_write_segment_in_memory_impl(
+        const std::shared_ptr<Store>& store,
+        VersionId version_id,
+        const SegmentInMemory& segment,
+        const std::shared_ptr<DeDupMap>& de_dup_map
+);
+
 folly::Future<AtomKey> async_append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,

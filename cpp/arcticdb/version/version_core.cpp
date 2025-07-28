@@ -111,6 +111,35 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
 }
 
+VersionedItem write_segment_in_memory_impl(
+        const std::shared_ptr<Store>& store,
+        VersionId version_id,
+        const SegmentInMemory& segment,
+        const std::shared_ptr<DeDupMap>& de_dup_map
+) {
+    ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
+    auto atom_key_fut = async_write_segment_in_memory_impl(store, version_id, segment, de_dup_map);
+    return {std::move(atom_key_fut).get()};
+}
+
+folly::Future<entity::AtomKey> async_write_segment_in_memory_impl(
+        const std::shared_ptr<Store>& store,
+        VersionId version_id,
+        const SegmentInMemory& segment,
+        const std::shared_ptr<DeDupMap> &de_dup_map
+) {
+    ARCTICDB_SAMPLE(DoWrite, 0)
+    if (version_id == 0) {
+        auto check_outcome = verify_symbol_key(segment.descriptor().id());
+        if (std::holds_alternative<Error>(check_outcome)) {
+            std::get<Error>(check_outcome).throw_error();
+        }
+    }
+
+    auto partial_key = IndexPartialKey{segment.descriptor().id(), version_id};
+    return write_segment(std::move(partial_key), segment, store, de_dup_map, version_id);
+}
+
 namespace {
 IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, const IndexDescriptorImpl& desc) {
     if (std::holds_alternative<stream::TimeseriesIndex>(index))
