@@ -28,7 +28,7 @@ except ImportError:
     from pandas.core.computation.ops import UndefinedVariableError
 
 from arcticdb import QueryBuilder
-from arcticdb.util._versions import PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -244,10 +244,10 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     First will rebuild index for dataframes to assure we
     have same index in both frames when row range index is used
     """
-    if PANDAS_VERSION < CHECK_FREQ_VERSION:
+    if IS_PANDAS_ONE:
+        # On zero size frames some column types will not match when pandas 1.x is used
         if expected.shape[0] == expected.shape[0] and expected.shape[0] == 0:
-            assert expected.columns.equals(expected.columns)    
-            return
+            assert_frame_equal(left=expected, right=actual, check_dtype=False)
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
@@ -420,8 +420,8 @@ def populate_db(version_store):
 
 def random_integers(size, dtype, min_value: int = None, max_value: int = None):
     # We do not generate integers outside the int64 range
-    platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
+    platform_int_info = iinfo
     if min_value is None:
         min_value = max(iinfo.min, platform_int_info.min)
     if max_value is None:
@@ -447,7 +447,6 @@ def get_wide_dataframe(size=10000, seed=0):
             "bool": np.random.randn(size) > 0,
         }
     )
-
 
 def get_pickle():
     return (
