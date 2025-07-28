@@ -11,7 +11,7 @@
 #include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <arcticdb/util/configs_map.hpp>
 #include <fmt/format.h>
-#include <folly/gen/Base.h>
+#include <arcticdb/util/std_ranges_utils.hpp>
 
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <arcticdb/entity/index_range.hpp>
@@ -151,13 +151,16 @@ bool MongoStorage::do_fast_delete() {
 }
 
 void MongoStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) {
-    namespace fg = folly::gen;
     auto fmt_db = [](auto &&k) { return variant_key_type(k); };
     ARCTICDB_SAMPLE(MongoStorageRemove, 0)
     std::vector<VariantKey> keys_not_found;
 
-    (fg::from(variant_keys) | fg::move | fg::groupBy(fmt_db)).foreach([&](auto &&group) {
-        for (auto &k : group.values()) {
+    // Group keys by type using standard library
+    auto grouped_keys = arcticdb::util::group_by(variant_keys, fmt_db);
+    
+    // Process each group
+    arcticdb::util::foreach_group(grouped_keys, [&](ARCTICDB_UNUSED auto&& key_type, auto&& keys) {
+        for (auto &k : keys) {
             auto collection = collection_name(variant_key_type(k));
             try {
                 auto result = client_->remove_keyvalue(db_, collection, k);
@@ -176,6 +179,7 @@ void MongoStorage::do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts
             }
         }
     });
+    
     if (!keys_not_found.empty()) {
         throw KeyNotFoundException(std::move(keys_not_found));
     }

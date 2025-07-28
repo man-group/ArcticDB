@@ -16,7 +16,7 @@
 #include <arcticdb/column_store/row_ref.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 
-#include <folly/gen/Base.h>
+#include <arcticdb/util/std_ranges_utils.hpp>
 
 #include <chrono>
 
@@ -116,29 +116,32 @@ class StreamReader {
     }
 
     auto generate_rows() {
-        return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)
-            | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
-            | generate_segments_from_keys(*store_, DATA_PREFETCH_WINDOW, opts_)
-            | generate_rows_from_data_segments();
+        auto keys = key_gen_();
+        auto segments = generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)(keys);
+        auto data_keys = generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)(segments);
+        auto data_segments = generate_segments_from_keys(*store_, DATA_PREFETCH_WINDOW, opts_)(data_keys);
+        return generate_rows_from_data_segments()(data_segments);
     }
 
     auto generate_data_keys() {
-        return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)
-            | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX);
+        auto keys = key_gen_();
+        auto segments = generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)(keys);
+        return generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)(segments);
     }
 
-    auto &&generate_rows_from_data_segments() {
-        return folly::gen::map([](auto &&key_seg) {
-            return folly::gen::detail::GeneratorBuilder<RowRef>() + [&](auto &&yield) {
+    auto generate_rows_from_data_segments() {
+        return [](auto&& key_segs) {
+            std::vector<RowRef> result;
+            
+            for (auto&& key_seg : key_segs) {
                 auto[key, seg] = std::move(key_seg);
                 for (std::size_t i = 0; i < seg.row_count(); ++i) {
-                    yield(RowRef{i, seg});
+                    result.emplace_back(i, seg);
                 }
-            };
-        })
-        | folly::gen::concat;
+            }
+            
+            return result;
+        };
     }
 
     template<class Visitor>

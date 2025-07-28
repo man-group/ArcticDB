@@ -94,7 +94,7 @@ inline std::vector<AtomKey> get_data_keys(
     using StreamReader = arcticdb::stream::StreamReader<AtomKey, KeySupplier, SegmentInMemory::Row>;
     auto gen = [&keys]() { return keys; };
     StreamReader stream_reader(std::move(gen), store, opts);
-    return stream_reader.generate_data_keys() | folly::gen::as<std::vector>();
+    return stream_reader.generate_data_keys();
 }
 
 inline std::vector<AtomKey> get_data_keys(
