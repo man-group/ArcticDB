@@ -99,7 +99,7 @@ def merge_and_sort_segment_list(segment_list, int_columns_in_df=None):
 
 def assert_appended_data_does_not_overlap_with_storage(lib, symbol):
     with pytest.raises(UnsortedDataException) as exception_info:
-        lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND, delete_staged_data_on_failure=True)
+        lib.sort_and_finalize_staged_data(symbol, mode="aPpend", delete_staged_data_on_failure=True)
     assert "E_UNSORTED_DATA" in str(exception_info.value)
     assert "append" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0

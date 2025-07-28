@@ -54,11 +54,11 @@ from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
-from arcticdb_ext.version_store import DataError
+from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
 from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -82,6 +82,7 @@ from arcticdb.version_store._normalization import (
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
+import arcticdb_ext as ae
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -309,14 +310,7 @@ class NativeVersionStore:
         if nfh is None or nfh == "msg_pack":
             if nfh is not None:
                 nfh = getattr(self._cfg, nfh, None)
-
-            use_norm_failure_handler_known_types = (
-                self._cfg.use_norm_failure_handler_known_types if self._cfg is not None else False
-            )
-
-            self._normalizer = CompositeNormalizer(
-                MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
-            )
+            self._normalizer = CompositeNormalizer(MsgPackNormalizer(nfh))
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
@@ -618,10 +612,8 @@ class NativeVersionStore:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
+        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
 
-        pickle_on_failure = resolve_defaults(
-            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
-        )
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
@@ -696,6 +688,27 @@ class NativeVersionStore:
                 )
             dynamic_strings = True
         return dynamic_strings
+
+    def _resolve_pickle_on_failure(self, existing_value):
+        """
+        The parameter name is pickle_on_failure, but the protobuf field is use_norm_failure_handler_known_types, and
+        for safety we should check both env vars, so resolve_defaults is insufficient for this case
+        """
+        if existing_value is not None:
+            return existing_value
+        env_value_1 = os.getenv("USE_NORM_FAILURE_HANDLER_KNOWN_TYPES")
+        if env_value_1 is not None:
+            return env_value_1 not in ("", "0") and not env_value_1.lower().startswith("f")
+        env_value_2 = os.getenv("PICKLE_ON_FAILURE")
+        if env_value_2 is not None:
+            return env_value_2 not in ("", "0") and not env_value_2.lower().startswith("f")
+        try:
+            config_value = getattr(self._lib_cfg.lib_desc.version, "use_norm_failure_handler_known_types")
+            if config_value is not None:
+                return config_value
+        except AttributeError:
+            pass
+        return False
 
     last_mismatch_msg: Optional[str] = None
 
@@ -1538,9 +1551,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = resolve_defaults(
-            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
-        )
+        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
@@ -2269,7 +2280,8 @@ class NativeVersionStore:
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata)
-        vit = self.version_store.compact_incomplete(
+
+        compaction_result = self.version_store.compact_incomplete(
             symbol,
             append,
             convert_int_to_float,
@@ -2279,8 +2291,19 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             delete_staged_data_on_failure,
+            stage_results=_stage_results
         )
-        return self._convert_thin_cxx_item_to_python(vit, metadata)
+
+        if isinstance(compaction_result, ae.version_store.VersionedItem):
+            return self._convert_thin_cxx_item_to_python(compaction_result, metadata)
+        elif isinstance(compaction_result, List):
+            # We expect this to be a list of errors
+            check(compaction_result, "List of errors in compaction result should never be empty")
+            check(all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInStageResultInfo")
+            raise MissingKeysInStageResultsError("Missing keys during compaction", tokens_with_missing_keys=compaction_result)
+        else:
+            raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
+
 
     @staticmethod
     def _get_index_columns_from_descriptor(descriptor):

@@ -54,7 +54,7 @@ jobs:
           if [ -z "$PULL_REQUESTS" ] || [ ! -f "$PULL_REQUESTS" ]; then
             echo "Error: No PRs found between branches" && exit 1
           fi
-          labels=$(jq -r '.[].labels[].name' "$PULL_REQUESTS")
+          labels=$(jq -r '.[] | select(.pull_request.merged_at) | .labels[].name' "$PULL_REQUESTS")
           echo Labels: $labels
           increment_type="patch"
           case "$labels" in

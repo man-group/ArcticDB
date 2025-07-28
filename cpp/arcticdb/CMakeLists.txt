@@ -555,6 +555,9 @@ set(arcticdb_srcs
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
+# Disable default api so both UTF-8 and UTF-32 can be supported
+target_compile_definitions(arcticdb_core_object PUBLIC PCRE2_CODE_UNIT_WIDTH=0)
+
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_core_object")
     set(BASE_PCH
@@ -794,6 +797,9 @@ target_include_directories(arcticdb_core_object
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
+# Disable default api so both UTF-8 and UTF-32 can be supported
+target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0)
+
 target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -869,7 +875,6 @@ pybind11_add_module(arcticdb_ext MODULE
         python/arctic_version.cpp
         python/arctic_version.hpp
         )
-
 set (additional_link_flags "")
 if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
 
@@ -881,7 +886,6 @@ if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
 endif()
 
 target_link_libraries(arcticdb_ext
-        PUBLIC
         PRIVATE
         arcticdb_python
         ${additional_link_flags}
@@ -1130,6 +1134,7 @@ if(${TEST})
             version/test/rapidcheck_version_map.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
+
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -1183,7 +1188,6 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
-
     if(${ARCTICDB_USE_PCH})
         message(STATUS "Using precompiled headers for target test_unit_arcticdb")
         target_precompile_headers(

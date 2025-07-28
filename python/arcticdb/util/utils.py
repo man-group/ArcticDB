@@ -546,7 +546,7 @@ class ListGenerators:
                       seed = 1) -> List[ArcticFloatType]:
         # Higher numbers will trigger overflow in numpy uniform (-1e307 - 1e307)
         # Get the minimum and maximum values for np.float32
-        info = np.finfo(np.float32)
+        info = np.finfo(dtype)
         _max = info.max
         _min = info.min
         if seed is not None:
@@ -711,7 +711,9 @@ class DFGenerator:
         return self
 
     def add_timestamp_index(self, name_col:str, freq:Union[str , timedelta , pd.Timedelta , pd.DateOffset], 
-                            start_time: pd.Timestamp = pd.Timestamp(0)) -> 'DFGenerator':
+                            start_time: Union[pd.Timestamp, TimestampNumber] = pd.Timestamp(0)) -> 'DFGenerator':
+        if isinstance(start_time, TimestampNumber):
+            start_time = start_time.to_timestamp()
         self.__index = pd.date_range(start=start_time, periods=self.__size, freq=freq, name=name_col)
         return self
     
@@ -809,7 +811,7 @@ class DFGenerator:
     @classmethod
     def generate_wide_dataframe(cls, num_rows: int, num_cols: int,  
                             num_string_cols: int,
-                            start_time: pd.Timestamp = None,
+                            start_time: Union[pd.Timestamp, TimestampNumber] = None,
                             freq: Union[str , timedelta , pd.Timedelta , pd.DateOffset] = 's',
                             seed = 23445):
         """
@@ -839,6 +841,8 @@ class DFGenerator:
         frame: pd.DataFrame = pd.concat(frames, axis=1) # Concatenate horizontally
 
         if start_time:
+            if isinstance(start_time, TimestampNumber):
+                start_time = start_time.to_timestamp()
             range = pd.date_range(start=start_time, periods=frame.shape[0], freq=freq, name='index')
             frame.index = range
             
@@ -846,7 +850,7 @@ class DFGenerator:
 
     @classmethod
     def generate_normal_dataframe(cls, num_rows: int, num_cols: int,  
-                            start_time: pd.Timestamp = None,
+                            start_time: Union[pd.Timestamp, TimestampNumber] = None,
                             freq: Union[str , timedelta , pd.Timedelta , pd.DateOffset] = 's',
                             seed = 1234):
         cols=int(num_cols)
@@ -870,6 +874,8 @@ class DFGenerator:
                 else:
                     return f"Unsupported type {dtype}"
         if start_time is not None:
+            if isinstance(start_time, TimestampNumber):
+                start_time = start_time.to_timestamp()
             gen.add_timestamp_index("index", freq, start_time)
         return gen.generate_dataframe()        
 

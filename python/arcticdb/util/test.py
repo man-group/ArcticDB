@@ -440,8 +440,8 @@ def populate_db(version_store):
 
 def random_integers(size, dtype, min_value: int = None, max_value: int = None):
     # We do not generate integers outside the int64 range
-    platform_int_info = np.iinfo("int_")
     iinfo = np.iinfo(dtype)
+    platform_int_info = iinfo
     if min_value is None:
         min_value = max(iinfo.min, platform_int_info.min)
     if max_value is None:
@@ -467,7 +467,6 @@ def get_wide_dataframe(size=10000, seed=0):
             "bool": np.random.randn(size) > 0,
         }
     )
-
 
 def get_pickle():
     return (

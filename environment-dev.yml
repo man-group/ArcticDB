@@ -46,7 +46,7 @@ dependencies:
   - azure-identity-cpp
   - azure-storage-blobs-cpp
   - fmt
-  - folly==2023.09.25.00
+  - folly==2025.04.14.00
   - unordered_dense
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
@@ -63,8 +63,9 @@ dependencies:
   # Build dependencies for tests
   # Use libarrow==18.0.0 only on Linux and MacOS (resolution problem on Windows)
   # TODO: Remove this when the issue is resolved
-  - sel(unix): libarrow==18.0.0
-  - sel(win): libarrow
+  #- sel(unix): libarrow==18.0.0
+  #- sel(win): libarrow
+  - libarrow
   # Python dependences
   - python >=3.12,<3.14
   - packaging
