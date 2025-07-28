@@ -1,0 +1,59 @@
+From 7dbd4d31633e22bd963b20c168bab86c72261379 Mon Sep 17 00:00:00 2001
+From: Julien Jerphanion <git@jjerphan.xyz>
+Date: Fri, 25 Jul 2025 10:51:43 +0200
+Subject: [PATCH] fix: Ignore features based on `<demangle.h>`
+
+Signed-off-by: Julien Jerphanion <git@jjerphan.xyz>
+---
+ folly/Demangle.cpp | 14 ++++++++++----
+ 1 file changed, 10 insertions(+), 4 deletions(-)
+
+diff --git a/folly/Demangle.cpp b/folly/Demangle.cpp
+index d7234e0db..2274359ba 100644
+--- a/folly/Demangle.cpp
++++ b/folly/Demangle.cpp
+@@ -33,7 +33,13 @@
+ //  symbol basename. Unfortunately, the declarations are different. So including
+ //  both headers in the same translation unit fails due to the two conflicting
+ //  declarations. Since <demangle.h> includes <libiberty.h> we must be careful.
+-#if __has_include(<demangle.h>)
++
++// The resolution of <demangle.h> seems complex and make the compilation mess up
++// on some systems, so we disable associated features for now.
++// See: https://github.com/microsoft/vcpkg/issues/25214
++#define FOLLY_DEMANGLE_H_INCLUDED 0
++
++#if FOLLY_DEMANGLE_H_INCLUDED
+ #pragma push_macro("HAVE_DECL_BASENAME")
+ #define HAVE_DECL_BASENAME 1
+ #include <demangle.h> // @manual
+@@ -64,7 +70,7 @@ static constexpr auto cxxabi_demangle = static_cast<char* (*)(...)>(nullptr);
+ //
+ //  for rust_demangle_callback, detect its declaration in the header
+ 
+-#if __has_include(<demangle.h>)
++#if FOLLY_DEMANGLE_H_INCLUDED
+ 
+ namespace {
+ struct poison {};
+@@ -111,7 +117,7 @@ static constexpr auto liberty_demangle_options = //
+     DMGL_PARAMS | DMGL_ANSI | DMGL_TYPES | //
+     liberty_demangle_options_no_recurse_limit;
+ 
+-#else // __has_include(<demangle.h>)
++#else // FOLLY_DEMANGLE_H_INCLUDED
+ 
+ using liberty_demangle_t = int(...);
+ 
+@@ -119,7 +125,7 @@ static constexpr liberty_demangle_t* liberty_cplus_demangle = nullptr;
+ static constexpr liberty_demangle_t* liberty_rust_demangle = nullptr;
+ static constexpr auto liberty_demangle_options = 0;
+ 
+-#endif // __has_include(<demangle.h>)
++#endif // FOLLY_DEMANGLE_H_INCLUDED
+ 
+ //  implementations
+ 
+-- 
+2.50.0
+
