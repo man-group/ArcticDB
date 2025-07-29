@@ -717,14 +717,19 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 }
 
 VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
-    const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    bool prune_previous_versions,
-    bool allow_sparse,
-    bool validate_index
-    ) {
+        const StreamId& stream_id,
+        const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+        bool prune_previous_versions,
+        bool allow_sparse,
+        bool validate_index
+) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
+
+    if(std::holds_alternative<SegmentInMemory>(frame)) {
+        assert(std::get<SegmentInMemory>(frame).descriptor().id() == stream_id);
+    }
+
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
@@ -733,37 +738,13 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
 
     auto versioned_item = write_dataframe_impl(
-        store(),
-        version_id,
-        frame,
-        write_options,
-        de_dup_map,
-        allow_sparse,
-        validate_index);
-
-    if(cfg().symbol_list())
-        symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
-
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
-    return versioned_item;
-}
-
-VersionedItem LocalVersionedEngine::write_versioned_segment_in_memory_internal(
-        const SegmentInMemory& segment,
-        bool prune_previous_versions
-) {
-    auto stream_id = segment.descriptor().id();
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
-    auto version_id = get_next_version_from_key(maybe_prev);
-    ARCTICDB_DEBUG(log::version(), "write_versioned_dataframe for stream_id: {} , version_id = {}", stream_id, version_id);
-    auto write_options = get_write_options();
-    auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
-
-    auto versioned_item = write_segment_in_memory_impl(
             store(),
             version_id,
-            segment,
-            de_dup_map);
+            frame,
+            write_options,
+            de_dup_map,
+            allow_sparse,
+            validate_index);
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
