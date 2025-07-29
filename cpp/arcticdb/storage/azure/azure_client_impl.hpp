@@ -19,8 +19,8 @@ class RealAzureClient : public AzureClientWrapper {
 private:
     Azure::Storage::Blobs::BlobContainerClient container_client;
 
-    static Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 public:
+    static Azure::Storage::Blobs::BlobClientOptions get_client_options(const Config &conf);
 
     explicit RealAzureClient(const Config &conf);
 
