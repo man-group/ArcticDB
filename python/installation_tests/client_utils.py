@@ -10,6 +10,7 @@ import atexit
 from enum import Enum
 import os
 import shutil
+import sys
 import tempfile
 
 import arcticdb
@@ -17,7 +18,8 @@ from arcticdb.arctic import Arctic
 from datetime import datetime
 from packaging import version
 
-from arcticdb.storage_fixtures.utils import _LINUX
+
+LINUX = sys.platform.lower().startswith("linux")
 
 
 CONDITION_GCP_AVAILABLE = (
@@ -187,7 +189,7 @@ def get_real_azure_uri(shared_path: bool = True):
         path_prefix,
     ) = real_azure_credentials(shared_path)
     ca_certs = ""
-    if _LINUX:
+    if LINUX:
         ca_certs_file = "/etc/ssl/certs/ca-certificates.crt"
         os.path.exists(ca_certs_file), f"CA file: {ca_certs_file} not found!"
         ca_certs = f";CA_cert_path={ca_certs_file}"
