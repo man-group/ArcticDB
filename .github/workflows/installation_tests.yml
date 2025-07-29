@@ -193,7 +193,7 @@ jobs:
             $RETRY="--resume-retries 5"
         fi
         python -m pip install --upgrade pip $RETRY
-        pip install wheel setuptools pytest pytest-xdist requests $RETRY
+        pip install wheel setuptools pytest pytest-xdist requests trustme $RETRY
 
       # Install conda environment
     - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
@@ -213,7 +213,7 @@ jobs:
       run: |
           micromamba activate arcticdb 
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
-          micromamba install --no-pin requests -c conda-forge
+          micromamba install --no-pin requests trustme -c conda-forge
 
     - name: Set persistent storage variables
       # Should be executed for all persistent storages but not for LMDB
