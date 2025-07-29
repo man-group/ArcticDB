@@ -48,7 +48,7 @@ struct NumpyBufferHolder {
                     }
                 }
             }
-            delete[] ptr_;
+            std::allocator<uint8_t>().deallocate(ptr_, row_count_ * type_.get_type_bytes());
         }
     }
 };

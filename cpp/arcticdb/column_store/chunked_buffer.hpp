@@ -533,7 +533,7 @@ class ChunkedBufferImpl {
 
     MemBlock* create_detachable_block(size_t capacity, size_t offset) const {
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        auto* data = new uint8_t[capacity];
+        auto* data = std::allocator<uint8_t>().allocate(capacity);
         new(ptr) MemBlock(data, capacity, offset, ts, true);
         return reinterpret_cast<BlockType*>(ptr);
     }
