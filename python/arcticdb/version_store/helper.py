@@ -431,7 +431,7 @@ def get_azure_proto(
     else:
         azure.prefix = lib_name
     azure.ca_cert_path = ca_cert_path
-    azure.ca_cert_dir = ca_cert_dir
+    azure.ca_cert_dir = ca_cert_dir if ca_cert_dir else ""
 
     sid, storage = get_storage_for_lib_name(azure.prefix, env)
     storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")
