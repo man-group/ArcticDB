@@ -17,6 +17,7 @@ on:
     - cron: "0 9 * * *"     
     - cron: "0 10 * * *"       
     - cron: "0 11 * * *"       
+    - cron: "0 12 * * *"       
   workflow_dispatch:
     inputs:
       arcticdb_version:
@@ -28,6 +29,7 @@ on:
         type: choice
         options:
           - "latest"
+          - "5.9.3"
           - "5.8.0"
           - "5.7.0"
           - "5.6.0"
@@ -56,7 +58,7 @@ on:
           - "0"
       debug_enabled:
         type: boolean
-        description: 'Run the build with tmate debugging enabled (https://github.com/marketplace/actions/debugging-with-tmate)'
+        description: 'Run the build with debugging enabled
         required: false
         default: false                  
 
@@ -120,6 +122,7 @@ jobs:
           "08") echo "arcticdb_version=5.6.0" >> $GITHUB_ENV;;
           "09") echo "arcticdb_version=5.7.0" >> $GITHUB_ENV;;
           "10") echo "arcticdb_version=5.8.0" >> $GITHUB_ENV;;
+          "12") echo "arcticdb_version=5.9.3" >> $GITHUB_ENV;;
           "11") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
         esac        
 
