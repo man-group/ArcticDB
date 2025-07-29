@@ -62,15 +62,13 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             .def("find_keys_for_id", &LibraryTool::find_keys_for_id)
             .def("clear_ref_keys", &LibraryTool::clear_ref_keys)
             .def("batch_key_exists", &LibraryTool::batch_key_exists, py::call_guard<SingleThreadMutexHolder>())
-            .def("_read_to_read_result",
-             [&](LibraryTool& lt, const VariantKey& key){
-                 constexpr OutputFormat output_format = OutputFormat::PANDAS;
-                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
-                 return adapt_read_df(lt.read(key, handler_data, output_format), &handler_data);
-             },
-             "Read the most recent dataframe from the store")
              .def("inspect_env_variable", &LibraryTool::inspect_env_variable)
-             .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg);
+             .def_static("read_unaltered_lib_cfg", &LibraryTool::read_unaltered_lib_cfg)
+             .def("segment_in_memory_to_read_result", [&] (LibraryTool& lt, arcticdb::SegmentInMemory& segment) {
+                constexpr OutputFormat output_format = OutputFormat::PANDAS;
+                auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
+                return adapt_read_df(lt.segment_in_memory_to_read_result(segment, handler_data, output_format), &handler_data);
+            });
 
     // Reliable storage lock exposed for integration testing. It is intended for use in C++
     using namespace arcticdb::lock;

@@ -130,13 +130,10 @@ jobs:
 
 
   macos:
-    strategy:
-      matrix:
-        include:
-          - os: macos-14
-
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
+    if: |
+      always() &&
+      !cancelled()
+    runs-on: macos-14
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
