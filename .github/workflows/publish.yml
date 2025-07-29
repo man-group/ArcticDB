@@ -83,9 +83,12 @@ jobs:
             merge-multiple: true
             run-id: ${{ env.RUN_ID }}
             github-token: ${{github.token}}
+            
       - name: Skip uploading macos wheels for now
         run: |
             rm *macos*.whl
+        continue-on-error: false
+            
       - name: Upload to Pypi
         run: |
             ls
