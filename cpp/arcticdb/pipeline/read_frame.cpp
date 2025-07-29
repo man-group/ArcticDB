@@ -309,7 +309,7 @@ void decode_or_expand(
             ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
+            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
                 util::default_initialize<TagType>(dest, dest_bytes);
@@ -325,7 +325,7 @@ void decode_or_expand(
             const auto &ndarray = encoded_field_info.ndarray();
             if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
                 ARCTICDB_TRACE(log::version(), "Default initializing as only have {} bytes of {}", bytes, dest_bytes);
-                source_type_desc.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
+                source_type_desc.visit_tag([dest, bytes, dest_bytes](auto tdt) {
                     using TagType = decltype(tdt);
                     util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
                 });
@@ -767,6 +767,7 @@ class NullValueReducer {
     DecodePathData shared_data_;
     std::any& handler_data_;
     const OutputFormat output_format_;
+    std::optional<Value> default_value_;
 
 public:
     NullValueReducer(
@@ -775,7 +776,8 @@ public:
         SegmentInMemory frame,
         DecodePathData shared_data,
         std::any& handler_data,
-        OutputFormat output_format) :
+        OutputFormat output_format,
+        std::optional<Value> default_value = {}) :
             column_(column),
             type_bytes_(column_.type().get_type_bytes()),
             context_(context),
@@ -783,7 +785,8 @@ public:
             pos_(frame_.offset()),
             shared_data_(std::move(shared_data)),
             handler_data_(handler_data),
-            output_format_(output_format){
+            output_format_(output_format),
+            default_value_(default_value){
     }
 
     [[nodiscard]] static size_t cursor(const PipelineContextRow &context_row) {
@@ -816,7 +819,7 @@ public:
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
             } else if (output_format_ != OutputFormat::ARROW) {
                 // Arrow does not care what values are in the main buffer where the validity bitmap is zero
-                column_.default_initialize_rows(start_row, num_rows, false);
+                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
             }
             if (output_format_ == OutputFormat::ARROW) {
                 backfill_all_zero_validity_bitmaps(start_row * type_bytes_, context_row.index());
@@ -828,8 +831,8 @@ public:
     }
 
     void finalize() {
-        auto total_rows = frame_.row_count();
-        auto end =  frame_.offset() + total_rows;
+        const auto total_rows = frame_.row_count();
+        const auto end =  frame_.offset() + total_rows;
         if(pos_ != end) {
             util::check(pos_ < end, "Overflow in finalize {} > {}", pos_, end);
             const auto num_rows = end - pos_;
@@ -838,7 +841,7 @@ public:
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
             } else if (output_format_ != OutputFormat::ARROW) {
                 // Arrow does not care what values are in the main buffer where the validity bitmap is zero
-                column_.default_initialize_rows(start_row, num_rows, false);
+                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
             }
             if (output_format_ == OutputFormat::ARROW) {
                 backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().size() - 1);
@@ -878,8 +881,15 @@ struct ReduceColumnTask : async::BaseTask {
         const auto field_type = frame_field.type().data_type();
         auto &column = frame_.column(static_cast<position_t>(column_index_));
         const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
-
         const auto column_data = slice_map_->columns_.find(frame_field.name());
+        const auto& name = frame_field.name();
+        const std::optional<Value> default_value = [&]() -> std::optional<Value> {
+            if (auto it = context_->default_values_.find(std::string(name)); it != context_->default_values_.end()) {
+                return it->second;
+            }
+            return {};
+        }();
+
         if(dynamic_schema && column_data == slice_map_->columns_.end()) {
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(read_options_.output_format(), column.type()); handler) {
                 handler->default_initialize(column.buffer(), 0, frame_.row_count() * handler->type_size(), shared_data_, handler_data_);
@@ -898,12 +908,12 @@ struct ReduceColumnTask : async::BaseTask {
                     auto& prev_buffer = column.buffer();
                     swap(prev_buffer, new_buffer);
                 } else {
-                    column.default_initialize_rows(0, frame_.row_count(), false);
+                    column.default_initialize_rows(0, frame_.row_count(), false, default_value);
                 }
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema) {
-                NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format()};
+                NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format(), default_value};
                 for (const auto &row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};
                     null_reducer.reduce(context_row);

@@ -273,16 +273,17 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
 // 1: key is the column name to aggregate, value is the aggregation operator. Output column name will be the same as input column name
 // 2: key is the column name to output, value is a pair where the first element is the input column name, and the second element is the aggregation operator
 // These 2 styles can be mixed and matched
-inline std::vector<NamedAggregator> named_aggregators_from_dict(const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>& aggregations) {
+inline std::vector<NamedAggregator> named_aggregators_from_dict(std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>>&& aggregations) {
     std::vector<NamedAggregator> named_aggregators;
-    for (const auto& [output_column_name, var_agg_named_agg]: aggregations) {
+    named_aggregators.reserve(aggregations.size());
+    for (auto& [output_column_name, var_agg_named_agg]: aggregations) {
         util::variant_match(
-                var_agg_named_agg,
-                [&named_aggregators, &output_column_name] (const std::string& agg_operator) {
-                    named_aggregators.emplace_back(agg_operator, output_column_name, output_column_name);
+                std::move(var_agg_named_agg),
+                [&] (std::string&& agg_operator) {
+                    named_aggregators.emplace_back(std::move(agg_operator), output_column_name, output_column_name);
                 },
-                [&named_aggregators, &output_column_name] (const std::pair<std::string, std::string>& input_col_and_agg) {
-                    named_aggregators.emplace_back(input_col_and_agg.second, input_col_and_agg.first, output_column_name);
+                [&] (std::pair<std::string, std::string>&& input_col_and_agg) {
+                    named_aggregators.emplace_back(std::move(input_col_and_agg.second), std::move(input_col_and_agg.first), std::move(output_column_name));
                 }
         );
     }

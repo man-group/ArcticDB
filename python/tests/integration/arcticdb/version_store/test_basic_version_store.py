@@ -2947,6 +2947,30 @@ def test_dynamic_schema_column_hash(basic_store_column_buckets):
     read_df = lib.read("symbol", columns=["a", "c"]).data
     assert_equal(df[["a", "c"]], read_df)
 
+def subset_permutations(input_data):
+    return (p for r in range(1, len(input_data)+1) for p in itertools.permutations(input_data, r))
+
+@pytest.mark.parametrize("bucketize_dynamic", [pytest.param(True, marks=pytest.mark.xfail(reason="Bucketize dynamic is not used in production. There are bugs")), False])
+def test_dynamic_schema_read_columns(version_store_factory, lib_name, bucketize_dynamic):
+    column_data = {"a": [1.0], "b": [2.0], "c": [3.0], "d": [4.0]}
+    append_column_data = {"a": [5.0], "b": [6.0], "c": [7.0], "d": [8.0]}
+    lmdb_lib = version_store_factory(lib_name, dynamic_schema=True, column_group_size=2, bucketize_dynamic=bucketize_dynamic)
+    columns = ("a", "b", "c", "d")
+    subset_perm = subset_permutations(columns)
+    input_data = [(pd.DataFrame({c: column_data[c] for c in v1}), pd.DataFrame({c: append_column_data[c] for c in v2})) for v1 in subset_perm for v2 in subset_perm]
+    for to_write, to_append in input_data:
+        lmdb_lib.write("test", to_write)
+        lmdb_lib.append("test", to_append)
+        columns = set(list(to_write.columns) + list(to_append.columns))
+        for read_columns in subset_permutations(list(columns)):
+            data = lmdb_lib.read("test", columns=read_columns).data
+            expected = pd.DataFrame({c: [column_data[c][0] if c in to_write else np.nan, append_column_data[c][0] if c in to_append else np.nan] for c in read_columns})
+            data.sort_index(inplace=True, axis=1)
+            expected.sort_index(inplace=True, axis=1)
+            assert_frame_equal(data, expected)
+        lmdb_lib.delete("test")
+
+
 
 @pytest.mark.storage
 def test_list_versions_without_snapshots(basic_store):

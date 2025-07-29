@@ -25,7 +25,6 @@ struct is_tuple<std::tuple<T...>> : std::true_type{};
 template<typename T>
 constexpr bool is_tuple_v = is_tuple<T>::value;
 
-
 template<std::size_t... I, typename Tuple, class...Ts>
 requires is_tuple_v<std::decay_t<Tuple>>
 auto variant_match(std::index_sequence<I...>, Tuple&& tuple, Ts&&... ts){

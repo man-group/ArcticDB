@@ -96,8 +96,7 @@ inline Column generate_int_sparse_column(size_t num_rows) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     for(size_t idx = 0; idx < num_rows; ++idx) {
-        if (idx%2 == 0)
-        {
+        if (idx%2 == 0) {
             column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx));
         }
     }
@@ -228,14 +227,12 @@ inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t 
     return seg;
 }
 
-inline SegmentInMemory generate_groupby_testing_sparse_segment(size_t num_rows, size_t unique_values)
-{
+inline SegmentInMemory generate_groupby_testing_sparse_segment(size_t num_rows, size_t unique_values) {
     SegmentInMemory seg;
     auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
-    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
-    std::array<std::string, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
-    for (const auto& name: col_names)
-    {
+    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), std::move(int_repeated_values_col));
+    const std::array<std::string, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    for (const auto& name: col_names) {
         auto col = std::make_shared<Column>(generate_int_sparse_column(num_rows));
         seg.add_column(scalar_field(col->type().data_type(), name), col);
     }
@@ -248,10 +245,9 @@ inline SegmentInMemory generate_sparse_groupby_testing_segment(size_t num_rows, 
     SegmentInMemory seg;
     auto int_sparse_repeated_values_col = std::make_shared<Column>(generate_int_column_sparse_repeated_values(num_rows, unique_values));
     int_sparse_repeated_values_col->mark_absent_rows(num_rows-1);
-    seg.add_column(scalar_field(int_sparse_repeated_values_col->type().data_type(), "int_sparse_repeated_values"), int_sparse_repeated_values_col);
-    std::array<std::string_view, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
-    for (const auto& name: col_names)
-    {
+    seg.add_column(scalar_field(int_sparse_repeated_values_col->type().data_type(), "int_sparse_repeated_values"), std::move(int_sparse_repeated_values_col));
+    const std::array<std::string_view, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
+    for (const auto& name: col_names) {
         auto col = std::make_shared<Column>(generate_int_column(num_rows));
         seg.add_column(scalar_field(col->type().data_type(), name), col);
     }

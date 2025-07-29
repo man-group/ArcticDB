@@ -15,11 +15,9 @@ import pytest
 from pytz import timezone
 import random
 import string
-import sys
 
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,
     config_context,
@@ -627,6 +625,7 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
     expected = df.query(pandas_query).loc[:, ["a"]]
     received = lib.read(symbol, columns=["a"], query_builder=q).data
     assert np.array_equal(expected, received)
+
     # Filter on column c (in second column slice), and display all columns
     q = QueryBuilder()
     q = q[q["c"] == 22]
@@ -1117,6 +1116,16 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
 ################################
 
 
+@pytest.mark.xfail(reason="""Fails on Pandas < 2 because of this logic:
+    https://github.com/man-group/ArcticDB/blob/fc9514f25712d8e86fbdbd2f7e37e64f3a10df40/python/arcticdb/version_store/_normalization.py#L230
+    The assumptions there however are not correct. The dtype of empty columns is not deterministic and varies between
+    Pandas versions, for example the test passes on the CI with Python > 3.8 because it uses pandas 2.3.0 and the dtype
+    of the column is float64 (note the if in the link above sets the dtype to object only for pandas < 2 because it
+    expects that int Pandas >= 2 it'll always be object). It fails for object dtype because in arcticdb that becomes
+    string type and string types cannot be filtered using < or >, thus modify_schema fails
+    """,
+    strict=False
+)
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_filter_empty_dataframe(request, lib_type):
     lib = request.getfixturevalue(lib_type)
@@ -1188,29 +1197,29 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
 
 def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
-    symbol = "test_filter_column_not_present_static"
+    symbol = "test_filter_column_not_present_dynamic"
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2), dtype="int64")
     q = QueryBuilder()
     q = q[q["b"] < 5]
 
     lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
+    with pytest.raises(SchemaException):
+        vit = lib.read(symbol, query_builder=q)
 
-    if (not IS_NUMPY_TWO) and (IS_PANDAS_TWO and sys.platform.startswith("win32")):
-        # Pandas 2.0.0 changed the behavior of Index creation from numpy arrays:
-        # "Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
-        # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,
-        # where it previously would have been int64 even on 32-bit systems.
-        # Instantiating Index using a list of numbers will still return 64bit dtypes,
-        # e.g. Index([1, 2, 3]) will have a int64 dtype, which is the same as previously."
-        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#index-can-now-hold-numpy-numeric-dtypes
-        index_dtype = "int32"
-    else:
-        index_dtype = "int64"
+def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_filter_column_not_present_dynamic"
+    df = pd.DataFrame({"a": np.arange(2)}, dtype="int64")
+    lib.write(symbol, df)
 
-    expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Index([], dtype=index_dtype))
-    assert_frame_equal(vit.data, expected)
+    df = pd.DataFrame({"b": [1, 10]}, dtype="int64")
+    lib.append(symbol, df)
 
+    q = QueryBuilder()
+    q = q[q["b"] < 5]
+
+    result = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(result, pd.DataFrame({"a": [0], "b": [1]}))
 
 def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
