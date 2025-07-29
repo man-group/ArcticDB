@@ -18,8 +18,10 @@ from arcticdb.arctic import Arctic
 from datetime import datetime
 from packaging import version
 
+from logger import get_logger
 
 LINUX = sys.platform.lower().startswith("linux")
+logger = get_logger()
 
 
 CONDITION_GCP_AVAILABLE = (
@@ -55,20 +57,20 @@ atexit.register(__cleanup_temp_paths)
 
 
 if CONDITION_GCP_AVAILABLE and CONDITION_AZURE_AVAILABLE:
-    print("VERSION with AZURE and GCP")
+    logger.info("VERSION with AZURE and GCP")
     class StorageTypes(Enum):
         LMDB = 1,
         REAL_AWS_S3 = 2,
         REAL_GCP = 3,
         REAL_AZURE = 4,
 elif CONDITION_AZURE_AVAILABLE:
-    print("VERSION with AZURE")
+    logger.info("VERSION with AZURE")
     class StorageTypes(Enum):
         LMDB = 1,
         REAL_AWS_S3 = 2,
         REAL_AZURE = 4,
 else:
-    print("NO GCP")
+    logger.info("NO GCP")
     class StorageTypes(Enum):
         LMDB = 1,
         REAL_AWS_S3 = 2,
