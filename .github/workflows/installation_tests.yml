@@ -58,7 +58,7 @@ on:
           - "0"
       debug_enabled:
         type: boolean
-        description: 'Run the build with debugging enabled
+        description: 'Run the build with debugging enabled'
         required: false
         default: false                  
 
