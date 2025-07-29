@@ -77,9 +77,9 @@ on:
         default: false                  
       run_enable_logging:
         description: 'Enabled debug logging'
-        type: string
+        type: boolean
         required: false
-        default: ""        
+        default: false        
       run_commandline:
         description: 'Run custom commandline before tests, Like: export ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0; ...'
         type: string
