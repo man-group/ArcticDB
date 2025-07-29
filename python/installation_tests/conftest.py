@@ -45,7 +45,7 @@ def ac_client(request) -> Generator[Arctic, None, None]:
     logger.info(f"Create arctic type: {storage}")
     ac = create_arctic_client(storage, **extras)            
     arctic_uri = ac.get_uri() if ac else "Arctic is None (not created)"
-    logger.info(f"Arctic uri : {ac.get_uri()}")
+    logger.info(f"Arctic uri : {arctic_uri}")
     if ac is None:
         pytest.skip("Storage not activated")
     yield ac

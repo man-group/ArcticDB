@@ -49,7 +49,15 @@ on:
       run_on_real_s3:
         description: 'Execute tests on Amazon S3'
         required: true
-        default: '1'
+        default: '0'
+        type: choice
+        options:
+          - "1"
+          - "0"
+      run_on_real_gcp:
+        description: 'Execute tests on Azure'
+        required: true
+        default: '0'
         type: choice
         options:
           - "1"
@@ -57,7 +65,7 @@ on:
       run_on_real_azure:
         description: 'Execute tests on Azure'
         required: true
-        default: '1'
+        default: '0'
         type: choice
         options:
           - "1"
@@ -106,6 +114,7 @@ jobs:
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
       real_azure: ${{ inputs.run_on_real_azure || '1' }}
+      real_gcp: ${{ inputs.run_on_real_gcp || '1' }}
 
     steps:
 
@@ -235,7 +244,7 @@ jobs:
         echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_AWS_S3=${{ env.real_s3 }}" >> $GITHUB_ENV        
         echo "ARCTICDB_STORAGE_AZURE=${{ env.real_azure }}" >> $GITHUB_ENV        
-        echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_GCP=${{ env.real_gcp }}" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
 
     - name: Setup tmate session
