@@ -419,6 +419,8 @@ jobs:
             eval "$ARCTICDB_PYTEST_ARGS"
           else
             if [[ "$STORAGE_TYPE" == "AZURE" ]]; then          
+            cd python
+            rm -rf arcticc
             catch=`{ which catchsegv 2>/dev/null || echo ; } | tail -n 1`
             $catch python -m pytest --timeout=3600 -v -n auto\
               --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
