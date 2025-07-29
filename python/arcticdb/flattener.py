@@ -188,10 +188,11 @@ class Flattener:
         for k, v in iterables:
             # Note: It's fine to not worry about the separator given we just use it to form some sort of vaguely
             # readable name in the end when the leaf node is retrieved.
-            if issubclass(item_type, collections.abc.MutableMapping) and self.SEPARATOR in k:
+            str_k = str(k)
+            if issubclass(item_type, collections.abc.MutableMapping) and self.SEPARATOR in str_k:
                 raise UnsupportedKeyInDictionary(f"Dictionary keys used with recursive normalizers cannot contain [{self.SEPARATOR}]. "
                                          f"Encountered key {k} while writing symbol {original_symbol}")
-            key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str(k))
+            key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str_k)
             meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write, depth=depth + 1,
                                                                        original_symbol=original_symbol))
 
