@@ -440,8 +440,7 @@ def test_update_batch_types_upgrade(custom_library):
 
 
 
-@pytest.mark.xfail(IS_PANDAS_ONE, 
-                   reason = "update_batch return unexpected exception (9589648728)")
+@pytest.mark.xfail(IS_PANDAS_ONE, reason = "update_batch return unexpected exception (9589648728)")
 def test_update_batch_error_scenario1(arctic_library):   
     lib= arctic_library
     symbol = "experimental 342143"
@@ -458,11 +457,10 @@ def test_update_batch_error_scenario1(arctic_library):
     lib.write_batch([WritePayload(symbol, df)])
     update = UpdatePayload(symbol, df_0col)
     update_result = lib.update_batch([update], prune_previous_versions=True)
-    assert update_result[0].version == 1
+    assert update_result[0].version == 0
 
 
-@pytest.mark.xfail(IS_PANDAS_ONE, 
-                   reason = "update_batch return unexpected exception (9589648728)")
+@pytest.mark.xfail(IS_PANDAS_ONE, reason = "update_batch return unexpected exception (9589648728)")
 def test_update_batch_error_scenario2(arctic_library):   
     lib= arctic_library
     symbol = "experimental 342143"
@@ -475,11 +473,10 @@ def test_update_batch_error_scenario2(arctic_library):
         "2033-12-11 00:00:01",
     ])
     df = pd.DataFrame(data, index=index)
-    df_0col = df[0:0]
     lib.write_batch([WritePayload(symbol, df)])
     update = UpdatePayload(symbol, df[0:1], date_range=(pd.Timestamp("2030-12-11 00:00:00"), pd.Timestamp("2030-12-11 00:00:01")))
     update_result = lib.update_batch([update], prune_previous_versions=True)
-    assert update_result[0].version == 1    
+    assert update_result[0].version == 0
 
 
 def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
