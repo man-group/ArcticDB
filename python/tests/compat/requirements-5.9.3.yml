@@ -3,6 +3,6 @@ channels:
   - conda-forge
 dependencies:
   - arcticdb==5.9.3
-  - numpy<=2.2.6
+  - numpy
   - pyarrow
   - protobuf<6
