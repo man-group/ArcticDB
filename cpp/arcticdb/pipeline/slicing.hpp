@@ -65,6 +65,10 @@ SlicingPolicy get_slicing_policy(
     const WriteOptions& options,
     const arcticdb::pipelines::InputTensorFrame& frame);
 
+SlicingPolicy get_slicing_policy(
+        const WriteOptions& options,
+        const SegmentInMemory& segment);
+
 std::vector<FrameSlice> slice(InputTensorFrame &frame, const SlicingPolicy& slicer);
 
 inline auto slice_begin_pos(const FrameSlice& slice, const InputTensorFrame& frame) {

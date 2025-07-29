@@ -72,75 +72,60 @@ static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>&
     }
 }
 
+
 VersionedItem write_dataframe_impl(
-    const std::shared_ptr<Store>& store,
-    VersionId version_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    const WriteOptions& options,
-    const std::shared_ptr<DeDupMap>& de_dup_map,
-    bool sparsify_floats,
-    bool validate_index
-    ) {
+        const std::shared_ptr<Store>& store,
+        VersionId version_id,
+        const std::variant<std::shared_ptr<pipelines::InputTensorFrame>, SegmentInMemory>& frame,
+        const WriteOptions& options,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        bool sparsify_floats,
+        bool validate_index
+) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
+    //ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
     auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
     return {std::move(atom_key_fut).get()};
 }
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
-    const std::shared_ptr<Store>& store,
-    VersionId version_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
-    const std::shared_ptr<DeDupMap> &de_dup_map,
-    bool sparsify_floats,
-    bool validate_index
-    ) {
+        const std::shared_ptr<Store>& store,
+        VersionId version_id,
+        const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+        const WriteOptions& options,
+        const std::shared_ptr<DeDupMap> &de_dup_map,
+        bool sparsify_floats,
+        bool validate_index
+) {
+    auto stream_id = arcticdb::util::variant_match(frame, [] (const SegmentInMemory& segment) {
+                                                            return segment.descriptor().id();
+                                                        }, [] (const std::shared_ptr<InputTensorFrame>& frame) {
+                                                            return frame->desc.id();
+                                                        });
     ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame->desc.id());
+        auto check_outcome = verify_symbol_key(stream_id);
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
     }
+    auto partial_key = IndexPartialKey(stream_id, version_id);
 
-    // Slice the frame according to the write options
-    frame->set_bucketize_dynamic(options.bucketize_dynamic);
-    auto slicing_arg = get_slicing_policy(options, *frame);
-    auto partial_key = IndexPartialKey{frame->desc.id(), version_id};
-    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
-        sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
-    }
-    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
-}
+    auto slicing_arg = arcticdb::util::variant_match(frame, [&options] (const SegmentInMemory& segment) {
+                                                                auto slicing_arg = get_slicing_policy(options, segment);
+                                                                return slicing_arg;
+                                                    }, [&options, &validate_index] (const std::shared_ptr<InputTensorFrame>& frame) {
+                                                             // Slice the frame according to the write options
+                                                             frame->set_bucketize_dynamic(options.bucketize_dynamic);
+                                                             auto slicing_arg = get_slicing_policy(options, *frame);
+                                                             if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
+                                                                 sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
+                                                             }
+                                                             return slicing_arg;
+                                                        });
 
-VersionedItem write_segment_in_memory_impl(
-        const std::shared_ptr<Store>& store,
-        VersionId version_id,
-        const SegmentInMemory& segment,
-        const std::shared_ptr<DeDupMap>& de_dup_map
-) {
-    ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    auto atom_key_fut = async_write_segment_in_memory_impl(store, version_id, segment, de_dup_map);
-    return {std::move(atom_key_fut).get()};
-}
 
-folly::Future<entity::AtomKey> async_write_segment_in_memory_impl(
-        const std::shared_ptr<Store>& store,
-        VersionId version_id,
-        const SegmentInMemory& segment,
-        const std::shared_ptr<DeDupMap> &de_dup_map
-) {
-    ARCTICDB_SAMPLE(DoWrite, 0)
-    if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(segment.descriptor().id());
-        if (std::holds_alternative<Error>(check_outcome)) {
-            std::get<Error>(check_outcome).throw_error();
-        }
-    }
-
-    auto partial_key = IndexPartialKey{segment.descriptor().id(), version_id};
-    return write_segment(std::move(partial_key), segment, store, de_dup_map, version_id);
+    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats, version_id);
 }
 
 namespace {
