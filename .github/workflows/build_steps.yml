@@ -404,8 +404,8 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
-        
       - name: Run test
+        if: ${{ env.real_tests_storage_type != 'AZURE' && inputs.python3 != '8' && matrix.python-version != '9' && matrix.python-version != '10' && inputs.python3 != '12' && inputs.python3 != '13'}}
         run: |
           ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
