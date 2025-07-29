@@ -35,15 +35,6 @@ on:
         description: Tag of the ArcticDB development image to use for the Linux C++ tests build
         type: string
         default: arcticdb-dev-clang:latest
-      pytest_args:
-        description: Rewrite what tests will run or do your own pytest line if string starts with pytest ... (Example -- pytest -n auto -v --count=50 -x python/tests/compat)
-        type: string
-        default: ""
-      version_cache_full_test:
-        description: 'Run tests with both version cache 0 and 2000000000'
-        required: false
-        default: false
-        type: boolean
       macos_enabled:
         description: Enable macOS tests
         required: false
@@ -54,6 +45,20 @@ on:
         description: 'Run the build with debugging enabled'
         required: false
         default: false                  
+      version_cache_full_test:
+        description: 'Run tests with both version cache 0 and 2000000000'
+        required: false
+        default: false
+        type: boolean
+      run_enable_logging:
+        description: 'Enabled debug logging'
+        type: boolean
+        required: false
+        default: false        
+      pytest_args:
+        description: Rewrite what tests will run or do your own pytest line if string starts with pytest ... (Example -- pytest -n auto -v --count=50 -x python/tests/compat)
+        type: string
+        default: ""
 
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:

@@ -402,7 +402,11 @@ jobs:
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}  
+        
+      - name: Set ArcticDB Debug Logging
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
+        uses: ./.github/actions/enable_logging
 
       - name: Run test
         if: ${{ env.real_tests_storage_type != 'AZURE' || env.real_tests_storage_type == 'AZURE' && inputs.python3 == '11' }}
@@ -414,7 +418,14 @@ jobs:
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
           else
-            build_tooling/parallel_test.sh tests/${{matrix.type}}
+            if [[ "$STORAGE_TYPE" == "AZURE" ]]; then          
+            catch=`{ which catchsegv 2>/dev/null || echo ; } | tail -n 1`
+            $catch python -m pytest --timeout=3600 -v -n auto\
+              --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+              $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS tests/${{matrix.type}} 2>&1
+            else
+              build_tooling/parallel_test.sh tests/${{matrix.type}}
+            fi
           fi
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}
@@ -423,6 +434,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
+          STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
 
