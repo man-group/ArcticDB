@@ -182,6 +182,9 @@ folly::Future<std::vector<SliceAndKey>> write_segment(
     });
 }
 
+// TODO: Overload this function to also take a SegmentInMemory.
+// Instead of relying on the `slice` and `write_slices` for the SegmentInMemory case we can just use:
+// SegmentInMemory::split for the slicing and a folly::window with store->async_write on each segment from the vector.
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputTensorFrame> &frame,
         const SlicingPolicy &slicing,
