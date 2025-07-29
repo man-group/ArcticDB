@@ -217,7 +217,7 @@ write_frame(
                                                     .thenValue([frame = frame, key = std::move(key), &store](auto&& slice_keys) mutable {
                                                         return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
                                                     });
-                                        }, [&key, &slicing, &store, &de_dup_map, &version_id] (const SegmentInMemory& segment) {
+                                        }, [&key, &store, &de_dup_map, &version_id] (const SegmentInMemory& segment) {
                                               ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
                                               auto fut_slice_keys = write_segment(segment, store, de_dup_map, version_id);
                                               // Write the keys of the slices into an index segment
