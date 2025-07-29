@@ -12,6 +12,7 @@
 
 namespace arcticdb::pipelines {
 
+// TODO: To change this to just take a StreamDescriptor
 std::pair<int64_t, int64_t> get_index_and_field_count(const arcticdb::pipelines::InputTensorFrame& frame) {
     return {frame.desc.index().field_count(), frame.desc.fields().size()};
 }
@@ -29,6 +30,8 @@ SlicingPolicy get_slicing_policy(
     return FixedSlicer{options.column_group_size, options.segment_row_size};
 }
 
+// TODO: We can also make this take a variant<InputTensorFrame, SegmentInMemory> and slicer functions
+// can handle the different cases with overloads
 std::vector<FrameSlice> slice(InputTensorFrame& frame, const SlicingPolicy& arg) {
     return util::variant_match(arg,
             [&frame](NoSlicing) -> std::vector<FrameSlice> {
@@ -48,13 +51,20 @@ void add_index_fields(const arcticdb::pipelines::InputTensorFrame& frame, FieldC
     }
 }
 
+// TODO: Let's add an overload for `SegmentInMemory`. `SegmentInMemory` already has an `offset()` and `row_count()`
 std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::InputTensorFrame& frame) {
     return {frame.offset, frame.num_rows + frame.offset};
 }
 
+// TODO: Let's add an overload for SegmentInMemory as only a StreamDescriptor, num_rows, and offset is enough.
+// It is fine to raise an unimplemented error message in case of the Hash slicing. It is not really used
 std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::InputTensorFrame& frame) const {
     const auto [index_count, total_field_count] = get_index_and_field_count(frame);
     auto field_count = total_field_count - index_count;
+    // TODO: Looks like this tensor_pos is completely unneeded. We only use it to iterate to the end.
+    // We can instead use the `field_count` above for these operations.
+    // This looks like a complicated and risky refactor though. If turns out difficult to change, maybe we should
+    // fallback to completely separate logic for SegmentInMemory
     auto tensor_pos = std::begin(frame.field_tensors);
     auto fields_pos = std::begin(frame.desc.fields());
     std::advance(fields_pos, index_count);
@@ -102,6 +112,8 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
     return slices;
 }
 
+// TODO: I suspect we will also need an overload with SegmentInMemory in this case. It is fine to raise an
+// unimplemented error in this case.
 std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::InputTensorFrame& frame) const {
     std::vector<uint32_t> buckets;
     const auto [index_count, field_count] = get_index_and_field_count(frame);

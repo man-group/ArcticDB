@@ -28,8 +28,12 @@ using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 namespace ranges = std::ranges;
 
+// TODO: Let's create a new SplitSegmentTask.
+// For row slicing it can do something similar to SegmentInMemory::split.
+// For column slicing it will need a more sophisticated approach.
+
 WriteToSegmentTask::WriteToSegmentTask(
-    std::shared_ptr<InputTensorFrame> frame,
+    std::shared_ptr<InputTensorFrame> frame, // std::variant<SegmentInMemory, InputTensorFrame>
     FrameSlice slice,
     const SlicingPolicy& slicing,
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
@@ -47,6 +51,7 @@ WriteToSegmentTask::WriteToSegmentTask(
     slice_.check_magic();
 }
 
+    // Frame -> std::vector<SegmentInMemory>
 std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator() () {
     slice_.check_magic();
     magic_.check();
@@ -137,6 +142,8 @@ int64_t write_window_size() {
     return ConfigsMap::instance()->get_int("VersionStore.BatchWriteWindow", int64_t(2 * async::TaskScheduler::instance()->io_thread_count()));
 }
 
+
+// TODO: This should also take a variant<InputTensorFrame, SegmentInMemory>.
 folly::Future<std::vector<SliceAndKey>> write_slices(
         const std::shared_ptr<InputTensorFrame> &frame,
         std::vector<FrameSlice>&& slices,

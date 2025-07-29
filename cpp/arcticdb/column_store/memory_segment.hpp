@@ -471,6 +471,7 @@ public:
         return impl_->is_sparse();
     }
 
+    // TODO: Think about whether not to just use this
     [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows, bool filter_down_stringpool=false) const {
         std::vector<SegmentInMemory> output;
         auto new_impls = impl_->split(rows, filter_down_stringpool);
