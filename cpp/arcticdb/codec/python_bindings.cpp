@@ -103,7 +103,7 @@ Segment encode_segment(SegmentInMemory segment_in_memory, const py::object &opts
 }
 
 SegmentInMemory decode_python_segment(Segment& segment) {
-    return decode_segment(segment);
+    return decode_segment(segment, AllocationType::DETACHABLE);
 }
 
 class BufferPairDataSink {
