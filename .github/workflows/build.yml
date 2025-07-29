@@ -51,7 +51,7 @@ on:
         type: boolean
       debug_enabled:
         type: boolean
-        description: 'Run the build with tmate debugging enabled'
+        description: 'Run the build with debugging enabled'
         required: false
         default: false                  
 

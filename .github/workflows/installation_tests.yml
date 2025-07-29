@@ -55,7 +55,7 @@ on:
           - "1"
           - "0"
       run_on_real_gcp:
-        description: 'Execute tests on Azure'
+        description: 'Execute tests on GCP'
         required: true
         default: '0'
         type: choice
@@ -75,6 +75,21 @@ on:
         description: 'Run the build with debugging enabled'
         required: false
         default: false                  
+      run_enable_logging:
+        description: 'Enabled debug logging'
+        type: string
+        required: false
+        default: ""        
+      run_commandline:
+        description: 'Run custom commandline before tests, Like: export ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0; ...'
+        type: string
+        required: false
+        default: ""        
+      run_custom_pytest_command:
+        description: '*Run custom pytest command, instead of standard(Note: curdir is project root). For example: pytest -v -s --log-file="tests.log" python/installation_tests/test_installation.py::test_list_versions_write_append_update[StorageTypes.REAL_AZURE]'
+        type: string
+        required: false
+        default: ""        
 
 jobs:
 
@@ -247,6 +262,10 @@ jobs:
         echo "ARCTICDB_STORAGE_GCP=${{ env.real_gcp }}" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
 
+    - name: Set ArcticDB Debug Logging
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
+      uses: ./.github/actions/enable_logging
+
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
       if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
@@ -255,12 +274,25 @@ jobs:
       if: ${{ env.SKIP_JOB != 'true' }}
       shell: bash -l {0}      
       run: |
-        echo $pwd
-        echo "Running tests against arcticdb version: ${{ env.arcticdb_version }}"
-        pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
-        
-        ## For testing
-        #pytest -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
+        echo "Run commandline: $COMMANDLINE"
+        eval "$COMMANDLINE"
+        export ARCTICDB_RAND_SEED=$RANDOM
+        if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+          command="python -m $ARCTICDB_PYTEST_ARGS"
+          echo "Run custom pytest command: $command"
+          python -m pip  install pytest-repeat
+          echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
+          eval "$command"
+        else
+          echo $pwd
+          echo "Running tests against arcticdb version: ${{ env.arcticdb_version }}"
+          pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
+          ## For testing
+          #pytest -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
+        fi
+      env:
+        COMMANDLINE: ${{ inputs.run_commandline }}
+        ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
 
     - name: Upload the logs
       if: ${{ env.SKIP_JOB != 'true' }}
