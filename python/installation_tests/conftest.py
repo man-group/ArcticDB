@@ -42,7 +42,7 @@ def ac_client(request) -> Generator[Arctic, None, None]:
             storage = request.param
         else:
             storage, extras = request.param
-    logger.info("Create arctic type:", storage)
+    logger.info(f"Create arctic type: {storage}")
     ac = create_arctic_client(storage, **extras)            
     arctic_uri = ac.get_uri() if ac else "Arctic is None (not created)"
     logger.info(f"Arctic uri : {ac.get_uri()}")
