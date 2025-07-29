@@ -623,6 +623,10 @@ public:
         return data_.buffer().blocks();
     }
 
+    const auto& block_offsets() const {
+        return data_.buffer().block_offsets();
+    }
+
     inline shape_t *allocate_shapes(std::size_t bytes) {
         shapes_.ensure_bytes(bytes);
         return reinterpret_cast<shape_t *>(shapes_.cursor());

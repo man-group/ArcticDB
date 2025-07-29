@@ -1,4 +1,6 @@
 from arcticdb_ext.version_store import OutputFormat
+from hypothesis import assume, given, settings, strategies as st
+from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
 import pandas as pd
 import numpy as np
 import pytest
@@ -6,9 +8,23 @@ import pytest
 from pandas.testing import assert_frame_equal
 from arcticdb.version_store.processing import QueryBuilder
 import pyarrow as pa
+from arcticdb.util.hypothesis import (
+    use_of_function_scoped_fixtures_in_hypothesis_checked,
+    ENDIANNESS,
+    supported_string_dtypes,
+    dataframe_strategy,
+    column_strategy,
+)
 from arcticdb.util.test import get_sample_dataframe
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
+
+
+def stringify_dictionary_encoded_columns(table: pa.Table) -> pa.Table:
+    for i, name in enumerate(table.column_names):
+        if pa.types.is_dictionary(table.column(i).type):
+            table = table.set_column(i, name, table.column(name).cast(pa.string()))
+    return table
 
 
 def test_basic(lmdb_version_store_v1):
@@ -306,39 +322,6 @@ def test_with_querybuilder(lmdb_version_store_v1):
     assert_frame_equal(result, expected)
 
 
-def test_dynamic_schema(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
-    df1 = pd.DataFrame({"x": np.arange(10), "y": np.arange(10.0, 20.0)})
-
-    lib.write("arrow", df1)
-    df2 = pd.DataFrame({"y": np.arange(20.0, 30.0), "z": np.arange(10.0, 20.0)})
-    lib.append("arrow", df2)
-    vit = lib.read("arrow", _output_format=OutputFormat.ARROW)
-    result = vit.data.to_pandas()
-    expected = pd.concat([df1, df2])
-    expected.reset_index(drop=True, inplace=True)
-    assert_frame_equal(result.astype(float).fillna(0), expected.fillna(0))
-
-
-def test_dynamic_schema_column_change(lmdb_version_store_dynamic_schema):
-    lib = lmdb_version_store_dynamic_schema
-    df1 = pd.DataFrame({"x": np.arange(10)})
-
-    lib.write("arrow", df1)
-    df2 = pd.DataFrame({"x": np.arange(20.0, 30.0, dtype=np.float64)})
-    lib.append("arrow", df2)
-    arrow_table = lib.read("arrow", _output_format=OutputFormat.ARROW).data
-    batches = arrow_table.to_batches()
-    assert len(batches) == 2
-    for record_batch in batches:
-        x_arr = record_batch.columns[0]
-        assert x_arr.type == pa.float64()
-    result = arrow_table.to_pandas()
-    expected = pd.concat([df1, df2])
-    expected.reset_index(drop=True, inplace=True)
-    assert_frame_equal(result.astype(float).fillna(0), expected.fillna(0))
-
-
 def test_arrow_layout(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     lib_tool = lib.library_tool()
@@ -357,3 +340,126 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
         assert index_arr.type == pa.int64()
         assert int_arr.type == pa.int64()
         assert str_arr.type == pa.dictionary(pa.int32(), pa.large_string())
+
+
+@pytest.mark.parametrize(
+    "first_type",
+    [pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64(), pa.int8(), pa.int16(), pa.int32(), pa.int64(), pa.float32(), pa.float64()]
+)
+@pytest.mark.parametrize(
+    "second_type",
+    [pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64(), pa.int8(), pa.int16(), pa.int32(), pa.int64(), pa.float32(), pa.float64()]
+)
+def test_arrow_dynamic_schema_changing_types(lmdb_version_store_dynamic_schema_v1, first_type, second_type):
+    if ((pa.types.is_uint64(first_type) and pa.types.is_signed_integer(second_type)) or
+            (pa.types.is_uint64(second_type) and pa.types.is_signed_integer(first_type))):
+        pytest.skip("Unsupported ArcticDB type combination")
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_arrow_dynamic_schema_changing_types"
+    write_table = pa.table({"col": pa.array([0], first_type)})
+    append_table = pa.table({"col": pa.array([1], second_type)})
+    # TODO: Remove to_pandas() when we support writing Arrow structures directly
+    lib.write(sym, write_table.to_pandas())
+    lib.append(sym, append_table.to_pandas())
+    expected = pa.concat_tables([write_table, append_table], promote_options="permissive")
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    assert expected.equals(received)
+
+
+@pytest.mark.skipif(WINDOWS, reason="Segfault as sparrow fails to free memory created by new uint8_t[capacity] (Monday issue 9685477375)")
+@pytest.mark.parametrize("rows_per_column", [1, 7, 8, 9, 100_000])
+@pytest.mark.parametrize("segment_row_size", [1, 2, 100_000])
+def test_arrow_dynamic_schema_missing_columns_numeric(version_store_factory, rows_per_column, segment_row_size):
+    if rows_per_column == 100_000 and segment_row_size != 100_000:
+        pytest.skip("Slow to write and doesn't tell us anything the other variants do not")
+    lib = version_store_factory(segment_row_size=segment_row_size, dynamic_schema=True)
+    sym = "test_arrow_dynamic_schema_missing_columns_numeric"
+    write_table = pa.table({"col1": pa.array([1] * rows_per_column, pa.int64())})
+    append_table = pa.table({"col2": pa.array([2] * rows_per_column, pa.int32())})
+    # TODO: Remove to_pandas() when we support writing Arrow structures directly
+    lib.write(sym, write_table.to_pandas())
+    lib.append(sym, append_table.to_pandas())
+    expected = pa.concat_tables([write_table, append_table], promote_options="permissive")
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    assert expected.equals(received)
+
+
+@pytest.mark.skipif(WINDOWS, reason="Segfault as sparrow fails to free memory created by new uint8_t[capacity] (Monday issue 9685477375)")
+@pytest.mark.parametrize("rows_per_column", [1, 7, 8, 9, 100_000])
+def test_arrow_dynamic_schema_missing_columns_strings(lmdb_version_store_dynamic_schema_v1, rows_per_column):
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_arrow_dynamic_schema_missing_columns_strings"
+    write_table = pa.table({"col1": pa.array(["hello"] * rows_per_column, pa.string())})
+    append_table = pa.table({"col2": pa.array(["goodbye"] * rows_per_column, pa.string())})
+    # TODO: Remove to_pandas() when we support writing Arrow structures directly
+    lib.write(sym, write_table.to_pandas())
+    lib.append(sym, append_table.to_pandas())
+    expected = pa.concat_tables([write_table, append_table], promote_options="permissive")
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    received = stringify_dictionary_encoded_columns(received)
+    assert expected.equals(received)
+
+
+# Omit uint64 as it cannot be combined with signed int types in calls to append
+# Omit int64 as pyarrow refuses to concatenate arrays together if an int is greater than 2^53
+@st.composite
+def combinable_numeric_dtypes(draw):
+    return draw(
+        st.one_of(
+            st.one_of(
+                unsigned_integer_dtypes(endianness=ENDIANNESS, sizes=[8, 16, 32]),
+                integer_dtypes(endianness=ENDIANNESS, sizes=[8, 16, 32]),
+                floating_dtypes(endianness=ENDIANNESS, sizes=[32, 64]),
+            )
+        )
+    )
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df_0=dataframe_strategy(
+        [
+            column_strategy("numeric_1", combinable_numeric_dtypes()),
+            column_strategy("numeric_2", combinable_numeric_dtypes()),
+            column_strategy("string_1", supported_string_dtypes()),
+            column_strategy("string_2", supported_string_dtypes()),
+        ]
+    ),
+    df_1=dataframe_strategy(
+        [
+            column_strategy("numeric_1", combinable_numeric_dtypes()),
+            column_strategy("numeric_2", combinable_numeric_dtypes()),
+            column_strategy("string_1", supported_string_dtypes()),
+            column_strategy("string_2", supported_string_dtypes()),
+        ]
+    ),
+    df_2=dataframe_strategy(
+        [
+            column_strategy("numeric_1", combinable_numeric_dtypes()),
+            column_strategy("numeric_2", combinable_numeric_dtypes()),
+            column_strategy("string_1", supported_string_dtypes()),
+            column_strategy("string_2", supported_string_dtypes()),
+        ]
+    ),
+    columns_0=st.lists(st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True),
+    columns_1=st.lists(st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True),
+    columns_2=st.lists(st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True),
+)
+def test_arrow_dynamic_schema_missing_columns_hypothesis(lmdb_version_store_dynamic_schema_v1, df_0, df_1, df_2, columns_0, columns_1, columns_2):
+    assume(len(df_0) and len(df_1) and len(df_2))
+    lib = lmdb_version_store_dynamic_schema_v1
+    sym = "test_arrow_dynamic_schema_missing_columns_hypothesis"
+    df_0 = df_0[columns_0]
+    df_1 = df_1[columns_1]
+    df_2 = df_2[columns_2]
+    lib.write(sym, df_0)
+    lib.append(sym, df_1)
+    lib.append(sym, df_2)
+    expected = pa.concat_tables(
+        [pa.Table.from_pandas(df_0), pa.Table.from_pandas(df_1), pa.Table.from_pandas(df_2)],
+        promote_options="permissive",
+    )
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    received = stringify_dictionary_encoded_columns(received)
+    assert expected.equals(received)
