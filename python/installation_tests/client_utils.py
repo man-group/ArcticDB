@@ -17,7 +17,7 @@ from arcticdb.arctic import Arctic
 from datetime import datetime
 from packaging import version
 
-from arcticdb.storage_fixtures.azure import AzureStorageFixtureFactory
+from arcticdb.storage_fixtures.utils import _LINUX
 
 
 CONDITION_GCP_AVAILABLE = (
@@ -186,8 +186,12 @@ def get_real_azure_uri(shared_path: bool = True):
         connection_str,
         path_prefix,
     ) = real_azure_credentials(shared_path)
-    azure_uri = AzureStorageFixtureFactory().initialize_from_connection_sting(
-        constr=connection_str, container=container, prefix=path_prefix).get_arctic_uri()
+    ca_certs = ""
+    if _LINUX:
+        ca_certs_file = "/etc/ssl/certs/ca-certificates.crt"
+        os.path.exists(ca_certs_file), f"CA file: {ca_certs_file} not found!"
+        ca_certs = f";CA_cert_path={ca_certs_file}"
+    azure_uri = f"azure://Container={container};Path_prefix={path_prefix};{connection_str}{ca_certs}"
     return azure_uri
 
 
