@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/processing/grouper.hpp>
 
 using namespace arcticdb;
 using namespace arcticdb::pipelines;

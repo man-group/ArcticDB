@@ -27,6 +27,41 @@
 
 using namespace arcticdb;
 
+consteval auto all_data_types() {
+    return std::array{
+            DataType::UINT8,
+            DataType::UINT16,
+            DataType::UINT32,
+            DataType::UINT64,
+            DataType::INT8,
+            DataType::INT16,
+            DataType::INT32,
+            DataType::INT64,
+            DataType::FLOAT32,
+            DataType::FLOAT64,
+            DataType::BOOL8,
+            DataType::NANOSECONDS_UTC64,
+            DataType::ASCII_FIXED64,
+            DataType::ASCII_DYNAMIC64,
+            DataType::UTF_FIXED64,
+            DataType::UTF_DYNAMIC64,
+            DataType::EMPTYVAL,
+            DataType::BOOL_OBJECT8,
+            DataType::UTF_DYNAMIC32
+    };
+}
+
+consteval bool is_allowed_mean_input(const DataType dt) {
+    return is_numeric_type(dt) || is_bool_type(dt) || is_empty_type(dt);
+}
+
+consteval auto allowed_mean_input_types() {
+    constexpr size_t count = std::ranges::count_if(all_data_types(), is_allowed_mean_input);
+    std::array<DataType, count> result;
+    std::ranges::copy_if(all_data_types(), result.begin(), is_allowed_mean_input);
+    return result;
+}
+
 template<typename DTT, Dimension DIM, NumericId def_tsid = 123, int def_field_count = 4>
 StreamDescriptor create_tsd(StreamId tsid = def_tsid, std::size_t field_count = def_field_count) {
 
@@ -222,3 +257,17 @@ class StorageGenerator {
   const std::string storage_;
   inline static const fs::path TEST_DATABASES_PATH = "./test_databases";
 };
+
+template<typename TagType, typename Input>
+requires requires(Input in) {
+    requires util::instantiation_of<TagType, TypeDescriptorTag>;
+    requires std::ranges::contiguous_range<Input>;
+    requires std::same_as<typename TagType::DataTypeTag::raw_type, std::ranges::range_value_t<Input>>;
+}
+Column create_dense_column(const Input& data) {
+    constexpr size_t element_size = sizeof(std::ranges::range_value_t<Input>);
+    Column result(TagType::type_descriptor(), data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+    std::memcpy(result.ptr(), data.data(), data.size() * element_size);
+    result.set_row_data(data.size());
+    return result;
+}

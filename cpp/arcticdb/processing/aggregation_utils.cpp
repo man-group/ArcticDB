@@ -12,8 +12,7 @@ namespace arcticdb {
 
 void add_data_type_impl(entity::DataType data_type, std::optional<entity::DataType>& current_data_type) {
     if (current_data_type.has_value()) {
-        auto common_type = has_valid_common_type(entity::TypeDescriptor(*current_data_type, 0),
-                                                 entity::TypeDescriptor(data_type, 0));
+        const auto common_type = promotable_type(make_scalar_type(*current_data_type), make_scalar_type(data_type));
         schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                 common_type.has_value(),
                 "Cannot perform aggregation on column, incompatible types present: {} and {}",
