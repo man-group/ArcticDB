@@ -73,8 +73,8 @@ write_frame(
         const SlicingPolicy &slicing,
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats,
-        VersionId version_id);
+        bool sparsify_floats = false,
+        std::optional<VersionId> version_id = std::nullopt);
 
 folly::Future<std::vector<SliceAndKey>> write_segment(
         const SegmentInMemory& segment,
