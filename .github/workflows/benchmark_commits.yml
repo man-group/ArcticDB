@@ -70,17 +70,11 @@ jobs:
         with:
           micromamba-version: 2.1.0-0
 
-      - name: Install libmambapy
-        shell: bash -el {0}
-        run: |
-          micromamba install -y -c conda-forge "libmambapy<2"
-
-      - name: Install ASV
+      - name: Install libmambapy<2 and ASV
         shell: bash -el {0}
         run: |
           git config --global --add safe.directory .
-          python -m pip install --upgrade pip
-          pip install asv virtualenv
+          micromamba install -y -c conda-forge "libmambapy<2" pip asv virtualenv
           python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
       - name: Configure what suite or tests to execute
