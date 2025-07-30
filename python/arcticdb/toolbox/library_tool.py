@@ -174,7 +174,7 @@ class LibraryTool(LibraryToolImpl):
 
     def dataframe_to_segment_in_memory(self, df : pd.DataFrame, stream_id):
         item, norm_meta = self.normalize_dataframe_with_nvs_defaults(df)
-        return item_to_segment_in_memory(stream_id, item, norm_meta, None)
+        return self.item_to_segment_in_memory(stream_id, item, norm_meta, None)
     
     def overwrite_append_data_with_dataframe(self, key : VariantKey, df : pd.DataFrame) -> SegmentInMemory:
         """
