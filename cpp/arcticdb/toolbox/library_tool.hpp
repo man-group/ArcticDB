@@ -48,6 +48,8 @@ public:
 
     void overwrite_segment_in_memory(VariantKey key, SegmentInMemory& segment_in_memory);
 
+    SegmentInMemory item_to_segment_in_memory(StreamId stream_id, const py::tuple &item, const py::object &norm, const py::object & user_meta, std::optional<AtomKey> next_key);
+
     SegmentInMemory overwrite_append_data(VariantKey key, const py::tuple &item, const py::object &norm, const py::object & user_meta);
 
     void remove(VariantKey key);

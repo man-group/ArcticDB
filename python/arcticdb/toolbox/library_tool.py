@@ -172,6 +172,10 @@ class LibraryTool(LibraryToolImpl):
         dynamic_strings = self._nvs._resolve_dynamic_strings({})
         return normalize_dataframe(df, dynamic_schema=dynamic_schema, empty_types=empty_types, dynamic_strings=dynamic_strings)
 
+    def dataframe_to_segment_in_memory(self, df : pd.DataFrame, stream_id):
+        item, norm_meta = self.normalize_dataframe_with_nvs_defaults(df)
+        return item_to_segment_in_memory(stream_id, item, norm_meta, None)
+    
     def overwrite_append_data_with_dataframe(self, key : VariantKey, df : pd.DataFrame) -> SegmentInMemory:
         """
         Overwrites the append data key with the provided dataframe. Use with extreme caution as overwriting with
