@@ -222,8 +222,8 @@ write_frame(
                                                     });
                                         }, [&key, &store, &de_dup_map, &version_id] (const SegmentInMemory& segment) {
                                               ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
-                                              assert(version_id != std::nullopt);
-                                              auto fut_slice_keys = write_segment(segment, store, de_dup_map, version_id);
+                                              assert(version_id.has_value());
+                                              auto fut_slice_keys = write_segment(segment, store, de_dup_map, version_id.value());
                                               // Write the keys of the slices into an index segment
                                               ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
                                               auto index =  stream::index_type_from_descriptor(segment.descriptor());
