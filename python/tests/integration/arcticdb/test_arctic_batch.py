@@ -1105,26 +1105,27 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     lib_tool.remove(s1_index_key)
     lib_tool.remove(s2_data_key)
     lib_tool.remove(s3_key_to_delete)
+    assert s3_key_to_delete not in lib_tool.find_keys_for_id(KeyType.VERSION, "s3"), "Key is successfully deleted"
     q = QueryBuilder()
     q = q[q["a"] < 5]
     # When
     batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)], query_builder=q)
     # Then
-    assert isinstance(batch[0], DataError)
+    assert isinstance(batch[0], DataError) # now we check for key if deleted, look up
     assert batch[0].symbol == "s1"
     assert batch[0].version_request_type == VersionRequestType.LATEST
     assert batch[0].version_request_data is None
     assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
     assert batch[0].error_category == ErrorCategory.STORAGE
 
-    assert isinstance(batch[1], DataError)
+    assert isinstance(batch[1], DataError) # now we check for key if deleted, look up
     assert batch[1].symbol == "s2"
     assert batch[1].version_request_type == VersionRequestType.LATEST
     assert batch[1].version_request_data is None
     assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
     assert batch[1].error_category == ErrorCategory.STORAGE
 
-    assert isinstance(batch[2], DataError)
+    assert isinstance(batch[2], DataError) # now we check for key if deleted, look up
     assert batch[2].symbol == "s3"
     assert batch[2].version_request_type == VersionRequestType.SPECIFIC
     assert batch[2].version_request_data == 0
