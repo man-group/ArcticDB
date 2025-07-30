@@ -409,7 +409,7 @@ jobs:
         uses: ./.github/actions/enable_logging
 
       - name: Run test
-        if: ${{ env.real_tests_storage_type != 'AZURE' || env.real_tests_storage_type == 'AZURE' && inputs.python3 == '11' }}
+        if: ${{ env.real_tests_storage_type != 'AZURE' || env.real_tests_storage_type == 'AZURE' && inputs.python3 == '12' }}
         run: |
           ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
@@ -422,7 +422,7 @@ jobs:
             cd python
             rm -rf arcticc
             catch=`{ which catchsegv 2>/dev/null || echo ; } | tail -n 1`
-            $catch python -m pytest --timeout=3600 -v -n auto\
+            $catch python -m pytest --timeout=3600 -v -n 2\
               --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
               $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS tests/${{matrix.type}} 2>&1
             else
