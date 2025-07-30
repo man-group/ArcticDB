@@ -10,6 +10,7 @@ from datetime import datetime
 import os
 import random
 import re
+import sys
 import threading
 from typing import Generator
 import uuid
@@ -75,4 +76,31 @@ def ac_library(request, ac_client, lib_name) -> Generator[Library, None, None]:
     yield lib
     ac.delete_library(lib_name)    
 
+#region Pytest special xfail handling
 
+MACOS = sys.platform == "darwin"
+# This is due issue 9692682845 - has_library may return error on Mac_OS
+# With thisapproach we will xfail dynamically all tests experiencing this error on MacOS
+ERROR_MARKER = "arcticdb_ext.exceptions.InternalException: Azure::Storage::StorageException(404 The specified blob does not exist."
+marked_tests = []  # Global list to collect xfailed test IDs
+
+def pytest_runtest_makereport(item, call):
+    if MACOS and call.excinfo:
+        err_msg = str(call.excinfo.value)
+        if ERROR_MARKER in err_msg:
+            report = pytest.TestReport.from_item_and_call(item, call)
+            report.outcome = "skipped"
+            report.wasxfail = True
+
+            # Collect the test ID
+            marked_tests.append(item.nodeid)
+            return report
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    if marked_tests:
+        terminalreporter.write("\n=== MAC-OS XFAIL SUMMARY ===\n", bold=True)
+        for test_id in marked_tests:
+            terminalreporter.write(f"• {test_id}\n")
+        terminalreporter.write("=============================\n\n")
+
+#endregion
