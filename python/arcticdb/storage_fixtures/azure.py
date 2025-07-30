@@ -9,6 +9,8 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import re
 import shutil
+import stat
+import tempfile
 import uuid
 from typing import TYPE_CHECKING, Optional, Union
 from tempfile import mkdtemp
@@ -216,6 +218,21 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         pass            
 
 
+def copy_ca_certs(source_path: str, new_filename: str) -> str:
+    """
+    Copies a file to the system's temporary directory under a new filename.
+    Sets the file permissions to readable and writable by everyone (chmod 666).
+    Returns the full path to the new file.
+    """
+    temp_dir = tempfile.gettempdir()
+    destination_path = os.path.join(temp_dir, new_filename)
+    shutil.copy2(source_path, destination_path)
+    os.chmod(destination_path, stat.S_IRUSR | stat.S_IWUSR | 
+                         stat.S_IRGRP | stat.S_IWGRP |  
+                         stat.S_IROTH | stat.S_IWOTH) 
+    return destination_path
+
+
 class AzureStorageFixtureFactory(StorageFixtureFactory):
 
     endpoint: str
@@ -231,8 +248,13 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
     def __init__(self, native_config: Optional[dict] = None):
         self.native_config = native_config
         if _LINUX:
-            AzureStorageFixtureFactory.client_cert_file = "/etc/ssl/certs/ca-certificates.crt"
-            os.path.exists(AzureStorageFixtureFactory.client_cert_file), f"CA file: {AzureStorageFixtureFactory.client_cert_file} not found!"
+            ca_certs_file = "/etc/ssl/certs/ca-certificates.crt"
+            os.path.exists(ca_certs_file), f"CA file: {ca_certs_file} not found!"
+            ca_certs_path = copy_ca_certs(ca_certs_file, "ca-certificates.crt")
+            AzureStorageFixtureFactory.client_cert_file = ca_certs_path
+            file_stats = os.stat(ca_certs_path)
+            get_logger().info(f"File: {ca_certs_file}, copied to: {ca_certs_path}")
+            get_logger().info(f"File: {ca_certs_path}, stats: {file_stats}")
 
     def _safe_enter(self):
         pass
