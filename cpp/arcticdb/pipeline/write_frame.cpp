@@ -182,6 +182,9 @@ folly::Future<std::vector<SliceAndKey>> write_segment(
     });
 }
 
+// TODO: Overload this function to also take a SegmentInMemory.
+// Instead of relying on the `slice` and `write_slices` for the SegmentInMemory case we can just use:
+// SegmentInMemory::split for the slicing and a folly::window with store->async_write on each segment from the vector.
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputTensorFrame> &frame,
         const SlicingPolicy &slicing,
@@ -207,7 +210,7 @@ write_frame(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats,
-        VersionId version_id) {
+        std::optional<VersionId> version_id = std::nullopt) {
     return arcticdb::util::variant_match(frame, [&key, &slicing, &store, &de_dup_map, &sparsify_floats] (const std::shared_ptr<InputTensorFrame>& frame) {
                                             ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
                                             auto fut_slice_keys = slice_and_write(frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats);
@@ -219,6 +222,7 @@ write_frame(
                                                     });
                                         }, [&key, &store, &de_dup_map, &version_id] (const SegmentInMemory& segment) {
                                               ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
+                                              assert(version_id != std::nullopt);
                                               auto fut_slice_keys = write_segment(segment, store, de_dup_map, version_id);
                                               // Write the keys of the slices into an index segment
                                               ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
