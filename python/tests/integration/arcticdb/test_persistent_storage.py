@@ -3,7 +3,7 @@ import pytest
 import os
 from arcticdb.arctic import Arctic, Library
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.util.utils import get_logger
+from arcticdb.util.logger import get_logger
 from tests.conftest import (
     real_gcp_storage, 
     real_gcp_storage_without_clean_up, 

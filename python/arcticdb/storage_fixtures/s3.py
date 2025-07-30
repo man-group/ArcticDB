@@ -28,7 +28,7 @@ import botocore.exceptions
 from moto.server import DomainDispatcherApplication, create_backend_app
 
 from arcticdb.storage_fixtures.azure import AzureStorageFixtureFactory
-from arcticdb.util.utils import get_logger
+from arcticdb.util.logger import get_logger
 
 from .api import *
 from .utils import (

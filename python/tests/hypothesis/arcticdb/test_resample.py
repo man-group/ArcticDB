@@ -10,7 +10,7 @@ from arcticdb.util.test import generic_resample_test
 from arcticdb.util._versions import IS_PANDAS_TWO
 from hypothesis.extra.pandas import column
 
-from arcticdb.util.utils import get_logger
+from arcticdb.util.logger import get_logger
 
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]

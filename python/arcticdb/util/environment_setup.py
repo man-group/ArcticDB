@@ -18,6 +18,7 @@ from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_azure_from_environment_variables, real_s3_from_environment_variables
 from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber
+from arcticdb.util.logger import get_logger
 from arcticdb.version_store.library import Library
 
 
@@ -26,61 +27,6 @@ AWS_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 GCP_S3_DEFAULT_BUCKET = 'arcticdb-asv-real-storage'
 AZURE_DEFAULT_CONTAINER = 'githubasvtests' # defined at 'arcticdbgithub' storage account
 AZURE_ACCOUNT_NAME = 'arcticdbgithub'
-
-class GitHubSanitizingHandler(logging.StreamHandler):
-    """
-    The handler sanitizes messages only when execution is in GitHub
-    """
-
-    def emit(self, record: logging.LogRecord):
-        # Sanitize the message here
-        record.msg = self.sanitize_message(record.msg)
-        super().emit(record)
-
-    @staticmethod
-    def sanitize_message(message: str) -> str:
-        if (os.getenv("GITHUB_ACTIONS") == "true") and isinstance(message, str):
-            # Use regex to find and replace sensitive access keys
-            sanitized_message = re.sub(r'(secret=)[^\s&]+', r'\1***', message)
-            sanitized_message = re.sub(r'(access=)[^\s&]+', r'\1***', sanitized_message)
-            sanitized_message = re.sub(r'AccountKey=([^;]+)', r'AccountKey=***', sanitized_message) 
-            return sanitized_message
-        return message
-
-
-loggers:Dict[str, logging.Logger] = {}
-
-
-def get_console_logger(bencmhark_cls: Union[str, Any] = None):
-    """
-    Creates logger instance with associated console handler.
-    The logger name can be either passed as string or class,
-    or if not automatically will assume the caller module name
-    """
-    logLevel = logging.INFO
-    if bencmhark_cls:
-        if isinstance(bencmhark_cls, str):
-            value = bencmhark_cls
-        else:
-            value = type(bencmhark_cls).__name__
-        name = value
-    else:
-        frame = inspect.stack()[1]
-        module = inspect.getmodule(frame[0])
-        name = module.__name__
-
-    logger = loggers.get(name, None)
-    if logger :
-        return logger
-    logger = logging.getLogger(name)    
-    logger.setLevel(logLevel)
-    console_handler = GitHubSanitizingHandler()
-    console_handler.setLevel(logLevel)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-    console_handler.setFormatter(formatter)
-    logger.addHandler(console_handler)
-    loggers[name] = logger
-    return logger
 
 
 class Storage(Enum):
@@ -261,7 +207,7 @@ class TestLibraryManager:
         StorageSetup()
 
     def log_info(self):
-        logger = get_console_logger()
+        logger = get_logger()
         if len(self._ac_cache) < 2:
             self._get_arctic_client_persistent() # Forces uri generation
             self._get_arctic_client_modifiable() # Forces uri generation
@@ -378,7 +324,7 @@ class TestLibraryManager:
         lib_names = set(ac.list_libraries())
         for to_delete in lib_names:
             ac.delete_library(to_delete)  
-            get_console_logger().info(f"Delete library [{to_delete}] from storage space having [{uri_str_to_confirm}]")          
+            get_logger().info(f"Delete library [{to_delete}] from storage space having [{uri_str_to_confirm}]")          
         assert len(ac.list_libraries()) == 0, f"All libs for storage space [{uri_str_to_confirm}] deleted"        
 
     def remove_all_persistent_libs_for_this_test(self):
@@ -392,7 +338,7 @@ class TestLibraryManager:
         for to_delete in lib_names:
             if to_delete.startswith(name_prefix):
                 ac.delete_library(to_delete)  
-                get_console_logger().info(f"Delete library [{to_delete}]")          
+                get_logger().info(f"Delete library [{to_delete}]")          
 
 
 class DataFrameGenerator(ABC):
@@ -674,7 +620,7 @@ class TestsForTestLibraryManager:
         """
         symbol = "symbol"
         storage = Storage.AMAZON
-        logger = get_console_logger()
+        logger = get_logger()
         tlm = TestLibraryManager(storage, "TEST_TEST_MODE").set_test_mode()
         df = DFGenerator(10).add_int_col("int").generate_dataframe()
         TestLibraryManager.remove_all_test_libs(storage)
@@ -701,7 +647,7 @@ class TestsForTestLibraryManager:
         """
         symbol = "symbol"
         storage = Storage.AMAZON
-        logger = get_console_logger()
+        logger = get_logger()
         tlm = TestLibraryManager(storage, "TEST_MODIFIABLE_ACCESS").set_test_mode()
         df = DFGenerator(10).add_int_col("int").generate_dataframe()
 
@@ -745,7 +691,7 @@ class TestsForTestLibraryManager:
     @classmethod
     def test_library_populator(cls):
         storage = Storage.GOOGLE
-        logger = get_console_logger()
+        logger = get_logger()
         tlm = TestLibraryManager(storage, "Library_populator").set_test_mode()
         lib_name_suffix = "mylib"
 
@@ -796,7 +742,7 @@ class TestsForTestLibraryManager:
 
         num_processes = 7
         storage = Storage.AMAZON
-        logger = get_console_logger()
+        logger = get_logger()
         benchmark_name = "MULTIPROCESSING"
 
         df =  DFGenerator.generate_random_dataframe(10, 10)

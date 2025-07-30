@@ -409,9 +409,10 @@ jobs:
         uses: ./.github/actions/enable_logging
 
       - name: Run test
-        if: ${{ env.real_tests_storage_type != 'AZURE' || env.real_tests_storage_type == 'AZURE' && inputs.python3 == '12' }}
         run: |
-          openssl version -d
+          # find ssl directory where cacerts are (for Azure)
+          openssl version -d 
+          # list file descriptors and other limits of the runner
           ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             python -m pip  install pytest-repeat setuptools wheel
@@ -419,16 +420,7 @@ jobs:
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
           else
-            if [[ "$STORAGE_TYPE" == "AZURE" ]]; then          
-            cd python
-            rm -rf arcticc
-            catch=`{ which catchsegv 2>/dev/null || echo ; } | tail -n 1`
-            $catch python -m pytest --timeout=3600 -v -n 2\
-              --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
-              $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS tests/${{matrix.type}} 2>&1
-            else
-              build_tooling/parallel_test.sh tests/${{matrix.type}}
-            fi
+            build_tooling/parallel_test.sh tests/${{matrix.type}}
           fi
         env:
           TEST_OUTPUT_DIR: ${{runner.temp}}

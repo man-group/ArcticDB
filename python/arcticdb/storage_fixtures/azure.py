@@ -15,7 +15,7 @@ import uuid
 from typing import TYPE_CHECKING, Optional, Union
 from tempfile import mkdtemp
 
-from arcticdb.util.utils import get_logger
+from arcticdb.util.logger import get_logger
 
 
 from .api import *

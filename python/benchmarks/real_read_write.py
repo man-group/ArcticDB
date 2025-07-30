@@ -11,7 +11,8 @@ import numpy as np
 import pandas as pd
 
 from arcticdb.options import LibraryOptions
-from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, get_console_logger, populate_library_if_missing
+from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library_if_missing
+from arcticdb.util.logger import get_logger
 from arcticdb.util.utils import DFGenerator, DataRangeUtils, TimestampNumber
 import arcticdb.toolbox.query_stats as qs
 from benchmarks.common import AsvBase
@@ -66,7 +67,7 @@ class AWSReadWrite(AsvBase):
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="READ_WRITE")
 
     def get_logger(self) -> Logger:
-        return get_console_logger(self)
+        return get_logger(self)
 
     def get_library_manager(self) -> TestLibraryManager:
         return AWSReadWrite.library_manager
