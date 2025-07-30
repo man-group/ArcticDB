@@ -210,7 +210,7 @@ write_frame(
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats,
-        std::optional<VersionId> version_id = std::nullopt) {
+        std::optional<VersionId> version_id) {
     return arcticdb::util::variant_match(frame, [&key, &slicing, &store, &de_dup_map, &sparsify_floats] (const std::shared_ptr<InputTensorFrame>& frame) {
                                             ARCTICDB_SAMPLE_DEFAULT(WriteFrame)
                                             auto fut_slice_keys = slice_and_write(frame, slicing, IndexPartialKey{key}, store, de_dup_map, sparsify_floats);
