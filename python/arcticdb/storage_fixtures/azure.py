@@ -217,6 +217,19 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         # Do nothing in this case
         pass            
 
+def find_ca_certs():
+    # Common CA certificates locations
+    possible_paths = [
+        '/etc/ssl/certs/ca-certificates.crt',
+        '/usr/lib/ssl/certs/ca-certificates.crt',
+        '/etc/pki/tls/certs/ca-bundle.crt',
+        '/etc/ssl/cert.pem'
+    ]
+    for path in possible_paths:
+        if os.path.exists(path):
+            return path
+    return None
+
 
 def copy_ca_certs(source_path: str, new_filename: str) -> str:
     """
@@ -248,8 +261,8 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
     def __init__(self, native_config: Optional[dict] = None):
         self.native_config = native_config
         if _LINUX:
-            ca_certs_file = "/etc/ssl/certs/ca-certificates.crt"
-            os.path.exists(ca_certs_file), f"CA file: {ca_certs_file} not found!"
+            ca_certs_file = find_ca_certs()
+            assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
             ca_certs_path = copy_ca_certs(ca_certs_file, "ca-certificates.crt")
             AzureStorageFixtureFactory.client_cert_file = ca_certs_path
             file_stats = os.stat(ca_certs_path)

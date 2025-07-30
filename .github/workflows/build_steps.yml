@@ -411,6 +411,7 @@ jobs:
       - name: Run test
         if: ${{ env.real_tests_storage_type != 'AZURE' || env.real_tests_storage_type == 'AZURE' && inputs.python3 == '12' }}
         run: |
+          openssl version -d
           ulimit -a
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             python -m pip  install pytest-repeat setuptools wheel
