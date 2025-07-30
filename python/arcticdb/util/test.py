@@ -5,7 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
-
+import copy
 import os
 from contextlib import contextmanager
 from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
@@ -928,9 +928,27 @@ def generic_resample_test(
         resample_args["offset"] = offset
 
     if PANDAS_VERSION >= Version("1.1.0"):
-        expected = original_data.resample(rule, closed=closed, label=label, **resample_args).agg(
-            None, **pandas_aggregations
-        )
+        resampler = original_data.resample(rule, closed=closed, label=label, **resample_args)
+        try:
+            expected = resampler.agg(None, **pandas_aggregations)
+        except ValueError:
+            bins = resampler.groups.keys()
+            if len(bins) == 0:
+                # This is due to a bug in Pandas https://github.com/pandas-dev/pandas/issues/44957
+                # When none of the values fall in any bucket Pandas, the groups in the resampler are empty, and Pandas
+                # throws ValueError. ArcticDB behaves reasonably and returns an empty DataFrame.
+                # This seems possible only if the origin is end_day
+                if expected_types is not None:
+                    _expected_types = copy.deepcopy(expected_types)
+                    _expected_types["_bucket_size_"] = np.uint64
+                else:
+                    _expected_types = None
+                expected = pd.DataFrame(
+                    {col_name: np.array([], dtype=_expected_types[col_name] if _expected_types else None) for col_name in pandas_aggregations},
+                    index=pd.DatetimeIndex([])
+                )
+            else:
+                raise
     else:
         expected = original_data.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
     if drop_empty_buckets_for:
