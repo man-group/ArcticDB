@@ -1526,18 +1526,17 @@ def test_ok_chars_snapshots(arctic_library_v1, snap):
     assert arctic_library.list_snapshots() == {snap: None}
 
 
-def test_backing_store(lmdb_storage, s3_version_store_v1):
-    ac = lmdb_storage.create_arctic()
-    lib = ac.create_library("abc")
-    lib_cfg = lib._nvs.lib_cfg()
+def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib_cfg = lib.lib_cfg()
     primary_storage_id = list(lib_cfg.storage_by_id.keys())[0]
     secondary_storage_id = "abc"
+    # The order of protobuf map is an UB but dict is insertion ordered
     new_storage_by_id = {
         secondary_storage_id: list(s3_version_store_v1.lib_cfg().storage_by_id.values())[0],
         primary_storage_id: lib_cfg.storage_by_id[primary_storage_id],
     }
     lib_cfg.lib_desc.storage_ids.append(secondary_storage_id)
-    # The order of protobuf map is an UB but dict is insertion ordered
     class LibraryConfigWrapper:
         def __init__(self, original_lib_cfg, controlled_storage_by_id):
             self._original = original_lib_cfg
@@ -1553,7 +1552,7 @@ def test_backing_store(lmdb_storage, s3_version_store_v1):
     new_lib_cfg = LibraryConfigWrapper(lib_cfg, new_storage_by_id)
     # get_backing_store() was only returning backed storage at the beginning of the list
     # so we need to recreate the situation so confirm now it returns primary storage
-    assert list(new_lib_cfg.storage_by_id.keys())[0] == secondary_storage_id # insertion order
+    assert list(new_lib_cfg.storage_by_id.keys())[0] == secondary_storage_id
     lib_with_s3 = NativeVersionStore.create_store_from_lib_config(
         new_lib_cfg, env=Defaults.ENV, open_mode=OpenMode.DELETE
     )
