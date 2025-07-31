@@ -178,12 +178,12 @@ public:
 
     size_t compact_symbol_list_internal() override;
 
-    VersionedItem  write_versioned_dataframe_internal(
-        const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
-        bool prune_previous_versions,
-        bool allow_sparse,
-        bool validate_index
+    VersionedItem write_versioned_dataframe_internal(
+            const StreamId& stream_id,
+            const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+            bool prune_previous_versions,
+            bool allow_sparse,
+            bool validate_index
     ) override;
 
     VersionedItem write_versioned_metadata_internal(

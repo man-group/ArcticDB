@@ -55,6 +55,14 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
         bool allow_sparse = false
 );
 
+folly::Future<std::vector<SliceAndKey>> slice_and_write(
+        const SegmentInMemory& segment,
+        const SlicingPolicy& slicing,
+        IndexPartialKey&& key,
+        const std::shared_ptr<stream::StreamSink>& sink,
+        const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>()
+);
+
 int64_t write_window_size();
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
@@ -67,13 +75,19 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         bool sparsify_floats);
 
 folly::Future<entity::AtomKey> write_frame(
-    IndexPartialKey &&key,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    const SlicingPolicy &slicing,
-    const std::shared_ptr<Store> &store,
-    const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-    bool allow_sparse = false
-);
+        IndexPartialKey&& key,
+        const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+        const SlicingPolicy &slicing,
+        const std::shared_ptr<Store>& store,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        bool sparsify_floats = false,
+        std::optional<VersionId> version_id = std::nullopt);
+
+folly::Future<std::vector<SliceAndKey>> write_segment(
+        const SegmentInMemory& segment,
+        const std::shared_ptr<stream::StreamSink>& sink,
+        const std::shared_ptr<DeDupMap>& de_dup_map,
+        VersionId version_id);
 
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key,
