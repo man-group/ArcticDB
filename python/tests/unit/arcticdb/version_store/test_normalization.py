@@ -1277,8 +1277,16 @@ def test_multi_index_same_names(lmdb_version_store_v1):
             [i%4 for i in range(10)],
         ]
     )
-    print (df.index.names)
     df.index.names = ["index", "index", "index", "another_index", "another_index"]
     lib.write("sym", df)
     result_df = lib.read("sym").data
+    assert_frame_equal(result_df, df)
+
+@pytest.mark.xfail(reason="Monday ref: 9715738171")
+def test_digit_columns(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(np.arange(20).resize(10, 2), columns=[1, "1"])
+    lib.write("sym", df)
+    result_df = lib.read("sym").data
+    # Both column contents and column names are broken
     assert_frame_equal(result_df, df)
