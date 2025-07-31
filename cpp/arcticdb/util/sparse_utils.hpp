@@ -165,6 +165,12 @@ inline util::BitMagic deserialize_bytes_to_bitmap(const std::uint8_t*& input, si
     return bv;
 }
 
+util::BitMagic truncate_sparse_map(
+        const util::BitMagic& input_sparse_map,
+        size_t start_row,
+        size_t end_row
+);
+
 inline void dump_bitvector(const util::BitMagic& bv) {
     auto en = bv.first();
     auto en_end = bv.end();

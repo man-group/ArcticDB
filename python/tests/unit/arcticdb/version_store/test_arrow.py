@@ -1,6 +1,7 @@
 from arcticdb_ext.version_store import OutputFormat
 from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
+from hypothesis.extra.pandas import columns, data_frames
 import pandas as pd
 import numpy as np
 import pytest
@@ -481,4 +482,121 @@ def test_arrow_dynamic_schema_missing_columns_hypothesis(lmdb_version_store_dyna
     )
     received = lib.read(sym, _output_format=OutputFormat.ARROW).data
     received = stringify_dictionary_encoded_columns(received)
+    assert expected.equals(received)
+
+
+# TODO: Extend these tests to other types when Arrow write support is complete
+@pytest.mark.parametrize("type", [pa.float32(), pa.float64()])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_arrow_sparse_floats_basic(version_store_factory, type, dynamic_schema):
+    lib = version_store_factory(dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_basic"
+    table = pa.table({"col": pa.array([1, None, None, 2, None], type)})
+    assert table.column("col").null_count == 3
+    df = table.to_pandas()
+    assert df["col"].isna().sum() == 3
+    lib.write(sym, df, sparsify_floats=True)
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    assert table.equals(received)
+
+
+@pytest.mark.parametrize("type", [pa.float32(), pa.float64()])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_arrow_sparse_floats_row_sliced(version_store_factory, type, dynamic_schema):
+    lib = version_store_factory(segment_row_size=2, dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_row_sliced"
+    table_0 = pa.table({"col": pa.array([1, None], type)})
+    table_1 = pa.table({"col": pa.array([2, 3], type)})
+    table_2 = pa.table({"col": pa.array([None, 4], type)})
+    df_0 = table_0.to_pandas()
+    df_1 = table_1.to_pandas()
+    df_2 = table_2.to_pandas()
+    df = pd.concat([df_0, df_1, df_2])
+    df.index = pd.RangeIndex(0, 6)
+    lib.write(sym, df, sparsify_floats=True)
+    expected = pa.concat_tables([table_0, table_1, table_2])
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    assert expected.equals(received)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("date_range_start", list(pd.date_range("2025-01-01", periods=14)))
+@pytest.mark.parametrize("date_range_width", list(range(0, 15)))
+def test_arrow_sparse_floats_date_range(version_store_factory, dynamic_schema, date_range_start, date_range_width):
+    lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_date_range"
+    table_0 = pa.table({"col": pa.array([1, None, 2, None, 3], pa.float64())})
+    table_1 = pa.table({"col": pa.array([4, None, None, None, None], pa.float64())})
+    table_2 = pa.table({"col": pa.array([None, 5, 6, 7, 8], pa.float64())})
+    df_0 = table_0.to_pandas()
+    df_1 = table_1.to_pandas()
+    df_2 = table_2.to_pandas()
+    df = pd.concat([df_0, df_1, df_2])
+    df.index = pd.date_range("2025-01-01", periods=15)
+    lib.write(sym, df, sparsify_floats=True)
+    date_range = (date_range_start, date_range_start + pd.Timedelta(days=date_range_width))
+    expected = pa.concat_tables([table_0, table_1, table_2]).slice(offset=(date_range_start - pd.Timestamp("2025-01-01")).days, length=date_range_width + 1)
+    received = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    assert expected["col"].equals(received["col"])
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("row_range_start", list(range(14)))
+@pytest.mark.parametrize("row_range_width", list(range(0, 15)))
+def test_arrow_sparse_floats_row_range(version_store_factory, dynamic_schema, row_range_start, row_range_width):
+    lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_row_range"
+    table_0 = pa.table({"col": pa.array([1, None, 2, None, 3], pa.float64())})
+    table_1 = pa.table({"col": pa.array([4, None, None, None, None], pa.float64())})
+    table_2 = pa.table({"col": pa.array([None, 5, 6, 7, 8], pa.float64())})
+    df_0 = table_0.to_pandas()
+    df_1 = table_1.to_pandas()
+    df_2 = table_2.to_pandas()
+    df = pd.concat([df_0, df_1, df_2])
+    df.index = pd.RangeIndex(0, 15)
+    lib.write(sym, df, sparsify_floats=True)
+    row_range = (row_range_start, row_range_start + row_range_width)
+    expected = pa.concat_tables([table_0, table_1, table_2]).slice(offset=row_range[0], length=row_range[1] - row_range[0])
+    received = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    assert expected.equals(received)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        columns(
+            ["col"],
+            elements=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
+            fill=st.just(np.nan)
+        ),
+    ),
+    rows_per_slice=st.integers(2, 10),
+    use_row_range=st.booleans(),
+)
+def test_arrow_sparse_floats_hypothesis(lmdb_version_store_v1, df, rows_per_slice, use_row_range):
+    row_count = len(df)
+    assume(row_count > 0)
+    # Cannot use version_store_factory as it will complain that the library name is the same
+    lib = lmdb_version_store_v1
+    lib._cfg.write_options.segment_row_size = rows_per_slice
+    sym = "test_arrow_sparse_floats_hypothesis"
+    # Each row slice must have at least one non-NaN value for sparsify_floats to work, so add one if there aren't any
+    row_slices = []
+    num_row_slices = (row_count + (rows_per_slice - 1)) // rows_per_slice
+    for i in range(num_row_slices):
+        row_slice = df[i * rows_per_slice: (i + 1) * rows_per_slice]
+        if row_slice["col"].notna().sum() == 0:
+            row_slice["col"][i * rows_per_slice] = 100
+        row_slices.append(row_slice)
+    adjusted_df = pd.concat(row_slices)
+    lib.write(sym, adjusted_df, sparsify_floats=True)
+    if use_row_range:
+        row_range = (row_count // 3, (2 * row_count) // 3)
+        expected = (pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
+                    .slice(offset=row_range[0], length=row_range[1] - row_range[0]))
+        received = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    else:
+        expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
+        received = lib.read(sym, _output_format=OutputFormat.ARROW).data
     assert expected.equals(received)
