@@ -1526,8 +1526,8 @@ def test_ok_chars_snapshots(arctic_library_v1, snap):
     assert arctic_library.list_snapshots() == {snap: None}
 
 
-def test_backing_store(mongo_storage, s3_version_store_v1):
-    ac = mongo_storage.create_arctic()
+def test_backing_store(lmdb_storage, s3_version_store_v1):
+    ac = lmdb_storage.create_arctic()
     lib = ac.create_library("abc")
     lib_cfg = lib._nvs.lib_cfg()
     primary_storage_id = list(lib_cfg.storage_by_id.keys())[0]
@@ -1549,6 +1549,7 @@ def test_backing_store(mongo_storage, s3_version_store_v1):
         
         def __getattr__(self, name):
             return getattr(self._original, name)
+            
     new_lib_cfg = LibraryConfigWrapper(lib_cfg, new_storage_by_id)
     # get_backing_store() was only returning backed storage at the beginning of the list
     # so we need to recreate the situation so confirm now it returns primary storage
@@ -1556,5 +1557,5 @@ def test_backing_store(mongo_storage, s3_version_store_v1):
     lib_with_s3 = NativeVersionStore.create_store_from_lib_config(
         new_lib_cfg, env=Defaults.ENV, open_mode=OpenMode.DELETE
     )
-    assert lib_with_s3.get_backing_store() == "mongo_storage"
+    assert lib_with_s3.get_backing_store() == "lmdb_storage"
 
