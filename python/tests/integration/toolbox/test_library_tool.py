@@ -366,30 +366,18 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     lib_tool = lib.library_tool()
     sym = "sym"
-
-    #sample_df = sample_dataframe()
-
-    sample_df = pd.DataFrame( {"col1": [i for i in range(200)], "col2": [i for i in range(200)], "ime": ["alo" for i in range(200)]})
+    sample_df = sample_dataframe()
 
     segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
-
     lib_tool.write_segment_in_memory(sym, segment)
-
     dataframe = lib.read(sym).data
-
-    print(dataframe)
-
-    print(sample_df)
 
     assert_frame_equal(dataframe, sample_df)
 
-    data_key_count = len(lib_tool.find_keys(sym, KeyType.TABLE_DATA))
-    index_key_count = len(lib_tool.find_keys(sym, KeyType.TABLE_INDEX))
-    version_key_count = len(lib_tool.find_keys(sym, KeyType.VERSION))
+    data_key_count = len(lib_tool.find_keys(KeyType.TABLE_DATA))
+    index_key_count = len(lib_tool.find_keys(KeyType.TABLE_INDEX))
+    version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
 
-    assert data_key_count == len(sample_df.keys()) // 2
-
+    assert data_key_count == len(sample_df) // 2
     assert index_key_count == 1
     assert version_key_count == 1
-
-    assert False

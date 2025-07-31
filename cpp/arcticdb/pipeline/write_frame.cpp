@@ -202,12 +202,12 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
     int64_t write_window = write_window_size();
-    return folly::collect(folly::window(std::move(slices), [key, sink, de_dup_map, &segment, &tsv](auto&& slice) {
+    return folly::collect(folly::window(std::move(slices), [key, sink, de_dup_map, &segment, tsv=std::move(tsv)](auto&& slice) {
                                auto frame_slice = FrameSlice{std::make_shared<entity::StreamDescriptor>(slice.descriptor()), {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()}, {slice.offset(), slice.offset() + slice.row_count()}};
                                auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{
                                        get_partial_key_gen(segment, tsv)(slice), slice, frame_slice
                                };
-                               return sink->async_write(ks, de_dup_map);
+                               return sink->async_write(std::move(ks), de_dup_map);
                            },
                            write_window)).via(&async::io_executor());
 }
