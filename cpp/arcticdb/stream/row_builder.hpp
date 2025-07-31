@@ -51,7 +51,7 @@ class RowBuilder {
     RowBuilder &operator=(RowBuilder &) = delete;
 
     template<class...Args>
-    void start_row(const Args...args) {
+    void start_row([[maybe_unused]] const Args...args) {
         reset();
         if constexpr(sizeof...(Args)> 0 && !std::is_same_v<Index, EmptyIndex>) {
             index().set([&](std::size_t pos, auto arg) {

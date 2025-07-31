@@ -111,6 +111,7 @@ void register_log(py::module && log) {
 
     log.def("log",[&](LoggerId log_id, spdlog::level::level_enum level, const std::string & msg){
         //assuming formatting done in python
+        py::gil_scoped_release gil_release;
         auto & logger = choose_logger(log_id);
         switch(level){
             case spdlog::level::level_enum::debug:
@@ -136,6 +137,7 @@ void register_log(py::module && log) {
     });
 
     log.def("flush_all", [](){
+        py::gil_scoped_release gil_release;
         arcticdb::log::Loggers::instance().flush_all();
     });
 }

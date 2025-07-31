@@ -16,9 +16,9 @@
 #include <arcticdb/column_store/block.hpp>
 #include <arcticdb/util/hash.hpp>
 
+#ifndef DEBUG_BUILD
 #include <boost/container/small_vector.hpp>
-
-#include <cstdint>
+#endif
 
 namespace arcticdb {
 
@@ -183,6 +183,8 @@ class ChunkedBufferImpl {
     }
 
     [[nodiscard]] const auto &blocks() const { return blocks_; }
+
+    [[nodiscard]] const auto &block_offsets() const { return block_offsets_; }
 
     BlockType* block(size_t pos) {
         util::check(pos < blocks_.size(), "Requested block {} out of range {}", pos, blocks_.size());

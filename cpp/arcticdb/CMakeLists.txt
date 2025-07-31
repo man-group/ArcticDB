@@ -535,9 +535,9 @@ set(arcticdb_srcs
         util/offset_string.cpp
         util/sparse_utils.cpp
         util/string_utils.cpp
-        util/timer.cpp
         util/trace.cpp
         util/type_handler.cpp
+        util/format_date.cpp
         version/key_block.hpp
         version/key_block.cpp
         version/local_versioned_engine.cpp
@@ -957,6 +957,7 @@ if(${TEST})
             pipeline/test/test_pipeline.cpp
             pipeline/test/test_query.cpp
             pipeline/test/test_frame_allocation.cpp
+            pipeline/test/test_value.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
@@ -974,6 +975,7 @@ if(${TEST})
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
+            processing/test/test_unsorted_aggregation.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp

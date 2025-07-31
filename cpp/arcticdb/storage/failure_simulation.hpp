@@ -64,8 +64,8 @@ struct FailureAction {
             description_(std::move(description)), proxy_(std::move(proxy)) {}
 
     template<typename Func>
-    FailureAction(Description description, Func func):
-            FailureAction(std::move(description), FunctionWrapper{func}.asSharedProxy()) {}
+    FailureAction(Description description, Func&& func):
+            FailureAction(std::move(description), FunctionWrapper{std::forward<Func>(func)}.asSharedProxy()) {}
 
     inline void operator()(FailureType type) const {
         proxy_(type);

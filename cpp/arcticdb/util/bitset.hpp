@@ -33,22 +33,19 @@ constexpr bm::bvector<>::size_type bv_size(uint64_t val) {
     return static_cast<bm::bvector<>::size_type>(val);
 }
 
-constexpr size_t bitset_unpacked_size(size_t size) {
-    return (size + 63) / 64 * sizeof(uint64_t);
+// The number of bytes needed to hold num_bits in a packed bitset
+constexpr size_t bitset_packed_size_bytes(size_t num_bits) {
+    return (num_bits + 7) / 8;
 }
 
-inline void bitset_to_packed_bits(const bm::bvector<>& bv, uint64_t* dest_ptr) {
-    std::memset(dest_ptr, 0, bitset_unpacked_size(bv.size()));
-
-    auto en = bv.first();
+inline void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
+    std::memset(dest_ptr, 0, bitset_packed_size_bytes(bv.size()));
     auto last = bv.end();
-    for (; en != last; ++en) {
+    for (auto en = bv.first(); en != last; ++en) {
         size_t bit_pos = *en;
-
-        size_t word_idx = bit_pos / 64;
-        size_t bit_idx = bit_pos % 64;
-
-        dest_ptr[word_idx] |= (1ULL << bit_idx);
+        size_t byte_idx = bit_pos / 8;
+        size_t bit_idx = bit_pos % 8;
+        dest_ptr[byte_idx] |= (uint8_t(1) << bit_idx);
     }
 }
 
