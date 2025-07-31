@@ -51,16 +51,17 @@ class RowBuilder {
     RowBuilder &operator=(RowBuilder &) = delete;
 
     template<class...Args>
-    void start_row([[maybe_unused]] const Args&...args) {
+    void start_row([[maybe_unused]] Args&&...args) {
         reset();
         if constexpr(sizeof...(Args)> 0 && !std::is_same_v<Index, EmptyIndex>) {
-            index().set([&](std::size_t pos, auto arg) {
-                if constexpr (std::is_integral_v<decltype(arg)> || std::is_floating_point_v<decltype(arg)>) {
-                    set_scalar_impl(pos, arg);
+            index().set([this](std::size_t pos, auto&& arg) {
+                using ArgType = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_integral_v<ArgType> || std::is_floating_point_v<ArgType>) {
+                    set_scalar_impl(pos, std::forward<decltype(arg)>(arg));
                 } else {
-                    set_string_impl(pos, arg);
+                    set_string_impl(pos, std::forward<decltype(arg)>(arg));
                 }
-            }, args...);
+            }, std::forward<Args>(args)...);
         }
     }
 
