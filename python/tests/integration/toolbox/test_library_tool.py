@@ -382,6 +382,14 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment):
     print(sample_df)
 
     assert_frame_equal(dataframe, sample_df)
-    # check version_key, index_key, table data key
+
+    data_key_count = len(lib_tool.find_keys(sym, KeyType.TABLE_DATA))
+    index_key_count = len(lib_tool.find_keys(sym, KeyType.TABLE_INDEX))
+    version_key_count = len(lib_tool.find_keys(sym, KeyType.VERSION))
+
+    assert data_key_count == len(sample_df.keys()) // 2
+
+    assert index_key_count == 1
+    assert version_key_count == 1
 
     assert False

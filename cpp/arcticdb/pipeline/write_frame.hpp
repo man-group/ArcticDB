@@ -83,12 +83,6 @@ folly::Future<entity::AtomKey> write_frame(
         bool sparsify_floats = false,
         std::optional<VersionId> version_id = std::nullopt);
 
-folly::Future<std::vector<SliceAndKey>> write_segment(
-        const SegmentInMemory& segment,
-        const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map,
-        VersionId version_id);
-
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key,
         const std::shared_ptr<InputTensorFrame>& frame,

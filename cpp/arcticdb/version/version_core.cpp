@@ -124,7 +124,6 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
                                                              return slicing_arg;
                                                         });
 
-
     return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats, version_id);
 }
 

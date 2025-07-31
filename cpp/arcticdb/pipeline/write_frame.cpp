@@ -166,23 +166,6 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     }, write_window)).via(&async::io_executor());
 }
 
-folly::Future<std::vector<SliceAndKey>> write_segment(
-        const SegmentInMemory& segment,
-        const std::shared_ptr<stream::StreamSink>& sink,
-        const std::shared_ptr<DeDupMap>& de_dup_map,
-        VersionId version_id) {
-    ARCTICDB_SAMPLE(WriteSlices, 0)
-
-    auto slice = FrameSlice(segment);
-    using PartialKey = stream::StreamSink::PartialKey;
-    using KeyType = entity::KeyType;
-    auto pkey = PartialKey{KeyType::TABLE_DATA, version_id, segment.descriptor().id(), 0, static_cast<int64_t>(segment.row_count())};
-    auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{pkey, segment, slice};
-    return std::move(sink -> async_write(ks, de_dup_map)).thenValue([](SliceAndKey sk) {
-        return std::vector<SliceAndKey> {std::move(sk)};
-    });
-}
-
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
         const std::shared_ptr<InputTensorFrame> &frame,
         const SlicingPolicy &slicing,
@@ -219,9 +202,6 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
     int64_t write_window = write_window_size();
-
-    std::cerr<<segment.descriptor_ptr()<<std::endl;
-
     return folly::collect(folly::window(std::move(slices), [key, sink, de_dup_map, &segment, &tsv](auto&& slice) {
                                auto frame_slice = FrameSlice{std::make_shared<entity::StreamDescriptor>(slice.descriptor()), {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()}, {slice.offset(), slice.offset() + slice.row_count()}};
                                auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{
