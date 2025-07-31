@@ -20,7 +20,8 @@ import numpy as np
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb.util.test import dataframe_simulate_arcticdb_update_static
-from arcticdb.util.utils import DFGenerator, TimestampNumber, get_logger
+from arcticdb.util.utils import DFGenerator, TimestampNumber
+from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.library import Library, UpdatePayload, WritePayload
 from arcticdb.util.test import assert_frame_equal
