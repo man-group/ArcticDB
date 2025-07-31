@@ -31,6 +31,7 @@ jobs:
       CMAKE_C_COMPILER_LAUNCHER: sccache
       CMAKE_CXX_COMPILER_LAUNCHER: sccache
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME: "0"
     defaults:
       run: {shell: bash}
     steps:  

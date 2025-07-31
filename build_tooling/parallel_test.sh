@@ -17,6 +17,7 @@ MSYS=winsymlinks:nativestrict ln -s "$(realpath "$tooling_dir/../python/tests")"
 cd $PARALLEL_TEST_ROOT
 
 export ARCTICDB_RAND_SEED=$RANDOM
+export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME="0"
 if [ "$VERSION_MAP_RELOAD_INTERVAL" != "-1" ]; then
     export ARCTICDB_VersionMap_ReloadInterval_int=$VERSION_MAP_RELOAD_INTERVAL
 fi
