@@ -14,6 +14,7 @@ class ListFunctions:
 
     number = 5
     timeout = 6000
+    warmup_time = 0    
 
     params = [500, 1000]
     param_names = ["num_symbols"]

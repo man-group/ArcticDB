@@ -27,6 +27,7 @@ class ComparisonBenchmarks:
         - read/write dataframe to arcticdb
     """
     number = 5
+    warmup_time = 0    
     timeout = 60000
 
     LIB_NAME = "compare"
