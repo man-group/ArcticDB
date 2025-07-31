@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from pandas.testing import assert_frame_equal
+from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 import pyarrow as pa
 from arcticdb.util.hypothesis import (
@@ -117,6 +118,17 @@ def test_strings_basic(lmdb_version_store_v1, dynamic_strings):
     vit = lib.read("arrow", _output_format=OutputFormat.ARROW)
     result = convert_pandas_categorical_to_str(vit.data.to_pandas())
     assert_frame_equal(result, df)
+
+
+@pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
+def test_fixed_width_strings(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_fixed_width_strings"
+    df0 = pd.DataFrame({"my_column": ["hello", "goodbye"]})
+    lib.write(sym, df0, dynamic_strings=False)
+    with pytest.raises(SchemaException) as e:
+        lib.read(sym, _output_format=OutputFormat.ARROW)
+    assert "my_column" in str(e.value) and "Arrow" in str(e.value)
 
 
 @pytest.mark.parametrize("dynamic_strings", [
