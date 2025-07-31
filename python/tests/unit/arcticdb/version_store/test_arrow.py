@@ -206,9 +206,9 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 3), (3, 75), (4, 32), (0, 99), (7, 56)])
 def test_date_range(version_store_factory, segment_row_size, start_offset, end_offset):
-    lib = version_store_factory(segment_row_size=segment_row_size)
+    lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
     initial_timestamp = pd.Timestamp("2019-01-01")
-    df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100), columns=['x'])
+    df = pd.DataFrame({"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]}, index=pd.date_range(initial_timestamp, periods=100))
     sym = "arrow_date_test"
     lib.write(sym, df)
 
@@ -217,11 +217,15 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
 
     date_range = (query_start_ts, query_end_ts)
     data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    data_closed_table = stringify_dictionary_encoded_columns(data_closed_table)
     df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
     assert query_start_ts == df.index[0]
     assert query_end_ts == df.index[-1]
-    assert df['x'].iloc[0] == start_offset
-    assert df['x'].iloc[-1] == end_offset
+    assert df['numeric'].iloc[0] == start_offset
+    assert df['numeric'].iloc[-1] == end_offset
+    assert df['strings'].iloc[0] == f"{start_offset}"
+    assert df['strings'].iloc[-1] == f"{end_offset}"
+
 
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_date,end_date", [(1, 1), (1, 4), (1, 5), (3, 7), (6, 7), (6, 10), (7, 7)])
@@ -292,22 +296,25 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 4), (3, 76), (4, 33), (0, 100), (7, 57)])
 def test_row_range(version_store_factory, segment_row_size, start_offset, end_offset):
-    lib = version_store_factory(segment_row_size=segment_row_size)
+    lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
     initial_timestamp = pd.Timestamp("2019-01-01")
-    df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100), columns=['x'])
+    df = pd.DataFrame({"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]}, index=pd.date_range(initial_timestamp, periods=100))
     sym = "arrow_date_test"
     lib.write(sym, df)
 
     row_range = (start_offset, end_offset)
     data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    data_closed_table = stringify_dictionary_encoded_columns(data_closed_table)
     df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
 
     start_ts = initial_timestamp + pd.DateOffset(start_offset)
     end_ts = initial_timestamp + pd.DateOffset(end_offset-1)
     assert start_ts == df.index[0]
     assert end_ts == df.index[-1]
-    assert df['x'].iloc[0] == start_offset
-    assert df['x'].iloc[-1] == end_offset-1
+    assert df['numeric'].iloc[0] == start_offset
+    assert df['numeric'].iloc[-1] == end_offset-1
+    assert df['strings'].iloc[0] == f"{start_offset}"
+    assert df['strings'].iloc[-1] == f"{end_offset - 1}"
 
 
 def test_with_querybuilder(lmdb_version_store_v1):
