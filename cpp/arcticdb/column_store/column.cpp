@@ -659,48 +659,12 @@ void Column::truncate_single_block(size_t start_row, size_t end_row) {
     return {start_byte, end_byte};
 }
 
-[[nodiscard]] static util::BitMagic truncate_sparse_map(
-    const util::BitMagic& input_sparse_map,
-    size_t start_row,
-    size_t end_row
-) {
-    // The output sparse map is the slice [start_row, end_row) of the input sparse map
-    // BitMagic doesn't have a method for this, so hand-roll it here
-    // Ctor parameter is the size
-    util::BitMagic output_sparse_map(end_row - start_row);
-    util::BitSet::bulk_insert_iterator inserter(output_sparse_map);
-    util::BitSetSizeType set_input_bit;
-    if (start_row == 0) {
-        // get_first can return 0 if no bits are set, but we checked earlier that input_sparse_map.size() > 0,
-        // and we do not have sparse maps with no bits set (except for the empty type)
-        set_input_bit = input_sparse_map.get_first();
-        if (set_input_bit < end_row) {
-            inserter = set_input_bit;
-        }
-    } else {
-        set_input_bit = input_sparse_map.get_next(start_row - 1);
-        // get_next returns 0 if no more bits are set
-        if (set_input_bit != 0 && set_input_bit < end_row) {
-            // Shift start_row elements to the left
-            inserter = set_input_bit - start_row;
-        }
-    }
-    do {
-        set_input_bit = input_sparse_map.get_next(set_input_bit);
-        if (set_input_bit != 0 && set_input_bit < end_row) {
-            inserter = set_input_bit - start_row;
-        }
-    } while (set_input_bit != 0);
-    inserter.flush();
-    return output_sparse_map;
-}
-
 std::shared_ptr<Column> Column::truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row) {
     const auto [start_byte, end_byte] = column_start_end_bytes(*column, start_row, end_row);
     auto buffer = ::arcticdb::truncate(column->data_.buffer(), start_byte, end_byte);
     auto res = std::make_shared<Column>(column->type(), column->allow_sparse_, std::move(buffer));
     if (column->is_sparse()) {
-        res->set_sparse_map(truncate_sparse_map(column->sparse_map(), start_row, end_row));
+        res->set_sparse_map(util::truncate_sparse_map(column->sparse_map(), start_row, end_row));
     }
     res->set_row_data(end_row - (start_row + 1));
     return res;
