@@ -637,7 +637,9 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(siz
         util::BitSetSizeType end = std::min(start + rows, total_rows);
         // set_range is close interval on [left, right]
         bitset.set_range(start, end - 1, true);
-        output.emplace_back(filter(std::move(bitset), filter_down_stringpool));
+        auto output_segment = filter(std::move(bitset), filter_down_stringpool);
+        output_segment->set_offset(start);
+        output.emplace_back(std::move(output_segment));
     }
     return output;
 }

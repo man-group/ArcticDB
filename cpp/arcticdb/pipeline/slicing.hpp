@@ -123,7 +123,7 @@ inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, TypedSt
 inline auto get_partial_key_gen(const SegmentInMemory& segment, TypedStreamVersion key) {
     using PartialKey = stream::StreamSink::PartialKey;
 
-    return [segment=std::move(segment), key = std::move(key)](const SegmentInMemory& s) {
+    return [&segment, key = std::move(key)](const SegmentInMemory& s) {
         if (segment.descriptor().index().field_count() != 0) {
             util::check(static_cast<bool>(segment.descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP), "Got null index tensor in get_partial_key_gen");
             auto& idx = segment.column(0);
@@ -137,8 +137,8 @@ inline auto get_partial_key_gen(const SegmentInMemory& segment, TypedStreamVersi
         else {
             return PartialKey{
                     key.type, key.version_id, key.id,
-                    entity::safe_convert_to_numeric_index(0, "Rows"),
-                    entity::safe_convert_to_numeric_index(s.row_count() - 1, "Rows")};
+                    entity::safe_convert_to_numeric_index(s.offset(), "Rows"),
+                    entity::safe_convert_to_numeric_index(s.offset() + s.row_count() - 1, "Rows")};
         }
     };
 }

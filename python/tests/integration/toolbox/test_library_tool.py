@@ -361,3 +361,27 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)
     assert read_append_data_keys_from_ref(sym) == []
     assert_frame_equal(lib.read(sym).data, get_df(18, 0, np.int64))
+
+def test_write_segment_in_memory(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    lib_tool = lib.library_tool()
+    sym = "sym"
+
+    #sample_df = sample_dataframe()
+
+    sample_df = pd.DataFrame( {"col1": [i for i in range(200)], "col2": [i for i in range(200)], "ime": ["alo" for i in range(200)]})
+
+    segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
+
+    lib_tool.write_segment_in_memory(sym, segment)
+
+    dataframe = lib.read(sym).data
+
+    print(dataframe)
+
+    print(sample_df)
+
+    assert_frame_equal(dataframe, sample_df)
+    # check version_key, index_key, table data key
+
+    assert False

@@ -78,7 +78,7 @@ void LibraryTool::overwrite_segment_in_memory(VariantKey key, SegmentInMemory& s
 }
 
 SegmentInMemory LibraryTool::item_to_segment_in_memory(
-        StreamId stream_id,
+        const StreamId &stream_id,
         const py::tuple &item,
         const py::object &norm,
         const py::object &user_meta,

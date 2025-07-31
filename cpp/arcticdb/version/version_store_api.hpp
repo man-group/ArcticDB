@@ -58,6 +58,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool allow_sparse,
         bool validate_index);
 
+    VersionedItem write_versioned_segment(
+            const StreamId& stream_id,
+            const SegmentInMemory& segment,
+            bool prune_previous_versions,
+            bool allow_sparse,
+            bool validate_index);
+
     VersionedItem write_versioned_composite_data(
         const StreamId& stream_id,
         const py::object &metastruct,

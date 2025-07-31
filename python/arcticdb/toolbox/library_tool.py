@@ -172,10 +172,10 @@ class LibraryTool(LibraryToolImpl):
         dynamic_strings = self._nvs._resolve_dynamic_strings({})
         return normalize_dataframe(df, dynamic_schema=dynamic_schema, empty_types=empty_types, dynamic_strings=dynamic_strings)
 
-    def dataframe_to_segment_in_memory(self, df : pd.DataFrame, stream_id):
+    def dataframe_to_segment_in_memory(self, sym, df : pd.DataFrame) -> SegmentInMemory:
         item, norm_meta = self.normalize_dataframe_with_nvs_defaults(df)
-        return self.item_to_segment_in_memory(stream_id, item, norm_meta, None)
-    
+        return self.item_to_segment_in_memory(sym, item, norm_meta, None, None)
+
     def overwrite_append_data_with_dataframe(self, key : VariantKey, df : pd.DataFrame) -> SegmentInMemory:
         """
         Overwrites the append data key with the provided dataframe. Use with extreme caution as overwriting with
@@ -204,3 +204,6 @@ class LibraryTool(LibraryToolImpl):
         dynamic_strings = self._nvs._resolve_dynamic_strings({})
         _, item, norm_meta = self._nvs._try_normalize(symbol, df, None, False, dynamic_strings, None)
         self._nvs.version_store.append_incomplete(symbol, item, norm_meta, None, validate_index)
+
+    def write_segment_in_memory(self, symbol: str, segment: SegmentInMemory):
+        self._nvs.version_store.write_versioned_segment(symbol, segment, False, False, False)

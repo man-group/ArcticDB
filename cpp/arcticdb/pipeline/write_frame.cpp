@@ -21,6 +21,7 @@
 #include <vector>
 #include <array>
 #include <ranges>
+#include <arcticdb/pipeline/read_frame.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -218,9 +219,13 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
     int64_t write_window = write_window_size();
+
+    std::cerr<<segment.descriptor_ptr()<<std::endl;
+
     return folly::collect(folly::window(std::move(slices), [key, sink, de_dup_map, &segment, &tsv](auto&& slice) {
+                               auto frame_slice = FrameSlice{std::make_shared<entity::StreamDescriptor>(slice.descriptor()), {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()}, {slice.offset(), slice.offset() + slice.row_count()}};
                                auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{
-                                       get_partial_key_gen(segment, tsv)(slice), segment, slice
+                                       get_partial_key_gen(segment, tsv)(slice), slice, frame_slice
                                };
                                return sink->async_write(ks, de_dup_map);
                            },
@@ -270,7 +275,7 @@ folly::Future<entity::AtomKey> write_frame(
                 tsd.set_normalization_metadata(std::move(norm_meta));
 
                 return std::move(fut_slice_keys)
-                        .thenValue([segment = segment, key = std::move(key), &store, tsd, index = std::move(index)](auto&& slice_keys) mutable {
+                        .thenValue([key = std::move(key), &store, tsd, index = std::move(index)](auto&& slice_keys) mutable {
                             return index::write_index(index, tsd, std::forward<decltype(slice_keys)>(slice_keys), key, store);
                         });
             }
