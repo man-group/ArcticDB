@@ -721,7 +721,8 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
         const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
-        bool validate_index
+        bool validate_index,
+        bool no_slice
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
@@ -744,7 +745,8 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
             write_options,
             de_dup_map,
             allow_sparse,
-            validate_index);
+            validate_index,
+            no_slice);
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
@@ -760,35 +762,6 @@ std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_ver
     auto res = batch_restore_version_internal({stream_id}, {version_query});
     util::check(res.size() == 1, "Expected one result from restore version but there were {}. Please report this to ArcticDB team.", res.size());
     return res.at(0);
-}
-
-VersionedItem LocalVersionedEngine::write_individual_segment(
-    const StreamId& stream_id,
-    SegmentInMemory&& segment,
-    bool prune_previous_versions
-    ) {
-    ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
-
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write individual segment");
-    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
-    auto version_id = get_next_version_from_key(maybe_prev);
-    ARCTICDB_DEBUG(log::version(), "write individual segment for stream_id: {} , version_id = {}", stream_id, version_id);
-    auto index = index_type_from_descriptor(segment.descriptor());
-    auto range = get_range_from_segment(index, segment);
-
-    stream::StreamSink::PartialKey pk{
-        KeyType::TABLE_DATA, version_id, stream_id, range.start_, range.end_
-    };
-
-    auto frame_slice = FrameSlice{segment};
-    auto descriptor = make_timeseries_descriptor(segment.row_count(),segment.descriptor().clone(), {}, std::nullopt,std::nullopt, std::nullopt, false);
-    auto key = store_->write(pk, std::move(segment)).get();
-    std::vector sk{SliceAndKey{frame_slice, to_atom(key)}};
-    auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
-    auto versioned_item = VersionedItem{std::move(index_key_fut).get()};
-
-    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
-    return versioned_item;
 }
 
 // Steps of delete_trees_responsibly:

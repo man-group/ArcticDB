@@ -111,13 +111,8 @@ public:
         const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
-        bool validate_index
-    ) = 0;
-
-    virtual VersionedItem write_individual_segment(
-        const StreamId& stream_id,
-        SegmentInMemory&& segment,
-        bool prune_previous_versions
+        bool validate_index,
+        bool no_slice = false
     ) = 0;
 
     virtual std::set<StreamId> list_streams_internal(

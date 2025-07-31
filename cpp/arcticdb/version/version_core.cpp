@@ -80,11 +80,12 @@ VersionedItem write_dataframe_impl(
         const WriteOptions& options,
         const std::shared_ptr<DeDupMap>& de_dup_map,
         bool sparsify_floats,
-        bool validate_index
+        bool validate_index,
+        bool no_slice
 ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     //ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
-    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
+    auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index, no_slice);
     return {std::move(atom_key_fut).get()};
 }
 
@@ -95,7 +96,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
         const WriteOptions& options,
         const std::shared_ptr<DeDupMap> &de_dup_map,
         bool sparsify_floats,
-        bool validate_index
+        bool validate_index,
+        bool no_slice
 ) {
     auto stream_id = arcticdb::util::variant_match(frame, [] (const SegmentInMemory& segment) {
                                                             return segment.descriptor().id();
@@ -123,6 +125,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
                                                              }
                                                              return slicing_arg;
                                                         });
+
+    if(no_slice) slicing_arg = arcticdb::pipelines::NoSlicing();
 
     return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats, version_id);
 }

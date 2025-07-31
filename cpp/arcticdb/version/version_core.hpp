@@ -74,7 +74,8 @@ VersionedItem write_dataframe_impl(
         const WriteOptions& options,
         const std::shared_ptr<DeDupMap>& de_dup_mapp = std::make_shared<DeDupMap>(),
         bool sparsify_floats = false,
-        bool validate_index = false
+        bool validate_index = false,
+        bool no_slice = false
 );
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
@@ -84,7 +85,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
         const WriteOptions& options,
         const std::shared_ptr<DeDupMap> &de_dup_ma,
         bool sparsify_floats,
-        bool validate_index
+        bool validate_index,
+        bool no_slice = false
 );
 
 folly::Future<AtomKey> async_append_impl(

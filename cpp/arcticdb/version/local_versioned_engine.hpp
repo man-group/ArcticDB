@@ -183,7 +183,8 @@ public:
             const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
             bool prune_previous_versions,
             bool allow_sparse,
-            bool validate_index
+            bool validate_index,
+            bool no_slice = false
     ) override;
 
     VersionedItem write_versioned_metadata_internal(
@@ -241,12 +242,6 @@ public:
     ColumnStats get_column_stats_info_version_internal(
         const StreamId& stream_id,
         const VersionQuery& version_query);
-
-    VersionedItem write_individual_segment(
-        const StreamId& stream_id,
-        SegmentInMemory&& segment,
-        bool prune_previous_versions
-    ) override;
 
     std::set<StreamId> get_incomplete_symbols() override;
     std::set<StreamId> get_incomplete_refs() override;

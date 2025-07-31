@@ -419,7 +419,7 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     bool written = false;
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
         if(!written) {
-            test_store_->write_individual_segment(stream_id, std::move(segment), false);
+            test_store_->write_versioned_dataframe_internal(stream_id, std::move(segment), false, false, false, true);
             written = true;
         }
         else {
@@ -479,7 +479,7 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     bool written = false;
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
         if(!written) {
-            test_store_->write_individual_segment(stream_id, std::move(segment), false);
+            test_store_->write_versioned_dataframe_internal(stream_id, std::move(segment), false, false, false, true);
             written = true;
         }
         else {
@@ -536,7 +536,7 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     bool written = false;
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
         if(!written) {
-            test_store_->write_individual_segment(stream_id, std::move(segment), false);
+            test_store_->write_versioned_dataframe_internal(stream_id, std::move(segment), false, false, false, true);
             written = true;
         }
         else {
