@@ -54,6 +54,7 @@ void register_bindings(py::module &m, py::exception<arcticdb::ArcticException>& 
             )pbdoc")
             .def("write", &LibraryTool::write)
             .def("overwrite_segment_in_memory", &LibraryTool::overwrite_segment_in_memory)
+            .def("item_to_segment_in_memory", &LibraryTool::item_to_segment_in_memory)
             .def("overwrite_append_data", &LibraryTool::overwrite_append_data)
             .def("remove", &LibraryTool::remove)
             .def("find_keys", &LibraryTool::find_keys)
