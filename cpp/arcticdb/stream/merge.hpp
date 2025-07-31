@@ -20,7 +20,7 @@
 #include <ankerl/unordered_dense.h>
 
 template<typename Aggregator>
-inline consteval bool is_static_schema() {
+consteval bool is_static_schema() {
     if constexpr (std::is_same_v<typename Aggregator::SchemaPolicy, arcticdb::stream::DynamicSchema>) {
         return false;
     } else if constexpr (std::is_same_v<typename Aggregator::SchemaPolicy, arcticdb::stream::FixedSchema>) {
@@ -31,18 +31,19 @@ inline consteval bool is_static_schema() {
 }
 
 template<typename Aggregator>
-inline consteval bool is_dynamic_schema() {
+consteval bool is_dynamic_schema() {
     return !is_static_schema<Aggregator>();
 }
 
 
 namespace arcticdb::stream {
-template<typename IndexType, typename AggregatorType, typename QueueType>
+template<typename AggregatorType, typename QueueType>
 void do_merge(
     QueueType& input_streams,
     AggregatorType& agg,
     bool add_symbol_column
     ) {
+    using IndexType = typename AggregatorType::IndexType;
     while (!input_streams.empty() && input_streams.top()->seg_.row_count() == 0) {
         input_streams.pop_top();
     }
@@ -93,13 +94,13 @@ void do_merge(
                                 using RowFieldDescriptorTagType = typename std::decay_t<decltype(row_field_descriptor_tag)>;
                                 using RowFieldDescriptorTagDataType = typename RowFieldDescriptorTagType::DataTypeTag;
                                 using row_type_info = ScalarTypeInfo<RowFieldDescriptorTagDataType>;
-                                // At this point all staged descriptors were merged using merge_descritpros and it
+                                // At this point all staged descriptors were merged using merge_descriptors, and it
                                 // ensured that all staged descriptors are either the same or are convertible to the
                                 // stream descriptor in the aggregator.
                                 if constexpr (merged_type_info::data_type == row_type_info::data_type) {
                                     rb.set_scalar_by_name(name, opt_v.value(), merged_type_info::data_type);
                                 } else if constexpr (std::is_convertible_v<decltype(*opt_v), typename merged_type_info::RawType>) {
-                                    rb.set_scalar_by_name(name, static_cast<merged_type_info::RawType>(*opt_v), merged_type_info::data_type);
+                                    rb.set_scalar_by_name(name, static_cast<typename merged_type_info::RawType>(*opt_v), merged_type_info::data_type);
                                 } else {
                                     schema::raise<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                                         "Cannot convert {} to {}",
@@ -108,6 +109,21 @@ void do_merge(
                                     );
                                 }
                             });
+                        }
+                    } else {
+                        if constexpr(is_sequence_type(row_field_descriptor_tag.data_type())) {
+                            // When the value is std::nullopt this means we're dealing with sparse data. For string
+                            // values this means that the values in the string pool are placeholders either for NaN or
+                            // None. We write the placeholder into the column, otherwise if the whole column contains
+                            // None/NaN the encoding throws an exception see Monday tickets: 9712849046 and 9712629170
+                            using TDT = decltype(row_field_descriptor_tag);
+                            using RawType = typename TDT::DataTypeTag::raw_type;
+                            const RawType& raw_value = val->template value<RawType>();
+                            debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                                nan_placeholder(raw_value) || not_a_string(raw_value),
+                                "Expected NaN or None placeholders to represent missing value."
+                            );
+                            rb.set_scalar_by_name(name, raw_value, row_field_descriptor_tag.data_type());
                         }
                     }
                 });

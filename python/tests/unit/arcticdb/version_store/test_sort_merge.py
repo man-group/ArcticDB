@@ -693,7 +693,7 @@ def test_update_symbol_list(lmdb_library):
     lib.write(sym_2, df, staged=True)
     lib.sort_and_finalize_staged_data(sym_2, mode=StagedDataFinalizeMethod.APPEND)
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 3
-    assert set(lib.list_symbols()) == set([sym, sym_2])
+    assert set(lib.list_symbols()) == {sym, sym_2}
 
 
 def test_delete_staged_data(lmdb_library):
@@ -948,3 +948,11 @@ class TestEmptyDataFrames:
         lib.write(symbol, to_append, staged=True)
         with pytest.raises(SchemaException, match="wrong_col"):
             lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+
+def test_staged_segment_has_only_none(lmdb_library):
+    symbol = "symbol"
+    lib = lmdb_library
+    df = pd.DataFrame({"a": [None]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)]))
+    lib.write(symbol, df, staged=True)
+    lib.sort_and_finalize_staged_data(symbol)
+    assert_frame_equal(lib.read(symbol).data, df)

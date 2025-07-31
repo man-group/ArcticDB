@@ -620,12 +620,12 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
         auto ptr = col_ref.data().buffer().ptr_cast<char>(row * string_size, string_size);
         return std::string_view(ptr, string_size);
     } else {
-
-        auto offset = col_ref.scalar_at<entity::position_t>(row);
-        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder())
+        const auto offset = col_ref.scalar_at<entity::position_t>(row);
+        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder()) {
             return string_pool_->get_view(*offset);
-        else
+        } else {
             return std::nullopt;
+        }
     }
 }
 
