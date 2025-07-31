@@ -333,6 +333,9 @@ void decode_or_expand(
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
         }
     }
+    // TODO: This is super inefficient for Arrow string columns. It will first produce the required 3 Arrow buffers
+    // for the entire slice of the column that was just decoded, and then restrict to just the relevant rows of the
+    // "data" column
     handle_truncation(dest_column, mapping);
 }
 
