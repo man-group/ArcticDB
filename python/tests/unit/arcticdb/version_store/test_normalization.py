@@ -1263,3 +1263,22 @@ def test_norm_meta_column_and_index_names_df_multi_index(lmdb_version_store_stat
     assert field_names == ["col_one", "__idx__col_two", expected_col_one_name, "col_two", "col_three"]
     assert stream_descriptor.index.field_count() == 1
     assert stream_descriptor.index.kind() == IndexKind.TIMESTAMP
+
+
+@pytest.mark.xfail(reason="Monday ref: 9714233101")
+def test_multi_index_same_names(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+        {"x": np.arange(10)},
+        index = [
+            [chr(ord('a') + i//5) for i in range(10)],
+            [i%2 for i in range(10)],
+            [i%3 for i in range(10)],
+            [i%4 for i in range(10)],
+        ]
+    )
+    print (df.index.names)
+    df.index.names = ["index", "index", "index", "another_index", "another_index"]
+    lib.write("sym", df)
+    result_df = lib.read("sym").data
+    assert_frame_equal(result_df, df)
