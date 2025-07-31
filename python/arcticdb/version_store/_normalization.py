@@ -590,22 +590,22 @@ class ArrowNormalizationOperations(NamedTuple):
 
     Attributes
     ----------
-    renames : Mapping[int, str]
-        Column renames coming from normalization metadata. E.g. index names
+    renames_for_table : Mapping[int, str]
+        Column renames coming from normalization metadata to be applied to the pyarrow table. E.g. index names
     timezones: Mapping[int, str]
         Timezones to apply to timezone-naive timestamp columns
     range_index: Optional[Dict[str, Any]]
         Range index details to place in pandas_metadata
     pandas_indexes: Optional[int]
         Num index columns to place in pandas_metadata
-    pandas_renames: Mapping[int, Union[int, str, None]]
-        Column renames which only apply to pandas_metadata. E.g. renaming a column to an int
+    renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
+        Column renames which can only be applied to pandas_metadata. E.g. renaming a column to an int
     """
-    renames : Mapping[int, str]
+    renames_for_table : Mapping[int, str]
     timezones: Mapping[int, str]
     range_index: Optional[Dict[str, Any]]
     pandas_indexes: Optional[int]
-    pandas_renames: Mapping[int, Union[int, str, None]]
+    renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
 
 
 class ArrowTableNormalizer(Normalizer):
@@ -624,8 +624,8 @@ class ArrowTableNormalizer(Normalizer):
         pandas_columns = []
         for i, field in enumerate(fields):
             name = field.name
-            if i in op.pandas_renames:
-                name = op.pandas_renames[i]
+            if i in op.renames_for_pandas_metadata:
+                name = op.renames_for_pandas_metadata[i]
 
             pandas_type = str(field.type)
             numpy_type = str(field.type)
@@ -659,7 +659,7 @@ class ArrowTableNormalizer(Normalizer):
             "numpy_type": 'object',
             "metadata": {'encoding': 'UTF-8'}
         }
-        renames_to_ints = len([new_name for new_name in op.pandas_renames.values() if isinstance(new_name, int)])
+        renames_to_ints = len([new_name for new_name in op.renames_for_pandas_metadata.values() if isinstance(new_name, int)])
         if renames_to_ints == len(fields):
             column_index["pandas_type"] = "int64"
             column_index["numpy_type"] = "int64"
@@ -679,11 +679,11 @@ class ArrowTableNormalizer(Normalizer):
         # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
         import pyarrow as pa
 
-        if (len(op.renames) == 0 and
+        if (len(op.renames_for_table) == 0 and
             len(op.timezones) == 0 and
             op.range_index is None and
             op.pandas_indexes is None and
-            len(op.pandas_renames) == 0):
+            len(op.renames_for_pandas_metadata) == 0):
             return table
 
         new_columns = []
@@ -691,8 +691,8 @@ class ArrowTableNormalizer(Normalizer):
 
         for i, col in enumerate(table.columns):
             field = table.field(i)
-            if i in op.renames:
-                field = field.with_name(op.renames[i])
+            if i in op.renames_for_table:
+                field = field.with_name(op.renames_for_table[i])
             if i in op.timezones:
                 timezone = op.timezones[i]
                 # All arcticdb timestamps are stored as UTC for timezone aware timestamps.
@@ -713,71 +713,81 @@ class ArrowTableNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
-        renames = {}
+        renames_for_table = {}
         timezones = {}
         range_index = None
         pandas_indexes = None
-        pandas_renames = {}
+        renames_for_pandas_metadata = {}
+
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
             pandas_meta = norm_meta.df.common
-            index_type = pandas_meta.WhichOneof("index_type")
-            if index_type == "index":
-                index_meta = pandas_meta.index
-                if index_meta.is_physically_stored:
-                    pandas_indexes = 1
-                    if index_meta.tz:
-                        timezones[0] = index_meta.tz
-                    if index_meta.name:
-                        renames[0] = index_meta.name
-                    if index_meta.fake_name:
-                        pandas_renames[0] = None
-                else:
-                    index_name = index_meta.name if index_meta.name else None
-                    range_index = {
-                        "name": index_name,
-                        "start": index_meta.start,
-                        "step": index_meta.step,
-                        "stop": index_meta.start + len(item)*index_meta.step,
-                    }
-            else:
-                multi_index_meta = pandas_meta.multi_index
-                pandas_indexes = multi_index_meta.field_count+1
-                fake_field_pos = set(multi_index_meta.fake_field_pos)
-                for index_col_idx in range(pandas_indexes):
-                    index_level_num = index_col_idx + 1
-
-                    tz = multi_index_meta.timezone.get(index_col_idx, "")
-                    if tz != "":
-                        timezones[index_col_idx] = tz
-
-                    if index_level_num in fake_field_pos:
-                        pandas_renames[index_col_idx] = None
-                    elif index_col_idx==0:
-                        renames[0] = multi_index_meta.name
-                    else:
-                        renames[index_col_idx] = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
-
-            for i, col in enumerate(item.column_names):
-                if col in pandas_meta.col_names:
-                    col_data = pandas_meta.col_names[col]
-                    if col_data.is_none:
-                        pandas_renames[i] = None
-                    elif col_data.is_empty:
-                        pandas_renames[i] = ""
-                    elif col_data.is_int:
-                        pandas_renames[i] = int(col)
-                    elif col_data.original_name != col:
-                        pandas_renames[i] = col_data.original_name
-
-
         elif input_type == "series":
-            frame_meta = norm_meta.series
-            log.warn(f"No normalization was applied to series metadata when reading as arrow: {frame_meta}")
+            # For pandas series we always return a dataframe (to not lose the index information).
+            # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
+            pandas_meta = norm_meta.series.common
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
 
-        op = ArrowNormalizationOperations(renames, timezones, range_index, pandas_indexes, pandas_renames)
+        index_type = pandas_meta.WhichOneof("index_type")
+        if index_type == "index":
+            index_meta = pandas_meta.index
+            if index_meta.is_physically_stored:
+                pandas_indexes = 1
+                if index_meta.tz:
+                    timezones[0] = index_meta.tz
+                if index_meta.name:
+                    renames_for_table[0] = index_meta.name
+                if index_meta.fake_name:
+                    renames_for_pandas_metadata[0] = None
+            else:
+                index_name = index_meta.name if index_meta.name else None
+                range_index = {
+                    "name": index_name,
+                    "start": index_meta.start,
+                    "step": index_meta.step,
+                    "stop": index_meta.start + len(item)*index_meta.step,
+                }
+        else:
+            multi_index_meta = pandas_meta.multi_index
+            pandas_indexes = multi_index_meta.field_count+1
+            fake_field_pos = set(multi_index_meta.fake_field_pos)
+            for index_col_idx in range(pandas_indexes):
+                if index_col_idx==0:
+                    tz = multi_index_meta.tz
+                else:
+                    tz = multi_index_meta.timezone.get(index_col_idx, "")
+                if tz != "":
+                    timezones[index_col_idx] = tz
+
+                if index_col_idx in fake_field_pos:
+                    renames_for_pandas_metadata[index_col_idx] = None
+                elif index_col_idx==0:
+                    renames_for_table[0] = multi_index_meta.name
+                else:
+                    new_name = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
+                    if new_name == renames_for_table.get(0, item.column_names[0]):
+                        # If the new_name would collide with the first index name we only want to apply the new name
+                        # to the pandas metadata.
+                        # TODO: Something similar needs to be done when we support multiple pandas indices with
+                        # equal names (Monday ref: 9714233101)
+                        renames_for_pandas_metadata[index_col_idx] = new_name
+                    else:
+                        renames_for_table[index_col_idx] = new_name
+
+        for i, col in enumerate(item.column_names):
+            if col in pandas_meta.col_names:
+                col_data = pandas_meta.col_names[col]
+                if col_data.is_none:
+                    renames_for_pandas_metadata[i] = None
+                elif col_data.is_empty:
+                    renames_for_pandas_metadata[i] = ""
+                elif col_data.is_int:
+                    renames_for_pandas_metadata[i] = int(col)
+                elif col_data.original_name != col:
+                    renames_for_pandas_metadata[i] = col_data.original_name
+
+        op = ArrowNormalizationOperations(renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata)
         item = self.apply_pyarrow_operations(item, op)
         return item
 
