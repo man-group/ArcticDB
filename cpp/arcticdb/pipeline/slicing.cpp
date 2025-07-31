@@ -16,7 +16,6 @@ std::pair<int64_t, int64_t> get_index_and_field_count(const arcticdb::pipelines:
     return {frame.desc.index().field_count(), frame.desc.fields().size()};
 }
 
-
 SlicingPolicy get_slicing_policy(
     const WriteOptions& options,
     const arcticdb::pipelines::InputTensorFrame& frame) {
