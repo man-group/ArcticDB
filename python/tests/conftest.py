@@ -1481,3 +1481,16 @@ def clear_query_stats():
     yield
     query_stats.disable()
     query_stats.reset_stats()
+
+
+#region Pytest special xfail handling
+
+def pytest_runtest_makereport(item, call):
+    from tests.pytest_xfail import  pytest_runtest_makereport
+    return pytest_runtest_makereport(item, call)
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    from tests.pytest_xfail import  pytest_terminal_summary
+    pytest_terminal_summary(terminalreporter, exitstatus, config)
+
+#endregion    
