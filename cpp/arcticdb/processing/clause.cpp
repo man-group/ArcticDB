@@ -1050,13 +1050,13 @@ void merge_impl(
         const ColRange& col_range,
         IndexType index,
         const StreamDescriptor& stream_descriptor) {
-    auto num_segment_rows = ConfigsMap::instance()->get_int("Merge.SegmentSize", 100000);
+    const auto num_segment_rows = ConfigsMap::instance()->get_int("Merge.SegmentSize", 100000);
     using SegmentationPolicy = stream::RowCountSegmentPolicy;
     SegmentationPolicy segmentation_policy{static_cast<size_t>(num_segment_rows)};
 
-    auto func = [&component_manager, &ret, &col_range, start_row = row_range.first](auto&& segment) mutable {
+    auto commit_callback = [&component_manager, &ret, &col_range, start_row = row_range.first](SegmentInMemory&& segment) mutable {
         const size_t end_row = start_row + segment.row_count();
-        ret.emplace_back(push_entities(*component_manager, ProcessingUnit{std::forward<decltype(segment)>(segment), RowRange{start_row, end_row}, col_range}));
+        ret.emplace_back(push_entities(*component_manager, ProcessingUnit{std::move(segment), RowRange{start_row, end_row}, col_range}));
         start_row = end_row;
     };
 
@@ -1065,13 +1065,13 @@ void merge_impl(
 
     AggregatorType agg{
         Schema{stream_descriptor, index},
-        std::move(func),
+        std::move(commit_callback),
         std::move(segmentation_policy),
         stream_descriptor,
         std::nullopt
     };
 
-    stream::do_merge<IndexType, AggregatorType, decltype(input_streams)>(input_streams, agg, add_symbol_column);
+    stream::do_merge(input_streams, agg, add_symbol_column);
 }
 
 MergeClause::MergeClause(

@@ -375,6 +375,3 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
 }
 
 }
-
-#define ARCTICDB_VERSION_CORE_H_
-#include <arcticdb/version/version_core-inl.hpp>

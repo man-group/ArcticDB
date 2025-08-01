@@ -187,7 +187,7 @@ class Aggregator {
         return row_builder_;
     }
 
-    inline void rollback_row(util::BitSet &) noexcept {
+    void rollback_row(util::BitSet &) noexcept {
         // TODO implement rollback
     }
 
@@ -201,15 +201,15 @@ class Aggregator {
         return std::get<IndexType>(schema_policy_.index());
     }
 
-    inline size_t row_count() { return segment_.row_count(); }
+    size_t row_count() { return segment_.row_count(); }
 
-    inline size_t commits_count() const { return commits_count_; }
+    size_t commits_count() const { return commits_count_; }
 
-    inline const AggregationStats &stats() const { return stats_; }
+    const AggregationStats &stats() const { return stats_; }
 
-    inline const arcticdb::entity::StreamDescriptor &descriptor() const { return segment_.descriptor(); }
+    const arcticdb::entity::StreamDescriptor &descriptor() const { return segment_.descriptor(); }
 
-    inline arcticdb::entity::StreamDescriptor default_descriptor() const { return schema_policy_.default_descriptor(); }
+    arcticdb::entity::StreamDescriptor default_descriptor() const { return schema_policy_.default_descriptor(); }
 
     auto &segment() { return segment_; }
 
@@ -239,21 +239,19 @@ class Aggregator {
         segment_.set_offset(offset);
     }
 
-    inline void end_block_write(size_t size) {
+    void end_block_write(size_t size) {
         stats_.update_rows(size);
         segment_.end_block_write(size);
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
+    template<typename T, template<typename> typename Tensor>
+    requires std::integral<T> || std::floating_point<T>
     void set_array(position_t pos, Tensor<T> &val) {
         segment_.set_array(pos, val);
     }
 
-    template<class T, std::enable_if_t<
-        std::is_integral_v<T> || std::is_floating_point_v<T>,
-        int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_array(position_t pos, py::array_t<T>& val) {
         segment_.set_array(pos, val);
     }

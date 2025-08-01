@@ -402,7 +402,6 @@ set(arcticdb_srcs
         version/snapshot.hpp
         version/version_constants.hpp
         version/version_core.hpp
-        version/version_core-inl.hpp
         version/versioned_engine.hpp
         version/version_functions.hpp
         version/version_log.hpp
