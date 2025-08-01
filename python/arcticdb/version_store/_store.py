@@ -3418,7 +3418,7 @@ class NativeVersionStore:
         return self._library
 
     def library_tool(self) -> LibraryTool:
-        return LibraryTool(self.library(), self)
+        return LibraryTool(self._library, self)
 
 
 def resolve_dynamic_strings(kwargs):
