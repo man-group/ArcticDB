@@ -388,6 +388,8 @@ jobs:
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
 
@@ -398,8 +400,19 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}  
+        
+      - name: Set ArcticDB Debug Logging
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
+        uses: ./.github/actions/enable_logging
+
       - name: Run test
         run: |
+          # find ssl directory where cacerts are (for Azure)
+          openssl version -d 
+          # list file descriptors and other limits of the runner
           ulimit -a
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
@@ -417,6 +430,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
+          STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
 

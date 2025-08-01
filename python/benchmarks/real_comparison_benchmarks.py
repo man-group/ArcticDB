@@ -13,7 +13,8 @@ from arcticdb import Arctic
 import pandas as pd
 import numpy as np
 
-from arcticdb.util.environment_setup import LibraryPopulationPolicy, LibraryType, Storage, TestLibraryManager, get_console_logger
+from arcticdb.util.environment_setup import LibraryPopulationPolicy, LibraryType, Storage, TestLibraryManager
+from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_string, random_integers, random_dates
 
 
@@ -63,7 +64,7 @@ class RealComparisonBenchmarks:
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="COMPARISON")
     
     def get_logger(self) -> Logger:
-        return get_console_logger(self)
+        return get_logger(self)
 
     def get_library_manager(self) -> TestLibraryManager:
         return RealComparisonBenchmarks.library_manager

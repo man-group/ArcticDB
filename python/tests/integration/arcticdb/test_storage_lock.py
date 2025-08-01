@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 import sys
 
-from arcticdb.util.utils import get_logger
+from arcticdb.util.logger import get_logger
 from arcticdb_ext.tools import ReliableStorageLock, ReliableStorageLockManager
 from tests.util.mark import REAL_S3_TESTS_MARK, WINDOWS
 
