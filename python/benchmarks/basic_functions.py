@@ -30,6 +30,7 @@ DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
+    warmup_time = 0    
     number = 5
     timeout = 6000
     CONNECTION_STRING = "lmdb://basic_functions?map_size=20GB"
@@ -156,6 +157,7 @@ class BasicFunctions:
 
 class BatchBasicFunctions:
     number = 5
+    warmup_time = 0    
     timeout = 6000
     CONNECTION_STRING = "lmdb://batch_basic_functions?map_size=20GB"
     DATE_RANGE = DATE_RANGE

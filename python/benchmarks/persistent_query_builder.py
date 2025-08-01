@@ -47,6 +47,7 @@ def get_real_s3_uri(shared_path: bool = False):
 class PersistentQueryBuilderFunctions:
     number = 2
     timeout = 6000
+    warmup_time = 0    
     LIB_NAME = "query_builder_benchmark_lib"
 
     params = [1_000_000, 10_000_000]
