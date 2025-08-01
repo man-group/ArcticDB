@@ -113,6 +113,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             python -m pip  install pytest-repeat
@@ -194,6 +195,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             echo "Run custom pytest command: $command"

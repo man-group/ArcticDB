@@ -22,6 +22,7 @@ from .common import *
 class IterateVersionChain:
     number = 10
     timeout = 6000
+    warmup_time = 0    
     CONNECTION_STRING = "lmdb://version_chain?map_size=20GB"
     LIB_NAME = "lib"
 

@@ -25,6 +25,7 @@ class SnaphotFunctions:
 
     number = 5
     timeout = 6000
+    warmup_time = 0    
 
     # For each test param n1xn2 defined:
     #   n1 - the number of symbols in the library
