@@ -71,6 +71,7 @@ from arcticdb.version_store._normalization import (
     denormalize_dataframe,
     MsgPackNormalizer,
     CompositeNormalizer,
+    ArrowTableNormalizer,
     FrameData,
     _IDX_PREFIX_LEN,
     get_timezone_from_metadata,
@@ -322,6 +323,7 @@ class NativeVersionStore:
         self.env = env or "local"
         self._lib_cfg = lib_cfg
         self._custom_normalizer = custom_normalizer
+        self._arrow_normalizer = ArrowTableNormalizer()
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
@@ -2374,7 +2376,8 @@ class NativeVersionStore:
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            data = pa.Table.from_batches(record_batches)
+            table = pa.Table.from_batches(record_batches)
+            data = self._arrow_normalizer.denormalize(table, read_result.norm)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):

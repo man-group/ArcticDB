@@ -29,6 +29,8 @@ sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::stri
                     std::move(dict_keys_buffer),
                     validity_bitmap
             )};
+        } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
+            return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, validity_bitmap)};
         } else {
             return sparrow::array{create_primitive_array<RawType>(nullptr, 0, validity_bitmap)};
         }

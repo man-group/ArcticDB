@@ -13,7 +13,6 @@
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
-#include <boost/multiprecision/detail/min_max.hpp>
 
 using namespace arcticdb;
 
@@ -197,7 +196,7 @@ TEST(Arrow, ConvertSegmentBasic) {
         EXPECT_EQ(names.size(), fields.size() + 1);
         EXPECT_EQ(columns.size(), fields.size() + 1);
         EXPECT_EQ(names[0], "time");
-        EXPECT_EQ(columns[0].data_type(), sparrow::data_type::INT64);
+        EXPECT_EQ(columns[0].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
         EXPECT_EQ(names[1], "smallints");
         EXPECT_EQ(columns[1].data_type(), sparrow::data_type::UINT8);
         EXPECT_EQ(names[2], "bigints");
@@ -254,7 +253,7 @@ TEST(Arrow, ConvertSegmentMultipleStringColumns) {
         EXPECT_EQ(names.size(), fields.size() + 1);
         EXPECT_EQ(columns.size(), fields.size() + 1);
         EXPECT_EQ(names[0], "time");
-        EXPECT_EQ(columns[0].data_type(), sparrow::data_type::INT64);
+        EXPECT_EQ(columns[0].data_type(), sparrow::data_type::TIMESTAMP_NANOSECONDS);
         EXPECT_EQ(names[1], "floats");
         EXPECT_EQ(columns[1].data_type(), sparrow::data_type::DOUBLE);
         EXPECT_EQ(names[2], "str_1");
