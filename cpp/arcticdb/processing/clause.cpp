@@ -544,7 +544,7 @@ OutputSchema AggregationClause::modify_schema(OutputSchema&& output_schema) cons
     for (const auto& agg: aggregators_){
         const auto& input_column_name = agg.get_input_column_name().value;
         const auto& output_column_name = agg.get_output_column_name().value;
-        const auto& input_column_type = input_stream_desc.field(*input_stream_desc.find_field(input_column_name)).type().data_type();
+        const auto& input_column_type = output_schema.column_types()[input_column_name];
         auto agg_data = agg.get_aggregator_data();
         agg_data.add_data_type(input_column_type);
         const DataType output_column_type = agg_data.get_output_data_type();
@@ -606,7 +606,7 @@ OutputSchema ResampleClause<closed_boundary>::modify_schema(OutputSchema&& outpu
     for (const auto& agg: aggregators_){
         const auto& input_column_name = agg.get_input_column_name().value;
         const auto& output_column_name = agg.get_output_column_name().value;
-        const auto& input_column_type = input_stream_desc.field(*input_stream_desc.find_field(input_column_name)).type().data_type();
+        const auto& input_column_type = output_schema.column_types()[input_column_name];
         agg.check_aggregator_supported_with_data_type(input_column_type);
         auto output_column_type = agg.generate_output_data_type(input_column_type);
         stream_desc.add_scalar_field(output_column_type, output_column_name);
