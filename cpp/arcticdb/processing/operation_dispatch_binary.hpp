@@ -483,7 +483,7 @@ VariantData visit_binary_operator(const VariantData& left, const VariantData& ri
 
 VariantData dispatch_binary(const VariantData& left, const VariantData& right, OperationType operation);
 
-// instantiated in operation_dispatch_binary_operator.cpp to reduce compilation memory use
+// instantiated in operation_dispatch_binary_operator_*.cpp to reduce compilation memory use
 extern template
 VariantData visit_binary_operator<arcticdb::PlusOperator>(const VariantData&, const VariantData&, PlusOperator&&);
 extern template
@@ -493,7 +493,7 @@ VariantData visit_binary_operator<arcticdb::TimesOperator>(const VariantData&, c
 extern template
 VariantData visit_binary_operator<arcticdb::DivideOperator>(const VariantData&, const VariantData&, DivideOperator&&);
 
-// instantiated in operation_dispatch_binary_comparator.cpp to reduce compilation memory use
+// instantiated in operation_dispatch_binary_*.cpp to reduce compilation memory use
 extern template
 VariantData visit_binary_comparator<EqualsOperator>(const VariantData&, const VariantData&, EqualsOperator&&);
 extern template
@@ -506,5 +506,13 @@ extern template
 VariantData visit_binary_comparator<GreaterThanOperator>(const VariantData&, const VariantData&, GreaterThanOperator&&);
 extern template
 VariantData visit_binary_comparator<GreaterThanEqualsOperator>(const VariantData&, const VariantData&, GreaterThanEqualsOperator&&);
+extern template
+VariantData visit_binary_comparator<RegexMatchOperator>(const VariantData&, const VariantData&, RegexMatchOperator&&);
+
+// instantiated in operation_dispatch_binary_(isin|isnotin).cpp to reduce compilation memory use
+extern template
+VariantData visit_binary_membership<IsInOperator>(const VariantData&, const VariantData&, IsInOperator&&);
+extern template
+VariantData visit_binary_membership<IsNotInOperator>(const VariantData&, const VariantData&, IsNotInOperator&&);
 
 }

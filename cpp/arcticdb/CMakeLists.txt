@@ -482,6 +482,9 @@ set(arcticdb_srcs
         processing/operation_dispatch_binary_gte.cpp
         processing/operation_dispatch_binary_lt.cpp
         processing/operation_dispatch_binary_lte.cpp
+        processing/operation_dispatch_binary_isin.cpp
+        processing/operation_dispatch_binary_isnotin.cpp
+        processing/operation_dispatch_binary_regex.cpp
         processing/operation_dispatch_binary_operator_plus.cpp
         processing/operation_dispatch_binary_operator_minus.cpp
         processing/operation_dispatch_binary_operator_times.cpp

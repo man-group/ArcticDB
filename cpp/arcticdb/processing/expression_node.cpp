@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
