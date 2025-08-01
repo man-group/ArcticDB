@@ -109,7 +109,7 @@ TEST_F(AggregationClauseOutputTypesTest, Sum) {
     ASSERT_EQ(stream_desc.field(8).type().data_type(), DataType::UINT64); // uint64
     ASSERT_EQ(stream_desc.field(9).type().data_type(), DataType::FLOAT64); // float32
     ASSERT_EQ(stream_desc.field(10).type().data_type(), DataType::FLOAT64); // float64
-    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::BOOL8); // bool
+    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::UINT64); // bool
 
     aggregation_clause = AggregationClause{"to_group", {{"sum", "timestamp", "timestamp_sum"}}};
     ASSERT_THROW(aggregation_clause.modify_schema(initial_schema()), SchemaException);
@@ -151,9 +151,13 @@ TEST_F(AggregationClauseOutputTypesTest, Mean) {
     check_output_column_names(stream_desc);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::INT64); // grouping column
     for (size_t idx = 1; idx < 13; ++idx) {
-        ASSERT_EQ(stream_desc.field(idx).type().data_type(), DataType::FLOAT64);
+        const DataType field_data_type = stream_desc.field(idx).type().data_type();
+        if (is_time_type(field_data_type)) {
+            ASSERT_EQ(field_data_type, initial_stream_desc_.field(idx).type().data_type());
+        } else {
+            ASSERT_EQ(field_data_type, DataType::FLOAT64);
+        }
     }
-
     aggregation_clause = AggregationClause{"to_group", {{"mean", "string", "string_agg"}}};
     ASSERT_THROW(aggregation_clause.modify_schema(initial_schema()), SchemaException);
 }

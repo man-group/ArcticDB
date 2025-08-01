@@ -14,6 +14,7 @@
 #include <arcticdb/processing/operation_dispatch_binary.hpp>
 #include <arcticdb/processing/operation_dispatch_ternary.hpp>
 #include <arcticdb/processing/operation_dispatch_unary.hpp>
+#include <arcticdb/stream/index.hpp>
 
 namespace arcticdb {
 
@@ -117,11 +118,6 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                 user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                         std::holds_alternative<DataType>(left_type),
                         "Unexpected bitset input to {}", operation_type_);
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        is_floating_point_type(std::get<DataType>(left_type)) || is_sequence_type(std::get<DataType>(left_type)) ||
-                        is_time_type(std::get<DataType>(left_type)),
-                        "Unexpected data type {} input to {}",
-                        std::get<DataType>(left_type), operation_type_);
                 break;
             case OperationType::IDENTITY:
             case OperationType::NOT:
@@ -197,6 +193,15 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
                         (is_sequence_type(std::get<DataType>(left_type)) && is_sequence_type(std::get<DataType>(right_type)) && (operation_type_ == OperationType::EQ || operation_type_ == OperationType::NE)),
                         "Unexpected data types {} {} input to {}",
                         std::get<DataType>(left_type), std::get<DataType>(right_type), operation_type_);
+                break;
+            case OperationType::REGEX_MATCH:
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(left_type), "Unexpected bitset input as left operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(std::holds_alternative<DataType>(right_type), "Unexpected bitset input as right operand to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(right_value_set_state == ValueSetState::NOT_A_SET, "Unexpected value set input to {}", operation_type_);
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    is_sequence_type(std::get<DataType>(left_type)) && is_sequence_type(std::get<DataType>(right_type)),
+                    "Unexpected data types {} {} input to {}",
+                    std::get<DataType>(left_type), std::get<DataType>(right_type), operation_type_);
                 break;
             case OperationType::ISIN:
             case OperationType::ISNOTIN:
@@ -295,22 +300,30 @@ std::variant<BitSetTag, DataType> ExpressionNode::compute(
             child,
             [&column_types] (const ColumnName& column_name) -> std::variant<BitSetTag, DataType> {
                 auto it = column_types.find(column_name.value);
+                if (it == column_types.end()) {
+                    // The column might be a part of multi-index. In that case the name gets mangled so it won't be
+                    // found by column_types.find(column_name.value). We need to retry with the mangled name.
+                    it = column_types.find(stream::mangled_name(column_name.value));
+                }
                 schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(it != column_types.end(),
                                                                 "Clause requires column '{}' to exist in input data"
                         ,column_name.value);
                 return it->second;
             },
             [&expression_context] (const ValueName& value_name) -> std::variant<BitSetTag, DataType> {
-                return expression_context.values_.get_value(value_name.value)->data_type_;
+                return expression_context.values_.get_value(value_name.value)->data_type();
             },
             [&expression_context, &value_set_state] (const ValueSetName& value_set_name) -> std::variant<BitSetTag, DataType> {
-                auto value_set = expression_context.value_sets_.get_value(value_set_name.value);
+                const auto value_set = expression_context.value_sets_.get_value(value_set_name.value);
                 value_set_state = value_set->empty() ? ValueSetState::EMPTY_SET : ValueSetState::NON_EMPTY_SET;
                 return value_set->base_type().data_type();
             },
             [&expression_context, &column_types] (const ExpressionName& expression_name) -> std::variant<BitSetTag, DataType> {
-                auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
+                const auto expr = expression_context.expression_nodes_.get_value(expression_name.value);
                 return expr->compute(expression_context, column_types);
+            },
+            [] (const RegexName&) -> std::variant<BitSetTag, DataType> {
+                return DataType::UTF_DYNAMIC64;
             },
             [] (auto&&) -> std::variant<BitSetTag, DataType> {
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected expression argument type");

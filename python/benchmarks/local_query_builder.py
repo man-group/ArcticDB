@@ -16,6 +16,7 @@ PARAMS_QUERY_BUILDER = [1_000_000, 10_000_000]
 class LocalQueryBuilderFunctions:
     number = 5
     timeout = 6000
+    warmup_time = 0    
     LIB_NAME = "query_builder"
     CONNECTION_STRING = "lmdb://query_builder?map_size=5GB"
 

@@ -476,6 +476,176 @@ def test_sequences_data_layout(lmdb_version_store_v1, sequence_type):
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
 
 
+class CustomClassSeparatorInStr:
+
+    def __init__(self, n):
+        self.n = n
+
+    def __str__(self):
+        return "CustomClass__str"
+
+    def __repr__(self):
+        return "CustomClass__repr"
+
+    def __hash__(self):
+        return self.n % 10
+
+    def __eq__(self, other):
+        return self.n == other.n
+
+
+def test_dictionaries_with_custom_keys_that_cannot_roundtrip(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {CustomClassSeparatorInStr(1): df}
+
+    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    assert not lib.has_symbol("sym")
+
+
+class CustomClass:
+
+    def __init__(self, n):
+        self.n = n
+
+    def __str__(self):
+        return f"CustomClassStr{self.n}"
+
+    def __repr__(self):
+        return f"CustomClassRepr{self.n}"
+
+    def __hash__(self):
+        return self.n % 10
+
+    def __eq__(self, other):
+        return self.n == other.n
+
+
+def test_dictionaries_with_custom_keys(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {CustomClass(1): df}
+
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+
+    assert len(actual_data) == 1
+    assert_frame_equal(actual_data["CustomClassStr1"], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert [i.id for i in index_keys] == ['sym__CustomClassStr1']
+    assert len(data_keys) == 1
+
+    assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.VERSION, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, "sym")) == 0
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 1
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__CustomClassStr1"
+
+
+def test_list_with_custom_elements(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = [CustomClassSeparatorInStr(1), df]
+
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+
+    assert len(actual_data) == 2
+    assert actual_data[0] == CustomClassSeparatorInStr(1)
+    assert_frame_equal(actual_data[1], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert [i.id for i in index_keys] == ['sym__0', "sym__1"]
+    assert len(data_keys) == 2
+
+    assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.VERSION, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, "sym")) == 0
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 2
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__0"
+    contents = segment.iloc[1].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1"
+
+
+def test_dictionaries_with_non_str_keys(lmdb_version_store_v1):
+    """We seem to inadvertently coerce dictionary keys to strings. We should change this so we either round trup correctly
+    or raise, but this test records the current behaviour."""
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+
+    data = {1: df, None: 1, 1.1: df, False: df}
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+    assert len(actual_data) == 4
+    assert_frame_equal(actual_data["1.1"], df)
+    assert actual_data["None"] == 1
+    assert_frame_equal(actual_data["1.1"], df)
+    assert_frame_equal(actual_data["False"], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    assert [i.id for i in index_keys] == ['sym__1', "sym__1.1", "sym__False"]
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert len(data_keys) == 3
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 3
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1"
+    contents = segment.iloc[1].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1.1"
+    contents = segment.iloc[2].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__False"
+
+
 DataFrameHolder = namedtuple("DataFrameHolder", ["contents"])
 
 
