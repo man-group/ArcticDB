@@ -610,7 +610,7 @@ def compare_snapshot_data(source_lib, target_libs, snapshot_versions):
                     raise e
 
 
-def compare_data(source_data, source_metadata, target_data, target_metadata):
+def compare_data(source_data=None, source_metadata=None, target_data=None, target_metadata=None):
     if isinstance(source_data, pd.DataFrame):
         assert_frame_equal(source_data, target_data)
     else:
