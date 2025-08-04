@@ -75,7 +75,7 @@ jobs:
         run: |
           git config --global --add safe.directory .
           micromamba install -y -c conda-forge "libmambapy<2" pip asv virtualenv
-          /github/home/micromamba/python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
+          /github/home/micromamba/bin/python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
@@ -102,26 +102,26 @@ jobs:
             echo "FINAL selection to execute SUITE=$SUITE"
             echo "SUITE=$SUITE" >> $GITHUB_ENV
             # Now lets reduce logging
-            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
+            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
 
       - name: Benchmark given commit
         if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: |
           git config --global --add safe.directory .
-          /github/home/micromamba/python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
+          /github/home/micromamba/bin/python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
 
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
-          /github/home/micromamba/python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
+          /github/home/micromamba/bin/python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
 
       - name: Add results to ArcticDB database
         shell: bash -el {0}
         run: |
-          /github/home/micromamba/pip install arcticdb[Testing] "protobuf<6"
-          /github/home/micromamba/python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
+          /github/home/micromamba/bin/pip install arcticdb[Testing] "protobuf<6"
+          /github/home/micromamba/bin/python build_tooling/transform_asv_results.py --mode save ${{ github.ref != 'refs/heads/master' && format('--arcticdb_library {0}_asv_results', github.ref_name) || ''}}
 
   stop-ec2-runner:
     needs: [start_ec2_runner, benchmark_commit]

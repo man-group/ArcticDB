@@ -176,15 +176,15 @@ jobs:
         run: |
           git config --global --add safe.directory .
           micromamba install -y -c conda-forge "libmambapy<2" pip asv virtualenv
-          /github/home/micromamba/python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
+          /github/home/micromamba/bin/python -m asv machine -v --yes --machine ArcticDB-Medium-Runner
 
       - name: Build project for ASV
         run: |
-          /github/home/micromamba/python -m pip install -ve .[Testing]
+          /github/home/micromamba/bin/python -m pip install -ve .[Testing]
 
       - name: Run ASV Tests Check script
         run: |
-          /github/home/micromamba/python python/utils/asv_checks.py
+          /github/home/micromamba/bin/python python/utils/asv_checks.py
         continue-on-error: false
 
   # code_coverage:
