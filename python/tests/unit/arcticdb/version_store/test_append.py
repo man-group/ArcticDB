@@ -263,12 +263,11 @@ def test_upsert_with_delete(lmdb_version_store_big_map):
 
 
 def test_append_numpy_array(lmdb_version_store):
-    '''Tests append will all supported by arctic data types'''
+    '''Tests append with all supported by arctic data types'''
     logger = get_logger()
     for index, _type in enumerate(supported_types_list):
         sym = f"test_append_numpy_array_{index}"
         logger.info(f"Storing type: {_type} in symbol: {sym}")
-        #np1 = random_integers(10, t)
         np1 = generate_random_numpy_array(10, _type)
         try: 
             lmdb_version_store.write(sym, np1)

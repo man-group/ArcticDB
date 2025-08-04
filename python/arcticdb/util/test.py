@@ -167,16 +167,18 @@ def dataframe_simulate_arcticdb_update_static(existing_df: Union[pd.DataFrame, p
     NOTE: you have to pass indexed dataframe
     """
 
-    if isinstance(existing_df, pd.Series):
+    if isinstance(existing_df, pd.Series) and isinstance(update_df, pd.Series):
         if len(update_df) < 1:
             return existing_df # Nothing to update
         assert existing_df.dtype == update_df.dtype, f"Series must have same type {existing_df.dtype} == {update_df.dtype}"
         assert existing_df.name == update_df.name, "Series name must be same"
-    else:
+    elif isinstance(existing_df, pd.DataFrame) and isinstance(update_df, pd.DataFrame):
         assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
             "Dataframe must have identical columns types in same order"
         )
         assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
+    else:
+        raise(f"Expected existing_df and update_df to have the same type. Types: {type(existing_df)} and {type(update_df)}")
 
     start2 = update_df.first_valid_index()
     end2 = update_df.last_valid_index()
@@ -251,6 +253,8 @@ def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwarg
             ):
             if (expected.size == 0) and (actual.size == 0):
                 assert expected.name == actual.name
+                # Compare the indexes as indexes without the frequency which can be None sometimes for some types (str)
+                assert pd.Index(expected.index).equals(pd.Index(actual.index)), f"Investigate why {expected.index} == {actual.index}"
                 return
     assert_series_equal(expected, actual, **kwargs)
 

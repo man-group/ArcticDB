@@ -13,7 +13,7 @@ import re
 import string
 import time
 import sys
-from typing import Dict, Set 
+from typing import Dict, Optional, Set 
 from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
 import numpy.typing as npt
@@ -95,11 +95,11 @@ def list_installed_packages() -> List[str]:
             print(package)
     """
     try:
-        # Python 3.8+
+        # Python >3.8
         from importlib.metadata import distributions
         return [f"{dist.metadata['Name']}=={dist.version}" for dist in distributions()]
     except ImportError:
-        # Previous pythons
+        # Previous pythons (3.8)
         try:
             import pkg_resources
             return [f"{dist.project_name}=={dist.version}" for dist in pkg_resources.working_set]
@@ -126,23 +126,45 @@ def generate_random_timestamp_array(size: int,
     random_seconds = np.random.randint(start_ts, end_ts, size=size)
     return np.array(pd.to_datetime(random_seconds, unit='s'))
 
+def generate_random_float_array(size: int, dtype: 
+                                np.floating = np.float32 ) -> npt.NDArray[np.floating]:
+    """Pseudo random float algorithm supporting np.float* types"""
+    def power_sequence(max_power):
+        exponents = np.arange(max_power, -(max_power+1), -1)
+        sequence = np.power(10.0, exponents)
+        return sequence
+    
+    if dtype == np.float32:
+        power_arr = power_sequence(37)
+    elif dtype == np.float16:
+        power_arr = power_sequence(4)
+    elif np.issubdtype(dtype, np.floating):
+        power_arr = power_sequence(100)
+    else:
+        raise TypeError(f"Type not supported {dtype}")
 
-def generate_random_numpy_array(size: int, _type, seed: int = 8238) -> npt.NDArray[Any]:
+    random_part = np.random.random(size).astype(dtype)
+    scaling_part = np.random.choice(power_arr, size=size).astype(np.float64)
+    result = random_part * scaling_part
+    return result.astype(dtype)
+
+
+def generate_random_numpy_array(size: int, dtype, seed: int = 8238) -> npt.NDArray[Any]:
     """ Generates random numpy array of specified type
     """
     set_seed(seed)
     arr = []
-    if 'int' in str(_type):
-        arr = random_integers(size, _type)
-    elif 'float' in str(_type):
-        arr = np.arange(size, dtype=_type)
-    elif 'bool' in str(_type):
+    if 'int' in str(dtype):
+        arr = random_integers(size, dtype)
+    elif 'float' in str(dtype):
+        arr = generate_random_float_array(dtype=dtype, size=size)
+    elif 'bool' in str(dtype):
         arr = np.random.randn(size) > 0
-    elif 'str' in str(_type):
+    elif 'str' in str(dtype):
         length = 10
         arr = [random_string(length) for _ in range(size)]
         arr = np.array(arr, dtype=f"U{size}")
-    elif 'datetime' in str(_type):
+    elif 'datetime' in str(dtype):
         arr = generate_random_timestamp_array(size, seed=seed)
     else:
         raise TypeError("Unsupported type {dtype}")        
@@ -150,7 +172,7 @@ def generate_random_numpy_array(size: int, _type, seed: int = 8238) -> npt.NDArr
 
 
 def generate_random_series(type: ArcticTypes, length: int, name: str, 
-                    start_time: pd.Timestamp=None, freq: str='s', seed=3247) -> pd.Series:
+                    start_time: Optional[pd.Timestamp]=None, freq: str='s', seed=3247) -> pd.Series:
     """Generates random series of specified type with or without index"""
     set_seed(seed)
     index = None

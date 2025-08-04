@@ -20,7 +20,7 @@ import numpy as np
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb.util.test import dataframe_simulate_arcticdb_update_static
-from arcticdb.util.utils import DFGenerator, TimestampNumber, get_logger
+from arcticdb.util.utils import DFGenerator, TimestampNumber, get_logger, set_seed
 from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.library import Library, UpdatePayload, WritePayload
 from arcticdb.util.test import assert_frame_equal
@@ -140,11 +140,6 @@ def upgrade_dataframe_types(df: pd.DataFrame, upgrade_types_dict: Dict[type, typ
         upgrade_to = upgrade_types_dict.get(df[col].dtype.type, None)
         if upgrade_to:
             df[col] = df[col].astype(upgrade_to)
-
-
-def set_seed(_seed):
-    np.random.seed(_seed)
-    random.seed(_seed)
 
 
 class UpdatesGenerator:

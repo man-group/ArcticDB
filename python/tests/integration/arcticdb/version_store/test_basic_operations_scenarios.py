@@ -13,6 +13,7 @@ import pytest
 import pandas as pd
 import numpy as np
 
+from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
@@ -90,9 +91,9 @@ def get_metadata():
 
 @SLOW_TESTS_MARK
 @pytest.mark.parametrize("dtype", supported_types_list)
-@pytest.mark.parametrize("schema", [True, False])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("append_type", ["append", "stage"])
-def test_write_append_update_read_scenario_with_different_series_combinations(version_store_factory, dtype, schema, append_type):
+def test_write_append_update_read_scenario_with_different_series_combinations(version_store_factory, dtype, dynamic_schema, append_type):
     """This test covers series with timestamp index of all supported arcticdb types.
     Write, append and read combinations of different boundary length sizes of series
 
@@ -105,10 +106,9 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
     if LINUX and (sys.version_info[:2] == (3, 8)) and dtype == np.float64:
         """ https://github.com/man-group/ArcticDB/actions/runs/16363364782/job/46235614310?pr=2470
         """
-        print ("Test fails due to issue (9589648728), Skipping")
-        return
+        pytest.skip("Test fails due to issue (9589648728), Skipping")
     segment_row_size = 3
-    lib: NativeVersionStore = version_store_factory(dynamic_schema=schema, segment_row_size=segment_row_size)
+    lib: NativeVersionStore = version_store_factory(dynamic_schema=dynamic_schema, segment_row_size=segment_row_size)
     set_seed(3484356)
     max_length = segment_row_size * 29
     symbol = f"symbol-{re.sub(r'[^A-Za-z0-9]', '_', str(dtype))}"
@@ -158,7 +158,7 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
     values for different data types
 
     Verifies:
-     - continuous appends/updates with new columns works as expected across dynamic and static schema
+     - continuous appends/updates with new columns works as expected across dynamic schema
      - updates/appends with new columns and combinations incomplete, metadata and prune previous
        always deliver desired result
     """
@@ -258,9 +258,9 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
         verify_dynamically_added_columns(read_data, update_timestamp, new_columns_to_update_df)
 
 
-@pytest.mark.parametrize("schema", [True, False])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.storage
-def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic_store_factory, schema):
+def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic_store_factory, dynamic_schema):
     """
     Test error messages and exception types for various failure scenarios mixed with 
     
@@ -270,7 +270,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     - Exceptions are same across all storage types
     """
     lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
-            dynamic_schema=schema, dynamic_strings=True, segment_row_size=1)
+            dynamic_schema=dynamic_schema, dynamic_strings=True, segment_row_size=1)
     symbol = "test_append_errors"
     
     df = pd.DataFrame({'value': [1, 2, 3]}, index=pd.date_range('2023-01-01', periods=3, freq='s'))
@@ -294,12 +294,8 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
 
     # Test append to non-existent symbol
     for sym in [symbol, None, ""]:
-        try:
+        with pytest.raises(TypeError):
             lib.append(sym)
-            assert False, "Expected exception was not raised"
-        except Exception as e:
-            # Verify exception type and message content
-            assert isinstance(e, TypeError)
     assert len(lib.list_symbols()) == 0
 
     # Empty dataframe will create symbol with one version
@@ -361,7 +357,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
             lib.append(symbol, pick)
 
     # Append with different schema works on dynamic schema only
-    if schema:
+    if dynamic_schema:
         lib.append(symbol, df_different_schema)    
         assert len(lib.list_versions()) == 4
         assert_frame_equal( pd.concat([df, df_2, df_different_schema], sort=True), lib.read(symbol).data)
@@ -374,7 +370,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
     # but as we saw previously it will create symbol 
     result = lib.append(symbol, df_empty)
     assert len(lib.list_symbols()) == 1
-    assert len(lib.list_versions()) == 4 if schema else 3
+    assert len(lib.list_versions()) == 4 if dynamic_schema else 3
 
     # Validate that validate_index works as expected
     with pytest.raises(SortingException):
@@ -448,8 +444,6 @@ def test_update_date_range_exhaustive(lmdb_version_store):
                 update_expected_at_index=0, length_of_result_df=update_data.shape[0], 
                 scenario="both open")
     assert_frame_equal(update_data, result_df)
-
-    lib.list_symbols_with_incomplete_data
 
     
 def split_dataframe_into_random_chunks(df: pd.DataFrame, min_size: int = 1, max_size: int = 30) -> List[pd.DataFrame]:
