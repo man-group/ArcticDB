@@ -13,7 +13,6 @@ import pytest
 import pandas as pd
 import numpy as np
 
-from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
