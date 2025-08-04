@@ -1,11 +1,13 @@
 from arcticdb_ext.version_store import OutputFormat
 from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
+from hypothesis.extra.pandas import columns, data_frames
 import pandas as pd
 import numpy as np
 import pytest
 
 from pandas.testing import assert_frame_equal
+from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 import pyarrow as pa
 from arcticdb.util.hypothesis import (
@@ -119,6 +121,17 @@ def test_strings_basic(lmdb_version_store_v1, dynamic_strings):
     assert_frame_equal(result, df)
 
 
+@pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
+def test_fixed_width_strings(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_fixed_width_strings"
+    df0 = pd.DataFrame({"my_column": ["hello", "goodbye"]})
+    lib.write(sym, df0, dynamic_strings=False)
+    with pytest.raises(SchemaException) as e:
+        lib.read(sym, _output_format=OutputFormat.ARROW)
+    assert "my_column" in str(e.value) and "Arrow" in str(e.value)
+
+
 @pytest.mark.parametrize("dynamic_strings", [
     True,
     pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))
@@ -206,9 +219,9 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 3), (3, 75), (4, 32), (0, 99), (7, 56)])
 def test_date_range(version_store_factory, segment_row_size, start_offset, end_offset):
-    lib = version_store_factory(segment_row_size=segment_row_size)
+    lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
     initial_timestamp = pd.Timestamp("2019-01-01")
-    df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100), columns=['x'])
+    df = pd.DataFrame({"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]}, index=pd.date_range(initial_timestamp, periods=100))
     sym = "arrow_date_test"
     lib.write(sym, df)
 
@@ -217,11 +230,15 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
 
     date_range = (query_start_ts, query_end_ts)
     data_closed_table = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    data_closed_table = stringify_dictionary_encoded_columns(data_closed_table)
     df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
     assert query_start_ts == df.index[0]
     assert query_end_ts == df.index[-1]
-    assert df['x'].iloc[0] == start_offset
-    assert df['x'].iloc[-1] == end_offset
+    assert df['numeric'].iloc[0] == start_offset
+    assert df['numeric'].iloc[-1] == end_offset
+    assert df['strings'].iloc[0] == f"{start_offset}"
+    assert df['strings'].iloc[-1] == f"{end_offset}"
+
 
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_date,end_date", [(1, 1), (1, 4), (1, 5), (3, 7), (6, 7), (6, 10), (7, 7)])
@@ -292,22 +309,25 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("start_offset,end_offset", [(2, 4), (3, 76), (4, 33), (0, 100), (7, 57)])
 def test_row_range(version_store_factory, segment_row_size, start_offset, end_offset):
-    lib = version_store_factory(segment_row_size=segment_row_size)
+    lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
     initial_timestamp = pd.Timestamp("2019-01-01")
-    df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100), columns=['x'])
+    df = pd.DataFrame({"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]}, index=pd.date_range(initial_timestamp, periods=100))
     sym = "arrow_date_test"
     lib.write(sym, df)
 
     row_range = (start_offset, end_offset)
     data_closed_table = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    data_closed_table = stringify_dictionary_encoded_columns(data_closed_table)
     df = fix_timeseries_index(data_closed_table.to_pandas(), set_index=True)
 
     start_ts = initial_timestamp + pd.DateOffset(start_offset)
     end_ts = initial_timestamp + pd.DateOffset(end_offset-1)
     assert start_ts == df.index[0]
     assert end_ts == df.index[-1]
-    assert df['x'].iloc[0] == start_offset
-    assert df['x'].iloc[-1] == end_offset-1
+    assert df['numeric'].iloc[0] == start_offset
+    assert df['numeric'].iloc[-1] == end_offset-1
+    assert df['strings'].iloc[0] == f"{start_offset}"
+    assert df['strings'].iloc[-1] == f"{end_offset - 1}"
 
 
 def test_with_querybuilder(lmdb_version_store_v1):
@@ -462,4 +482,121 @@ def test_arrow_dynamic_schema_missing_columns_hypothesis(lmdb_version_store_dyna
     )
     received = lib.read(sym, _output_format=OutputFormat.ARROW).data
     received = stringify_dictionary_encoded_columns(received)
+    assert expected.equals(received)
+
+
+# TODO: Extend these tests to other types when Arrow write support is complete
+@pytest.mark.parametrize("type", [pa.float32(), pa.float64()])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_arrow_sparse_floats_basic(version_store_factory, type, dynamic_schema):
+    lib = version_store_factory(dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_basic"
+    table = pa.table({"col": pa.array([1, None, None, 2, None], type)})
+    assert table.column("col").null_count == 3
+    df = table.to_pandas()
+    assert df["col"].isna().sum() == 3
+    lib.write(sym, df, sparsify_floats=True)
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    assert table.equals(received)
+
+
+@pytest.mark.parametrize("type", [pa.float32(), pa.float64()])
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_arrow_sparse_floats_row_sliced(version_store_factory, type, dynamic_schema):
+    lib = version_store_factory(segment_row_size=2, dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_row_sliced"
+    table_0 = pa.table({"col": pa.array([1, None], type)})
+    table_1 = pa.table({"col": pa.array([2, 3], type)})
+    table_2 = pa.table({"col": pa.array([None, 4], type)})
+    df_0 = table_0.to_pandas()
+    df_1 = table_1.to_pandas()
+    df_2 = table_2.to_pandas()
+    df = pd.concat([df_0, df_1, df_2])
+    df.index = pd.RangeIndex(0, 6)
+    lib.write(sym, df, sparsify_floats=True)
+    expected = pa.concat_tables([table_0, table_1, table_2])
+    received = lib.read(sym, _output_format=OutputFormat.ARROW).data
+    assert expected.equals(received)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("date_range_start", list(pd.date_range("2025-01-01", periods=14)))
+@pytest.mark.parametrize("date_range_width", list(range(0, 15)))
+def test_arrow_sparse_floats_date_range(version_store_factory, dynamic_schema, date_range_start, date_range_width):
+    lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_date_range"
+    table_0 = pa.table({"col": pa.array([1, None, 2, None, 3], pa.float64())})
+    table_1 = pa.table({"col": pa.array([4, None, None, None, None], pa.float64())})
+    table_2 = pa.table({"col": pa.array([None, 5, 6, 7, 8], pa.float64())})
+    df_0 = table_0.to_pandas()
+    df_1 = table_1.to_pandas()
+    df_2 = table_2.to_pandas()
+    df = pd.concat([df_0, df_1, df_2])
+    df.index = pd.date_range("2025-01-01", periods=15)
+    lib.write(sym, df, sparsify_floats=True)
+    date_range = (date_range_start, date_range_start + pd.Timedelta(days=date_range_width))
+    expected = pa.concat_tables([table_0, table_1, table_2]).slice(offset=(date_range_start - pd.Timestamp("2025-01-01")).days, length=date_range_width + 1)
+    received = lib.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+    assert expected["col"].equals(received["col"])
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("row_range_start", list(range(14)))
+@pytest.mark.parametrize("row_range_width", list(range(0, 15)))
+def test_arrow_sparse_floats_row_range(version_store_factory, dynamic_schema, row_range_start, row_range_width):
+    lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
+    sym = "test_arrow_sparse_floats_row_range"
+    table_0 = pa.table({"col": pa.array([1, None, 2, None, 3], pa.float64())})
+    table_1 = pa.table({"col": pa.array([4, None, None, None, None], pa.float64())})
+    table_2 = pa.table({"col": pa.array([None, 5, 6, 7, 8], pa.float64())})
+    df_0 = table_0.to_pandas()
+    df_1 = table_1.to_pandas()
+    df_2 = table_2.to_pandas()
+    df = pd.concat([df_0, df_1, df_2])
+    df.index = pd.RangeIndex(0, 15)
+    lib.write(sym, df, sparsify_floats=True)
+    row_range = (row_range_start, row_range_start + row_range_width)
+    expected = pa.concat_tables([table_0, table_1, table_2]).slice(offset=row_range[0], length=row_range[1] - row_range[0])
+    received = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    assert expected.equals(received)
+
+
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+@given(
+    df=data_frames(
+        columns(
+            ["col"],
+            elements=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
+            fill=st.just(np.nan)
+        ),
+    ),
+    rows_per_slice=st.integers(2, 10),
+    use_row_range=st.booleans(),
+)
+def test_arrow_sparse_floats_hypothesis(lmdb_version_store_v1, df, rows_per_slice, use_row_range):
+    row_count = len(df)
+    assume(row_count > 0)
+    # Cannot use version_store_factory as it will complain that the library name is the same
+    lib = lmdb_version_store_v1
+    lib._cfg.write_options.segment_row_size = rows_per_slice
+    sym = "test_arrow_sparse_floats_hypothesis"
+    # Each row slice must have at least one non-NaN value for sparsify_floats to work, so add one if there aren't any
+    row_slices = []
+    num_row_slices = (row_count + (rows_per_slice - 1)) // rows_per_slice
+    for i in range(num_row_slices):
+        row_slice = df[i * rows_per_slice: (i + 1) * rows_per_slice]
+        if row_slice["col"].notna().sum() == 0:
+            row_slice["col"][i * rows_per_slice] = 100
+        row_slices.append(row_slice)
+    adjusted_df = pd.concat(row_slices)
+    lib.write(sym, adjusted_df, sparsify_floats=True)
+    if use_row_range:
+        row_range = (row_count // 3, (2 * row_count) // 3)
+        expected = (pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
+                    .slice(offset=row_range[0], length=row_range[1] - row_range[0]))
+        received = lib.read(sym, row_range=row_range, _output_format=OutputFormat.ARROW).data
+    else:
+        expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
+        received = lib.read(sym, _output_format=OutputFormat.ARROW).data
     assert expected.equals(received)

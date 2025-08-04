@@ -15,7 +15,6 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/util/encoding_conversion.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/codec/slice_data_sink.hpp>
@@ -263,6 +262,15 @@ void handle_truncation(
     handle_truncation(dest_column, mapping.truncate_);
 }
 
+void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate) {
+    if (truncate.start_) {
+        bv = util::truncate_sparse_map(bv, *truncate.start_, truncate.end_.value_or(bv.size()));
+    } else if (truncate.end_) {
+        // More efficient than util::truncate_sparse_map as it avoids a copy
+        bv.resize(*truncate.end_);
+    }
+}
+
 void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type) {
     auto& sparse_buffer = dest_column.create_extra_buffer(
         offset,
@@ -309,17 +317,23 @@ void decode_or_expand(
             ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](auto tdt) {
+            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, output_format](auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
-                util::default_initialize<TagType>(dest, dest_bytes);
+                if (output_format != OutputFormat::ARROW) {
+                    // Arrow doesn't care what values are at indices where the validity bitmap is zero
+                    util::default_initialize<TagType>(dest, dest_bytes);
+                }
                 util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
 
             // TODO We must handle sparse columns in ArrowStringHandler and deduplicate logic between the two.
             // Consider registering a sparse handler on the TypeHandlerRegistry.
-            if(output_format == OutputFormat::ARROW)
+            if(output_format == OutputFormat::ARROW) {
+                bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
+                handle_truncation(*bv, mapping.truncate_);
                 create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
+            }
         } else {
             SliceDataSink sink(dest, dest_bytes);
             const auto &ndarray = encoded_field_info.ndarray();
@@ -333,6 +347,9 @@ void decode_or_expand(
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
         }
     }
+    // TODO: This is super inefficient for Arrow string columns. It will first produce the required 3 Arrow buffers
+    // for the entire slice of the column that was just decoded, and then restrict to just the relevant rows of the
+    // "data" column
     handle_truncation(dest_column, mapping);
 }
 

@@ -55,6 +55,7 @@ class BIBenchmarks:
 
     number = 2
     timeout = 6000
+    warmup_time = 0    
     LIB_NAME = "BI_benchmark_lib"
     # We use dataframe in this file
     CITY_BI_FILE = "data/CityMaxCapita_1.csv.bz2"
