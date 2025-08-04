@@ -2951,6 +2951,8 @@ class NativeVersionStore:
     def will_item_be_pickled(self, item):
         """
         Check if the data will be pickled.
+
+        Parameters
         ----------
         item : `Any`
             Data to be checked.
@@ -2962,7 +2964,7 @@ class NativeVersionStore:
 
         Notes
         ----------
-        There is dispartiy between `will_item_be_pickled` and `is_symbol_pickled`.
+        There is disparity between `will_item_be_pickled` and `is_symbol_pickled`.
         For recursively normalized data, regardless of whether it's partially pickled or not,
         `is_symbol_pickled` returns False and `will_item_be_pickled` returns True
 
@@ -2996,9 +2998,9 @@ class NativeVersionStore:
             if resolved_recursive_normalizers:
                 is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
                 if is_recursive_normalize_preferred:
-                    log.warning("As library setting recursive_normalizers is enabled, the item"
-                                "will be recursively normalized in `def write`."
-                                "However for backward compatibility, this API will still return True.")
+                    log.warning("As the library setting recursive_normalizers is enabled, the item "
+                                "will be recursively normalized in `write`. "
+                                "However, for backward compatibility, this API will still return True.")
                     fl = Flattener()
                     if fl.will_obj_be_partially_pickled(item):
                         log.warning("Please note the item will still be partially pickled.")
@@ -3041,7 +3043,7 @@ class NativeVersionStore:
 
         Notes
         ----------
-        There is dispartiy between `will_item_be_pickled` and `is_symbol_pickled`.
+        There is disparity between `will_item_be_pickled` and `is_symbol_pickled`.
         For recursively normalized data, regardless of whether it's partially pickled or not,
         `is_symbol_pickled` returns False and `will_item_be_pickled` returns True
 
