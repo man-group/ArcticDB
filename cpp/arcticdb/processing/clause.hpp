@@ -681,10 +681,20 @@ struct RowRangeClause {
         clause_info_.input_structure_ = ProcessingStructure::ALL;
     }
 
-    explicit RowRangeClause(int64_t start, int64_t end):
-            row_range_type_(RowRangeType::RANGE),
-            user_provided_start_(start),
-            user_provided_end_(end) {
+    explicit RowRangeClause(std::optional<int64_t> start, std::optional<int64_t> end) {
+        util::check(start || end, "Expect at least one of start and end to be present");
+        if (start && end) {
+            row_range_type_ = RowRangeType::RANGE;
+            user_provided_start_ = *start;
+            user_provided_end_ = *end;
+        } else if (start) {
+            util::check(start != 0, "Did not expect end=nullopt and start==0");
+            row_range_type_ = RowRangeType::TAIL;
+            n_ = -1 * start.value();
+        } else if (end) {
+            row_range_type_ = RowRangeType::HEAD;
+            n_ = end.value();
+        }
         clause_info_.input_structure_ = ProcessingStructure::ALL;
     }
 

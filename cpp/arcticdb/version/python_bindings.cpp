@@ -456,7 +456,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
             .def(py::init<RowRangeClause::RowRangeType, int64_t>())
-            .def(py::init<int64_t, int64_t>())
+            .def(py::init<std::optional<int64_t>, std::optional<int64_t>>())
             .def("__str__", &RowRangeClause::to_string);
 
     py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")

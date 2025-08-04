@@ -6,11 +6,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 import numpy as np
+import pandas as pd
 import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException
 
+from arcticdb.util.test import assert_frame_equal
 
 pytestmark = pytest.mark.pipeline
 
@@ -89,3 +91,93 @@ def test_row_range_pickled_symbol(lmdb_version_store):
     assert lmdb_version_store.is_symbol_pickled(symbol)
     with pytest.raises(InternalException):
         _ = lmdb_version_store.read(symbol, row_range=(1, 2))
+
+
+@pytest.mark.parametrize("query_builder", (True, False))
+def test_row_range_open_ended_negative_start(lmdb_version_store_v1, query_builder):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    row_range = (-5, None)
+
+    if query_builder:
+        q = QueryBuilder().row_range(row_range)
+        received = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    else:
+        received = lmdb_version_store_v1.read(symbol, row_range=row_range).data
+
+    expected = pd.DataFrame({"a": np.arange(95, 100)})
+    assert_frame_equal(received, expected)
+
+
+def test_row_range_open_ended_positive_start(lmdb_version_store_v1):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    q = QueryBuilder().row_range((5, None))
+    received_array_via_querybuilder = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": np.arange(5, 100)})
+    assert_frame_equal(received_array_via_querybuilder, expected)
+
+
+def test_row_range_open_ended_zero_start(lmdb_version_store_v1):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    q = QueryBuilder().row_range((0, None))
+    received_array_via_querybuilder = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": np.arange(0, 100)})
+    assert_frame_equal(received_array_via_querybuilder, expected)
+
+
+def test_row_range_open_ended_negative_end(lmdb_version_store_v1):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    q = QueryBuilder().row_range((None, -5))
+    received_array_via_querybuilder = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": np.arange(95)})
+    assert_frame_equal(received_array_via_querybuilder, expected)
+
+
+def test_row_range_open_ended_positive_end(lmdb_version_store_v1):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    q = QueryBuilder().row_range((None, 5))
+    received_array_via_querybuilder = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": np.arange(5)})
+    assert_frame_equal(received_array_via_querybuilder, expected)
+
+
+def test_row_range_open_ended_zero_end(lmdb_version_store_v1):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    q = QueryBuilder().row_range((None, 0))
+    received_array_via_querybuilder = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": []}, dtype=np.int64)
+    assert_frame_equal(received_array_via_querybuilder, expected)
+
+
+def test_row_range_doubly_open_ended(lmdb_version_store_v1):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    q = QueryBuilder().row_range((None, None))
+    received_array_via_querybuilder = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": np.arange(100)})
+    assert_frame_equal(received_array_via_querybuilder, expected)
+
+
+def test_row_range_cross_over(lmdb_version_store_v1):
+    symbol = "test_row_range"
+    df = pd.DataFrame({"a": np.arange(100)})
+    lmdb_version_store_v1.write(symbol, df)
+    q = QueryBuilder().row_range((5, 3))
+    received_array_via_querybuilder = lmdb_version_store_v1.read(symbol, query_builder=q).data
+    expected = pd.DataFrame({"a": []}, dtype=np.int64)
+    assert_frame_equal(received_array_via_querybuilder, expected)
+
+# TODO aseaton read with row_range
+# TODO aseaton batch_read with row_range
