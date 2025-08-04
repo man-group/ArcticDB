@@ -30,8 +30,8 @@ DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
-    warmup_time = 0    
     number = 5
+    warmup_time = 0
     timeout = 6000
     CONNECTION_STRING = "lmdb://basic_functions?map_size=20GB"
     ULTRA_SHORT_WIDE_DF_ROWS = 1
@@ -156,8 +156,10 @@ class BasicFunctions:
 
 
 class BatchBasicFunctions:
-    number = 5
-    warmup_time = 0    
+    rounds = 1
+    number = 1
+    repeat = 3
+    warmup_time = 0
     timeout = 6000
     CONNECTION_STRING = "lmdb://batch_basic_functions?map_size=20GB"
     DATE_RANGE = DATE_RANGE
@@ -196,7 +198,8 @@ class BatchBasicFunctions:
 
     def get_fresh_lib(self):
         self.ac.delete_library("fresh_lib")
-        return self.ac.create_library("fresh_lib")
+        lib = self.ac.create_library("fresh_lib")
+        return lib
 
     def time_write_batch(self, rows, num_symbols):
         payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]

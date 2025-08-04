@@ -394,7 +394,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -417,7 +417,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -440,7 +440,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -463,7 +463,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -486,7 +486,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -496,7 +496,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch(self, rows, num_symbols):\n        read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n        self.lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch",
-        "number": 5,
+        "number": 1,
         "param_names": [
             "rows",
             "num_symbols"
@@ -511,10 +511,10 @@
                 "1000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -525,7 +525,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch_pure(self, rows, num_symbols):\n        self.lib.read_batch(self.read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch_pure",
-        "number": 5,
+        "number": 1,
         "param_names": [
             "rows",
             "num_symbols"
@@ -540,10 +540,10 @@
                 "1000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -554,7 +554,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch_with_columns(self, rows, num_symbols):\n        COLS = [\"value\"]\n        read_reqs = [ReadRequest(f\"{sym}_sym\", columns=COLS) for sym in range(num_symbols)]\n        self.lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch_with_columns",
-        "number": 5,
+        "number": 1,
         "param_names": [
             "rows",
             "num_symbols"
@@ -569,10 +569,10 @@
                 "1000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -583,7 +583,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch_with_date_ranges(self, rows, num_symbols):\n        read_reqs = [ReadRequest(f\"{sym}_sym\", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]\n        self.lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch_with_date_ranges",
-        "number": 5,
+        "number": 1,
         "param_names": [
             "rows",
             "num_symbols"
@@ -598,10 +598,10 @@
                 "1000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -612,7 +612,7 @@
         "code": "class BatchBasicFunctions:\n    def time_update_batch(self, rows, num_symbols):\n        payloads = [UpdatePayload(f\"{sym}_sym\", self.update_df) for sym in range(num_symbols)]\n        results = self.lib.update_batch(payloads)\n        assert results[0].version >= 1\n        assert results[-1].version >= 1\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_update_batch",
-        "number": 5,
+        "number": 1,
         "param_names": [
             "rows",
             "num_symbols"
@@ -627,10 +627,10 @@
                 "1000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -641,7 +641,7 @@
         "code": "class BatchBasicFunctions:\n    def time_write_batch(self, rows, num_symbols):\n        payloads = [WritePayload(f\"{sym}_sym\", self.df) for sym in range(num_symbols)]\n        self.fresh_lib.write_batch(payloads)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_write_batch",
-        "number": 5,
+        "number": 1,
         "param_names": [
             "rows",
             "num_symbols"
@@ -656,10 +656,10 @@
                 "1000"
             ]
         ],
-        "repeat": 0,
-        "rounds": 2,
+        "repeat": 3,
+        "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:167",
+        "setup_cache_key": "basic_functions:169",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -683,7 +683,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -707,7 +707,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -731,7 +731,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -755,7 +755,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -779,7 +779,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -803,7 +803,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -827,7 +827,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -851,7 +851,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -875,7 +875,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -899,7 +899,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -923,7 +923,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:316",
+        "setup_cache_key": "basic_functions:319",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -3999,7 +3999,7 @@
     },
     "version": 2,
     "version_chain.IterateVersionChain.time_list_undeleted_versions": {
-        "code": "class IterateVersionChain:\n    def time_list_undeleted_versions(self, num_versions, caching, deleted):\n        self.lib.list_versions(symbol=self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching==\"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching==\"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching==\"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n    \n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    if (i == math.floor(deleted * num_versions)):\n                        lib.delete(symbol)\n    \n        del self.ac",
+        "code": "class IterateVersionChain:\n    def time_list_undeleted_versions(self, num_versions, caching, deleted):\n        self.lib.list_versions(symbol=self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n    \n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n        # Pre-calculate delete points to avoid repeated math.floor calls\n        delete_points = {}\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_points[symbol] = math.floor(deleted * num_versions)\n    \n        start_time = time.time()\n        adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        # Batch operations by symbol to reduce overhead\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_point = delete_points[symbol]\n    \n                # Write all versions in a single loop\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    # Only check for deletion once per iteration\n                    if i == delete_point:\n                        lib.delete(symbol)\n    \n        adb._ext.unset_config_int(\"VersionMap.ReloadInterval\")\n    \n        print(\"IterateVersionChain: Setup cache took (s) :\", time.time() - start_time)\n    \n        del self.ac",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_list_undeleted_versions",
         "number": 10,
@@ -4025,15 +4025,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "version_chain:37",
+        "setup_cache_key": "version_chain:39",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "6bdd43d7f191d2bbbd30ef740909969e25cbe1cec77f1755c5c3ba58a77f2b88",
+        "version": "8667ff561fc9425f8c5bf0cd8b395b7c78ecf03898773dca1a68a88cd920d525",
         "warmup_time": 0
     },
     "version_chain.IterateVersionChain.time_load_all_versions": {
-        "code": "class IterateVersionChain:\n    def time_load_all_versions(self, num_versions, caching, deleted):\n        self.load_all(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching==\"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching==\"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching==\"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n    \n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    if (i == math.floor(deleted * num_versions)):\n                        lib.delete(symbol)\n    \n        del self.ac",
+        "code": "class IterateVersionChain:\n    def time_load_all_versions(self, num_versions, caching, deleted):\n        self.load_all(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n    \n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n        # Pre-calculate delete points to avoid repeated math.floor calls\n        delete_points = {}\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_points[symbol] = math.floor(deleted * num_versions)\n    \n        start_time = time.time()\n        adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        # Batch operations by symbol to reduce overhead\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_point = delete_points[symbol]\n    \n                # Write all versions in a single loop\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    # Only check for deletion once per iteration\n                    if i == delete_point:\n                        lib.delete(symbol)\n    \n        adb._ext.unset_config_int(\"VersionMap.ReloadInterval\")\n    \n        print(\"IterateVersionChain: Setup cache took (s) :\", time.time() - start_time)\n    \n        del self.ac",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_load_all_versions",
         "number": 10,
@@ -4059,15 +4059,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "version_chain:37",
+        "setup_cache_key": "version_chain:39",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "c40fe3123db9e5d6fdf5f35caecaf42d266328deb78c237e293096ae3a4bcf98",
+        "version": "af26164b7b08b891411652bc950f752fccd5115fc6e3b55055350cc9dca4895f",
         "warmup_time": 0
     },
     "version_chain.IterateVersionChain.time_read_alternating": {
-        "code": "class IterateVersionChain:\n    def time_read_alternating(self, num_versions, caching, deleted):\n        self.read_from_epoch(self.symbol(num_versions, deleted))\n        self.read_v0(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching==\"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching==\"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching==\"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n    \n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    if (i == math.floor(deleted * num_versions)):\n                        lib.delete(symbol)\n    \n        del self.ac",
+        "code": "class IterateVersionChain:\n    def time_read_alternating(self, num_versions, caching, deleted):\n        self.read_from_epoch(self.symbol(num_versions, deleted))\n        self.read_v0(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n    \n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n        # Pre-calculate delete points to avoid repeated math.floor calls\n        delete_points = {}\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_points[symbol] = math.floor(deleted * num_versions)\n    \n        start_time = time.time()\n        adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        # Batch operations by symbol to reduce overhead\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_point = delete_points[symbol]\n    \n                # Write all versions in a single loop\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    # Only check for deletion once per iteration\n                    if i == delete_point:\n                        lib.delete(symbol)\n    \n        adb._ext.unset_config_int(\"VersionMap.ReloadInterval\")\n    \n        print(\"IterateVersionChain: Setup cache took (s) :\", time.time() - start_time)\n    \n        del self.ac",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_read_alternating",
         "number": 10,
@@ -4093,15 +4093,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "version_chain:37",
+        "setup_cache_key": "version_chain:39",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "ec1a61c37c4cc7317cfafe554f3eeb7fe2a426068ec412c1d7c6b78f510f6c45",
+        "version": "06d8140bbd804a1fb0eb734eb8d1d07e58af6040ae2d4e011c86fbdd04e40557",
         "warmup_time": 0
     },
     "version_chain.IterateVersionChain.time_read_from_epoch": {
-        "code": "class IterateVersionChain:\n    def time_read_from_epoch(self, num_versions, caching, deleted):\n        self.read_from_epoch(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching==\"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching==\"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching==\"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n    \n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    if (i == math.floor(deleted * num_versions)):\n                        lib.delete(symbol)\n    \n        del self.ac",
+        "code": "class IterateVersionChain:\n    def time_read_from_epoch(self, num_versions, caching, deleted):\n        self.read_from_epoch(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n    \n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n        # Pre-calculate delete points to avoid repeated math.floor calls\n        delete_points = {}\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_points[symbol] = math.floor(deleted * num_versions)\n    \n        start_time = time.time()\n        adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        # Batch operations by symbol to reduce overhead\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_point = delete_points[symbol]\n    \n                # Write all versions in a single loop\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    # Only check for deletion once per iteration\n                    if i == delete_point:\n                        lib.delete(symbol)\n    \n        adb._ext.unset_config_int(\"VersionMap.ReloadInterval\")\n    \n        print(\"IterateVersionChain: Setup cache took (s) :\", time.time() - start_time)\n    \n        del self.ac",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_read_from_epoch",
         "number": 10,
@@ -4127,15 +4127,15 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "version_chain:37",
+        "setup_cache_key": "version_chain:39",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "5c6aace0b39c7a75f064a61c182cbbb42a35f0e0ee46546579bc641e68dc954a",
+        "version": "75622fb8f2befd8d3eaf5b40d7dd8717ca4f999247924a13d99fa5369abeff80",
         "warmup_time": 0
     },
     "version_chain.IterateVersionChain.time_read_v0": {
-        "code": "class IterateVersionChain:\n    def time_read_v0(self, num_versions, caching, deleted):\n        self.read_v0(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching==\"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching==\"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching==\"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n    \n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    if (i == math.floor(deleted * num_versions)):\n                        lib.delete(symbol)\n    \n        del self.ac",
+        "code": "class IterateVersionChain:\n    def time_read_v0(self, num_versions, caching, deleted):\n        self.read_v0(self.symbol(num_versions, deleted))\n\n    def setup(self, num_versions, caching, deleted):\n        # Disable warnings for version not found\n        set_log_level(\"ERROR\")\n    \n        if caching == \"never\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", 0)\n        if caching == \"forever\":\n            adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        if caching == \"default\":\n            # Leave the default reload interval\n            pass\n    \n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n        self.lib = self.ac[IterateVersionChain.LIB_NAME]\n    \n        if caching != \"never\":\n            # Pre-load the cache\n            self.load_all(self.symbol(num_versions, deleted))\n\n    def setup_cache(self):\n        self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)\n    \n        num_versions_list, caching_list, deleted_list = IterateVersionChain.params\n    \n        self.ac.delete_library(IterateVersionChain.LIB_NAME)\n        lib = self.ac.create_library(IterateVersionChain.LIB_NAME)\n    \n        small_df = generate_random_floats_dataframe(2, 2)\n        # Pre-calculate delete points to avoid repeated math.floor calls\n        delete_points = {}\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_points[symbol] = math.floor(deleted * num_versions)\n    \n        start_time = time.time()\n        adb._ext.set_config_int(\"VersionMap.ReloadInterval\", sys.maxsize)\n        # Batch operations by symbol to reduce overhead\n        for num_versions in num_versions_list:\n            for deleted in deleted_list:\n                symbol = self.symbol(num_versions, deleted)\n                delete_point = delete_points[symbol]\n    \n                # Write all versions in a single loop\n                for i in range(num_versions):\n                    lib.write(symbol, small_df)\n                    # Only check for deletion once per iteration\n                    if i == delete_point:\n                        lib.delete(symbol)\n    \n        adb._ext.unset_config_int(\"VersionMap.ReloadInterval\")\n    \n        print(\"IterateVersionChain: Setup cache took (s) :\", time.time() - start_time)\n    \n        del self.ac",
         "min_run_count": 2,
         "name": "version_chain.IterateVersionChain.time_read_v0",
         "number": 10,
@@ -4161,11 +4161,11 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "version_chain:37",
+        "setup_cache_key": "version_chain:39",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "4bf693e490128c1cff7500c93799432e7bf150925d3714757219604aa7fa5e9c",
+        "version": "68ba5dbfd6155bc8c5b6a3854debbba05c832587ad9e0f325f432750698acc2b",
         "warmup_time": 0
     }
 }
