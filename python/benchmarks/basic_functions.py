@@ -195,16 +195,25 @@ class BatchBasicFunctions:
         self.fresh_lib = self.get_fresh_lib()
 
     def get_fresh_lib(self):
+        start_time = time.time()
         self.ac.delete_library("fresh_lib")
-        return self.ac.create_library("fresh_lib")
+        print("In get_fresh_lib: Delete library took (s) :", time.time() - start_time)
+        start_time = time.time()
+        lib = self.ac.create_library("fresh_lib")
+        print("In get_fresh_lib: Create library took (s) :", time.time() - start_time)
+        return lib
 
     def time_write_batch(self, rows, num_symbols):
         payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]
+        start_time = time.time()
         self.fresh_lib.write_batch(payloads)
+        print("In time_write_batch: Write batch took (s) :", time.time() - start_time)
 
     def peakmem_write_batch(self, rows, num_symbols):
         payloads = [WritePayload(f"{sym}_sym", self.df) for sym in range(num_symbols)]
+        start_time = time.time()
         self.fresh_lib.write_batch(payloads)
+        print("In peakmem_write_batch: Write batch took (s) :", time.time() - start_time)
 
     def time_update_batch(self, rows, num_symbols):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
