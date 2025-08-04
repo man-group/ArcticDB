@@ -498,6 +498,10 @@ def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update
                     to_df[col] = np.full(len(to_df), False, dtype=dtype)
                 elif dtype == object or pd.api.types.is_string_dtype(dtype):
                     to_df[col] = [None] * len(to_df)
+                elif pd.api.types.is_datetime64_any_dtype(from_df[col]):
+                    to_df[col] = pd.NaT
+                else:
+                    raise TypeError(f"Type is not supported: {dtype}")
     add_missing_ending_columns(expected_df, update_df)
     return dataframe_simulate_arcticdb_update_static(expected_df, update_df)
 
