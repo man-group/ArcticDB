@@ -39,6 +39,9 @@ PRE_4_X_X = (
 PRE_5_X_X = (
     False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.0.0")
 )    
+PRE_5_2_X = (
+    False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.2.0")
+)    
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     dataframes = []
@@ -374,10 +377,10 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
     ## NOTE: Conditional on the version check.
     ##       Reasons for failure of older version is not investigated
-    if (arcticdb.__version__ >= "5.2.0"):
-        assert len(data_keys) == 8
-    else:
+    if PRE_5_2_X:
         assert len(data_keys) == 2
+    else:
+        assert len(data_keys) == 8
     for k in data_keys:
         df = lib_tool.read_to_dataframe(k)
         assert df.index.is_monotonic_increasing
