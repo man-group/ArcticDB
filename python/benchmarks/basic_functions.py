@@ -30,7 +30,7 @@ DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
-    warmup_time = 0    
+    warmup_time = 0
     number = 5
     timeout = 6000
     CONNECTION_STRING = "lmdb://basic_functions?map_size=20GB"
@@ -157,7 +157,7 @@ class BasicFunctions:
 
 class BatchBasicFunctions:
     number = 5
-    warmup_time = 0    
+    warmup_time = 0
     timeout = 6000
     CONNECTION_STRING = "lmdb://batch_basic_functions?map_size=20GB"
     DATE_RANGE = DATE_RANGE
@@ -208,13 +208,17 @@ class BatchBasicFunctions:
 
     def time_update_batch(self, rows, num_symbols):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
+        start_time = time.time()
         results = self.lib.update_batch(payloads)
+        print("In t time_update_batch: Update batch took (s) :", time.time() - start_time)
         assert results[0].version >= 1
         assert results[-1].version >= 1
 
     def peakmem_update_batch(self, rows, num_symbols):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
+        start_time = time.time()
         results = self.lib.update_batch(payloads)
+        print("In peakmem_update_batch: Update batch took (s) :", time.time() - start_time)
         assert results[0].version >= 1
 
     def time_read_batch(self, rows, num_symbols):

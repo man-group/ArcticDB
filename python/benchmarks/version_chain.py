@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import datetime
 import os
 
@@ -15,6 +16,7 @@ import arcticdb as adb
 import datetime
 import math
 import sys
+import time
 
 from .common import *
 
@@ -22,7 +24,7 @@ from .common import *
 class IterateVersionChain:
     number = 10
     timeout = 6000
-    warmup_time = 0    
+    warmup_time = 0
     CONNECTION_STRING = "lmdb://version_chain?map_size=20GB"
     LIB_NAME = "lib"
 
@@ -35,21 +37,36 @@ class IterateVersionChain:
         return f"symbol_{num_versions}_{deleted}"
 
     def setup_cache(self):
+        start_time = time.time()
         self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)
+        print("Arctic connection took (s) :", time.time() - start_time)
         num_versions_list, caching_list, deleted_list = IterateVersionChain.params
 
+        start_time = time.time()
         self.ac.delete_library(IterateVersionChain.LIB_NAME)
+        print("Delete library took (s) :", time.time() - start_time)
+
+        start_time = time.time()
         lib = self.ac.create_library(IterateVersionChain.LIB_NAME)
+        print("Create library took (s) :", time.time() - start_time)
 
+        start_time = time.time()
         small_df = generate_random_floats_dataframe(2, 2)
+        print("Generate random dataframe took (s) :", time.time() - start_time)
 
+        start_time = time.time()
         for num_versions in num_versions_list:
             for deleted in deleted_list:
                 symbol = self.symbol(num_versions, deleted)
                 for i in range(num_versions):
                     lib.write(symbol, small_df)
-                    if (i == math.floor(deleted * num_versions)):
+                    if i == math.floor(deleted * num_versions):
                         lib.delete(symbol)
+        print("Write and delete took (s) :", time.time() - start_time)
+
+        start_time = time.time()
+        del self.ac
+        print("Delete Arctic took (s) :", time.time() - start_time)
 
         del self.ac
 
@@ -61,25 +78,25 @@ class IterateVersionChain:
         try:
             # Throws an error if version is deleted
             self.lib.read(symbol, as_of=0)
-        except(NoSuchVersionException):
+        except NoSuchVersionException:
             pass
 
     def read_from_epoch(self, symbol):
         try:
             # Throws an error if version is deleted
             self.lib.read(symbol, as_of=datetime.datetime.utcfromtimestamp(0))
-        except(NoSuchVersionException):
+        except NoSuchVersionException:
             pass
 
     def setup(self, num_versions, caching, deleted):
         # Disable warnings for version not found
         set_log_level("ERROR")
 
-        if caching=="never":
+        if caching == "never":
             adb._ext.set_config_int("VersionMap.ReloadInterval", 0)
-        if caching=="forever":
+        if caching == "forever":
             adb._ext.set_config_int("VersionMap.ReloadInterval", sys.maxsize)
-        if caching=="default":
+        if caching == "default":
             # Leave the default reload interval
             pass
 
@@ -94,7 +111,6 @@ class IterateVersionChain:
         adb._ext.unset_config_int("VersionMap.ReloadInterval")
         del self.lib
         del self.ac
-
 
     def time_load_all_versions(self, num_versions, caching, deleted):
         self.load_all(self.symbol(num_versions, deleted))
