@@ -567,7 +567,7 @@ def test_arrow_sparse_floats_row_range(version_store_factory, dynamic_schema, ro
     df=data_frames(
         columns(
             ["col"],
-            elements=st.floats(min_value=0, max_value=1000, allow_nan=False, allow_subnormal=False),
+            elements=st.floats(min_value=0, max_value=1000, allow_nan=False),
             fill=st.just(np.nan)
         ),
     ),
