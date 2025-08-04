@@ -54,6 +54,7 @@ void TaskScheduler::init(){
 }
 
 TaskSchedulerPtrWrapper::~TaskSchedulerPtrWrapper() {
+    ptr_->all_threads_dead();
     delete ptr_;
 }
 

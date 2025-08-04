@@ -101,6 +101,12 @@ struct SchedulerWrapper : public SchedulerType {
     void ensure_active_threads() {
         SchedulerType::ensureActiveThreads();
     }
+
+    void all_threads_dead() {
+        for (const auto& task : SchedulerType::threadList_.get()) {
+            SchedulerType::threadList_.remove(task);
+        }
+    }
 };
 
 struct CGroupValues {
@@ -253,6 +259,11 @@ class TaskScheduler {
     SchedulerWrapper<IOSchedulerType>& io_exec() {
         ARCTICDB_TRACE(log::schedule(), "Getting IO executor: {}", io_exec_.getPendingTaskCount());
         return io_exec_;
+    }
+
+    void all_threads_dead() {
+        cpu_exec_.all_threads_dead();
+        io_exec_.all_threads_dead();
     }
 
     void re_init() {
