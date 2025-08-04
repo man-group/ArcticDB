@@ -95,6 +95,15 @@ If only `NumCPUThreads` is set, `NumIOThreads` will still default to x1.5 `NumCP
 
 <sup>\*</sup>On Linux machines, this core count takes cgroups into account. In particular, this means that CPU limits are respected in processes running in Kubernetes.
 
+### VersionStore.WillItemBePickledWarningMsg
+
+Control whether a detailed message explaining how the item is normalized is logged when calling the `will_item_be_pickled` function.
+Please note that this message is logged as a warning. Therefore, setting the log level to below `warning` will also suppress the log in the `will_item_be_pickled` function.
+
+Values:
+* 0: Disable
+* 1: Enable (Default)
+
 ## Logging configuration
 
 ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 
