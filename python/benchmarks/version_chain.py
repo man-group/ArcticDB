@@ -59,12 +59,24 @@ class IterateVersionChain:
         print("Generate random dataframe took (s) :", time.time() - start_time)
 
         start_time = time.time()
+        # Pre-calculate delete points to avoid repeated math.floor calls
+        delete_points = {}
         for num_versions in num_versions_list:
             for deleted in deleted_list:
                 symbol = self.symbol(num_versions, deleted)
+                delete_points[symbol] = math.floor(deleted * num_versions)
+
+        # Batch operations by symbol to reduce overhead
+        for num_versions in num_versions_list:
+            for deleted in deleted_list:
+                symbol = self.symbol(num_versions, deleted)
+                delete_point = delete_points[symbol]
+
+                # Write all versions in a single loop
                 for i in range(num_versions):
                     lib.write(symbol, small_df)
-                    if i == math.floor(deleted * num_versions):
+                    # Only check for deletion once per iteration
+                    if i == delete_point:
                         lib.delete(symbol)
         print("Write and delete took (s) :", time.time() - start_time)
 
