@@ -68,8 +68,6 @@ class IterateVersionChain:
         del self.ac
         print("Delete Arctic took (s) :", time.time() - start_time)
 
-        del self.ac
-
     def load_all(self, symbol):
         # Getting tombstoned versions requires a LOAD_ALL
         self.lib._nvs.version_store._get_all_tombstoned_versions(symbol)
