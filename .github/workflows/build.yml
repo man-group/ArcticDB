@@ -238,7 +238,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[12]')}}
+        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
