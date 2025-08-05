@@ -20,14 +20,12 @@ std::once_flag TaskScheduler::shutdown_flag_;
 bool TaskScheduler::forked_ = false;
 
 void TaskScheduler::destroy_instance() {
-    std::call_once(TaskScheduler::shutdown_flag_, &TaskScheduler::stop_and_destroy);
+    std::call_once(TaskScheduler::shutdown_flag_, &TaskScheduler::stop_threads);
 }
 
-void TaskScheduler::stop_and_destroy() {
+void TaskScheduler::stop_threads() {
     if(TaskScheduler::instance_) {
         TaskScheduler::instance()->stop();
-
-        TaskScheduler::instance_.reset();
     }
 }
 

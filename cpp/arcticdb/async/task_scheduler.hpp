@@ -103,8 +103,9 @@ struct SchedulerWrapper : public SchedulerType {
     }
 
     void all_threads_dead() {
-        for (const auto& task : SchedulerType::threadList_.get()) {
-            SchedulerType::threadList_.remove(task);
+        auto threads_to_remove = SchedulerType::threadList_.get();
+        for (const auto& thread : threads_to_remove) {
+            SchedulerType::threadList_.remove(thread);
         }
     }
 };
@@ -222,7 +223,7 @@ class TaskScheduler {
     static TaskScheduler* instance();
     static void reattach_instance();
     static void destroy_instance();
-    static void stop_and_destroy();
+    static void stop_threads();
     static bool forked_;
     static bool is_forked();
     static void set_forked(bool);
