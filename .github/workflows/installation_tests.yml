@@ -159,6 +159,9 @@ jobs:
           "11") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
         esac        
 
+    - name: Checkout code
+      uses: actions/checkout@v3
+
     - name: Check Unsupported Versions
       shell: bash
       run: |
@@ -177,10 +180,6 @@ jobs:
           echo "Skipping unsupported combination: $CURRENT_COMBINATION"
           echo "SKIP_JOB=true" >> $GITHUB_ENV
         fi
-
-    - name: Checkout code
-      if: ${{ env.SKIP_JOB != 'true' }}
-      uses: actions/checkout@v3
 
     - name: Set up Python
       if: ${{ env.SKIP_JOB != 'true' }}
@@ -243,7 +242,7 @@ jobs:
 
     - name: Set persistent storage variables
       # Should be executed for all persistent storages but not for LMDB
-      if: ${{ env.real_tests_storage_type != 'no' }}
+      if: ${{ env.SKIP_JOB != 'true' && env.real_tests_storage_type != 'no' }}
       uses: ./.github/actions/set_persistent_storage_env_vars
       with:
         aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -271,12 +270,12 @@ jobs:
       if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Set ArcticDB Debug Logging
-      if: ${{ github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
+      if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
       uses: ./.github/actions/enable_logging
 
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
-      if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
+      if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
       if: ${{ env.SKIP_JOB != 'true' }}
