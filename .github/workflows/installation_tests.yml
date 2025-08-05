@@ -126,6 +126,9 @@ jobs:
           "11") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
         esac        
 
+    - name: Checkout code
+      uses: actions/checkout@v3
+
     - name: Check Unsupported Versions
       shell: bash
       run: |
@@ -144,10 +147,6 @@ jobs:
           echo "Skipping unsupported combination: $CURRENT_COMBINATION"
           echo "SKIP_JOB=true" >> $GITHUB_ENV
         fi
-
-    - name: Checkout code
-      if: ${{ env.SKIP_JOB != 'true' }}
-      uses: actions/checkout@v3
 
     - name: Set up Python
       if: ${{ env.SKIP_JOB != 'true' }}
