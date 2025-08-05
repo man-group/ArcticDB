@@ -32,6 +32,7 @@ from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, Stora
 from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context
 from arcticdb.storage_fixtures.s3 import S3Bucket
+from arcticdb.config import Defaults
 from arcticdb.version_store.library import (
     WritePayload,
     ArcticUnsupportedDataTypeException,
@@ -39,6 +40,8 @@ from arcticdb.version_store.library import (
     StagedDataFinalizeMethod,
     DeleteRequest,
 )
+from arcticdb.authorization.permissions import OpenMode
+from arcticdb.version_store._store import NativeVersionStore
 
 from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from ...util.mark import (
@@ -1521,3 +1524,37 @@ def test_ok_chars_snapshots(arctic_library_v1, snap):
 
     assert_frame_equal(arctic_library.read("sym", as_of=snap).data, df)
     assert arctic_library.list_snapshots() == {snap: None}
+
+
+def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib_cfg = lib.lib_cfg()
+    primary_storage_id = list(lib_cfg.storage_by_id.keys())[0]
+    secondary_storage_id = "abc"
+    # The order of protobuf map is an UB but dict is insertion ordered
+    new_storage_by_id = {
+        secondary_storage_id: list(s3_version_store_v1.lib_cfg().storage_by_id.values())[0],
+        primary_storage_id: lib_cfg.storage_by_id[primary_storage_id],
+    }
+    lib_cfg.lib_desc.storage_ids.append(secondary_storage_id)
+    class LibraryConfigWrapper:
+        def __init__(self, original_lib_cfg, controlled_storage_by_id):
+            self._original = original_lib_cfg
+            self._storage_by_id = controlled_storage_by_id
+        
+        @property
+        def storage_by_id(self): # Can't patch _storage_by_id
+            return self._storage_by_id
+        
+        def __getattr__(self, name):
+            return getattr(self._original, name)
+            
+    new_lib_cfg = LibraryConfigWrapper(lib_cfg, new_storage_by_id)
+    # get_backing_store() was only returning backed storage at the beginning of the list
+    # so we need to recreate the situation so confirm now it returns primary storage
+    assert list(new_lib_cfg.storage_by_id.keys())[0] == secondary_storage_id
+    lib_with_s3 = NativeVersionStore.create_store_from_lib_config(
+        new_lib_cfg, env=Defaults.ENV, open_mode=OpenMode.DELETE
+    )
+    assert lib_with_s3.get_backing_store() == "lmdb_storage"
+
