@@ -25,6 +25,10 @@ void ArrowStringHandler::handle_type(
     const std::shared_ptr<StringPool>& string_pool) {
     ARCTICDB_SAMPLE(ArrowHandleString, 0)
     util::check(field.has_ndarray(), "String handler expected array");
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            m.source_type_desc_.data_type() == DataType::UTF_DYNAMIC64,
+            "Cannot read column '{}' into Arrow output format as it is of unsupported type {} (only {} is supported)",
+            m.frame_field_descriptor_.name(), m.source_type_desc_.data_type(), DataType::UTF_DYNAMIC64);
     ARCTICDB_DEBUG(log::version(), "String handler got encoded field: {}", field.DebugString());
     const auto &ndarray = field.ndarray();
     const auto bytes = encoding_sizes::data_uncompressed_size(ndarray);

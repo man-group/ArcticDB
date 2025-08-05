@@ -39,6 +39,8 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
+#include <arcticdb/util/format_date.hpp>
+
 #include <ranges>
 
 namespace arcticdb::version_store {
@@ -630,7 +632,7 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
     auto slice_added = std::make_shared<std::vector<bool>>(num_segments, false);
     auto futures = std::make_shared<std::vector<folly::Future<std::vector<EntityId>>>>();
 
-    for (auto&& entity_ids: entities_by_work_unit) {
+    for (auto& entity_ids: entities_by_work_unit) {
         std::vector<folly::Future<pipelines::SegmentAndSlice>> local_futs;
         local_futs.reserve(entity_ids.size());
         for (auto id: entity_ids) {
@@ -786,9 +788,7 @@ void set_output_descriptors(
         for (const auto& segment: *proc.segments_) {
             fields.push_back(segment->descriptor().fields_ptr());
         }
-        new_stream_descriptor = merge_descriptors(*new_stream_descriptor,
-                                                  fields,
-                                                  std::vector<std::string>{});
+        new_stream_descriptor = merge_descriptors(*new_stream_descriptor, fields, std::vector<std::string>{});
     }
     if (new_stream_descriptor.has_value()) {
         // Finding and erasing fields from the FieldCollection contained in StreamDescriptor is O(n) in number of fields
@@ -908,6 +908,65 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
     return add_schema_check(pipeline_context, std::move(segment_and_slice_futures), std::move(incomplete_bitset), processing_config);
 }
 
+static StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext& pipeline_context) {
+    const StreamDescriptor& desc = pipeline_context.descriptor();
+    // pipeline_context.overall_column_bitset_ can be different from std::nullopt only in case of static schema. We use
+    // it to constrain the initial set of columns. If dynamic schema is used and only certain columns must be read we
+    // use the whole descriptor and at the end of the read return only the ones that were selected. This is because
+    // currently dynamic schema cannot handle column dependencies e.g.
+    // columns on disk: col1, col2
+    // q = QueryBuilder()
+    // q = q["col1" < 1]
+    // lib.read(columns=["col2", query_builder=q)
+    // We want to read only col2 but the filtering requires col1, thus the OutputSchema must contain both col1 and col2
+    // in order to satisfy the filter clause.
+    if (pipeline_context.overall_column_bitset_) {
+        FieldCollection fields_to_use;
+        auto overall_fields_it = pipeline_context.overall_column_bitset_->first();
+        const auto overall_fields_end = pipeline_context.overall_column_bitset_->end();
+        while (overall_fields_it != overall_fields_end) {
+            fields_to_use.add(desc.field(*overall_fields_it).ref());
+            ++overall_fields_it;
+        }
+        return StreamDescriptor{desc.data_ptr(), std::make_shared<FieldCollection>(std::move(fields_to_use))};
+    }
+    return desc;
+}
+
+static OutputSchema create_initial_output_schema(PipelineContext& pipeline_context) {
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(pipeline_context.norm_meta_,
+                                                    "Normalization metadata should not be missing during read_and_process");
+    return OutputSchema{generate_initial_output_schema_descriptor(pipeline_context), *pipeline_context.norm_meta_};
+}
+
+static OutputSchema generate_output_schema(
+    PipelineContext& pipeline_context,
+    std::shared_ptr<ReadQuery> read_query
+) {
+    OutputSchema output_schema = create_initial_output_schema(pipeline_context);
+    for (const auto& clause: read_query->clauses_) {
+        output_schema = clause->modify_schema(std::move(output_schema));
+    }
+    if (read_query->columns) {
+        std::unordered_set<std::string_view> selected_columns(read_query->columns->begin(), read_query->columns->end());
+        FieldCollection fields_to_use;
+        if (!pipeline_context.filter_columns_) {
+            pipeline_context.filter_columns_ = std::make_shared<FieldCollection>();
+        }
+        for (const Field& field : output_schema.stream_descriptor().fields()) {
+            if (selected_columns.contains(field.name())) {
+                fields_to_use.add(field.ref());
+                if (!pipeline_context.is_in_filter_columns_set(field.name())) {
+                    pipeline_context.filter_columns_->add(field.ref());
+                }
+            }
+        }
+        pipeline_context.filter_columns_set_ = std::move(selected_columns);
+        output_schema.set_stream_descriptor(StreamDescriptor{output_schema.stream_descriptor().data_ptr(), std::make_shared<FieldCollection>(std::move(fields_to_use))});
+    }
+    return output_schema;
+}
+
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
     const std::shared_ptr<Store>& store,
     const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -959,24 +1018,23 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
  * decompression without context switching to try and optimise cache access.
  */
 folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
-        const std::shared_ptr<Store>& store,
-        const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options
+    const std::shared_ptr<Store>& store,
+    const std::shared_ptr<PipelineContext>& pipeline_context,
+    const std::shared_ptr<ReadQuery>& read_query,
+    const ReadOptions& read_options
 ) {
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager, read_query, pipeline_context](std::vector<EntityId>&& processed_entity_ids) {
+            .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
+                OutputSchema schema = generate_output_schema(*pipeline_context, std::move(read_query));
+                auto&& [descriptor, norm_meta, default_values] = schema.release();
+                pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
+                pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
+                    std::forward<proto::descriptors::NormalizationMetadata>(norm_meta));
+                pipeline_context->default_values_ = std::forward<decltype(default_values)>(default_values);
                 auto proc = gather_entities<std::shared_ptr<SegmentInMemory>,
-                        std::shared_ptr<RowRange>,
-                        std::shared_ptr<ColRange>>(*component_manager, processed_entity_ids);
-
-                if (std::ranges::any_of(read_query->clauses_,
-                                        [](const std::shared_ptr<Clause>& clause) {
-                                            return clause->clause_info().modifies_output_descriptor_;
-                                        })) {
-                    set_output_descriptors(proc, read_query->clauses_, pipeline_context);
-                }
+                    std::shared_ptr<RowRange>,
+                    std::shared_ptr<ColRange> >(*component_manager, processed_entity_ids);
                 return collect_segments(std::move(proc));
             });
 }
@@ -1262,9 +1320,9 @@ static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<Pi
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 !last_existing_index_value.has_value() || key.start_time() >= *last_existing_index_value,
                 "Cannot append staged segments to existing data as incomplete segment contains index value < existing data (in UTC): {} <= {}",
-                date_and_time(key.start_time()),
+                util::format_timestamp(key.start_time()),
                 // Should never reach "" but the standard mandates that all function arguments are evaluated
-                last_existing_index_value ? date_and_time(*last_existing_index_value) : ""
+                last_existing_index_value ? util::format_timestamp(*last_existing_index_value) : ""
             );
             auto [_, inserted] = unique_timestamp_ranges.emplace(key.start_time(), key.end_time());
             // This is correct because incomplete segments aren't column sliced
@@ -1273,7 +1331,7 @@ static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<Pi
                     // -1 as end_time is stored as 1 greater than the last index value in the segment
                     inserted || key.end_time() -1 == key.start_time(),
                     "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in UTC): ({}, {})",
-                    date_and_time(key.start_time()), date_and_time(key.end_time()));
+                    util::format_timestamp(key.start_time()), util::format_timestamp(key.end_time()));
         }
 
         for (auto it = unique_timestamp_ranges.begin(); it != unique_timestamp_ranges.end(); it++) {
@@ -1283,10 +1341,11 @@ static void check_incompletes_index_ranges_dont_overlap(const std::shared_ptr<Pi
                         // -1 as end_time is stored as 1 greater than the last index value in the segment
                         next_it->first >= it->second - 1,
                         "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): ({}, {}) intersects ({}, {})",
-                        date_and_time(it->first),
-                        date_and_time(it->second - 1),
-                        date_and_time(next_it->first),
-                        date_and_time(next_it->second - 1));
+                        util::format_timestamp(it->first),
+                        util::format_timestamp(it->second - 1),
+                        util::format_timestamp(next_it->first),
+                        util::format_timestamp(next_it->second - 1)
+                );
             }
         }
     }
@@ -1300,7 +1359,8 @@ void copy_frame_data_to_buffer(
         const RowRange& row_range,
         DecodePathData shared_data,
         std::any& handler_data,
-        OutputFormat output_format) {
+        OutputFormat output_format,
+        const std::optional<Value>& default_value) {
     const auto num_rows = row_range.diff();
     if (num_rows == 0) {
         return;
@@ -1309,7 +1369,7 @@ void copy_frame_data_to_buffer(
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
     auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
-    auto total_size = dst_rawtype_size * num_rows;
+    const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
 
     auto src_data = src_column.data();
@@ -1319,18 +1379,18 @@ void copy_frame_data_to_buffer(
                                                 src_column.type(), dst_column.type(), destination.field(target_index).name());
     if(auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
         const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
-        ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
+        const ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
         handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
-            util::default_initialize<decltype(dst_desc_tag)>(dst_ptr, num_rows * dst_rawtype_size);
+            util::initialize<decltype(dst_desc_tag)>(dst_ptr, total_size, default_value);
         });
     // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
-    } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type())) {
+    } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE)) {
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
-            util::default_initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size);
-            auto typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
+            typename dst_type_info::RawType* typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
+            util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
             details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
                 Column::for_each_enumerated<typename src_type_info::TDT>(src_column, [typed_dst_ptr](auto enumerating_it) {
@@ -1339,26 +1399,62 @@ void copy_frame_data_to_buffer(
             });
         });
     } else if (trivially_compatible_types(src_column.type(), dst_column.type())) {
-        details::visit_type(src_column.type().data_type() ,[&src_data, &dst_ptr] (auto src_desc_tag) {
+        details::visit_type(src_column.type().data_type() ,[&] (auto src_desc_tag) {
             using SourceTDT = ScalarTagType<decltype(src_desc_tag)>;
             using SourceType =  typename decltype(src_desc_tag)::DataTypeTag::raw_type;
-            while (auto block = src_data.template next<SourceTDT>()) {
-                const auto row_count = block->row_count();
-                memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
-                dst_ptr += row_count * sizeof(SourceType);
+            if (!src_column.is_sparse()) {
+                while (auto block = src_data.next<SourceTDT>()) {
+                    const auto row_count = block->row_count();
+                    memcpy(dst_ptr, block->data(), row_count * sizeof(SourceType));
+                    dst_ptr += row_count * sizeof(SourceType);
+                }
+            } else {
+                util::initialize<SourceTDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
+                Column::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
+                    typed_dst_ptr[row.idx()] = row.value();
+                });
             }
+
         });
-    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type())) {
-        details::visit_type(dst_column.type().data_type() ,[&src_data, &dst_ptr, &src_column, &type_promotion_error_msg] (auto dest_desc_tag) {
-            using DestinationType =  typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            auto typed_dst_ptr = reinterpret_cast<DestinationType *>(dst_ptr);
-            details::visit_type(src_column.type().data_type() ,[&src_data, &typed_dst_ptr, &type_promotion_error_msg] (auto src_desc_tag) {
+    } else if (is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE) ||
+               (src_column.type().data_type() == DataType::UINT64 && dst_column.type().data_type() == DataType::INT64) ||
+               (src_column.type().data_type() == DataType::FLOAT64 && dst_column.type().data_type() == DataType::FLOAT32)) {
+        // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type between
+        // these types. This means that the second condition cannot happen during a regular read. The processing
+        // pipeline, however, can produce a set of segments where some are int64 and other uint64. This can happen in
+        // the sum aggregation (both for unsorted aggregations and resampling). Because we promote the sum type to the
+        // largest type of the respective category. E.g., we have int8 and uint8. Dynamic schema will allow this, and
+        // the global type descriptor will be int16. However, when segments are processed on their own int8 -> int64 and
+        // uint8 -> int64. We have decided to allow this and assign a common type of int64 (done in the modify_schema
+        // procedure). This is what pyarrow does as well. Because of the above, we allow here copying uint64 buffer in
+        // an int64 buffer.
+        //
+        // Having float64 as a source and float32 as a destination should not appear during a regular read however it
+        // can happen in the processing pipeline. E.g., performing a first/last/min/max aggregations in resampling or
+        // groupby. There might be 4 segments float32, uint16, int8 and float32, if the first segment is in a separate
+        // group/bucket and the second 3 segments are in the same group the processing pipeline will output two segments
+        // one with float32 dtype and one with dtype:
+        // common_type(common_type(uint16, int8), float32) = common_type(int32, float32) = float64
+        details::visit_type(dst_column.type().data_type() ,[&] (auto dest_desc_tag) {
+            using dst_type_info = ScalarTypeInfo<decltype(dest_desc_tag)>;
+            using DestinationRawType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
+            auto typed_dst_ptr = reinterpret_cast<DestinationRawType*>(dst_ptr);
+            details::visit_type(src_column.type().data_type() ,[&] (auto src_desc_tag) {
                 using source_type_info = ScalarTypeInfo<decltype(src_desc_tag)>;
-                if constexpr(std::is_arithmetic_v<typename source_type_info::RawType> && std::is_arithmetic_v<DestinationType>) {
-                    const auto src_cend = src_data.cend<typename source_type_info::TDT>();
-                    for (auto src_it = src_data.cbegin<typename source_type_info::TDT>(); src_it != src_cend; ++src_it) {
-                        *typed_dst_ptr++ = static_cast<DestinationType>(*src_it);
+                if constexpr(std::is_arithmetic_v<typename source_type_info::RawType> && std::is_arithmetic_v<DestinationRawType>) {
+                    if (src_column.is_sparse()) {
+                        util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                        Column::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
+                            typed_dst_ptr[row.idx()] = row.value();
+                        });
+                    } else {
+                        Column::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
+                            *typed_dst_ptr = value;
+                            ++typed_dst_ptr;
+                        });
                     }
+
                 } else {
                     util::raise_rte(type_promotion_error_msg.c_str());
                 }
@@ -1377,6 +1473,7 @@ struct CopyToBufferTask : async::BaseTask {
     DecodePathData shared_data_;
     std::any& handler_data_;
     OutputFormat output_format_;
+    std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment,
@@ -1385,14 +1482,16 @@ struct CopyToBufferTask : async::BaseTask {
             uint32_t required_fields_count,
             DecodePathData shared_data,
             std::any& handler_data,
-            OutputFormat output_format) :
+            OutputFormat output_format,
+            std::shared_ptr<PipelineContext> pipeline_context) :
             source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
         frame_slice_(std::move(frame_slice)),
         required_fields_count_(required_fields_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        output_format_(output_format){
+        output_format_(output_format),
+        pipeline_context_(std::move(pipeline_context)){
     }
 
     folly::Unit operator()() {
@@ -1401,19 +1500,45 @@ struct CopyToBufferTask : async::BaseTask {
         const auto& fields = source_segment_.descriptor().fields();
         // Skip the "true" index fields (i.e. those stored in every column slice) if we are not in the first column slice
         for (size_t idx = first_col_slice ? 0 : get_index_field_count(source_segment_); idx < fields.size(); ++idx) {
-            // First condition required to avoid underflow when substracting one unsigned value from another
+            // First condition required to avoid underflow when subtracting one unsigned value from another
             if (required_fields_count_ >= first_col && idx < required_fields_count_ - first_col) {
                 // This is a required column in the output. The name in source_segment_ may not match that in target_segment_
                 // e.g. If 2 timeseries are joined that had differently named indexes
-                copy_frame_data_to_buffer(target_segment_, idx + first_col, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+                copy_frame_data_to_buffer(
+                    target_segment_,
+                    idx + first_col,
+                    source_segment_,
+                    idx,
+                    frame_slice_.row_range,
+                    shared_data_,
+                    handler_data_,
+                    output_format_,
+                    {});
             } else {
                 // All other columns use names to match the source with the destination
                 const auto& field = fields.at(idx);
                 const auto& field_name = field.name();
                 auto frame_loc_opt = target_segment_.column_index(field_name);
-                if (!frame_loc_opt)
+                if (!frame_loc_opt) {
                     continue;
-                copy_frame_data_to_buffer(target_segment_, *frame_loc_opt, source_segment_, idx, frame_slice_.row_range, shared_data_, handler_data_, output_format_);
+                }
+                const std::optional<Value>& default_value = [&]() -> std::optional<Value> {
+                    const auto it = pipeline_context_->default_values_.find(std::string{field_name});
+                    if (it != pipeline_context_->default_values_.end()) {
+                        return it->second;
+                    }
+                    return {};
+                }();
+                copy_frame_data_to_buffer(
+                    target_segment_,
+                    *frame_loc_opt,
+                    source_segment_,
+                    idx,
+                    frame_slice_.row_range,
+                    shared_data_,
+                    handler_data_,
+                    output_format_,
+                    default_value);
             }
         }
         return folly::Unit{};
@@ -1426,7 +1551,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
         SegmentInMemory frame,
         std::any& handler_data,
         OutputFormat output_format) {
-    auto required_fields_count = pipelines::index::required_fields_count(pipeline_context->descriptor(),
+    const auto required_fields_count = pipelines::index::required_fields_count(pipeline_context->descriptor(),
                                                                      *pipeline_context->norm_meta_);
     std::vector<folly::Future<folly::Unit>> copy_tasks;
     DecodePathData shared_data;
@@ -1441,7 +1566,8 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 required_fields_count,
                 shared_data,
                 handler_data,
-                output_format}));
+                output_format,
+                pipeline_context}));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
 }
@@ -1624,7 +1750,8 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         const std::shared_ptr<PipelineContext>& pipeline_context,
         const DecodePathData& shared_data,
         std::any& handler_data) {
-    if(!read_query->clauses_.empty()) {
+    const bool direct_read = read_query->clauses_.empty();
+    if(!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(),"Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
@@ -1846,8 +1973,8 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     last_index_on_disc <= incomplete_start,
                     "Cannot append staged segments to existing data as incomplete segment contains index value {} < existing data {}",
-                    date_and_time(incomplete_start),
-                    date_and_time(last_index_on_disc)
+                    util::format_timestamp(incomplete_start),
+                    util::format_timestamp(last_index_on_disc)
                 );
             }
             pipeline_context->total_rows_ = num_versioned_rows + get_slice_rowcounts(segments);
@@ -2239,23 +2366,10 @@ folly::Future<SymbolProcessingResult> read_and_process(
 
     schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(!pipeline_context->is_pickled(),"Cannot perform multi-symbol join on pickled data");
 
-    StreamDescriptor output_stream_descriptor;
-    if (read_query->columns.has_value()) {
-        output_stream_descriptor = StreamDescriptor(
-                pipeline_context->descriptor().id(),
-                pipeline_context->descriptor().index(),
-                std::make_shared<FieldCollection>(pipeline_context->filter_columns_->clone()));
-    } else {
-        output_stream_descriptor = pipeline_context->descriptor().clone();
-    }
-    OutputSchema output_schema(std::move(output_stream_descriptor), *pipeline_context->norm_meta_);
-    for (const auto& clause: read_query->clauses_) {
-        output_schema = clause->modify_schema(std::move(output_schema));
-    }
-
+    OutputSchema output_schema = generate_output_schema(*pipeline_context, read_query);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
-    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, std::move(component_manager))
     .thenValueInline([res_versioned_item = std::move(res_versioned_item), pipeline_context, output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
         // Pipeline context user metadata is not populated in the case that only incomplete segments exist for a symbol, no indexed versions
         return SymbolProcessingResult{std::move(res_versioned_item),

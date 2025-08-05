@@ -13,6 +13,8 @@
 
 #include <google/protobuf/any.pb.h>
 
+#include <arcticdb/stream/index.hpp>
+
 namespace arcticdb {
 
     SegmentInMemoryImpl::SegmentInMemoryImpl() = default;
@@ -163,7 +165,7 @@ std::optional<std::size_t> SegmentInMemoryImpl::column_index(std::string_view na
     if (auto index = column_index(name); index)
         return index;
 
-    std::string multi_index_column_name = fmt::format("__idx__{}", name);
+    const std::string multi_index_column_name = stream::mangled_name(name);
     if (auto multi_index = column_index(multi_index_column_name); multi_index)
         return multi_index;
 

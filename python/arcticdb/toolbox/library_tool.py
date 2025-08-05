@@ -6,7 +6,6 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 
-from arcticdb.version_store._normalization import FrameData
 from arcticdb.supported_types import ExplicitlySupportedDates
 from arcticdb_ext.codec import decode_segment
 from arcticdb_ext.storage import KeyType
@@ -71,6 +70,9 @@ class LibraryTool(LibraryToolImpl):
     def read_to_segment_in_memory(self, key: VariantKey) -> SegmentInMemory:
         return decode_segment(self.read_to_segment(key))
 
+    def segment_in_memory_to_dataframe(self, segment: SegmentInMemory) -> pd.DataFrame:
+        return denormalize_dataframe(self.segment_in_memory_to_read_result(segment))
+
     def read_to_dataframe(self, key: VariantKey) -> pd.DataFrame:
         """
         Reads the segment associated with the provided key into a Pandas DataFrame format. Any strings in the segment
@@ -94,7 +96,7 @@ class LibraryTool(LibraryToolImpl):
           start_index                     end_index  version_id stream_id          creation_ts         content_hash  index_type  key_type
         0  2023-01-01 2023-01-02 00:00:00.000000001           0      None  1681399019580103187  3563433649738173789          84         3
         """
-        return denormalize_dataframe(self._read_to_read_result(key))
+        return self.segment_in_memory_to_dataframe(self.read_to_segment_in_memory(key))
 
     def read_to_keys(
         self, key: VariantKey, id: Optional[Union[str, int]] = None, filter_key_type: Optional[KeyType] = None

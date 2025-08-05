@@ -26,6 +26,7 @@ from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
+import time
 
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
 from arcticdb_ext.version_store import SortedValue, StageResult
@@ -407,7 +408,8 @@ class NativeVersionStore:
     def get_backing_store(self):
         backing_store = ""
         try:
-            primary_backing_url = list(self._lib_cfg.storage_by_id.values())[0].config.type_url
+            primary_storage_id = self._lib_cfg.lib_desc.storage_ids[0]
+            primary_backing_url = self._lib_cfg.storage_by_id[primary_storage_id].config.type_url
             storage_val = re.search("cxx.arctic.org/arcticc.pb2.(.*)_pb2.Config", primary_backing_url)
             backing_store = storage_val.group(1)
         except Exception as e:
@@ -669,6 +671,7 @@ class NativeVersionStore:
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
+                _log_warning_on_writing_empty_dataframe(data, symbol)
                 vit = self.version_store.write_versioned_dataframe(
                     symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats, validate_index
                 )
@@ -816,9 +819,18 @@ class NativeVersionStore:
                 if incomplete:
                     self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 else:
+                    call_time = time.time_ns()
                     vit = self.version_store.append(
                         symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
                     )
+                    # This is a heuristic to check for the case of using append call to write an empty dataframe in that
+                    # case we want to warn users that the processing pipeline might not work as expected. There are two
+                    # cases when the version is 0 either a new symbol was created by this call or there was an existing
+                    # symbol with version 0 and the input dataframe was empty, which makes the append a noop. That is
+                    # why the call_time is used to check if the symbol creation time was after the call to append in the
+                    # C++ layer.
+                    if vit.version == 0 and write_if_missing and vit.timestamp >= call_time:
+                        _log_warning_on_writing_empty_dataframe(dataframe, symbol)
                     return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def update(
@@ -914,9 +926,17 @@ class NativeVersionStore:
 
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
+                call_time = time.time_ns()
                 vit = self.version_store.update(
                     symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
                 )
+                # This is a heuristic to check for using update to write an empty dataframe in that case we want to warn
+                # users that the processing pipeline might not work as expected. There are two cases when the version is
+                # 0 either a new symbol was created by this call or there was an existing symbol with version 0 and the
+                # input dataframe was empty, which makes the update a noop. That is why the call_time is used to check
+                # if the symbol creation time was after the call to append in the C++ layer.
+                if vit.version == 0 and upsert and vit.timestamp >= call_time:
+                    _log_warning_on_writing_empty_dataframe(data, symbol)
             return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _apply_date_range_to_update_query(
@@ -965,10 +985,21 @@ class NativeVersionStore:
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
             symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update
         )
+        call_time = time.time_ns()
         cxx_versioned_items = self.version_store.batch_update(
             symbols, items, norm_metas, udms, update_queries, prune_previous_version, upsert
         )
-        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        result = self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        for idx, item in enumerate(result):
+            # This is a heuristic to check for the case of using update call to write an empty dataframe in that case we
+            # want to warn users that the processing pipeline might not work as expected. Calling update with an empty
+            # dataframe might create a new version if upsert is true and there is no live version on disk. If the input
+            # is empty and there's a live version or write_if_missing is False the update is a noop. Since there's no
+            # cheap way of checking if there's a live version, call_time is used to check if the symbol creation time
+            # was after the call to update in the C++ layer.
+            if isinstance(item, VersionedItem) and upsert and item.timestamp >= call_time:
+                _log_warning_on_writing_empty_dataframe(data_vector[idx], symbols[idx])
+        return result
 
     def create_column_stats(
         self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
@@ -1562,6 +1593,8 @@ class NativeVersionStore:
             norm_failure_options_msg,
             operation_supports_categoricals=True,
         )
+        for idx, dataframe in enumerate(data_vector):
+            _log_warning_on_writing_empty_dataframe(dataframe, symbols[idx])
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
@@ -1696,6 +1729,7 @@ class NativeVersionStore:
             symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append
         )
         write_if_missing = kwargs.get("write_if_missing", True)
+        call_time = time.time_ns()
         cxx_versioned_items = self.version_store.batch_append(
             symbols,
             items,
@@ -1706,7 +1740,17 @@ class NativeVersionStore:
             write_if_missing,
             throw_on_error,
         )
-        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        converted = self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        for idx, result in enumerate(converted):
+            # This is a heuristic to check for the case of using append call to write an empty dataframe in that case we
+            # want to warn users that the processing pipeline might not work as expected. Calling append with an empty
+            # dataframe might create a new version if write_if_missing is true and there is no live version on disk. If
+            # the input is empty and there's a live version or write_if_missing is False the append is a noop. Since
+            # there's no cheap way of checking if there's a live version, call_time is used to check if the symbol
+            # creation time was after the call to append in the C++ layer.
+            if isinstance(result, VersionedItem) and write_if_missing and result.timestamp >= call_time:
+                _log_warning_on_writing_empty_dataframe(data_vector[idx], symbols[idx])
+        return converted
 
     def _convert_cxx_batch_results_to_python(self, cxx_versioned_items, metadata_vector):
         results = []
@@ -3375,7 +3419,7 @@ class NativeVersionStore:
         return self._library
 
     def library_tool(self) -> LibraryTool:
-        return LibraryTool(self.library(), self)
+        return LibraryTool(self._library, self)
 
 
 def resolve_dynamic_strings(kwargs):
@@ -3389,3 +3433,19 @@ def resolve_dynamic_strings(kwargs):
         dynamic_strings = True
 
     return dynamic_strings
+
+def _log_warning_on_writing_empty_dataframe(dataframe, symbol):
+    # We allow passing other things to write such as integers and strings and python arrays but we care only about
+    # dataframes and series
+    is_dataframe = isinstance(dataframe, pd.DataFrame)
+    is_series = isinstance(dataframe, pd.Series)
+    if (is_series or is_dataframe) and dataframe.empty and os.getenv("ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME", "1") == "1":
+        empty_column_type = pd.DataFrame({"a": []}).dtypes["a"] if is_dataframe else pd.Series([]).dtype
+        current_dtypes = list(dataframe.dtypes.items()) if is_dataframe else [(dataframe.name, dataframe.dtype)]
+        log.warning("Writing empty dataframe to ArcticDB for symbol \"{}\". The dtypes of empty columns depend on the"
+                    "Pandas version being used. This can lead to unexpected behavior in the processing pipeline. For"
+                    " example if the empty columns are of object dtype they cannot be part of numeric computations in"
+                    "the processing pipeline such as filtering (qb = qb[qb['empty_column'] < 5]) or projection"
+                    "(qb = qb.apply('new', qb['empty_column'] + 5)). Pandas version is: {}, the default dtype for empty"
+                    " column is: {}. Column types in the original input: {}. Parameter \"coerce_columns\" can be used" 
+                    " to explicitly set the types of dataframe columns", symbol, PANDAS_VERSION, empty_column_type, current_dtypes)

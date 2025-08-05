@@ -18,6 +18,7 @@
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/stream/incompletes.hpp>
+#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <cstdlib>
 
 namespace arcticdb::toolbox::apy {
@@ -34,15 +35,12 @@ async::AsyncStore<>& LibraryTool::async_store() {
     return dynamic_cast<async::AsyncStore<>&>(*store());
 }
 
-ReadResult LibraryTool::read(const VariantKey& key, std::any& handler_data, OutputFormat output_format) {
-    auto segment = read_to_segment(key);
-    auto segment_in_memory = decode_segment(segment, AllocationType::DETACHABLE);
-    auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment_in_memory));
-    const auto& atom_key = util::variant_match(
-            key,
-            [](const AtomKey& key){return key;},
-            // We construct a dummy atom key in case of a RefKey to be able to build the read_result
-            [](const RefKey& key){return AtomKeyBuilder().build<KeyType::VERSION_REF>(key.id());});
+ReadResult LibraryTool::segment_in_memory_to_read_result(arcticdb::SegmentInMemory& segment, std::any& handler_data, OutputFormat output_format) {
+    std::pair<std::any &, OutputFormat> handler{handler_data, output_format};
+
+    //This is a dummy atom key needed to construct the read result, otherwise not important
+    const auto &atom_key = AtomKeyBuilder().build<KeyType::VERSION_REF>(segment.descriptor().id());
+    auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment));
 
     return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format);
 }

@@ -13,6 +13,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType
 from arcticdb_ext.exceptions import SchemaException, InternalException
 from arcticdb_ext.version_store import Slicing
+from arcticdb_ext.stream import SegmentInMemory
 
 
 def get_ref_key_types():
@@ -363,6 +364,7 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     assert read_append_data_keys_from_ref(sym) == []
     assert_frame_equal(lib.read(sym).data, get_df(18, 0, np.int64))
 
+    
 def test_write_segment_in_memory_row_slicing(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     lib_tool = lib.library_tool()
@@ -383,6 +385,7 @@ def test_write_segment_in_memory_row_slicing(lmdb_version_store_tiny_segment):
     assert index_key_count == 1
     assert version_key_count == 1
 
+    
 def test_write_segment_in_memory_no_slicing(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     lib_tool = lib.library_tool()
@@ -402,3 +405,26 @@ def test_write_segment_in_memory_no_slicing(lmdb_version_store_tiny_segment):
     assert data_key_count == 1
     assert index_key_count == 1
     assert version_key_count == 1
+
+    
+def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
+    df = sample_dataframe()
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    lib.write(sym, sample_dataframe)
+
+    tdata_key = lib_tool.find_keys(KeyType.TABLE_DATA)[0]
+
+    segment_in_memory = lib_tool.read_to_segment_in_memory(tdata_key)
+
+    assert isinstance(segment_in_memory, SegmentInMemory)
+
+    dataframe = lib_tool.segment_in_memory_to_dataframe(segment_in_memory)
+
+    assert isinstance(dataframe, pd.DataFrame)
+
+    expected_df = lib_tool.read_to_dataframe(tdata_key)
+
+    assert_frame_equal(expected_df, dataframe)
+
