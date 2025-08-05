@@ -31,6 +31,13 @@ supported_int_types_list = list(get_args(ArcticIntType))
 supported_float_types_list = list(get_args(ArcticFloatType))
 supported_types_list = list(get_args(ArcticTypes))
 
+# Default N/A (not a value) for arcticd types
+ARCTICDB_NA_VALUE_FLOAT = np.nan
+ARCTICDB_NA_VALUE_INT = 0
+ARCTICDB_NA_VALUE_STRING = None
+ARCTICDB_NA_VALUE_TIMESTAMP = pd.NaT
+ARCTICDB_NA_VALUE_BOOL = False
+
 
 class GitHubSanitizingHandler(logging.StreamHandler):
     """
@@ -198,15 +205,15 @@ def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[
                 value = updated_df[col].loc[row_index]
             else:
                 value = updated_df[col].iloc[row_index]
-            if 'int' in str(dtype):
+            if pd.api.types.is_integer_dtype(dtype):
                 assert 0 == value, f"column {col}:{dtype} -> 0 == {value}"
-            elif 'float' in str(dtype):
+            elif pd.api.types.is_float_dtype(dtype):
                 assert pd.isna(value), f"column {col}:{dtype} -> Nan == {value}"
-            elif 'bool' in str(dtype):
+            elif pd.api.types.is_bool_dtype(dtype):
                 assert False == value, f"column {col}:{dtype} -> False == {value}"
-            elif 'object' in str(dtype):
+            elif pd.api.types.is_string_dtype(dtype):
                 assert value is None , f"column {col}:{dtype} -> None == {value}"
-            elif 'datetime' in str(dtype):
+            elif pd.api.types.is_datetime64_any_dtype(dtype):
                 assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
             else:
                 raise TypeError(f"Unsupported dtype: {dtype}")

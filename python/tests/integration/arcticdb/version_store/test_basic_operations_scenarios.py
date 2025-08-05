@@ -8,17 +8,18 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import re
 import sys
-from typing import List, Set
+from typing import List
 import pytest
 import pandas as pd
 import numpy as np
 
+from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
     dataframe_simulate_arcticdb_update_static,
 )
-from arcticdb.util.utils import DFGenerator, generate_random_series, generate_random_timestamp_array, list_installed_packages, set_seed, supported_types_list, verify_dynamically_added_columns
+from arcticdb.util.utils import DFGenerator, generate_random_series, set_seed, supported_types_list 
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
@@ -169,6 +170,8 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
     symbol = "232_43213dfmkd_!"
     col_name = 'MIDDLE'
     start_time = pd.Timestamp(32513454)
+    asym = ArcticSymbolSimulator(keep_versions=True).associate_arctic_lib(lib)
+
 
     def get_df() -> pd.DataFrame:
         """ Creates new dataframe with one constant one column and one row where the value is 
@@ -180,81 +183,63 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
 
     initial_df = get_df()
     add_index(initial_df, start_time)
-    lib.write(symbol, initial_df)
-    read_data = lib.read(symbol).data
+    asym.write(initial_df).arctic_lib().write(symbol, initial_df)
+    read_data = asym.arctic_lib().read(symbol).data
 
     # Will do append operation times to confirm growth is not a problem
     for i in range(10):
-        num_versions_before = len(lib.list_versions(symbol))
+        num_versions_before = len(asym.arctic_lib().list_versions(symbol))
         middle_df = get_df()
         add_index(middle_df, start_time)
         append_df = wrap_df_add_new_columns(middle_df, i)
         make_df_appendable(read_data, append_df) # timestamps of append_df to be after the initial
 
-        # Get new columns that will be added to appended rows
-        new_columns_to_appended_df = set(read_data.columns.to_list())
-        # Remove the common column
-        new_columns_to_appended_df.remove(col_name)
-        # Get new columns that are added with this append
-        new_columns_to_symbol = set(append_df.columns.to_list())
-        # Remove the common column
-        new_columns_to_symbol.remove(col_name)
-
         # Do append with different mixes of parameters
         if i % 2 == 0:
             meta = get_metadata()
-            lib.append(symbol, append_df, prune_previous_version=True, validate_index=True, metadata=meta)
+            asym.arctic_lib().append(symbol, append_df, prune_previous_version=True, validate_index=True, metadata=meta)
             assert num_versions_before, lib.list_versions(symbol) # previous version is pruned
         else:
             meta = None
             # NOTE: metadata is not stored then incomplete=True
-            lib.append(symbol, append_df, incomplete=True, prune_previous_version=False, validate_index=True, metadata=meta)
-            lib.compact_incomplete(symbol, True, False)
-            assert num_versions_before, lib.list_versions(symbol) + 1 # previous version is not pruned
+            asym.arctic_lib().append(symbol, append_df, incomplete=True, prune_previous_version=False, validate_index=True, metadata=meta)
+            asym.arctic_lib().compact_incomplete(symbol, True, False)
+            assert num_versions_before, asym.arctic_lib().list_versions(symbol) + 1 # previous version is not pruned
+
+        asym.append(append_df)
 
         # Verify  metadata and dynamically added columns
-        ver = lib.read(symbol)
+        ver = asym.arctic_lib().read(symbol)
         read_data:pd.DataFrame = ver.data
         assert meta == ver.metadata
-        verify_dynamically_added_columns(read_data, -2, new_columns_to_symbol)
-        verify_dynamically_added_columns(read_data, -1, new_columns_to_appended_df)
+        asym.assert_equal_to_associated_lib(symbol)   
 
     # Will only update last row with 1 row dataframe
     update_timestamp = read_data.index[-1]
-    # Will take previous to the update row timestamp
-    previous_timestamp = read_data.index[-2]
 
     # repeat update operation several times, to confirm growth is not a problem
     for i in range(5):
-        num_versions_before = len(lib.list_versions(symbol))
+        num_versions_before = len(asym.arctic_lib().list_versions(symbol))
         middle_df = get_df()
         add_index(middle_df, update_timestamp)
         update_df = wrap_df_add_new_columns(middle_df, f"upd_{i}")
 
-        # Get new columns that will be added to updated rows
-        new_columns_to_update_df = set(read_data.columns.to_list())
-        # Remove the common column
-        new_columns_to_update_df.remove(col_name)
-        # Get new columns that are added with this update
-        new_columns_to_symbol = set(update_df.columns.to_list())
-        # Remove the common column
-        new_columns_to_symbol.remove(col_name)
-
         if i % 2 == 0:
             meta = get_metadata()
-            lib.update(symbol, update_df, prune_previous_version=False, metadata=meta)
-            assert num_versions_before, lib.list_versions(symbol) + 1 # previous version is not pruned
+            asym.arctic_lib().update(symbol, update_df, prune_previous_version=False, metadata=meta)
+            assert num_versions_before, asym.arctic_lib().list_versions(symbol) + 1 # previous version is not pruned
         else:
             meta = "just a message"
-            lib.update(symbol, update_df, prune_previous_version=True, metadata=meta)
-            assert num_versions_before, lib.list_versions(symbol) # previous version is pruned
+            asym.arctic_lib().update(symbol, update_df, prune_previous_version=True, metadata=meta)
+            assert num_versions_before, asym.arctic_lib().list_versions(symbol) # previous version is pruned
+        
+        asym.update(update_df)
 
         # Verify  metadata and dynamically added columns
         ver = lib.read(symbol)
         read_data:pd.DataFrame = ver.data
         assert meta == ver.metadata
-        verify_dynamically_added_columns(read_data, previous_timestamp, new_columns_to_symbol)
-        verify_dynamically_added_columns(read_data, update_timestamp, new_columns_to_update_df)
+        asym.assert_equal_to_associated_lib(symbol)        
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])

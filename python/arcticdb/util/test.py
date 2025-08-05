@@ -174,7 +174,8 @@ def dataframe_simulate_arcticdb_update_static(existing_df: Union[pd.DataFrame, p
         assert existing_df.name == update_df.name, "Series name must be same"
     elif isinstance(existing_df, pd.DataFrame) and isinstance(update_df, pd.DataFrame):
         assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
-            "Dataframe must have identical columns types in same order"
+            f"Dataframe must have identical columns types in same order.\n"
+            + f"{existing_df.dtypes.to_list()} == {update_df.dtypes.to_list()}."
         )
         assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
     else:
