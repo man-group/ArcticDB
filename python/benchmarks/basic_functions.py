@@ -159,7 +159,7 @@ class BasicFunctions:
 
 class BatchBasicFunctions:
     rounds = 1
-    number = 1  # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
+    number = 1
     repeat = 3
     warmup_time = 0
     timeout = 6000
