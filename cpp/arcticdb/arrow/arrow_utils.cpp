@@ -27,12 +27,12 @@ sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::stri
                 create_dict_array<int32_t>(
                     sparrow::array{std::move(dict_values_array)},
                     std::move(dict_keys_buffer),
-                    validity_bitmap
+                    std::move(validity_bitmap)
             )};
         } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-            return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, validity_bitmap)};
+            return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
         } else {
-            return sparrow::array{create_primitive_array<RawType>(nullptr, 0, validity_bitmap)};
+            return sparrow::array{create_primitive_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
         }
     });
     res.set_name(name);
@@ -52,9 +52,9 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
         while (auto block = column_data.next<TagType>()) {
             auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-                vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, bitmap));
+                vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
             } else {
-                vec.emplace_back(arrow_array_from_block<TagType>(*block, name, bitmap));
+                vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
             }
         }
     });

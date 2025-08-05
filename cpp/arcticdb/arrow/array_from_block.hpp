@@ -26,7 +26,7 @@ template <typename T>
 sparrow::primitive_array<T> create_primitive_array(
         T* data_ptr,
         size_t data_size,
-        std::optional<sparrow::validity_bitmap>& validity_bitmap) {
+        std::optional<sparrow::validity_bitmap>&& validity_bitmap) {
     sparrow::u8_buffer<T> buffer(data_ptr, data_size);
     if(validity_bitmap) {
         return sparrow::primitive_array<T>{std::move(buffer), data_size, std::move(*validity_bitmap)};
@@ -39,7 +39,7 @@ template <>
 inline sparrow::primitive_array<bool> create_primitive_array(
         bool* data_ptr,
         size_t data_size,
-        std::optional<sparrow::validity_bitmap>& validity_bitmap) {
+        std::optional<sparrow::validity_bitmap>&& validity_bitmap) {
     // We need special handling for bools because arrow uses dense bool representation (i.e. 8 bools per byte)
     // Our internal representation is not dense. We use sparrow's `make_data_buffer` utility, but if needed, we can use
     // our own.
@@ -55,7 +55,7 @@ template <typename T>
 sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
         T* data_ptr,
         size_t data_size,
-        std::optional<sparrow::validity_bitmap>& validity_bitmap) {
+        std::optional<sparrow::validity_bitmap>&& validity_bitmap) {
     static_assert(sizeof(T) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
     // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
     // applied during normalization in python layer.
@@ -72,7 +72,7 @@ template <typename T>
 sparrow::dictionary_encoded_array<T> create_dict_array(
     sparrow::array&& dict_values_array,
     sparrow::u8_buffer<T>&& dict_keys_buffer,
-    std::optional<sparrow::validity_bitmap>& validity_bitmap
+    std::optional<sparrow::validity_bitmap>&& validity_bitmap
     ) {
     if(validity_bitmap) {
         return sparrow::dictionary_encoded_array<T>{
@@ -107,7 +107,7 @@ sparrow::array string_dict_from_block(
         TypedBlockData<TagType>& block,
         const Column& column,
         std::string_view name,
-        std::optional<sparrow::validity_bitmap> maybe_bitmap) {
+        std::optional<sparrow::validity_bitmap>&& maybe_bitmap) {
     const auto offset = block.offset();
     // We use 64-bit offsets and 32-bit keys because we use a layout where each row-segment has its own arrow array.
     // By default, the row-segments are 100k rows, so number of rows wouldn't exceed 32-bit ints.
@@ -142,7 +142,7 @@ sparrow::array string_dict_from_block(
     auto dict_encoded = create_dict_array<int32_t>(
         sparrow::array{std::move(dict_values_array)},
         std::move(dict_keys_buffer),
-        maybe_bitmap
+        std::move(maybe_bitmap)
     );
 
     sparrow::array arr{std::move(dict_encoded)};
@@ -154,17 +154,17 @@ template <typename TagType>
 sparrow::array arrow_array_from_block(
         TypedBlockData<TagType>& block,
         std::string_view name,
-        std::optional<sparrow::validity_bitmap> maybe_bitmap) {
+        std::optional<sparrow::validity_bitmap>&& maybe_bitmap) {
     using DataTagType = typename TagType::DataTypeTag;
     using RawType = typename DataTagType::raw_type;
     auto *data_ptr = block.release();
     const auto data_size = block.row_count();
     auto arr = [&]() {
         if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
-            auto timestamp_array = create_timestamp_array<RawType>(data_ptr, data_size, maybe_bitmap);
+            auto timestamp_array = create_timestamp_array<RawType>(data_ptr, data_size, std::move(maybe_bitmap));
             return sparrow::array{std::move(timestamp_array)};
         } else {
-            auto primitive_array = create_primitive_array<RawType>(data_ptr, data_size, maybe_bitmap);
+            auto primitive_array = create_primitive_array<RawType>(data_ptr, data_size, std::move(maybe_bitmap));
             return sparrow::array{std::move(primitive_array)};
         }
     }();
