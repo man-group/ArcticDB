@@ -2956,11 +2956,6 @@ class NativeVersionStore:
         ----------
         item : `Any`
             Data to be checked.
-        recursive_normalizers : `Optional[bool]`, default=None
-            Whether recursive normalizer is enabled.
-            This should be provided if `recursive_normalizers` is also provided to `write`.
-            Otherwise, the fallback logic for environment variables, library config
-            options, etc will be used, as in `write`.
 
         Notes
         ----------
