@@ -108,11 +108,10 @@ public:
 
     virtual VersionedItem write_versioned_dataframe_internal(
         const StreamId& stream_id,
-        const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
-        bool validate_index,
-        bool no_slice = false
+        bool validate_index
     ) = 0;
 
     virtual std::set<StreamId> list_streams_internal(

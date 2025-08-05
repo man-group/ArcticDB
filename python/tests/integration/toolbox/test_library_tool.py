@@ -12,6 +12,7 @@ from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType
 from arcticdb_ext.exceptions import SchemaException, InternalException
+from arcticdb_ext.version_store import Slicing
 
 
 def get_ref_key_types():
@@ -362,14 +363,14 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     assert read_append_data_keys_from_ref(sym) == []
     assert_frame_equal(lib.read(sym).data, get_df(18, 0, np.int64))
 
-def test_write_segment_in_memory(lmdb_version_store_tiny_segment):
+def test_write_segment_in_memory_row_slicing(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     lib_tool = lib.library_tool()
     sym = "sym"
     sample_df = sample_dataframe()
 
     segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
-    lib_tool.write_segment_in_memory(sym, segment)
+    lib_tool.write_segment_in_memory(sym, segment, Slicing.RowSlicing)
     dataframe = lib.read(sym).data
 
     assert_frame_equal(dataframe, sample_df)
@@ -379,5 +380,25 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment):
     version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
 
     assert data_key_count == len(sample_df) // 2
+    assert index_key_count == 1
+    assert version_key_count == 1
+
+def test_write_segment_in_memory_no_slicing(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    sample_df = sample_dataframe()
+
+    segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
+    lib_tool.write_segment_in_memory(sym, segment, Slicing.NoSlicing)
+    dataframe = lib.read(sym).data
+
+    assert_frame_equal(dataframe, sample_df)
+
+    data_key_count = len(lib_tool.find_keys(KeyType.TABLE_DATA))
+    index_key_count = len(lib_tool.find_keys(KeyType.TABLE_INDEX))
+    version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
+
+    assert data_key_count == 1
     assert index_key_count == 1
     assert version_key_count == 1

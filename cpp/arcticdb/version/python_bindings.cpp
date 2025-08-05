@@ -569,6 +569,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("SPEED", PipelineOptimisation::SPEED)
             .value("MEMORY", PipelineOptimisation::MEMORY);
 
+    py::enum_<Slicing>(version, "Slicing")
+            .value("NoSlicing", Slicing::NoSlicing)
+            .value("RowSlicing", Slicing::RowSlicing);
+
     py::class_<ExpressionContext, std::shared_ptr<ExpressionContext>>(version, "ExpressionContext")
             .def(py::init())
             .def("add_expression_node", &ExpressionContext::add_expression_node)

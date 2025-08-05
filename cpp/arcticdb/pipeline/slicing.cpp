@@ -29,18 +29,6 @@ SlicingPolicy get_slicing_policy(
     return FixedSlicer{options.column_group_size, options.segment_row_size};
 }
 
-SlicingPolicy get_slicing_policy(
-        const WriteOptions& options,
-        const SegmentInMemory& segment) {
-    if(options.bucketize_dynamic) {
-        const auto col_count = segment.num_columns();
-        const auto num_buckets = std::min(static_cast<size_t>(std::ceil(double(col_count) / options.column_group_size)), options.max_num_buckets);
-        return HashedSlicer(num_buckets, options.segment_row_size);
-    }
-
-    return FixedSlicer{options.column_group_size, options.segment_row_size};
-}
-
 std::vector<FrameSlice> slice(InputTensorFrame& frame, const SlicingPolicy& arg) {
     return util::variant_match(arg,
             [&frame](NoSlicing) -> std::vector<FrameSlice> {

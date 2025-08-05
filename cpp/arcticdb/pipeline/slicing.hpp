@@ -65,10 +65,6 @@ SlicingPolicy get_slicing_policy(
     const WriteOptions& options,
     const arcticdb::pipelines::InputTensorFrame& frame);
 
-SlicingPolicy get_slicing_policy(
-        const WriteOptions& options,
-        const SegmentInMemory& segment);
-
 std::vector<FrameSlice> slice(InputTensorFrame &frame, const SlicingPolicy& slicer);
 
 inline auto slice_begin_pos(const FrameSlice& slice, const InputTensorFrame& frame) {
@@ -120,27 +116,29 @@ inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, TypedSt
     };
 }
 
-inline auto get_partial_key_gen(const SegmentInMemory& segment, TypedStreamVersion key) {
+inline stream::StreamSink::PartialKey get_partial_key(const IndexDescriptorImpl& index, TypedStreamVersion key, const SegmentInMemory& slice) {
     using PartialKey = stream::StreamSink::PartialKey;
 
-    return [&segment, key = std::move(key)](const SegmentInMemory& s) {
-        if (segment.descriptor().index().field_count() != 0) {
-            util::check(static_cast<bool>(segment.descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP), "Got null index tensor in get_partial_key_gen");
-            auto& idx = segment.column(0);
-            assert(idx.scalar_at<timestamp>(0).has_value());
-            assert(idx.scalar_at<timestamp>(s.row_count()-1).value());
-            auto start = idx.scalar_at<timestamp>(0).value();
-            auto end = idx.scalar_at<timestamp>(s.row_count()-1).value();
-            return PartialKey{
-                    key.type, key.version_id, key.id, start, end_index_generator(end)};
-        }
-        else {
-            return PartialKey{
-                    key.type, key.version_id, key.id,
-                    entity::safe_convert_to_numeric_index(s.offset(), "Rows"),
-                    entity::safe_convert_to_numeric_index(s.offset() + s.row_count() - 1, "Rows")};
-        }
-    };
+    if (index.field_count() != 0) {
+        util::check(static_cast<bool>(index.type() == IndexDescriptor::Type::TIMESTAMP), "Got null index tensor in get_partial_key_gen");
+        auto& idx = slice.column(0);
+        assert(idx.scalar_at<timestamp>(0).has_value());
+        assert(idx.scalar_at<timestamp>(slice.row_count()-1).value());
+        auto start = idx.scalar_at<timestamp>(0).value();
+        auto end = idx.scalar_at<timestamp>(slice.row_count()-1).value();
+        return PartialKey{
+                key.type, key.version_id, key.id, start, end_index_generator(end)
+        };
+    }
+    else {
+        return PartialKey{
+                key.type,
+                key.version_id,
+                key.id,
+                entity::safe_convert_to_numeric_index(slice.offset(), "Rows"),
+                entity::safe_convert_to_numeric_index(slice.offset() + slice.row_count() - 1, "Rows")
+        };
+    }
 }
 
 } //arcticdb::pipelines

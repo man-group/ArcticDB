@@ -718,19 +718,13 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 
 VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
         const StreamId& stream_id,
-        const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
-        bool validate_index,
-        bool no_slice
+        bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
-
-    if(std::holds_alternative<SegmentInMemory>(frame)) {
-        assert(std::get<SegmentInMemory>(frame).descriptor().id() == stream_id);
-    }
-
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
@@ -745,8 +739,70 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
             write_options,
             de_dup_map,
             allow_sparse,
-            validate_index,
-            no_slice);
+            validate_index);
+
+    if(cfg().symbol_list())
+        symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
+
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
+    return versioned_item;
+}
+
+VersionedItem LocalVersionedEngine::write_segment(
+        const StreamId& stream_id,
+        const SegmentInMemory& segment,
+        bool prune_previous_versions,
+        Slicing slicing
+) {
+    ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
+    assert(segment.descriptor().id() == stream_id);
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write individual segment");
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
+    auto version_id = get_next_version_from_key(maybe_prev);
+    ARCTICDB_DEBUG(log::version(), "write individual segment for stream_id: {} , version_id = {}", stream_id, version_id);
+
+    auto write_options = get_write_options();
+    auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
+
+    if(version_id == 0){
+        auto check_outcome = verify_symbol_key(stream_id);
+        if (std::holds_alternative<Error>(check_outcome)) {
+            std::get<Error>(check_outcome).throw_error();
+        }
+    }
+    auto partial_key = IndexPartialKey(stream_id, version_id);
+
+    auto slices = (slicing == Slicing::NoSlicing) ? std::vector<SegmentInMemory>({segment}) : segment.split(get_write_options().segment_row_size);
+
+    auto sink = store();
+
+    TypedStreamVersion tsv{partial_key.id, partial_key.version_id, KeyType::TABLE_DATA};
+    int64_t write_window = write_window_size();
+    auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [&sink, de_dup_map, &segment, tsv=std::move(tsv)](auto&& slice) {
+            auto frame_slice = FrameSlice{std::make_shared<entity::StreamDescriptor>(slice.descriptor()), {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()}, {slice.offset(), slice.offset() + slice.row_count()}};
+            auto pkey = get_partial_key(segment.descriptor().index(), tsv, slice);
+            auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{
+                    pkey, std::move(slice), frame_slice
+            };
+            return sink->async_write(std::move(ks), de_dup_map);
+        },write_window)).via(&async::io_executor());
+
+    // Create a TimeSeriesDescriptor that is needed for writing the index key
+    auto index = stream::index_type_from_descriptor(segment.descriptor());
+    auto tsd = TimeseriesDescriptor();
+    tsd.set_stream_descriptor(segment.descriptor());
+    tsd.set_total_rows(segment.row_count());
+    arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
+    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(false);
+    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_start(0);
+    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
+    tsd.set_normalization_metadata(std::move(norm_meta));
+
+    auto atom_key_fut = std::move(fut_slice_keys).thenValue([partial_key = std::move(partial_key), &sink, tsd, index = std::move(index)](auto&& slice_keys) {
+                                    return index::write_index(index, tsd, std::forward<decltype(slice_keys)>(slice_keys), partial_key, sink);
+                                });
+
+    auto versioned_item = VersionedItem(std::move(atom_key_fut).get());
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());

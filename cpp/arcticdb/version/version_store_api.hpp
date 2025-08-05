@@ -62,8 +62,7 @@ class PythonVersionStore : public LocalVersionedEngine {
             const StreamId& stream_id,
             const SegmentInMemory& segment,
             bool prune_previous_versions,
-            bool allow_sparse,
-            bool validate_index);
+            Slicing slicing);
 
     VersionedItem write_versioned_composite_data(
         const StreamId& stream_id,

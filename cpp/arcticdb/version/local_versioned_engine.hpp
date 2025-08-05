@@ -59,6 +59,10 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     const bool dry_run = false
 );
 
+enum class Slicing {
+    NoSlicing, RowSlicing
+};
+
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -180,12 +184,18 @@ public:
 
     VersionedItem write_versioned_dataframe_internal(
             const StreamId& stream_id,
-            const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+            const std::shared_ptr<InputTensorFrame>& frame,
             bool prune_previous_versions,
             bool allow_sparse,
-            bool validate_index,
-            bool no_slice = false
+            bool validate_index
     ) override;
+
+    VersionedItem write_segment(
+            const StreamId& stream_id,
+            const SegmentInMemory& segment,
+            bool prune_previous_versions,
+            Slicing slicing
+    );
 
     VersionedItem write_versioned_metadata_internal(
         const StreamId& stream_id,

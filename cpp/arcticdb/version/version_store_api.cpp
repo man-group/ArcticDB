@@ -628,10 +628,9 @@ VersionedItem PythonVersionStore::write_versioned_segment(
         const StreamId& stream_id,
         const SegmentInMemory& segment,
         bool prune_previous_versions,
-        bool sparsify_floats,
-        bool validate_index) {
+        Slicing slicing) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
-    auto versioned_item = write_versioned_dataframe_internal(stream_id, segment, prune_previous_versions, sparsify_floats, validate_index);
+    auto versioned_item = write_segment(stream_id, segment, prune_previous_versions, slicing);
     return versioned_item;
 }
 

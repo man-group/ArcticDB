@@ -14,6 +14,8 @@ from arcticdb_ext.stream import SegmentInMemory
 from arcticdb_ext.tools import LibraryTool as LibraryToolImpl
 from arcticdb_ext.version_store import AtomKey, RefKey
 from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
+from arcticdb_ext.version_store import Slicing
+
 
 VariantKey = Union[AtomKey, RefKey]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
@@ -205,5 +207,5 @@ class LibraryTool(LibraryToolImpl):
         _, item, norm_meta = self._nvs._try_normalize(symbol, df, None, False, dynamic_strings, None)
         self._nvs.version_store.append_incomplete(symbol, item, norm_meta, None, validate_index)
 
-    def write_segment_in_memory(self, symbol: str, segment: SegmentInMemory):
-        self._nvs.version_store.write_versioned_segment(symbol, segment, False, False, False)
+    def write_segment_in_memory(self, symbol: str, segment: SegmentInMemory, slicing: Slicing):
+        self._nvs.version_store.write_versioned_segment(symbol, segment, False, slicing)

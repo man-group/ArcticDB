@@ -70,23 +70,21 @@ struct MultiSymbolReadOutput {
 VersionedItem write_dataframe_impl(
         const std::shared_ptr<Store>& store,
         VersionId version_id,
-        const std::variant<std::shared_ptr<pipelines::InputTensorFrame>, SegmentInMemory>& frame,
+        const std::shared_ptr<pipelines::InputTensorFrame>& frame,
         const WriteOptions& options,
         const std::shared_ptr<DeDupMap>& de_dup_mapp = std::make_shared<DeDupMap>(),
         bool sparsify_floats = false,
-        bool validate_index = false,
-        bool no_slice = false
+        bool validate_index = false
 );
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
         const std::shared_ptr<Store>& store,
         VersionId version_id,
-        const std::variant<std::shared_ptr<InputTensorFrame>, SegmentInMemory>& frame,
+        const std::shared_ptr<InputTensorFrame>& frame,
         const WriteOptions& options,
         const std::shared_ptr<DeDupMap> &de_dup_ma,
         bool sparsify_floats,
-        bool validate_index,
-        bool no_slice = false
+        bool validate_index
 );
 
 folly::Future<AtomKey> async_append_impl(
