@@ -199,12 +199,8 @@ class BatchBasicFunctions:
         self.fresh_lib = self.get_fresh_lib()
 
     def get_fresh_lib(self):
-        start_time = time.time()
         self.ac.delete_library("fresh_lib")
-        print("In get_fresh_lib: Delete library took (s) :", time.time() - start_time)
-        start_time = time.time()
         lib = self.ac.create_library("fresh_lib")
-        print("In get_fresh_lib: Create library took (s) :", time.time() - start_time)
         return lib
 
     def time_write_batch(self, rows, num_symbols):
