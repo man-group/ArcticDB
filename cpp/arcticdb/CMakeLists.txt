@@ -161,6 +161,8 @@ if (NOT MSVC)
         # Compilers on conda-forge are relatively strict.
         # For now, we do not want to treat warnings as errors for those builds.
         add_compile_options("-Werror")
+        # folly::ConcurrentHashMap default ctor trips this warning on GCC 13.3
+        add_compile_options("-Wno-stringop-overflow")
     endif()
     add_compile_options("-ggdb")
     add_compile_options("-fvisibility=hidden")
