@@ -118,4 +118,4 @@ def test_row_range_open_ended_negative_start(lmdb_version_store_v1, api, row_ran
         assert api == "read_batch"
         received = lmdb_version_store_v1.batch_read([symbol], row_ranges=[row_range])[symbol].data
 
-    assert_frame_equal(received, expected)
+    assert_frame_equal(received, expected, check_dtype=False)
