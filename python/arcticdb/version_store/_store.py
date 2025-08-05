@@ -59,6 +59,7 @@ from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
 from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame
+from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
 from arcticdb.flattener import Flattener
@@ -2948,7 +2949,7 @@ class NativeVersionStore:
         """
         return self._normalizer.get_normalizer_for_type(item)
 
-    def will_item_be_pickled(self, item):
+    def will_item_be_pickled(self, item, recursive_normalizers: Optional[bool] = None):
         """
         Check if the data will be pickled.
 
@@ -2956,6 +2957,14 @@ class NativeVersionStore:
         ----------
         item : `Any`
             Data to be checked.
+        recursive_normalizers : `Optional[bool]`, default=None
+            Whether recursive normalizer is enabled.
+            This should be provided if `recursive_normalizers` is also provided to `write`.
+            Otherwise, the fallback logic for environment variables, library config
+            options, etc will be used, as in `write`.
+            This parameter WILL NOT affect the behavior of this method, for the reason stated
+            in below `Notes` section, but rather giving better warning messages for
+            recursive normalizable data.
 
         Notes
         ----------
@@ -2985,10 +2994,10 @@ class NativeVersionStore:
             result = True
 
         result |= norm_meta.WhichOneof("input_type") == "msg_pack_frame"
-        if result:
+        if result and log.is_active(_LogLevel.WARN):
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
             resolved_recursive_normalizers = resolve_defaults(
-                "recursive_normalizers", proto_cfg, global_default=False, uppercase=False
+                "recursive_normalizers", proto_cfg, global_default=False, uppercase=False, **{"recursive_normalizers": recursive_normalizers}
             )
             if resolved_recursive_normalizers:
                 is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
