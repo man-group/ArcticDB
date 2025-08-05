@@ -56,9 +56,6 @@ if(NOT ${ARCTICDB_USING_CONDA})
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
-    # Libraries baked into the internal and external Linux images are found by searching various paths
-    # On Windows, vcpkg will provide a "Config" which takes precedence
-    find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
 else()
 
     # ARCTICDB_USING_CONDA is used in header of the files including vendored
@@ -750,7 +747,6 @@ endif()
 if(${ARCTICDB_USING_CONDA})
 
     list (APPEND arcticdb_core_libraries
-        ${PCRE_LIBRARIES}
         msgpack-c
         ${LMDB_LIBRARIES}
     )
