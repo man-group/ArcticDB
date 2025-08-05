@@ -43,7 +43,7 @@ jobs:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     defaults:
       run: {shell: bash}
-    steps:
+    steps:  
       - uses: actions/checkout@v3.3.0
         with:
           lfs: 'true'
@@ -51,7 +51,7 @@ jobs:
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
           ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
-
+        
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
 
@@ -95,7 +95,7 @@ jobs:
 
       - name: Configure what suite or tests to execute
         shell: bash -el {0}
-        run: |
+        run: | 
             if [ "${{ inputs.suite_to_run }}" == "REAL" ]; then
               # ASV tests with real storage starts with 'real_' in the test name
               SUITE='^(real_).*'
@@ -118,15 +118,15 @@ jobs:
             echo "FINAL selection to execute SUITE=$SUITE"
             echo "SUITE=$SUITE" >> $GITHUB_ENV
             # Now lets reduce logging
-            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
+            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
 
       - name: Benchmark given commit
         if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
-        run: |
+        run: | 
           git config --global --add safe.directory .
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
-
+        
       - name: Benchmark against master
         if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
         shell: bash -el {0}

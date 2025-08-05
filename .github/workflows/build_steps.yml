@@ -281,7 +281,7 @@ jobs:
         run: |
           # Find and preload the appropriate sanitizer runtime library
           SANITIZER_LIB=""
-
+          
           # Check if address sanitizer is enabled (can be part of comma-separated list)
           if [[ "$ARCTICDB_USE_SANITIZER" == *"address"* ]]; then
             # Try multiple methods to find the ASan library
@@ -298,12 +298,12 @@ jobs:
                 break
               fi
             done
-
+            
             # Method 2: Use ldconfig if available
             if [[ -z "$SANITIZER_LIB" ]]; then
               SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.asan|libasan.so' | head -n1 | awk '{print $NF}')
             fi
-
+            
           # Check if thread sanitizer is enabled
           elif [[ "$ARCTICDB_USE_SANITIZER" == *"thread"* ]]; then
             # Try multiple methods to find the TSan library
@@ -319,44 +319,44 @@ jobs:
                 break
               fi
             done
-
+            
             # Method 2: Use ldconfig if available
             if [[ -z "$SANITIZER_LIB" ]]; then
               SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.tsan|libtsan.so' | head -n1 | awk '{print $NF}')
             fi
           fi
-
+          
           if [[ -z "$SANITIZER_LIB" ]]; then
             echo "ERROR: Could not find sanitizer library for $ARCTICDB_USE_SANITIZER"
             echo "Available libraries:"
             find /usr -name "*san*.so*" 2>/dev/null || echo "No sanitizer libraries found"
             exit 1
           fi
-
+          
           echo "Using sanitizer library: $SANITIZER_LIB"
-
+          
           # Configure leak sanitizer suppressions
           if [[ "$ARCTICDB_USE_SANITIZER" == *"address"* ]]; then
             export LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt:print_suppressions=0"
             echo "Leak Sanitizer suppressions enabled: $LSAN_OPTIONS"
           fi
-
+          
           # Run pytest with the sanitizer runtime preloaded
           # Pytest may exit 1 if ANY leaks are detected, but we only care about arcticdb leaks
           # Disable pipefail so pipeline exit code comes from filter, not pytest
           set +e          # Don't exit on error
           set +o pipefail # Don't fail on first error in pipeline
-
+          
           LD_PRELOAD="$SANITIZER_LIB" pytest -s -v python/tests/sanitizers 2>&1 | python3 filter_sanitizer_leaks.py
           FILTER_EXIT=$?
-
+          
           set -e          # Re-enable exit on error
           set -o pipefail # Re-enable pipefail
-
+          
           # Exit with the filter's result (0 = no arcticdb leaks, 1 = arcticdb leaks found)
           exit $FILTER_EXIT
         env:
-          ARCTICDB_USE_SANITIZER: ${{env.ARCTICDB_USE_SANITIZER}}
+          ARCTICDB_USE_SANITIZER: ${{env.ARCTICDB_USE_SANITIZER}}  
 
       - name: Upload sanitizer output
         if: always() && env.ARCTICDB_USE_SANITIZER != ''
@@ -460,7 +460,7 @@ jobs:
         type: ${{fromJSON(vars.TEST_DIRS_OVERRIDE || needs.compile.outputs.test_dirs)}}
         python_deps_id: ${{fromJson(inputs.python_deps_ids)}}
         # Always run with both for cp311
-        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }}
+        version_cache_timeout: ${{ fromJSON((inputs.version_cache_full_test || needs.compile.outputs.python_impl_name == 'cp311') && '["NoCache", "DefaultCache"]' || '["DefaultCache"]') }} 
         include:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
@@ -533,8 +533,8 @@ jobs:
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: npm install -g azurite
-
+          command: npm install -g azurite 
+          
       - name: Install MongoDB
         if: matrix.os == 'linux'
         uses: ./.github/actions/install_mongodb
@@ -582,24 +582,21 @@ jobs:
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.DEBUG_ENABLED == '1' }}
-
+        if: ${{ inputs.DEBUG_ENABLED == '1' }}  
+        
       - name: Set ArcticDB Debug Logging
-        if: ${{ inputs.DEBUG_LOGGING_ENABLED == '1' }}
+        if: ${{ inputs.DEBUG_LOGGING_ENABLED == '1' }}        
         uses: ./.github/actions/enable_logging
 
       - name: Run test
         run: |
           # find ssl directory where cacerts are (for Azure)
-          openssl version -d
+          openssl version -d 
           # list file descriptors and other limits of the runner
           ulimit -a
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            echo "Run custom pytest command"
-            python -m pip  install pytest-repeat
-            python -m pip  install setuptools
-            python -m pip  install wheel
+            python -m pip  install pytest-repeat setuptools wheel
             python setup.py protoc --build-lib python
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
@@ -647,4 +644,4 @@ jobs:
           name: pytest-${{env.distinguishing_name}}
           path: |
             ${{runner.temp}}/*test*
-
+            
