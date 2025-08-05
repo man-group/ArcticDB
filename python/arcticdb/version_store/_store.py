@@ -408,7 +408,8 @@ class NativeVersionStore:
     def get_backing_store(self):
         backing_store = ""
         try:
-            primary_backing_url = list(self._lib_cfg.storage_by_id.values())[0].config.type_url
+            primary_storage_id = self._lib_cfg.lib_desc.storage_ids[0]
+            primary_backing_url = self._lib_cfg.storage_by_id[primary_storage_id].config.type_url
             storage_val = re.search("cxx.arctic.org/arcticc.pb2.(.*)_pb2.Config", primary_backing_url)
             backing_store = storage_val.group(1)
         except Exception as e:
