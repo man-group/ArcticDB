@@ -11,6 +11,7 @@ import os
 
 from arcticdb import Arctic
 from arcticdb.exceptions import NoSuchVersionException
+from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.config import set_log_level
 import arcticdb as adb
 import datetime
@@ -39,6 +40,7 @@ class IterateVersionChain:
     def setup_cache(self):
         start_time = time.time()
         self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)
+
         print("Arctic connection took (s) :", time.time() - start_time)
         num_versions_list, caching_list, deleted_list = IterateVersionChain.params
 
@@ -48,6 +50,8 @@ class IterateVersionChain:
 
         start_time = time.time()
         lib = self.ac.create_library(IterateVersionChain.LIB_NAME)
+        self.ac.modify_library_option(self.lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
+
         print("Create library took (s) :", time.time() - start_time)
 
         start_time = time.time()
