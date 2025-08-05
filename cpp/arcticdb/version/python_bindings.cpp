@@ -388,7 +388,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("diff", &pipelines::RowRange::diff);
 
     py::class_<pipelines::SignedRowRange, std::shared_ptr<pipelines::SignedRowRange>>(version, "SignedRowRange")
-    .def(py::init([](int64_t start, int64_t end){
+    .def(py::init([](std::optional<int64_t> start, std::optional<int64_t> end){
         return SignedRowRange{start, end};
     }));
 
