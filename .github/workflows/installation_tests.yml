@@ -210,7 +210,7 @@ jobs:
 
     - name: Set persistent storage variables
       # Should be executed for all persistent storages but not for LMDB
-      if: ${{ env.real_tests_storage_type != 'no' }}
+      if: ${{ env.SKIP_JOB != 'true' && env.real_tests_storage_type != 'no' }}
       uses: ./.github/actions/set_persistent_storage_env_vars
       with:
         aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
