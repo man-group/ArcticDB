@@ -50,7 +50,7 @@ class IterateVersionChain:
 
         start_time = time.time()
         lib = self.ac.create_library(IterateVersionChain.LIB_NAME)
-        self.ac.modify_library_option(self.lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
+        self.ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
         print("Create library took (s) :", time.time() - start_time)
 
