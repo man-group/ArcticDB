@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
 #include <arcticdb/util/allocation_tracing.hpp>
+#include <arcticdb/version/version_tasks.hpp>
 
 namespace arcticdb::version_store {
 
@@ -1355,15 +1356,20 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
     py::gil_scoped_release release_gil;
 
     auto write_options = get_write_options();
-    auto update_info_futs = batch_get_latest_undeleted_version_and_next_version_id_async(store(),
-                                                                                         version_map(),
-                                                                                         stream_ids);
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == update_info_futs.size(), "stream_ids and update_info_futs must be of the same size");
     std::vector<folly::Future<VersionedItem>> version_futures;
-    for(auto&& update_info_fut : folly::enumerate(update_info_futs)) {
-        auto idx = update_info_fut.index;
-        version_futures.push_back(std::move(*update_info_fut)
-            .thenValue([this, &stream_id = stream_ids[idx], &write_options](auto&& update_info){
+    for(auto&& [idx, stream_id] : folly::enumerate(stream_ids)) {
+        version_futures.push_back(
+            async::submit_io_task(CheckReloadTask{store(),
+                        version_map(),
+                        stream_id,
+                        LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}})
+            .thenValue([](auto entry){
+                auto latest_version = entry->get_first_index(true).first;
+                auto latest_undeleted_version = entry->get_first_index(false).first;
+                VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
+                return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
+            }).via(&async::cpu_executor())
+            .thenValue([this, stream_id = stream_ids[idx], write_options](auto&& update_info){
                 return create_version_id_and_dedup_map(std::move(update_info), stream_id, write_options);
             }).via(&async::cpu_executor())
             .thenValue([this, &stream_id = stream_ids[idx], &write_options, &validate_index, &frame = frames[idx]](
@@ -1549,12 +1555,19 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 ) {
     py::gil_scoped_release release_gil;
 
-    auto stream_update_info_futures = batch_get_latest_undeleted_version_and_next_version_id_async(store(), version_map(),stream_ids);
     std::vector<folly::Future<VersionedItem>> update_versions_futs;
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(stream_ids.size() == stream_update_info_futures.size(), "stream_ids and stream_update_info_futures must be of the same size");
-    for (const auto&& [idx, stream_update_info_fut] : enumerate(stream_update_info_futures)) {
+    for (const auto&& [idx, stream_id] : folly::enumerate(stream_ids)) {
         update_versions_futs.push_back(
-            std::move(stream_update_info_fut)
+            async::submit_io_task(CheckReloadTask{store(),
+                version_map(),
+                stream_ids[idx],
+                LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}})
+            .thenValue([](auto entry){
+                auto latest_version = entry->get_first_index(true).first;
+                auto latest_undeleted_version = entry->get_first_index(false).first;
+                VersionId next_version_id = latest_version.has_value() ? latest_version->version_id() + 1 : 0;
+                return version_store::UpdateInfo{latest_undeleted_version, next_version_id};
+            }).via(&async::cpu_executor())
                 .thenValue([this, frame = std::move(frames[idx]), stream_id = stream_ids[idx], update_query = update_queries[idx], upsert, prune_previous_versions](UpdateInfo&& update_info) -> folly::Future<VersionedItem> {
                     auto index_key_fut = folly::Future<AtomKey>::makeEmpty();
                     auto write_options = get_write_options();

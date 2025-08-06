@@ -38,27 +38,15 @@ class IterateVersionChain:
         return f"symbol_{num_versions}_{deleted}"
 
     def setup_cache(self):
-        start_time = time.time()
         self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)
 
-        print("Arctic connection took (s) :", time.time() - start_time)
         num_versions_list, caching_list, deleted_list = IterateVersionChain.params
 
-        start_time = time.time()
         self.ac.delete_library(IterateVersionChain.LIB_NAME)
-        print("Delete library took (s) :", time.time() - start_time)
-
-        start_time = time.time()
         lib = self.ac.create_library(IterateVersionChain.LIB_NAME)
         self.ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
-        print("Create library took (s) :", time.time() - start_time)
-
-        start_time = time.time()
         small_df = generate_random_floats_dataframe(2, 2)
-        print("Generate random dataframe took (s) :", time.time() - start_time)
-
-        start_time = time.time()
         # Pre-calculate delete points to avoid repeated math.floor calls
         delete_points = {}
         for num_versions in num_versions_list:
@@ -78,11 +66,8 @@ class IterateVersionChain:
                     # Only check for deletion once per iteration
                     if i == delete_point:
                         lib.delete(symbol)
-        print("Write and delete took (s) :", time.time() - start_time)
 
-        start_time = time.time()
         del self.ac
-        print("Delete Arctic took (s) :", time.time() - start_time)
 
     def load_all(self, symbol):
         # Getting tombstoned versions requires a LOAD_ALL
