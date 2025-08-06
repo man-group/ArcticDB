@@ -693,7 +693,7 @@ def test_update_symbol_list(lmdb_library):
     lib.write(sym_2, df, staged=True)
     lib.sort_and_finalize_staged_data(sym_2, mode=StagedDataFinalizeMethod.APPEND)
     assert lib_tool.count_keys(KeyType.SYMBOL_LIST) == 3
-    assert set(lib.list_symbols()) == set([sym, sym_2])
+    assert set(lib.list_symbols()) == {sym, sym_2}
 
 
 def test_delete_staged_data(lmdb_library):
@@ -948,3 +948,47 @@ class TestEmptyDataFrames:
         lib.write(symbol, to_append, staged=True)
         with pytest.raises(SchemaException, match="wrong_col"):
             lib.sort_and_finalize_staged_data(symbol, mode=StagedDataFinalizeMethod.APPEND)
+
+class TestSegmentsWithNaNAndNone:
+    @pytest.mark.parametrize("value", [np.nan, None])
+    def test_staged_segment_has_only_nan_none(self, lmdb_library, value):
+        symbol = "symbol"
+        lib = lmdb_library
+        df = pd.DataFrame({"a": 3 * [value]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)]))
+        lib.write(symbol, df, staged=True)
+        lib.sort_and_finalize_staged_data(symbol)
+        assert_frame_equal(lib.read(symbol).data, df)
+
+    def test_float_column_contains_only_nan_none(self, lmdb_library):
+        symbol = "symbol"
+        lib = lmdb_library
+        df = pd.DataFrame({"a": np.array(3 * [np.nan], dtype=np.float32)}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(2), pd.Timestamp(3)]))
+        lib.write(symbol, df, staged=True)
+        lib.sort_and_finalize_staged_data(symbol)
+        assert_frame_equal(lib.read(symbol).data, df)
+
+    @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
+    def test_multiple_segments_with_nan_none(self, lmdb_library_factory, rows_per_segment):
+        symbol = "symbol"
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=rows_per_segment))
+        set_config_int("Merge.SegmentSize", rows_per_segment)
+        df1 = pd.DataFrame({"a": [None, np.nan, np.nan]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(3), pd.Timestamp(5)]))
+        lib.write(symbol, df1, staged=True)
+        df2 = pd.DataFrame({"a": [None, np.nan, None]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4), pd.Timestamp(6)]))
+        lib.write(symbol, df2, staged=True)
+        lib.sort_and_finalize_staged_data(symbol)
+        expected = pd.DataFrame({"a": [None, None, np.nan, np.nan, np.nan, None]}, index=pd.DatetimeIndex([pd.Timestamp(i) for i in range(1, 7)]))
+        assert_frame_equal(lib.read(symbol).data, expected)
+
+    @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
+    def test_input_contains_actual_values(self, lmdb_library_factory, rows_per_segment):
+        symbol = "symbol"
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=rows_per_segment))
+        set_config_int("Merge.SegmentSize", rows_per_segment)
+        df1 = pd.DataFrame({"a": [None, "a", None]}, index=pd.DatetimeIndex([pd.Timestamp(1), pd.Timestamp(3), pd.Timestamp(5)]))
+        lib.write(symbol, df1, staged=True)
+        df2 = pd.DataFrame({"a": [None, None, "b"]}, index=pd.DatetimeIndex([pd.Timestamp(2), pd.Timestamp(4), pd.Timestamp(6)]))
+        lib.write(symbol, df2, staged=True)
+        lib.sort_and_finalize_staged_data(symbol)
+        expected = pd.DataFrame({"a": [None, None, "a", None, None, "b"]}, index=pd.DatetimeIndex([pd.Timestamp(i) for i in range(1, 7)]))
+        assert_frame_equal(lib.read(symbol).data, expected)

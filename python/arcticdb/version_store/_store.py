@@ -71,6 +71,7 @@ from arcticdb.version_store._normalization import (
     denormalize_dataframe,
     MsgPackNormalizer,
     CompositeNormalizer,
+    ArrowTableNormalizer,
     FrameData,
     _IDX_PREFIX_LEN,
     get_timezone_from_metadata,
@@ -322,6 +323,7 @@ class NativeVersionStore:
         self.env = env or "local"
         self._lib_cfg = lib_cfg
         self._custom_normalizer = custom_normalizer
+        self._arrow_normalizer = ArrowTableNormalizer()
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
@@ -408,7 +410,8 @@ class NativeVersionStore:
     def get_backing_store(self):
         backing_store = ""
         try:
-            primary_backing_url = list(self._lib_cfg.storage_by_id.values())[0].config.type_url
+            primary_storage_id = self._lib_cfg.lib_desc.storage_ids[0]
+            primary_backing_url = self._lib_cfg.storage_by_id[primary_storage_id].config.type_url
             storage_val = re.search("cxx.arctic.org/arcticc.pb2.(.*)_pb2.Config", primary_backing_url)
             backing_store = storage_val.group(1)
         except Exception as e:
@@ -2375,7 +2378,8 @@ class NativeVersionStore:
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            data = pa.Table.from_batches(record_batches)
+            table = pa.Table.from_batches(record_batches)
+            data = self._arrow_normalizer.denormalize(table, read_result.norm)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):
@@ -3419,7 +3423,7 @@ class NativeVersionStore:
         return self._library
 
     def library_tool(self) -> LibraryTool:
-        return LibraryTool(self.library(), self)
+        return LibraryTool(self._library, self)
 
 
 def resolve_dynamic_strings(kwargs):
