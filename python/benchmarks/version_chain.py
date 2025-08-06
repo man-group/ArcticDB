@@ -72,7 +72,8 @@ class IterateVersionChain:
                     iters.append(time.time() - iter_start_time)
 
         print("Setup cache took (s) :", time.time() - start_time)
-        print("Iterations took (s) :", iters)
+        for iter in iters:
+            print(iter)
 
         del self.ac
 
