@@ -125,7 +125,7 @@ message NormalizationMetadata {
         string name = 1; // RangeIndex are not represented as a field, hence no name is associated
         string tz = 2;
         bool fake_name = 3;
-        // True if the index is stored on disk. False if it can be reconstruced from the metadata at read time.
+        // True if the index is stored on disk. False if it can be reconstructed from the metadata at read time.
         bool is_physically_stored = 4;
         int64 start = 5; // Used for RangeIndex
         int64 step = 6; // Used for RangeIndex
