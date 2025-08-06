@@ -104,10 +104,11 @@ struct SchedulerWrapper : public SchedulerType {
 
     void stop_orphaned_threads() {
 #ifdef _WIN32
-        for (const auto& thread : SchedulerType::threadList_.get()) {
+        const auto to_remove_copy = SchedulerType::threadList_.get();
+        for (const auto& thread : to_remove_copy) {
             const bool is_signaled = WaitForSingleObject(thread->handle.native_handle(), 0) == WAIT_OBJECT_0;
             if (is_signaled) {
-                SchedulerType::stoppedThreads_.add(thread);
+                SchedulerType::threadList_.remove(thread);
             }
         }
 #endif
