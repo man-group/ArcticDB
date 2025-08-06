@@ -231,8 +231,6 @@ jobs:
           npm install -g azurite
 
       - name: Set persistent storage variables
-        # Should be executed for all persistent storages but not for LMDB
-        if: ${{ env.real_tests_storage_type != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -241,7 +239,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: "true"
+          persistent_storage: "no"
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}        
