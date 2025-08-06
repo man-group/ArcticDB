@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import re
 import shutil
+import ssl
 import stat
 import tempfile
 import uuid
@@ -109,6 +110,7 @@ class AzureContainer(StorageFixture):
 
     def __exit__(self, exc_type, exc_value, traceback):
         if self.is_real_azure():
+            # This code is for cleaning Azure, the code for Azurite is down
             if self.factory.clean_bucket_on_fixture_exit:
                 self.factory.cleanup_container(self)
                 if len(self.libs_from_factory) > 0:
@@ -116,11 +118,13 @@ class AzureContainer(StorageFixture):
             
         if self.client:
             if not self.is_real_azure():
+                # This code is only for Azurite cleaning, it is faster than this for Azure
                 if self._admin_client:
                     self._admin_client.delete_container(timeout=3)
                     self._admin_client.close()
                 else:
                     self.client.delete_container(timeout=3)
+            # This code is for both Azure and Azurite
             self.client.close()
             self.client = None
 
@@ -219,7 +223,14 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
 
 def find_ca_certs():
     # Common CA certificates locations
-    possible_paths = [
+    default_patch = ssl.get_default_verify_paths()
+    possible_paths =  [
+        default_patch.cafile,
+        default_patch.capath,
+        default_patch.openssl_cafile_env,
+        default_patch.openssl_capath_env,
+        default_patch.openssl_cafile,
+        default_patch.openssl_capath,
         '/etc/ssl/certs/ca-certificates.crt',
         '/usr/lib/ssl/certs/ca-certificates.crt',
         '/etc/pki/tls/certs/ca-bundle.crt',

@@ -294,8 +294,6 @@ jobs:
           echo $pwd
           echo "Running tests against arcticdb version: ${{ env.arcticdb_version }}"
           pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
-          ## For testing
-          #pytest -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
         fi
       env:
         COMMANDLINE: ${{ inputs.run_commandline }}
