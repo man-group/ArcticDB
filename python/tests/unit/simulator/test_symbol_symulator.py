@@ -168,7 +168,6 @@ def test_simulator_append_series_and_dataframe(lmdb_library_dynamic_schema):
     lib = lmdb_library_dynamic_schema
     asym = ArcticSymbolSimulator().associate_arctic_lib(lib)
     s1 = pd.Series([10, 20, 30], name="name")
-    s2 = pd.Series([100, 200, 300], name="name")
     df1 = pd.DataFrame({
         'A': [1, 2],
         'B': [3, 4],
@@ -177,5 +176,55 @@ def test_simulator_append_series_and_dataframe(lmdb_library_dynamic_schema):
     asym.write(s1).arctic_lib().write("s", s1)
     asym.append(df1).arctic_lib().append("s", df1)
     asym.assert_equal_to_associated_lib("s")
+    
+
+def test_simulator_append_series_and_dataframe_with_timestamp(lmdb_library_dynamic_schema):
+    lib = lmdb_library_dynamic_schema
+    asym = ArcticSymbolSimulator().associate_arctic_lib(lib)
+    index_dates = pd.date_range(start=datetime.datetime(2025, 6, 18), periods=3, freq="D")
+    s1 = pd.Series([10, 20, 30], name="name", index=index_dates)
+    index_dates = pd.date_range(start=datetime.datetime(2025, 7, 18), periods=1, freq="D")
+    df1 = pd.DataFrame({
+        "int_col": [111],
+        "float_col": [111.0],
+        "bool_col": [False],
+        "str_col": ["Z"],
+        "timestamp_col": index_dates + pd.to_timedelta(2, unit="h")
+    }, index=index_dates)
+    asym.write(s1).arctic_lib().write("s", s1)
+    asym.append(df1).arctic_lib().append("s", df1)
+    asym.assert_equal_to_associated_lib("s")
+
+
+@pytest.mark.xfail(True, reason="Currently adding series to symbol does not work (9754433454)")
+def test_simulator_append_series_and_dataframe_mix(lmdb_library_dynamic_schema):
+    lib = lmdb_library_dynamic_schema
+    asym = ArcticSymbolSimulator().associate_arctic_lib(lib)
+    s1 = pd.Series([10, 20, 30], name="name")
+    s2 = pd.Series([100, 200, 300], name="ioop")
+    s3 = pd.Series([1000, 2000, 3000], name="name")
+    df1 = pd.DataFrame({
+        'A': [1, 2],
+        'B': [3, 4],
+        'C': [5, 6]
+    })
+    index_dates = pd.date_range(start=datetime.datetime(2025, 6, 18), periods=1, freq="D")
+    df2 = pd.DataFrame({
+        "int_col": [111],
+        "float_col": [111.0],
+        "bool_col": [False],
+        "str_col": ["Z"],
+        "timestamp_col": index_dates + pd.to_timedelta(2, unit="h")
+    })
+    asym.write(s1).arctic_lib().write("s", s1)
+    asym.append(df1).arctic_lib().append("s", df1)
+    asym.assert_equal_to_associated_lib("s")
     asym.append(s2).arctic_lib().append("s", s2)
+    asym.assert_equal_to_associated_lib("s")
+    asym.append(s3).arctic_lib().append("s", s3)
+    asym.assert_equal_to_associated_lib("s")
+    asym.append(s3).arctic_lib().append("s", df2)
+    asym.assert_equal_to_associated_lib("s")
+
+
     

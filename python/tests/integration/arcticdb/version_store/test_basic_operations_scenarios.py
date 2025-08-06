@@ -17,7 +17,6 @@ from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
-    dataframe_simulate_arcticdb_update_static,
 )
 from arcticdb.util.utils import DFGenerator, generate_random_series, set_seed, supported_types_list 
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
@@ -144,7 +143,7 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
                                                    start_time=timestamp + timedelta(seconds=total_length - 1), seed=None)
             total_length += append_series_length
             lib.update(symbol, update_series, metadata=meta)
-            result_series = dataframe_simulate_arcticdb_update_static(result_series, update_series)
+            result_series = ArcticSymbolSimulator().simulate_arctic_update(result_series, update_series, dynamic_schema=False)
             ver = lib.read(symbol)
             assert_series_equal_pandas_1(result_series, ver.data, check_index_type=(len(result_series) > 0))
             assert meta == ver.metadata
