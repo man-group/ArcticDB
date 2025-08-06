@@ -102,11 +102,15 @@ struct SchedulerWrapper : public SchedulerType {
         SchedulerType::ensureActiveThreads();
     }
 
-    void all_threads_dead() {
-        auto threads_to_remove = SchedulerType::threadList_.get();
-        for (const auto& thread : threads_to_remove) {
-            SchedulerType::threadList_.remove(thread);
+    void stop_orphaned_threads() {
+#ifdef _WIN32
+        for (const auto& thread : SchedulerType::threadList_.get()) {
+            const bool is_signaled = WaitForSingleObject(thread->handle.native_handle(), 0) == WAIT_OBJECT_0;
+            if (is_signaled) {
+                SchedulerType::stoppedThreads_.add(thread);
+            }
         }
+#endif
     }
 };
 
@@ -222,8 +226,7 @@ class TaskScheduler {
 
     static TaskScheduler* instance();
     static void reattach_instance();
-    static void destroy_instance();
-    static void stop_threads();
+    static void stop_active_threads();
     static bool forked_;
     static bool is_forked();
     static void set_forked(bool);
@@ -236,8 +239,8 @@ class TaskScheduler {
 
     void stop() {
         ARCTICDB_DEBUG(log::schedule(), "Stopping task scheduler");
-        cpu_exec_.stop();
         io_exec_.stop();
+        cpu_exec_.stop();
     }
 
     void set_active_threads(size_t n) {
@@ -262,11 +265,6 @@ class TaskScheduler {
         return io_exec_;
     }
 
-    void all_threads_dead() {
-        cpu_exec_.all_threads_dead();
-        io_exec_.all_threads_dead();
-    }
-
     void re_init() {
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Reinitializing task scheduler: {} {}", cpu_thread_count_, io_thread_count_);
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "IO exec num threads: {}", io_exec_.numActiveThreads());
@@ -285,6 +283,11 @@ class TaskScheduler {
 
     size_t io_thread_count() const {
         return io_thread_count_;
+    }
+
+    void stop_orphaned_threads() {
+        io_exec_.stop_orphaned_threads();
+        cpu_exec_.stop_orphaned_threads();
     }
 
 private:
