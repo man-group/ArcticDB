@@ -400,20 +400,6 @@ def real_gcp_from_environment_variables(
         out.default_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     return out
 
-def real_azure_from_environment_variables(
-    shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
-) -> AzureStorageFixtureFactory:
-    out = AzureStorageFixtureFactory(native_config=native_config)
-    if shared_path:
-        prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
-    else:
-        prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
-    out.initialize_from_connection_sting(
-        constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
-        container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
-        prefix=prefix)
-    return out
-
 
 def real_s3_sts_from_environment_variables(
     user_name: str,

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING, Optional, Union
 from tempfile import mkdtemp
 
 from arcticdb.util.logger import get_logger
+from arcticdb_ext.storage import NativeVariantStorage
 
 
 from .api import *
@@ -319,3 +320,16 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
     def cleanup_container(self, b: AzureContainer):
         b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")            
 
+def real_azure_from_environment_variables(
+    shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
+) -> AzureStorageFixtureFactory:
+    out = AzureStorageFixtureFactory(native_config=native_config)
+    if shared_path:
+        prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
+    out.initialize_from_connection_sting(
+        constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
+        container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
+        prefix=prefix)
+    return out

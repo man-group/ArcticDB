@@ -11,7 +11,7 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-from arcticdb.storage_fixtures.s3 import real_azure_from_environment_variables
+from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
 try:
     # from pytest this way will work
     from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED

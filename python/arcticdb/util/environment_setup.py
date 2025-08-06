@@ -16,7 +16,8 @@ from typing import Any, Dict, List, Union
 
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
-from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_azure_from_environment_variables, real_s3_from_environment_variables
+from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
+from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
 from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store.library import Library

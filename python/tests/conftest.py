@@ -39,7 +39,6 @@ from arcticdb.storage_fixtures.s3 import (
     MotoNfsBackedS3StorageFixtureFactory,
     NfsS3Bucket,
     S3Bucket,
-    real_azure_from_environment_variables,
     real_gcp_from_environment_variables,
     real_s3_from_environment_variables,
     mock_s3_with_error_simulation,
@@ -47,6 +46,7 @@ from arcticdb.storage_fixtures.s3 import (
     real_s3_sts_resources_ready,
     real_s3_sts_clean_up,
 )
+from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
