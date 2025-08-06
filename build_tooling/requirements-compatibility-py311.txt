@@ -1,2 +1,9 @@
 # Makes sure we are able to use Numpy 1
-numpy<2
+pandas~=2.1
+numpy~=1.24
+protobuf~=4.25
+attrs~=23.1
+msgpack~=1.0
+prometheus_client~=0.21
+pyyaml~=6.0
+packaging~=24.2
