@@ -53,20 +53,17 @@ struct MemBlock {
     }
 
     [[nodiscard]] bool is_external() const {
-        return external_data_ != nullptr;
+        // external_data_ can be nullptr when owns_external_data_ is true
+        return external_data_ != nullptr || owns_external_data_;
     }
 
     ~MemBlock() {
         magic_.check(true);
-        if(owns_external_data_) {
-            if (is_external()) {
-                // Previously warn level, but would then show up in a read_batch when some of the returned values are
-                // DataError objects if the read is racing with a delete
-                log::version().debug("Unexpected release of detachable block memory");
-                delete[] external_data_;
-            } else {
-                log::version().warn("Cannot free inline allocated block");
-            }
+        if (owns_external_data_) {
+            // Previously warn level, but would then show up in a read_batch when some of the returned values are
+            // DataError objects if the read is racing with a delete
+            log::version().debug("Unexpected release of detachable block memory");
+            free_detachable_memory(external_data_, bytes_);
         }
     }
 
@@ -121,7 +118,7 @@ struct MemBlock {
     [[nodiscard]] uint8_t *data() { return is_external() ? external_data_ : data_; }
 
     [[nodiscard]] uint8_t* release() {
-        util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
+        util::check(is_external(), "Cannot release inlined or external data pointer");
         auto* tmp = external_data_;
         external_data_ = nullptr;
         owns_external_data_ = false;
@@ -129,8 +126,8 @@ struct MemBlock {
     }
 
     void abandon() {
-        util::check(is_external() && owns_external_data_, "Cannot release inlined or external data pointer");
-        delete[] external_data_;
+        util::check(is_external(), "Cannot abandon inlined or external data pointer");
+        free_detachable_memory(external_data_, bytes_);
         external_data_ = nullptr;
         owns_external_data_ = false;
     }

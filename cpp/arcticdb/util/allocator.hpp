@@ -26,6 +26,16 @@
 
 namespace arcticdb {
 
+// Must be used whenever deallocation COULD be the responsibility of sparrow
+// Explanation: Windows new[]/delete[] do not exactly map onto std::allocator allocate/deallocate
+// In particular, std::allocate has alignment optimisations when allocating larger blocks that
+// are not applied by new[]. sparrow uses the standard allocator to free memory we pass of to it,
+// and this can crash if the memory was allocated with new[] due to a mismatch in alignment expectations
+uint8_t* allocate_detachable_memory(size_t size);
+
+// Must be used whenever memory was allocated with allocate_detachable_memory
+void free_detachable_memory(uint8_t* ptr, size_t size);
+
 static constexpr uint64_t BYTES = 1;
 static constexpr uint64_t KILOBYTES = 1024 * BYTES;
 static constexpr uint64_t MEGABYTES = 1024 * KILOBYTES;

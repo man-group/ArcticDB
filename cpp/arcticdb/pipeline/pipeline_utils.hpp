@@ -38,8 +38,7 @@ inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data, Out
             // manually freed before the column goes out of scope to avoid triggering debug logs in ~MemBlock
             // complaining about freeing external data
             util::check(dest_column.blocks().size() == 1, "Unexpected multi-block column when reading single frame");
-            uint8_t* ptr = dest_column.blocks().at(0)->release();
-            delete[] ptr;
+            dest_column.blocks().at(0)->abandon();
         }
     }
 }
