@@ -363,9 +363,16 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
     auto row_slices = split_by_row_slice(std::move(proc));
 
     // Sort procs following row range descending order, as we are going to iterate through them backwards
+    // front() is UB if vector is empty. Should be non-empty by construction, but exception > UB
+    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+            ranges::all_of(row_slices, [](const auto& proc) {
+                return proc.row_ranges_.has_value() && !proc.row_ranges_->empty();
+            }),
+            "Unexpected empty row_ranges_ in AggregationClause::process"
+            );
     ranges::sort(row_slices,
                  [](const auto& left, const auto& right) {
-                     return left.row_ranges_->at(0)->start() > right.row_ranges_->at(0)->start();
+                    return left.row_ranges_->front()->start() > right.row_ranges_->front()->start();
                  });
 
 
