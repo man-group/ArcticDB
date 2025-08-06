@@ -56,6 +56,7 @@ class IterateVersionChain:
 
         start_time = time.time()
         iters = []
+        adb._ext.set_config_int("VersionMap.ReloadInterval", sys.maxsize)
         # Batch operations by symbol to reduce overhead
         for num_versions in num_versions_list:
             for deleted in deleted_list:
@@ -70,6 +71,8 @@ class IterateVersionChain:
                     if i == delete_point:
                         lib.delete(symbol)
                     iters.append(time.time() - iter_start_time)
+
+        adb._ext.unset_config_int("VersionMap.ReloadInterval")
 
         print("Setup cache took (s) :", time.time() - start_time)
         for iter in iters:
