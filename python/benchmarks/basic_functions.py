@@ -30,9 +30,7 @@ DATE_RANGE = (pd.Timestamp("2022-12-31"), pd.Timestamp("2023-01-01"))
 
 
 class BasicFunctions:
-    rounds = 1
-    number = 1  # We do a single run between setup and teardown because we e.g. can't delete a symbol twice
-    repeat = 3
+    number = 5
     warmup_time = 0
     timeout = 6000
     CONNECTION_STRING = "lmdb://basic_functions?map_size=20GB"
@@ -158,9 +156,7 @@ class BasicFunctions:
 
 
 class BatchBasicFunctions:
-    rounds = 1
-    number = 1
-    repeat = 3
+    number = 5
     warmup_time = 0
     timeout = 6000
     CONNECTION_STRING = "lmdb://batch_basic_functions?map_size=20GB"

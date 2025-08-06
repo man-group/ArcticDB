@@ -11,7 +11,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -29,7 +29,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -47,7 +47,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -65,7 +65,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -83,7 +83,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -101,7 +101,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -119,7 +119,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -137,7 +137,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -155,7 +155,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -165,7 +165,7 @@
         "code": "class BasicFunctions:\n    def time_read(self, rows):\n        self.lib.read(f\"sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -175,10 +175,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -189,7 +189,7 @@
         "code": "class BasicFunctions:\n    def time_read_short_wide(self, rows):\n        lib = self.ac[get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)]\n        lib.read(\"short_wide_sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_short_wide",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -199,10 +199,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -213,7 +213,7 @@
         "code": "class BasicFunctions:\n    def time_read_ultra_short_wide(self, rows):\n        lib = self.ac[get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)]\n        lib.read(\"ultra_short_wide_sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_ultra_short_wide",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -223,10 +223,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -237,7 +237,7 @@
         "code": "class BasicFunctions:\n    def time_read_with_columns(self, rows):\n        COLS = [\"value\"]\n        self.lib.read(f\"sym\", columns=COLS).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_with_columns",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -247,10 +247,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -261,7 +261,7 @@
         "code": "class BasicFunctions:\n    def time_read_with_date_ranges(self, rows):\n        self.lib.read(f\"sym\", date_range=BasicFunctions.DATE_RANGE).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_with_date_ranges",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -271,10 +271,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -285,7 +285,7 @@
         "code": "class BasicFunctions:\n    def time_read_with_date_ranges_query_builder(self, rows):\n        q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)\n        self.lib.read(f\"sym\", query_builder=q).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_with_date_ranges_query_builder",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -295,10 +295,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -309,7 +309,7 @@
         "code": "class BasicFunctions:\n    def time_write(self, rows):\n        self.fresh_lib.write(f\"sym\", self.df)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_write",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -319,10 +319,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -333,7 +333,7 @@
         "code": "class BasicFunctions:\n    def time_write_short_wide(self, rows):\n        self.fresh_lib.write(\"short_wide_sym\", self.df_short_wide)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_write_short_wide",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -343,10 +343,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -357,7 +357,7 @@
         "code": "class BasicFunctions:\n    def time_write_staged(self, rows):\n        self.fresh_lib.write(f\"sym\", self.df, staged=True)\n        self.fresh_lib._nvs.compact_incomplete(f\"sym\", False, False)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_write_staged",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows"
         ],
@@ -367,10 +367,10 @@
                 "1500000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:46",
+        "setup_cache_key": "basic_functions:44",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -394,7 +394,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -417,7 +417,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -440,7 +440,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -463,7 +463,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -486,7 +486,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -496,7 +496,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch(self, rows, num_symbols):\n        read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n        self.lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows",
             "num_symbols"
@@ -511,10 +511,10 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -525,7 +525,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch_pure(self, rows, num_symbols):\n        self.lib.read_batch(self.read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch_pure",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows",
             "num_symbols"
@@ -540,10 +540,10 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -554,7 +554,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch_with_columns(self, rows, num_symbols):\n        COLS = [\"value\"]\n        read_reqs = [ReadRequest(f\"{sym}_sym\", columns=COLS) for sym in range(num_symbols)]\n        self.lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch_with_columns",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows",
             "num_symbols"
@@ -569,10 +569,10 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -583,7 +583,7 @@
         "code": "class BatchBasicFunctions:\n    def time_read_batch_with_date_ranges(self, rows, num_symbols):\n        read_reqs = [ReadRequest(f\"{sym}_sym\", date_range=BatchBasicFunctions.DATE_RANGE) for sym in range(num_symbols)]\n        self.lib.read_batch(read_reqs)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_read_batch_with_date_ranges",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows",
             "num_symbols"
@@ -598,10 +598,10 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -612,7 +612,7 @@
         "code": "class BatchBasicFunctions:\n    def time_update_batch(self, rows, num_symbols):\n        payloads = [UpdatePayload(f\"{sym}_sym\", self.update_df) for sym in range(num_symbols)]\n        start_time = time.time()\n        results = self.lib.update_batch(payloads)\n        print(\"In t time_update_batch: Update batch took (s) :\", time.time() - start_time)\n        assert results[0].version >= 1\n        assert results[-1].version >= 1\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_update_batch",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows",
             "num_symbols"
@@ -627,10 +627,10 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -641,7 +641,7 @@
         "code": "class BatchBasicFunctions:\n    def time_write_batch(self, rows, num_symbols):\n        payloads = [WritePayload(f\"{sym}_sym\", self.df) for sym in range(num_symbols)]\n        start_time = time.time()\n        self.fresh_lib.write_batch(payloads)\n        print(\"In time_write_batch: Write batch took (s) :\", time.time() - start_time)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        rows_values, num_symbols_values = BatchBasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            for sym in range(num_symbols_values[-1]):\n                lib.write(f\"{sym}_sym\", self.dfs[rows])",
         "min_run_count": 2,
         "name": "basic_functions.BatchBasicFunctions.time_write_batch",
-        "number": 1,
+        "number": 5,
         "param_names": [
             "rows",
             "num_symbols"
@@ -656,10 +656,10 @@
                 "1000"
             ]
         ],
-        "repeat": 3,
-        "rounds": 1,
+        "repeat": 0,
+        "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:171",
+        "setup_cache_key": "basic_functions:167",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -683,7 +683,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -707,7 +707,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -731,7 +731,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -755,7 +755,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -779,7 +779,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -803,7 +803,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -827,7 +827,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -851,7 +851,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -875,7 +875,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -899,7 +899,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -923,7 +923,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:329",
+        "setup_cache_key": "basic_functions:325",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
