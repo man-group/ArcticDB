@@ -224,21 +224,18 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
 
 def find_ca_certs():
     # Common CA certificates locations
-    default_patch = ssl.get_default_verify_paths()
+    default_paths = ssl.get_default_verify_paths()
     possible_paths =  [
-        default_patch.cafile,
-        default_patch.capath,
-        default_patch.openssl_cafile_env,
-        default_patch.openssl_capath_env,
-        default_patch.openssl_cafile,
-        default_patch.openssl_capath,
+        default_paths.cafile,
+        default_paths.openssl_cafile_env,
+        default_paths.openssl_cafile,
         '/etc/ssl/certs/ca-certificates.crt',
         '/usr/lib/ssl/certs/ca-certificates.crt',
         '/etc/pki/tls/certs/ca-bundle.crt',
         '/etc/ssl/cert.pem'
     ]
     for path in possible_paths:
-        if os.path.exists(path):
+        if path and os.path.isfile(path):
             return path
     return None
 
