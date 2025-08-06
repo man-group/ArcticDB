@@ -156,7 +156,9 @@ class BasicFunctions:
 
 
 class BatchBasicFunctions:
-    number = 5
+    rounds = 1
+    number = 1
+    repeat = 3
     warmup_time = 0
     timeout = 6000
     CONNECTION_STRING = "lmdb://batch_basic_functions?map_size=20GB"

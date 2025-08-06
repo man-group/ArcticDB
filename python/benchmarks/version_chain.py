@@ -54,6 +54,8 @@ class IterateVersionChain:
                 symbol = self.symbol(num_versions, deleted)
                 delete_points[symbol] = math.floor(deleted * num_versions)
 
+        start_time = time.time()
+        iters = []
         # Batch operations by symbol to reduce overhead
         for num_versions in num_versions_list:
             for deleted in deleted_list:
@@ -62,10 +64,15 @@ class IterateVersionChain:
 
                 # Write all versions in a single loop
                 for i in range(num_versions):
+                    iter_start_time = time.time()
                     lib.write(symbol, small_df)
                     # Only check for deletion once per iteration
                     if i == delete_point:
                         lib.delete(symbol)
+                    iters.append(time.time() - iter_start_time)
+
+        print("Setup cache took (s) :", time.time() - start_time)
+        print("Iterations took (s) :", iters)
 
         del self.ac
 
