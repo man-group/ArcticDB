@@ -12,7 +12,6 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <iterator>
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <util/key_utils.hpp>
 #include <pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
@@ -44,6 +43,12 @@
 #include <ranges>
 
 namespace arcticdb::version_store {
+
+[[nodiscard]] static ReadOptions defragmentation_read_options_generator(const WriteOptions &options){
+    ReadOptions read_options;
+    read_options.set_dynamic_schema(options.dynamic_schema);
+    return read_options;
+}
 
 namespace ranges = std::ranges;
 

@@ -51,15 +51,17 @@ class RowBuilder {
     RowBuilder &operator=(RowBuilder &) = delete;
 
     template<class...Args>
-    void start_row([[maybe_unused]] const Args...args) {
+    void start_row([[maybe_unused]] Args&&...args) {
         reset();
         if constexpr(sizeof...(Args)> 0 && !std::is_same_v<Index, EmptyIndex>) {
-            index().set([&](std::size_t pos, auto arg) {
-                if constexpr (std::is_integral_v<decltype(arg)> || std::is_floating_point_v<decltype(arg)>)
-                    set_scalar_impl(pos, arg);
-                else
-                    set_string_impl(pos, arg);
-            }, args...);
+            index().set([this](std::size_t pos, auto&& arg) {
+                using ArgType = std::decay_t<decltype(arg)>;
+                if constexpr (std::is_integral_v<ArgType> || std::is_floating_point_v<ArgType>) {
+                    set_scalar_impl(pos, std::forward<decltype(arg)>(arg));
+                } else {
+                    set_string_impl(pos, std::forward<decltype(arg)>(arg));
+                }
+            }, std::forward<Args>(args)...);
         }
     }
 
@@ -92,9 +94,8 @@ class RowBuilder {
         return descriptor().find_field(field_name);
     }
 
-    template<class T,
-        std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0
-    >
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_array(std::size_t pos, py::array_t<T> &val) {
         ARCTICDB_SAMPLE(RowBuilderSetArray, 0)
         magic_.check();
@@ -107,7 +108,8 @@ class RowBuilder {
         nbytes_ += val.nbytes() + sizeof(shape_t) * val.ndim();
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_scalar(std::size_t pos, T val) {
         util::check_arg(pos >= index().field_count(),
                         "expected position > {} (field count), actual {} in set_scalar", index().field_count(), pos);
@@ -115,18 +117,21 @@ class RowBuilder {
         set_scalar_impl(pos, val);
     }
 
-    template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string>, int> = 0>
-    void set_scalar(std::size_t pos, T val) {
+    template<typename T>
+    requires std::same_as<T, std::string>
+    void set_scalar(std::size_t pos, const T& val) {
         set_string(pos, val);
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_scalar_by_name(std::string_view name, T val, DataType data_type) {
         aggregator_.set_scalar_by_name(name, val, data_type);
         nbytes_ += sizeof(T);
     }
 
-    template<class T, std::enable_if_t<std::is_same_v<std::decay_t<T>, std::string_view>, int> = 0>
+    template<typename T>
+    requires std::same_as<std::decay_t<T>, std::string_view>
     void set_scalar_by_name(std::string_view name, T val, DataType data_type) {
                 aggregator_.set_string_by_name(name, val, data_type);
     }
@@ -171,7 +176,8 @@ class RowBuilder {
         nbytes_ = 0;
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_block(std::size_t pos, T *val, size_t size) {
         descriptor().fields[pos].type_desc.visit_tag([&](auto &&tag) {
             using DT = std::decay_t<decltype(tag)>;
@@ -185,7 +191,8 @@ class RowBuilder {
         });
     }
 
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<typename T>
+    requires std::integral<T> || std::floating_point<T>
     void set_scalar_impl(std::size_t pos, T val) {
         visit_field(descriptor().fields(pos), [&](auto &&tag) {
             using RawType = typename std::decay_t<decltype(tag)>::DataTypeTag::raw_type;
