@@ -292,7 +292,4 @@ arcticdb::ScopedTimerTotal timer2{#name, [&data](auto totals) { \
     std::copy(std::begin(totals), std::end(totals), std::back_inserter(data)); \
 }};
 
-[[nodiscard]] std::string date_and_time(int64_t ts);
-
-
 } //namespace arcticdb

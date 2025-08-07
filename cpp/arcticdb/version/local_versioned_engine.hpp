@@ -153,7 +153,7 @@ public:
             const StreamId& stream_id,
             const VersionQuery& version_query);
 
-    void write_parallel_frame(
+    StageResult write_parallel_frame(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool validate_index,
@@ -254,10 +254,10 @@ public:
 
     void flush_version_map() override;
 
-    VersionedItem sort_merge_internal(
+    std::variant<VersionedItem, CompactionError> sort_merge_internal(
         const StreamId& stream_id,
         const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-        const CompactIncompleteOptions& options);
+        const CompactIncompleteParameters& parameters);
 
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         const std::vector<VersionId>& version_ids,
@@ -298,8 +298,8 @@ public:
         std::any& handler_data);
 
     MultiSymbolReadOutput batch_read_and_join_internal(
-            const std::vector<StreamId>& stream_ids,
-            const std::vector<VersionQuery>& version_queries,
+            std::shared_ptr<std::vector<StreamId>> stream_ids,
+            std::shared_ptr<std::vector<VersionQuery>> version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries,
             const ReadOptions& read_options,
             std::vector<std::shared_ptr<Clause>>&& clauses,
@@ -381,6 +381,15 @@ public:
         bool throw_on_error
     );
 
+    std::vector<std::variant<version_store::TombstoneVersionResult, DataError>> batch_delete_internal(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<std::vector<VersionId>>& version_ids
+    );
+
+    std::vector<std::variant<folly::Unit, DataError>> batch_delete_symbols_internal(
+        const std::vector<std::pair<StreamId, VersionId>>& symbols_to_delete
+    );
+
     VersionIdAndDedupMapInfo create_version_id_and_dedup_map(
         const version_store::UpdateInfo&& update_info, 
         const StreamId& stream_id, 
@@ -419,10 +428,11 @@ protected:
     explicit LocalVersionedEngine(
         const std::shared_ptr<Store>& store,
         const ClockType& = ClockType{});
-    VersionedItem compact_incomplete_dynamic(
+
+    std::variant<VersionedItem, CompactionError> compact_incomplete_dynamic(
             const StreamId& stream_id,
             const std::optional<arcticdb::proto::descriptors::UserDefinedMetadata>& user_meta,
-            const CompactIncompleteOptions& options);
+            const CompactIncompleteParameters& parameters);
 
     /**
      * Take tombstoned indexes that have been pruned in the version map and perform the actual deletion
@@ -458,7 +468,7 @@ protected:
 
 private:
     void initialize(const std::shared_ptr<storage::Library>& library);
-    void add_to_symbol_list_on_compaction(const StreamId& stream_id, const CompactIncompleteOptions& options, const UpdateInfo& update_info);
+    void add_to_symbol_list_on_compaction(const StreamId& stream_id, const CompactIncompleteParameters& parameters, const UpdateInfo& update_info);
 
     std::shared_ptr<Store> store_;
     arcticdb::proto::storage::VersionStoreConfig cfg_;

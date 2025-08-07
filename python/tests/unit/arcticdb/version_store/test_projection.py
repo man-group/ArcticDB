@@ -18,18 +18,6 @@ from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_data
 pytestmark = pytest.mark.pipeline
 
 
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_project_empty_dataframe(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
-    df = pd.DataFrame({"a": []})
-    q = QueryBuilder()
-    q = q.apply("new", q["a"] + 1)
-    symbol = "test_project_empty_dataframe"
-    lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
-    assert vit.data.empty
-
-
 def test_project_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))

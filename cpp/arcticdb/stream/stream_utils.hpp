@@ -181,7 +181,7 @@ class IndexRangeFilter {
 template<class KeyIt>
 class KeyRangeIterator : public IndexRangeFilter {
   public:
-    KeyRangeIterator(const IndexRange &index_range, folly::Range<KeyIt> rg) :
+    KeyRangeIterator(const IndexRange &index_range, std::ranges::subrange<KeyIt> rg) :
         IndexRangeFilter(index_range), key_rg_(rg), current_(rg.begin()) {}
 
     std::optional<typename KeyIt::value_type> next(folly::Duration) {
@@ -196,7 +196,7 @@ class KeyRangeIterator : public IndexRangeFilter {
     }
 
   private:
-    folly::Range<KeyIt> key_rg_;
+    std::ranges::subrange<KeyIt> key_rg_;
     KeyIt current_;
 };
 
@@ -358,8 +358,8 @@ inline std::set<StreamId> filter_by_regex(const std::set<StreamId>& results, con
         return results;
     }
     std::set<StreamId> filtered_results;
-    util::RegexPattern pattern(*opt_regex);
-    util::Regex regex{pattern};
+    util::RegexPatternUTF8 pattern(*opt_regex);
+    util::RegexUTF8 regex{pattern};
 
     // Using std::copy_if because it builds the new std::set in O(n).
     std::copy_if(results.begin(),

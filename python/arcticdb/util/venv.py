@@ -32,13 +32,13 @@ def run_shell_command(
 ) -> subprocess.CompletedProcess:
     logger.info(f"Executing command: {command}")
     result = None
+    command_string = " ".join(command)
     if is_running_on_windows():
         # shell=True is required for running the correct python executable on Windows
         result = subprocess.run(command, cwd=cwd, capture_output=True, shell=True)
     else:
         # On linux we need shell=True for conda feedstock runners (because otherwise they fail to expand path variables)
         # But to correctly work with shell=True we need a single command string.
-        command_string = " ".join(command)
         result = subprocess.run(
             command_string,
             cwd=cwd,
@@ -89,9 +89,7 @@ class Venv:
     def tear_down_venv(self):
         shutil.rmtree(self.path, ignore_errors=True)
 
-    def execute_python_file(
-        self, python_path: Union[str, os.PathLike]
-    ) -> subprocess.CompletedProcess:
+    def execute_python_file(self, python_path: Union[str, os.PathLike]) -> subprocess.CompletedProcess:
         command = [get_os_specific_venv_python(), python_path]
         return run_shell_command(command, self.path)
 
@@ -104,7 +102,7 @@ class VenvArctic:
         self.venv = venv
         self.uri = uri
         self.init_storage()
-        self.parquet = False # True is for parquet format False is for CSV
+        self.parquet = False  # True is for parquet format False is for CSV
 
     def add_traceability_prints(self, python_commands):
         """
@@ -142,7 +140,7 @@ class VenvArctic:
                     file = os.path.join(dir, f"{df_name}.parquet")
                     df.to_parquet(file)
                     command = f"{df_name} = pd.read_parquet({repr(file)})"
-                else: 
+                else:
                     # CSV format does not preserve metadata of DatetimeIndex and RangeIndex
                     # Therefore after the load from CSV we have to reconstruct the index metadata
                     # so that dataframes become fully equal
@@ -153,14 +151,16 @@ class VenvArctic:
                         if isinstance(df.index, pd.DatetimeIndex) and np.issubdtype(df.index.dtype, np.datetime64):
                             index_load_commands.append(f"{df_name}.index.freq = {repr(df.index.freqstr)}")
                         elif isinstance(df.index, pd.RangeIndex):
-                            index_load_commands = [ 
-                                                   f"{df_name}.index.start = {df.index.start}",
-                                                   f"{df_name}.index.stop = {df.index.stop}",
-                                                   f"{df_name}.index.step = {df.index.step}",
-                                                ]
+                            index_load_commands = [
+                                f"{df_name}.index.start = {df.index.start}",
+                                f"{df_name}.index.stop = {df.index.stop}",
+                                f"{df_name}.index.step = {df.index.step}",
+                            ]
                         else:
                             index_load_commands
-                        command = f"{df_name} = pd.read_csv({repr(file)}, dtype={dtypes_dict}, parse_dates=True, index_col=0)"
+                        command = (
+                            f"{df_name} = pd.read_csv({repr(file)}, dtype={dtypes_dict}, parse_dates=True, index_col=0)"
+                        )
                     else:
                         command = f"{df_name} = pd.read_csv({repr(file)}, dtype={dtypes_dict}, parse_dates=True)"
                 df_load_commands.append(command)
@@ -185,9 +185,7 @@ class VenvArctic:
 
             result = self.venv.execute_python_file(python_path)
             if result.returncode != 0:
-                raise ErrorInVenv(
-                    f"Executing {python_commands} failed with return code {result.returncode}: {result}"
-                )
+                raise ErrorInVenv(f"Executing {python_commands} failed with return code {result.returncode}: {result}")
 
     def init_storage(self):
         self.execute([])
@@ -237,12 +235,15 @@ class CurrentVersion:
 
     So we use `with CurrentVersion` construct to ensure we delete all our outstanding references to the library.
     """
+
     def __init__(self, uri, lib_name):
         self.uri = uri
         self.lib_name = lib_name
 
     def __enter__(self):
-        set_config_int("VersionMap.ReloadInterval", 0) # We disable the cache to be able to read the data written from old_venv
+        set_config_int(
+            "VersionMap.ReloadInterval", 0
+        )  # We disable the cache to be able to read the data written from old_venv
         self.ac = Arctic(self.uri)
         self.lib = self.ac.get_library(self.lib_name)
         return self
@@ -261,7 +262,8 @@ class CompatLibrary:
     they are responsible for maintaining their own arctic instances across several processes. As long as libraries
     within the test are wrapped in a CompatLibrary cleanup will be dealt with.
     """
-    def __init__(self, old_venv : Venv, uri : str, lib_names : Union[str, List[str]], create_with_current_version=False):
+
+    def __init__(self, old_venv: Venv, uri: str, lib_names: Union[str, List[str]], create_with_current_version=False):
         self.old_venv = old_venv
         self.uri = uri
         self.lib_names = lib_names if isinstance(lib_names, list) else [lib_names]
@@ -279,7 +281,7 @@ class CompatLibrary:
                 old_ac.create_library(lib_name)
 
         self.old_ac = self.old_venv.create_arctic(self.uri)
-        self.old_libs = {lib_name : self.old_ac.get_library(lib_name) for lib_name in self.lib_names}
+        self.old_libs = {lib_name: self.old_ac.get_library(lib_name) for lib_name in self.lib_names}
         self.old_lib = self.old_libs[self.lib_names[0]]
         return self
 

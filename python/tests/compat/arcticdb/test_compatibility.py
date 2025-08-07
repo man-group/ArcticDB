@@ -8,7 +8,7 @@ from packaging import version
 import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
@@ -460,11 +460,62 @@ def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_sto
             assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
 
             arrow_table = curr.lib._nvs.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
-            df = arrow_table.to_pandas()
-            df["index"] = df["index"].apply(lambda x : pd.Timestamp(x))
-            df["index"] = df["index"].astype("datetime64[ns]")
-            df = df.set_index("index")
             expected_df = curr.lib.read(sym, date_range=date_range).data
-            expected_df.index.name = "index"
-            assert_frame_equal(df, expected_df)
+            assert_frame_equal_with_arrow(arrow_table, expected_df)
 
+
+def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):
+    """Can a new venv read column and index names serialized by an old client?"""
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+
+    sym = "sym"
+
+    df = pd.DataFrame(
+        index=[pd.Timestamp("2018-01-02 00:01:00"), pd.Timestamp("2018-01-02 00:02:00")],
+        data={"col_one": ["a", "b"], "col_two": ["c", "d"]},
+    )
+    df.index.set_names(["col_one"], inplace=True)  # specifically testing an odd behaviour when an index name matches a column name
+
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        compat.old_lib.execute([
+            'df = pd.DataFrame(index=[pd.Timestamp("2018-01-02 00:01:00"), pd.Timestamp("2018-01-02 00:02:00")], data={"col_one": ["a", "b"], "col_two": ["c", "d"]})',
+            'df.index.set_names(["col_one"], inplace=True)',
+            'lib.write("sym", df)',
+        ])
+
+        with compat.current_version() as curr:
+            res = curr.lib.get_description(sym)
+            assert ["col_one", "col_two"] == [c.name for c in res.columns]
+            assert res.index[0][0] == "col_one"
+            assert_frame_equal(curr.lib.read(sym).data, df)
+
+
+def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic_uri, lib_name):
+    """Can an old venv read column and index names serialized by a new client?"""
+    old_venv, arctic_uri = old_venv_and_arctic_uri
+
+    start = pd.Timestamp("2018-01-02")
+    index = pd.date_range(start=start, periods=4)
+
+    df = pd.DataFrame(
+        index=index,
+        data={"col_one": [1, 2, 3, 4], "col_two": [1, 2, 3, 4]},
+        dtype=np.uint64
+    )
+    df.index.set_names(["col_one"], inplace=True)  # specifically testing an odd behaviour when an index name matches a column name
+
+    with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
+        with compat.current_version() as curr:
+            curr.lib.write("sym", df)
+
+        compat.old_lib.execute([
+            f"desc = lib.get_description('sym')",
+            "actual_desc_cols = [c.name for c in desc.columns]",
+            "assert ['__col_col_one__0', 'col_two'] == actual_desc_cols, f'Actual columns were {actual_desc_cols}'",
+            "actual_desc_index_name = desc.index[0][0]",
+            "assert actual_desc_index_name == 'col_one', f'Actual index name was {actual_desc_index_name}'",
+            "actual_df = lib.read('sym').data",
+            "assert actual_df.index.name == 'col_one', f'Actual index name was {actual_df.index.name}'",
+            "actual_col_names = list(actual_df.columns.values)",
+            "assert actual_col_names == ['col_one', 'col_two'], f'Actual col names were {actual_col_names}'"
+        ])

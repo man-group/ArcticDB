@@ -113,6 +113,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             python -m pip  install pytest-repeat
@@ -130,13 +131,10 @@ jobs:
 
 
   macos:
-    strategy:
-      matrix:
-        include:
-          - os: macos-13
-
-      fail-fast: false
-    runs-on: ${{ matrix.os }}
+    if: |
+      always() &&
+      !cancelled()
+    runs-on: macos-14
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
@@ -197,6 +195,7 @@ jobs:
         shell: bash -l {0}
         run: |
           export ARCTICDB_RAND_SEED=$RANDOM
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             echo "Run custom pytest command: $command"

@@ -107,6 +107,8 @@ jobs:
             fi
             echo "FINAL selection to execute SUITE=$SUITE"
             echo "SUITE=$SUITE" >> $GITHUB_ENV
+            # Now lets reduce logging
+            echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
 
       - name: Benchmark given commit
         if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true

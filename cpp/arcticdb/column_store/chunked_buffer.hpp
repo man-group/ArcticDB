@@ -16,9 +16,9 @@
 #include <arcticdb/column_store/block.hpp>
 #include <arcticdb/util/hash.hpp>
 
+#ifndef DEBUG_BUILD
 #include <boost/container/small_vector.hpp>
-
-#include <cstdint>
+#endif
 
 namespace arcticdb {
 
@@ -183,6 +183,8 @@ class ChunkedBufferImpl {
     }
 
     [[nodiscard]] const auto &blocks() const { return blocks_; }
+
+    [[nodiscard]] const auto &block_offsets() const { return block_offsets_; }
 
     BlockType* block(size_t pos) {
         util::check(pos < blocks_.size(), "Requested block {} out of range {}", pos, blocks_.size());
@@ -531,7 +533,7 @@ class ChunkedBufferImpl {
 
     MemBlock* create_detachable_block(size_t capacity, size_t offset) const {
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        auto* data = new uint8_t[capacity];
+        auto* data = allocate_detachable_memory(capacity);
         new(ptr) MemBlock(data, capacity, offset, ts, true);
         return reinterpret_cast<BlockType*>(ptr);
     }
@@ -539,8 +541,9 @@ class ChunkedBufferImpl {
     void free_block(BlockType* block) const {
         ARCTICDB_TRACE(log::storage(), "Freeing block at address {:x}", uintptr_t(block));
         block->magic_.check();
+        auto timestamp = block->timestamp_;
         block->~MemBlock();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), block->timestamp_));
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
     }
 
     void free_last_block() {

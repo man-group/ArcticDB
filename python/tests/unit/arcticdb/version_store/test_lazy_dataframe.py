@@ -215,6 +215,25 @@ def test_lazy_resample(lmdb_library):
     received = lazy_df.collect().data
     expected = df.resample("D").agg({"col1": "sum", "col2": "first"})
 
+    expected.sort_index(inplace=True, axis=1)
+    received.sort_index(inplace=True, axis=1)
+    assert_frame_equal(expected, received)
+
+
+def test_lazy_regex_match(lmdb_library, sym):
+    lib = lmdb_library
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
+        )
+    lib.write(sym, df)
+
+    lazy_df = lib.read(sym, lazy=True)
+    pattern = "^abc"
+    lazy_df = lazy_df[lazy_df["a"].regex_match(pattern)]
+    received = lazy_df.collect().data
+    expected = df[df.a.str.contains(pattern)]
+
     assert_frame_equal(expected, received)
 
 

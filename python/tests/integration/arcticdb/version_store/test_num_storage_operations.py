@@ -1,4 +1,5 @@
 from collections import defaultdict
+from pprint import pformat
 
 import pytest
 import pandas as pd
@@ -9,7 +10,7 @@ from arcticdb.util.test import (
     assert_frame_equal,
     config_context,
     config_context_string,
-    dataframe_simulate_arcticdb_update_static
+    dataframe_simulate_arcticdb_update_static,
 )
 import arcticdb.toolbox.query_stats as qs
 
@@ -24,7 +25,6 @@ def sum_operations(stats):
         Dictionary with total counts, sizes, and times for each operation type
     """
     totals = {}
-
     for op_type, key_types in stats["storage_operations"].items():
         totals[op_type] = {"count": 0, "size_bytes": 0, "total_time_ms": 0}
 
@@ -42,6 +42,7 @@ def sum_all_operations(stats):
     for op_type, metrics in totals.items():
         total_count += metrics["count"]
     return total_count
+
 
 def sum_operations_by_type(stats, type):
     totals = sum_operations(stats)
@@ -152,62 +153,129 @@ def test_delete_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats
 
 
 def test_write_and_prune_previous_over_time(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
-    expected_ops = 9
+    expected_ops = 17
     with config_context("VersionMap.ReloadInterval", 0):
         lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
         qs.enable()
         lib.write("s", data=create_df())
+        lib.write("s", data=create_df(), prune_previous_version=True)
         qs.reset_stats()
 
-        lib.write("s", data=create_df(), prune_previous=True)
+        lib.write("s", data=create_df(), prune_previous_version=True)
 
         base_stats = qs.get_query_stats()
         base_ops_count = sum_all_operations(base_stats)
-        assert base_ops_count == expected_ops
+        assert base_ops_count == expected_ops, pformat(base_stats)
         qs.reset_stats()
 
         iters = 10
 
         # make sure that the write and prune makes a constant number of operations
         for i in range(iters):
-            lib.write("s", data=create_df(), prune_previous=True)
+            lib.write("s", data=create_df(), prune_previous_version=True)
             stats = qs.get_query_stats()
             qs.reset_stats()
-            assert sum_all_operations(stats) == base_ops_count == expected_ops, visualize_stats_diff(base_stats, stats)
+            assert sum_all_operations(stats) == base_ops_count, visualize_stats_diff(base_stats, stats)
+
+
+def test_read_after_write_and_prune_previous(lib_name, s3_and_nfs_storage_bucket, clear_query_stats):
+    expected_ops = 3
+    lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
+    lib.write("s", data=create_df())
+    lib.write("s", data=create_df(), prune_previous_version=True)
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        lib.read("s")
+        stats = qs.get_query_stats()
+        qs.reset_stats()
+
+        assert sum_all_operations(stats) == expected_ops, pformat(stats)
+        # there should be only get object operations
+        assert stats["storage_operations"].keys() == {"S3_GetObject"}, pformat(stats)
+        get_obj_ops = stats["storage_operations"]["S3_GetObject"]
+        # We expect 3 get object operations:
+        # - 1 for the version ref key
+        # - 1 for the index key
+        # - 1 for the data key
+        assert len(get_obj_ops.keys()) == 3, pformat(stats)
+        assert get_obj_ops["VERSION_REF"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_INDEX"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_DATA"]["count"] == 1, pformat(stats)
+
+
+@pytest.mark.parametrize("version_to_read", [0, 1, 2, 3])
+def test_read_as_of_version(lib_name, s3_and_nfs_storage_bucket, clear_query_stats, version_to_read):
+    # The we should be reading less, if we are reading a newer version
+    # 2 and 3 are special cases, because they are both in the ref key
+    expected_version_ops = 4 - version_to_read if version_to_read < 2 else 0
+    expected_ops = 3 + expected_version_ops
+    lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
+    lib.write("s", data=create_df())
+    lib.write("s", data=create_df(), prune_previous_version=False)
+    lib.write("s", data=create_df(), prune_previous_version=False)
+    lib.write("s", data=create_df(), prune_previous_version=False)
+
+    with config_context("VersionMap.ReloadInterval", 0):
+        qs.enable()
+        lib.read("s", as_of=version_to_read)
+        stats = qs.get_query_stats()
+        qs.reset_stats()
+
+        assert sum_all_operations(stats) == expected_ops, pformat(stats)
+        # there should be only get object operations
+        assert stats["storage_operations"].keys() == {"S3_GetObject"}, pformat(stats)
+        get_obj_ops = stats["storage_operations"]["S3_GetObject"]
+        # We expect 3 get object operations:
+        # - 1 for the version ref key
+        # - 1 for the index key
+        # - 1 for the data key
+        # - 3 - the version number that we are reading
+
+        if expected_version_ops:
+            assert len(get_obj_ops.keys()) == 4, pformat(stats)
+        else:
+            assert len(get_obj_ops.keys()) == 3, pformat(stats)
+        assert get_obj_ops["VERSION_REF"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_INDEX"]["count"] == 1, pformat(stats)
+        assert get_obj_ops["TABLE_DATA"]["count"] == 1, pformat(stats)
+        if expected_version_ops:
+            assert get_obj_ops["VERSION"]["count"] == expected_version_ops, pformat(stats)
 
 
 def get_dataframe_for_range_edge_cases():
     index = [pd.Timestamp(x) for x in [10, 11, 11, 13, 13, 13, 13, 14, 14, 15, 16, 16, 16, 16, 18]]
-    data = {f"col_{i}" : np.arange(i, i+15) for i in range(5)}
+    data = {f"col_{i}": np.arange(i, i + 15) for i in range(5)}
     return pd.DataFrame(data=data, index=index)
+
 
 def get_update_dataframe(start_index, end_index):
     num_rows = (end_index - start_index).value + 1
-    index = pd.date_range(start=start_index, periods=num_rows, freq='ns')
-    data = {f"col_{i}" : np.arange(100, 100+num_rows) for i in range(5)}
+    index = pd.date_range(start=start_index, periods=num_rows, freq="ns")
+    data = {f"col_{i}": np.arange(100, 100 + num_rows) for i in range(5)}
     return pd.DataFrame(data=data, index=index)
 
 
 date_ranges_to_test = [
-    (None, None), # All
-    (None, 9), # Before beginning
-    (None, 10), # Only first
-    (None, 13), # Up to 13
-    (13, None), # From 13
-    (18, None), # Only last
-    (19, None), # After end
-    (12, 12), # No values but within segment
-    (17, 17), # No values but between segments
-    (11, 11), # Single value
+    (None, None),  # All
+    (None, 9),  # Before beginning
+    (None, 10),  # Only first
+    (None, 13),  # Up to 13
+    (13, None),  # From 13
+    (18, None),  # Only last
+    (19, None),  # After end
+    (12, 12),  # No values but within segment
+    (17, 17),  # No values but between segments
+    (11, 11),  # Single value
     (13, 13),
     (14, 14),
     (16, 16),
-    (11, 12), # 2 values
+    (11, 12),  # 2 values
     (13, 14),
     (14, 15),
-    (10, 12), # 3 values
+    (10, 12),  # 3 values
     (11, 13),
-    (11, 16), # More values
+    (11, 16),  # More values
     (10, 18),
 ]
 
@@ -230,14 +298,18 @@ def get_num_data_keys_intersecting_date_range(index, start, end, exclude_fully_i
                 # range and elements outside the range.
                 # The above if checks the range has elements within the range and
                 # the below if checks the range has elements outside the range.
-                if (start is not None and row["start_index"] < start) or (end is not None and end+pd.Timedelta(1) < row["end_index"]):
+                if (start is not None and row["start_index"] < start) or (
+                    end is not None and end + pd.Timedelta(1) < row["end_index"]
+                ):
                     count += 1
             else:
                 count += 1
     return count
 
 
-@pytest.mark.parametrize("row_range_start, row_range_end", [(0, 0), (5, 5), (0, 1), (1, 2), (5, 6), (0, 4), (1, 5), (0, 6), (6, 15), (0, 15)])
+@pytest.mark.parametrize(
+    "row_range_start, row_range_end", [(0, 0), (5, 5), (0, 1), (1, 2), (5, 6), (0, 4), (1, 5), (0, 6), (6, 15), (0, 15)]
+)
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_row_range_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, row_range_start, row_range_end):
     with config_context("VersionMap.ReloadInterval", 0):
@@ -303,8 +375,12 @@ def test_update_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, u
         qs.enable()
         sym = "sym"
         init_df = get_dataframe_for_range_edge_cases()
-        update_range_start = pd.Timestamp(update_range_start) if update_range_start is not None else init_df.index[0] - pd.Timedelta(10)
-        update_range_end = pd.Timestamp(update_range_end) if update_range_end is not None else init_df.index[-1] + pd.Timedelta(10)
+        update_range_start = (
+            pd.Timestamp(update_range_start) if update_range_start is not None else init_df.index[0] - pd.Timedelta(10)
+        )
+        update_range_end = (
+            pd.Timestamp(update_range_end) if update_range_end is not None else init_df.index[-1] + pd.Timedelta(10)
+        )
         update_df = get_update_dataframe(update_range_start, update_range_end)
         assert update_df.index[0] == update_range_start
         assert update_df.index[-1] == update_range_end
@@ -321,7 +397,9 @@ def test_update_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, u
         lib.update(sym, update_df)
         stats = qs.get_query_stats()
         qs.reset_stats()
-        expected_data_keys = get_num_data_keys_intersecting_date_range(index, update_range_start, update_range_end, exclude_fully_included=True)
+        expected_data_keys = get_num_data_keys_intersecting_date_range(
+            index, update_range_start, update_range_end, exclude_fully_included=True
+        )
         if update_range_start == pd.Timestamp(12) and update_range_end == pd.Timestamp(12):
             # Currently if we're updating a range completely within a single slice (as the case for 12-12) we read each
             # of these slices twice:

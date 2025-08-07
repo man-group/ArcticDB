@@ -217,8 +217,9 @@ class StorageLock {
         }
     }
 
-    bool exists_active_lock(const std::shared_ptr<Store>& store) const {
-        if (auto read_ts = read_timestamp(store)) {
+    std::optional<timestamp> ttl_not_expired(const std::shared_ptr<Store>& store) {
+        auto read_ts = read_timestamp(store);
+        if (read_ts) {
             // check TTL
             auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
             if (ClockType::coarse_nanos_since_epoch() - *read_ts < ttl) {
