@@ -628,7 +628,7 @@ VersionedItem PythonVersionStore::write_versioned_segment(
         const StreamId& stream_id,
         const SegmentInMemory& segment,
         bool prune_previous_versions,
-        Slicing slicing) {
+        Slicing const& slicing) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
     auto versioned_item = write_segment(stream_id, segment, prune_previous_versions, slicing);
     return versioned_item;

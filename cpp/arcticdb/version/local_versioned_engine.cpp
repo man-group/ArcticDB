@@ -752,7 +752,7 @@ VersionedItem LocalVersionedEngine::write_segment(
         const StreamId& stream_id,
         const SegmentInMemory& segment,
         bool prune_previous_versions,
-        Slicing slicing
+        Slicing const& slicing
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     assert(segment.descriptor().id() == stream_id);

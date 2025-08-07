@@ -194,7 +194,7 @@ public:
             const StreamId& stream_id,
             const SegmentInMemory& segment,
             bool prune_previous_versions,
-            Slicing slicing
+            Slicing const& slicing
     );
 
     VersionedItem write_versioned_metadata_internal(
