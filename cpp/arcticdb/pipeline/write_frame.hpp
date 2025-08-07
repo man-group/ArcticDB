@@ -72,7 +72,7 @@ folly::Future<entity::AtomKey> write_frame(
     const SlicingPolicy &slicing,
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-    bool sparsify_floats = false);
+    bool allow_sparse = false);
 
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key,
