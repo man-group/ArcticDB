@@ -29,7 +29,7 @@ def compact_symbols_worker(lib):
     assert len(compacted_keys) <= 1
 
 @pytest.fixture(params=[
-    (0.5, 1200, 1500)
+    (0.5, 1500, 3000)
 ])
 def slow_writing_library(request, real_s3_storage, lib_name):
     write_slowdown_prob, write_slowdown_min_ms, write_slowdown_max_ms = request.param
