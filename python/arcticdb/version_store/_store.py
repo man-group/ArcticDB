@@ -1134,8 +1134,10 @@ class NativeVersionStore:
         date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
             List of date ranges to filter the symbols.
             i-th entry corresponds to i-th element of `symbols`.
-        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
-            List of row ranges to filter the symbols.
+        row_ranges : `Optional[List[Tuple[Optional[int], Optional[int]]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             i-th entry corresponds to i-th element of `symbols`.
         columns: `List[List[str]]`, default=None
             Which columns to return for a dataframe.
@@ -2012,10 +2014,12 @@ class NativeVersionStore:
             slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
             details.
             Only one of date_range or row_range can be provided.
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
             the handling of negative start/end values.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
             Applicable only for dataframes. Determines which columns to return data for.
