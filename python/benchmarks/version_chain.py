@@ -11,7 +11,6 @@ import os
 
 from arcticdb import Arctic
 from arcticdb.exceptions import NoSuchVersionException
-from arcticdb.options import ModifiableEnterpriseLibraryOption
 from arcticdb.config import set_log_level
 import arcticdb as adb
 import datetime
@@ -44,7 +43,6 @@ class IterateVersionChain:
 
         self.ac.delete_library(IterateVersionChain.LIB_NAME)
         lib = self.ac.create_library(IterateVersionChain.LIB_NAME)
-        self.ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
         small_df = generate_random_floats_dataframe(2, 2)
         # Pre-calculate delete points to avoid repeated math.floor calls
