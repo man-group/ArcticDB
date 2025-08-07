@@ -67,12 +67,12 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         bool sparsify_floats);
 
 folly::Future<entity::AtomKey> write_frame(
-        IndexPartialKey&& key,
-        const std::shared_ptr<InputTensorFrame>& frame,
-        const SlicingPolicy &slicing,
-        const std::shared_ptr<Store>& store,
-        const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats = false);
+            IndexPartialKey&& key,
+            const std::shared_ptr<InputTensorFrame>& frame,
+            const SlicingPolicy &slicing,
+            const std::shared_ptr<Store>& store,
+            const std::shared_ptr<DeDupMap>& de_dup_map,
+            bool sparsify_floats = false);
 
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key,

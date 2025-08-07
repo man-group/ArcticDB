@@ -22,7 +22,6 @@
 #include <vector>
 #include <array>
 #include <ranges>
-#include <arcticdb/pipeline/read_frame.hpp>
 
 namespace arcticdb::pipelines {
 
