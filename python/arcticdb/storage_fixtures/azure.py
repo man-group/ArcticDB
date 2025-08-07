@@ -305,7 +305,7 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         if self.connection_string:
             url += f"{url};{self.connection_string}"
         else:
-            raise NotImplementedError("Constructing azure uri from current settings")
+            get_logger().error(f"Constructed URL is probably not correct: {url}")
         return url
 
     def create_fixture(self) -> AzureContainer:
