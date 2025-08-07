@@ -3001,13 +3001,17 @@ class NativeVersionStore:
             )
             if resolved_recursive_normalizers:
                 is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
+                warning_msg = ""
                 if is_recursive_normalize_preferred:
-                    log.warning("As the library setting recursive_normalizers is enabled, the item "
-                                "will be recursively normalized in `write`. "
-                                "However, for backward compatibility, this API will still return True.")
+                    warning_msg = ("As recursive_normalizers is enabled, the item will be "
+                                   "recursively normalized in `write`. However, this API will "
+                                   "still return True for historical reason, such as recursively "
+                                   "normalized data not being data_range searchable like "
+                                   "pickled data. ")
                     fl = Flattener()
                     if fl.will_obj_be_partially_pickled(item):
-                        log.warning("Please note the item will still be partially pickled.")
+                        warning_msg += "Please note the item will still be partially pickled."
+                log.warning(warning_msg)
                 
         return result
 
