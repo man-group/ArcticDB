@@ -750,7 +750,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
 
 VersionedItem LocalVersionedEngine::write_segment(
         const StreamId& stream_id,
-        const SegmentInMemory& segment,
+        SegmentInMemory&& segment,
         bool prune_previous_versions,
         Slicing const& slicing
 ) {
