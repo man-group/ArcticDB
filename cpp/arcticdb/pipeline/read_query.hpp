@@ -12,8 +12,8 @@ namespace arcticdb::pipelines {
 using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;
 
 struct SignedRowRange {
-    int64_t start_;
-    int64_t end_;
+    std::optional<int64_t> start_;
+    std::optional<int64_t> end_;
 };
 
 struct ReadQuery {
