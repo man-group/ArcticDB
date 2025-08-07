@@ -351,6 +351,17 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      - name: Windows download timezone data for pyarrow
+        if: matrix.os == 'windows'
+        shell: pwsh
+        # Script sourced from: https://arrow.apache.org/docs/cpp/build_system.html#download-timezone-database
+        run: |
+          curl https://data.iana.org/time-zones/releases/tzdata2021e.tar.gz --output tzdata.tar.gz
+          mkdir tzdata
+          tar --extract --file tzdata.tar.gz --directory tzdata
+          move tzdata C:\Users\runneradmin\Downloads\tzdata
+          curl https://raw.githubusercontent.com/unicode-org/cldr/master/common/supplemental/windowsZones.xml --output C:\Users\runneradmin\Downloads\tzdata\windowsZones.xml
+
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
         if: matrix.os == 'linux' || matrix.os == 'macos'
@@ -388,6 +399,8 @@ jobs:
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
 
@@ -401,6 +414,7 @@ jobs:
       - name: Run test
         run: |
           ulimit -a
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             python -m pip  install pytest-repeat setuptools wheel
             python setup.py protoc --build-lib python

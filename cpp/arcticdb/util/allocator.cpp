@@ -19,6 +19,14 @@
 
 namespace arcticdb {
 
+    uint8_t* allocate_detachable_memory(size_t size) {
+        return std::allocator<uint8_t>().allocate(size);
+    }
+
+    void free_detachable_memory(uint8_t* ptr, size_t size) {
+        std::allocator<uint8_t>().deallocate(ptr, size);
+    }
+
     bool use_slab_allocator()
     {
         static const bool use_it = ConfigsMap::instance()->get_int("Allocator.UseSlabAllocator", 1);
@@ -310,6 +318,7 @@ namespace arcticdb {
     template<class TracingPolicy, class ClockType>
     std::pair<uint8_t*, entity::timestamp>
     AllocatorImpl<TracingPolicy, ClockType>::realloc(std::pair<uint8_t*, entity::timestamp> ptr, size_t size) {
+        AddrIdentifier old_addr{uintptr_t(ptr.first), ptr.second};
         auto ret = internal_realloc(ptr.first, size);
 
 #ifdef ARCTICDB_TRACK_ALLOCS
@@ -319,7 +328,7 @@ namespace arcticdb {
             uintptr_t(ret));
 #endif
         auto ts = current_timestamp();
-        TracingPolicy::track_realloc(std::make_pair(uintptr_t(ptr.first), ptr.second), std::make_pair(uintptr_t(ret), ts), size);
+        TracingPolicy::track_realloc(old_addr, std::make_pair(uintptr_t(ret), ts), size);
         return { ret, ts };
     }
 

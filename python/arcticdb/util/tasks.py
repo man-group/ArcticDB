@@ -143,7 +143,7 @@ def write_and_append_simple_df(lib, symbol):
 
 def write_large_mixed_df_prune(lib, symbol):
     df = get_wide_dataframe(LARGE_DF_SIZE)
-    lib.write(symbol, df, metadata={"something"}, prune_previous=True)
+    lib.write(symbol, df, metadata={"something"}, prune_previous_version=True)
     assert_frame_equal(lib.read(symbol).data, df)
 
 

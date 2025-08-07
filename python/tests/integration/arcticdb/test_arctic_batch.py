@@ -16,6 +16,7 @@ from arcticdb_ext.version_store import VersionRequestType
 from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder, DataError
 from arcticdb_ext.version_store import AtomKey, RefKey
+from arcticdb.toolbox.library_tool import LibraryTool
 
 import time
 import pytest
@@ -39,6 +40,7 @@ from arcticdb.version_store.library import (
     ReadRequest,
     ReadInfoRequest,
     ArcticInvalidApiUsageException,
+    DeleteRequest,
 )
 
 
@@ -488,13 +490,142 @@ def test_write_batch_missing_keys_dedup(library_factory):
 
 
 @pytest.mark.storage
-def test_delete_batch(library_factory, sym):
+def test_delete_many_rows(library_factory, sym):
     lib = library_factory(LibraryOptions(rows_per_segment=2))
     df = pd.DataFrame({"y": np.arange(1000)})
     lib.write(sym, df)
     lib.delete(sym)
     lib_tool = lib._nvs.library_tool()
     assert not lib_tool.find_keys_for_id(KeyType.TABLE_DATA, sym)
+
+
+@pytest.mark.storage
+def test_delete_batch_comprehensive(arctic_library):
+    """Test delete_batch with both string symbols and DeleteRequest objects."""
+    lib = arctic_library
+
+    # Create test data
+    df1 = pd.DataFrame({"col": [1, 2, 3]})
+    df2 = pd.DataFrame({"col": [4, 5, 6]})
+    df3 = pd.DataFrame({"col": [7, 8, 9]})
+
+    # Write multiple versions of symbols
+    lib.write("sym1", df1)
+    lib.write("sym1", df2)
+    lib.write("sym2", df3)
+
+    # Test 1: Delete all versions of a symbol (string input)
+    result = lib.delete_batch(["sym1"])
+    assert len(result) == 1
+    assert result[0] is None
+
+    # Verify sym1 is deleted
+    assert not lib.has_symbol("sym1")
+    assert lib.has_symbol("sym2")  # sym2 should still exist
+    assert lib.list_symbols() == ["sym2"]
+
+    # Test 2: Delete specific versions using DeleteRequest
+    lib.write("sym3", df1)
+    lib.write("sym3", df2)
+    lib.write("sym3", df3)
+
+    # Delete only version 1 of sym3
+    delete_request = DeleteRequest("sym3", [1])
+    # sym1 is already deleted, but we don't return an error for it, just print a warning
+    # but that shouldn't affect the delete of sym3
+    result = lib.delete_batch(["sym1", delete_request])
+    assert len(result) == 2
+    assert result[0] is None
+    assert not lib.has_symbol("sym1")
+    assert lib.has_symbol("sym3")
+    versions = lib.list_versions("sym3")
+    assert ("sym3", 0) in versions
+    assert ("sym3", 2) in versions
+    assert ("sym3", 1) not in versions
+
+    # sym3 should still exist but version 1 should be deleted
+    assert lib.has_symbol("sym3")
+    versions = lib.list_versions("sym3")
+    assert ("sym3", 0) in versions
+    assert ("sym3", 2) in versions
+    assert ("sym3", 1) not in versions
+
+    # Test 3: Mixed input types - str and DeleteRequest
+    lib.write("sym4", df1)
+    lib.write("sym5", df2)
+
+    result = lib.delete_batch(["sym4", DeleteRequest("sym5", [0])])
+    assert len(result) == 2
+    assert result[0] is None
+    assert result[1] is None
+    # both sym4 and sym5 should be deleted
+    assert not lib.has_symbol("sym4")
+    assert not lib.has_symbol("sym5")
+
+    # Test 4: Delete all including the ones that are already deleted
+    syms = ["sym1", "sym2", "sym3", "sym4", "sym5"]
+    result = lib.delete_batch(syms)
+    assert len(result) == 5
+    for r in result:
+        assert r is None
+
+    for sym in syms:
+        assert not lib.has_symbol(sym)
+    assert lib.list_symbols() == []
+    lt = lib._nvs.library_tool()
+    for sym in syms:
+        assert not [ver for ver in lib._nvs.list_versions() if ver["symbol"] == sym]
+        assert not lt.find_keys_for_id(KeyType.TABLE_DATA, sym)
+
+    assert len(lib.list_versions()) == 0
+    assert not lt.find_keys(KeyType.TABLE_DATA)
+
+
+@pytest.mark.storage
+def test_snapshots_with_delete_batch(arctic_library):
+    lib = arctic_library
+    original_data = pd.DataFrame({"a": [1, 2, 3]})
+    v1_data = pd.DataFrame({"a": [1, 2, 3, 4]})
+
+    lib.write("sym1", original_data)
+    lib.write("sym1", v1_data)
+    lib.write("sym2", original_data)
+
+    # Delete without having anything in snapshots -> should delete:
+    # - sym1, version 1
+    # - sym2 completely
+    lib.delete_batch([DeleteRequest("sym1", [1]), "sym2"])
+
+    assert lib.has_symbol("sym1")
+    assert not lib.has_symbol("sym2")
+    assert lib.list_symbols() == ["sym1"]
+    # We should just have sym1
+    assert not [ver for ver in lib._nvs.list_versions() if ver["symbol"] == "sym2"]
+
+    lib.write("sym3", original_data)
+    lib.snapshot("sym3_snap")
+
+    # This version of sym3 is not in a snapshot
+    lib.write("sym3", v1_data)
+
+    # This should NOT delete sym1 and sym3 v0,
+    # but should delete sym3 v1, which is not in a snapshot
+    res = lib.delete_batch([DeleteRequest("sym1", [0]), "sym3"])
+    assert len(res) == 2
+    assert res[0] is None
+    assert res[1] is None
+
+    # sym1 and sym3 shouldn't be readable now without going through the snapshot.
+    with pytest.raises(Exception):
+        lib.read("sym1")
+    with pytest.raises(Exception):
+        lib.read("sym3")
+
+    assert_frame_equal(lib.read("sym3", as_of="sym3_snap").data, original_data)
+    assert_frame_equal(lib.read("sym1", as_of="sym3_snap").data, original_data)
+    assert lib.list_symbols() == []
+    assert not [ver for ver in lib._nvs.list_versions() if ver["symbol"] == "sym1"]
+    assert not [ver for ver in lib._nvs.list_versions() if ver["symbol"] == "sym3"]
 
 
 @pytest.mark.storage
@@ -586,6 +717,41 @@ def test_append_batch_missing_keys(arctic_library):
     read_dataframe = lib.read("s2")
     assert read_dataframe.metadata == "great_metadata_s2"
     assert_frame_equal(read_dataframe.data, pd.concat([df2_write, df2_append]))
+
+def test_append_batch_empty_dataframe_does_not_increase_version(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib.batch_write(["sym1", "sym2"], [pd.DataFrame({"a": [1, 2, 3]}), pd.DataFrame({"b": [1, 2, 3, 4]})])
+    lib_tool = lib.library_tool()
+
+    for symbol in ["sym1", "sym2"]:
+        assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1)
+        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1)
+        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1)
+    # One symbol list entry for sym1 and one for sym2
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
+
+    append_result = lib.batch_append(["sym1", "sym2"], [pd.DataFrame({"a": [5, 6, 7]}), pd.DataFrame({"b": []})])
+    assert append_result[0].version == 1
+    assert append_result[1].version == 0
+
+    sym_1_vit, sym_2_vit = lib.read("sym1"), lib.read("sym2")
+
+    assert sym_1_vit.version == 1
+    assert_frame_equal(sym_1_vit.data, pd.DataFrame({"a": [1, 2, 3, 5, 6, 7]}))
+    assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "sym1")) == 2)
+    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym1")) == 2)
+    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym1")) == 2)
+
+    assert sym_2_vit.version == 0
+    assert_frame_equal(sym_2_vit.data, pd.DataFrame({"b": [1, 2, 3, 4]}))
+    assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "sym2")) == 1)
+    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym2")) == 1)
+    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym2")) == 1)
+
+    # This result is wrong. The correct value is 2. This is due to a bug Monday: 9682041273, append_batch and
+    # update_batch should not create symbol list keys for already existing symbols. Since append_batch is noop when
+    # the input is empty, there is no key for sym_2, but there is a new key for sym_1 and that is wrong.
+    assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 3
 
 
 @pytest.mark.storage

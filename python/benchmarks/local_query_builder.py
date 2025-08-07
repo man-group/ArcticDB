@@ -16,6 +16,7 @@ PARAMS_QUERY_BUILDER = [1_000_000, 10_000_000]
 class LocalQueryBuilderFunctions:
     number = 5
     timeout = 6000
+    warmup_time = 0    
     LIB_NAME = "query_builder"
     CONNECTION_STRING = "lmdb://query_builder?map_size=5GB"
 
@@ -68,6 +69,12 @@ class LocalQueryBuilderFunctions:
         string_set = [f"id{str(i).zfill(3)}" for i in range(1, k + 1)]
         q = QueryBuilder()
         q = q[q["id1"].isin(string_set)]
+        self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
+
+    def time_filtering_string_regex_match(self, num_rows):
+        pattern = f"^id\d\d\d$"
+        q = QueryBuilder()
+        q = q[q["id1"].regex_match(pattern)]
         self.lib.read(f"{num_rows}_rows", columns=["v3"], query_builder=q)
 
     def time_projection(self, num_rows):

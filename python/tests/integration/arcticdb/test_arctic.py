@@ -23,7 +23,7 @@ import multiprocessing
 from arcticdb_ext import get_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
 from arcticdb_ext.storage import NoDataFoundException
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
@@ -32,13 +32,18 @@ from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, Stora
 from arcticdb.storage_fixtures.mongo import MongoDatabase
 from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context
 from arcticdb.storage_fixtures.s3 import S3Bucket
+from arcticdb.config import Defaults
 from arcticdb.version_store.library import (
     WritePayload,
     ArcticUnsupportedDataTypeException,
     ReadRequest,
     StagedDataFinalizeMethod,
+    DeleteRequest,
 )
+from arcticdb.authorization.permissions import OpenMode
+from arcticdb.version_store._store import NativeVersionStore
 
+from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from ...util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -354,7 +359,22 @@ def test_write_metadata_with_none(arctic_library):
     assert read_symbol.version == 0
 
 
-@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND))
+@pytest.mark.parametrize("sort", (True, False))
+def test_staged_data_bad_mode(arctic_library, sort):
+    lib = arctic_library
+    df_0 = pd.DataFrame({"col": [1, 2]}, index=pd.date_range("2024-01-01", periods=2))
+    lib.stage("sym", df_0)
+
+    if sort:
+        fn = lib.sort_and_finalize_staged_data
+    else:
+        fn = lib.finalize_staged_data
+
+    with pytest.raises(ArcticInvalidApiUsageException):
+        fn("sym", mode="bad_mode")
+
+
+@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, "write", "wRite"))
 @pytest.mark.storage
 def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
@@ -366,14 +386,13 @@ def test_staged_data(arctic_library, finalize_method):
     df_2 = pd.DataFrame({"col": [5, 6]}, index=pd.date_range("2024-01-05", periods=2))
     expected = pd.concat([df_0, df_1, df_2])
 
-    if finalize_method == StagedDataFinalizeMethod.WRITE:
+    if finalize_method == StagedDataFinalizeMethod.APPEND:
+        lib.write(sym_with_metadata, df_0, staged=False)
+        lib.write(sym_without_metadata, df_0, staged=False)
+    else:
         lib.write(sym_with_metadata, df_0, staged=True)
         lib.write(sym_without_metadata, df_0, staged=True)
         lib.write(sym_unfinalized, df_0, staged=True)
-    else:
-        # finalize_method == StagedDataFinalizeMethod.APPEND
-        lib.write(sym_with_metadata, df_0, staged=False)
-        lib.write(sym_without_metadata, df_0, staged=False)
 
     lib.write(sym_with_metadata, df_1, staged=True)
     lib.write(sym_with_metadata, df_2, staged=True)
@@ -457,7 +476,8 @@ class TestAppendStagedData:
         assert "append" in str(exception_info.value)
 
     @pytest.mark.storage
-    def test_appended_df_start_same_as_df_end(self, arctic_library):
+    @pytest.mark.parametrize("mode", (StagedDataFinalizeMethod.APPEND, "append", "aPpend"))
+    def test_appended_df_start_same_as_df_end(self, arctic_library, mode):
         lib = arctic_library
         df = pd.DataFrame(
             {"col": [1, 2, 3]},
@@ -475,14 +495,15 @@ class TestAppendStagedData:
             ),
         )
         lib.write("sym", df_to_append, staged=True)
-        lib.finalize_staged_data("sym", mode=StagedDataFinalizeMethod.APPEND)
+        lib.finalize_staged_data("sym", mode=mode)
         res = lib.read("sym").data
         expected_df = pd.concat([df, df_to_append])
         assert_frame_equal(lib.read("sym").data, expected_df)
 
 
 @pytest.mark.storage
-def test_snapshots_and_deletes(arctic_library):
+@pytest.mark.parametrize("delete_op", ["single", "batch_single", "batch_delete_request"])
+def test_snapshots_and_deletes(arctic_library, delete_op):
     lib = arctic_library
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
     lib.write("my_symbol", df)
@@ -494,7 +515,13 @@ def test_snapshots_and_deletes(arctic_library):
 
     assert_frame_equal(lib.read("my_symbol", as_of="test1").data, df)
 
-    lib.delete("my_symbol")
+    if delete_op == "single":
+        lib.delete("my_symbol")
+    elif delete_op == "batch_single":
+        lib.delete_batch(["my_symbol"])
+    elif delete_op == "batch_delete_request":
+        lib.delete_batch([DeleteRequest("my_symbol", [0])])
+
     lib.snapshot("snap_after_delete")
     assert sorted(lib.list_symbols("test1")) == ["my_symbol", "my_symbol2"]
     assert lib.list_symbols("snap_after_delete") == ["my_symbol2"]
@@ -674,36 +701,36 @@ def test_delete_version_that_does_not_exist(arctic_library):
     lib = arctic_library
 
     # symbol does not exist
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=0)
 
     # symbol does not exist
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=[1, 2])
 
     # version does not exist
     lib.write("symbol", pd.DataFrame())
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=1)
 
     lib.write("symbol", pd.DataFrame(), prune_previous_versions=False)
     lib.delete("symbol", versions=0)
 
     # the version is already deleted
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=0)
 
     # one of the versions is already deleted
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=[0, 1])
 
     lib.delete("symbol", versions=1)
 
     # symbol does not exist
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=1)
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol", versions=[2, 3])
 
 
@@ -716,13 +743,13 @@ def test_delete_version_after_tombstone_all(arctic_library):
     assert len(lib.list_versions("symbol_tombstone_all")) == 2
     assert len(lib.list_symbols()) == 1
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0])
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0, 1])
 
-    with pytest.raises(InternalException):
+    with pytest.raises(NoSuchVersionException):
         lib.delete("symbol_tombstone_all", versions=[0, 1, 2])
 
     lib.delete("symbol_tombstone_all", versions=[1, 2])
@@ -1497,3 +1524,37 @@ def test_ok_chars_snapshots(arctic_library_v1, snap):
 
     assert_frame_equal(arctic_library.read("sym", as_of=snap).data, df)
     assert arctic_library.list_snapshots() == {snap: None}
+
+
+def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib_cfg = lib.lib_cfg()
+    primary_storage_id = list(lib_cfg.storage_by_id.keys())[0]
+    secondary_storage_id = "abc"
+    # The order of protobuf map is an UB but dict is insertion ordered
+    new_storage_by_id = {
+        secondary_storage_id: list(s3_version_store_v1.lib_cfg().storage_by_id.values())[0],
+        primary_storage_id: lib_cfg.storage_by_id[primary_storage_id],
+    }
+    lib_cfg.lib_desc.storage_ids.append(secondary_storage_id)
+    class LibraryConfigWrapper:
+        def __init__(self, original_lib_cfg, controlled_storage_by_id):
+            self._original = original_lib_cfg
+            self._storage_by_id = controlled_storage_by_id
+        
+        @property
+        def storage_by_id(self): # Can't patch _storage_by_id
+            return self._storage_by_id
+        
+        def __getattr__(self, name):
+            return getattr(self._original, name)
+            
+    new_lib_cfg = LibraryConfigWrapper(lib_cfg, new_storage_by_id)
+    # get_backing_store() was only returning backed storage at the beginning of the list
+    # so we need to recreate the situation so confirm now it returns primary storage
+    assert list(new_lib_cfg.storage_by_id.keys())[0] == secondary_storage_id
+    lib_with_s3 = NativeVersionStore.create_store_from_lib_config(
+        new_lib_cfg, env=Defaults.ENV, open_mode=OpenMode.DELETE
+    )
+    assert lib_with_s3.get_backing_store() == "lmdb_storage"
+

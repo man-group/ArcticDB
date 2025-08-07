@@ -9,6 +9,7 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
+#include <arcticdb/column_store/column_utils.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/python_utils.hpp>
@@ -20,11 +21,10 @@
 #include <arcticdb/processing/query_planner.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/python/adapt_read_dataframe.hpp>
+#include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
-#include <arcticdb/python/python_handler_data.hpp>
-#include <boost/date_time/posix_time/posix_time.hpp>
-
+#include <arcticdb/storage/storage_exceptions.hpp>
 
 namespace arcticdb::version_store {
 
@@ -56,9 +56,9 @@ requires std::integral<T>
 [[nodiscard]] static std::pair<timestamp, timestamp> compute_first_last_dates(
     timestamp start,
     timestamp end,
-    timestamp rule,
-    ResampleBoundary closed_boundary_arg,
-    timestamp offset,
+    const timestamp rule,
+    const ResampleBoundary closed_boundary_arg,
+    const timestamp offset,
     const ResampleOrigin& origin
 ) {
     // Origin value formula from Pandas:
@@ -138,11 +138,12 @@ void declare_resample_clause(py::module& version) {
             }))
             .def_property_readonly("rule", &ResampleClause<closed_boundary>::rule)
             .def("set_aggregations", [](ResampleClause<closed_boundary>& self,
-                                        const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
-                self.set_aggregations(python_util::named_aggregators_from_dict(aggregations));
+                                        std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+                self.set_aggregations(python_util::named_aggregators_from_dict(std::move(aggregations)));
             })
             .def("__str__", &ResampleClause<closed_boundary>::to_string);
 }
+
 
 void register_bindings(py::module &version, py::exception<arcticdb::ArcticException>& base_exception) {
 
@@ -163,7 +164,19 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     .def(pybind11::self != pybind11::self)
     .def("__repr__", &AtomKey::view)
     .def(py::self < py::self)
-    ;
+    .def(py::pickle([] (const AtomKey& key) {
+        constexpr int serialization_version = 0;
+        return py::make_tuple(serialization_version, key.id(), key.version_id(), key.creation_ts(), key.content_hash(), key.start_index(), key.end_index(), key.type());
+    },[](py::tuple t) {
+        util::check(t.size() >= 7, "Invalid AtomKey pickle object!");
+
+        [[maybe_unused]] const int serialization_version = t[0].cast<int>();
+        AtomKey key(t[1].cast<StreamId>(), t[2].cast<VersionId>(), t[3].cast<timestamp>(),
+            t[4].cast<ContentHash>(), t[5].cast<IndexValue>(), t[6].cast<IndexValue>(),
+            t[7].cast<KeyType>());
+        return key;
+    }
+    ));
 
     py::class_<RefKey, std::shared_ptr<RefKey>>(version, "RefKey")
     .def(py::init())
@@ -241,26 +254,14 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             return adapt_read_df(read_dataframe_from_file(sid, path, read_query, read_options, handler_data), &handler_data);
         });
 
-    using FrameDataWrapper = arcticdb::pipelines::FrameDataWrapper;
-    py::class_<FrameDataWrapper, std::shared_ptr<FrameDataWrapper>>(version, "FrameDataWrapper")
-            .def_property_readonly("data", &FrameDataWrapper::data);
+    py::class_<NumpyBufferHolder, std::shared_ptr<NumpyBufferHolder>>(version, "NumpyBufferHolder");
 
     using PandasOutputFrame = arcticdb::pipelines::PandasOutputFrame;
     py::class_<PandasOutputFrame>(version, "PandasOutputFrame")
-        .def(py::init<>([](const SegmentInMemory& segment_in_memory) {
-            return PandasOutputFrame(segment_in_memory);
-        }))
-        .def_property_readonly("value", [](py::object & obj){
-            auto& fd = obj.cast<PandasOutputFrame&>();
-            return fd.arrays(obj);
+        .def("extract_numpy_arrays", [](PandasOutputFrame& self) {
+            return python_util::extract_numpy_arrays(self);
         })
-        .def_property_readonly("offset", [](PandasOutputFrame& self) {
-            return self.frame().offset(); })
-        .def_property_readonly("names", &PandasOutputFrame::names, py::return_value_policy::reference)
-        .def_property_readonly("index_columns", &PandasOutputFrame::index_columns, py::return_value_policy::reference)
-        .def_property_readonly("row_count", [](PandasOutputFrame& self) {
-            return self.frame().row_count();
-        });
+        ;
 
         py::class_<ArrowOutputFrame>(version, "ArrowOutputFrame")
         .def("extract_record_batches", &ArrowOutputFrame::extract_record_batches)
@@ -320,6 +321,29 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("exception_string", &DataError::exception_string)
             .def("__str__", &DataError::to_string);
 
+    py::class_<storage::KeyNotFoundInStageResultInfo, std::shared_ptr<storage::KeyNotFoundInStageResultInfo>>(version, "KeyNotFoundInStageResultInfo", R"pbdoc(
+        Internal type. Information about a stage result that failed during staged data finalization, because a key that it refers
+        to is not present in storage.
+
+        Attributes
+        ----------
+        stage_result_index: int
+            Index of the stage result that containing a key that was not found, an index in to the stage_results provided to the finalization
+            method.
+        missing_key: AtomKey
+            The key that was in the stage result but missing in storage.
+    )pbdoc")
+        .def(py::init([](uint64_t stage_result_index, const VariantKey& missing_key) {
+            return storage::KeyNotFoundInStageResultInfo(stage_result_index, missing_key);
+        }))
+        .def_property_readonly("stage_result_index", &storage::KeyNotFoundInStageResultInfo::stage_result_index)
+        .def_property_readonly("missing_key", &storage::KeyNotFoundInStageResultInfo::missing_key)
+        .def("__repr__", &storage::KeyNotFoundInStageResultInfo::to_string)
+        .def("__str__", &storage::KeyNotFoundInStageResultInfo::to_string)
+        .def(py::self == py::self)
+        .def(py::self != py::self)
+        ;
+
     // TODO: add repr.
     py::class_<VersionedItem>(version, "VersionedItem")
         .def_property_readonly("symbol", &VersionedItem::symbol)
@@ -333,6 +357,23 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("end_index", &DescriptorItem::end_index)
         .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
         .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
+
+    py::class_<StageResult>(version, "StageResult")
+        .def(py::init([]() { return StageResult({}); }))
+	.def_property_readonly("staged_segments", [](const StageResult& self) { return self.staged_segments; })
+        .def(py::pickle(
+            [](const StageResult& s) {
+                constexpr int serialization_version = 0;
+                return py::make_tuple(serialization_version, s.staged_segments);
+            },
+            [](py::tuple t) {
+                util::check(t.size() >= 1, "Invalid StageResult pickle object!");
+
+                [[maybe_unused]] const int serialization_version = t[0].cast<int>();
+                StageResult p(t[1].cast<std::vector<AtomKey>>());
+                return p;
+            }
+        ));
 
     py::class_<pipelines::FrameSlice, std::shared_ptr<pipelines::FrameSlice>>(version, "FrameSlice")
         .def_property_readonly("col_range", &pipelines::FrameSlice::columns)
@@ -392,8 +433,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::class_<AggregationClause, std::shared_ptr<AggregationClause>>(version, "AggregationClause")
             .def(py::init([](
                     const std::string& grouping_colum,
-                    const std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
-                return AggregationClause(grouping_colum, python_util::named_aggregators_from_dict(aggregations));
+                    std::unordered_map<std::string, std::variant<std::string, std::pair<std::string, std::string>>> aggregations) {
+                return AggregationClause(grouping_colum, python_util::named_aggregators_from_dict(std::move(aggregations)));
             }))
             .def("__str__", &AggregationClause::to_string);
 
@@ -473,6 +514,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("GE", OperationType::GE)
             .value("ISIN", OperationType::ISIN)
             .value("ISNOTIN", OperationType::ISNOTIN)
+            .value("REGEX_MATCH", OperationType::REGEX_MATCH)
             .value("AND", OperationType::AND)
             .value("OR", OperationType::OR)
             .value("XOR", OperationType::XOR)
@@ -508,6 +550,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                 return ExpressionName(name);
             }));
 
+    py::class_<RegexName>(version, "RegexName")
+            .def(py::init([](const std::string& name) {
+                return RegexName(name);
+            }));
+
     py::class_<ExpressionNode, std::shared_ptr<ExpressionNode>>(version, "ExpressionNode")
             .def(py::init([](VariantNode condition, VariantNode left, VariantNode right, OperationType operation_type) {
                 return ExpressionNode(condition, left, right, operation_type);
@@ -528,6 +575,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .def("add_expression_node", &ExpressionContext::add_expression_node)
             .def("add_value", &ExpressionContext::add_value)
             .def("add_value_set", &ExpressionContext::add_value_set)
+            .def("add_regex", &ExpressionContext::add_regex)
             .def_readwrite("root_node_name", &ExpressionContext::root_node_name_);
 
     py::class_<UpdateQuery>(version, "PythonVersionStoreUpdateQuery")
@@ -571,6 +619,11 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("delete_versions",
              &PythonVersionStore::delete_versions,
              py::call_guard<SingleThreadMutexHolder>(), "Delete specific versions of the given symbol")
+        .def("batch_delete",
+             &PythonVersionStore::batch_delete,
+             py::arg("stream_ids"),
+             py::arg("version_ids"),
+             py::call_guard<SingleThreadMutexHolder>(), "Delete specific versions of the given symbols")
          .def("prune_previous_versions",
               &PythonVersionStore::prune_previous_versions,
               py::call_guard<SingleThreadMutexHolder>(), "Delete all but the latest version of the given symbol")
@@ -623,6 +676,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("prune_previous_versions") = false,
              py::arg("validate_index") = false,
              py::arg("delete_staged_data_on_failure") = false,
+             py::kw_only(),
+             py::arg("stage_results") = std::nullopt,
              py::call_guard<SingleThreadMutexHolder>(), "Compact incomplete segments")
          .def("sort_merge",
              &PythonVersionStore::sort_merge,
@@ -634,6 +689,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::arg("sparsify") = false,
              py::arg("prune_previous_versions") = false,
              py::arg("delete_staged_data_on_failure") = false,
+             py::kw_only(),
+             py::arg("stage_results") = std::nullopt,
              py::call_guard<SingleThreadMutexHolder>(), "sort_merge will sort and merge incomplete segments. The segments do not have to be ordered - incomplete segments can contain interleaved time periods but the final result will be fully ordered")
         .def("compact_library",
              &PythonVersionStore::compact_library,
@@ -817,8 +874,8 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              py::call_guard<SingleThreadMutexHolder>(), "Read a dataframe from the store")
         .def("batch_read_and_join",
              [&](PythonVersionStore& v,
-                 const std::vector<StreamId>& stream_ids,
-                 const std::vector<VersionQuery>& version_queries,
+                 std::vector<StreamId> stream_ids,
+                 std::vector<VersionQuery> version_queries,
                  std::vector<std::shared_ptr<ReadQuery>>& read_queries,
                  const ReadOptions& read_options,
                  std::vector<ClauseVariant> clauses
@@ -841,13 +898,21 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
                                              !clause->clause_info().multi_symbol_,
                                              "Multi-symbol clause cannot be used on a single symbol");
                                  }
-                                 _clauses.emplace_back(std::make_shared<Clause>(*clause));
+                                 _clauses.emplace_back(std::make_shared<Clause>(*std::forward<decltype(clause)>(clause)));
                              }
                      );
                  }
                  const OutputFormat output_format = read_options.output_format();
                  auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(output_format);
-                 return adapt_read_df(v.batch_read_and_join(stream_ids, version_queries, read_queries, read_options, std::move(_clauses), handler_data), &handler_data);
+                 return adapt_read_df(
+                     v.batch_read_and_join(
+                         std::make_shared<std::vector<StreamId>>(std::move(stream_ids)),
+                         std::make_shared<std::vector<VersionQuery>>(std::move(version_queries)),
+                         read_queries,
+                         read_options,
+                         std::move(_clauses),
+                         handler_data),
+                     &handler_data);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Join multiple symbols from the store")
         .def("batch_read_keys",

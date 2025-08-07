@@ -72,7 +72,8 @@ TEST_F(AstParsingOutputTypesTest, FilterIsNullStringColumn) {
 TEST_F(AstParsingOutputTypesTest, FilterIsNullNumericColumn) {
     ec.add_expression_node("root", std::make_shared<ExpressionNode>(ColumnName("int32"), OperationType::ISNULL));
     FilterClause filter_clause{{"int32"}, ec, {}};
-    ASSERT_THROW(filter_clause.modify_schema(initial_schema()), UserInputException);
+    auto output_schema = filter_clause.modify_schema(initial_schema());
+    ASSERT_EQ(output_schema.stream_descriptor(), initial_schema().stream_descriptor());
 }
 
 TEST_F(AstParsingOutputTypesTest, FilterIsNullBitset) {

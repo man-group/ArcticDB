@@ -11,8 +11,6 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
-#include <folly/Range.h>
-
 namespace arcticdb::stream {
 
 template <typename Derived>
@@ -21,7 +19,7 @@ StreamDescriptor BaseIndex<Derived>::create_stream_descriptor(
     std::initializer_list<FieldRef> fields
 ) const {
     std::vector<FieldRef> fds{fields};
-    return create_stream_descriptor(stream_id, folly::range(fds));
+    return create_stream_descriptor(stream_id, std::views::all(fds));
 }
 
 [[nodiscard]] IndexDescriptor::Type get_index_value_type(const AtomKey& key) {
@@ -253,5 +251,10 @@ template class BaseIndex<TimeseriesIndex>;
 template class BaseIndex<TableIndex>;
 template class BaseIndex<RowCountIndex>;
 template class BaseIndex<EmptyIndex>;
+
+std::string mangled_name(std::string_view name) {
+    return fmt::format("__idx__{}", name);
+}
+
 
 }

@@ -20,4 +20,9 @@ struct is_instantiation_of<TT, TT<Ts...>> : std::true_type {};
 template<typename T, template<typename...> class TT>
 inline constexpr bool is_instantiation_of_v = is_instantiation_of<TT, T>::value;
 
+template<typename T, template<typename...> class TT>
+concept instantiation_of = is_instantiation_of_v<T, TT>;
+
+template <typename T, typename... U>
+concept any_of = std::disjunction_v<std::is_same<T, U>...>;
 } // namespace arcticdb::util

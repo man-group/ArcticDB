@@ -15,7 +15,6 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/util/encoding_conversion.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/codec/slice_data_sink.hpp>
@@ -117,7 +116,7 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
 SegmentInMemory allocate_contiguous_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    SegmentInMemory output{get_filtered_descriptor(context, output_format),  row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
+    SegmentInMemory output{get_filtered_descriptor(context, output_format), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, output_format, DataTypeMode::EXTERNAL};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
 }
@@ -263,14 +262,33 @@ void handle_truncation(
     handle_truncation(dest_column, mapping.truncate_);
 }
 
+void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate) {
+    if (truncate.start_) {
+        bv = util::truncate_sparse_map(bv, *truncate.start_, truncate.end_.value_or(bv.size()));
+    } else if (truncate.end_) {
+        // More efficient than util::truncate_sparse_map as it avoids a copy
+        bv.resize(*truncate.end_);
+    }
+}
+
 void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type) {
     auto& sparse_buffer = dest_column.create_extra_buffer(
         offset,
         ExtraBufferType::BITMAP,
-        bitset_unpacked_size(sparse_map.count() * sizeof(uint64_t)),
+        bitset_packed_size_bytes(sparse_map.size()),
         allocation_type);
 
-    bitset_to_packed_bits(sparse_map, reinterpret_cast<uint64_t*>(sparse_buffer.data()));
+    bitset_to_packed_bits(sparse_map, sparse_buffer.data());
+}
+
+void create_dense_bitmap_all_zeros(size_t offset, size_t num_bits, Column& dest_column, AllocationType allocation_type) {
+    auto num_bytes = bitset_packed_size_bytes(num_bits);
+    auto& sparse_buffer = dest_column.create_extra_buffer(
+            offset,
+            ExtraBufferType::BITMAP,
+            num_bytes,
+            allocation_type);
+    std::memset(sparse_buffer.data(), 0, num_bytes);
 }
 
 void decode_or_expand(
@@ -299,23 +317,29 @@ void decode_or_expand(
             ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse](const auto tdt) {
+            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, output_format](auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
-                util::default_initialize<TagType>(dest, dest_bytes);
+                if (output_format != OutputFormat::ARROW) {
+                    // Arrow doesn't care what values are at indices where the validity bitmap is zero
+                    util::default_initialize<TagType>(dest, dest_bytes);
+                }
                 util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
 
             // TODO We must handle sparse columns in ArrowStringHandler and deduplicate logic between the two.
             // Consider registering a sparse handler on the TypeHandlerRegistry.
-            if(output_format == OutputFormat::ARROW)
+            if(output_format == OutputFormat::ARROW) {
+                bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
+                handle_truncation(*bv, mapping.truncate_);
                 create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
+            }
         } else {
             SliceDataSink sink(dest, dest_bytes);
             const auto &ndarray = encoded_field_info.ndarray();
             if (const auto bytes = encoding_sizes::data_uncompressed_size(ndarray); bytes < dest_bytes) {
                 ARCTICDB_TRACE(log::version(), "Default initializing as only have {} bytes of {}", bytes, dest_bytes);
-                source_type_desc.visit_tag([dest, bytes, dest_bytes](const auto tdt) {
+                source_type_desc.visit_tag([dest, bytes, dest_bytes](auto tdt) {
                     using TagType = decltype(tdt);
                     util::default_initialize<TagType>(dest + bytes, dest_bytes - bytes);
                 });
@@ -323,6 +347,9 @@ void decode_or_expand(
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
         }
     }
+    // TODO: This is super inefficient for Arrow string columns. It will first produce the required 3 Arrow buffers
+    // for the entire slice of the column that was just decoded, and then restrict to just the relevant rows of the
+    // "data" column
     handle_truncation(dest_column, mapping);
 }
 
@@ -750,12 +777,14 @@ void decode_into_frame_dynamic(
  */
 class NullValueReducer {
     Column &column_;
+    const int type_bytes_;
     std::shared_ptr<PipelineContext> context_;
     SegmentInMemory frame_;
     size_t pos_;
     DecodePathData shared_data_;
     std::any& handler_data_;
     const OutputFormat output_format_;
+    std::optional<Value> default_value_;
 
 public:
     NullValueReducer(
@@ -764,18 +793,36 @@ public:
         SegmentInMemory frame,
         DecodePathData shared_data,
         std::any& handler_data,
-        OutputFormat output_format) :
+        OutputFormat output_format,
+        std::optional<Value> default_value = {}) :
             column_(column),
+            type_bytes_(column_.type().get_type_bytes()),
             context_(context),
             frame_(std::move(frame)),
             pos_(frame_.offset()),
             shared_data_(std::move(shared_data)),
             handler_data_(handler_data),
-            output_format_(output_format){
+            output_format_(output_format),
+            default_value_(default_value){
     }
 
     [[nodiscard]] static size_t cursor(const PipelineContextRow &context_row) {
         return context_row.slice_and_key().slice_.row_range.first;
+    }
+
+    void backfill_all_zero_validity_bitmaps(size_t offset_bytes_start, size_t offset_bytes_end_idx) {
+        // Explanation: offset_bytes_start and offset_bytes_end should both be elements of block_offsets by
+        // construction. We must add an all zeros validity bitmap for each row-slice read from storage where this
+        // column was missing, in order to correctly populate the Arrow record-batches for the output
+        const auto& block_offsets = column_.block_offsets();
+        auto start_it = std::ranges::lower_bound(block_offsets, offset_bytes_start);
+        util::check(start_it != block_offsets.cend() && *start_it == offset_bytes_start,
+                    "NullValueReducer: Failed to find offset_bytes_start {} in block_offsets {}",
+                    offset_bytes_start, block_offsets);
+        for (auto idx = static_cast<size_t>(std::distance(block_offsets.begin(), start_it)); idx < offset_bytes_end_idx; ++idx) {
+            auto rows = (block_offsets.at(idx + 1) - block_offsets.at(idx)) / type_bytes_;
+            create_dense_bitmap_all_zeros(block_offsets.at(idx), rows, column_, AllocationType::DETACHABLE);
+        }
     }
 
     void reduce(PipelineContextRow &context_row){
@@ -787,26 +834,34 @@ public:
             const auto start_row = pos_ - frame_.offset();
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
-            } else {
-                column_.default_initialize_rows(start_row, num_rows, false);
+            } else if (output_format_ != OutputFormat::ARROW) {
+                // Arrow does not care what values are in the main buffer where the validity bitmap is zero
+                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
+            }
+            if (output_format_ == OutputFormat::ARROW) {
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, context_row.index());
             }
             pos_ = current_pos + sz_to_advance;
-        }
-        else
+        } else {
             pos_ += sz_to_advance;
+        }
     }
 
     void finalize() {
-        auto total_rows = frame_.row_count();
-        auto end =  frame_.offset() + total_rows;
+        const auto total_rows = frame_.row_count();
+        const auto end =  frame_.offset() + total_rows;
         if(pos_ != end) {
             util::check(pos_ < end, "Overflow in finalize {} > {}", pos_, end);
             const auto num_rows = end - pos_;
             const auto start_row = pos_ - frame_.offset();
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
-            } else {
-                column_.default_initialize_rows(start_row, num_rows, false);
+            } else if (output_format_ != OutputFormat::ARROW) {
+                // Arrow does not care what values are in the main buffer where the validity bitmap is zero
+                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
+            }
+            if (output_format_ == OutputFormat::ARROW) {
+                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().size() - 1);
             }
         }
     }
@@ -843,17 +898,39 @@ struct ReduceColumnTask : async::BaseTask {
         const auto field_type = frame_field.type().data_type();
         auto &column = frame_.column(static_cast<position_t>(column_index_));
         const auto dynamic_schema = read_options_.dynamic_schema().value_or(false);
-
         const auto column_data = slice_map_->columns_.find(frame_field.name());
+        const auto& name = frame_field.name();
+        const std::optional<Value> default_value = [&]() -> std::optional<Value> {
+            if (auto it = context_->default_values_.find(std::string(name)); it != context_->default_values_.end()) {
+                return it->second;
+            }
+            return {};
+        }();
+
         if(dynamic_schema && column_data == slice_map_->columns_.end()) {
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(read_options_.output_format(), column.type()); handler) {
                 handler->default_initialize(column.buffer(), 0, frame_.row_count() * handler->type_size(), shared_data_, handler_data_);
             } else {
-                column.default_initialize_rows(0, frame_.row_count(), false);
+                if (is_fixed_string_type(field_type)) {
+                    // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
+                    // where this column was not present in any of the read row-slices)
+                    // All other column types are allocated in the output frame as detachable by default since we know
+                    // we will be handing them off to Python to free. This is not the case for fixed-width string
+                    // columns, since the buffer still contains string pool offsets at this point, and so will usually
+                    // be swapped out with the inflated strings buffer. However, if there are no strings to inflate, we
+                    // still need to make this buffer detachable and full of nulls of the correct length
+                    auto buffer_size = frame_.row_count() * (field_type == DataType::UTF_FIXED64 ? 4 : 1);
+                    ChunkedBuffer new_buffer(buffer_size, AllocationType::DETACHABLE);
+                    memset(new_buffer.data(), 0, buffer_size);
+                    auto& prev_buffer = column.buffer();
+                    swap(prev_buffer, new_buffer);
+                } else {
+                    column.default_initialize_rows(0, frame_.row_count(), false, default_value);
+                }
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if(dynamic_schema) {
-                NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format()};
+                NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format(), default_value};
                 for (const auto &row : column_data->second) {
                     PipelineContextRow context_row{context_, row.second.context_index_};
                     null_reducer.reduce(context_row);

@@ -15,11 +15,9 @@ import pytest
 from pytz import timezone
 import random
 import string
-import sys
 
-from arcticdb.exceptions import ArcticNativeException
+from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,
     config_context,
@@ -31,6 +29,7 @@ from arcticdb.util.test import (
     generic_filter_test,
     generic_filter_test_strings,
     generic_filter_test_nans,
+    unicode_symbols,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 
@@ -626,6 +625,7 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
     expected = df.query(pandas_query).loc[:, ["a"]]
     received = lib.read(symbol, columns=["a"], query_builder=q).data
     assert np.array_equal(expected, received)
+
     # Filter on column c (in second column slice), and display all columns
     q = QueryBuilder()
     q = q[q["c"] == 22]
@@ -1115,19 +1115,6 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
 
-
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_empty_dataframe(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
-    df = pd.DataFrame({"a": []})
-    q = QueryBuilder()
-    q = q[q["a"] < 5]
-    symbol = "test_filter_empty_dataframe"
-    lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
-    assert vit.data.empty
-
-
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_filter_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)
@@ -1187,29 +1174,29 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
 
 def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
-    symbol = "test_filter_column_not_present_static"
+    symbol = "test_filter_column_not_present_dynamic"
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2), dtype="int64")
     q = QueryBuilder()
     q = q[q["b"] < 5]
 
     lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
+    with pytest.raises(SchemaException):
+        vit = lib.read(symbol, query_builder=q)
 
-    if (not IS_NUMPY_TWO) and (IS_PANDAS_TWO and sys.platform.startswith("win32")):
-        # Pandas 2.0.0 changed the behavior of Index creation from numpy arrays:
-        # "Previously, all indexes created from numpy numeric arrays were forced to 64-bit.
-        # Now, for example, Index(np.array([1, 2, 3])) will be int32 on 32-bit systems,
-        # where it previously would have been int64 even on 32-bit systems.
-        # Instantiating Index using a list of numbers will still return 64bit dtypes,
-        # e.g. Index([1, 2, 3]) will have a int64 dtype, which is the same as previously."
-        # See: https://pandas.pydata.org/docs/dev/whatsnew/v2.0.0.html#index-can-now-hold-numpy-numeric-dtypes
-        index_dtype = "int32"
-    else:
-        index_dtype = "int64"
+def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    symbol = "test_filter_column_not_present_dynamic"
+    df = pd.DataFrame({"a": np.arange(2)}, dtype="int64")
+    lib.write(symbol, df)
 
-    expected = pd.DataFrame({"a": pd.Series(dtype="int64")}, index=pd.Index([], dtype=index_dtype))
-    assert_frame_equal(vit.data, expected)
+    df = pd.DataFrame({"b": [1, 10]}, dtype="int64")
+    lib.append(symbol, df)
 
+    q = QueryBuilder()
+    q = q[q["b"] < 5]
+
+    result = lib.read(symbol, query_builder=q).data
+    assert_frame_equal(result, pd.DataFrame({"a": [0], "b": [1]}))
 
 def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
@@ -1329,3 +1316,149 @@ def test_filter_unsupported_boolean_operators():
     with pytest.raises(UserInputException):
         q = QueryBuilder()
         q = q[not q["a"]]
+
+
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
+        )
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
+
+    pattern_a = "^abc"
+    q_a = QueryBuilder()
+    q_a = q_a[q_a["a"].regex_match(pattern_a)]
+    assert_frame_equal(lib.read(sym, query_builder=q_a).data, df[df.a.str.contains(pattern_a)])
+    
+    pattern_c = r"\d\d[a-zA-Z]"
+    q_c = QueryBuilder()
+    q_c = q_c[q_c["c"].regex_match(pattern_c)]
+    assert_frame_equal(lib.read(sym, query_builder=q_c).data, df[df.c.str.contains(pattern_c)])
+
+    pattern_c2 = r"1\d[a-zA-Z]"
+    q_c2 = QueryBuilder()
+    q_c2 = q_c2[q_c2["c"].regex_match(pattern_c2)]
+    assert_frame_equal(lib.read(sym, query_builder=q_c2).data, df[df.c.str.contains(pattern_c2)])
+
+    q = QueryBuilder()
+    q = q[q["a"].regex_match(pattern_a) & q["c"].regex_match(pattern_c)]
+    expected = df[df.a.str.contains(pattern_a) & df.c.str.contains(pattern_c)]
+    assert_frame_equal(lib.read(sym, query_builder=q).data, expected)
+
+    q2 = QueryBuilder()
+    q2 = q2[q2["a"].regex_match(pattern_a) & q2["c"].regex_match(pattern_c2)]
+    expected2 = df[df.a.str.contains(pattern_a) & df.c.str.contains(pattern_c2)]
+    assert_frame_equal(lib.read(sym, query_builder=q2).data, expected2)
+
+    q2_alt = QueryBuilder()
+    q2_alt = q2_alt[q2_alt["a"].regex_match(pattern_a)]
+    q2_alt = q2_alt[q2_alt["c"].regex_match(pattern_c2)]
+    assert_frame_equal(lib.read(sym, query_builder=q2_alt).data, expected2)
+
+
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_strings):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
+        )
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
+
+    pattern_a = r"^xyz"  # No matches
+    q_a = QueryBuilder()
+    q_a = q_a[q_a["a"].regex_match(pattern_a)]
+    assert lib.read(sym, query_builder=q_a).data.empty
+
+    pattern_c = r"\d\d[a-zA-Z]"
+    q = QueryBuilder()
+    q = q[q["a"].regex_match(pattern_a) & q["c"].regex_match(pattern_c)]
+    assert lib.read(sym, query_builder=q).data.empty
+
+    q2 = QueryBuilder()
+    q2 = q2[q2["a"].regex_match(pattern_a) & q2["b"].isin([0])]
+    assert lib.read(sym, query_builder=q2).data.empty
+    
+
+def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=4),
+            data={"a": ["abc", None, "aabc", np.nan], "b": [1, 2, 3, 4], "c": [np.nan, "q34c", None, "567f"]}
+        )
+    lib.write(sym, df)
+
+    pattern_a = "^abc"
+    q_a = QueryBuilder()
+    q_a = q_a[q_a["a"].regex_match(pattern_a)]
+    expected = df[df.a.str.contains(pattern_a, na=False)]
+    assert_frame_equal(lib.read(sym, query_builder=q_a).data, expected)
+
+    pattern_c = r"\d\d[a-zA-Z]"
+    q_c = QueryBuilder()
+    q_c = q_c[q_c["c"].regex_match(pattern_c)]
+    expected = df[df.c.str.contains(pattern_c, na=False)]
+    assert_frame_equal(lib.read(sym, query_builder=q_c).data, expected)
+
+
+def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
+    with pytest.raises(InternalException): # Pending changing exception type to UserInputException in v6.0.0 release 
+        q = QueryBuilder()
+        q = q[q["a"].regex_match("[")]
+
+    with pytest.raises(UserInputException):
+        q = QueryBuilder()
+        q = q[q["b"].regex_match(1)]
+
+
+def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
+        )
+    lib.write(sym, df)
+
+    with pytest.raises(UserInputException):
+        q = QueryBuilder()
+        q = q[q["b"].regex_match(r"\d+")]
+        lib.read(sym, query_builder=q)
+    
+
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": [f"{unicode_symbols}abc", f"abc{unicode_symbols}", "abc"], "b": [1, 2, 3]}
+        )
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
+
+    pattern = "^" + unicode_symbols + "abc$"
+    q = QueryBuilder()
+    q = q[q["a"].regex_match(pattern)]
+    expected = df[df.a.str.contains(pattern)]
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+    assert not expected.empty
+
+
+@pytest.mark.parametrize("dynamic_strings", [True, False])
+def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynamic_strings):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame(
+            index=pd.date_range(pd.Timestamp(0), periods=3),
+            data={"a": ["a-1,d-1", "g-i,3-l", "d-2,-hi"], "b": [1, 2, 3]}
+        )
+    lib.write(sym, df, dynamic_strings=dynamic_strings)
+
+    pattern = r"\w-\d"
+    q = QueryBuilder()
+    q = q[q["a"].regex_match(pattern)]
+    expected = df[df.a.str.contains(pattern)]
+    received = lib.read(sym, query_builder=q).data
+    assert_frame_equal(expected, received)
+    assert not expected.empty
+

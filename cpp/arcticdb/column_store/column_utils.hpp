@@ -8,14 +8,14 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/pipeline/frame_data_wrapper.hpp>
+#include <arcticdb/python/numpy_buffer_holder.hpp>
 #include <arcticdb/python/python_types.hpp>
 
 #include <pybind11/pybind11.h>
 
 namespace arcticdb::detail {
 
-inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, OutputFormat output_format, py::object &anchor) {
+inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, OutputFormat output_format) {
     ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameArrayAt)
     if (frame.empty()) {
         return visit_field(frame.field(col_pos), [output_format] (auto tag) {
@@ -46,13 +46,6 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
                 }
             } else if constexpr (is_empty_type(data_type) || is_bool_object_type(data_type) || is_array_type(TypeDescriptor(tag))) {
                 dtype= "O";
-                // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
-                // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there
-                // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the column
-                // is represented as an array of (numpy) arrays. Each nested arrays is represented as a pointer to the
-                // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
-                // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
-                // cpp/arcticdb/pipeline/column_mapping.hpp::external_datatype_size
                 esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
             } else if constexpr(tag.dimension() == Dimension::Dim2) {
                 util::raise_rte("Read resulted in two dimensional type. This is not supported.");
@@ -67,6 +60,11 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
         auto column_data = frame.column(col_pos).data();
         const auto& buffer = column_data.buffer();
+        util::check(buffer.num_blocks() == 1, "Expected 1 block when creating ndarray, got {}",
+                    buffer.num_blocks());
+        uint8_t* ptr = buffer.blocks().at(0)->release();
+        NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, frame.row_count());
+        auto base_obj = pybind11::cast(std::move(numpy_buffer_holder));
         std::string dtype;
         ssize_t esize = get_type_size(data_type);
         if constexpr (is_sequence_type(data_type)) {
@@ -97,16 +95,10 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
             }
         } else if constexpr (is_empty_type(data_type) || is_bool_object_type(data_type)) {
             dtype = "O";
-            // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
-            // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there
-            // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the column
-            // is represented as an array of (numpy) arrays. Each nested arrays is represented as a pointer to the
-            // (numpy) array, thus the size of the element is not the size of the raw type, but the size of a pointer.
-            // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
-            // cpp/arcticdb/pipeline/column_mapping.hpp::datatype_size
             esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
         } else if constexpr (is_array_type(TypeDescriptor(tag))) {
             dtype= "O";
+            esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
             // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
             // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there
             // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the column
@@ -115,41 +107,20 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
             // This also affects how we allocate columns. Check cpp/arcticdb/column_store/column.hpp::Column and
             // cpp/arcticdb/pipeline/column_mapping.hpp::external_datatype_size
             auto &api = py::detail::npy_api::get();
-            auto it = column_data.buffer().iterator(sizeof(PyObject*));
-            while(!it.finished()) {
-                auto* ptr = reinterpret_cast<PyObject*>(it.value());
-                util::check(ptr != nullptr, "Can't set base object on null item");
-                if(!is_py_none(ptr))
-                    api.PyArray_SetBaseObject_(ptr, anchor.inc_ref().ptr());
-
-                it.next();
+            auto py_ptr = reinterpret_cast<PyObject**>(ptr);
+            for (size_t idx = 0; idx < frame.row_count(); ++idx, ++py_ptr) {
+                util::check(py_ptr != nullptr, "Can't set base object on null item");
+                if(!is_py_none(*py_ptr)) {
+                    api.PyArray_SetBaseObject_(*py_ptr, base_obj.inc_ref().ptr());
+                }
             }
-            esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
-    } else if constexpr(tag.dimension() == Dimension::Dim2) {
-            util::raise_rte("Read resulted in two dimensional type. This is not supported.");
+        } else if constexpr(tag.dimension() == Dimension::Dim2) {
+                util::raise_rte("Read resulted in two dimensional type. This is not supported.");
         } else {
             static_assert(!sizeof(data_type), "Unhandled data type");
         }
-        // Note how base is passed to the array to register the data owner.
-        // It's especially important to keep the frame data object alive for as long as the array is alive
-        // so that regular python ref counting logic handles the liveness
-        return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, buffer.data(), anchor);
+        return py::array(py::dtype{dtype}, {frame.row_count()}, {esize}, ptr, base_obj);
     });
-}
-
-inline std::shared_ptr<pipelines::FrameDataWrapper> initialize_array(
-        const SegmentInMemory& frame,
-        OutputFormat output_format,
-        py::object &ref) {
-    auto output = std::make_shared<pipelines::FrameDataWrapper>(frame.fields().size());
-    ARCTICDB_SAMPLE(InitializeArrays, 0);
-    ARCTICDB_DEBUG(log::memory(), "Initializing arrays");
-    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-    for (std::size_t c = 0; c < static_cast<size_t>(frame.fields().size()); ++c) {
-        output->data_[c] = array_at(frame, c, output_format, ref);
-    }
-    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
-    return output;
 }
 
 }
