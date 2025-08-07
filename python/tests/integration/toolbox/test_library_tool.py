@@ -377,9 +377,13 @@ def test_write_segment_in_memory_row_slicing(lmdb_version_store_tiny_segment):
 
     assert_frame_equal(dataframe, sample_df)
 
-    data_key_count = len(lib_tool.find_keys(KeyType.TABLE_DATA))
+    data_keys = lib_tool.find_keys(KeyType.TABLE_DATA)
+    data_key_count = len(data_keys)
+
     index_key_count = len(lib_tool.find_keys(KeyType.TABLE_INDEX))
     version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
+
+    assert sorted([(dkey.start_index, dkey.end_index) for dkey in data_keys]) == [(i, i+1) for i in range(0, len(sample_df), 2)]
 
     assert data_key_count == len(sample_df) // 2
     assert index_key_count == 1
