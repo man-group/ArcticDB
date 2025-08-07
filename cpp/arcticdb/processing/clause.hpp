@@ -682,12 +682,14 @@ struct RowRangeClause {
     }
 
     explicit RowRangeClause(std::optional<int64_t> start, std::optional<int64_t> end) {
+        // start and end both absent is a no-op, the Python layer just skips the clause in this case
         util::check(start || end, "Expect at least one of start and end to be present");
         if (start && end) {
             row_range_type_ = RowRangeType::RANGE;
             user_provided_start_ = *start;
             user_provided_end_ = *end;
         } else if (start) {
+            // start=0 and end absent is a no-op, the Python layer just skips the clause in this case
             util::check(start != 0, "Did not expect end=nullopt and start==0");
             row_range_type_ = RowRangeType::TAIL;
             n_ = -1 * start.value();

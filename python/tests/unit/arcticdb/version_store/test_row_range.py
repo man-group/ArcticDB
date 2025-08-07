@@ -104,7 +104,7 @@ def test_row_range_pickled_symbol(lmdb_version_store):
     ((5, 3), pd.DataFrame({"a": []}, dtype=np.int64)),
 ))
 @pytest.mark.parametrize("api", ("query_builder", "read", "read_batch"))
-def test_row_range_open_ended_negative_start(lmdb_version_store_v1, api, row_range, expected):
+def test_row_range_open_ended(lmdb_version_store_v1, api, row_range, expected):
     symbol = "test_row_range"
     df = pd.DataFrame({"a": np.arange(100)})
     lmdb_version_store_v1.write(symbol, df)
