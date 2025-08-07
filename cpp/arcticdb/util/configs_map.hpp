@@ -56,7 +56,6 @@ private:
     std::unordered_map<std::string, uint64_t> map_of_int;
     std::unordered_map<std::string, std::string> map_of_string;
     std::unordered_map<std::string, double> map_of_double;
-    mutable std::mutex mutex_;
 };
 
 struct ScopedConfig {
