@@ -244,6 +244,21 @@ def custom_library(arctic_client, lib_name, request) -> Generator[Library, None,
     except Exception:
         pass
 
+def get_metadata_safe(df: pd.DataFrame) -> str:
+    try:
+        return df.to_json()
+    except:
+        try: 
+            # If there is an int bigger than number that will get us to overflow
+            df_safe = df.copy()
+            for col in df_safe.select_dtypes(include=['int64', 'int32']).columns:
+                max_val = df_safe[col].abs().max()
+                if max_val > 2**53 - 1: 
+                    df_safe[col] = df_safe[col].astype(str)
+            return df_safe.to_json()
+        except:
+            return "Some metadata"
+            
 
 @pytest.mark.storage
 @pytest.mark.parametrize("custom_library", [
@@ -286,7 +301,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df3_num_rows = ROWS_PER_SEGMENT*2 - 1
     df3 = g.get_dataframe(number_columns=df3_num_cols, number_rows=df3_num_rows, start_time=start_time)
     update3 = ug.generate_update(df3, UpdatePositionType.INSIDE_OVERLAP_END, df3_num_cols, ROWS_PER_SEGMENT - 2)
-    metadata3 = df2.to_json()
+    metadata3 = get_metadata_safe(df2)
     expected_updated_df3 = dataframe_simulate_arcticdb_update_static(df3, update3) 
 
     # Error update due to mismatch in columns
