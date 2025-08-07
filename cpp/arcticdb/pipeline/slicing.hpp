@@ -95,10 +95,10 @@ inline auto end_index_generator(T end_index){//works for both rawtype and rawtyp
     }
 }
 
-inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, TypedStreamVersion key) {
+inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, const TypedStreamVersion& key) {
     using PartialKey = stream::StreamSink::PartialKey;
 
-    return [frame=std::move(frame), key = std::move(key)](const FrameSlice& s) {
+    return [frame=std::move(frame), &key](const FrameSlice& s) {
         if (frame->has_index()) {
             util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in get_partial_key_gen");
             auto& idx = frame->index_tensor.value();
@@ -116,7 +116,7 @@ inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, TypedSt
     };
 }
 
-inline stream::StreamSink::PartialKey get_partial_key(const IndexDescriptorImpl& index, TypedStreamVersion key, const SegmentInMemory& slice) {
+inline stream::StreamSink::PartialKey get_partial_key(const IndexDescriptorImpl& index, const TypedStreamVersion& key, const SegmentInMemory& slice) {
     using PartialKey = stream::StreamSink::PartialKey;
 
     if (index.field_count() != 0) {
