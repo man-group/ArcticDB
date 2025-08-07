@@ -91,8 +91,6 @@ class StorageSetup:
 
             # Azure variable setup
             cls._azure_factory = real_azure_from_environment_variables(shared_path=True)
-            # Under this account name 
-            assert AZURE_ACCOUNT_NAME in cls._azure_factory.account_name, "Account name is not expected one"
             cls._aws_default_factory.default_prefix = None
             cls._aws_default_factory.default_bucket = AZURE_DEFAULT_CONTAINER
             cls._aws_default_factory.clean_bucket_on_fixture_exit = False
@@ -144,6 +142,8 @@ class StorageSetup:
             return f"gcpxml://storage.googleapis.com:{cls._gcp_bucket}?access={a}&secret={s}&path_prefix={prefix}"
         elif storage == Storage.AZURE:
             cls._azure_factory.default_prefix = prefix
+            # All runs can be only under this account name 
+            assert AZURE_ACCOUNT_NAME in cls._azure_factory.account_name, "Account name is not expected one"
             return cls._azure_factory.create_fixture().arctic_uri
         else:
             raise Exception("Unsupported storage type :", storage)

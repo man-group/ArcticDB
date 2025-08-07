@@ -26,7 +26,7 @@ from arcticdb_ext.exceptions import InternalException, PermissionException
 
 from multiprocessing import Pool
 from arcticdb_ext import set_config_int
-from tests.util.mark import MACOS
+from tests.util.mark import MACOS, REAL_AZURE_TESTS_MARK
 
 
 @pytest.fixture
@@ -121,6 +121,7 @@ def test_symbol_list_regex(basic_store):
     }
 
 
+@pytest.mark.xfail(MACOS and REAL_AZURE_TESTS_MARK.args[0], reason="MacOS problem with Azure (9713365654)")
 @pytest.mark.parametrize("compact_first", [True, False])
 # Using S3 because LMDB does not allow OpenMode to be changed
 @pytest.mark.storage
@@ -203,6 +204,7 @@ def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
 
 
 @pytest.mark.storage
+@pytest.mark.xfail(MACOS and REAL_AZURE_TESTS_MARK.args[0], reason="MacOS problem with Azure (9713365654)")
 def test_empty_lib(basic_store):
     lib = basic_store
     assert lib.list_symbols() == []
@@ -211,6 +213,7 @@ def test_empty_lib(basic_store):
 
 
 @pytest.mark.storage
+@pytest.mark.xfail(MACOS and REAL_AZURE_TESTS_MARK.args[0], reason="MacOS problem with Azure (9713365654)")
 def test_no_active_symbols(basic_store_prune_previous):
     lib = basic_store_prune_previous
     for idx in range(20):
@@ -225,6 +228,7 @@ def test_no_active_symbols(basic_store_prune_previous):
 
 
 @pytest.mark.storage
+@pytest.mark.xfail(MACOS and REAL_AZURE_TESTS_MARK.args[0], reason="MacOS problem with Azure (9713365654)")
 def test_only_latest_compaction_key_is_used(basic_store):
     lib: NativeVersionStore = basic_store
     lt = lib.library_tool()
@@ -254,6 +258,7 @@ def test_only_latest_compaction_key_is_used(basic_store):
 
 @pytest.mark.parametrize("write_another", [False, True])
 @pytest.mark.storage
+@pytest.mark.xfail(MACOS and REAL_AZURE_TESTS_MARK.args[0], reason="MacOS problem with Azure (9713365654)")
 def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)

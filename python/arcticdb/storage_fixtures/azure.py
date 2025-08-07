@@ -110,22 +110,13 @@ class AzureContainer(StorageFixture):
                 self._set_uri_and_client_azurite("SharedAccessSignature=" + sas)
 
     def __exit__(self, exc_type, exc_value, traceback):
-        if self.is_real_azure():
-            # This code is for cleaning Azure, the code for Azurite is down
-            if self.factory.clean_bucket_on_fixture_exit:
-                self.factory.cleanup_container(self)
+        if self.factory.clean_bucket_on_fixture_exit:
+            self.factory.cleanup_container(self)
+            if self.is_real_azure():
                 if len(self.libs_from_factory) > 0:
                     get_logger().warning(f"Libraries not cleared remaining {self.libs_from_factory.keys()}")
             
         if self.client:
-            if not self.is_real_azure():
-                # This code is only for Azurite cleaning, it is faster than this for Azure
-                if self._admin_client:
-                    self._admin_client.delete_container(timeout=3)
-                    self._admin_client.close()
-                else:
-                    self.client.delete_container(timeout=3)
-            # This code is for both Azure and Azurite
             self.client.close()
             self.client = None
 
@@ -219,8 +210,14 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         return AzureContainer(self)
 
     def cleanup_container(self, b: AzureContainer):
-        # Do nothing in this case
-        pass            
+        if b.client:
+            if not b.is_real_azure():
+                # This code is only for Azurite cleaning, it is faster than this for Azure
+                if b._admin_client:
+                    b._admin_client.delete_container(timeout=3)
+                    b._admin_client.close()
+                else:
+                    b.client.delete_container(timeout=3)
 
 def find_ca_certs():
     # Common CA certificates locations
@@ -288,8 +285,8 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         return f"[{type(self)}=Container:{self.default_container}], ConnectionString:{self.connection_string}"
 
     def initialize_from_connection_sting(self, constr: str, container: str, prefix: str = None) -> "AzureStorageFixtureFactory":
-        assert constr, "Azure connection string not available"
-        assert container, "Azure container not available"
+        get_logger().error(f"Azure connection string not available: {constr}")
+        get_logger().error(f"Azure container not available: {container}")
         AzureStorageFixtureFactory.connection_string = constr
         AzureStorageFixtureFactory.account_name = re.search(r'AccountName=([^;]+)', constr).group(1)
         AzureStorageFixtureFactory.account_key = re.search(r'AccountKey=([^;]+)', constr).group(1)
@@ -325,8 +322,8 @@ def real_azure_from_environment_variables(
         prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
         prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
-    out.initialize_from_connection_sting(
-        constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
-        container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
-        prefix=prefix)
+        out.initialize_from_connection_sting(
+            constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
+            container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
+            prefix=prefix)
     return out
