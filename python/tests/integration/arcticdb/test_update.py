@@ -244,15 +244,13 @@ def custom_library(arctic_client, lib_name, request) -> Generator[Library, None,
     except Exception:
         pass
 
+
 def get_metadata_safe() -> str:
-    try:
-        import string
-        size_in_bytes = 1024 * 1024  
-        chars = string.ascii_letters + string.digits
-        return ''.join(random.choices(chars, k=size_in_bytes))
-    except:
-        return "Some metadata"
-            
+    import string
+    size_in_bytes = 1024 * 1024  
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choices(chars, k=size_in_bytes))
+
 
 @pytest.mark.storage
 @pytest.mark.parametrize("custom_library", [
