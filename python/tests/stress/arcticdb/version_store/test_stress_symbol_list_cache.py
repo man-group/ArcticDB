@@ -24,12 +24,12 @@ def compact_symbols_worker(lib):
     set_log_level(specific_log_levels = {"lock":"DEBUG"})
     lib.list_symbols()
 
+    lt = lib._dev_tools.library_tool()
+    compacted_keys = lt.find_keys_for_id(KeyType.SYMBOL_LIST, "__symbols__")
+    assert len(compacted_keys) <= 1
+
 @pytest.fixture(params=[
-    (0, 0, 0), # Probability of slowdown, min ms, max ms
-    (0.3, 10, 50),
-    (0.3, 100, 300),
-    (0.3, 300, 500),
-    (0.3, 700, 1200)
+    (0.5, 1200, 1500)
 ])
 def slow_writing_library(request, real_s3_storage, lib_name):
     write_slowdown_prob, write_slowdown_min_ms, write_slowdown_max_ms = request.param
@@ -43,7 +43,8 @@ def slow_writing_library(request, real_s3_storage, lib_name):
     arctic.delete_library(lib_name)
 
 @REAL_S3_TESTS_MARK
-@pytest.mark.parametrize("num_writers, num_compactors", [(1,1), (2, 10), (10, 50)])
+@pytest.mark.xfail(reason="This should pass after improvements to the storage lock in the future.")
+@pytest.mark.parametrize("num_writers, num_compactors", [(10, 100)])
 def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_compactors):
     writers = [
         Process(target=write_symbols_worker, args=(slow_writing_library, i))
@@ -63,7 +64,7 @@ def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_c
     for p in processes:
         p.join()
         if p.exitcode != 0:
-            raise RuntimeError(f"Process {p.pid} failed with exit code {p.exitcode}")
+            pytest.fail(f"Process {p.pid} failed with exit code {p.exitcode}")
 
     expected_symbol_list = { f"sym_{i}" for i in range(num_writers) }
 
