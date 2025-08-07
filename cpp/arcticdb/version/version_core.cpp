@@ -76,14 +76,14 @@ static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>&
 
 
 VersionedItem write_dataframe_impl(
-        const std::shared_ptr<Store>& store,
-        VersionId version_id,
-        const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-        const WriteOptions& options,
-        const std::shared_ptr<DeDupMap>& de_dup_map,
-        bool sparsify_floats,
-        bool validate_index
-) {
+    const std::shared_ptr<Store>& store,
+    VersionId version_id,
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const WriteOptions& options,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
+    bool sparsify_floats,
+    bool validate_index
+    ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
     ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
     auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
@@ -91,14 +91,14 @@ VersionedItem write_dataframe_impl(
 }
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
-        const std::shared_ptr<Store>& store,
-        VersionId version_id,
-        const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-        const WriteOptions& options,
-        const std::shared_ptr<DeDupMap> &de_dup_map,
-        bool sparsify_floats,
-        bool validate_index
-) {
+    const std::shared_ptr<Store>& store,
+    VersionId version_id,
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const WriteOptions& options,
+    const std::shared_ptr<DeDupMap> &de_dup_map,
+    bool sparsify_floats,
+    bool validate_index
+    ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0) {
         auto check_outcome = verify_symbol_key(frame->desc.id());

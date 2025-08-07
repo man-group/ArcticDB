@@ -717,11 +717,11 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 }
 
 VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
-        const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
-        bool prune_previous_versions,
-        bool allow_sparse,
-        bool validate_index
+    const StreamId& stream_id,
+    const std::shared_ptr<InputTensorFrame>& frame,
+    bool prune_previous_versions,
+    bool allow_sparse,
+    bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
@@ -733,13 +733,13 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
 
     auto versioned_item = write_dataframe_impl(
-            store(),
-            version_id,
-            frame,
-            write_options,
-            de_dup_map,
-            allow_sparse,
-            validate_index);
+        store(),
+        version_id,
+        frame,
+        write_options,
+        de_dup_map,
+        allow_sparse,
+        validate_index);
 
     if(cfg().symbol_list())
         symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
@@ -772,6 +772,7 @@ VersionedItem LocalVersionedEngine::write_segment(
     }
     auto partial_key = IndexPartialKey(stream_id, version_id);
 
+    // TODO: do the segment splitting in parallel
     auto slices = (slicing == Slicing::NoSlicing) ? std::vector<SegmentInMemory>({segment}) : segment.split(get_write_options().segment_row_size);
 
     auto sink = store();
@@ -780,7 +781,7 @@ VersionedItem LocalVersionedEngine::write_segment(
     int64_t write_window = write_window_size();
     auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [&sink, de_dup_map, &segment, tsv=std::move(tsv)](auto&& slice) {
             auto frame_slice = FrameSlice{std::make_shared<entity::StreamDescriptor>(slice.descriptor()), {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()}, {slice.offset(), slice.offset() + slice.row_count()}};
-            auto pkey = get_partial_key(segment.descriptor().index(), tsv, slice);
+            auto pkey = get_partial_key_for_segment_slice(segment.descriptor().index(), tsv, slice);
             auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{
                     pkey, std::move(slice), frame_slice
             };

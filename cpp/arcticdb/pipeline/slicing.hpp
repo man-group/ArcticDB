@@ -116,7 +116,7 @@ inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, const T
     };
 }
 
-inline stream::StreamSink::PartialKey get_partial_key(const IndexDescriptorImpl& index, const TypedStreamVersion& key, const SegmentInMemory& slice) {
+inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(const IndexDescriptorImpl& index, const TypedStreamVersion& key, const SegmentInMemory& slice) {
     using PartialKey = stream::StreamSink::PartialKey;
 
     if (index.field_count() != 0) {
