@@ -12,12 +12,14 @@ import pandas as pd
 import numpy as np
 from arcticdb.util.test import (
     assert_frame_equal_rebuild_index_first,
+    assert_series_equal_pandas_1,
 )
 from arcticdb.util.utils import ARCTICDB_NA_VALUE_BOOL, ARCTICDB_NA_VALUE_FLOAT, ARCTICDB_NA_VALUE_INT, ARCTICDB_NA_VALUE_STRING, ARCTICDB_NA_VALUE_TIMESTAMP
 from arcticdb.version_store.library import Library
 
 
-def calculate_different_and_common_parts(df1: pd.DataFrame, df2: pd.DataFrame) -> List[pd.DataFrame]:
+def calculate_different_and_common_parts(df1: pd.DataFrame, df2: pd.DataFrame, 
+                                         dynamic_schema: bool = False) -> List[pd.DataFrame]:
     """ Create 4 dataframes of different and common parts of both dataframes
 
     Returns 4 dataframes:
@@ -36,13 +38,14 @@ def calculate_different_and_common_parts(df1: pd.DataFrame, df2: pd.DataFrame) -
     common_cols = list(cols_df1 & cols_df2)
 
     # Check type consistency for common columns
-    for col in common_cols:
-        dtype1 = df1[col].dtype
-        dtype2 = df2[col].dtype
-        if dtype1 != dtype2:
-            raise TypeError(
-                f"Column '{col}' has different types: df1={dtype1}, df2={dtype2}. Type mismatch not supported."
-            )
+    if not dynamic_schema:
+        for col in common_cols:
+            dtype1 = df1[col].dtype
+            dtype2 = df2[col].dtype
+            if dtype1 != dtype2:
+                raise TypeError(
+                    f"Column '{col}' has different types: df1={dtype1}, df2={dtype2}. Type mismatch not supported."
+                )
 
     # Create the resulting DataFrames
     df_only_df1 = df1[only_in_df1].copy(deep=True)
@@ -151,17 +154,20 @@ class ArcticSymbolSimulator:
         df = self._versions[as_of]
         return df.copy(deep=True) if df is not None else None
     
-    def assert_equal_to(self, other_df: pd.DataFrame):
-        self.assert_frames_equal(self.read(), other_df)
+    def assert_equal_to(self, other_df_or_series: Union[pd.DataFrame, pd.Series]):
+        self.assert_frames_equal(self.read(), other_df_or_series)
 
     def assert_equal_to_associated_lib(self, symbol: str, as_of: Optional[int] = None):
         assoc_data = self.arctic_lib().read(symbol, as_of=as_of).data
         self.assert_frames_equal(self.read(as_of=as_of), assoc_data)
 
     @classmethod
-    def assert_frames_equal(self, expected_df: pd.DataFrame, actual_df: pd.DataFrame):
-        actual_df_same_col_sequence = actual_df[expected_df.columns]
-        assert_frame_equal_rebuild_index_first(expected_df, actual_df_same_col_sequence)
+    def assert_frames_equal(self, expected: Union[pd.DataFrame, pd.Series], actual: Union[pd.DataFrame, pd.Series]):
+        if isinstance(expected, pd.Series) and isinstance(actual, pd.Series):
+            assert_series_equal_pandas_1(expected, actual)
+        else:
+            actual_df_same_col_sequence = actual[expected.columns]
+            assert_frame_equal_rebuild_index_first(expected, actual_df_same_col_sequence)
 
     @classmethod
     def simulate_arctic_append(cls, df1: Union[pd.DataFrame, pd.Series], 
@@ -213,51 +219,62 @@ class ArcticSymbolSimulator:
         if df1.empty: return df2 
         if df2.empty: return df1
 
-        if isinstance(df1, pd.Series):
-            df1 = pd.DataFrame(df1)
-            
-        if isinstance(df2, pd.Series):
-            df2 = pd.DataFrame(df2)
+        if isinstance(df1, pd.Series) and isinstance(df2, pd.Series):
+            # When we have series only case
+            if df1.name != df2.name:
+                assert dynamic_schema, "Can append Series with different schema with dynamic schema only"
+            result_series = pd.concat([df1, df2])
+            # With range index we might have a glitch
+            if isinstance(df1.index, pd.RangeIndex):
+                result_series.index = pd.RangeIndex(start=0, stop=len(result_series), step=df1.index.step)
+            return result_series
 
-        # Lets split the dataframes in several parts - differences and common parts
-        df_left, df_common_first, df_common_second, df_right = calculate_different_and_common_parts(df1, df2)
-        df_left_zeroed = create_dataframe_with_na(df_left)
-        df_right_zeroed = create_dataframe_with_na(df_right)
+        else: 
+            if isinstance(df1, pd.Series):
+                df1 = pd.DataFrame(df1)
+                
+            if isinstance(df2, pd.Series):
+                df2 = pd.DataFrame(df2)
 
-        # Collect all float32 columns which will be added
-        # Those float32 may be forced to float64 if a float column is all None
-        df_left_float32_cols = [col for col in df_left.columns if df_left[col].dtype == np.float32]
-        df_right_float32_cols = [col for col in df_right.columns if df_right[col].dtype == np.float32]
-        source_float32_cols = list()
-        source_float32_cols.extend(df_left_float32_cols)
-        source_float32_cols.extend(df_right_float32_cols)
+            # Lets split the dataframes in several parts - differences and common parts
+            df_left, df_common_first, df_common_second, df_right = calculate_different_and_common_parts(df1, df2, dynamic_schema)
+            df_left_zeroed = create_dataframe_with_na(df_left)
+            df_right_zeroed = create_dataframe_with_na(df_right)
 
-        # We will extend df1 and df2 with dataframes with NA values that have 
-        # columns that that the dataframe does not have but the other has
-        # match_row_count will adapt the number of rows of both dataframes
-        df_right_zeroed = match_row_count(df1, df_right_zeroed)
-        # This way we synchronize the index of NA dataframe with the 
-        # dataframe to which it will be added
-        df_right_zeroed.index = df1.index
-        # Stitching both dataframes horizontally will will create
-        # a dataframe that has all columns but new added columns are NA
-        df1_prepared_with_all_cols = pd.concat([df1, df_right_zeroed], axis=1)
-        # Same procedure for the other dataframe
-        df_left_zeroed = match_row_count(df2, df_left_zeroed)
-        df_left_zeroed.index = df2.index
-        df2_prepared_with_all_cols = pd.concat([df2, df_left_zeroed], axis=1)
+            # Collect all float32 columns which will be added
+            # Those float32 may be forced to float64 if a float column is all None
+            df_left_float32_cols = [col for col in df_left.columns if df_left[col].dtype == np.float32]
+            df_right_float32_cols = [col for col in df_right.columns if df_right[col].dtype == np.float32]
+            source_float32_cols = list()
+            source_float32_cols.extend(df_left_float32_cols)
+            source_float32_cols.extend(df_right_float32_cols)
 
-        append_df_to_df1 = pd.concat([df1_prepared_with_all_cols, df2_prepared_with_all_cols])
-        # With range index we might have a glitch
-        if isinstance(df1.index, pd.RangeIndex):
-            append_df_to_df1.index = pd.RangeIndex(start=0, stop=len(append_df_to_df1), step=df1.index.step)
+            # We will extend df1 and df2 with dataframes with NA values that have 
+            # columns that that the dataframe does not have but the other has
+            # match_row_count will adapt the number of rows of both dataframes
+            df_right_zeroed = match_row_count(df1, df_right_zeroed)
+            # This way we synchronize the index of NA dataframe with the 
+            # dataframe to which it will be added
+            df_right_zeroed.index = df1.index
+            # Stitching both dataframes horizontally will will create
+            # a dataframe that has all columns but new added columns are NA
+            df1_prepared_with_all_cols = pd.concat([df1, df_right_zeroed], axis=1)
+            # Same procedure for the other dataframe
+            df_left_zeroed = match_row_count(df2, df_left_zeroed)
+            df_left_zeroed.index = df2.index
+            df2_prepared_with_all_cols = pd.concat([df2, df_left_zeroed], axis=1)
 
-        # Convert back float64 columns that had to be float 32
-        for col in source_float32_cols:
-            if append_df_to_df1[col].dtype == np.float64:
-                append_df_to_df1[col] = append_df_to_df1[col].astype(np.float32)        
+            append_df_to_df1 = pd.concat([df1_prepared_with_all_cols, df2_prepared_with_all_cols])
+            # With range index we might have a glitch
+            if isinstance(df1.index, pd.RangeIndex):
+                append_df_to_df1.index = pd.RangeIndex(start=0, stop=len(append_df_to_df1), step=df1.index.step)
 
-        return append_df_to_df1
+            # Convert back float64 columns that had to be float 32
+            for col in source_float32_cols:
+                if append_df_to_df1[col].dtype == np.float64:
+                    append_df_to_df1[col] = append_df_to_df1[col].astype(np.float32)        
+
+            return append_df_to_df1
 
     @classmethod
     def simulate_arctic_update(cls, existing_df: Union[pd.DataFrame, pd.Series], 

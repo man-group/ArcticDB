@@ -176,7 +176,7 @@ def test_simulator_append_series_and_dataframe(lmdb_library_dynamic_schema):
     asym.write(s1).arctic_lib().write("s", s1)
     asym.append(df1).arctic_lib().append("s", df1)
     asym.assert_equal_to_associated_lib("s")
-    
+
 
 def test_simulator_append_series_and_dataframe_with_timestamp(lmdb_library_dynamic_schema):
     lib = lmdb_library_dynamic_schema
@@ -227,4 +227,85 @@ def test_simulator_append_series_and_dataframe_mix(lmdb_library_dynamic_schema):
     asym.assert_equal_to_associated_lib("s")
 
 
-    
+def test_simulator_update_all_columns_promote_in_type(lmdb_library_dynamic_schema):
+    lib = lmdb_library_dynamic_schema
+    asym = ArcticSymbolSimulator().associate_arctic_lib(lib)
+    index_dates = pd.date_range(start=datetime.datetime(2025, 8, 1), periods=3, freq="D")
+    df1 = pd.DataFrame({
+        "int_col": np.array([10, 20, 30], dtype=np.int16),
+        "uint_col": np.array([10, 20, 30], dtype=np.uint16),
+        "uint_col_to_int": np.array([10, 20, 30], dtype=np.uint16),
+        "int_col_to_float": np.array([10, 20, 30], dtype=np.float64),
+        "uint_col_to_float": np.array([10, 20, 30], dtype=np.uint16),
+        "float_col": np.array([1.5, 2.5, 3.5], dtype=np.float32),
+        "bool_col": [True, False, True],
+        "str_col": ["a", "b", "c"],
+        "timestamp_col": index_dates + pd.to_timedelta(2, unit="h")
+    }, index=index_dates)
+    index_dates = pd.date_range(start=datetime.datetime(2025, 8, 3), periods=1, freq="D")
+    df2 = pd.DataFrame({
+        "int_col": np.array([-100], dtype=np.int64),
+        "int_col1": np.array([-100], dtype=np.int64),
+        "uint_col": np.array([200], dtype=np.uint32),
+        "uint_col2": np.array([200], dtype=np.uint32),
+        "uint_col_to_int": np.array([-1243], dtype=np.int32),
+        "uint_col_to_float": np.array([11.11], dtype=np.float32),
+        "int_col_uint": np.array([100], dtype=np.uint64),
+        "float_col": np.array([15.55], dtype=np.float64),
+        "int_col_to_float": np.array([1234.567], dtype=np.float64),
+        "bool_col": [False],
+        "str_col": ["a"],
+        "timestamp_col": index_dates + pd.to_timedelta(2, unit="h")
+    }, index=index_dates)
+    asym.write(df1).arctic_lib().write("s", df1)
+    asym.update(df2).arctic_lib().update("s", df2)
+    asym.assert_equal_to_associated_lib("s")
+    assert 3 == len(asym.read())
+
+
+def test_simulator_append_serries_supported_combos(lmdb_library_dynamic_schema):
+
+    def test_append_serries(s1, s2):
+        lib = lmdb_library_dynamic_schema
+        asym = ArcticSymbolSimulator().associate_arctic_lib(lib)
+        asym.write(s1).arctic_lib().write("s", s1)
+        asym.append(s2).arctic_lib().append("s", s2)
+        asym.assert_equal_to_associated_lib("s")
+        return asym.read()
+
+    s1 = pd.Series([10, 20, 30], name="name")
+    s2 = pd.Series([100, 200, 300], name="name")
+    test_append_serries(s1, s2)
+
+    s1 = pd.Series([10, 20, 30])
+    s2 = pd.Series([100, 200, 300])
+    test_append_serries(s1, s2)
+
+    # Series and Dataframe - results in Dataframe
+    s1 = pd.Series([10, 20, 30], name="name")
+    s2 = pd.DataFrame(pd.Series([100, 200, 300], name="name"))
+    df: pd.DataFrame = test_append_serries(s1, s2)
+    assert 1 == df.shape[1]
+
+    # Series and Dataframe - results in Dataframe
+    # when column names different - we have 2 cols
+    s1 = pd.Series([10, 20, 30], name="name")
+    s2 = pd.DataFrame(pd.Series([100, 200, 300], name="name2"))
+    df: pd.DataFrame = test_append_serries(s1, s2)
+    assert 2 == df.shape[1]
+
+@pytest.mark.xfail(True, reason="Currently adding series to symbol does not work (9754433454)")
+def test_simulator_append_serries_supported_errors(lmdb_library_dynamic_schema):
+
+    def test_append_serries(s1, s2):
+        lib = lmdb_library_dynamic_schema
+        asym = ArcticSymbolSimulator().associate_arctic_lib(lib)
+        asym.write(s1).arctic_lib().write("s", s1)
+        asym.append(s2).arctic_lib().append("s", s2)
+        asym.assert_equal_to_associated_lib("s")
+        return asym.read()
+
+    s1 = pd.Series([10, 20, 30], name="name")
+    s2 = pd.Series([100, 200, 300], name="name2")
+    test_append_serries(s1, s2)
+

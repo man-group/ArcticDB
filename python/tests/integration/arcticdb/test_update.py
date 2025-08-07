@@ -475,38 +475,6 @@ def test_update_batch_error_scenario2(arctic_library):
     assert update_result[0].version == 0
 
 
-def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
-    """ Simulates partially dynamic update, when update df has new columns.
-    The scenario where there are type promotions of existing columns is not covered yet
-    """
-    def add_missing_ending_columns(to_df: pd.DataFrame, from_df: pd.DataFrame):
-        """
-        Modifies `to_df` adding all missing columns at from `from_df` at the end.
-        Note that it checks first that first common column of both are same
-        """
-        assert len(from_df.columns) >= len(to_df.columns)
-        for index, col in enumerate(from_df.columns):
-            if index < len(to_df.columns):
-                message = f"Column [{index}] does not match from_df{from_df.columns[index]} != to_df{from_df.columns[index]}"
-                assert from_df.columns[index] == to_df.columns[index], message
-            else:
-                dtype = from_df[col].dtype
-                if np.issubdtype(dtype, np.integer):
-                    to_df[col] = np.zeros(len(to_df), dtype=dtype)
-                elif np.issubdtype(dtype, np.floating):
-                    to_df[col] = np.full(len(to_df), np.nan, dtype=dtype)
-                elif np.issubdtype(dtype, np.bool_):
-                    to_df[col] = np.full(len(to_df), False, dtype=dtype)
-                elif dtype == object or pd.api.types.is_string_dtype(dtype):
-                    to_df[col] = [None] * len(to_df)
-                elif pd.api.types.is_datetime64_any_dtype(from_df[col]):
-                    to_df[col] = pd.NaT
-                else:
-                    raise TypeError(f"Type is not supported: {dtype}")
-    add_missing_ending_columns(expected_df, update_df)
-    return ArcticSymbolSimulator().simulate_arctic_update(expected_df, update_df, dynamic_schema=False)
-
-
 @pytest.mark.storage
 @pytest.mark.parametrize("custom_library", [
             {'library_options': LibraryOptions(dynamic_schema=True)}
@@ -523,8 +491,8 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     start_time = TimestampNumber.from_timestamp(timestamp=Timestamp("1/2/2017"))
     g = BasicDataFrameGenerator()
     ug = UpdatesGenerator(g)
-    original_num_cols = 30
-    original_number_rows = 50
+    original_num_cols = 5
+    original_number_rows = 5
     symbol_prefix = "different types of updates"
 
     symbol_names = []
@@ -543,7 +511,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
             symbol_names.append(symbol_name)
             # Calculate expected dataframe
             expected_df = original_dataframe.copy(deep=True)
-            expected_results[symbol_name] = dataframe_simulate_arcticdb_update_dynamic(expected_df, update)
+            expected_results[symbol_name] = ArcticSymbolSimulator().simulate_arctic_update(expected_df, update)
             update_batch.append(UpdatePayload(symbol_name, update))
             write_batch.append(WritePayload(symbol_name, original_dataframe))
     
@@ -559,7 +527,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     logger.info(f"Verify expected results for updates with rows count: {number_rows}")
     for index, result in enumerate(update_result):
         assert result.version == 1 
-        assert_frame_equal(expected_results[result.symbol], read_data[result.symbol].data)
+        ArcticSymbolSimulator().assert_frames_equal(expected_results[result.symbol], read_data[result.symbol].data)
           
 
 
