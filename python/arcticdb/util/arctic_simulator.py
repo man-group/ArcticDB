@@ -111,27 +111,12 @@ class ArcticSymbolSimulator:
     Test oracles serve to predict result of an operation performed by actual product.
     As this is work in progress this is not intended to be full oracle 
     from the very beginning, but slowly grow with the actual needs
-
-    Use:
-
-        asym = ArcticSymbolSimulator(keep_versions=True).associate_arctic_lib(lib)
-        asym.write(initial_df).arctic_lib().write(symbol, initial_df)
-        asym.append(initial_df).arctic_lib().append(symbol, initial_df)
-        asym.assert_equal_to_associated_lib(symbol)
-
     """
 
     def __init__(self, keep_versions: bool = False, dynamic_schema: bool = True):
         self._versions: List[pd.DataFrame] = list()
         self._keep_versions: bool = keep_versions
         self._dynamic_schema: bool = dynamic_schema
-
-    def associate_arctic_lib(self, lib: Library) -> 'ArcticSymbolSimulator':
-        self._ac_lib: Library = lib
-        return self
-
-    def arctic_lib(self) -> Library:
-        return self._ac_lib
 
     def write(self, df: pd.DataFrame) -> 'ArcticSymbolSimulator':
         if (len(self._versions) == 0) or self._keep_versions: 
@@ -156,10 +141,6 @@ class ArcticSymbolSimulator:
     
     def assert_equal_to(self, other_df_or_series: Union[pd.DataFrame, pd.Series]):
         self.assert_frames_equal(self.read(), other_df_or_series)
-
-    def assert_equal_to_associated_lib(self, symbol: str, as_of: Optional[int] = None):
-        assoc_data = self.arctic_lib().read(symbol, as_of=as_of).data
-        self.assert_frames_equal(self.read(as_of=as_of), assoc_data)
 
     @classmethod
     def assert_frames_equal(self, expected: Union[pd.DataFrame, pd.Series], actual: Union[pd.DataFrame, pd.Series]):
@@ -320,3 +301,31 @@ class ArcticSymbolSimulator:
             return result_df
         else:
             return pd.concat(chunks)
+
+
+class ArcticSymbolSimulatorWrapper(ArcticSymbolSimulator):
+    """The wrapper class provides ability to do one line operations with simulator and arcticdb
+
+    Use like:
+
+        asym = ArcticSymbolSimulator(keep_versions=True).associate_arctic_lib(lib)
+        asym.write(initial_df).arctic_lib().write(symbol, initial_df)
+        asym.append(initial_df).arctic_lib().append(symbol, initial_df)
+        asym.assert_equal_to_associated_lib(symbol)
+
+    """
+
+    def __init__(self, keep_versions: bool = False, dynamic_schema: bool = True):
+        super().__init__(keep_versions, dynamic_schema)
+
+    def associate_arctic_lib(self, lib: Library) -> 'ArcticSymbolSimulatorWrapper':
+        self._ac_lib: Library = lib
+        return self
+
+    def arctic_lib(self) -> Library:
+        return self._ac_lib
+
+    def assert_equal_to_associated_lib(self, symbol: str, as_of: Optional[int] = None):
+        assoc_data = self.arctic_lib().read(symbol, as_of=as_of).data
+        self.assert_frames_equal(self.read(as_of=as_of), assoc_data)
+
