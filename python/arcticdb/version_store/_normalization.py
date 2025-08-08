@@ -1377,11 +1377,17 @@ class KnownTypeFallbackOnError(Normalizer):
 
 
 class CompositeNormalizer(Normalizer):
-    def __init__(self, fallback_normalizer=None):
+    def __init__(self, fallback_normalizer=None, use_norm_failure_handler_known_types=False):
         self.df = DataFrameNormalizer()
         self.series = SeriesNormalizer()
         self.tf = TimeFrameNormalizer()
         self.np = NdArrayNormalizer()
+
+        if use_norm_failure_handler_known_types and fallback_normalizer is not None:
+            self.df = KnownTypeFallbackOnError(self.df, fallback_normalizer)
+            self.series = KnownTypeFallbackOnError(self.series, fallback_normalizer)
+            self.tf = KnownTypeFallbackOnError(self.tf, fallback_normalizer)
+            self.np = KnownTypeFallbackOnError(self.np, fallback_normalizer)
 
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer

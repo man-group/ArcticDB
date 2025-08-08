@@ -117,6 +117,27 @@ class Flattener:
     def deserialize_primitives(obj):
         return _msgpack_compat.unpackb(obj, raw=False)
 
+    def will_obj_be_partially_pickled(self, obj):
+        to_write = dict()
+        self._create_meta_structure(obj, "dummy", to_write)
+        msgpack_normalizer = MsgPackNormalizer()
+        msgpack_normalizer.strict_mode = True  # To prevent msgpack from falling back to pickle silently
+        base_normalizer = CompositeNormalizer(msgpack_normalizer, use_norm_failure_handler_known_types=False)
+        for sym, obj_to_write in to_write.items():
+            try:
+                opt_custom = self.custom_normalizer.normalize(obj_to_write)
+                if opt_custom is not None:
+                    item, custom_norm_meta = opt_custom
+                    base_normalizer.normalize(item, pickle_on_failure=False)
+                else:
+                    base_normalizer.normalize(obj_to_write, pickle_on_failure=False)
+                # Note that we are fine with msgpack serialization, but not fall back to pickle for msgpack.
+            except Exception:
+                log.info("{} with key {} will be pickled".format(obj_to_write, sym))
+                return True
+
+        return False
+
     def _create_meta_structure(self, obj, sym, to_write, depth=0, original_symbol=None):
         if original_symbol is None:
             original_symbol = sym  # just used for error messages
