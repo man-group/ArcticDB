@@ -338,6 +338,7 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
+@pytest.mark.skip(reason = "Will become ASV tests")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     lib: adb.Library = arctic_library_lmdb_100gb
 
@@ -384,6 +385,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 )
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
+@pytest.mark.skip(reason = "Will become ASV tests")
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
     """
     This test uses old approach with iterations.
