@@ -263,7 +263,7 @@ class ReadRequest(NamedTuple):
         See `read` method.
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none
         See `read`method.
-    row_range: Optional[Tuple[int, int]], default=none
+    row_range: Optional[Tuple[Optional[int], Optional[int]]], default=none
         See `read` method.
     columns: Optional[List[str]], default=none
         See `read` method.
@@ -278,7 +278,7 @@ class ReadRequest(NamedTuple):
     symbol: str
     as_of: Optional[AsOf] = None
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
-    row_range: Optional[Tuple[int, int]] = None
+    row_range: Optional[Tuple[Optional[int], Optional[int]]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
 
@@ -863,9 +863,8 @@ class Library:
         primitive.
 
         ``data`` must be of a format that can be normalised into Arctic's internal storage structure. Pandas
-        DataFrames, Pandas Series and Numpy NDArrays of numeric types, strings, and timestamps can all be normalised.
-        Normalised data will be split along both the columns and rows into segments. By default, a segment will contain
-        100,000 rows and 127 columns.
+        DataFrames, Pandas Series and Numpy NDArrays can all be normalised. Normalised data will be split along both the
+        columns and rows into segments. By default, a segment will contain 100,000 rows and 127 columns.
 
         If this library has ``write_deduplication`` enabled then segments will be deduplicated against storage prior to
         write to reduce required IO operations and storage requirements. Data will be effectively deduplicated for all
@@ -912,7 +911,7 @@ class Library:
         Raises
         ------
         ArcticUnsupportedDataTypeException
-            If ``data`` is not of NormalizableType. See `write_pickle` for options in this case.
+            If ``data`` is not of NormalizableType.
         UnsortedDataException
             If data is unsorted and validate_index is set to True.
 
@@ -965,7 +964,7 @@ class Library:
     ) -> VersionedItem:
         """
         See `write`. This method differs from `write` only in that ``data`` can be of any type that is serialisable via
-        msgpack or the Pickle library. There are significant downsides to storing data in this way:
+        the Pickle library. There are significant downsides to storing data in this way:
 
         - Retrieval can only be done in bulk. Calls to `read` will not support `date_range`, `query_builder` or `columns`.
         - The data cannot be updated or appended to via the update and append methods.
@@ -1798,11 +1797,12 @@ class Library:
 
             Only one of date_range or row_range can be provided.
 
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
             the handling of negative start/end values.
-
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
