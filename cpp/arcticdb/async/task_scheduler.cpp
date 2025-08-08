@@ -19,16 +19,12 @@ std::once_flag TaskScheduler::init_flag_;
 std::once_flag TaskScheduler::shutdown_flag_;
 bool TaskScheduler::forked_ = false;
 
-void TaskScheduler::destroy_instance() {
-    std::call_once(TaskScheduler::shutdown_flag_, &TaskScheduler::stop_and_destroy);
-}
-
-void TaskScheduler::stop_and_destroy() {
-    if(TaskScheduler::instance_) {
-        TaskScheduler::instance()->stop();
-
-        TaskScheduler::instance_.reset();
-    }
+void TaskScheduler::stop_active_threads() {
+    std::call_once(shutdown_flag_, [] {
+        if (instance_) {
+            instance()->stop();
+        }
+    });
 }
 
 void TaskScheduler::reattach_instance() {
@@ -54,6 +50,7 @@ void TaskScheduler::init(){
 }
 
 TaskSchedulerPtrWrapper::~TaskSchedulerPtrWrapper() {
+    ptr_->stop_orphaned_threads();
     delete ptr_;
 }
 
