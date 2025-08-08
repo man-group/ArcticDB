@@ -308,7 +308,7 @@ def get_multiindex_df_with_tz(tz):
 @pytest.mark.parametrize("tz", [pytz.timezone("America/New_York"), pytz.UTC])
 def test_multiindex_with_tz(tz):
     d = get_multiindex_df_with_tz(tz)
-    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(d)
     fd = FrameData.from_npd_df(df)
     denorm = norm.denormalize(fd, norm_meta)
@@ -323,7 +323,7 @@ def test_multiindex_with_tz(tz):
 @pytest.mark.parametrize("tz", [pytz.timezone("America/New_York"), pytz.UTC])
 def test_empty_df_with_multiindex_with_tz(tz):
     orig_df = get_multiindex_df_with_tz(tz)
-    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
     norm_df, norm_meta = norm.normalize(orig_df)
 
     # Slice the normalized df to an empty df (this can happen after date range slicing)
@@ -422,8 +422,8 @@ NT = namedtuple("NT", ["X", "Y"])
 
 def test_namedtuple_inside_df():
     d = pd.DataFrame({"A": [NT(1, "b"), NT(2, "a")]})
-    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
-    df, norm_meta = norm.normalize(d, pickle_on_failure=True)
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
+    df, norm_meta = norm.normalize(d)
     fd = FrameData.from_npd_df(df)
     denorm = norm.denormalize(fd, norm_meta)
     if pd.__version__.startswith("0"):
@@ -473,8 +473,9 @@ def test_serialize_custom_normalizer():
 def test_force_pickle_on_norm_failure():
     normal_df = pd.DataFrame({"a": [1, 2, 3]})
     mixed_type_df = pd.DataFrame({"a": [1, 2, "a"]})
-    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
-    # This should always work
+    # Turn off the global flag for the normalizer
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
+    # This should work as before
     _d, _meta = norm.normalize(normal_df)
 
     # This should fail as the df has mixed type
@@ -484,9 +485,14 @@ def test_force_pickle_on_norm_failure():
     # Explicitly passing in pickle settings without global pickle flag being set should work
     _d, _meta = norm.normalize(mixed_type_df, pickle_on_failure=True)
 
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=True, fallback_normalizer=test_msgpack_normalizer)
+
+    # Forcing it to pickle should work with the bool set.
+    _d, _meta = norm.normalize(mixed_type_df)
+
 
 def test_numpy_array_normalization_composite():
-    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     arr = np.random.rand(10, 10, 10)
     df, norm_meta = norm.normalize(arr)
     fd = FrameData.from_npd_df(df)
@@ -516,7 +522,7 @@ def test_ndarray_arbitrary_shape():
 def test_dict_with_tuples():
     # This has to be pickled because msgpack doesn't differentiate between tuples and lists
     data = {(1, 2): [1, 24, 55]}
-    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(data)
     fd = FrameData.from_npd_df(df)
     denormalized_data = norm.denormalize(fd, norm_meta)
@@ -544,7 +550,7 @@ def test_will_item_be_pickled(lmdb_version_store, sym):
 def test_numpy_ts_col_with_none(lmdb_version_store):
     df = pd.DataFrame(data={"a": [None, None]})
     df.loc[0, "a"] = pd.Timestamp(0)
-    norm = CompositeNormalizer(fallback_normalizer=test_msgpack_normalizer)
+    norm = CompositeNormalizer(use_norm_failure_handler_known_types=False, fallback_normalizer=test_msgpack_normalizer)
     df, norm_meta = norm.normalize(df)
     fd = FrameData.from_npd_df(df)
     df_denormed = norm.denormalize(fd, norm_meta)
