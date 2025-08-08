@@ -231,6 +231,11 @@ jobs:
             docker inspect --type=image "${{inputs.cibw_image_tag}}" \
               --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
+      - name: Select Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
         run: pipx run cibuildwheel==${{inputs.cibw_version}}
