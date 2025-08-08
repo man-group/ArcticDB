@@ -239,8 +239,8 @@ jobs:
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
         run: |
-          pipx list
-          pipx run --python $(which python) cibuildwheel==${{inputs.cibw_version}}
+          python -m pip install pipx
+          python -m pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
