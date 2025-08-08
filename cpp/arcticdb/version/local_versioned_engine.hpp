@@ -59,6 +59,10 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     const bool dry_run = false
 );
 
+enum class Slicing {
+    NoSlicing, RowSlicing
+};
+
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -178,13 +182,20 @@ public:
 
     size_t compact_symbol_list_internal() override;
 
-    VersionedItem  write_versioned_dataframe_internal(
+    VersionedItem write_versioned_dataframe_internal(
         const StreamId& stream_id,
         const std::shared_ptr<InputTensorFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
         bool validate_index
     ) override;
+
+    VersionedItem write_segment(
+            const StreamId& stream_id,
+            SegmentInMemory&& segment,
+            bool prune_previous_versions,
+            Slicing const& slicing
+    );
 
     VersionedItem write_versioned_metadata_internal(
         const StreamId& stream_id,
@@ -241,12 +252,6 @@ public:
     ColumnStats get_column_stats_info_version_internal(
         const StreamId& stream_id,
         const VersionQuery& version_query);
-
-    VersionedItem write_individual_segment(
-        const StreamId& stream_id,
-        SegmentInMemory&& segment,
-        bool prune_previous_versions
-    ) override;
 
     std::set<StreamId> get_incomplete_symbols() override;
     std::set<StreamId> get_incomplete_refs() override;
