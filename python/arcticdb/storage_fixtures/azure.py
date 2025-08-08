@@ -112,10 +112,6 @@ class AzureContainer(StorageFixture):
     def __exit__(self, exc_type, exc_value, traceback):
         if self.factory.clean_bucket_on_fixture_exit:
             self.factory.cleanup_container(self)
-            if self.is_real_azure():
-                if len(self.libs_from_factory) > 0:
-                    get_logger().warning(f"Libraries not cleared remaining {self.libs_from_factory.keys()}")
-            
         if self.client:
             self.client.close()
             self.client = None
@@ -303,7 +299,7 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         if self.client_cert_file:
            url += f";CA_cert_path={self.client_cert_file}"
         if self.connection_string:
-            url += f"{url};{self.connection_string}"
+            url += f";{self.connection_string}"
         else:
             get_logger().error(f"Constructed URL is probably not correct: {url}")
         return url
@@ -312,7 +308,10 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         return AzureContainer(self)
 
     def cleanup_container(self, b: AzureContainer):
-        b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")            
+        b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")     
+        if len(b.libs_from_factory) > 0:
+                    get_logger().warning(f"Libraries not cleared remaining {b.libs_from_factory.keys()}")      
+                     
 
 def real_azure_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""

@@ -12,7 +12,6 @@ from arcticdb.util.test import (
     compute_common_type_for_columns
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
-from hypothesis.extra.pandas import column
 
 from arcticdb.util.logger import get_logger
 

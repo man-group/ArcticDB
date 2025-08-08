@@ -18,9 +18,11 @@ from arcticdb.arctic import Arctic
 from datetime import datetime
 from packaging import version
 
-from logger import get_logger
 
-LINUX = sys.platform.lower().startswith("linux")
+from logger import get_logger
+from mark import LINUX
+
+
 logger = get_logger()
 
 
@@ -29,7 +31,7 @@ CONDITION_GCP_AVAILABLE = (
 )
 
 CONDITION_AZURE_AVAILABLE = (
-    True if "dev" in arcticdb.__version__ else version.Version(arcticdb.__version__) >= version.Version("5.0.0")
+    True if "dev" in arcticdb.__version__ else version.Version(arcticdb.__version__) >= version.Version("4.0.0")
 )
 
 __temp_paths = []
