@@ -12,7 +12,8 @@ from arcticdb.util.test import (
     compute_common_type_for_columns
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
-from arcticdb.util.utils import get_logger
+
+from arcticdb.util.logger import get_logger
 
 
 COLUMN_DTYPE = ["float", "int", "uint"]

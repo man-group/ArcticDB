@@ -1,0 +1,13 @@
+name: 'Enable ArcticDB Debug Logging'
+description: 'Set the necessary variables for finer logging on all storage types'
+runs:
+  using: "composite"
+  steps:
+  # add a step to run locally define python script
+    - name: Enable ArcticDB Debug Logging
+      shell: bash
+      run: |
+        # Enable all debug logs
+        echo "ARCTICDB_all_loglevel=debug" >> $GITHUB_ENV
+        echo "ARCTICDB_AWS_LogLevel_int=6" >> $GITHUB_ENV
+        echo "AZURE_LOG_LEVEL=1" >> $GITHUB_ENV
