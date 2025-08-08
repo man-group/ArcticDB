@@ -27,7 +27,7 @@ on:
   schedule: # Schedule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
 
-  pull_request_target:
+  pull_request:
     paths-ignore:
     - "**/*.md"
 
@@ -41,7 +41,7 @@ jobs:
         uses: actions/checkout@v3.3.0
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Get tags
         id: get_tags
@@ -63,14 +63,14 @@ jobs:
     with:
       commit: ${{ matrix.commits }}
       run_all_benchmarks: ${{ inputs.run_all_benchmarks || false }}
-      run_on_pr_head: ${{ github.event_name == 'pull_request_target' }}
+      run_on_pr_head: ${{ github.event_name == 'pull_request' }}
       dev_image_tag: ${{ inputs.dev_image_tag || 'latest' }}
       suite_to_run: ${{  github.event_name == 'schedule' && 'ALL' || inputs.suite_to_run || 'LMDB'}}
       suite_overwrite: ${{ inputs.suite_overwrite || ''}}
 
   publish_benchmark_results_to_gh_pages:  
     name: Publish benchmark results to gh-pages
-    if: ${{ github.event_name != 'pull_request_target' }} # only publish for the scheduled master builds
+    if: ${{ github.event_name != 'pull_request' }} # only publish for the scheduled master builds
     needs: [benchmark_commits]
     runs-on: ubuntu-22.04
     container:
@@ -102,7 +102,7 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
+          ref: ${{ github.event.pull_request.head.sha }}  # Note: This is dangerous if we run automatic CI on external PRs
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -143,7 +143,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs          
+          ref: ${{ github.event.pull_request.head.sha }}  
 
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -213,7 +213,7 @@ jobs:
   #     - uses: actions/checkout@v3.3.0
   #       with:
   #         submodules: recursive
-  #         ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || '' }} # Note: This is dangerous if we run automatic CI on external PRs
+  #         ref: ${{ github.event.pull_request.head.sha }}
 
   #     - name: Get number of CPU cores
   #       uses: SimenB/github-actions-cpu-cores@v1.1.0
