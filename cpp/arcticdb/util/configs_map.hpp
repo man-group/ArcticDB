@@ -21,14 +21,10 @@ using namespace arcticdb::proto::config;
 
 class ConfigsMap {
 public:
-    static std::shared_ptr<ConfigsMap> instance_;
-    static std::once_flag init_flag_;
-
     static void init();
-    static std::shared_ptr<ConfigsMap> instance();
-
-    ConfigsMap() :
-        mutex_(std::make_unique<std::mutex>()) {
+    static std::shared_ptr<ConfigsMap>& instance() { 
+        static auto instance_ = std::make_shared<ConfigsMap>();
+        return instance_;
     }
 
 #define HANDLE_TYPE(LABEL, TYPE)     \
@@ -60,24 +56,36 @@ private:
     std::unordered_map<std::string, uint64_t> map_of_int;
     std::unordered_map<std::string, std::string> map_of_string;
     std::unordered_map<std::string, double> map_of_double;
-    std::unique_ptr<std::mutex> mutex_;
 };
 
 struct ScopedConfig {
-    std::string name_;
-    std::optional<int64_t> original_;
+    using ConfigOptions = std::vector<std::pair<std::string, std::optional<int64_t>>>;
+    ConfigOptions originals;
+    ScopedConfig(std::string name, int64_t val) : ScopedConfig({{ std::move(name), std::make_optional(val) }}) {
+    }
 
-    ScopedConfig(const std::string& name, int64_t val) :
-            name_(name),
-            original_(ConfigsMap::instance()->get_int(name)) {
-        ConfigsMap::instance()->set_int(name_, val);
+    explicit ScopedConfig(ConfigOptions overrides) {
+        for (auto& config : overrides) {
+            auto& [name, new_value] = config;
+            const auto old_val = ConfigsMap::instance()->get_int(name);
+            if (new_value.has_value()) {
+                ConfigsMap::instance()->set_int(name, *new_value);
+            }
+            else {
+                ConfigsMap::instance()->unset_int(name);
+            }
+            originals.emplace_back(std::move(name), old_val);
+        }
     }
 
     ~ScopedConfig() {
-        if(original_)
-            ConfigsMap::instance()->set_int(name_, original_.value());
-        else
-            ConfigsMap::instance()->unset_int(name_);
+        for (const auto& config : originals) {
+            const auto& [name, original_value] = config;
+            if(original_value.has_value())
+                ConfigsMap::instance()->set_int(name, *original_value);
+            else
+                ConfigsMap::instance()->unset_int(name);
+        }
     }
 };
 
