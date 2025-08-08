@@ -98,7 +98,7 @@ jobs:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
-      cibuildwheel_ver: "2.21.3"
+      cibuildwheel_ver: "2.23.2"
       force_update: false
 
   run_linting_checks:
