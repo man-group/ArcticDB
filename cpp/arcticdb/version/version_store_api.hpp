@@ -42,6 +42,13 @@ class PythonVersionStore : public LocalVersionedEngine {
         LocalVersionedEngine(library, ct) {
     }
 
+    // Used in enterprise unit tests.
+    template<class ClockType = util::SysClock>
+    explicit PythonVersionStore(const std::shared_ptr<Store>& store, const ClockType& ct = util::SysClock{}) :
+        LocalVersionedEngine(store, ct) {
+
+    }
+
     VersionedItem write_dataframe_specific_version(
         const StreamId& stream_id,
         const py::tuple& item,
