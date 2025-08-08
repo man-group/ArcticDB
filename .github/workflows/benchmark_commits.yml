@@ -40,7 +40,7 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           token: ${{ secrets.ARCTICDB_TEST_PAT }}
-          ref: ${{ inputs.run_on_pr_head && github.event.pull_request.head.sha || '' }}  # Note: This is dangerous if we run automatic CI on external PRs
+          ref: ${{ github.event.pull_request.head.sha }}
         
       - name: Configure sccache
         uses: mozilla-actions/sccache-action@v0.0.9
@@ -111,14 +111,14 @@ jobs:
             echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV 
 
       - name: Benchmark given commit
-        if: github.event_name != 'pull_request_target' || inputs.run_all_benchmarks == true
+        if: github.event_name != 'pull_request' || inputs.run_all_benchmarks == true
         shell: bash -el {0}
         run: | 
           git config --global --add safe.directory .
           python -m asv run -v --show-stderr --bench $SUITE ${{ inputs.commit }}^!
         
       - name: Benchmark against master
-        if: github.event_name == 'pull_request_target' && inputs.run_all_benchmarks == false
+        if: github.event_name == 'pull_request' && inputs.run_all_benchmarks == false
         shell: bash -el {0}
         run: |
           python -m asv continuous -v --show-stderr --bench $SUITE origin/master HEAD -f 1.15
