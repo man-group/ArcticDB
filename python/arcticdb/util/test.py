@@ -252,39 +252,33 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     assert_frame_equal(left=expected, right=actual)
 
 
-def convert_arrow_to_pandas_and_remove_categoricals(table):
+def stringify_dictionary_encoded_columns(table, string_type=None):
     """
-    Converts a pyarrow.Table to a pandas.DataFrame and unwinds all dictionary encoded columns.
+    Converts all pyarrow.Table dictionary encoded columns to strings.
 
     Useful for testing because ArcticDB currently returns string columns in arrow as dictionary encoded, but when
-    comparing to the source pandas dataframes we want regular string columns instead of categoricals.
+    comparing to the source table we want regular large_string columns instead of categoricals.
     """
     import pyarrow as pa
-    new_columns = []
-    new_fields = []
-    metadata = table.schema.metadata
+    if string_type is None:
+        string_type = pa.large_string()
+    for i, name in enumerate(table.column_names):
+        if pa.types.is_dictionary(table.column(i).type):
+            table = table.set_column(i, name, table.column(name).cast(string_type))
+    return table
 
-    for i, col in enumerate(table.columns):
-        field = table.field(i)
-        if isinstance(field.type, pa.DictionaryType):
-            col = pa.compute.cast(col, field.type.value_type)
-            field = field.with_type(field.type.value_type)
-        new_columns.append(col)
-        new_fields.append(field)
 
-    new_table = pa.Table.from_arrays(
-        new_columns,
-        schema=pa.schema(new_fields).with_metadata(metadata)
-    )
+def convert_arrow_to_pandas_and_remove_categoricals(table):
+    new_table = stringify_dictionary_encoded_columns(table)
     return new_table.to_pandas()
 
-def assert_frame_equal_with_arrow(left, right):
+def assert_frame_equal_with_arrow(left, right, **kwargs):
     import pyarrow as pa
     if isinstance(left, pa.Table):
         left = convert_arrow_to_pandas_and_remove_categoricals(left)
     if isinstance(right, pa.Table):
         right = convert_arrow_to_pandas_and_remove_categoricals(right)
-    assert_frame_equal(left, right)
+    assert_frame_equal(left, right, **kwargs)
 
 
 unicode_symbol = "\u00A0"  # start of latin extensions

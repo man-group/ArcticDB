@@ -9,11 +9,10 @@ import pandas as pd
 import numpy as np
 from arcticdb import QueryBuilder
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
-from arcticdb.options import ModifiableEnterpriseLibraryOption
+from arcticdb.options import ModifiableEnterpriseLibraryOption, OutputFormat
 from arcticdb.toolbox.library_tool import LibraryTool
 from tests.util.mark import ARCTICDB_USING_CONDA, MACOS_WHEEL_BUILD, ZONE_INFO_MARK
 from arcticdb_ext.tools import StorageMover
-from arcticdb_ext.version_store import OutputFormat
 
 from arcticdb.util.venv import CompatLibrary
 
@@ -459,7 +458,7 @@ def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_sto
             assert index_df["end_index"].iloc[1] == pd.Timestamp("2025-01-04 00:00:00")
             assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
 
-            arrow_table = curr.lib._nvs.read(sym, date_range=date_range, _output_format=OutputFormat.ARROW).data
+            arrow_table = curr.lib.read(sym, date_range=date_range, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
             expected_df = curr.lib.read(sym, date_range=date_range).data
             assert_frame_equal_with_arrow(arrow_table, expected_df)
 
