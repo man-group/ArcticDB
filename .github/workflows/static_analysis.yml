@@ -61,7 +61,7 @@
           run: cp ${{github.workspace}}/coverity.yaml ${{github.workspace}}/cpp/out/linux-release-build
 
         - name: Polaris PR Scan
-          uses: blackduck-inc/black-duck-security-scan@v2
+          uses: blackduck-inc/black-duck-security-scan@latest
           with:
             polaris_server_url: ${{ vars.POLARIS_SERVER_URL }}
             polaris_access_token: ${{ secrets.POLARIS_ACCESS_TOKEN }}
