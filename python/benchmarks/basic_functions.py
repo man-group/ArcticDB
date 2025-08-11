@@ -33,6 +33,7 @@ class BasicFunctions:
     number = 5
     warmup_time = 0
     timeout = 6000
+    rounds = 1
     CONNECTION_STRING = "lmdb://basic_functions?map_size=20GB"
     ULTRA_SHORT_WIDE_DF_ROWS = 1
     WIDE_DF_ROWS = WIDE_DF_ROWS

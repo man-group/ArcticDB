@@ -18,6 +18,7 @@ from benchmarks.common import *
 def str_col(num, size):
     return [random_string(num) for _ in range(size)]
 
+
 class ComparisonBenchmarks:
     """
     The test aims to compare efficiency of read and write operations
@@ -26,8 +27,10 @@ class ComparisonBenchmarks:
         - read/write dataframe
         - read/write dataframe to arcticdb
     """
+
+    rounds = 1
     number = 5
-    warmup_time = 0    
+    warmup_time = 0
     timeout = 60000
 
     LIB_NAME = "compare"
@@ -65,19 +68,19 @@ class ComparisonBenchmarks:
 
     def create_dict(self, size):
         return {
-            "element_name object" : str_col(20, size),        
-            "element_value" : np.arange(size, dtype=np.float64), 
-            "element_unit" : str_col(10, size),
-            "period_year" :  random_integers(size, np.int64), 
-            "region" : str_col(10, size),
-            "last_published_date" : random_dates(size),
-            "model_snapshot_id" :  random_integers(size, np.int64), 
-            "period" : str_col(20, size), 
-            "observation_type" : str_col(10, size),
-            "ric" : str_col(10, size),
-            "dtype" : str_col(10, size),
-        }       
-    
+            "element_name object": str_col(20, size),
+            "element_value": np.arange(size, dtype=np.float64),
+            "element_unit": str_col(10, size),
+            "period_year": random_integers(size, np.int64),
+            "region": str_col(10, size),
+            "last_published_date": random_dates(size),
+            "model_snapshot_id": random_integers(size, np.int64),
+            "period": str_col(20, size),
+            "observation_type": str_col(10, size),
+            "ric": str_col(10, size),
+            "dtype": str_col(10, size),
+        }
+
     def peakmem_create_dataframe(self, tpl):
         df, dict = tpl
         df = pd.DataFrame(dict)
@@ -95,4 +98,3 @@ class ComparisonBenchmarks:
 
     def peakmem_read_dataframe_parquet(self, tpl):
         pd.read_parquet(self.path_to_read)
-
