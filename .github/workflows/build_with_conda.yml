@@ -121,7 +121,7 @@ jobs:
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -n logical --dist worksteal -v tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
@@ -204,7 +204,7 @@ jobs:
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
