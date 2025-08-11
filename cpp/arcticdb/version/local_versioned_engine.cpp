@@ -748,6 +748,15 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     return versioned_item;
 }
 
+std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
+        const StreamId& stream_id,
+        const VersionQuery& version_query
+) {
+    auto res = batch_restore_version_internal({stream_id}, {version_query});
+    util::check(res.size() == 1, "Expected one result from restore version but there were {}. Please report this to ArcticDB team.", res.size());
+    return res.at(0);
+}
+
 VersionedItem LocalVersionedEngine::write_segment(
         const StreamId& stream_id,
         SegmentInMemory&& segment,
@@ -801,15 +810,20 @@ VersionedItem LocalVersionedEngine::write_segment(
 
     // Create a TimeSeriesDescriptor that is needed for writing the index key
     auto index = stream::index_type_from_descriptor(segment.descriptor());
-    auto tsd = TimeseriesDescriptor();
-    tsd.set_stream_descriptor(segment.descriptor());
-    tsd.set_total_rows(segment.row_count());
-    arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
-    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(false);
-    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_start(0);
-    norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
-    tsd.set_normalization_metadata(std::move(norm_meta));
 
+    auto tsd = TimeseriesDescriptor();
+    if(!segment.has_index_descriptor()) {
+        tsd.set_stream_descriptor(segment.descriptor());
+        tsd.set_total_rows(segment.row_count());
+        arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
+        norm_meta.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(false);
+        norm_meta.mutable_df()->mutable_common()->mutable_index()->set_start(0);
+        norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
+        tsd.set_normalization_metadata(std::move(norm_meta));
+    }
+    else {
+        tsd = segment.index_descriptor();
+    }
     auto atom_key_fut = std::move(fut_slice_keys).thenValue([partial_key = std::move(partial_key), &sink, tsd = std::move(tsd), index = std::move(index)](auto&& slice_keys) {
                                     return index::write_index(index, tsd, std::forward<decltype(slice_keys)>(slice_keys), partial_key, sink);
                                 });
@@ -821,15 +835,6 @@ VersionedItem LocalVersionedEngine::write_segment(
 
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
-}
-
-std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
-    const StreamId& stream_id,
-    const VersionQuery& version_query
-    ) {
-    auto res = batch_restore_version_internal({stream_id}, {version_query});
-    util::check(res.size() == 1, "Expected one result from restore version but there were {}. Please report this to ArcticDB team.", res.size());
-    return res.at(0);
 }
 
 // Steps of delete_trees_responsibly:
