@@ -45,12 +45,16 @@ def ac_client(request) -> Generator[Arctic, None, None]:
         else:
             storage, extras = request.param
     logger.info(f"Create arctic type: {storage}")
-    ac = create_arctic_client(storage, **extras)            
+    ac:Arctic = create_arctic_client(storage, **extras)            
     arctic_uri = ac.get_uri() if ac else "Arctic is None (not created)"
     logger.info(f"Arctic uri : {arctic_uri}")
     if ac is None:
         pytest.skip("Storage not activated")
     yield ac
+    libs = ac.list_libraries()
+    for lname in libs:
+        logger.error(f"Library '{lname}' not deleted after test."
+                     + "You have to delete it in test with try: ... finally: delete_library(ac, lib_name)")
 
 
 @pytest.fixture(scope="function")

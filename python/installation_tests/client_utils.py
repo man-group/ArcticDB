@@ -226,3 +226,10 @@ def create_arctic_client(storage: StorageTypes, **extras) -> Arctic:
             __ARCTIC_CLIENT_AWS_S3 = Arctic(get_real_s3_uri(shared_path=False), **extras)
         return __ARCTIC_CLIENT_AWS_S3
     return None
+
+
+def delete_library(ac: Arctic, lib_name: str):
+    try:
+        ac.delete_library(lib_name)
+    except Exception as e:
+        logger.warning(f"Error while deleting library: {e}. \n url: {ac.get_uri()}")
