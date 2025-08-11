@@ -749,9 +749,9 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
 }
 
 std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_version(
-        const StreamId& stream_id,
-        const VersionQuery& version_query
-) {
+    const StreamId& stream_id,
+    const VersionQuery& version_query
+    ) {
     auto res = batch_restore_version_internal({stream_id}, {version_query});
     util::check(res.size() == 1, "Expected one result from restore version but there were {}. Please report this to ArcticDB team.", res.size());
     return res.at(0);
