@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 import tempfile
+from typing import Dict
 
 import arcticdb
 from arcticdb.arctic import Arctic
@@ -36,9 +37,10 @@ CONDITION_AZURE_AVAILABLE = (
 
 __temp_paths = []
 ## Session scoped clients
-__ARCTIC_CLIENT_AWS_S3: Arctic = None
-__ARCTIC_CLIENT_AZURE: Arctic = None
-__ARCTIC_CLIENT_GPC: Arctic = None
+__ARCTIC_CLIENT_AWS_S3: Arctic = dict()
+__ARCTIC_CLIENT_AZURE: Arctic = dict()
+__ARCTIC_CLIENT_GPC: Arctic = dict()
+__ARCTIC_CLIENT_LMDB: Arctic = dict()
 
 
 def get_temp_path():
@@ -203,28 +205,36 @@ def get_real_azure_uri(shared_path: bool = True):
 
 def create_arctic_client(storage: StorageTypes, **extras) -> Arctic:
 
+    sorted_extras = dict(sorted(extras.items()))
+
+    def create_arctic(dct: Dict[str, Arctic], uri: str, extras) -> Arctic:
+        key = f"{uri}{extras}"
+        if key not in dct:
+            dct[key] = Arctic(uri, **extras)
+        return dct[key]
+
+
     if CONDITION_GCP_AVAILABLE:
         if storage == StorageTypes.REAL_GCP and is_storage_enabled(storage):
             global __ARCTIC_CLIENT_GPC
-            if __ARCTIC_CLIENT_GPC is None:
-                __ARCTIC_CLIENT_GPC = Arctic(get_real_gcp_uri(shared_path=False), **extras)
-            return __ARCTIC_CLIENT_GPC
+            uri = get_real_gcp_uri(shared_path=False)
+            return create_arctic(__ARCTIC_CLIENT_GPC, uri, extras)
 
     if CONDITION_AZURE_AVAILABLE:
         if storage == StorageTypes.REAL_AZURE and is_storage_enabled(storage):
             global __ARCTIC_CLIENT_AZURE
-            if __ARCTIC_CLIENT_AZURE is None:
-                __ARCTIC_CLIENT_AZURE = Arctic(get_real_azure_uri(shared_path=False), **extras)
-            return __ARCTIC_CLIENT_AZURE
-
+            uri = get_real_azure_uri(shared_path=False)
+            return create_arctic(__ARCTIC_CLIENT_AZURE, uri, extras)
 
     if storage == StorageTypes.LMDB and is_storage_enabled(storage):
-        return Arctic("lmdb://" + str(get_temp_path()), **extras)
+        global __ARCTIC_CLIENT_LMDB
+        uri = f"lmdb://{str(get_temp_path())}_{str((extras))}"
+        return create_arctic(__ARCTIC_CLIENT_AZURE, uri, extras)
+    
     elif storage == StorageTypes.REAL_AWS_S3 and is_storage_enabled(storage):
         global __ARCTIC_CLIENT_AWS_S3
-        if __ARCTIC_CLIENT_AWS_S3 is None:
-            __ARCTIC_CLIENT_AWS_S3 = Arctic(get_real_s3_uri(shared_path=False), **extras)
-        return __ARCTIC_CLIENT_AWS_S3
+        uri = get_real_s3_uri(shared_path=False)
+        return create_arctic(__ARCTIC_CLIENT_AWS_S3, uri, extras)
     return None
 
 
