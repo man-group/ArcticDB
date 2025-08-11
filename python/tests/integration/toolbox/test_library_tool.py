@@ -364,15 +364,16 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     assert read_append_data_keys_from_ref(sym) == []
     assert_frame_equal(lib.read(sym).data, get_df(18, 0, np.int64))
 
-    
-def test_write_segment_in_memory_row_slicing(lmdb_version_store_tiny_segment):
+
+@pytest.mark.parametrize("slicing", [Slicing.NoSlicing, Slicing.RowSlicing])
+def test_write_segment_in_memory(lmdb_version_store_tiny_segment, slicing):
     lib = lmdb_version_store_tiny_segment
     lib_tool = lib.library_tool()
     sym = "sym"
     sample_df = sample_dataframe()
 
     segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
-    lib_tool.write_segment_in_memory(sym, segment, Slicing.RowSlicing)
+    lib_tool.write_segment_in_memory(sym, segment, slicing)
     dataframe = lib.read(sym).data
 
     assert_frame_equal(dataframe, sample_df)
@@ -383,34 +384,15 @@ def test_write_segment_in_memory_row_slicing(lmdb_version_store_tiny_segment):
     index_key_count = len(lib_tool.find_keys(KeyType.TABLE_INDEX))
     version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
 
-    assert sorted([(dkey.start_index, dkey.end_index) for dkey in data_keys]) == [(i, i+1) for i in range(0, len(sample_df), 2)]
+    if slicing == Slicing.RowSlicing:
+        assert sorted([(dkey.start_index, dkey.end_index) for dkey in data_keys]) == [(i, i+1) for i in range(0, len(sample_df), 2)]
+    elif slicing == Slicing.NoSlicing:
+        assert [(dkey.start_index, dkey.end_index) for dkey in data_keys] == [(0, len(sample_df)-1)]
 
-    assert data_key_count == len(sample_df) // 2
     assert index_key_count == 1
     assert version_key_count == 1
-
     
-def test_write_segment_in_memory_no_slicing(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
-    lib_tool = lib.library_tool()
-    sym = "sym"
-    sample_df = sample_dataframe()
 
-    segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
-    lib_tool.write_segment_in_memory(sym, segment, Slicing.NoSlicing)
-    dataframe = lib.read(sym).data
-
-    assert_frame_equal(dataframe, sample_df)
-
-    data_key_count = len(lib_tool.find_keys(KeyType.TABLE_DATA))
-    index_key_count = len(lib_tool.find_keys(KeyType.TABLE_INDEX))
-    version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
-
-    assert data_key_count == 1
-    assert index_key_count == 1
-    assert version_key_count == 1
-
-    
 def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
     df = sample_dataframe()
     lib = lmdb_version_store_v1
