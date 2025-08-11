@@ -160,7 +160,7 @@ void Column::unsparsify(size_t num_rows) {
     if(!sparse_map_)
         return;
 
-    type_.visit_tag([this, num_rows] (const auto tdt) {
+    type_.visit_tag([this, num_rows] (auto tdt) {
         using TagType = decltype(tdt);
         using RawType = typename TagType::DataTypeTag::raw_type;
         const auto dest_bytes = num_rows * sizeof(RawType);
@@ -373,20 +373,24 @@ void Column::mark_absent_rows(size_t num_rows) {
 }
 
 void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc) {
+    default_initialize_rows(start_pos, num_rows, ensure_alloc, std::nullopt);
+}
+
+void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, const std::optional<Value>& default_value) {
     if (num_rows > 0) {
-        type_.visit_tag([this, start_pos, num_rows, ensure_alloc](auto tag) {
+        type_.visit_tag([&,this](auto tag) {
             using T = std::decay_t<decltype(tag)>;
             using RawType = typename T::DataTypeTag::raw_type;
             const auto bytes = (num_rows * sizeof(RawType));
 
-            if (ensure_alloc)
+            if (ensure_alloc) {
                 data_.ensure<uint8_t>(bytes);
-
+            }
             auto type_ptr = data_.ptr_cast<RawType>(start_pos, bytes);
-            util::default_initialize<T>(reinterpret_cast<uint8_t *>(type_ptr), bytes);
-
-            if (ensure_alloc)
+            util::initialize<T>(reinterpret_cast<uint8_t*>(type_ptr), bytes, default_value);
+            if (ensure_alloc) {
                 data_.commit();
+            }
 
             last_logical_row_ += static_cast<ssize_t>(num_rows);
             last_physical_row_ += static_cast<ssize_t>(num_rows);
@@ -590,20 +594,19 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
     return output;
 }
 
-void Column::truncate_first_block(size_t row) {
+void Column::truncate_first_block(size_t start_row) {
     if(!is_sparse()) {
-        auto bytes = data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL)  * row;
+        auto bytes = start_row * data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
         data_.buffer().truncate_first_block(bytes);
     }
 }
 
-void Column::truncate_last_block(size_t row) {
+void Column::truncate_last_block(size_t end_row) {
     if(!is_sparse()) {
         const auto column_row_count = row_count();
-        if(row < static_cast<size_t>(column_row_count))
-            return;
-
-        auto bytes = data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL)  * (column_row_count - row);
+        util::check(column_row_count >= static_cast<int64_t>(end_row),
+                    "Cannot truncate column of length {} to row {}", column_row_count, end_row);
+        auto bytes = (column_row_count - end_row) * data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
         data_.buffer().truncate_last_block(bytes);
     }
 }
@@ -656,48 +659,12 @@ void Column::truncate_single_block(size_t start_row, size_t end_row) {
     return {start_byte, end_byte};
 }
 
-[[nodiscard]] static util::BitMagic truncate_sparse_map(
-    const util::BitMagic& input_sparse_map,
-    size_t start_row,
-    size_t end_row
-) {
-    // The output sparse map is the slice [start_row, end_row) of the input sparse map
-    // BitMagic doesn't have a method for this, so hand-roll it here
-    // Ctor parameter is the size
-    util::BitMagic output_sparse_map(end_row - start_row);
-    util::BitSet::bulk_insert_iterator inserter(output_sparse_map);
-    util::BitSetSizeType set_input_bit;
-    if (start_row == 0) {
-        // get_first can return 0 if no bits are set, but we checked earlier that input_sparse_map.size() > 0,
-        // and we do not have sparse maps with no bits set (except for the empty type)
-        set_input_bit = input_sparse_map.get_first();
-        if (set_input_bit < end_row) {
-            inserter = set_input_bit;
-        }
-    } else {
-        set_input_bit = input_sparse_map.get_next(start_row - 1);
-        // get_next returns 0 if no more bits are set
-        if (set_input_bit != 0 && set_input_bit < end_row) {
-            // Shift start_row elements to the left
-            inserter = set_input_bit - start_row;
-        }
-    }
-    do {
-        set_input_bit = input_sparse_map.get_next(set_input_bit);
-        if (set_input_bit != 0 && set_input_bit < end_row) {
-            inserter = set_input_bit - start_row;
-        }
-    } while (set_input_bit != 0);
-    inserter.flush();
-    return output_sparse_map;
-}
-
 std::shared_ptr<Column> Column::truncate(const std::shared_ptr<Column>& column, size_t start_row, size_t end_row) {
     const auto [start_byte, end_byte] = column_start_end_bytes(*column, start_row, end_row);
     auto buffer = ::arcticdb::truncate(column->data_.buffer(), start_byte, end_byte);
     auto res = std::make_shared<Column>(column->type(), column->allow_sparse_, std::move(buffer));
     if (column->is_sparse()) {
-        res->set_sparse_map(truncate_sparse_map(column->sparse_map(), start_row, end_row));
+        res->set_sparse_map(util::truncate_sparse_map(column->sparse_map(), start_row, end_row));
     }
     res->set_row_data(end_row - (start_row + 1));
     return res;

@@ -173,6 +173,8 @@ Please see version conversion dates in the below table:
 | 5.6 | Business Source License 1.1 | May 26, 2027 |
 | 5.7 | Business Source License 1.1 | Jun 2, 2027 |
 | 5.8 | Business Source License 1.1 | Jun 9, 2027 |
+| 5.9 | Business Source License 1.1 | Jul 7, 2027 |
+| 5.10 | Business Source License 1.1 | Jul 29, 2027 |
 
 ## Code of Conduct
 

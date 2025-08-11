@@ -1,5 +1,7 @@
 name: Build and Test
+
 on: workflow_call
+
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:
   group: ${{github.ref}}
@@ -50,7 +52,7 @@ jobs:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
-      cibuildwheel_ver: "2.21.3"
+      cibuildwheel_ver: "3.1.3"
       force_update: false
 
   run_linting_checks:
@@ -161,7 +163,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -185,7 +187,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -268,6 +270,7 @@ jobs:
 
   cpp-test-macos:
     needs: [common_config]
+    if: ${{ inputs.macos_enabled }}
     name: macOS C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -310,7 +313,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -333,7 +336,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -361,6 +364,7 @@ jobs:
 
   build-python-wheels-macos:
     needs: [common_config]
+    if: ${{ inputs.macos_enabled }}
     strategy:
       fail-fast: false
       matrix:

@@ -14,6 +14,7 @@
 #include <arcticdb/stream/python_bindings.hpp>
 #include <arcticdb/toolbox/python_bindings.hpp>
 #include <arcticdb/version/python_bindings.hpp>
+#include <arcticdb/util/python_bindings.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/trace.hpp>
@@ -110,6 +111,7 @@ void register_log(py::module && log) {
 
     log.def("log",[&](LoggerId log_id, spdlog::level::level_enum level, const std::string & msg){
         //assuming formatting done in python
+        py::gil_scoped_release gil_release;
         auto & logger = choose_logger(log_id);
         switch(level){
             case spdlog::level::level_enum::debug:
@@ -135,6 +137,7 @@ void register_log(py::module && log) {
     });
 
     log.def("flush_all", [](){
+        py::gil_scoped_release gil_release;
         arcticdb::log::Loggers::instance().flush_all();
     });
 }
@@ -183,7 +186,7 @@ void register_termination_handler() {
         try {
             std::rethrow_exception(eptr);
         } catch (const std::exception &e) {
-            arcticdb::log::root().error("Terminate called in thread {}: {}\n Aborting", arcticdb::get_thread_id(), e.what());
+            arcticdb::log::root().error("Terminate called in thread {}: {}\n Aborting", std::this_thread::get_id(), e.what());
             std::abort();
         }
     });
@@ -348,6 +351,7 @@ PYBIND11_MODULE(arcticdb_ext, m) {
 
     arcticdb::stream::register_bindings(m);
     arcticdb::toolbox::apy::register_bindings(m, base_exception);
+    arcticdb::util::register_bindings(m);
 
     m.def("get_version_string", &arcticdb::get_arcticdb_version_string);
 

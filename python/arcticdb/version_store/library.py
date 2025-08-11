@@ -14,7 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
 from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
@@ -25,12 +25,14 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat
+from arcticdb_ext.version_store import DataError, OutputFormat, StageResult, KeyNotFoundInStageResultInfo
+
 import pandas as pd
 import numpy as np
 import logging
 from arcticdb.version_store._normalization import normalize_metadata
 from arcticdb.version_store.admin_tools import AdminTools
+import arcticdb_ext as _ae
 
 logger = logging.getLogger(__name__)
 
@@ -261,7 +263,7 @@ class ReadRequest(NamedTuple):
         See `read` method.
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none
         See `read`method.
-    row_range: Optional[Tuple[int, int]], default=none
+    row_range: Optional[Tuple[Optional[int], Optional[int]]], default=none
         See `read` method.
     columns: Optional[List[str]], default=none
         See `read` method.
@@ -276,7 +278,7 @@ class ReadRequest(NamedTuple):
     symbol: str
     as_of: Optional[AsOf] = None
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
-    row_range: Optional[Tuple[int, int]] = None
+    row_range: Optional[Tuple[Optional[int], Optional[int]]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
 
@@ -316,6 +318,30 @@ class ReadInfoRequest(NamedTuple):
         res += f", as_of={self.as_of}" if self.as_of is not None else ""
         res += ")"
         return res
+
+
+class DeleteRequest(NamedTuple):
+    """DeleteRequest is designed to enable batching of delete operations with an API that mirrors the singular ``delete`` API.
+    Therefore, construction of this object is only required for batch delete operations.
+
+    Attributes
+    ----------
+    symbol: str
+        See `delete` and `delete_batch` methods.
+    version_ids: List[int]
+        See `delete` and `delete_batch` methods.
+
+    Raises
+    ------
+    ValueError
+        If version_ids is empty.
+    """
+
+    symbol: str
+    version_ids: List[int]
+
+    def __repr__(self):
+        return f"DeleteRequest(symbol={self.symbol}, version_ids={self.version_ids})"
 
 
 class UpdatePayload:
@@ -541,10 +567,11 @@ class LazyDataFrameAfterJoin(QueryBuilder):
     # Actual batch read, join, and subsequent processing happens here
     >>> df = lazy_df_after_join.collect().data
     """
+
     def __init__(
-            self,
-            lazy_dataframes: LazyDataFrameCollection,
-            join: QueryBuilder,
+        self,
+        lazy_dataframes: LazyDataFrameCollection,
+        join: QueryBuilder,
     ):
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
@@ -575,8 +602,8 @@ class LazyDataFrameAfterJoin(QueryBuilder):
 
 
 def concat(
-        lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
-        join: str = "outer",
+    lazy_dataframes: Union[List[LazyDataFrame], LazyDataFrameCollection],
+    join: str = "outer",
 ) -> LazyDataFrameAfterJoin:
     """
     Concatenate a list of symbols together.
@@ -811,7 +838,7 @@ class Library:
         sort_columns:
             Sort the data by specific columns prior to writing.
         """
-        self._nvs.stage(
+        return self._nvs.stage(
             symbol,
             data,
             validate_index=validate_index,
@@ -1474,6 +1501,7 @@ class Library:
         metadata: Any = None,
         validate_index=True,
         delete_staged_data_on_failure: bool = False,
+        _stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
@@ -1498,9 +1526,12 @@ class Library:
         symbol : `str`
             Symbol to finalize data for.
 
-        mode : Union[`StagedDataFinalizeMethod`, str], default=StagedDataFinalizeMethod.WRITE
-            Finalize mode. Valid options are StagedDataFinalizeMethod.WRITE or StagedDataFinalizeMethod.APPEND. Write collects the staged data and writes them to a
-            new version. Append collects the staged data and appends them to the latest version. Also accepts "write" and "append".
+        mode : Union[str, StagedDataFinalizeMethod], default=StagedDataFinalizeMethod.WRITE
+            Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
+            new timeseries. Append collects the staged data and appends them to the latest version.
+
+            Also accepts strings "write" or "append" (case-insensitive).
+
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
         metadata : Any, default=None
@@ -1571,31 +1602,27 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        if (
-            mode not in [StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE, "write", "append"]
-            and mode is not None
-        ):
-            raise ArcticInvalidApiUsageException(
-                "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
-            )
+        mode = Library._normalize_staged_data_mode(mode)
 
         return self._nvs.compact_incomplete(
             symbol,
-            append=mode == StagedDataFinalizeMethod.APPEND or mode == "append",
+            append=mode == StagedDataFinalizeMethod.APPEND,
             convert_int_to_float=False,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
+            _stage_results=_stage_results,
         )
 
     def sort_and_finalize_staged_data(
         self,
         symbol: str,
-        mode: Optional[StagedDataFinalizeMethod] = StagedDataFinalizeMethod.WRITE,
+        mode: Optional[Union[StagedDataFinalizeMethod, str]] = StagedDataFinalizeMethod.WRITE,
         prune_previous_versions: bool = False,
         metadata: Any = None,
         delete_staged_data_on_failure: bool = False,
+        _stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Sorts and merges all staged data, making it available for reads. This differs from `finalize_staged_data` in that it
@@ -1621,9 +1648,11 @@ class Library:
         symbol : str
             Symbol to finalize data for.
 
-        mode : `StagedDataFinalizeMethod`, default=StagedDataFinalizeMethod.WRITE
+        mode : Union[str, StagedDataFinalizeMethod], default=StagedDataFinalizeMethod.WRITE
             Finalize mode. Valid options are WRITE or APPEND. Write collects the staged data and writes them to a
             new timeseries. Append collects the staged data and appends them to the latest version.
+
+            Also accepts strings "write" or "append" (case-insensitive).
 
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
@@ -1640,6 +1669,9 @@ class Library:
               ``sort_and_finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
+
+        _stage_results : Optional[List['StageResult']], default=None
+            Unused.
         Returns
         -------
         VersionedItem
@@ -1690,14 +1722,25 @@ class Library:
         2024-01-03    3
         2024-01-04    4
         """
-        vit = self._nvs.version_store.sort_merge(
+        mode = Library._normalize_staged_data_mode(mode)
+        compaction_result = self._nvs.version_store.sort_merge(
             symbol,
             normalize_metadata(metadata),
-            mode == StagedDataFinalizeMethod.APPEND,
+            append=mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
+            stage_results=_stage_results
         )
-        return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
+        if isinstance(compaction_result, _ae.version_store.VersionedItem):
+            return self._nvs._convert_thin_cxx_item_to_python(compaction_result, metadata)
+        elif isinstance(compaction_result, List):
+            # We expect this to be a list of errors
+            check(compaction_result, "List of errors in compaction result should never be empty")
+            check(all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInStageResultInfo")
+            raise MissingKeysInStageResultsError("Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result)
+        else:
+            raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
+
 
     def get_staged_symbols(self) -> List[str]:
         """
@@ -1754,11 +1797,12 @@ class Library:
 
             Only one of date_range or row_range can be provided.
 
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
             the handling of negative start/end values.
-
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
@@ -1963,9 +2007,9 @@ class Library:
             )
 
     def read_batch_and_join(
-            self,
-            symbols: List[ReadRequest],
-            query_builder: QueryBuilder,
+        self,
+        symbols: List[ReadRequest],
+        query_builder: QueryBuilder,
     ) -> VersionedItemWithJoin:
         """
         Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
@@ -2297,6 +2341,43 @@ class Library:
             versions = (versions,)
 
         self._nvs.delete_versions(symbol, versions)
+
+    def delete_batch(self, delete_requests: List[Union[str, DeleteRequest]]) -> List[Optional[DataError]]:
+        """
+        Delete multiple symbols in a batch fashion.
+
+        Parameters
+        ----------
+        delete_requests : List[Union[str, DeleteRequest]]
+            List of symbols to delete. Can be either:
+            - String symbols (delete all versions of the symbol)
+            - DeleteRequest objects (delete specific versions of the symbol, must have at least one version)
+
+        Returns
+        -------
+        List[DataError]
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
+        """
+        symbols = []
+        versions = []
+
+        for request in delete_requests:
+            if isinstance(request, str):
+                # Delete all versions of the symbol
+                symbols.append(request)
+                versions.append([])  # Empty list means delete all versions
+            elif isinstance(request, DeleteRequest):
+                # Delete specific versions of the symbol
+                symbols.append(request.symbol)
+                versions.append(request.version_ids)
+            else:
+                raise ArcticInvalidApiUsageException(
+                    f"Unsupported item in the delete_requests argument request=[{request}] type(request)=[{type(request)}]. "
+                    "Only [str] and [DeleteRequest] are supported."
+                )
+
+        return self._nvs.version_store.batch_delete(symbols, versions)
 
     def prune_previous_versions(self, symbol):
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
@@ -2826,3 +2907,23 @@ class Library:
     def admin_tools(self):
         """Administrative utilities that operate on this library."""
         return AdminTools(self._nvs)
+
+    @staticmethod
+    def _normalize_staged_data_mode(mode: Union[StagedDataFinalizeMethod, str]) -> StagedDataFinalizeMethod:
+        if mode is None:
+            return StagedDataFinalizeMethod.WRITE
+
+        if isinstance(mode, StagedDataFinalizeMethod):
+            return mode
+
+        if isinstance(mode, str):
+            mode = mode.lower()
+
+        if mode == "write":
+            return StagedDataFinalizeMethod.WRITE
+        elif mode == "append":
+            return StagedDataFinalizeMethod.APPEND
+        else:
+            raise ArcticInvalidApiUsageException(
+                "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
+            )

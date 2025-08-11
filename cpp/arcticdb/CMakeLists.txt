@@ -43,6 +43,7 @@ find_package(zstd CONFIG REQUIRED)  # "CONFIG" bypasses our cpp/CMake/FindZstd.c
 
 find_package(azure-identity-cpp CONFIG REQUIRED)
 find_package(azure-storage-blobs-cpp CONFIG REQUIRED)
+find_package(PCRE2 REQUIRED COMPONENTS 8BIT 32BIT)
 
 if(${BUILD_WITH_REMOTERY})
     add_compile_definitions(USE_REMOTERY)
@@ -53,7 +54,6 @@ endif()
 add_compile_definitions(_LIBCPP_DISABLE_AVAILABILITY)
 
 if(NOT ${ARCTICDB_USING_CONDA})
-    find_package(unofficial-pcre REQUIRED)
     find_package(Libevent CONFIG REQUIRED)
     set(ARCTICDB_MONGO_LIBS $<IF:$<TARGET_EXISTS:mongo::mongocxx_static>,mongo::mongocxx_static,mongo::mongocxx_shared>)
     set(Zstd_LIBRARY $<IF:$<TARGET_EXISTS:zstd::libzstd_shared>,zstd::libzstd_shared,zstd::libzstd_static>)
@@ -67,7 +67,6 @@ else()
     SET(HIDE_LINKED_SYMBOLS OFF)
 
     find_package(pybind11 REQUIRED)
-    find_package(PCRE REQUIRED)
     find_package(Libevent  REQUIRED)
     find_package(semimap REQUIRED)
 
@@ -106,7 +105,6 @@ set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_I
 
 # Libraries baked into the internal and external Linux images are found by searching various paths
 # On Windows, vcpkg will provide a "Config" which takes precedence
-find_library(Pcre_LIBRARY NAMES pcre PATHS /usr/local/lib/libpcre.a REQUIRED)
 if (WIN32)
     find_package(Iconv)
 else ()
@@ -227,6 +225,7 @@ set(arcticdb_srcs
         entity/read_result.hpp
         entity/ref_key.hpp
         entity/serialized_key.hpp
+        entity/stage_result.hpp
         entity/type_conversion.hpp
         entity/types.hpp
         entity/type_utils.hpp
@@ -241,7 +240,6 @@ set(arcticdb_srcs
         log/trace.hpp
         pipeline/column_mapping.hpp
         pipeline/column_stats.hpp
-        pipeline/frame_data_wrapper.hpp
         pipeline/frame_slice.hpp
         pipeline/frame_utils.hpp
         pipeline/index_fields.hpp
@@ -249,9 +247,9 @@ set(arcticdb_srcs
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
         pipeline/input_tensor_frame.hpp
+        pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
-        pipeline/pandas_output_frame.cpp
         pipeline/query.hpp
         pipeline/read_options.hpp
         pipeline/read_pipeline.hpp
@@ -261,6 +259,7 @@ set(arcticdb_srcs
         pipeline/value_set.hpp
         pipeline/write_frame.hpp
         pipeline/write_options.hpp
+        python/numpy_buffer_holder.hpp
         python/python_strings.hpp
         python/python_handler_data.hpp
         python/python_utils.hpp
@@ -403,7 +402,6 @@ set(arcticdb_srcs
         version/snapshot.hpp
         version/version_constants.hpp
         version/version_core.hpp
-        version/version_core-inl.hpp
         version/versioned_engine.hpp
         version/version_functions.hpp
         version/version_log.hpp
@@ -456,7 +454,6 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
         pipeline/pipeline_context.cpp
-        pipeline/pandas_output_frame.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
         pipeline/read_pipeline.cpp
@@ -494,7 +491,6 @@ set(arcticdb_srcs
         processing/unsorted_aggregation.cpp
         python/python_to_tensor_frame.cpp
         storage/config_resolvers.cpp
-        storage/failure_simulation.cpp
         storage/library_manager.cpp
         storage/azure/azure_storage.cpp
         storage/azure/azure_client_impl.cpp
@@ -528,7 +524,6 @@ set(arcticdb_srcs
         util/allocator.cpp
         util/allocation_tracing.cpp
         util/buffer_pool.cpp
-        util/configs_map.cpp
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
@@ -537,9 +532,9 @@ set(arcticdb_srcs
         util/offset_string.cpp
         util/sparse_utils.cpp
         util/string_utils.cpp
-        util/timer.cpp
         util/trace.cpp
         util/type_handler.cpp
+        util/format_date.cpp
         version/key_block.hpp
         version/key_block.cpp
         version/local_versioned_engine.cpp
@@ -556,6 +551,9 @@ set(arcticdb_srcs
         )
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
+
+# Disable default api so both UTF-8 and UTF-32 can be supported
+target_compile_definitions(arcticdb_core_object PUBLIC PCRE2_CODE_UNIT_WIDTH=0)
 
 if(${ARCTICDB_USE_PCH})
     message(STATUS "Using precompiled headers for target arcticdb_core_object")
@@ -672,7 +670,7 @@ if(${ARCTICDB_USE_PCH})
         <ankerl/unordered_dense.h>
         <third_party/recycle/src/recycle/shared_pool.hpp>
         <xxhash.h>
-        <pcre.h>
+        <pcre2.h>
     )
     target_precompile_headers(arcticdb_core_object PRIVATE ${BASE_PCH})
 endif()
@@ -708,6 +706,8 @@ set (arcticdb_core_libraries
         Azure::azure-identity
         Azure::azure-storage-blobs
         sparrow::sparrow
+        PCRE2::8BIT
+        PCRE2::32BIT
 )
 
 if(${ARCTICDB_COUNT_ALLOCATIONS})
@@ -729,7 +729,6 @@ endif()
 if(${ARCTICDB_USING_CONDA})
 
     list (APPEND arcticdb_core_libraries
-        pcre
         msgpack-c
         ${LMDB_LIBRARIES}
     )
@@ -741,7 +740,6 @@ if(${ARCTICDB_USING_CONDA})
 else()
 
     list (APPEND arcticdb_core_libraries
-        unofficial::pcre::pcre
         msgpackc-cxx
         EnTT::EnTT
         lmdb
@@ -796,6 +794,9 @@ target_include_directories(arcticdb_core_object
 
 add_library(arcticdb_core_static STATIC $<TARGET_OBJECTS:arcticdb_core_object>)
 
+# Disable default api so both UTF-8 and UTF-32 can be supported
+target_compile_definitions(arcticdb_core_static PUBLIC PCRE2_CODE_UNIT_WIDTH=0)
+
 target_include_directories(arcticdb_core_static PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>
         $<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}>
@@ -821,6 +822,7 @@ set(arcticdb_python_srcs
         stream/python_bindings.cpp
         toolbox/python_bindings.cpp
         version/python_bindings.cpp
+        util/python_bindings.cpp
         python/reader.hpp
         python/adapt_read_dataframe.hpp
         python/python_handlers.hpp
@@ -870,7 +872,6 @@ pybind11_add_module(arcticdb_ext MODULE
         python/arctic_version.cpp
         python/arctic_version.hpp
         )
-
 set (additional_link_flags "")
 if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
 
@@ -882,7 +883,6 @@ if (HIDE_LINKED_SYMBOLS AND (NOT WIN32))
 endif()
 
 target_link_libraries(arcticdb_ext
-        PUBLIC
         PRIVATE
         arcticdb_python
         ${additional_link_flags}
@@ -954,6 +954,7 @@ if(${TEST})
             pipeline/test/test_pipeline.cpp
             pipeline/test/test_query.cpp
             pipeline/test/test_frame_allocation.cpp
+            pipeline/test/test_value.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
             processing/test/test_clause.cpp
@@ -971,6 +972,7 @@ if(${TEST})
             processing/test/test_set_membership.cpp
             processing/test/test_signed_unsigned_comparison.cpp
             processing/test/test_type_comparison.cpp
+            processing/test/test_unsorted_aggregation.cpp
             storage/test/test_local_storages.cpp
             storage/test/test_memory_storage.cpp
             storage/test/test_s3_storage.cpp
@@ -1095,8 +1097,11 @@ if(${TEST})
 
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
+            column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp
+            processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp
+            processing/test/benchmark_common.cpp
             processing/test/benchmark_ternary.cpp
             version/test/benchmark_write.cpp)
 
@@ -1128,6 +1133,7 @@ if(${TEST})
             version/test/rapidcheck_version_map.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
+
     install(TARGETS arcticdb_rapidcheck_tests RUNTIME
                 DESTINATION .
                 PERMISSIONS ${EXECUTABLE_PERMS}
@@ -1181,7 +1187,6 @@ if(${TEST})
     endif()
 
     gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
-
     if(${ARCTICDB_USE_PCH})
         message(STATUS "Using precompiled headers for target test_unit_arcticdb")
         target_precompile_headers(

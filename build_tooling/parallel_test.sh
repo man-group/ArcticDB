@@ -21,6 +21,7 @@ if [ "$VERSION_MAP_RELOAD_INTERVAL" != "-1" ]; then
     export ARCTICDB_VersionMap_ReloadInterval_int=$VERSION_MAP_RELOAD_INTERVAL
 fi
 
+export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
 if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
     echo "Executing tests with no additional arguments"
     $catch python -m pytest --timeout=3600 $PYTEST_XDIST_MODE -v \

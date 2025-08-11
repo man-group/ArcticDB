@@ -10,6 +10,8 @@ inputs:
   aws_secret_key:    {required: true, type: string, description: The value for the AWS Secret key}
   gcp_access_key:    {required: true, type: string, description: The value for the GCP Access key}      
   gcp_secret_key:    {required: true, type: string, description: The value for the GCP Secret key}
+  azure_container:    {required: true, type: string, description: The value for the Azure container}
+  azure_connection_string:    {required: true, type: string, description: The value for the Azure connection string}
   strategy_branch:   {default: 'ignore', type: string, description: a unique combination of the parameters for the given job strategy branch, e.g. linux_cp36} 
   shared_storage_prefix:   {default: 'none', type: string, description: a prefix string that will be used for persistent storage}
   persistent_storage:      {default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
@@ -57,6 +59,10 @@ runs:
         echo "ARCTICDB_REAL_GCP_ENDPOINT=${{ inputs.endpoint_gcp }}" >> $GITHUB_ENV
         echo "ARCTICDB_REAL_GCP_CLEAR=1" >> $GITHUB_ENV
 
+        # AZURE Specific
+        echo "ARCTICDB_REAL_AZURE_CONTAINER=${{ inputs.azure_container }}" >> $GITHUB_ENV
+        echo "ARCTICDB_REAL_AZURE_CONNECTION_STRING=${{ inputs.azure_connection_string }}" >> $GITHUB_ENV
+
         # Against what storage type to run test?
         if [[ "${{inputs.persistent_storage}}" == "AWS_S3" ]]; then 
             echo "Storage tests will run with AWS_S3"
@@ -78,7 +84,19 @@ runs:
             echo "ARCTICDB_PERSISTENT_STORAGE_TESTS_TYPE=gcp"  >> $GITHUB_ENV
             echo "PYTEST_ADD_TO_COMMAND_LINE= -m storage "  >> $GITHUB_ENV
         fi
+        if [[ "${{inputs.persistent_storage}}" == "AZURE" ]]; then 
+            echo "Storage tests will run with AZURE"
+            echo "ARCTICDB_STORAGE_AZURE=1"  >> $GITHUB_ENV
+            # NO S3 and GCP
+            echo "ARCTICDB_STORAGE_AWS_S3=0"  >> $GITHUB_ENV
+            echo "ARCTICDB_STORAGE_GCP=0"  >> $GITHUB_ENV
+            # No local tests
+            echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0"  >> $GITHUB_ENV
+            echo "ARCTICDB_PERSISTENT_STORAGE_TESTS_TYPE=azure"  >> $GITHUB_ENV
+            echo "PYTEST_ADD_TO_COMMAND_LINE= -m storage "  >> $GITHUB_ENV
+        fi
 
         # Enable all debug logs
         # echo "ARCTICDB_all_loglevel=debug" >> $GITHUB_ENV
         # echo "ARCTICDB_AWS_LogLevel_int=6" >> $GITHUB_ENV
+        # echo "AZURE_LOG_LEVEL=1" >> $GITHUB_ENV

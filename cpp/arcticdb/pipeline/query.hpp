@@ -255,7 +255,7 @@ inline void build_row_read_query_filters(
 }
 
 template <typename ContainerType>
-inline void build_col_read_query_filters(
+void build_col_read_query_filters(
     std::shared_ptr<PipelineContext> pipeline_context,
     bool dynamic_schema,
     bool column_groups,
@@ -282,7 +282,6 @@ inline void build_col_read_query_filters(
         queries.push_back(std::move(query));
     } else if (pipeline_context->overall_column_bitset_) {
         util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
-
         if (column_groups)
             queries.emplace_back(create_dynamic_col_filter(std::move(pipeline_context)));
         else
@@ -361,12 +360,14 @@ inline std::vector<SliceAndKey> strictly_before(const FilterRange &range, std::s
     util::variant_match(range,
                         [&](const RowRange &row_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
-                                return sk.slice_.row_range.second < row_range.first;
+                                // Key's row ranges are end exclusive
+                                return sk.slice_.row_range.second <= row_range.first;
                             });
                         },
                         [&](const IndexRange &index_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
-                                return sk.key().index_range().end_ < index_range.start_;
+                                // Key's index ranges are end exclusive
+                                return sk.key().index_range().end_ <= index_range.start_;
                             });
                         },
                         [&](const auto &) {
@@ -380,11 +381,13 @@ inline std::vector<SliceAndKey> strictly_after(const FilterRange &range, std::sp
     util::variant_match(range,
                         [&input, &output](const RowRange &row_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
-                                return sk.slice_.row_range.first > row_range.second;
+                                // Row range filters are end exclusive
+                                return sk.slice_.row_range.first >= row_range.second;
                             });
                         },
                         [&input, &output](const IndexRange &index_range) {
                             std::ranges::copy_if(input, std::back_inserter(output), [&](const auto &sk) {
+                                // Index range filters are end inclusive
                                 return sk.key().index_range().start_ > index_range.end_;
                             });
                         },

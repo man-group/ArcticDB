@@ -27,22 +27,23 @@ dependencies:
   - libmongocxx <3.9
   - zstd
   - pybind11
-  - pcre
+  - pcre2
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
-  - libprotobuf <6
+  - libprotobuf <7
   - openssl
   - libcurl
   - bitmagic
-  - sparrow >=0.9.0
+  - sparrow >=1
   - spdlog
   - azure-core-cpp
   - azure-identity-cpp
   - azure-storage-blobs-cpp
   - fmt
-  - folly==2023.09.25.00
+  - folly==2025.04.14.00
   - unordered_dense
+  - entt
   # Vendored build dependencies (see `cpp/thirdparty` and `cpp/vcpkg.json`)
   # Versions must be kept in sync
   - xxhash==0.8.2
@@ -56,10 +57,7 @@ dependencies:
   - libiconv
   - aws-c-s3
   # Build dependencies for tests
-  # Use libarrow==18.0.0 only on Linux and MacOS (resolution problem on Windows)
-  # TODO: Remove this when the issue is resolved
-  - sel(unix): libarrow==18.0.0
-  - sel(win): libarrow
+  - libarrow
   # Python dependences
   - python >=3.12,<3.14
   - packaging
@@ -72,12 +70,12 @@ dependencies:
   - mock
   # msgpack 0.5.0 is required for strict_types argument, needed for correct pickling fallback
   - msgpack-python >=0.5.0
+  # Python dependencies (for tests only)
   # Pinned to avoid test disruption (in phase with the pin in setup.cfg)
   # See: https://github.com/man-group/ArcticDB/pull/291
   - hypothesis <6.73
   - pytest-sugar
   - pytest-timeout
-  # Python dependencies (for tests only)
   - azure-storage-blob
   - azure-identity
   - pyarrow
@@ -85,7 +83,6 @@ dependencies:
   - pymongo
   - pytest
   - trustme
-  - entt
   - psutil
   # Use memray and pytest-memray only on Linux and MacOS
   - sel(unix): memray

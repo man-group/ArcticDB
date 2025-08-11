@@ -715,7 +715,20 @@ ColumnStats PythonVersionStore::get_column_stats_info_version(
     return get_column_stats_info_version_internal(stream_id, version_query);
 }
 
-VersionedItem PythonVersionStore::compact_incomplete(
+static void validate_stage_results(const std::optional<std::vector<StageResult>>& stage_results, const StreamId& stream_id) {
+    if (!stage_results) {
+        return;
+    }
+
+    for (const auto& stage_result : *stage_results) {
+        for (const auto& staged_segment : stage_result.staged_segments) {
+            user_input::check<ErrorCode::E_STAGE_RESULT_WITH_INCORRECT_SYMBOL>(staged_segment.id() == stream_id, fmt::format("Expected all stage_result objects submitted for compaction to have "
+                                                          "the specified symbol {} but found one with symbol {}", stream_id, staged_segment.id()));
+        }
+    }
+}
+
+std::variant<VersionedItem, CompactionError> PythonVersionStore::compact_incomplete(
         const StreamId& stream_id,
         bool append,
         bool convert_int_to_float,
@@ -724,25 +737,32 @@ VersionedItem PythonVersionStore::compact_incomplete(
         const std::optional<py::object>& user_meta /* = std::nullopt */,
         bool prune_previous_versions,
         bool validate_index,
-        bool delete_staged_data_on_failure) {
+        bool delete_staged_data_on_failure,
+        const std::optional<std::vector<StageResult>>& stage_results) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (user_meta && !user_meta->is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(*user_meta, *meta);
     }
-    CompactIncompleteOptions options{
+
+    validate_stage_results(stage_results, stream_id);
+
+    CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
         .validate_index_=validate_index,
-        .delete_staged_data_on_failure_=delete_staged_data_on_failure
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure,
+        .stage_results=stage_results
     };
-    return compact_incomplete_dynamic(stream_id, meta, options);
+
+    return compact_incomplete_dynamic(stream_id, meta, params);
+
 }
 
-VersionedItem PythonVersionStore::sort_merge(
+std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
         const StreamId& stream_id,
         const py::object& user_meta,
         bool append,
@@ -750,24 +770,30 @@ VersionedItem PythonVersionStore::sort_merge(
         bool via_iteration,
         bool sparsify,
         bool prune_previous_versions,
-        bool delete_staged_data_on_failure) {
+        bool delete_staged_data_on_failure,
+        const std::optional<std::vector<StageResult>>& stage_results) {
     std::optional<arcticdb::proto::descriptors::UserDefinedMetadata> meta;
     if (!user_meta.is_none()) {
         meta = std::make_optional<arcticdb::proto::descriptors::UserDefinedMetadata>();
         python_util::pb_from_python(user_meta, *meta);
     }
-    CompactIncompleteOptions options{
+
+    validate_stage_results(stage_results, stream_id);
+
+    CompactIncompleteParameters params{
         .prune_previous_versions_=prune_previous_versions,
         .append_=append,
         .convert_int_to_float_=convert_int_to_float,
         .via_iteration_=via_iteration,
         .sparsify_=sparsify,
-        .delete_staged_data_on_failure_=delete_staged_data_on_failure
+        .delete_staged_data_on_failure_=delete_staged_data_on_failure,
+        .stage_results=stage_results
     };
-    return sort_merge_internal(stream_id, meta, options);
+
+    return sort_merge_internal(stream_id, meta, params);
 }
 
-void PythonVersionStore::write_parallel(
+StageResult PythonVersionStore::write_parallel(
     const StreamId& stream_id,
     const py::tuple& item,
     const py::object& norm,
@@ -775,7 +801,7 @@ void PythonVersionStore::write_parallel(
     bool sort_on_index,
     std::optional<std::vector<std::string>> sort_columns) const {
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, py::none(), cfg().write_options().empty_types());
-    write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
+    return write_parallel_frame(stream_id, frame, validate_index, sort_on_index, sort_columns);
 }
 
 std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versions(const StreamId &stream_id) {
@@ -821,13 +847,13 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_up
     }
 
 ReadResult PythonVersionStore::batch_read_and_join(
-    const std::vector<StreamId>& stream_ids,
-    const std::vector<VersionQuery>& version_queries,
+    std::shared_ptr<std::vector<StreamId>> stream_ids,
+    std::shared_ptr<std::vector<VersionQuery>> version_queries,
     std::vector<std::shared_ptr<ReadQuery>>& read_queries,
     const ReadOptions& read_options,
     std::vector<std::shared_ptr<Clause>>&& clauses,
     std::any& handler_data) {
-    auto versions_and_frame = batch_read_and_join_internal(stream_ids, version_queries, read_queries, read_options, std::move(clauses), handler_data);
+    auto versions_and_frame = batch_read_and_join_internal(std::move(stream_ids), std::move(version_queries), read_queries, read_options, std::move(clauses), handler_data);
     return create_python_read_result(
             versions_and_frame.versioned_items_,
             read_options.output_format(),
@@ -956,6 +982,61 @@ void PythonVersionStore::delete_versions(
     }
 }
 
+std::vector<std::optional<DataError>> PythonVersionStore::batch_delete(
+    const std::vector<StreamId>& stream_ids,
+    const std::vector<std::vector<VersionId>>& version_ids) {
+    // This error can only be triggered when the function is called from batch_delete_versions
+    // The other code paths make checks that prevents us getting to this point
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(stream_ids.size() == version_ids.size(), "when calling batch_delete_versions, stream_ids and version_ids must have the same size");
+    
+    auto results = batch_delete_internal(stream_ids, version_ids);
+    
+    std::vector<std::optional<DataError>> return_results;
+
+    std::vector<IndexTypeKey> keys_to_delete;
+    std::vector<std::pair<StreamId, VersionId>> symbols_to_delete;
+
+    for (const auto& result : results) {
+        util::variant_match(result,
+            [&](const version_store::TombstoneVersionResult& tombstone_result) {
+                return_results.emplace_back(std::nullopt);
+
+                if(tombstone_result.keys_to_delete.empty()) {
+                    log::version().warn("Nothing to delete for symbol '{}'", tombstone_result.symbol);
+                    return;
+                }
+
+                if (!cfg().write_options().delayed_deletes()) {
+                    keys_to_delete.insert(keys_to_delete.end(), tombstone_result.keys_to_delete.begin(), tombstone_result.keys_to_delete.end());
+                }
+
+                if(tombstone_result.no_undeleted_left && cfg().symbol_list() && !tombstone_result.keys_to_delete.empty()) {
+                    symbols_to_delete.emplace_back(tombstone_result.symbol, tombstone_result.latest_version_);
+                }
+            },
+            [&](const DataError& data_error) {
+                return_results.emplace_back(std::make_optional(std::move(data_error)));
+            }
+        );
+    }
+
+    // Make sure to call delete_tree and thus get_master_snapshots_map only once for all symbols
+    if(!keys_to_delete.empty()) {
+        delete_tree(keys_to_delete, TombstoneVersionResult{true});
+    }
+
+    auto sym_delete_results = batch_delete_symbols_internal(symbols_to_delete);
+    
+    for(size_t i = 0; i < symbols_to_delete.size(); ++i) {
+        const auto& result = sym_delete_results[i];
+        if(std::holds_alternative<DataError>(result)) {
+            return_results[i] = std::make_optional(std::get<DataError>(result));
+        }
+    }
+    
+    return return_results;
+}
+
 void PythonVersionStore::fix_symbol_trees(const std::vector<StreamId>& symbols) {
     auto snaps = get_master_snapshots_map(store());
     for (const auto& sym : symbols) {
@@ -998,7 +1079,10 @@ void PythonVersionStore::delete_all_versions(const StreamId& stream_id) {
 
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: delete_all_versions");
     try {
-        auto [version_id, all_index_keys] = version_map()->delete_all_versions(store(), stream_id);
+        auto res = tombstone_all_async(store(), version_map(), stream_id).get();
+        auto version_id = res.latest_version_;
+        auto all_index_keys = res.keys_to_delete;
+        
         if (all_index_keys.empty()) {
             log::version().warn("Nothing to delete for symbol '{}'", stream_id);
             return;

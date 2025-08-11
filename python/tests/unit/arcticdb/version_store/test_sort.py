@@ -2,11 +2,17 @@ import pandas as pd
 import numpy as np
 import pytest
 import arcticdb as adb
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, config_context
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import SortedValue
 
 from arcticdb.util.test import random_strings_of_length
+
+# Reuse all current testing with both the new and old API
+@pytest.fixture(params=[True, False], autouse=True)
+def setup_use_new_stage_api(request):
+    with config_context("dev.stage_new_api_enabled", 1 if request.param else 0):
+        yield
 
 
 @pytest.mark.storage

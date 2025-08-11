@@ -27,7 +27,7 @@ uint64_t get_symbol_prefix(const StreamId& stream_id) {
             for(size_t p = begin, i = 0; p < end && i < string_id.size(); ++p, ++i) {
                 const auto c = string_id[i];
                 util::check(c < 127, "Out of bounds character {}", c);
-                target[p] = c;
+                target[i] = c;
             }
         },
         [&data] (const NumericId& numeric_id) {

@@ -12,8 +12,8 @@ namespace arcticdb::pipelines {
 using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;
 
 struct SignedRowRange {
-    int64_t start_;
-    int64_t end_;
+    std::optional<int64_t> start_;
+    std::optional<int64_t> end_;
 };
 
 struct ReadQuery {
@@ -32,19 +32,6 @@ struct ReadQuery {
     void add_clauses(std::vector<std::shared_ptr<Clause>>& clauses);
 
     void convert_to_positive_row_filter(int64_t total_rows);
-
-    void calculate_row_filter(int64_t total_rows) {
-        if (row_range.has_value()) {
-            size_t start = row_range->start_ >= 0 ?
-                           std::min(row_range->start_, total_rows) :
-                           std::max(total_rows + row_range->start_,
-                                    static_cast<int64_t>(0));
-            size_t end = row_range->end_ >= 0 ?
-                         std::min(row_range->end_, total_rows) :
-                         std::max(total_rows + row_range->end_, static_cast<int64_t>(0));
-            row_filter = RowRange(start, end);
-        }
-    }
 };
 
 }

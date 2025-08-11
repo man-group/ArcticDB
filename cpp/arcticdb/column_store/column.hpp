@@ -19,13 +19,12 @@
 #include <arcticdb/util/flatten_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/sparse_utils.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
-#include <folly/container/Enumerate.h>
 // Compilation fails on Mac if cstdio is not included prior to folly/Function.h due to a missing definition of memalign in folly/Memory.h
 #ifdef __APPLE__
 #include <cstdio>
 #endif
-#include <folly/Function.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 
@@ -449,9 +448,8 @@ public:
         return std::move(shapes_.buffer());
     }
 
-    template<class T, template<class> class Tensor, std::enable_if_t<
-            std::is_integral_v<T> || std::is_floating_point_v<T>,
-            int> = 0>
+    template<class T, template<class> class Tensor>
+    requires std::is_integral_v<T> || std::is_floating_point_v<T>
     void set_array(ssize_t row_offset, Tensor<T> &val) {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
@@ -469,7 +467,8 @@ public:
         ++last_logical_row_;
     }
 
-    template<class T, std::enable_if_t< std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    template<class T>
+    requires std::is_integral_v<T> || std::is_floating_point_v<T>
     void set_array(ssize_t row_offset, py::array_t<T>& val) {
         ARCTICDB_SAMPLE(ColumnSetArray, RMTSF_Aggregate)
         magic_.check();
@@ -520,6 +519,7 @@ public:
     void mark_absent_rows(size_t num_rows);
 
     void default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc);
+    void default_initialize_rows(size_t start_pos, size_t num_rows, bool ensure_alloc, const std::optional<Value>& default_value);
 
     void set_row_data(size_t row_id);
 
@@ -621,6 +621,10 @@ public:
 
     const auto& blocks() const {
         return data_.buffer().blocks();
+    }
+
+    const auto& block_offsets() const {
+        return data_.buffer().block_offsets();
     }
 
     inline shape_t *allocate_shapes(std::size_t bytes) {
@@ -728,59 +732,58 @@ public:
     // Only works if column is of numeric type and is monotonically increasing
     // Returns the index such that if val were inserted before that index, the order would be preserved
     // By default returns the lowest index satisfying this property. If from_right=true, returns the highest such index
-    template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
+    // from (inclusive) and to (exclusive) can optionally be provided to search a subset of the rows in the column
+    template<class T>
+    requires std::integral<T> || std::floating_point<T>
     size_t search_sorted(T val, bool from_right=false, std::optional<int64_t> from = std::nullopt, std::optional<int64_t> to = std::nullopt) const {
         // There will not necessarily be a unique answer for sparse columns
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(!is_sparse(),
                                                         "Column::search_sorted not supported with sparse columns");
-        std::optional<size_t> res;
         auto column_data = data();
-        details::visit_type(type().data_type(), [this, &res, &column_data, val, from_right, &from, &to](auto type_desc_tag) {
+        return details::visit_type(type().data_type(), [this, &column_data, val, from_right, &from, &to](auto type_desc_tag) -> int64_t {
             using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
             auto accessor = random_accessor<typename type_info::TDT>(&column_data);
             if constexpr(std::is_same_v<T, typename type_info::RawType>) {
-                int64_t low = from.value_or(0);
-                int64_t high = to.value_or(row_count() - 1);
-                while (!res.has_value()) {
-                    auto mid{low + (high - low) / 2};
-                    auto mid_value = accessor.at(mid);
-                    if (val == mid_value) {
-                        // At least one value in the column exactly matches the input val
-                        // Search to the right/left for the last/first such value
-                        if (from_right) {
-                            while (++mid <= high && val == accessor.at(mid)) {}
-                            res = mid;
+                int64_t first = from.value_or(0);
+                const int64_t last = to.value_or(row_count());
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(last >= first,
+                    "Invalid input range for Column::search_sorted. First: {}, Last: {}", first, last);
+                int64_t step;
+                int64_t count{last - first};
+                int64_t idx;
+                if (from_right) {
+                    while (count > 0) {
+                        idx = first;
+                        step = count / 2;
+                        idx = std::min(idx + step, last);
+                        if (accessor.at(idx) <= val) {
+                            first = ++idx;
+                            count -= step + 1;
                         } else {
-                            while (--mid >= low && val == accessor.at(mid)) {}
-                            res = mid + 1;
+                            count = step;
                         }
-                    } else if (val > mid_value) {
-                        if (mid + 1 <= high && val >= accessor.at(mid + 1)) {
-                            // Narrow the search interval
-                            low = mid + 1;
+                    }
+                } else {
+                    while (count > 0) {
+                        idx = first;
+                        step = count / 2;
+                        idx = std::min(idx + step, last);
+                        if (accessor.at(idx) < val) {
+                            first = ++idx;
+                            count -= step + 1;
                         } else {
-                            // val is less than the next value, so we have found the right interval
-                            res = mid + 1;
-                        }
-                    } else { // val < mid_value
-                        if (mid - 1 >= low && val <= accessor.at(mid + 1)) {
-                            // Narrow the search interval
-                            high = mid - 1;
-                        } else {
-                            // val is greater than the previous value, so we have found the right interval
-                            res = mid;
+                            count = step;
                         }
                     }
                 }
+                return first;
             } else {
                 // TODO: Could relax this requirement using something like has_valid_common_type
                 internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
                         "Column::search_sorted requires input value to be of same type as column");
+                return {};
             }
         });
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                res.has_value(), "Column::search_sorted should always find an index");
-        return *res;
     }
 
     [[nodiscard]] static std::vector<std::shared_ptr<Column>> split(
@@ -796,19 +799,15 @@ public:
         size_t end_row
     );
 
-    template <
-            typename input_tdt,
-            typename functor>
-    requires std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>
+    template <typename input_tdt, typename functor>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag> && std::is_invocable_r_v<void, functor, typename input_tdt::DataTypeTag::raw_type>
     static void for_each(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
         std::for_each(input_data.cbegin<input_tdt>(), input_data.cend<input_tdt>(), std::forward<functor>(f));
     }
 
-    template <
-            typename input_tdt,
-            typename functor>
-    requires std::is_invocable_r_v<void, functor, typename ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
+    template <typename input_tdt, typename functor>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag> && std::is_invocable_r_v<void, functor, ColumnData::Enumeration<typename input_tdt::DataTypeTag::raw_type>>
     static void for_each_enumerated(const Column& input_column, functor&& f) {
         auto input_data = input_column.data();
         if (input_column.is_sparse()) {
@@ -820,11 +819,8 @@ public:
         }
     }
 
-    template <
-            typename input_tdt,
-            typename output_tdt,
-            typename functor>
-    requires std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
+    template <typename input_tdt, typename output_tdt, typename functor>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag> && std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& input_column, Column& output_column, functor&& f) {
         auto input_data = input_column.data();
         initialise_output_column(input_column, output_column);
@@ -837,16 +833,10 @@ public:
         );
     }
 
-    template<
-            typename left_input_tdt,
-            typename right_input_tdt,
-            typename output_tdt,
-            typename functor>
-    requires std::is_invocable_r_v<
-            typename output_tdt::DataTypeTag::raw_type,
-            functor,
-            typename left_input_tdt::DataTypeTag::raw_type,
-            typename right_input_tdt::DataTypeTag::raw_type>
+    template<typename left_input_tdt, typename right_input_tdt, typename output_tdt, typename functor>
+    requires util::instantiation_of<left_input_tdt, TypeDescriptorTag> &&
+             util::instantiation_of<right_input_tdt, TypeDescriptorTag> &&
+             std::is_invocable_r_v<typename output_tdt::DataTypeTag::raw_type, functor, typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           Column& output_column,
@@ -909,9 +899,8 @@ public:
         }
     }
 
-    template <
-            typename input_tdt,
-            std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
+    template <typename input_tdt, std::predicate<typename input_tdt::DataTypeTag::raw_type> functor>
+    requires util::instantiation_of<input_tdt, TypeDescriptorTag>
     static void transform(const Column& input_column,
                           util::BitSet& output_bitset,
                           bool sparse_missing_value_output,
@@ -935,6 +924,7 @@ public:
             typename left_input_tdt,
             typename right_input_tdt,
             std::relation<typename left_input_tdt::DataTypeTag::raw_type, typename right_input_tdt::DataTypeTag::raw_type> functor>
+    requires util::instantiation_of<left_input_tdt, TypeDescriptorTag> && util::instantiation_of<right_input_tdt, TypeDescriptorTag>
     static void transform(const Column& left_input_column,
                           const Column& right_input_column,
                           util::BitSet& output_bitset,

@@ -9,15 +9,12 @@
 
 #include <folly/futures/Future.h>
 #include <arcticdb/column_store/memory_segment.hpp>
-#include <folly/Range.h>
 #include <arcticdb/util/preconditions.hpp>
 #include <unordered_map>
-#include <any>
 #include <string>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/test/generators.hpp>
 #include <variant>
-#include <arcticdb/util/variant.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 
@@ -39,7 +36,7 @@ class Pipeline {
   private:
     std::shared_ptr<folly::CPUThreadPoolExecutor> executor_;
     std::vector<PipelineStage> stages_;
-    std::pair<folly::Promise<PipelineValue>, folly::Future<PipelineValue>> chain_;
+    folly::PromiseContract<PipelineValue> chain_;
 
   public:
     explicit Pipeline(const std::shared_ptr<folly::CPUThreadPoolExecutor> &executor) :
@@ -54,14 +51,14 @@ class Pipeline {
 
     auto finalize() {
         for (auto &stage : stages_)
-            chain_.second = std::move(chain_.second).thenValue(std::move(stage.func_));
+            chain_.future = std::move(chain_.future).thenValue(std::move(stage.func_));
 
         stages_.clear();
     }
 
     auto run(PipelineValue &&val) {
-        chain_.first.setValue(std::move(val));
-        return std::move(chain_.second);
+        chain_.promise.setValue(std::move(val));
+        return std::move(chain_.future);
     }
 };
 

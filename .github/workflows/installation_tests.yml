@@ -14,7 +14,10 @@ on:
     - cron: "0 6 * * *"      
     - cron: "0 7 * * *"      
     - cron: "0 8 * * *"      
-    - cron: "0 9 * * *"      
+    - cron: "0 9 * * *"     
+    - cron: "0 10 * * *"       
+    - cron: "0 11 * * *"       
+    - cron: "0 12 * * *"       
   workflow_dispatch:
     inputs:
       arcticdb_version:
@@ -26,6 +29,9 @@ on:
         type: choice
         options:
           - "latest"
+          - "5.9.3"
+          - "5.8.0"
+          - "5.7.0"
           - "5.6.0"
           - "5.5.1"
           - "5.4.1"
@@ -50,7 +56,11 @@ on:
         options:
           - "1"
           - "0"
-                  
+      debug_enabled:
+        type: boolean
+        description: 'Run the build with debugging enabled'
+        required: false
+        default: false                  
 
 jobs:
 
@@ -110,8 +120,14 @@ jobs:
           "06") echo "arcticdb_version=5.4.1" >> $GITHUB_ENV;;
           "07") echo "arcticdb_version=5.5.1" >> $GITHUB_ENV;;
           "08") echo "arcticdb_version=5.6.0" >> $GITHUB_ENV;;
-          "09") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
+          "09") echo "arcticdb_version=5.7.0" >> $GITHUB_ENV;;
+          "10") echo "arcticdb_version=5.8.0" >> $GITHUB_ENV;;
+          "12") echo "arcticdb_version=5.9.3" >> $GITHUB_ENV;;
+          "11") echo "arcticdb_version=latest" >> $GITHUB_ENV;;
         esac        
+
+    - name: Checkout code
+      uses: actions/checkout@v3
 
     - name: Check Unsupported Versions
       shell: bash
@@ -132,10 +148,6 @@ jobs:
           echo "SKIP_JOB=true" >> $GITHUB_ENV
         fi
 
-    - name: Checkout code
-      if: ${{ env.SKIP_JOB != 'true' }}
-      uses: actions/checkout@v3
-
     - name: Set up Python
       if: ${{ env.SKIP_JOB != 'true' }}
       uses: actions/setup-python@v4
@@ -152,19 +164,29 @@ jobs:
   
     - name: (pypi) Install arcticdb (${{ env.arcticdb_version }}) from requirements files 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
+      shell: bash -l {0}
       run: |
-        pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt"
+        PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        if [[ "$PYTHON_VERSION" == "3.8" ]]; then
+            echo "Python 3.8 detected. Using fallback strategy..."
+            pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt" --retries 5
+        else   
+            pip install -r "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.txt" --resume-retries 5
+        fi
 
     - name: (pypi) Install other prerequisites 
       if: ${{ (env.SKIP_JOB != 'true') && (!contains(env.USE_CONDA, 'yes'))}}
       shell: bash -l {0}
       run: |
-        python -m pip install --upgrade pip
-
-        pip install wheel
-        pip install setuptools
-        pip install pytest
-        pip install pytest-xdist
+        PYTHON_VERSION=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+        if [[ "$PYTHON_VERSION" == "3.8" ]]; then
+            echo "Python 3.8 detected. Using fallback strategy..."
+            $RETRY="--retries 5"
+        else   
+            $RETRY="--resume-retries 5"
+        fi
+        python -m pip install --upgrade pip $RETRY
+        pip install wheel setuptools pytest pytest-xdist $RETRY
 
       # Install conda environment
     - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
@@ -184,15 +206,18 @@ jobs:
       run: |
           micromamba activate arcticdb
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
-  
+
     - name: Set persistent storage variables
-      if: ${{ env.SKIP_JOB != 'true' }}
+      # Should be executed for all persistent storages but not for LMDB
+      if: ${{ env.SKIP_JOB != 'true' && env.real_tests_storage_type != 'no' }}
       uses: ./.github/actions/set_persistent_storage_env_vars
       with:
         aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
         aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
         gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
         gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+        azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+        azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
         persistent_storage: "true"
 
     - name: Set environment variables 
@@ -204,6 +229,11 @@ jobs:
         echo "ARCTICDB_STORAGE_AWS_S3=${{ env.real_s3 }}" >> $GITHUB_ENV        
         echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+        echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
+
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
+      if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
       if: ${{ env.SKIP_JOB != 'true' }}

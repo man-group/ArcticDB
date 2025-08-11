@@ -41,6 +41,7 @@ from arcticdb_ext.version_store import ExpressionName as _ExpressionName
 from arcticdb_ext.version_store import ColumnName as _ColumnName
 from arcticdb_ext.version_store import ValueName as _ValueName
 from arcticdb_ext.version_store import ValueSetName as _ValueSetName
+from arcticdb_ext.version_store import RegexName as _RegexName
 from arcticdb_ext.version_store import Value as _Value
 from arcticdb_ext.version_store import ValueSet as _ValueSet
 from arcticdb_ext.version_store import (
@@ -58,6 +59,7 @@ from arcticdb_ext.version_store import (
 )
 from arcticdb_ext.version_store import ExpressionNode as _ExpressionNode
 from arcticdb_ext.version_store import OperationType as _OperationType
+from arcticdb_ext.util import RegexGeneric as _RegexGeneric
 
 COLUMN = "COLUMN"
 
@@ -233,6 +235,14 @@ class ExpressionNode:
 
     def notnull(self):
         return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
+    
+    def regex_match(self, pattern: str):
+        if isinstance(pattern, str):
+            return self._apply(_RegexGeneric(pattern), _OperationType.REGEX_MATCH)
+        else:
+            raise UserInputException(
+                f"'regex_match' filtering only accepts str as pattern, {type(pattern)} is given"
+            )
 
     def __str__(self):
         return self.get_name()
@@ -441,6 +451,7 @@ class QueryBuilder:
     * Unary NOT: ~
     * Binary combinators: &, |, ^
     * List membership: isin, isnotin (also accessible with == and !=)
+    * Regex match: regex_match
 
     isin/isnotin accept lists, sets, frozensets, 1D ndarrays, or *args unpacking. For example:
 
@@ -450,6 +461,8 @@ class QueryBuilder:
     is equivalent to...
 
         q.isin(1, 2, 3)
+
+    regex_match, similar to pandas' contains, accepts string as pattern and can only filter string columns
 
     Boolean columns can be filtered on directly:
 
@@ -940,15 +953,17 @@ class QueryBuilder:
         self._python_clauses = self._python_clauses + [PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n)]
         return self
 
-    def row_range(self, row_range: Tuple[int, int]):
+    def row_range(self, row_range: Tuple[Optional[int], Optional[int]]):
         """
         Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
         Should behave the same as df.iloc[start:end], including in the handling of negative start/end values.
 
         Parameters
         ----------
-        row_range : Tuple[int, int]
+        row_range : Tuple[Optional[int], Optional[int]]
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
 
         Returns
         -------
@@ -957,6 +972,15 @@ class QueryBuilder:
         """
         start = row_range[0]
         end = row_range[1]
+
+        if start is not None and not isinstance(start, int):
+            raise UserInputException(f"The first element of row_range must be None or int but was: {start}")
+
+        if end is not None and not isinstance(end, int):
+            raise UserInputException(f"The second element of row_range must be None or int but was: {end}")
+
+        if end is None and not start:
+            return self  # no-op
 
         self.clauses = self.clauses + [_RowRangeClause(start, end)]
         self._python_clauses = self._python_clauses + [PythonRowRangeClause(start=start, end=end)]
@@ -1113,7 +1137,7 @@ class QueryBuilder:
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):
-                if python_clause.start is not None and python_clause.end is not None:
+                if python_clause.row_range_type is None:
                     self.clauses = self.clauses + [_RowRangeClause(python_clause.start, python_clause.end)]
                 else:
                     self.clauses = self.clauses + [_RowRangeClause(python_clause.row_range_type, python_clause.n)]
@@ -1186,6 +1210,8 @@ def to_string(leaf):
     if isinstance(leaf, (np.ndarray, list)):
         # Truncate value set keys to first 100 characters
         key = str(leaf)[:100]
+    elif isinstance(leaf, _RegexGeneric):
+        key = "Regex({})".format(leaf.text())
     else:
         if isinstance(leaf, str):
             key = "Str({})".format(leaf)
@@ -1212,6 +1238,9 @@ def visit_expression(expr):
                     key = key + "-v" + str(valueset_keys[key])
                     expression_context.add_value_set(key, _ValueSet(node))
                     return _ValueSetName(key)
+                elif isinstance(node, _RegexGeneric):
+                    expression_context.add_regex(key, node)
+                    return _RegexName(key)
                 else:
                     expression_context.add_value(key, create_value(node))
                     return _ValueName(key)
