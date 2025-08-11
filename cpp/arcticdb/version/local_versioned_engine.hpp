@@ -59,10 +59,6 @@ folly::Future<folly::Unit> delete_trees_responsibly(
     const bool dry_run = false
 );
 
-enum class Slicing {
-    NoSlicing, RowSlicing
-};
-
 class LocalVersionedEngine : public VersionedEngine {
 
 public:
@@ -195,7 +191,7 @@ public:
             SegmentInMemory&& segment,
             bool prune_previous_versions,
             Slicing const& slicing
-    );
+    ) override;
 
     VersionedItem write_versioned_metadata_internal(
         const StreamId& stream_id,

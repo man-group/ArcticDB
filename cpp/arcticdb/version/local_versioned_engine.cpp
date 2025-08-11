@@ -722,7 +722,7 @@ VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     bool prune_previous_versions,
     bool allow_sparse,
     bool validate_index
-) {
+    ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
     py::gil_scoped_release release_gil;
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_dataframe");
@@ -773,18 +773,29 @@ VersionedItem LocalVersionedEngine::write_segment(
     auto partial_key = IndexPartialKey(stream_id, version_id);
 
     // TODO: do the segment splitting in parallel
-    auto slices = (slicing == Slicing::NoSlicing) ? std::vector<SegmentInMemory>({segment}) : segment.split(get_write_options().segment_row_size);
+    std::vector<SegmentInMemory> slices;
+    switch (slicing) {
+    case Slicing::NoSlicing:
+        slices = std::vector<SegmentInMemory>({segment});
+        break;
+    case Slicing::RowSlicing:
+        slices = segment.split(get_write_options().segment_row_size);
+        break;
+    }
 
     auto sink = store();
 
     TypedStreamVersion tsv{partial_key.id, partial_key.version_id, KeyType::TABLE_DATA};
     int64_t write_window = write_window_size();
     auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [&sink, de_dup_map, &segment, tsv=std::move(tsv)](auto&& slice) {
-            auto frame_slice = FrameSlice{std::make_shared<entity::StreamDescriptor>(slice.descriptor()), {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()}, {slice.offset(), slice.offset() + slice.row_count()}};
+            auto descriptor = std::make_shared<entity::StreamDescriptor>(slice.descriptor());
+            ColRange column_slice = {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()};
+            RowRange row_slice = {slice.offset(), slice.offset() + slice.row_count()};
+            auto frame_slice = FrameSlice{descriptor, column_slice, row_slice};
             auto pkey = get_partial_key_for_segment_slice(segment.descriptor().index(), tsv, slice);
-            auto ks = std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>{
-                    pkey, std::move(slice), frame_slice
-            };
+            auto ks = std::make_tuple(
+                    std::move(pkey), std::move(slice), std::move(frame_slice)
+            );
             return sink->async_write(std::move(ks), de_dup_map);
         },write_window)).via(&async::io_executor());
 
@@ -799,7 +810,7 @@ VersionedItem LocalVersionedEngine::write_segment(
     norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
     tsd.set_normalization_metadata(std::move(norm_meta));
 
-    auto atom_key_fut = std::move(fut_slice_keys).thenValue([partial_key = std::move(partial_key), &sink, tsd, index = std::move(index)](auto&& slice_keys) {
+    auto atom_key_fut = std::move(fut_slice_keys).thenValue([partial_key = std::move(partial_key), &sink, tsd = std::move(tsd), index = std::move(index)](auto&& slice_keys) {
                                     return index::write_index(index, tsd, std::forward<decltype(slice_keys)>(slice_keys), partial_key, sink);
                                 });
 

@@ -90,7 +90,7 @@ SegmentInMemory LibraryTool::overwrite_append_data(
         VariantKey key,
         const py::tuple &item,
         const py::object &norm,
-        const py::object &user_meta) {
+        const py::object & user_meta) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
         std::holds_alternative<AtomKey>(key) && std::get<AtomKey>(key).type() == KeyType::APPEND_DATA,
         "Can only override APPEND_DATA keys. Received: {}", key);
