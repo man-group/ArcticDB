@@ -74,11 +74,10 @@ static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>&
     }
 }
 
-
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
     bool sparsify_floats,
@@ -93,9 +92,9 @@ VersionedItem write_dataframe_impl(
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    const std::shared_ptr<DeDupMap> &de_dup_map,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     bool sparsify_floats,
     bool validate_index
     ) {

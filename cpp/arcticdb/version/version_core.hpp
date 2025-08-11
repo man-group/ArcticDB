@@ -70,7 +70,7 @@ struct MultiSymbolReadOutput {
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
     bool allow_sparse = false,
@@ -80,9 +80,9 @@ VersionedItem write_dataframe_impl(
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
     const WriteOptions& options,
-    const std::shared_ptr<DeDupMap> &de_dup_map,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     bool allow_sparse,
     bool validate_index
 );
