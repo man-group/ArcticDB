@@ -26,6 +26,7 @@ class FinalizeStagedData:
     repeat = 1
     min_run_count = 1
 
+    warmup_time = 0    
     timeout = 600
     LIB_NAME = "Finalize_Staged_Data_LIB"
 
@@ -83,6 +84,7 @@ from asv_runner.benchmarks.mark import SkipNotImplemented
 
 
 class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
+    warmup_time = 0    
     """
     The test is meant to be executed with 3 times wider dataframe than the base test
     """

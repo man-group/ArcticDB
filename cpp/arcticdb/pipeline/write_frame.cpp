@@ -18,6 +18,7 @@
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/format_date.hpp>
+
 #include <vector>
 #include <array>
 #include <ranges>
@@ -256,7 +257,7 @@ static RowRange partial_rewrite_row_range(
         });
         return {0, bound->row_pos()};
     } else {
-        const timestamp end = std::get<timestamp>(range.end_);
+        const timestamp end = std::get<timestamp>(range.inclusive_end());
         auto bound = std::upper_bound(std::begin(segment), std::end(segment), end, [](timestamp t, const auto& row) {
             return t < row.template index<TimeseriesIndex>();
         });

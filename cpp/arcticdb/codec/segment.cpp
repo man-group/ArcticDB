@@ -97,7 +97,7 @@ SegmentHeaderProtoWrapper decode_protobuf_header(const uint8_t* data, size_t hea
     google::protobuf::io::ArrayInputStream ais(data, static_cast<int>(header_bytes_size));
 
     auto arena = std::make_unique<google::protobuf::Arena>();
-    auto seg_hdr = google::protobuf::Arena::CreateMessage<arcticdb::proto::encoding::SegmentHeader>(arena.get());
+    auto seg_hdr = google::protobuf::Arena::Create<arcticdb::proto::encoding::SegmentHeader>(arena.get());
     seg_hdr->ParseFromZeroCopyStream(&ais);
     ARCTICDB_TRACE(log::codec(), "Decoded protobuf header: {}", seg_hdr->DebugString());
     return {seg_hdr, std::move(arena)};

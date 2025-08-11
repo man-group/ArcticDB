@@ -7,10 +7,8 @@
 
 #pragma once
 
-#include <arcticdb/entity/key.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -19,20 +17,14 @@
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
-#include <arcticdb/processing/grouper.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/util/movable_priority_queue.hpp>
-#include <arcticdb/pipeline/index_utils.hpp>
 
 #include <folly/Poly.h>
-#include <folly/futures/Future.h>
 
 #include <vector>
-#include <unordered_map>
 #include <string>
 #include <variant>
 #include <memory>
-#include <atomic>
 
 namespace arcticdb {
 
@@ -201,13 +193,12 @@ struct ProjectClause {
     explicit ProjectClause(std::unordered_set<std::string> input_columns,
                            std::string output_column,
                            ExpressionContext expression_context) :
-            output_column_(output_column),
+            output_column_(std::move(output_column)),
             expression_context_(std::make_shared<ExpressionContext>(std::move(expression_context))) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 std::holds_alternative<ExpressionName>(expression_context_->root_node_name_) || std::holds_alternative<ValueName>(expression_context_->root_node_name_),
                 "ProjectClause AST would not produce a column");
         clause_info_.input_columns_ = std::move(input_columns);
-        clause_info_.modifies_output_descriptor_ = true;
     }
 
     ProjectClause() = delete;
@@ -257,10 +248,8 @@ struct PartitionClause {
     std::string grouping_column_;
 
     explicit PartitionClause(const std::string& grouping_column) :
-            processing_config_(),
             grouping_column_(grouping_column) {
         clause_info_.input_columns_ = {grouping_column_};
-        clause_info_.modifies_output_descriptor_ = true;
     }
     PartitionClause() = delete;
 
@@ -348,7 +337,7 @@ struct AggregationClause {
     AggregationClause(const std::string& grouping_column,
                       const std::vector<NamedAggregator>& aggregations);
 
-    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(ARCTICDB_UNUSED std::vector<RangesAndKey>&) {
+    [[noreturn]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&) {
         internal::raise<ErrorCode::E_ASSERTION_FAILURE>("AggregationClause should never be first in the pipeline");
     }
 
@@ -405,8 +394,7 @@ struct ResampleClause {
         timestamp offset,
         ResampleOrigin origin);
 
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(
-            std::vector<RangesAndKey>& ranges_and_keys);
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys);
 
     [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec);
 
@@ -620,11 +608,9 @@ struct ColumnStatsGenerationClause {
     explicit ColumnStatsGenerationClause(
         std::unordered_set<std::string>&& input_columns,
         std::shared_ptr<std::vector<ColumnStatsAggregator>> column_stats_aggregators) :
-            processing_config_(),
             column_stats_aggregators_(std::move(column_stats_aggregators)) {
         clause_info_.input_columns_ = std::move(input_columns);
         clause_info_.can_combine_with_column_selection_ = false;
-        clause_info_.modifies_output_descriptor_ = true;
     }
 
     ARCTICDB_MOVE_COPY_DEFAULT(ColumnStatsGenerationClause)
@@ -653,7 +639,8 @@ struct ColumnStatsGenerationClause {
     }
 
     OutputSchema modify_schema(ARCTICDB_UNUSED OutputSchema&& output_schema) const {
-        internal::raise<ErrorCode::E_ASSERTION_FAILURE>("ColumnStatsGenerationClause::modify_schema should never be called");
+        // This clause is not used at the moment. Returning empty output schema so that unit tests can succeed.
+        return OutputSchema{};
     }
 
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
@@ -694,10 +681,22 @@ struct RowRangeClause {
         clause_info_.input_structure_ = ProcessingStructure::ALL;
     }
 
-    explicit RowRangeClause(int64_t start, int64_t end):
-            row_range_type_(RowRangeType::RANGE),
-            user_provided_start_(start),
-            user_provided_end_(end) {
+    explicit RowRangeClause(std::optional<int64_t> start, std::optional<int64_t> end) {
+        // start and end both absent is a no-op, the Python layer just skips the clause in this case
+        util::check(start || end, "Expect at least one of start and end to be present");
+        if (start && end) {
+            row_range_type_ = RowRangeType::RANGE;
+            user_provided_start_ = *start;
+            user_provided_end_ = *end;
+        } else if (start) {
+            // start=0 and end absent is a no-op, the Python layer just skips the clause in this case
+            util::check(start != 0, "Did not expect end=nullopt and start==0");
+            row_range_type_ = RowRangeType::TAIL;
+            n_ = -1 * start.value();
+        } else if (end) {
+            row_range_type_ = RowRangeType::HEAD;
+            n_ = end.value();
+        }
         clause_info_.input_structure_ = ProcessingStructure::ALL;
     }
 

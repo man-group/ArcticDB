@@ -9,6 +9,15 @@ import collections
 import hashlib
 import msgpack
 
+from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
+
+try:
+    from msgpack.fallback import DEFAULT_RECURSE_LIMIT
+except ImportError:
+    # The default as of msgpack 1.1.0 - handle the import error in case the msgpack wheel stops exporting this constant.
+    # Want to keep compatibility with a wide range of msgpack versions.
+    DEFAULT_RECURSE_LIMIT = 511
+
 from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer
@@ -129,8 +138,17 @@ class Flattener:
 
         return False
 
-    def _create_meta_structure(self, obj, sym, to_write):
-        # TODO: convert to non recursive and remove to_write from func arguments to not rely on external state.
+    def _create_meta_structure(self, obj, sym, to_write, depth=0, original_symbol=None):
+        if original_symbol is None:
+            original_symbol = sym  # just used for error messages
+
+        # Factor of 2 is because msgpack recurses with two stackframes for each level of nesting
+        if depth > DEFAULT_RECURSE_LIMIT // 2:
+            raise DataTooNestedException(f"Symbol {original_symbol} cannot be recursively normalized as it contains more than "
+                                         f"{DEFAULT_RECURSE_LIMIT // 2} levels of nested dictionaries. This is a limitation of the msgpack serializer.")
+
+        # Commit 450170d94 shows a non-recursive implementation of this function, but since `msgpack.packb` of the
+        # result is itself recursive, there is little point to rewriting this function.
         item_type, iterables, normalization_info = self.derive_iterables(obj)
         shortened_symbol = sym
         meta_struct = {
@@ -152,16 +170,31 @@ class Flattener:
 
         if not iterables:
             # Use the shortened name for the actual writes to avoid having obscenely large key sizes.
-            to_write[self.compact_v1(sym)] = obj
+            key_name = self.compact_v1(sym)
+            to_write[key_name] = obj
             meta_struct["leaf"] = True
+
+            # We currently rely on scrambling (with compact_v1) the symbol name at write time to generate stream IDs for the
+            # data being written under leaf nodes. We also use compact_v1 at read time to look up these stream IDs based on the "symbol"
+            # in the metastruct. This makes it impossible to change compact_v1 in a backwards and forwards compatible way.
+            # To give us a way to improve this in future, for example when recursive normalizers are added to the Library API,
+            # we more recently started recording the key_name explicitly in the metastruct. If using the key_name, you must
+            # bear in mind that old metastructs do not have it.
+            meta_struct["key_name"] = key_name
+
             return meta_struct
 
         meta_struct["sub_keys"] = []
         for k, v in iterables:
             # Note: It's fine to not worry about the separator given we just use it to form some sort of vaguely
             # readable name in the end when the leaf node is retrieved.
-            key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str(k))
-            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write))
+            str_k = str(k)
+            if issubclass(item_type, collections.abc.MutableMapping) and self.SEPARATOR in str_k:
+                raise UnsupportedKeyInDictionary(f"Dictionary keys used with recursive normalizers cannot contain [{self.SEPARATOR}]. "
+                                         f"Encountered key {k} while writing symbol {original_symbol}")
+            key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str_k)
+            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write, depth=depth + 1,
+                                                                       original_symbol=original_symbol))
 
         return meta_struct
 

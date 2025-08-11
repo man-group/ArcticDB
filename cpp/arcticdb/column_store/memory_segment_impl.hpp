@@ -74,15 +74,6 @@ public:
         }
 
         template<class Callable>
-        auto visit_string(Callable &&c) const {
-            return entity::visit_field(parent_->descriptor().field(column_id_), [this, c = std::forward<Callable>(c)](auto type_desc_tag) {
-                using DTT = typename std::decay_t<decltype(type_desc_tag)>::DataTypeTag;
-                if constexpr(is_sequence_type(DTT::data_type))
-                    return c(parent_->string_at(row_id_, position_t(column_id_)));
-            });
-        }
-
-        template<class Callable>
         auto visit_field(Callable &&c) const {
             const auto& field = parent_->descriptor().field(column_id_);
             return entity::visit_field(field, [&field, this, c = std::forward<Callable>(c)](auto type_desc_tag) {
@@ -408,7 +399,7 @@ public:
     void create_columns(
         size_t old_size,
         size_t expected_column_size,
-        AllocationType presize,
+        AllocationType allocation_type,
         Sparsity allow_sparse,
         OutputFormat output_format,
         DataTypeMode mode);
@@ -562,7 +553,7 @@ public:
         return *columns_[idx];
     }
 
-    std::shared_ptr<Column> column_ptr(position_t idx) {
+    std::shared_ptr<Column> column_ptr(position_t idx) const {
         return columns_[idx];
     }
 

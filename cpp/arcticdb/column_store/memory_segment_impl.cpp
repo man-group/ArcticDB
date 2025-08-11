@@ -13,6 +13,8 @@
 
 #include <google/protobuf/any.pb.h>
 
+#include <arcticdb/stream/index.hpp>
+
 namespace arcticdb {
 
     SegmentInMemoryImpl::SegmentInMemoryImpl() = default;
@@ -88,7 +90,7 @@ void SegmentInMemoryImpl::generate_column_map() const {
 void SegmentInMemoryImpl::create_columns(
         size_t old_size,
         size_t expected_column_size,
-        AllocationType presize,
+        AllocationType allocation_type,
         Sparsity allow_sparse,
         OutputFormat output_format,
         DataTypeMode mode) {
@@ -96,8 +98,17 @@ void SegmentInMemoryImpl::create_columns(
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
         auto type = descriptor_->fields(i).type();
         util::check(type.data_type() != DataType::UNKNOWN, "Can't create column in create_columns with unknown data type");
-        columns_.emplace_back(
-                std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, presize, allow_sparse, output_format, mode));
+        if (allocation_type == AllocationType::DETACHABLE && is_fixed_string_type(descriptor_->fields(i).type().data_type())) {
+            // Do not use detachable blocks for fixed width string columns as they are not yet inflated and will not be
+            // passed back to the Python layer "as is"
+            columns_.emplace_back(
+                    std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, AllocationType::PRESIZED, allow_sparse,
+                                             output_format, mode));
+        } else {
+            columns_.emplace_back(
+                    std::make_shared<Column>(descriptor_->fields(i).type(), expected_column_size, allocation_type, allow_sparse,
+                                             output_format, mode));
+        }
     }
     generate_column_map();
 }
@@ -154,7 +165,7 @@ std::optional<std::size_t> SegmentInMemoryImpl::column_index(std::string_view na
     if (auto index = column_index(name); index)
         return index;
 
-    std::string multi_index_column_name = fmt::format("__idx__{}", name);
+    const std::string multi_index_column_name = stream::mangled_name(name);
     if (auto multi_index = column_index(multi_index_column_name); multi_index)
         return multi_index;
 
@@ -609,12 +620,12 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
         auto ptr = col_ref.data().buffer().ptr_cast<char>(row * string_size, string_size);
         return std::string_view(ptr, string_size);
     } else {
-
-        auto offset = col_ref.scalar_at<entity::position_t>(row);
-        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder())
+        const auto offset = col_ref.scalar_at<entity::position_t>(row);
+        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder()) {
             return string_pool_->get_view(*offset);
-        else
+        } else {
             return std::nullopt;
+        }
     }
 }
 

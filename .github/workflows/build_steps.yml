@@ -96,6 +96,8 @@ jobs:
           brew install sccache
           brew install mono
           brew install bison   # required by thrift pulled via vcpkg
+          brew install openssl@3
+          which openssl
           echo "SCCACHE_DIR=/tmp/sccache" >> $GITHUB_ENV
           mkdir -p /tmp/sccache
           # Start sccache server
@@ -229,9 +231,16 @@ jobs:
             docker inspect --type=image "${{inputs.cibw_image_tag}}" \
               --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
+      - name: Select Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
-        run: pipx run cibuildwheel==${{inputs.cibw_version}}
+        run: |
+          python -m pip install pipx
+          python -m pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
@@ -349,6 +358,17 @@ jobs:
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
 
+      - name: Windows download timezone data for pyarrow
+        if: matrix.os == 'windows'
+        shell: pwsh
+        # Script sourced from: https://arrow.apache.org/docs/cpp/build_system.html#download-timezone-database
+        run: |
+          curl https://data.iana.org/time-zones/releases/tzdata2021e.tar.gz --output tzdata.tar.gz
+          mkdir tzdata
+          tar --extract --file tzdata.tar.gz --directory tzdata
+          move tzdata C:\Users\runneradmin\Downloads\tzdata
+          curl https://raw.githubusercontent.com/unicode-org/cldr/master/common/supplemental/windowsZones.xml --output C:\Users\runneradmin\Downloads\tzdata\windowsZones.xml
+
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
         if: matrix.os == 'linux' || matrix.os == 'macos'
@@ -386,6 +406,8 @@ jobs:
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           persistent_storage: "${{ inputs.persistent_storage }}"
           strategy_branch: "${{ env.distinguishing_name }}"
 
@@ -399,12 +421,11 @@ jobs:
       - name: Run test
         run: |
           ulimit -a
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            echo "Run custom pytest command"
-            python -m pip  install pytest-repeat
-            python -m pip  install setuptools
-            python -m pip  install wheel
+            python -m pip  install pytest-repeat setuptools wheel
             python setup.py protoc --build-lib python
+            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$ARCTICDB_PYTEST_ARGS"
           else
             build_tooling/parallel_test.sh tests/${{matrix.type}}

@@ -13,7 +13,7 @@ from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryB
 from arcticdb.exceptions import NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
-from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.mark import MACOS_WHEEL_BUILD, WINDOWS
 
 pytestmark = pytest.mark.pipeline
 
@@ -279,6 +279,40 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
     lazy_df_1 = lib.read("sym1", columns=columns, lazy=True)
 
     received = concat([lazy_df_0, lazy_df_1], join).collect().data
+    expected = pd.concat([df_0.loc[:, columns], df_1.loc[:, columns]])
+    expected.index = pd.RangeIndex(len(expected))
+    assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.parametrize("join", ["inner", "outer"])
+def test_symbol_concat_filtering_with_column_selection(lmdb_library_factory, dynamic_schema, join):
+    lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema))
+    df_0 = pd.DataFrame(
+        {
+            "col1": np.arange(3, dtype=np.int64),
+            "col2": np.arange(100, 103, dtype=np.int64),
+            "col3": np.arange(1000, 1003, dtype=np.int64),
+        },
+    )
+    df_1 = pd.DataFrame(
+        {
+            "col0": np.arange(10, 14, dtype=np.int64),
+            "col1": np.arange(4, dtype=np.int64),
+            "col2": np.arange(200, 204, dtype=np.int64),
+            "col3": np.arange(2000, 2004, dtype=np.int64),
+        },
+    )
+    lib.write("sym0", df_0)
+    lib.write("sym1", df_1)
+    columns=["col1"]
+    lazy_df_0 = lib.read("sym0", columns=columns, lazy=True)
+    lazy_df_0 = lazy_df_0[lazy_df_0["col3"] > 0]
+    lazy_df_1 = lib.read("sym1", columns=columns, lazy=True)
+    lazy_df_1 = lazy_df_1[lazy_df_1["col3"] > 0]
+
+    received = concat([lazy_df_0, lazy_df_1], join).collect().data
+    print(received)
     expected = pd.concat([df_0.loc[:, columns], df_1.loc[:, columns]])
     expected.index = pd.RangeIndex(len(expected))
     assert_frame_equal(expected, received)
@@ -620,7 +654,6 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
-@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Fatal Python error: Segmentation fault (monday:9520391456)")
 def test_symbol_concat_non_existent_symbol(lmdb_library):
     lib = lmdb_library
     sym = "test_symbol_concat_non_existent_symbol"
@@ -629,7 +662,6 @@ def test_symbol_concat_non_existent_symbol(lmdb_library):
         concat(lib.read_batch([sym, "non-existent symbol"], lazy=True)).collect()
 
 
-@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="Fatal Python error: Segmentation fault (monday:9520391456)")
 def test_symbol_concat_pickled_data(lmdb_library):
     lib = lmdb_library
     df = pd.DataFrame({"bytes": np.arange(10, dtype=np.uint64)})

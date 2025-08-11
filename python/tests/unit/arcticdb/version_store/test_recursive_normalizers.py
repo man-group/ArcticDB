@@ -15,9 +15,11 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
-from arcticdb_ext.exceptions import UserInputException
+from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
+import arcticdb_ext.stream as adb_stream
+import arcticdb_ext
 
 from tests.util.mark import MACOS_WHEEL_BUILD
 
@@ -226,7 +228,8 @@ def test_recursive_normalizers_not_set(lmdb_version_store_v1, type, pickle_on_fa
     lib.write("sym", data, recursive_normalizers=False, pickle_on_failure=pickle_on_failure)
 
     # Then
-    assert lib.get_info("sym")["type"] == "pickled"  # pickle_on_failure=False not respected: Monday 8083916814
+    assert lib.get_info("sym")["type"] == "pickled"  # pickle_on_failure just controls what happens if we
+    # try to normalize a type we natively support (like a dataframe) but it contains data we don't support
 
     result = lib.read("sym").data
     if type == "dict":
@@ -305,21 +308,40 @@ def test_long_lists(lmdb_version_store_v1):
     assert_frame_equal(result[500], df)
 
 
-def test_deep_nesting_metastruct_size(lmdb_version_store_v1):
+def test_deep_nesting_metastruct_size_over_limit(lmdb_version_store_v1):
     # Given
     lib = lmdb_version_store_v1
     sym = "sym"
     key = "reasonable_length_key"
     data = {key: pd.DataFrame({"col": [0]})}
 
-    nesting_levels = 1_000
+    nesting_levels = 256
     for i in range(nesting_levels - 1):
         data[key] = {key: data[key]}
 
     # When & Then
-    with pytest.raises(ValueError):
-        """Currently raises a ValueError: recursion limit exceeded within msgpack. We should try to do better here."""
+    with pytest.raises(DataTooNestedException, match=r"^Symbol sym cannot be recursively normalized.*255 levels.*"):
         lib.write(sym, data, recursive_normalizers=True)
+
+
+def test_deep_nesting_metastruct_size_under_limit(lmdb_version_store_v1):
+    # Given
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    key = "reasonable_length_key"
+    data = {key: pd.DataFrame({"col": [0]})}
+
+    nesting_levels = 255
+    for i in range(nesting_levels - 1):
+        data[key] = {key: data[key]}
+
+    lib.write(sym, data, recursive_normalizers=True)
+
+    res = lib.read(sym).data
+    for i in range(nesting_levels):
+        res = res[key]
+
+    assert_frame_equal(res, pd.DataFrame({"col": [0]}))
 
 
 def test_long_keys(lmdb_version_store_v1):
@@ -352,8 +374,35 @@ def test_unsupported_characters_in_keys(s3_version_store_v1, key):
     data = {key: df}
 
     # When & Then
-    with pytest.raises(UserInputException):
+    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
         lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
+
+    lt = lib.library_tool()
+    multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
+    assert not multi_keys
+
+
+@pytest.mark.parametrize("key", ("*", "<", ">", chr(31), chr(127)))
+def test_unsupported_characters_in_keys_nested(s3_version_store_v1, key):
+    """Check how we serialize nested keys with characters that we do not support in normal symbol names"""
+    # Given
+    lib = s3_version_store_v1
+    df = pd.DataFrame({"col": [0]})
+    data = {"blah": {key: df}}
+
+    # When
+    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
+
+    lt = lib.library_tool()
+    multi_keys = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")
+    assert not multi_keys
 
 
 def test_unsupported_characters_in_keys_empty_string(s3_version_store_v1):
@@ -427,6 +476,176 @@ def test_sequences_data_layout(lmdb_version_store_v1, sequence_type):
     assert len(lt.find_keys(KeyType.TABLE_DATA)) == 0
 
 
+class CustomClassSeparatorInStr:
+
+    def __init__(self, n):
+        self.n = n
+
+    def __str__(self):
+        return "CustomClass__str"
+
+    def __repr__(self):
+        return "CustomClass__repr"
+
+    def __hash__(self):
+        return self.n % 10
+
+    def __eq__(self, other):
+        return self.n == other.n
+
+
+def test_dictionaries_with_custom_keys_that_cannot_roundtrip(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {CustomClassSeparatorInStr(1): df}
+
+    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    assert not lib.has_symbol("sym")
+
+
+class CustomClass:
+
+    def __init__(self, n):
+        self.n = n
+
+    def __str__(self):
+        return f"CustomClassStr{self.n}"
+
+    def __repr__(self):
+        return f"CustomClassRepr{self.n}"
+
+    def __hash__(self):
+        return self.n % 10
+
+    def __eq__(self, other):
+        return self.n == other.n
+
+
+def test_dictionaries_with_custom_keys(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {CustomClass(1): df}
+
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+
+    assert len(actual_data) == 1
+    assert_frame_equal(actual_data["CustomClassStr1"], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert [i.id for i in index_keys] == ['sym__CustomClassStr1']
+    assert len(data_keys) == 1
+
+    assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.VERSION, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, "sym")) == 0
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 1
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__CustomClassStr1"
+
+
+def test_list_with_custom_elements(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = [CustomClassSeparatorInStr(1), df]
+
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+
+    assert len(actual_data) == 2
+    assert actual_data[0] == CustomClassSeparatorInStr(1)
+    assert_frame_equal(actual_data[1], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert [i.id for i in index_keys] == ['sym__0', "sym__1"]
+    assert len(data_keys) == 2
+
+    assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.VERSION, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, "sym")) == 0
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 2
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__0"
+    contents = segment.iloc[1].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1"
+
+
+def test_dictionaries_with_non_str_keys(lmdb_version_store_v1):
+    """We seem to inadvertently coerce dictionary keys to strings. We should change this so we either round trup correctly
+    or raise, but this test records the current behaviour."""
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+
+    data = {1: df, None: 1, 1.1: df, False: df}
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
+
+    actual_data = lib.read("sym").data
+    assert len(actual_data) == 4
+    assert_frame_equal(actual_data["1.1"], df)
+    assert actual_data["None"] == 1
+    assert_frame_equal(actual_data["1.1"], df)
+    assert_frame_equal(actual_data["False"], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    assert [i.id for i in index_keys] == ['sym__1', "sym__1.1", "sym__False"]
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert len(data_keys) == 3
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 3
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1"
+    contents = segment.iloc[1].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1.1"
+    contents = segment.iloc[2].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__False"
+
+
 DataFrameHolder = namedtuple("DataFrameHolder", ["contents"])
 
 
@@ -454,21 +673,62 @@ def test_something_we_cannot_normalize_just_gets_pickled(lmdb_version_store_v1):
     assert lib.get_info("sym")["type"] == "pickled"
 
 
-@pytest.mark.xfail(reason="These do not roundtrip properly. Monday: 9256783357")
 @pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
-def test_key_names(lmdb_version_store_v1, key):
+def test_double_underscore_names_validated_against(lmdb_version_store_v1, key):
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {key: df}
 
+    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key {key} while writing symbol sym$"):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
+
+
+def test_nested_double_underscore_names_validated_against(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = {"a": {"__a": df}}
+
+    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key __a while writing symbol sym$"):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
+
+
+def test_double_underscores_in_lists_ok(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+
+    data = ["a__", "__a", "a__b", "__a__b", df, "a__b__", df, {"a": df}]
+
     lib.write("sym", data, recursive_normalizers=True)
-    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
 
-    actual_data = lib.read("sym").data
-    assert key in actual_data
-    pd.testing.assert_frame_equal(actual_data[key], df)
+    res = lib.read("sym").data
 
-    assert lib.read("sym").version == 0
+    assert res[0] == "a__"
+    assert res[1] == "__a"
+    assert res[2] == "a__b"
+    assert res[3] == "__a__b"
+    assert_frame_equal(res[4], df)
+    assert res[5] == "a__b__"
+    assert_frame_equal(res[6], df)
+    assert_frame_equal(res[7]["a"], df)
+
+
+@pytest.mark.parametrize("key", ("a__", "__a", "a__b", "__a__b", "a__b__"))
+def test_double_underscores_in_dict_in_list_not_ok(lmdb_version_store_v1, key):
+    lib = lmdb_version_store_v1
+    df = pd.DataFrame({"d": [1, 2, 3]})
+    data = [df, {key: df}]
+
+    with pytest.raises(UnsupportedKeyInDictionary, match=f"^.*key {key} while writing symbol sym$"):
+        lib.write("sym", data, recursive_normalizers=True)
+
+    with pytest.raises(NoSuchVersionException):
+        lib.read("sym")
 
 
 def test_read_asof(lmdb_version_store_v1):
@@ -603,7 +863,7 @@ class TestRecursiveNormalizersCompat:
             compat.old_lib.execute([
                 f"""
 from arcticdb_ext.storage import KeyType
-lib._nvs.write('sym', {{"a": df_1, "b": df_2}}, recursive_normalizers=True, pickle_on_failure=True)
+lib._nvs.write('sym', {{"a": df_1, "b" * 95: df_2, "c" * 100: df_2}}, recursive_normalizers=True, pickle_on_failure=True)
 lib_tool = lib._nvs.library_tool()
 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 """
@@ -611,7 +871,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 
             with compat.current_version() as curr:
                 data = curr.lib.read(sym).data
-                expected = {"a": dfs["df_1"], "b": dfs["df_2"]}
+                expected = {"a": dfs["df_1"], "b" * 95: dfs["df_2"], "c" * 100: dfs["df_2"]}
                 assert set(data.keys()) == set(expected.keys())
                 for key in data.keys():
                     assert_frame_equal(data[key], expected[key])
@@ -622,7 +882,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
             dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
             with compat.current_version() as curr:
-                curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b": dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
+                curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b" * 95: dfs["df_2"], "c" * 100: dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
                 lib_tool = curr.lib._nvs.library_tool()
                 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 
@@ -630,7 +890,7 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
                 """
 from pandas.testing import assert_frame_equal
 data = lib.read('sym').data
-expected = {'a': df_1, 'b': df_2}
+expected = {'a': df_1, 'b' * 95: df_2, 'c' * 100: df_2}
 assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])

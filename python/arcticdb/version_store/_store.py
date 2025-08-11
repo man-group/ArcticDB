@@ -11,6 +11,8 @@ from dataclasses import dataclass
 import datetime
 import os
 import sys
+from warnings import warn
+
 import pandas as pd
 import numpy as np
 import pytz
@@ -24,15 +26,17 @@ from numpy import datetime64
 from pandas import Timestamp, to_datetime, Timedelta
 from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
+import time
 
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import SortedValue
+from arcticdb_ext.version_store import SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb_ext import get_config_int
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
     LibraryIndex as _LibraryIndex,
@@ -51,11 +55,11 @@ from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonV
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
-from arcticdb_ext.version_store import DataError
+from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame, PandasOutputFrame
+from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame
 from arcticdb.authorization.permissions import OpenMode
-from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException
+from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
 from arcticdb.flattener import Flattener
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer, CompositeCustomNormalizer
@@ -67,18 +71,20 @@ from arcticdb.version_store._normalization import (
     denormalize_dataframe,
     MsgPackNormalizer,
     CompositeNormalizer,
+    ArrowTableNormalizer,
     FrameData,
     _IDX_PREFIX_LEN,
     get_timezone_from_metadata,
     _from_tz_timestamp,
     restrict_data_to_date_range_only,
     normalize_dt_range_to_ts,
-    _denormalize_single_index,
+    _denormalize_columns_names,
 )
 
 TimeSeriesType = Union[pd.DataFrame, pd.Series]
 from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
+import arcticdb_ext as ae
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -324,6 +330,7 @@ class NativeVersionStore:
         self.env = env or "local"
         self._lib_cfg = lib_cfg
         self._custom_normalizer = custom_normalizer
+        self._arrow_normalizer = ArrowTableNormalizer()
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
@@ -410,7 +417,8 @@ class NativeVersionStore:
     def get_backing_store(self):
         backing_store = ""
         try:
-            primary_backing_url = list(self._lib_cfg.storage_by_id.values())[0].config.type_url
+            primary_storage_id = self._lib_cfg.lib_desc.storage_ids[0]
+            primary_backing_url = self._lib_cfg.storage_by_id[primary_storage_id].config.type_url
             storage_val = re.search("cxx.arctic.org/arcticc.pb2.(.*)_pb2.Config", primary_backing_url)
             backing_store = storage_val.group(1)
         except Exception as e:
@@ -529,9 +537,16 @@ class NativeVersionStore:
             norm_failure_options_msg=norm_failure_options_msg,
         )
         if isinstance(item, NPDDataFrame):
-            self.version_store.write_parallel(symbol, item, norm_meta, validate_index, sort_on_index, sort_columns)
+            is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
+            result = self.version_store.write_parallel(
+                symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
+            )
+            if is_new_stage_api_enabled:
+                return result
+            return None
         else:
             log.warning("The data could not be normalized to an ArcticDB format and has not been written")
+            return None
 
     def write(
         self,
@@ -657,9 +672,17 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             if parallel or incomplete:
+                is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
+                if is_new_stage_api_enabled:
+                    warn(
+                        "Staging data with write() is deprecated. Use stage() instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
+                _log_warning_on_writing_empty_dataframe(data, symbol)
                 vit = self.version_store.write_versioned_dataframe(
                     symbol, item, norm_meta, udm, prune_previous_version, sparsify_floats, validate_index
                 )
@@ -786,9 +809,18 @@ class NativeVersionStore:
                 if incomplete:
                     self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 else:
+                    call_time = time.time_ns()
                     vit = self.version_store.append(
                         symbol, item, norm_meta, udm, write_if_missing, prune_previous_version, validate_index
                     )
+                    # This is a heuristic to check for the case of using append call to write an empty dataframe in that
+                    # case we want to warn users that the processing pipeline might not work as expected. There are two
+                    # cases when the version is 0 either a new symbol was created by this call or there was an existing
+                    # symbol with version 0 and the input dataframe was empty, which makes the append a noop. That is
+                    # why the call_time is used to check if the symbol creation time was after the call to append in the
+                    # C++ layer.
+                    if vit.version == 0 and write_if_missing and vit.timestamp >= call_time:
+                        _log_warning_on_writing_empty_dataframe(dataframe, symbol)
                     return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def update(
@@ -824,7 +856,7 @@ class NativeVersionStore:
             If a range is specified, it will clear/delete the data within the
             range and overwrite it with the data in `data`. This allows the user
             to update with data that might only be a subset of the
-            original data.
+            original data. Note date_range is end-inclusive.
         upsert: bool, default=False
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
@@ -884,9 +916,17 @@ class NativeVersionStore:
 
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
+                call_time = time.time_ns()
                 vit = self.version_store.update(
                     symbol, update_query, item, norm_meta, udm, upsert, dynamic_schema, prune_previous_version
                 )
+                # This is a heuristic to check for using update to write an empty dataframe in that case we want to warn
+                # users that the processing pipeline might not work as expected. There are two cases when the version is
+                # 0 either a new symbol was created by this call or there was an existing symbol with version 0 and the
+                # input dataframe was empty, which makes the update a noop. That is why the call_time is used to check
+                # if the symbol creation time was after the call to append in the C++ layer.
+                if vit.version == 0 and upsert and vit.timestamp >= call_time:
+                    _log_warning_on_writing_empty_dataframe(data, symbol)
             return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _apply_date_range_to_update_query(
@@ -935,10 +975,21 @@ class NativeVersionStore:
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
             symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update
         )
+        call_time = time.time_ns()
         cxx_versioned_items = self.version_store.batch_update(
             symbols, items, norm_metas, udms, update_queries, prune_previous_version, upsert
         )
-        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        result = self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        for idx, item in enumerate(result):
+            # This is a heuristic to check for the case of using update call to write an empty dataframe in that case we
+            # want to warn users that the processing pipeline might not work as expected. Calling update with an empty
+            # dataframe might create a new version if upsert is true and there is no live version on disk. If the input
+            # is empty and there's a live version or write_if_missing is False the update is a noop. Since there's no
+            # cheap way of checking if there's a live version, call_time is used to check if the symbol creation time
+            # was after the call to update in the C++ layer.
+            if isinstance(item, VersionedItem) and upsert and item.timestamp >= call_time:
+                _log_warning_on_writing_empty_dataframe(data_vector[idx], symbols[idx])
+        return result
 
     def create_column_stats(
         self, symbol: str, column_stats: Dict[str, Set[str]], as_of: Optional[VersionQueryInput] = None
@@ -1071,8 +1122,10 @@ class NativeVersionStore:
         date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
             List of date ranges to filter the symbols.
             i-th entry corresponds to i-th element of `symbols`.
-        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
-            List of row ranges to filter the symbols.
+        row_ranges : `Optional[List[Tuple[Optional[int], Optional[int]]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             i-th entry corresponds to i-th element of `symbols`.
         columns: `List[List[str]]`, default=None
             Which columns to return for a dataframe.
@@ -1534,6 +1587,8 @@ class NativeVersionStore:
             norm_failure_options_msg,
             operation_supports_categoricals=True,
         )
+        for idx, dataframe in enumerate(data_vector):
+            _log_warning_on_writing_empty_dataframe(dataframe, symbols[idx])
         cxx_versioned_items = self.version_store.batch_write(
             symbols, items, norm_metas, udms, prune_previous_version, validate_index, throw_on_error
         )
@@ -1668,6 +1723,7 @@ class NativeVersionStore:
             symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append
         )
         write_if_missing = kwargs.get("write_if_missing", True)
+        call_time = time.time_ns()
         cxx_versioned_items = self.version_store.batch_append(
             symbols,
             items,
@@ -1678,7 +1734,17 @@ class NativeVersionStore:
             write_if_missing,
             throw_on_error,
         )
-        return self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        converted = self._convert_cxx_batch_results_to_python(cxx_versioned_items, metadata_vector)
+        for idx, result in enumerate(converted):
+            # This is a heuristic to check for the case of using append call to write an empty dataframe in that case we
+            # want to warn users that the processing pipeline might not work as expected. Calling append with an empty
+            # dataframe might create a new version if write_if_missing is true and there is no live version on disk. If
+            # the input is empty and there's a live version or write_if_missing is False the append is a noop. Since
+            # there's no cheap way of checking if there's a live version, call_time is used to check if the symbol
+            # creation time was after the call to append in the C++ layer.
+            if isinstance(result, VersionedItem) and write_if_missing and result.timestamp >= call_time:
+                _log_warning_on_writing_empty_dataframe(data_vector[idx], symbols[idx])
+        return converted
 
     def _convert_cxx_batch_results_to_python(self, cxx_versioned_items, metadata_vector):
         results = []
@@ -1932,18 +1998,21 @@ class NativeVersionStore:
             `str` : snapshot name which contains the version
             `datetime.datetime` : the version of the data that existed as_of the requested point in time
         date_range: `Optional[DateRangeInput]`, default=None
-            DateRange to read data for.  Applicable only for Pandas data with a DateTime index. Returns only the part
-            of the data that falls within the given range. The same effect can be achieved by using the date_range
-            clause of the QueryBuilder class, which will be slower, but return data with a smaller memory footprint.
-            See the QueryBuilder.date_range docstring for more details.
+            DateRange to read data for. Inclusive both for lower and upper bounds. Applicable only for dataframes with
+            a DateTime index. Returns only the part of the data that falls within the given range.
+            The same effect can  be achieved by using the date_range clause of the QueryBuilder class, which will be
+            slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
+            details.
             Only one of date_range or row_range can be provided.
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
             the handling of negative start/end values.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
-            Applicable only for Pandas data. Determines which columns to return data for.
+            Applicable only for dataframes. Determines which columns to return data for.
         query_builder: 'Optional[QueryBuilder]', default=None
             A QueryBuilder object to apply to the dataframe before it is returned.
             For more information see the documentation for the QueryBuilder class.
@@ -2066,9 +2135,10 @@ class NativeVersionStore:
             # post filter
             start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
             data = []
-            for c in read_result.frame_data.value.data:
+            for c in read_result.frame_data.data:
                 data.append(c[start_idx:end_idx])
-            read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns)
+            row_count = len(data[0]) if len(data) else 0
+            read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns, row_count, read_result.frame_data.offset)
 
         vitem = self._adapt_read_res(read_result)
 
@@ -2097,7 +2167,7 @@ class NativeVersionStore:
             start_idx = read_query.row_filter.start - read_result.frame_data.offset
             end_idx = read_query.row_filter.end - read_result.frame_data.offset
         elif isinstance(read_query.row_filter, _IndexRange):
-            index = read_result.frame_data.value.data[0]
+            index = read_result.frame_data.data[0]
             if len(index) != 0:
                 start_idx = index.searchsorted(datetime64(read_query.row_filter.start_ts, "ns"), side="left")
                 end_idx = index.searchsorted(datetime64(read_query.row_filter.end_ts, "ns"), side="right")
@@ -2202,6 +2272,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         delete_staged_data_on_failure: bool = False,
+        _stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -2248,7 +2319,8 @@ class NativeVersionStore:
             "prune_previous_version", self._write_options(), global_default=False, existing_value=prune_previous_version
         )
         udm = normalize_metadata(metadata)
-        vit = self.version_store.compact_incomplete(
+
+        compaction_result = self.version_store.compact_incomplete(
             symbol,
             append,
             convert_int_to_float,
@@ -2258,8 +2330,19 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             delete_staged_data_on_failure,
+            stage_results=_stage_results
         )
-        return self._convert_thin_cxx_item_to_python(vit, metadata)
+
+        if isinstance(compaction_result, ae.version_store.VersionedItem):
+            return self._convert_thin_cxx_item_to_python(compaction_result, metadata)
+        elif isinstance(compaction_result, List):
+            # We expect this to be a list of errors
+            check(compaction_result, "List of errors in compaction result should never be empty")
+            check(all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInStageResultInfo")
+            raise MissingKeysInStageResultsError("Missing keys during compaction", tokens_with_missing_keys=compaction_result)
+        else:
+            raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
+
 
     @staticmethod
     def _get_index_columns_from_descriptor(descriptor):
@@ -2283,14 +2366,15 @@ class NativeVersionStore:
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
             import pyarrow as pa
+
             frame_data = read_result.frame_data
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            data = pa.Table.from_batches(record_batches)
+            table = pa.Table.from_batches(record_batches)
+            data = self._arrow_normalizer.denormalize(table, read_result.norm)
         else:
-            frame_data = FrameData.from_cpp(read_result.frame_data)
-            data = self._normalizer.denormalize(frame_data, read_result.norm)
+            data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):
                 data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
 
@@ -2630,6 +2714,59 @@ class NativeVersionStore:
         """
         self.version_store.delete_versions(symbol, versions)
 
+    def batch_delete_versions(self, symbols: List[str], versions: List[List[int]]) -> List[Optional[DataError]]:
+        """
+        Delete the given versions of the given symbols.
+        Batch equivalent of `delete_version` and `delete_versions`.
+
+        see `delete_version` and `delete_versions` for more details.
+
+        Parameters
+        ----------
+        symbols : `List[str]`
+            Symbols to delete versions for.
+        versions : `List[List[int]]`
+            Versions to delete for each symbol.
+            If there are no versions left for the symbol, the symbol will be deleted.
+
+        Returns
+        -------
+        `List[DataError]`
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
+
+        Raises
+        ------
+        ValueError
+            If versions is empty for any symbol.
+        """
+        # make sure that the versions are not empty
+        for symbol, version_ids in zip(symbols, versions):
+            if not version_ids:
+                raise ValueError(f"version_ids cannot be empty for symbol '{symbol}'")
+        return self.version_store.batch_delete(symbols, versions)
+
+    def batch_delete_symbols(self, symbols: List[str]) -> List[Optional[DataError]]:
+        """
+        Delete all versions of the given symbols.
+
+        Batch equivalent of `delete`.
+
+        see `delete` for more details.
+
+        Parameters
+        ----------
+        symbols : `List[str]`
+            Symbols to delete all versions for.
+
+        Returns
+        -------
+        `List[DataError]`
+            List of DataError objects, one for each symbol that was not deleted due to an error.
+            If the symbol was already deleted, there will be no error, just a warning.
+        """
+        return self.version_store.batch_delete(symbols, [[] for _ in symbols])
+
     def prune_previous_versions(self, symbol: str):
         """
         Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
@@ -2923,9 +3060,7 @@ class NativeVersionStore:
         given_version = max([v["version"] for v in self.list_versions(symbol)]) if version is None else version
         version_query = self._get_version_query(given_version)
 
-        i = self.version_store.read_index(symbol, version_query)
-        frame_data = ReadResult(*i).frame_data
-        index_data = FrameData.from_cpp(frame_data).data
+        index_data = ReadResult(*self.version_store.read_index(symbol, version_query)).frame_data.data
         if len(index_data[0]) == 0:
             return datetime64("nat"), datetime64("nat")
 
@@ -2961,7 +3096,7 @@ class NativeVersionStore:
 
     def lib_cfg(self):
         return self._lib_cfg
-    
+
     def lib_native_cfg(self):
         return self._native_cfg
 
@@ -2970,9 +3105,7 @@ class NativeVersionStore:
 
     def _process_info(
         self,
-        symbol: str,
         dit,
-        as_of: VersionQueryInput,
         date_range_ns_precision: bool,
     ) -> Dict[str, Any]:
         timeseries_descriptor = dit.timeseries_descriptor
@@ -2982,7 +3115,12 @@ class NativeVersionStore:
         index_dtype = []
         input_type = timeseries_descriptor.normalization.WhichOneof("input_type")
         index_type = "NA"
-        if input_type == "df":
+        if input_type == "series":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.series)
+        elif input_type == "ts":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.ts)
+        elif input_type == "df":
+            _denormalize_columns_names(columns, timeseries_descriptor.normalization.df)
             index_type = timeseries_descriptor.normalization.df.common.WhichOneof("index_type")
             if index_type == "index":
                 index_metadata = timeseries_descriptor.normalization.df.common.index
@@ -3069,7 +3207,7 @@ class NativeVersionStore:
         date_range_ns_precision = kwargs.get("date_range_ns_precision", False)
         version_query = self._get_version_query(version, **kwargs)
         dit = self.version_store.read_descriptor(symbol, version_query)
-        return self._process_info(symbol, dit, version, date_range_ns_precision)
+        return self._process_info(dit, date_range_ns_precision)
 
     def batch_get_info(
         self, symbols: List[str], as_ofs: Optional[List[VersionQueryInput]] = None
@@ -3126,7 +3264,7 @@ class NativeVersionStore:
             if isinstance(dit, DataError):
                 description_results.append(dit)
             else:
-                description_results.append(self._process_info(symbol, dit, as_of, date_range_ns_precision))
+                description_results.append(self._process_info(dit, date_range_ns_precision))
         return description_results
 
     def write_metadata(
@@ -3278,7 +3416,7 @@ class NativeVersionStore:
         return self._library
 
     def library_tool(self) -> LibraryTool:
-        return LibraryTool(self.library(), self)
+        return LibraryTool(self._library, self)
 
 
 def resolve_dynamic_strings(kwargs):
@@ -3292,3 +3430,19 @@ def resolve_dynamic_strings(kwargs):
         dynamic_strings = True
 
     return dynamic_strings
+
+def _log_warning_on_writing_empty_dataframe(dataframe, symbol):
+    # We allow passing other things to write such as integers and strings and python arrays but we care only about
+    # dataframes and series
+    is_dataframe = isinstance(dataframe, pd.DataFrame)
+    is_series = isinstance(dataframe, pd.Series)
+    if (is_series or is_dataframe) and dataframe.empty and os.getenv("ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME", "1") == "1":
+        empty_column_type = pd.DataFrame({"a": []}).dtypes["a"] if is_dataframe else pd.Series([]).dtype
+        current_dtypes = list(dataframe.dtypes.items()) if is_dataframe else [(dataframe.name, dataframe.dtype)]
+        log.warning("Writing empty dataframe to ArcticDB for symbol \"{}\". The dtypes of empty columns depend on the"
+                    "Pandas version being used. This can lead to unexpected behavior in the processing pipeline. For"
+                    " example if the empty columns are of object dtype they cannot be part of numeric computations in"
+                    "the processing pipeline such as filtering (qb = qb[qb['empty_column'] < 5]) or projection"
+                    "(qb = qb.apply('new', qb['empty_column'] + 5)). Pandas version is: {}, the default dtype for empty"
+                    " column is: {}. Column types in the original input: {}. Parameter \"coerce_columns\" can be used" 
+                    " to explicitly set the types of dataframe columns", symbol, PANDAS_VERSION, empty_column_type, current_dtypes)

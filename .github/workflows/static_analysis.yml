@@ -16,7 +16,7 @@
       name: Polaris Coverity Static Analysis
       permissions:
         packages: write
-      runs-on: ubuntu-22.04
+      runs-on: ubuntu-24.04
       env:
         VCPKG_NUGET_USER: ${{secrets.VCPKG_NUGET_USER || github.repository_owner}}
         VCPKG_NUGET_TOKEN: ${{secrets.VCPKG_NUGET_TOKEN || secrets.GITHUB_TOKEN}}
@@ -34,7 +34,7 @@
         - name: Setup build dependencies
           run: |
             sudo apt-get update
-            sudo apt-get install -y gcc-11 g++-11 make mono-complete libkrb5-dev libsasl2-dev
+            sudo apt-get install -y clang-19 make mono-complete libkrb5-dev libsasl2-dev
 
         - name: Setup VCPKG cache
           run: |
@@ -50,12 +50,12 @@
         - name: CMake configure
           uses: lukka/run-cmake@v10
           env:
-            CC: "gcc-11"
-            CXX: "g++-11"
+            CC: "clang"
+            CXX: "clang++"
           with:
             cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
             configurePreset: linux-release
-            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_C_COMPILER=gcc-11', '-DCMAKE_CXX_COMPILER=g++-11']"
+            configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DCMAKE_C_COMPILER=clang', '-DCMAKE_CXX_COMPILER=clang++']"
 
         - name: Copy Coverity config
           run: cp ${{github.workspace}}/coverity.yaml ${{github.workspace}}/cpp/out/linux-release-build

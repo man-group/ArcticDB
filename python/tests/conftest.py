@@ -117,7 +117,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"
+    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"[:200]
 
 
 @pytest.fixture
@@ -239,6 +239,20 @@ def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFa
         use_ssl=False, ssl_test_support=False, bucket_versioning=False, _test_only_is_nfs_layout=True
     ) as f:
         yield f
+
+
+@pytest.fixture(scope="session")
+def test_prefix():
+    return "test_bucket_prefix"
+
+
+@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+def s3_and_nfs_storage_bucket(test_prefix, request):
+    with request.param(
+            use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
+    ) as factory:
+        with factory.create_fixture() as bucket:
+            yield bucket
 
 
 @pytest.fixture(scope="session")
@@ -522,11 +536,12 @@ def filter_out_unwanted_mark(request, current_param):
 @pytest.fixture(
     scope="function",
     params=[
+        # Make sure that mem and lmdb are first so we have faster startup
+        pytest.param("mem", marks=MEM_TESTS_MARK),
+        pytest.param("lmdb", marks=LMDB_TESTS_MARK),
         pytest.param("s3", marks=SIM_S3_TESTS_MARK),
         pytest.param("nfs_backed_s3", marks=SIM_NFS_TESTS_MARK),
         pytest.param("gcp", marks=SIM_GCP_TESTS_MARK),
-        pytest.param("lmdb", marks=LMDB_TESTS_MARK),
-        pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("azurite", marks=AZURE_TESTS_MARK),
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
@@ -647,7 +662,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
     # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))     
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS))     
 
 
 @pytest.fixture

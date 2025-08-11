@@ -452,7 +452,7 @@ folly::Future<SliceAndKey> async_write(
         })
         .thenValue([de_dup_map](auto &&ks) -> std::pair<DeDupLookupResult, pipelines::FrameSlice> {
             auto& [key_seg, slice] = ks;
-            return std::make_pair<>(lookup_match_in_dedup_map(de_dup_map, key_seg), std::move(slice));
+            return std::pair{lookup_match_in_dedup_map(de_dup_map, key_seg), std::move(slice)};
         })
         .via(&async::io_executor())
         .thenValue([lib=library_](auto&& item) {

@@ -155,6 +155,8 @@ VariantData dispatch_binary(const VariantData& left, const VariantData& right, O
             return visit_binary_comparator(left, right, GreaterThanOperator{});
         case OperationType::GE:
             return visit_binary_comparator(left, right, GreaterThanEqualsOperator{});
+        case OperationType::REGEX_MATCH:
+            return visit_binary_comparator(left, right, RegexMatchOperator{});
         case OperationType::ISIN:
             return visit_binary_membership(left, right, IsInOperator{});
         case OperationType::ISNOTIN:

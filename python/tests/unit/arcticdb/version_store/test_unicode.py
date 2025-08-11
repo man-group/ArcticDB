@@ -277,19 +277,20 @@ def test_snapshots(lmdb_version_store):
 def test_get_info(lmdb_version_store, batch):
     start = pd.Timestamp("2018-01-02")
     index = pd.date_range(start=start, periods=4)
-    unicode_str = "ab"
 
     df_1 = pd.DataFrame(
         index=index,
         data={"a": ["123", unicode_str, copyright, trademark], trademark: [1, 2, 3, 4], copyright: [unicode_str] * 4},
     )
-    df_1.index.set_names([unicode_str])
+    df_1.index.set_names([unicode_str], inplace=True)
 
+    # This one has an index with the same name as a column, which used to incorrectly obfuscate that column name
+    # in the get_info output.
     df_2 = pd.DataFrame(
         index=index,
         data={unicode_str: [1, 2, 3, 4], trademark: [1, 2, 3, 4], copyright: [unicode_str] * 4},
     )
-    df_2.index.set_names([unicode_str])
+    df_2.index.set_names([unicode_str], inplace=True)
     lmdb_version_store.write("sym_1", df_1, metadata=metadata)
     lmdb_version_store.write("sym_2", df_2, metadata=metadata)
 
@@ -298,11 +299,13 @@ def test_get_info(lmdb_version_store, batch):
         assert len(res) == 2
         assert list(df_1.columns) == res[0]["col_names"]["columns"]
         assert list(df_2.columns) == res[1]["col_names"]["columns"]
+        assert res[0]["col_names"]["index"] == [unicode_str]
+        assert res[1]["col_names"]["index"] == [unicode_str]
     else:
         for sym, df in [("sym_1", df_1), ("sym_2", df_2)]:
             res = lmdb_version_store.get_info(sym)
             assert list(df.columns) == res["col_names"]["columns"]
-            # assert res["col_names"]["index"] == [unicode_str]  # index names are not exposed by get_info, seems to be a bug 8667920777
+            assert res["col_names"]["index"] == [unicode_str]
 
 
 def sample_nested_structures():

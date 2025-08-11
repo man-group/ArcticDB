@@ -32,7 +32,7 @@ namespace as = arcticdb::stream;
 
 /**
  * The purpose of this class is to perform python-specific translations into either native C++ or protobuf objects
- * so that the LocalVersionedEngine contains only partable C++ code.
+ * so that the LocalVersionedEngine contains only portable C++ code.
  */
 class PythonVersionStore : public LocalVersionedEngine {
 
@@ -40,6 +40,12 @@ class PythonVersionStore : public LocalVersionedEngine {
     template<class ClockType = util::SysClock>
     explicit PythonVersionStore(const std::shared_ptr<storage::Library>& library, const ClockType& ct = util::SysClock{}) :
         LocalVersionedEngine(library, ct) {
+    }
+
+    template<class ClockType = util::SysClock>
+    explicit PythonVersionStore(const std::shared_ptr<Store>& store, const ClockType& ct = util::SysClock{}) :
+        LocalVersionedEngine(store, ct) {
+
     }
 
     VersionedItem write_dataframe_specific_version(
@@ -110,7 +116,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const py::object & user_meta,
         bool validate_index) const;
 
-    VersionedItem compact_incomplete(
+    std::variant<VersionedItem, CompactionError> compact_incomplete(
             const StreamId& stream_id,
             bool append,
             bool convert_int_to_float,
@@ -119,9 +125,10 @@ class PythonVersionStore : public LocalVersionedEngine {
             const std::optional<py::object>& user_meta = std::nullopt,
             bool prune_previous_versions = false,
             bool validate_index = false,
-            bool delete_staged_data_on_failure=false);
+            bool delete_staged_data_on_failure=false,
+            const std::optional<std::vector<StageResult>>& stage_results = std::nullopt);
 
-    void write_parallel(
+    StageResult write_parallel(
         const StreamId& stream_id,
         const py::tuple& item,
         const py::object& norm,
@@ -160,7 +167,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const ReadOptions& read_options,
         std::any& handler_data);
 
-    VersionedItem sort_merge(
+    std::variant<VersionedItem, CompactionError> sort_merge(
             const StreamId& stream_id,
             const py::object& user_meta,
             bool append,
@@ -168,7 +175,8 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool via_iteration,
             bool sparsify,
             bool prune_previous_versions,
-            bool delete_staged_data_on_failure);
+            bool delete_staged_data_on_failure,
+            const std::optional<std::vector<StageResult>>& stage_results = std::nullopt);
 
     std::pair<VersionedItem, py::object> read_metadata(
         const StreamId& stream_id,
@@ -200,6 +208,10 @@ class PythonVersionStore : public LocalVersionedEngine {
     void delete_versions(
         const StreamId& stream_id,
         const std::vector<VersionId>& version_ids);
+
+    std::vector<std::optional<DataError>> batch_delete(
+        const std::vector<StreamId>& stream_ids,
+        const std::vector<std::vector<VersionId>>& version_ids);
 
     void prune_previous_versions(
         const StreamId& stream_id);
@@ -307,8 +319,8 @@ class PythonVersionStore : public LocalVersionedEngine {
         bool upsert);
 
     ReadResult batch_read_and_join(
-            const std::vector<StreamId>& stream_ids,
-            const std::vector<VersionQuery>& version_queries,
+            std::shared_ptr<std::vector<StreamId>> stream_ids,
+            std::shared_ptr<std::vector<VersionQuery>> version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries,
             const ReadOptions& read_options,
             std::vector<std::shared_ptr<Clause>>&& clauses,

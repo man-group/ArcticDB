@@ -16,9 +16,9 @@
 #include <arcticdb/column_store/block.hpp>
 #include <arcticdb/util/hash.hpp>
 
+#ifndef DEBUG_BUILD
 #include <boost/container/small_vector.hpp>
-
-#include <cstdint>
+#endif
 
 namespace arcticdb {
 
@@ -183,6 +183,8 @@ class ChunkedBufferImpl {
     }
 
     [[nodiscard]] const auto &blocks() const { return blocks_; }
+
+    [[nodiscard]] const auto &block_offsets() const { return block_offsets_; }
 
     BlockType* block(size_t pos) {
         util::check(pos < blocks_.size(), "Requested block {} out of range {}", pos, blocks_.size());
@@ -462,25 +464,40 @@ class ChunkedBufferImpl {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
     }
 
+    // Note that with all the truncate_*_block methods, the bytes_ and offsets are no longer accurate after the methods
+    // are called, but downstream logic uses these values to match up blocks with record batches, so this is deliberate
     void truncate_single_block(size_t start_offset, size_t end_offset) {
-        auto [block, offset, ts] = block_and_offset(start_offset);
+        // Inclusive of start_offset, exclusive of end_offset
+        util::check(end_offset >= start_offset, "Truncate single block expects end ({}) >= start ({})", end_offset, start_offset);
         util::check(blocks_.size() == 1, "Truncate single block expects buffer with only one block");
-        const auto removed_bytes = start_offset + (block->bytes() - end_offset);
-        util::check(removed_bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", removed_bytes, block->bytes());
+        auto [block, offset, ts] = block_and_offset(start_offset);
+        const auto removed_bytes = block->bytes() - (end_offset - start_offset);
+        util::check(removed_bytes <= block->bytes(), "Can't truncate {} bytes from a {} byte block", removed_bytes, block->bytes());
         auto remaining_bytes = block->bytes() - removed_bytes;
-        auto new_block = create_block(remaining_bytes, 0);
-        new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
-        blocks_[0] = new_block;
+        if (remaining_bytes > 0) {
+            auto new_block = create_block(remaining_bytes, 0);
+            new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
+            blocks_[0] = new_block;
+        } else {
+            blocks_.clear();
+            block_offsets_.clear();
+        }
         block->abandon();
         delete block;
     }
 
     void truncate_first_block(size_t bytes) {
-        auto [block, offset, ts] = block_and_offset(bytes);
+        util::check(blocks_.size() > 0, "Truncate first block expected at least one block");
+        auto block = blocks_[0];
         util::check(block == *blocks_.begin(), "Truncate first block position {} not within initial block", bytes);
-        util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
+        // bytes is the number of bytes to remove, and is asserted to be in the first block of the buffer
+        // An old bug in update caused us to store a larger end_index value in the index key than needed. Thus, if
+        // date_range.start > table_data_key.last_ts && date_range.start < table_data_key.end_index we will load
+        // the first data key even if it has no rows within the range. So, we allow clearing the entire first block
+        // (i.e. bytes == block->bytes())
+        util::check(bytes <= block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
         auto remaining_bytes = block->bytes() - bytes;
-        auto new_block = create_block(bytes, 0);
+        auto new_block = create_block(remaining_bytes, block->offset_);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
         block->abandon();
@@ -488,8 +505,9 @@ class ChunkedBufferImpl {
     }
 
     void truncate_last_block(size_t bytes) {
-        auto [block, offset, ts] = block_and_offset(bytes);
-        util::check(block == *blocks_.rbegin(), "Truncate first block position {} not within initial block", bytes);
+        // bytes is the number of bytes to remove, and is asserted to be in the last block of the buffer
+        auto [block, offset, ts] = block_and_offset(bytes_ - bytes);
+        util::check(block == *blocks_.rbegin(), "Truncate last block position {} not within last block", bytes);
         util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
         auto remaining_bytes = block->bytes() - bytes;
         auto new_block = create_block(remaining_bytes, block->offset_);
@@ -515,7 +533,7 @@ class ChunkedBufferImpl {
 
     MemBlock* create_detachable_block(size_t capacity, size_t offset) const {
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        auto* data = new uint8_t[capacity];
+        auto* data = allocate_detachable_memory(capacity);
         new(ptr) MemBlock(data, capacity, offset, ts, true);
         return reinterpret_cast<BlockType*>(ptr);
     }
@@ -523,8 +541,9 @@ class ChunkedBufferImpl {
     void free_block(BlockType* block) const {
         ARCTICDB_TRACE(log::storage(), "Freeing block at address {:x}", uintptr_t(block));
         block->magic_.check();
+        auto timestamp = block->timestamp_;
         block->~MemBlock();
-        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), block->timestamp_));
+        Allocator::free(std::make_pair(reinterpret_cast<uint8_t *>(block), timestamp));
     }
 
     void free_last_block() {
