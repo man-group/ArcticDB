@@ -45,11 +45,11 @@ STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
 # Local storage tests are all LMDB, simulated and a real mongo process/service
 LOCAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", "1") == "1"
 # Each storage can be controlled individually
-STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
-STORAGE_AZURITE = os.getenv("ARCTICDB_STORAGE_AZURITE", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
-STORAGE_MONGO = os.getenv("ARCTICDB_STORAGE_MONGO", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
-STORAGE_MEM = os.getenv("ARCTICDB_STORAGE_MEM", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
-STORAGE_NFS = os.getenv("ARCTICDB_STORAGE_NFS", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
+STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" and os.getenv("ARCTICDB_STORAGE_LMDB") !="0")
+STORAGE_AZURITE = os.getenv("ARCTICDB_STORAGE_AZURITE") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" and os.getenv("ARCTICDB_STORAGE_AZURITE") != "0")
+STORAGE_MONGO = os.getenv("ARCTICDB_STORAGE_MONGO") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" and os.getenv("ARCTICDB_STORAGE_MONGO") != "0")
+STORAGE_MEM = os.getenv("ARCTICDB_STORAGE_MEM") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" and os.getenv("ARCTICDB_STORAGE_MEM") != "0")
+STORAGE_NFS = os.getenv("ARCTICDB_STORAGE_NFS") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" and os.getenv("ARCTICDB_STORAGE_NFS") != "0")
 # When a real storage is turned on the simulated storage is turned off
 STORAGE_SIM_S3 = (not STORAGE_AWS_S3) and (os.getenv("ARCTICDB_STORAGE_SIM_S3", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1")
 STORAGE_SIM_GCP = (not STORAGE_GCP) and (os.getenv("ARCTICDB_STORAGE_SIM_GCP", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1")
