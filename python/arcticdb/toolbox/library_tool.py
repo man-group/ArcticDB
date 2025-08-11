@@ -15,7 +15,6 @@ from arcticdb_ext.version_store import AtomKey, RefKey
 from arcticdb.version_store._normalization import denormalize_dataframe, normalize_dataframe
 from arcticdb_ext.version_store import Slicing
 
-
 VariantKey = Union[AtomKey, RefKey]
 VersionQueryInput = Union[int, str, ExplicitlySupportedDates, None]
 
