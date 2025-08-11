@@ -65,7 +65,7 @@ std::shared_ptr<ModuleData> ModuleData::instance_;
 std::once_flag ModuleData::init_flag_;
 
 void shutdown_globals() {
-    async::TaskScheduler::stop_active_threads();
+    async::TaskScheduler::destroy_instance();
     storage::mongo::MongoInstance::destroy_instance();
     ModuleData::destroy_instance();
 }
