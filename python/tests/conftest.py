@@ -61,6 +61,8 @@ from .util.mark import (
     SIM_NFS_TESTS_MARK,
     SIM_S3_TESTS_MARK,
     REAL_GCP_TESTS_MARK,
+    TEST_ENCODING_V1_MARK,
+    TEST_ENCODING_V2_MARK,
     WINDOWS,
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -74,6 +76,7 @@ from .util.mark import (
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
+from .util.marking import Mark
 import arcticdb.toolbox.query_stats as query_stats
 
 
@@ -137,17 +140,23 @@ class EncodingVersion(enum.IntEnum):
     V1 = 0
     V2 = 1
 
+# The current default encoding of ArcticDB release
+DEFAULT_ENCODING = EncodingVersion.V1
 
-@pytest.fixture(scope="session")
-def only_test_encoding_version_v1():
-    """Dummy fixture to reference at module/class level to reduce test cases"""
+# endregion
+# region =================================== Encoding Fixtures ====================================
+
+@pytest.fixture(scope="session", 
+                params=[pytest.param(DEFAULT_ENCODING, marks=TEST_ENCODING_V1_MARK)])
+def only_test_encoding_version_v1(request):
+    return request.param
 
 
-def pytest_generate_tests(metafunc):
-    if "encoding_version" in metafunc.fixturenames:
-        only_v1 = "only_test_encoding_version_v1" in metafunc.fixturenames
-        metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
-
+@pytest.fixture(scope="session",
+                params=[pytest.param(EncodingVersion.V1, marks=TEST_ENCODING_V1_MARK), 
+                        pytest.param(EncodingVersion.V2, marks=TEST_ENCODING_V2_MARK)],)
+def encoding_version(request):
+    return request.param
 
 # endregion
 # region ======================================= Storage Fixtures =======================================
@@ -572,7 +581,7 @@ def arctic_client(request, encoding_version) -> Arctic:
 def arctic_client_v1(request) -> Arctic:
     filter_out_unwanted_mark(request, request.param)
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
-    ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V1)
+    ac = storage_fixture.create_arctic(encoding_version=DEFAULT_ENCODING)
     return ac
 
 
@@ -1423,3 +1432,67 @@ def clear_query_stats():
     yield
     query_stats.disable()
     query_stats.reset_stats()
+
+# region =================================== Pytest plugins&hooks ====================================
+
+class Marks:
+    """Central Marks Registry
+
+    Usage:
+
+        @pmark([Marks.abc, Marks.cde])
+        def test_first():
+            ....
+
+        @Marks.abc.mark
+        def test_two():
+            ....
+    """
+    storage = Mark("storage")
+    authentication = Mark("authentication")
+    pipeline = Mark("pipeline")
+    compat = Mark("compat")
+    integration = Mark("integration")
+    unit = Mark("unit")
+    stress = Mark("stress")
+    nonreg = Mark("nonreg")
+    hypothesis = Mark("hypothesis")
+    arcticdb = Mark("arcticdb")
+    version_store = Mark("version_store")
+    toolbox = Mark("toolbox")
+
+    @classmethod
+    def list_all_marks(cls):
+        """Lists all marks in the registry"""
+        return [v for k, v in cls.__dict__.items() if isinstance(v, Mark)]
+
+
+def pytest_collection_modifyitems(config, items):
+    """ This hook is useful for filtering in out tests and modifying tests
+    as soon as pytest collects them before execution
+    """
+
+    def evaluate_item(item, part_string: str, mark_to_add: Mark):
+        """ Evaluate item(test) if its module path contains certain string
+        If there it will mark the test with specified mark
+        """
+        doc = item.module.__file__
+        if doc and part_string in doc.lower():
+            item.add_marker(mark_to_add)
+
+    for item in items:
+        ## Add custom marks to test depending file path name of module to the test
+        ## Electively this silently marks each test with its physical location in the repo
+        ## allowing later that physical location to be used in combination with other marks
+        ## 
+        ## Example: 
+        ##   pytest -s --co -m "toolbox and storage"
+        evaluate_item(item, Marks.unit.name, Marks.unit.mark)
+        evaluate_item(item, Marks.integration.name, Marks.integration.mark)
+        evaluate_item(item, Marks.stress.name, Marks.stress.mark)
+        evaluate_item(item, Marks.hypothesis.name, Marks.hypothesis.mark)
+        evaluate_item(item, Marks.nonreg.name, Marks.integration.mark)
+        evaluate_item(item, Marks.version_store.name, Marks.version_store.mark)
+        evaluate_item(item, Marks.toolbox.name, Marks.toolbox.mark)
+
+# endregion
