@@ -120,7 +120,7 @@ inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(const In
     using PartialKey = stream::StreamSink::PartialKey;
 
     if (index.field_count() != 0) {
-        util::check(static_cast<bool>(index.type() == IndexDescriptor::Type::TIMESTAMP), "Got null index tensor in get_partial_key_gen");
+        util::check(static_cast<bool>(index.type() == IndexDescriptor::Type::TIMESTAMP), "Got unexpected index type in get_partial_key_for_segment_slice");
         auto& idx = slice.column(0);
         assert(idx.scalar_at<timestamp>(0).has_value());
         assert(idx.scalar_at<timestamp>(slice.row_count()-1).value());

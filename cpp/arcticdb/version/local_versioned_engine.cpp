@@ -787,12 +787,12 @@ VersionedItem LocalVersionedEngine::write_segment(
 
     TypedStreamVersion tsv{partial_key.id, partial_key.version_id, KeyType::TABLE_DATA};
     int64_t write_window = write_window_size();
-    auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [&sink, de_dup_map, &segment, tsv=std::move(tsv)](auto&& slice) {
+    auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [&sink, de_dup_map, &index_desc = segment.descriptor().index(), tsv=std::move(tsv)](auto&& slice) {
             auto descriptor = std::make_shared<entity::StreamDescriptor>(slice.descriptor());
             ColRange column_slice = {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()};
             RowRange row_slice = {slice.offset(), slice.offset() + slice.row_count()};
             auto frame_slice = FrameSlice{descriptor, column_slice, row_slice};
-            auto pkey = get_partial_key_for_segment_slice(segment.descriptor().index(), tsv, slice);
+            auto pkey = get_partial_key_for_segment_slice(index_desc, tsv, slice);
             auto ks = std::make_tuple(
                     std::move(pkey), std::move(slice), std::move(frame_slice)
             );
