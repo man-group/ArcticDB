@@ -2069,6 +2069,23 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
         read_incomplete_flags
     );
 
+    // =======================================================
+    // INTENTIONAL ERROR
+    std::vector v = {1, 2, 3, 4};
+    std::vector v1 = std::move(v);
+    for (auto i : v) {
+        std::cout<<i;
+    }
+    for (auto i : v1) {
+        std::cout<<i;
+    }
+
+    int* i = new int(0);
+    delete i;
+    std::cout<<*i<<std::endl;
+    //========================================================
+
+
     bool has_incomplete_segments;
     if (std::holds_alternative<CompactionError>(read_incompletes_result)) {
         return std::get<CompactionError>(read_incompletes_result);

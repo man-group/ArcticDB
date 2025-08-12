@@ -71,6 +71,25 @@ public:
 
         util::check(segment.descriptor().id() == stream_id, "Descriptor id mismatch in atom key {} != {}", stream_id, segment.descriptor().id());
 
+        // ================== INTENTIONAL ERRORS =============================
+        // 1. Use After Free
+        char* data = new char[100];
+        std::strcpy(data, "Coverity test - use after free");
+        delete[] data;
+        std::cout << "Data (after delete): " << data << std::endl;  // USE_AFTER_FREE
+
+        // 2. Null Pointer Dereference
+        int* ptr = nullptr;
+        *ptr = 42;  // NULL_POINTER_DEREFERENCE
+
+        // 3. Resource Leak
+        FILE* file = fopen("temp.txt", "w");
+        if (file != nullptr) {
+            fprintf(file, "Testing resource leak\n");
+            // Missing fclose(file);  // RESOURCE_LEAK
+        }
+        // ======================================================================
+
         return async::submit_cpu_task(EncodeAtomTask{
             key_type, version_id, stream_id, start_index, end_index, current_timestamp(),
             std::move(segment), codec_, encoding_version_
