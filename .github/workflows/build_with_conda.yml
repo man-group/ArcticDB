@@ -22,6 +22,14 @@ on:
         type: boolean
         required: true
         default: true        
+      persistent_storage:
+        description: "Run against what persistent storage type? (no is LMDB/default)"
+        type: choice
+        options:
+          - 'no'
+          - 'AWS_S3'
+          - 'GCPXML'
+        default: 'no'
       debug_enabled:
         type: boolean
         description: 'Run the build with debugging enabled'
@@ -33,7 +41,7 @@ on:
         required: false
         default: false        
       run_commandline:
-        description: 'Run custom commandline before tests, Like: export ARCTICDB_STORAGE_AZURE=1; export ARCTICDB_STORAGE_GCP=0; export ARCTICDB_STORAGE_AWS_S3=0; export ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0; export ARCTICDB_PERSISTENT_STORAGE_TESTS=1'
+        description: 'Run custom commandline before tests, Like: export ARCTICDB_STORAGE_AZURE=1; ....'
         type: string
         required: false
         default: ""    
@@ -135,7 +143,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: "true"
+          persistent_storage: ${{ inputs.persistent_storage }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}        
@@ -239,7 +247,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: "no"
+          persistent_storage: ${{ inputs.persistent_storage }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}        
