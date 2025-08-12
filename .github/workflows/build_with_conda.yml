@@ -29,6 +29,7 @@ on:
           - 'no'
           - 'AWS_S3'
           - 'GCPXML'
+          - 'AZURE'
         default: 'no'
       debug_enabled:
         type: boolean
