@@ -23,8 +23,10 @@ jobs:
             pattern: "pytest-*"
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
-            output-path: ${{env.OUTPUT_PATH}}
+            path: ${{env.OUTPUT_PATH}}
 
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
 
       - name: Install requirements
         run: |
