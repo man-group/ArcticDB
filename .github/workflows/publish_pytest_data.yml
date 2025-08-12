@@ -1,0 +1,26 @@
+name: Publish pytest data to S3
+on: 
+  workflow_call:
+    inputs:
+      environment: { type: string, required: true }
+  workflow_dispatch:
+    inputs:
+      environment: { type: environment, required: true }
+      run_id: { type: number, required: true }
+run-name: Publish ${{github.ref}} to arcticdb-pytest-data
+jobs:
+  sync_pytest_xmls:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Gather pytest xmls from run ${{ github.run_id }}
+        id: gather-pytest-xmls
+        uses: actions/download-artifact@v4
+        with:
+            pattern: "pytest-*"
+            run-id: ${{ github.run_id }}
+            github-token: ${{github.token}}  
+
+      - name: Print pytest xmls
+        run: |
+          ls -la ${{runner.temp}}
+          cat ${{runner.temp}}/*test*
