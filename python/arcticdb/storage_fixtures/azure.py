@@ -281,8 +281,8 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         return f"[{type(self)}=Container:{self.default_container}], ConnectionString:{self.connection_string}"
 
     def initialize_from_connection_sting(self, constr: str, container: str, prefix: str = None) -> "AzureStorageFixtureFactory":
-        get_logger().error(f"Azure connection string not available: {constr}")
-        get_logger().error(f"Azure container not available: {container}")
+        if constr is None: get_logger().error(f"Azure connection string not available: {constr}") 
+        if container is None: get_logger().error(f"Azure container not available: {container}") 
         AzureStorageFixtureFactory.connection_string = constr
         AzureStorageFixtureFactory.account_name = re.search(r'AccountName=([^;]+)', constr).group(1)
         AzureStorageFixtureFactory.account_key = re.search(r'AccountKey=([^;]+)', constr).group(1)
@@ -321,8 +321,8 @@ def real_azure_from_environment_variables(
         prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
         prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
-        out.initialize_from_connection_sting(
-            constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
-            container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
-            prefix=prefix)
+    out.initialize_from_connection_sting(
+        constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
+        container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
+        prefix=prefix)
     return out
