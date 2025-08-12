@@ -489,7 +489,7 @@ def get_all_workflow_runs_parallel(max_workers=5, max_pages=20):
 @click.option("--max-workers", type=int, default=5)
 @click.option("--max-pages", type=int, default=20)
 @click.option("--download-dir", type=str, default="gh_artifacts")
-@click.option("--run-id", type=int, default=None)
+@click.option("--run-id", type=str, default=None)
 def main(max_workers, max_pages, download_dir, run_id):
     # Configuration
     download_dir = Path(download_dir)
@@ -532,6 +532,7 @@ def main(max_workers, max_pages, download_dir, run_id):
         df = pd.read_csv(csv_file)
         # unique python versions
         print(df["python_version"].unique(), df["test_type"].unique())
+        print(df.head())
         lib.write(csv_file.stem, df)
 
 
