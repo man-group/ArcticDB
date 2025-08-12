@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from arcticdb import Arctic
 from arcticdb.version_store.processing import QueryBuilder
 
@@ -13,10 +14,12 @@ from .common import *
 
 PARAMS_QUERY_BUILDER = [1_000_000, 10_000_000]
 
+
 class LocalQueryBuilderFunctions:
     number = 5
+    rounds = 1
     timeout = 6000
-    warmup_time = 0    
+    warmup_time = 0
     LIB_NAME = "query_builder"
     CONNECTION_STRING = "lmdb://query_builder?map_size=5GB"
 
