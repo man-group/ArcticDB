@@ -16,6 +16,7 @@ from pandas import Timestamp
 import pytest
 import pandas as pd
 import numpy as np
+import string
 
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
@@ -246,6 +247,12 @@ def custom_library(arctic_client, lib_name, request) -> Generator[Library, None,
         pass
 
 
+def random_metadata() -> str:
+    size_in_bytes = 1024 * 1024  
+    chars = string.ascii_letters + string.digits
+    return ''.join(random.choices(chars, k=size_in_bytes))
+
+
 @pytest.mark.storage
 @pytest.mark.parametrize("custom_library", [
             {'library_options': LibraryOptions(rows_per_segment=ROWS_PER_SEGMENT, 
@@ -287,7 +294,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df3_num_rows = ROWS_PER_SEGMENT*2 - 1
     df3 = g.get_dataframe(number_columns=df3_num_cols, number_rows=df3_num_rows, start_time=start_time)
     update3 = ug.generate_update(df3, UpdatePositionType.INSIDE_OVERLAP_END, df3_num_cols, ROWS_PER_SEGMENT - 2)
-    metadata3 = df2.to_json()
+    metadata3 = random_metadata()
     expected_updated_df3 = dataframe_simulate_arcticdb_update_static(df3, update3) 
 
     # Error update due to mismatch in columns

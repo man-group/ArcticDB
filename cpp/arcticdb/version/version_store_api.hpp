@@ -32,7 +32,7 @@ namespace as = arcticdb::stream;
 
 /**
  * The purpose of this class is to perform python-specific translations into either native C++ or protobuf objects
- * so that the LocalVersionedEngine contains only partable C++ code.
+ * so that the LocalVersionedEngine contains only portable C++ code.
  */
 class PythonVersionStore : public LocalVersionedEngine {
 
@@ -40,6 +40,12 @@ class PythonVersionStore : public LocalVersionedEngine {
     template<class ClockType = util::SysClock>
     explicit PythonVersionStore(const std::shared_ptr<storage::Library>& library, const ClockType& ct = util::SysClock{}) :
         LocalVersionedEngine(library, ct) {
+    }
+
+    template<class ClockType = util::SysClock>
+    explicit PythonVersionStore(const std::shared_ptr<Store>& store, const ClockType& ct = util::SysClock{}) :
+        LocalVersionedEngine(store, ct) {
+
     }
 
     VersionedItem write_dataframe_specific_version(

@@ -115,7 +115,7 @@ jobs:
     uses: ./.github/workflows/cibw_docker_image.yml
     permissions: {packages: write}
     with:
-      cibuildwheel_ver: "2.21.3"
+      cibuildwheel_ver: "3.1.3"
       force_update: false
 
   run_linting_checks:
@@ -226,7 +226,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -250,7 +250,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -288,7 +288,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-            pytest_xdist_mode: "-n auto"
+            pytest_xdist_mode: "-n logical --dist worksteal"
           - python3: 8
             python_deps_ids: ["", -compat38]
             matrix_override:
@@ -364,7 +364,7 @@ jobs:
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
-      pytest_xdist_mode: "-n auto"
+      pytest_xdist_mode: "-n logical --dist worksteal"
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
 
@@ -376,7 +376,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -399,7 +399,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
+        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -435,7 +435,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
-            pytest_xdist_mode: "-n auto"
+            pytest_xdist_mode: "-n logical --dist worksteal"
     name: 3.${{matrix.python3}} macOS
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
