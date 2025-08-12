@@ -35,6 +35,9 @@ jobs:
         cat <<'EOF' > raw_pr_body.txt
         $PR_BODY
         EOF
+        echo "Raw PR test:"
+        cat raw_pr_body.txt
+        
         cat raw_pr_body.txt | awk '/---ConfigStart/,/---ConfigEnd/' | sed '1d;$d' > extracted_config.sh
 
         echo "Extracted config extracted:"
