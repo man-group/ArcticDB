@@ -29,8 +29,12 @@ jobs:
 
     - name: Extract config block
       id: extract_config
+      env:
+          PR_BODY: "${{ steps.get_pr.outputs.result }}"
       run: |
-        echo "${{ steps.get_pr.outputs.result }}" > raw_pr_body.txt
+        cat <<'EOF' > raw_pr_body.txt
+        $PR_BODY
+        EOF
         cat raw_pr_body.txt | awk '/---ConfigStart/,/---ConfigEnd/' | sed '1d;$d' > extracted_config.sh
 
         echo "Extracted config extracted:"
