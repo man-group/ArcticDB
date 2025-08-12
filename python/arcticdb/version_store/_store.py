@@ -341,7 +341,7 @@ class NativeVersionStore:
         self._native_cfg = native_cfg
         self._runtime_options=runtime_options
 
-    def set_output_format(self, output_format: OutputFormat):
+    def set_output_format(self, output_format: Union[OutputFormat, str]):
         if self._runtime_options is None:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_output_format(output_format)

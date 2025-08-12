@@ -46,7 +46,7 @@ class Arctic:
     # It is set by the LmdbStorageFixture
     _accessed_libs: Optional[List[NativeVersionStore]] = None
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, output_format: OutputFormat = OutputFormat.PANDAS):
+    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, output_format: Union[OutputFormat, str] = OutputFormat.PANDAS):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -63,7 +63,7 @@ class Arctic:
             When creating new libraries with this Arctic instance, the default encoding version to use.
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
-        output_format: OutputFormat, default OutputFormat.PANDAS
+        output_format: Union[OutputFormat, str], default OutputFormat.PANDAS
             Controls the output format of all operations returning a dataframe.
             The default behavior (OutputFormat.PANDAS) is to return `pandas.DataFrame`s backed by numpy arrays.
             OutputFormat.EXPERIMENTAL_ARROW will return all dataframes as `pyarrow.Table`s. The arrow API is still
@@ -97,22 +97,31 @@ class Arctic:
         self._uri = uri
         self._runtime_options = RuntimeOptions(output_format=output_format)
 
-    def __getitem__(self, name: str) -> Library:
+    def _get_library(self, name: str, output_format: Optional[Union[OutputFormat, str]] = None) -> Library:
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         if not self._library_manager.has_library(lib_mgr_name):
             raise LibraryNotFound(name)
 
         storage_override = self._library_adapter.get_storage_override()
+
+        if output_format is not None:
+            runtime_options = RuntimeOptions(output_format=output_format)
+        else:
+            runtime_options = self._runtime_options
+
         lib = NativeVersionStore(
             self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
             native_cfg=self._library_adapter.native_config(),
-            runtime_options=self._runtime_options
+            runtime_options=runtime_options
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
         return Library(repr(self), lib)
+
+    def __getitem__(self, name: str):
+        return self._get_library(name)
 
     def __repr__(self):
         return "Arctic(config=%r)" % self._library_adapter
@@ -121,7 +130,11 @@ class Arctic:
         return self.has_library(name)
 
     def get_library(
-        self, name: str, create_if_missing: Optional[bool] = False, library_options: Optional[LibraryOptions] = None
+        self,
+        name: str,
+        create_if_missing: Optional[bool] = False,
+        library_options: Optional[LibraryOptions] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> Library:
         """
         Returns the library named ``name``.
@@ -144,6 +157,8 @@ class Arctic:
             match these.
             Unused if create_if_missing is False.
 
+        output_format: TODO: Docs
+
         Examples
         --------
         >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
@@ -160,7 +175,7 @@ class Arctic:
                 "In get_library, library_options must be falsey if create_if_missing is falsey"
             )
         try:
-            lib = self[name]
+            lib = self._get_library(name, output_format)
             if create_if_missing and library_options:
                 if library_options.encoding_version is None:
                     library_options.encoding_version = self._encoding_version
@@ -169,14 +184,15 @@ class Arctic:
             return lib
         except LibraryNotFound as e:
             if create_if_missing:
-                return self.create_library(name, library_options)
+                return self.create_library(name, library_options, output_format)
             else:
                 raise e
 
     def create_library(self,
                        name: str,
                        library_options: Optional[LibraryOptions] = None,
-                       enterprise_library_options: Optional[EnterpriseLibraryOptions] = None) -> Library:
+                       enterprise_library_options: Optional[EnterpriseLibraryOptions] = None,
+                       output_format: Optional[Union[OutputFormat, str]] = None) -> Library:
         """
         Creates the library named ``name``.
 
@@ -200,6 +216,8 @@ class Arctic:
             Enterprise options to use in configuring the library. Defaults if not provided are the same as documented in
             EnterpriseLibraryOptions. These options are only relevant to ArcticDB enterprise users.
 
+        output_format: TODO: Docs
+
         Examples
         --------
         >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
@@ -222,7 +240,7 @@ class Arctic:
         cfg = self._library_adapter.get_library_config(name, library_options, enterprise_library_options)
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         self._library_manager.write_library_config(cfg, lib_mgr_name, self._library_adapter.get_masking_override())
-        return self.get_library(name)
+        return self.get_library(name, output_format=output_format)
 
     def delete_library(self, name: str) -> None:
         """

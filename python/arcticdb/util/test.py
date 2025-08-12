@@ -29,6 +29,7 @@ except ImportError:
 
 from arcticdb import QueryBuilder
 from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.util.arrow import stringify_dictionary_encoded_columns
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -250,22 +251,6 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
-
-
-def stringify_dictionary_encoded_columns(table, string_type=None):
-    """
-    Converts all pyarrow.Table dictionary encoded columns to strings.
-
-    Useful for testing because ArcticDB currently returns string columns in arrow as dictionary encoded, but when
-    comparing to the source table we want regular large_string columns instead of categoricals.
-    """
-    import pyarrow as pa
-    if string_type is None:
-        string_type = pa.large_string()
-    for i, name in enumerate(table.column_names):
-        if pa.types.is_dictionary(table.column(i).type):
-            table = table.set_column(i, name, table.column(name).cast(string_type))
-    return table
 
 
 def convert_arrow_to_pandas_and_remove_categoricals(table):

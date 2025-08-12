@@ -281,7 +281,7 @@ class ReadRequest(NamedTuple):
     row_range: Optional[Tuple[int, int]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
-    output_format: Optional[OutputFormat] = None
+    output_format: Optional[Union[OutputFormat, str]] = None
 
     def __repr__(self):
         res = f"ReadRequest(symbol={self.symbol}"
@@ -1779,8 +1779,8 @@ class Library:
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
-        output_format : Optional[OutputFormat] = None,
-        lazy: bool = False
+        lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1888,8 +1888,8 @@ class Library:
         self,
         symbols: List[Union[str, ReadRequest]],
         query_builder: Optional[QueryBuilder] = None,
-        output_format : Optional[OutputFormat] = None,
         lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[List[Union[VersionedItem, DataError]], LazyDataFrameCollection]:
         """
         Reads multiple symbols.
@@ -2032,7 +2032,7 @@ class Library:
         self,
         symbols: List[ReadRequest],
         query_builder: QueryBuilder,
-        output_format: Optional[OutputFormat] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> VersionedItemWithJoin:
         """
         Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
@@ -2047,6 +2047,8 @@ class Library:
         query_builder: QueryBuilder
             The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
             individual dataframes, and will be applied to the joined data.
+
+            TODO: Docs
 
         Returns
         -------
@@ -2598,6 +2600,7 @@ class Library:
         as_of: Optional[AsOf] = None,
         columns: List[str] = None,
         lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
@@ -2614,6 +2617,7 @@ class Library:
             See documentation on `read`.
         lazy : bool, default=False
             See documentation on `read`.
+        TODO: Docs
 
         Returns
         -------
@@ -2630,6 +2634,7 @@ class Library:
                     as_of=as_of,
                     columns=columns,
                     query_builder=q,
+                    output_format=output_format,
                 ),
             )
         else:
@@ -2640,6 +2645,7 @@ class Library:
                 columns=columns,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
+                output_format=output_format,
             )
 
     def tail(
@@ -2649,6 +2655,7 @@ class Library:
         as_of: Optional[Union[int, str]] = None,
         columns: List[str] = None,
         lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.
@@ -2681,6 +2688,7 @@ class Library:
                     as_of=as_of,
                     columns=columns,
                     query_builder=q,
+                    output_format=output_format,
                 ),
             )
         else:
@@ -2691,6 +2699,7 @@ class Library:
                 columns=columns,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
+                output_format=output_format,
             )
 
     @staticmethod

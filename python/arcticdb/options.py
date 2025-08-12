@@ -153,10 +153,10 @@ class OutputFormat(str, Enum):
     EXPERIMENTAL_ARROW = "EXPERIMENTAL_ARROW"
 
 
-def output_format_to_internal(output_format: OutputFormat) -> InternalOutputFormat:
-    if output_format == OutputFormat.PANDAS:
+def output_format_to_internal(output_format: Union[OutputFormat, str]) -> InternalOutputFormat:
+    if output_format.lower() == OutputFormat.PANDAS.lower():
         return InternalOutputFormat.PANDAS
-    elif output_format == OutputFormat.EXPERIMENTAL_ARROW:
+    elif output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
         return InternalOutputFormat.ARROW
     else:
         raise ValueError(f"Unknown OutputFormat: {output_format}")
@@ -165,12 +165,12 @@ class RuntimeOptions:
     def __init__(
         self,
         *,
-        output_format: OutputFormat = OutputFormat.PANDAS,
+        output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
     ):
         self.output_format=output_format
 
 
-    def set_output_format(self, output_format: OutputFormat):
+    def set_output_format(self, output_format: Union[OutputFormat, str]):
         self.output_format = output_format
 
 

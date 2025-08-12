@@ -1253,7 +1253,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
         })
         .thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas, &read_options](SegmentInMemory&& frame) mutable {
             // Needed to force our usual backfilling behaviour when columns have been outer-joined and some are not present in all input symbols
-            ReadOptions read_options_with_dynamic_schema = read_options;
+            ReadOptions read_options_with_dynamic_schema = read_options.clone();
             read_options_with_dynamic_schema.set_dynamic_schema(true);
             return reduce_and_fix_columns(pipeline_context, frame, read_options_with_dynamic_schema, handler_data)
             .thenValueInline([pipeline_context, frame, res_versioned_items, res_metadatas](auto&&) mutable {
