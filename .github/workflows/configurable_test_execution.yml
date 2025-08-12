@@ -113,6 +113,8 @@ jobs:
             echo "  $line"
           done
 
+          export ARCTICDB_RAND_SEED=$RANDOM
+
           cd python
           echo "EXECUTE: python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests"
           python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests 
