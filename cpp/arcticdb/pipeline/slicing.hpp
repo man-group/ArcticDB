@@ -136,7 +136,7 @@ inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(const In
                 key.version_id,
                 key.id,
                 entity::safe_convert_to_numeric_index(slice.offset(), "Rows"),
-                entity::safe_convert_to_numeric_index(slice.offset() + slice.row_count() - 1, "Rows")
+                entity::safe_convert_to_numeric_index(slice.offset() + slice.row_count(), "Rows")
         };
     }
 }

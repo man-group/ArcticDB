@@ -209,4 +209,4 @@ class LibraryTool(LibraryToolImpl):
         self._nvs.version_store.append_incomplete(symbol, item, norm_meta, None, validate_index)
 
     def write_segment_in_memory(self, symbol: str, segment: SegmentInMemory, slicing: Slicing):
-        self._nvs.version_store.write_versioned_segment(symbol, segment, False, slicing)
+        self._nvs.version_store._test_write_versioned_segment(symbol, segment, False, slicing)
