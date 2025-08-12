@@ -1460,6 +1460,7 @@ class Marks:
     arcticdb = Mark("arcticdb")
     version_store = Mark("version_store")
     toolbox = Mark("toolbox")
+    priority0 = Mark("priority0")
 
     @classmethod
     def list_all_marks(cls):
