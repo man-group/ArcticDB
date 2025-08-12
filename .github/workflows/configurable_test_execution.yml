@@ -1,0 +1,39 @@
+name: Configurable Test Execution
+
+on:
+  pull_request:
+    types: [opened, synchronize]
+    # edited is not used because it can trigger excessive runs
+    # instead a manual run can be triggered when and if needed
+  workflow_dispatch:
+
+jobs:
+  extract-config:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Get PR body
+      id: get_pr
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const pr = await github.rest.pulls.get({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            pull_number: context.payload.pull_request.number
+          });
+          return pr.data.body;
+
+    - name: Extract config block
+      id: extract_config
+      run: |
+        echo "${{ steps.get_pr.outputs.result }}" > pr_description.txt
+
+        awk '/---ConfigStart/,/---ConfigEnd/' pr_description.txt | sed '1d;$d' > extracted_config.sh
+
+        echo "Extracted config:"
+        cat extracted_config.sh
+        chmod a+x extracted_config.sh
