@@ -11,7 +11,7 @@ on:
       run_id: { type: number, required: true }
 run-name: Publish ${{github.ref}} to arcticdb-pytest-data
 env:
-  OUTPUT_PATH: ${{runner.temp}}/gh_artifacts
+  OUTPUT_PATH: ${{github.runner.temp}}/gh_artifacts
 jobs:
   sync_pytest_xmls:
     runs-on: ubuntu-22.04
@@ -33,4 +33,3 @@ jobs:
       - name: Process pytest xmls
         run: |
           python3 build_tooling/process_pytest_artifacts.py --download-dir ${{env.OUTPUT_PATH}} --run-id ${{ github.run_id }}
-          
