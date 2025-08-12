@@ -32,14 +32,14 @@ jobs:
       env:
           PR_BODY: "${{ steps.get_pr.outputs.result }}"
       run: |
-        cat <<'EOF' > raw_pr_body.txt
-        $PR_BODY
-        EOF
+        echo "$PR_BODY" > raw_pr_body.txt
         echo "Raw PR test:"
         cat raw_pr_body.txt
-        
-        cat raw_pr_body.txt | awk '/---ConfigStart/,/---ConfigEnd/' | sed '1d;$d' > extracted_config.sh
+        echo "\n\n\n\n\nNormalized line endings:"
+        sed -i 's/\\r\\n/\n/g' raw_pr_body.txt
 
-        echo "Extracted config extracted:"
+        awk '/---ConfigStart/,/---ConfigEnd/' raw_pr_body.txt | sed '1d;$d' > extracted_config.sh       
+
+        echo "\n\n\n\n\nExtracted config extracted:"
         cat extracted_config.sh
         chmod +x extracted_config.sh
