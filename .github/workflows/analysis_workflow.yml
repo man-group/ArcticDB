@@ -170,6 +170,7 @@ jobs:
         uses: mamba-org/setup-micromamba@v2
         with:
           micromamba-version: 2.1.0-0
+          init-shell: bash cmd.exe
 
       - name: Install libmambapy
         shell: bash -el {0}
@@ -185,10 +186,12 @@ jobs:
           asv machine --yes
       
       - name: Build project for ASV
+        shell: bash -el {0}
         run: |
           python -m pip install -ve .[Testing]
           
       - name: Run ASV Tests Check script
+        shell: bash -el {0}
         run: |
           python python/utils/asv_checks.py
         continue-on-error: false
