@@ -796,7 +796,7 @@ VersionedItem LocalVersionedEngine::write_segment(
 
     TypedStreamVersion tsv{partial_key.id, partial_key.version_id, KeyType::TABLE_DATA};
     int64_t write_window = write_window_size();
-    auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [&sink, de_dup_map, &index_desc = segment.descriptor().index(), tsv=std::move(tsv)](auto&& slice) {
+    auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [sink, de_dup_map, index_desc = segment.descriptor().index(), tsv=std::move(tsv)](auto&& slice) {
             auto descriptor = std::make_shared<entity::StreamDescriptor>(slice.descriptor());
             ColRange column_slice = {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()};
             RowRange row_slice = {slice.offset(), slice.offset() + slice.row_count()};
@@ -824,7 +824,7 @@ VersionedItem LocalVersionedEngine::write_segment(
     else {
         tsd = segment.index_descriptor();
     }
-    auto atom_key_fut = std::move(fut_slice_keys).thenValue([partial_key = std::move(partial_key), &sink, tsd = std::move(tsd), index = std::move(index)](auto&& slice_keys) {
+    auto atom_key_fut = std::move(fut_slice_keys).thenValue([partial_key = std::move(partial_key), sink, tsd = std::move(tsd), index = std::move(index)](auto&& slice_keys) {
                                     return index::write_index(index, tsd, std::forward<decltype(slice_keys)>(slice_keys), partial_key, sink);
                                 });
 
