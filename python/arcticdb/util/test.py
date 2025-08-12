@@ -19,6 +19,7 @@ import random
 import time
 import attr
 from functools import wraps, reduce
+from arcticdb.dependencies import pyarrow as pa
 
 from arcticdb.util.marks import SHORTER_LOGS
 
@@ -258,7 +259,6 @@ def convert_arrow_to_pandas_and_remove_categoricals(table):
     return new_table.to_pandas()
 
 def assert_frame_equal_with_arrow(left, right, **kwargs):
-    import pyarrow as pa
     if isinstance(left, pa.Table):
         left = convert_arrow_to_pandas_and_remove_categoricals(left)
     if isinstance(right, pa.Table):

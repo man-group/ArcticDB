@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import Optional, Union
 from enum import Enum
 
+from arcticdb.dependencies import _PYARROW_AVAILABLE
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
 from arcticdb_ext.version_store import InternalOutputFormat
@@ -157,6 +158,8 @@ def output_format_to_internal(output_format: Union[OutputFormat, str]) -> Intern
     if output_format.lower() == OutputFormat.PANDAS.lower():
         return InternalOutputFormat.PANDAS
     elif output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
+        if not _PYARROW_AVAILABLE:
+            raise ModuleNotFoundError("ArcticDB's pyarrow optional dependency missing but is required to use arrow output format.")
         return InternalOutputFormat.ARROW
     else:
         raise ValueError(f"Unknown OutputFormat: {output_format}")

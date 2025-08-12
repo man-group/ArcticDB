@@ -28,6 +28,7 @@ from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 import time
 
+from arcticdb.dependencies import pyarrow as pa
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
 from arcticdb_ext.version_store import SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
@@ -2399,8 +2400,6 @@ class NativeVersionStore:
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
-            import pyarrow as pa
-
             frame_data = read_result.frame_data
             record_batches = []
             for record_batch in frame_data.extract_record_batches():

@@ -1,4 +1,4 @@
-
+from arcticdb.dependencies import pyarrow as pa
 
 def stringify_dictionary_encoded_columns(table, string_type=None):
     """
@@ -10,7 +10,6 @@ def stringify_dictionary_encoded_columns(table, string_type=None):
     Useful for testing when comparing to the source dataframe where we want regular large_string columns instead of
     categorical columns.
     """
-    import pyarrow as pa
     if string_type is None:
         string_type = pa.large_string()
     for i, name in enumerate(table.column_names):
