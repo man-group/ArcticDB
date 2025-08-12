@@ -1225,7 +1225,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         idx,
                                                         read_options,
-                                                        &component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
+                                                        component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
                     auto version_info = get_version_identifier(
                             (*stream_ids)[idx],
                             (*version_queries)[idx],
