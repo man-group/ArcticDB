@@ -30,10 +30,8 @@ jobs:
     - name: Extract config block
       id: extract_config
       run: |
-        # Write PR body to file safely
-        printf "%s\n" "${{ steps.get_pr.outputs.result }}" > pr_description.txt
-
-        awk '/---ConfigStart/,/---ConfigEnd/' pr_description.txt | sed '1d;$d' > extracted_config.sh
+        echo "${{ steps.get_pr.outputs.result }}" > raw_pr_body.txt
+        cat raw_pr_body.txt | awk '/---ConfigStart/,/---ConfigEnd/' | sed '1d;$d' > extracted_config.sh
 
         echo "Extracted config extracted:"
         cat extracted_config.sh
