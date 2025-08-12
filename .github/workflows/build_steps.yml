@@ -158,7 +158,7 @@ jobs:
           vs-path: 'C:\\Program Files (x86)\\Microsoft Visual Studio\\2022\\BuildTools'
 
       - name: Setup cmake
-        uses: jwlawson/actions-setup-cmake
+        uses: jwlawson/actions-setup-cmake@v2
 
       - name: Use cmake
         run: cmake --version
