@@ -32,4 +32,5 @@ jobs:
 
       - name: Process pytest xmls
         run: |
+          ls -R ${{runner.temp}}/gh_artifacts
           python3 build_tooling/process_pytest_artifacts.py --download-dir ${{runner.temp}}/gh_artifacts --run-id ${{ github.run_id }}

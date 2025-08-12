@@ -423,7 +423,7 @@ def process_workflow_run(run: Union[dict, str], download_dir: Path) -> List[Path
             if zip_path:
                 downloaded_zips.append(zip_path)
     else:
-        downloaded_zips = list(download_dir.glob("*"))
+        downloaded_zips = list(download_dir.glob("*.zip"))
 
     downloaded_files = []
     for zip_path in downloaded_zips:
