@@ -9,7 +9,15 @@ on:
 
 jobs:
   extract-config:
-    runs-on: ubuntu-latest
+    if: |
+      always() &&
+      !cancelled()
+    runs-on: ubuntu-22.04
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    services:
+      mongodb:
+        image: mongo:4.4
 
     steps:
     - name: Checkout code
@@ -32,14 +40,75 @@ jobs:
       env:
           PR_BODY: "${{ steps.get_pr.outputs.result }}"
       run: |
+        CONFIG_FILE="$(pwd)/extracted_config.sh"
+        echo "TEST_CONFIG_FILE=${CONFIG_FILE}" >> $GITHUB_ENV        
         echo "$PR_BODY" > raw_pr_body.txt
         echo "Raw PR test:"
-        cat raw_pr_body.txt
-        echo "\n\n\n\n\nNormalized line endings:"
         sed -i 's/\\r\\n/\n/g' raw_pr_body.txt
+        cat raw_pr_body.txt
 
-        awk '/---ConfigStart/,/---ConfigEnd/' raw_pr_body.txt | sed '1d;$d' > extracted_config.sh       
+        awk '/---ConfigStart/,/---ConfigEnd/' raw_pr_body.txt | sed '1d;$d' > $CONFIG_FILE      
 
-        echo "\n\n\n\n\nExtracted config extracted:"
-        cat extracted_config.sh
-        chmod +x extracted_config.sh
+        echo "Extracted configuration:"
+        cat $CONFIG_FILE
+        chmod +x $CONFIG_FILE
+        #Just try to execute configuration to catch errors
+        . $CONFIG_FILE 
+
+    - name: Get number of CPU cores
+      uses: SimenB/github-actions-cpu-cores@v1.1.0
+      id: cpu-cores
+
+    - name: Install Conda environment from environment-dev.yml
+      uses: mamba-org/setup-micromamba@v2.0.0
+      with:
+        environment-file: environment-dev.yml
+        init-shell: >-
+          bash
+        cache-environment: true
+        post-cleanup: 'all'
+
+    - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+      shell: bash -l {0}
+      run: |
+        # Protocol buffers compilation require not using build isolation.
+        python -m pip install --no-build-isolation --no-deps -v -e .
+      env:
+        ARCTICDB_USING_CONDA: 1
+
+    - name: Install mongo for mongod executable needed as a fallback server fixture
+      shell: bash -l {0}
+      run: |
+        sudo apt-get install gnupg curl
+        curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | sudo gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+        sudo apt-get update
+        sudo apt-get install -y mongodb-org
+
+    - name: Install npm # Linux github runner image does not come with npm
+      uses: actions/setup-node@v3.3.0
+      with:
+        node-version: '16'
+
+    - name: Install azurite
+      shell: bash -l {0}
+      run: |
+        npm install -g azurite
+
+    - name: Check no arcticdb file depend on tests package
+      shell: bash -l {0}
+      run: |
+        build_tooling/checks.sh          
+
+    - name: Test with pytest
+      shell: bash -l {0}
+      run: |
+          ls -al
+          # Here we need to apply what we extracted
+          . $TEST_CONFIG_FILE
+          cd python
+          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests $ARCTICDB_PYTEST_ARGS
+      env:
+        ARCTICDB_USING_CONDA: 1
+        CI_MONGO_HOST: mongodb
+
