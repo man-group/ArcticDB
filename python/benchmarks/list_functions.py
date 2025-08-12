@@ -5,16 +5,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from arcticdb import Arctic
 
 from benchmarks.common import *
 
 
 class ListFunctions:
-
     number = 5
+    rounds = 1
     timeout = 6000
-    warmup_time = 0    
+    warmup_time = 0
 
     params = [500, 1000]
     param_names = ["num_symbols"]

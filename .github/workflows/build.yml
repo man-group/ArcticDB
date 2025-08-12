@@ -48,6 +48,11 @@ on:
         required: false
         default: false
         type: boolean
+      run_full_matrix_of_persistent_tests:
+        description: Run full matrix of persistent tests
+        required: false
+        default: false
+        type: boolean
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 concurrency:
   group: ${{github.ref}}
@@ -209,7 +214,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[11]')}}
+        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -233,7 +238,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[11]')}}
+        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -267,7 +272,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
@@ -331,7 +336,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]')}}
         include:
           - matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: 3.${{matrix.python3}} Windows
@@ -359,7 +364,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || '[11]')}}
+        python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]') }}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -382,7 +387,7 @@ jobs:
       fail-fast: false
       matrix:
         # This uses old arcticdb versions which won't work on python < 3.12
-        python3: ${{fromJson(vars.WINDOWS_PYTHON_VERSIONS || '[11]')}}
+        python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]') }}
         arcticdb_version: ["oldest", "latest"]
         include:
           - python_deps_ids: [""]
@@ -401,7 +406,11 @@ jobs:
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, storage_type]
     # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -414,7 +423,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{fromJson(vars.MACOS_PYTHON_VERSIONS || '[8, 9, 10, 11, 12, 13]')}}
+        python3: ${{ fromJson(vars.LINUX_PYTHON_VERSIONS || '[8, 9, 10, 11]') }}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}

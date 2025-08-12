@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os
 from arcticdb import Arctic
 from arcticdb.version_store.processing import QueryBuilder
@@ -40,14 +41,17 @@ def get_real_s3_uri(shared_path: bool = False):
         path_prefix,
         _,
     ) = real_s3_credentials(shared_path)
-    aws_uri = f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    aws_uri = (
+        f"s3s://{endpoint}:{bucket}?access={access_key}&secret={secret_key}&region={region}&path_prefix={path_prefix}"
+    )
     return aws_uri
 
 
 class PersistentQueryBuilderFunctions:
     number = 2
+    rounds = 1
     timeout = 6000
-    warmup_time = 0    
+    warmup_time = 0
     LIB_NAME = "query_builder_benchmark_lib"
 
     params = [1_000_000, 10_000_000]
