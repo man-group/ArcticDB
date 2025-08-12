@@ -10,8 +10,6 @@ on:
       environment: { type: environment, required: true }
       run_id: { type: number, required: true }
 run-name: Publish ${{github.ref}} to arcticdb-pytest-data
-env:
-  OUTPUT_PATH: ${{github.runner.temp}}/gh_artifacts
 jobs:
   sync_pytest_xmls:
     runs-on: ubuntu-22.04
@@ -23,7 +21,7 @@ jobs:
             pattern: "pytest-*"
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
-            path: ${{env.OUTPUT_PATH}}
+            path: ${{runner.temp}}/gh_artifacts
 
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -34,4 +32,4 @@ jobs:
 
       - name: Process pytest xmls
         run: |
-          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{env.OUTPUT_PATH}} --run-id ${{ github.run_id }}
+          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{runner.temp}}/gh_artifacts --run-id ${{ github.run_id }}
