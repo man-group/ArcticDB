@@ -375,7 +375,9 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment, slicing):
     segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
     lib_tool.write_segment_in_memory(sym, segment, slicing)
     dataframe = lib.read(sym).data
+    version_id = lib.read(sym).version
 
+    assert version_id == 0
     assert_frame_equal(dataframe, sample_df)
 
     data_keys = lib_tool.find_keys(KeyType.TABLE_DATA)
@@ -390,6 +392,19 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment, slicing):
 
     assert index_key_count == 1
     assert version_key_count == 1
+
+    lib.write(sym, sample_df)
+    lib.write(sym, sample_df)
+    lib.delete_versions(sym, [0])
+    lib.write(sym, sample_df, prune_previous_version=True)
+
+    segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
+    lib_tool.write_segment_in_memory(sym, segment, slicing)
+    dataframe = lib.read(sym).data
+    version_id = lib.read(sym).version
+
+    assert version_id == 4
+    assert_frame_equal(dataframe, sample_df)
     
 
 def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):

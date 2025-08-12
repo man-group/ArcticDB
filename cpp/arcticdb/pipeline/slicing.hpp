@@ -122,8 +122,8 @@ inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(const In
     if (index.field_count() != 0) {
         util::check(static_cast<bool>(index.type() == IndexDescriptor::Type::TIMESTAMP), "Got unexpected index type in get_partial_key_for_segment_slice");
         auto& idx = slice.column(0);
-        assert(idx.scalar_at<timestamp>(0).has_value());
-        assert(idx.scalar_at<timestamp>(slice.row_count()-1).value());
+        util::check(idx.scalar_at<timestamp>(0).has_value(), "First element of index column of slice does not contain a value");
+        util::check(idx.scalar_at<timestamp>(slice.row_count()-1).has_value(), "Last element of index column of slice does not contain a value");
         auto start = idx.scalar_at<timestamp>(0).value();
         auto end = idx.scalar_at<timestamp>(slice.row_count()-1).value();
         return PartialKey{

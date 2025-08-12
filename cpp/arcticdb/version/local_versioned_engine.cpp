@@ -788,7 +788,7 @@ VersionedItem LocalVersionedEngine::write_segment(
         slices = std::vector<SegmentInMemory>({segment});
         break;
     case Slicing::RowSlicing:
-        slices = segment.split(get_write_options().segment_row_size);
+        slices = segment.split(get_write_options().segment_row_size, true);
         break;
     }
 
