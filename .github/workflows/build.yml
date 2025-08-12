@@ -438,7 +438,6 @@ jobs:
     needs: [common_config,build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
     if: |
       always() &&
-      !failure() &&
       !cancelled()
     uses: ./.github/workflows/publish_pytest_data.yml
     secrets: inherit
