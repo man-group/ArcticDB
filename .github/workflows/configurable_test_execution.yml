@@ -103,11 +103,19 @@ jobs:
     - name: Test with pytest
       shell: bash -l {0}
       run: |
-          ls -al
+          ls -al $TEST_CONFIG_FILE
           # Here we need to apply what we extracted
           . $TEST_CONFIG_FILE
+
+          # Lets see what is applied now
+          echo "🔍 ARCTICDB-related environment variables:"
+            env | grep '^ARCTICDB_' | while IFS= read -r line; do
+            echo "  $line"
+          done
+
           cd python
-          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests $ARCTICDB_PYTEST_ARGS
+          echo "EXECUTE: python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests"
+          python -m pytest --timeout=3600 -n ${{ steps.cpu-cores.outputs.count }} -v tests 
       env:
         ARCTICDB_USING_CONDA: 1
         CI_MONGO_HOST: mongodb
