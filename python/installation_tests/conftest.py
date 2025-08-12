@@ -55,6 +55,11 @@ def ac_client(request) -> Generator[Arctic, None, None]:
     for lname in libs:
         logger.error(f"Library '{lname}' not deleted after test."
                      + "You have to delete it in test with try: ... finally: delete_library(ac, lib_name)")
+        if not (os.getenv("GITHUB_ACTIONS") == "true"):
+            raise Exception("(Development only exception): "
+                            + "You receive this error because there is undeleted data in storage."
+                            + "Check the error message above and and fix the tests."
+                            + "This error will not be raised in Github")
 
 
 @pytest.fixture(scope="function")
