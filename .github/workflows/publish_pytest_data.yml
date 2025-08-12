@@ -1,4 +1,6 @@
 name: Publish pytest data to S3
+permissions:
+  contents: read
 on: 
   workflow_call:
     inputs:
