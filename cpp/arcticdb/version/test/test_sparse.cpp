@@ -419,7 +419,7 @@ TEST_F(SparseTestStore, SegmentWithExistingIndex) {
     bool written = false;
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
         if(!written) {
-            test_store_->write_versioned_segment(stream_id, segment, false, arcticdb::version_store::Slicing::NoSlicing);
+            test_store_->write_segment(stream_id, std::move(segment), false, arcticdb::version_store::Slicing::NoSlicing);
             written = true;
         }
         else {
@@ -479,7 +479,7 @@ TEST_F(SparseTestStore, SegmentAndFilterColumn) {
     bool written = false;
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
         if(!written) {
-            test_store_->write_versioned_segment(stream_id, segment, false, arcticdb::version_store::Slicing::RowSlicing);
+            test_store_->write_segment(stream_id, std::move(segment), false, arcticdb::version_store::Slicing::NoSlicing);
             written = true;
         }
         else {
@@ -536,7 +536,7 @@ TEST_F(SparseTestStore, SegmentWithRangeFilter) {
     bool written = false;
     DynamicAggregator aggregator(std::move(schema), [&](SegmentInMemory &&segment) {
         if(!written) {
-            test_store_->write_versioned_segment(stream_id, segment, false, arcticdb::version_store::Slicing::RowSlicing);
+            test_store_->write_segment(stream_id, std::move(segment), false, arcticdb::version_store::Slicing::NoSlicing);
             written = true;
         }
         else {

@@ -626,10 +626,10 @@ VersionedItem PythonVersionStore::write_versioned_dataframe(
 
 VersionedItem PythonVersionStore::write_versioned_segment(
         const StreamId& stream_id,
-        SegmentInMemory& segment,
+        SegmentInMemory& segment,   // we use lvalue reference because pybind does not allow rvalue reference
         bool prune_previous_versions,
-        Slicing const& slicing) {
-    ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
+        Slicing slicing) {
+    ARCTICDB_SAMPLE(WriteVersionedSegment, 0)
     auto versioned_item = write_segment(stream_id, std::move(segment), prune_previous_versions, slicing);
     return versioned_item;
 }

@@ -379,7 +379,6 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment, slicing):
     assert_frame_equal(dataframe, sample_df)
 
     data_keys = lib_tool.find_keys(KeyType.TABLE_DATA)
-    data_key_count = len(data_keys)
 
     index_key_count = len(lib_tool.find_keys(KeyType.TABLE_INDEX))
     version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
