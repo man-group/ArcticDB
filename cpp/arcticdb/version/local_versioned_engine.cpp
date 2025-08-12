@@ -764,7 +764,7 @@ VersionedItem LocalVersionedEngine::write_segment(
         Slicing const& slicing
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
-    assert(segment.descriptor().id() == stream_id);
+    util::check(segment.descriptor().id() == stream_id, "Stream_id does not match the one in the SegmentInMemory. Stream_id was {}, but SegmentInMemory had {}", stream_id, segment.descriptor().id());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write individual segment");
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
