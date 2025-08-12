@@ -410,7 +410,7 @@ def process_workflow_run(run: Union[dict, str], download_dir: Path) -> List[Path
     print(f"\nProcessing run {run_id}: {run_name} ({run_status}/{run_conclusion}) {run_started_at}")
 
     # Only process completed runs
-    if run_status != "completed":
+    if run_status.lower() != "completed":
         print(f"Skipping run {run_id} - not completed")
         return []
 
