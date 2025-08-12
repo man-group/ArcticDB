@@ -1827,11 +1827,14 @@ class Library:
             A QueryBuilder object to apply to the dataframe before it is returned. For more information see the
             documentation for the QueryBuilder class (``from arcticdb import QueryBuilder; help(QueryBuilder)``).
 
-        TODO: Add docs
-
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation
             on `LazyDataFrame` for more details.
+
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Controls the output format of the result dataframe.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Returns
         -------
@@ -1857,6 +1860,15 @@ class Library:
         0       5
         1       6
         2       7
+
+        Passing an output_format can change the resulting dataframe type. E.g. we can use the experimental arrow output
+        format:
+
+        >>> lib.read("symbol", output_format="EXPERIMENTAL_ARROW").data
+        pyarrow.Table
+        column: int64
+        ----
+        column: [[5,6,7]]
         """
         if lazy:
             return LazyDataFrame(
@@ -1903,11 +1915,14 @@ class Library:
             A single QueryBuilder to apply to all the dataframes before they are returned. If this argument is passed
             then none of the ``symbols`` may have their own query_builder specified in their request.
 
-        TODO: Docs
-
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrameCollection` object. See
             documentation on `LazyDataFrameCollection` for more details.
+
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Controls the output format of the result dataframes.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Returns
         -------
@@ -2048,7 +2063,10 @@ class Library:
             The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
             individual dataframes, and will be applied to the joined data.
 
-            TODO: Docs
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Controls the output format of the result dataframe.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Returns
         -------
@@ -2617,7 +2635,8 @@ class Library:
             See documentation on `read`.
         lazy : bool, default=False
             See documentation on `read`.
-        TODO: Docs
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            See documentation on `read`.
 
         Returns
         -------
@@ -2671,6 +2690,8 @@ class Library:
         columns
             See documentation on `read`.
         lazy : bool, default=False
+            See documentation on `read`.
+        output_format: Optional[Union[OutputFormat, str]], default=None
             See documentation on `read`.
 
         Returns
