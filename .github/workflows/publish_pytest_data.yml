@@ -28,7 +28,7 @@ jobs:
 
       - name: Install requirements
         run: |
-          python3 -m pip install arcticdb click
+          python3 -m pip install arcticdb[Testing] click
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
