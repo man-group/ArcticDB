@@ -152,7 +152,7 @@ def unify_xml_for_run(run_id, download_dir):
         # Find the run directory
         run_dir = None
         for part in path_parts:
-            if part.startswith(f"run_{run_id}_"):
+            if "pytest-" in part:
                 run_dir = part
                 break
 
@@ -166,6 +166,8 @@ def unify_xml_for_run(run_id, download_dir):
         # Extract Python version
         python_version = None
         py_match = re.search(r"cp(\d+)", artifact_name)
+        test_type = artifact_name.split("-")[3]
+        print(f"Test type: {test_type}")
         if py_match:
             python_version = f"{py_match.group(1)}"
 
@@ -175,27 +177,13 @@ def unify_xml_for_run(run_id, download_dir):
 
         python_version = f"3.{subversion}"
 
-        # Extract test type
-        test_type = None
-        test_types = ["hypothesis", "nonreg", "scripts", "unit", "integration", "enduser"]
-        for test_type_name in test_types:
-            if test_type_name in artifact_name:
-                test_type = test_type_name
-                break
-
         return python_version, test_type
 
-    # Find all pytest XML files for this run
-    run_pattern = f"run_{run_id}_*"
     xml_files = []
 
-    for run_dir in download_dir.glob(run_pattern):
-        if run_dir.is_dir():
-            extracted_dir = run_dir / "extracted"
-            if extracted_dir.exists():
-                for xml_file in extracted_dir.glob("pytest*.xml"):
-                    if xml_file.is_file():
-                        xml_files.append(xml_file)
+    for xml_file in download_dir.glob("**/*.xml"):
+        if xml_file.is_file() and "pytest" in xml_file.name:
+            xml_files.append(xml_file)
 
     if not xml_files:
         print(f"No XML files found for run {run_id}")
@@ -218,7 +206,7 @@ def unify_xml_for_run(run_id, download_dir):
     for xml_file in xml_files:
         python_version, test_type = parse_artifact_info_from_path(xml_file)
 
-        # print(f"  Processing {xml_file.name} (Python {python_version}, {test_type})")
+        print(f"  Processing {xml_file.name} (Python {python_version}, {test_type})")
 
         try:
             tree = ET.parse(xml_file)
@@ -508,7 +496,7 @@ def main(max_workers, max_pages, download_dir, run_id):
             print(f"\nTotal workflow runs fetched: {len(all_runs)}")
             print(f"Time taken: {end_time - start_time:.2f} seconds")
         else:
-            all_runs = [run.stem.split("_")[1] for run in download_dir.glob("pytest_*.zip")]
+            all_runs = [run.stem.split("_")[1] for run in download_dir.glob("*.xml")]
     else:
         # Get a single workflow run
         all_runs = [run_id]
@@ -526,14 +514,14 @@ def main(max_workers, max_pages, download_dir, run_id):
     print(f"All files saved to: {download_dir.absolute()}")
 
     # Get all the csv files
-    csv_files = [f for f in download_dir.glob("*.csv")]
-    print(f"Found {len(csv_files)} CSV files")
-    for csv_file in csv_files:
-        df = pd.read_csv(csv_file)
-        # unique python versions
-        print(df["python_version"].unique(), df["test_type"].unique())
-        print(df.head())
-        lib.write(csv_file.stem, df)
+    # csv_files = [f for f in download_dir.glob("*.csv")]
+    # print(f"Found {len(csv_files)} CSV files")
+    # for csv_file in csv_files:
+    #     df = pd.read_csv(csv_file)
+    #     # unique python versions
+    #     print(df["python_version"].unique(), df["test_type"].unique())
+    #     print(df.head())
+    #     lib.write(csv_file.stem, df)
 
 
 if __name__ == "__main__":
