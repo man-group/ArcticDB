@@ -59,13 +59,14 @@ class Arctic:
             URI specifying the backing store used to access, configure, and create Arctic libraries.
             For more details about the parameters, please refer to the [Arctic URI Documentation](./arctic_uri.md).
 
-        encoding_version: EncodingVersion, default = DEFAULT_ENCODING_VERSION
+        encoding_version: EncodingVersion, default = EncodingVersion.V1
             When creating new libraries with this Arctic instance, the default encoding version to use.
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
         output_format: Union[OutputFormat, str], default = OutputFormat.PANDAS
             Controls the default output format of all operations returning a dataframe.
-            The default behavior (OutputFormat.PANDAS) is to return `pandas.DataFrame`s backed by numpy arrays.
+            The default behavior (OutputFormat.PANDAS) is to return `pandas.DataFrame`s or `pandas.Series` backed by
+            numpy arrays.
             OutputFormat.EXPERIMENTAL_ARROW will return all dataframes as `pyarrow.Table`s. The arrow API is still
             experimental and the arrow layout might change in a minor release.
             Accepts the OutputFormat as either OutputFormat enum values or as case-insensitive strings like "pandas"
