@@ -70,11 +70,10 @@ jobs:
     runs-on: ubuntu-latest
     env:
       INPUT_STORAGE: ${{ inputs.persistent_storage }}
-      CONN_STR: ${{ secrets.AZURE_CONNECTION_STRING }}
     outputs:
       storage: ${{ steps.set-storage.outputs.storage }}
-      DEBUG_LOGGING_ENABLED: ${{ steps.set-storage.outputs.DEBUG_LOGGING_ENABLED }}
-      DEBUG_ENABLED: ${{ steps.set-storage.outputs.DEBUG_ENABLED }}      
+      DEBUG_LOGGING_ENABLED: ${{ steps.parse-flags.outputs.DEBUG_LOGGING_ENABLED }}
+      DEBUG_ENABLED: ${{ steps.parse-flags.outputs.DEBUG_ENABLED }}      
     steps:
       - name: Determine Storage Type Based On Schedule
         id: set-storage
@@ -109,8 +108,6 @@ jobs:
 
           echo "Final storage type for workflow execution: $_storage"
           echo "storage=$_storage" >> $GITHUB_OUTPUT
-
-          connection_string=$CONN_STR
 
       - name: Parse flags
         id: parse-flags
