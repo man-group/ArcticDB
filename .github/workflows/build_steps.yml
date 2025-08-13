@@ -417,7 +417,6 @@ jobs:
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
       - name: Run test
-        if: matrix.type == 'compat'
         run: |
           ulimit -a
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
