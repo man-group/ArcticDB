@@ -31,7 +31,7 @@ jobs:
             pattern: "pytest-*"
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
-            path: ${{ env.ARTEFACT_PATH }}
+            path: /tmp
 
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -58,5 +58,5 @@ jobs:
 
       - name: Process pytest xmls
         run: |
-          ls -R ${{ env.ARTEFACT_PATH }}
-          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --run-id ${{ github.run_id }}
+          ls -R /tmp
+          python3 build_tooling/process_pytest_artifacts.py --download-dir /tmp --run-id ${{ github.run_id }}
