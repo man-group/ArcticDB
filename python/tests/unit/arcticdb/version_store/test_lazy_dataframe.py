@@ -11,14 +11,16 @@ import pickle
 import pytest
 
 from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, ReadRequest, where
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal_with_arrow
+from arcticdb.options import OutputFormat
 
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 def test_lazy_read(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_read"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -31,11 +33,12 @@ def test_lazy_read(lmdb_library):
     received = lazy_df.collect().data
     expected = lib.read(sym, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"]).data
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_date_range(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_date_range"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -47,11 +50,12 @@ def test_lazy_date_range(lmdb_library):
     received = lazy_df.collect().data
     expected = df.iloc[1:9]
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_filter(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_filter"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -63,11 +67,12 @@ def test_lazy_filter(lmdb_library):
     received = lazy_df.collect().data
     expected = df.query("col1 in [0, 3, 6, 9]")
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_head(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_head"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -79,11 +84,12 @@ def test_lazy_head(lmdb_library):
     received = lazy_df.collect().data
     expected = df.iloc[2:4]
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_tail(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_tail"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -95,11 +101,12 @@ def test_lazy_tail(lmdb_library):
     received = lazy_df.collect().data
     expected = df.iloc[6:8]
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_apply(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_apply"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -112,11 +119,12 @@ def test_lazy_apply(lmdb_library):
     expected = df
     expected["new_col"] = expected["col1"] + expected["col2"]
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_apply_inline_col(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_apply_inline_col"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -128,11 +136,12 @@ def test_lazy_apply_inline_col(lmdb_library):
     expected = df
     expected["new_col"] = expected["col1"] + expected["col2"]
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_project(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -145,11 +154,12 @@ def test_lazy_project(lmdb_library):
     expected = df
     expected["new_col"] = expected["col1"] + expected["col2"]
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_project_constant_value(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -162,11 +172,12 @@ def test_lazy_project_constant_value(lmdb_library):
     expected = df
     expected["new_col"] = 5
 
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
 
 
 def test_lazy_ternary(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_ternary"
     df = pd.DataFrame(
         {
@@ -184,11 +195,12 @@ def test_lazy_ternary(lmdb_library):
     expected = df
     expected["new_col"] = np.where(df["conditional"].to_numpy(), df["col1"].to_numpy(), df["col2"].to_numpy())
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_groupby(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_groupby"
     df = pd.DataFrame({"col1": [0, 1, 0, 1, 2, 2], "col2": np.arange(6, dtype=np.int64)})
     lib.write(sym, df)
@@ -199,11 +211,12 @@ def test_lazy_groupby(lmdb_library):
     received.sort_index(inplace=True)
     expected = df.groupby("col1").agg({"col2": "sum"})
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_resample(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_resample"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -217,11 +230,12 @@ def test_lazy_resample(lmdb_library):
 
     expected.sort_index(inplace=True, axis=1)
     received.sort_index(inplace=True, axis=1)
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_regex_match(lmdb_library, sym):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
@@ -234,11 +248,12 @@ def test_lazy_regex_match(lmdb_library, sym):
     received = lazy_df.collect().data
     expected = df[df.a.str.contains(pattern)]
 
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_lazy_with_initial_query_builder(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_chaining"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -253,11 +268,12 @@ def test_lazy_with_initial_query_builder(lmdb_library):
 
     expected = df.resample("us").agg({"col": "sum"})
     expected["new_col"] = expected["col"] * 3
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
 
 
 def test_lazy_chaining(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_chaining"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -270,11 +286,12 @@ def test_lazy_chaining(lmdb_library):
 
     expected = df.resample("us").agg({"col": "sum"})
     expected["new_col"] = expected["col"] * 3
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
 
 
 def test_lazy_batch_read(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym_0 = "test_lazy_batch_read_0"
     sym_1 = "test_lazy_batch_read_1"
     df = pd.DataFrame(
@@ -296,12 +313,13 @@ def test_lazy_batch_read(lmdb_library):
     received = lazy_dfs.collect()
     expected_0 = lib.read(sym_0, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"]).data
     expected_1 = lib.read(sym_1).data
-    assert_frame_equal(expected_0, received[0].data)
-    assert_frame_equal(expected_1, received[1].data)
+    assert_frame_equal_with_arrow(expected_0, received[0].data)
+    assert_frame_equal_with_arrow(expected_1, received[1].data)
 
 
 def test_lazy_batch_one_query(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     syms = [f"test_lazy_batch_one_query_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -313,11 +331,12 @@ def test_lazy_batch_one_query(lmdb_library):
     received = lazy_dfs.collect()
     expected = df.query("col1 in [0, 3, 6, 9]")
     for vit in received:
-        assert_frame_equal(expected, vit.data)
+        assert_frame_equal_with_arrow(expected, vit.data)
 
 
 def test_lazy_batch_collect_separately(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     syms = [f"test_lazy_batch_collect_separately_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -334,13 +353,14 @@ def test_lazy_batch_collect_separately(lmdb_library):
     received_0 = lazy_df_0.collect().data
     received_1 = lazy_df_1.collect().data
     received_2 = lazy_df_2.collect().data
-    assert_frame_equal(expected_0, received_0)
-    assert_frame_equal(expected_1, received_1)
-    assert_frame_equal(expected_2, received_2)
+    assert_frame_equal_with_arrow(expected_0, received_0)
+    assert_frame_equal_with_arrow(expected_1, received_1)
+    assert_frame_equal_with_arrow(expected_2, received_2)
 
 
 def test_lazy_batch_separate_queries_collect_together(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     syms = [f"test_lazy_batch_separate_queries_collect_together_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -355,13 +375,14 @@ def test_lazy_batch_separate_queries_collect_together(lmdb_library):
     expected_2 = df.query("col1 in [2, 4, 8]")
 
     received = LazyDataFrameCollection(lazy_dfs).collect()
-    assert_frame_equal(expected_0, received[0].data)
-    assert_frame_equal(expected_1, received[1].data)
-    assert_frame_equal(expected_2, received[2].data)
+    assert_frame_equal_with_arrow(expected_0, received[0].data)
+    assert_frame_equal_with_arrow(expected_1, received[1].data)
+    assert_frame_equal_with_arrow(expected_2, received[2].data)
 
 
 def test_lazy_batch_complex(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     syms = [f"test_lazy_batch_complex_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -394,13 +415,14 @@ def test_lazy_batch_complex(lmdb_library):
     expected_2["shared_new_col_1"] = expected_2["col2"] * 2
     expected_2["new_col"] = expected_2["col1"] * 2
     expected_2["shared_new_col_2"] = expected_2["new_col"] + 10
-    assert_frame_equal(expected_0, received[0].data)
-    assert_frame_equal(expected_1, received[1].data)
-    assert_frame_equal(expected_2, received[2].data)
+    assert_frame_equal_with_arrow(expected_0, received[0].data)
+    assert_frame_equal_with_arrow(expected_1, received[1].data)
+    assert_frame_equal_with_arrow(expected_2, received[2].data)
 
 
 def test_lazy_collect_multiple_times(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_collect_multiple_times"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -410,19 +432,20 @@ def test_lazy_collect_multiple_times(lmdb_library):
     lazy_df = lib.read(sym, lazy=True).resample("us").agg({"col": "sum"})
     expected = df.resample("us").agg({"col": "sum"})
     received_0 = lazy_df.collect().data
-    assert_frame_equal(expected, received_0, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received_0, check_dtype=False)
     received_1 = lazy_df.collect().data
-    assert_frame_equal(expected, received_1, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received_1, check_dtype=False)
 
     lazy_df["new_col"] = lazy_df["col"] * 3
     received_2 = lazy_df.collect().data
 
     expected["new_col"] = expected["col"] * 3
-    assert_frame_equal(expected, received_2, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received_2, check_dtype=False)
 
 
 def test_lazy_batch_collect_multiple_times(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     syms = [f"test_lazy_batch_collect_multiple_times_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -434,21 +457,22 @@ def test_lazy_batch_collect_multiple_times(lmdb_library):
     received_0 = lazy_dfs.collect()
     expected = df.query("col1 in [0, 3, 6, 9]")
     for vit in received_0:
-        assert_frame_equal(expected, vit.data)
+        assert_frame_equal_with_arrow(expected, vit.data)
 
     received_1 = lazy_dfs.collect()
     for vit in received_1:
-        assert_frame_equal(expected, vit.data)
+        assert_frame_equal_with_arrow(expected, vit.data)
 
     lazy_dfs = lazy_dfs[lazy_dfs["col1"].isin(0, 6)]
     received_2 = lazy_dfs.collect()
     expected = df.query("col1 in [0, 6]")
     for vit in received_2:
-        assert_frame_equal(expected, vit.data)
+        assert_frame_equal_with_arrow(expected, vit.data)
 
 
 def test_lazy_collect_twice_with_date_range(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_collect_twice_with_date_range"
     df = pd.DataFrame(
         {
@@ -461,13 +485,14 @@ def test_lazy_collect_twice_with_date_range(lmdb_library):
     lazy_df = lib.read(sym, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), lazy=True)
     expected = lib.read(sym, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07"))).data
     received_0 = lazy_df.collect().data
-    assert_frame_equal(expected, received_0, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received_0, check_dtype=False)
     received_1 = lazy_df.collect().data
-    assert_frame_equal(expected, received_1, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received_1, check_dtype=False)
 
 
 def test_lazy_pickling(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_lazy_pickling"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -483,14 +508,15 @@ def test_lazy_pickling(lmdb_library):
     roundtripped = pickle.loads(pickle.dumps(lazy_df))
     assert roundtripped == lazy_df
     received_initial = lazy_df.collect().data
-    assert_frame_equal(expected, received_initial, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received_initial, check_dtype=False)
 
     received_roundtripped = roundtripped.collect().data
-    assert_frame_equal(expected, received_roundtripped, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received_roundtripped, check_dtype=False)
 
 
 def test_lazy_batch_pickling(lmdb_library):
     lib = lmdb_library
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     syms = [f"test_lazy_batch_pickling_{idx}" for idx in range(3)]
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -508,8 +534,8 @@ def test_lazy_batch_pickling(lmdb_library):
     assert roundtripped == lazy_dfs
     received_initial = lazy_dfs.collect()
     for vit in received_initial:
-        assert_frame_equal(expected, vit.data)
+        assert_frame_equal_with_arrow(expected, vit.data)
 
     received_roundtripped = roundtripped.collect()
     for vit in received_roundtripped:
-        assert_frame_equal(expected, vit.data)
+        assert_frame_equal_with_arrow(expected, vit.data)

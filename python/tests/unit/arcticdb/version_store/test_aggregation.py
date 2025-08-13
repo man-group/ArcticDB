@@ -19,12 +19,15 @@ from arcticdb.util.test import (
     common_sum_aggregation_dtype,
     valid_common_type
 )
+from arcticdb.options import OutputFormat
+from arcticdb.util.test import convert_arrow_to_pandas_and_remove_categoricals
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 def test_group_on_float_column_with_nans(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_on_float_column_with_nans"
     df = pd.DataFrame({"grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0], "agg_column": [1, 2, 3, 4, 5, 6]})
     lib.write(symbol, df)
@@ -35,6 +38,7 @@ def test_group_on_float_column_with_nans(lmdb_version_store_v1):
 @pytest.mark.parametrize("aggregator", ("sum", "min", "max", "mean", "count"))
 def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_aggregate_float_columns_with_nans"
     df = pd.DataFrame(
         {
@@ -48,6 +52,7 @@ def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
 
 def test_count_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_count_aggregation"
     df = DataFrame(
         {
@@ -63,6 +68,7 @@ def test_count_aggregation(lmdb_version_store_v1):
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_first_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_first_aggregation"
     df = DataFrame(
         {
@@ -78,6 +84,7 @@ def test_first_aggregation(lmdb_version_store_v1):
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_first_agg_with_append(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_first_agg_with_append"
     df_0 = pd.DataFrame({"grouping_column": [0], "to_first": [10.0]})
     df_1 = pd.DataFrame({"grouping_column": [1], "to_first": [30.0]})
@@ -91,6 +98,7 @@ def test_first_agg_with_append(lmdb_version_store_v1):
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_last_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_last_aggregation"
     df = DataFrame(
         {
@@ -107,6 +115,7 @@ def test_last_aggregation(lmdb_version_store_v1):
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
 def test_last_agg_with_append(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_last_agg_with_append"
     df_0 = pd.DataFrame({"grouping_column": [0], "to_last": [10.0]})
     df_1 = pd.DataFrame({"grouping_column": [1], "to_last": [30.0]})
@@ -119,6 +128,7 @@ def test_last_agg_with_append(lmdb_version_store_v1):
 
 def test_sum_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_sum_aggregation"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
@@ -129,6 +139,7 @@ def test_sum_aggregation(lmdb_version_store_v1):
 
 def test_sum_aggregation_bool(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_sum_aggregation"
     df = DataFrame(
         {
@@ -143,6 +154,7 @@ def test_sum_aggregation_bool(lmdb_version_store_v1):
 
 def test_mean_aggregation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_mean_aggregation"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
@@ -154,6 +166,7 @@ def test_mean_aggregation(lmdb_version_store_v1):
 
 def test_mean_aggregation_float(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_mean_aggregation_float"
     df = DataFrame(
         {
@@ -167,6 +180,7 @@ def test_mean_aggregation_float(lmdb_version_store_v1):
 
 def test_mean_aggregation_timestamp(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_mean_aggregation_float"
     df = DataFrame(
         {
@@ -195,6 +209,7 @@ def test_mean_aggregation_timestamp(lmdb_version_store_v1):
 
 def test_named_agg(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_named_agg"
     gen = np.random.default_rng()
     df = DataFrame(
@@ -225,6 +240,7 @@ def test_named_agg(lmdb_version_store_tiny_segment):
 
 def test_max_minus_one(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_max_minus_one"
     df = pd.DataFrame({"grouping_column": ["thing"], "to_max": [-1]})
     lib.write(symbol, df)
@@ -233,6 +249,7 @@ def test_max_minus_one(lmdb_version_store_v1):
 
 def test_group_empty_dataframe(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_empty_dataframe"
     df = DataFrame({"grouping_column": [], "to_mean": []})
     lib.write(symbol, df)
@@ -243,6 +260,7 @@ def test_group_empty_dataframe(lmdb_version_store_v1):
 
 def test_group_pickled_symbol(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_pickled_symbol"
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
@@ -253,6 +271,7 @@ def test_group_pickled_symbol(lmdb_version_store_v1):
 
 def test_group_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_column_not_present"
     df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
     lib.write(symbol, df)
@@ -263,6 +282,7 @@ def test_group_column_not_present(lmdb_version_store_v1):
 
 def test_group_column_splitting(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_column_splitting"
     df = DataFrame(
         {
@@ -285,6 +305,7 @@ def test_group_column_splitting(lmdb_version_store_tiny_segment):
 
 def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_column_splitting"
     df = DataFrame(
         {
@@ -307,6 +328,7 @@ def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
 
 def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory):
     lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_aggregation_with_nones_and_nans_in_string_grouping_column"
     # Structured so that the row-slices of the grouping column contain:
     # 1 - All strings
@@ -341,6 +363,7 @@ def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store
 
 def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = DataFrame({"grouping_column": ["group_1", "group_1", "group_1"], "to_max": [1, 5, 4]}, index=np.arange(3))
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_max": "max"})
@@ -354,6 +377,7 @@ def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1):
 
 def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1"], "to_mean": [1.1, 1.4, 2.5], "to_max": [1.1, 1.4, 2.5]},
         index=np.arange(3),
@@ -362,7 +386,7 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
     q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
 
     lib.write("symbol", df)
-    res = lib.read("symbol", query_builder=q).data
+    res = convert_arrow_to_pandas_and_remove_categoricals(lib.read("symbol", query_builder=q).data)
     res.sort_index(axis=1, inplace=True)
     df = pd.DataFrame({"to_max": [2.5], "to_mean": [(1.1 + 1.4 + 2.5) / 3]}, index=["group_1"])
     df.index.rename("grouping_column", inplace=True)
@@ -377,6 +401,7 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
 
 def test_count_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_count_aggregation_dynamic"
     df = DataFrame(
         {
@@ -394,6 +419,7 @@ def test_count_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
 @pytest.mark.xfail(reason="Not supported yet")
 def test_first_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_first_aggregation_dynamic"
     df = DataFrame(
         {
@@ -411,6 +437,7 @@ def test_first_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
 @pytest.mark.xfail(reason="Not supported yet")
 def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_last_aggregation_dynamic"
     df = DataFrame(
         {
@@ -427,6 +454,7 @@ def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
 
 def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_sum_aggregation_dynamic"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
@@ -439,6 +467,7 @@ def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
 
 def test_sum_aggregation_dynamic_bool_missing_aggregated_column(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_sum_aggregation_dynamic"
     df = DataFrame({"grouping_column": ["group_1", "group_2"], "to_sum": [True, False]}, index=np.arange(2),)
     lib.write(symbol, df)
@@ -447,6 +476,7 @@ def test_sum_aggregation_dynamic_bool_missing_aggregated_column(lmdb_version_sto
 
 def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_sum_aggregation_with_range_index_dynamic"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]}
@@ -459,6 +489,7 @@ def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_sch
 
 def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_empty_dataframe_dynamic"
     df = DataFrame({"grouping_column": [], "to_mean": []})
     lib.write(symbol, df)
@@ -469,6 +500,7 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1):
 
 def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_pickled_symbol_dynamic"
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
@@ -479,6 +511,7 @@ def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1):
 
 def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_group_column_not_present_dynamic"
     df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
     lib.write(symbol, df)
@@ -490,6 +523,7 @@ def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
 @pytest.mark.parametrize("agg", ("max", "min", "mean", "sum"))
 def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema_v1, agg):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_segment_without_aggregation_column"
     write_df = pd.DataFrame({"grouping_column": ["group_0"], "aggregation_column": [10330.0]})
     lib.write(symbol, write_df)
@@ -500,6 +534,7 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema_v1
 
 def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_minimal_repro_type_change"
     write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_sum": [np.uint8(1)]})
     lib.write(symbol, write_df)
@@ -510,6 +545,7 @@ def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema_v1):
 
 def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_minimal_repro_type_change_max"
     write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_max": [np.uint8(1)]})
     lib.write(symbol, write_df)
@@ -520,6 +556,7 @@ def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema_v1):
 
 def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_minimal_repro_type_sum_similar_string_group_values"
     df = pd.DataFrame({"grouping_column": ["0", "000"], "to_sum": [1.0, 1.0]})
     lib.write(symbol, df)
@@ -528,6 +565,7 @@ def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_d
 
 def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_aggregation_grouping_column_missing_from_row_group"
     write_df = DataFrame(
         {"to_sum": [1, 2], "grouping_column": ["group_1", "group_2"]},
@@ -553,6 +591,7 @@ def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype,
     test we test all configurations of dtypes and grouping options (same group vs different group)
     """
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df1 = pd.DataFrame({"grouping_column": [first_group], "to_sum": np.array([1], first_dtype)})
     df2 = pd.DataFrame({"grouping_column": [second_group], "to_sum": np.array([1], second_dtype)})
     lib.write("sym", df1)
@@ -563,7 +602,7 @@ def test_sum_aggregation_type(lmdb_version_store_dynamic_schema_v1, first_dtype,
         lib.append("sym", df2)
         q = QueryBuilder()
         q = q.groupby("grouping_column").agg({"to_sum": "sum"})
-        data = lib.read("sym", query_builder=q).data
+        data = convert_arrow_to_pandas_and_remove_categoricals(lib.read("sym", query_builder=q).data)
         expected_type = common_sum_aggregation_dtype(first_dtype, second_dtype)
         if first_group == second_group:
             expected_df = pd.DataFrame({"to_sum": np.array([2], expected_type)}, index=[first_group])
@@ -583,6 +622,7 @@ def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store
     because the aggregation column is missing, d2 will be the second row which will be dense and not backfilled.
     """
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "sym"
     df1 = pd.DataFrame({"agg_column": np.array([0, 0], dtype)})
     df2 = pd.DataFrame({"grouping_column": ["a"]})
@@ -591,7 +631,7 @@ def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store
         lib.append(sym, df)
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"agg_column": extremum})
-    data = lib.read("sym", query_builder=q).data
+    data = convert_arrow_to_pandas_and_remove_categoricals(lib.read("sym", query_builder=q).data)
     data = data.sort_index()
     expected = pd.DataFrame({"agg_column": np.array([default_value, 0], dtype)}, index=["a", "b"])
     expected.index.name = "grouping_column"
@@ -600,6 +640,7 @@ def test_extremum_aggregation_with_missing_aggregation_column(lmdb_version_store
 
 def test_mean_timestamp_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "sym"
     df1 = pd.DataFrame({"agg": [pd.Timestamp(1)], "grouping": [0]})
     df2 = pd.DataFrame({"grouping": [0, 1, 2]})
@@ -608,7 +649,7 @@ def test_mean_timestamp_aggregation_with_missing_aggregation_column(lmdb_version
         lib.append(sym, df)
     q = QueryBuilder()
     q = q.groupby("grouping").agg({"agg": "mean"})
-    data = lib.read("sym", query_builder=q).data
+    data = convert_arrow_to_pandas_and_remove_categoricals(lib.read("sym", query_builder=q).data)
     data.sort_index(inplace=True)
     expected = pd.DataFrame({"agg": [pd.Timestamp(1), pd.Timestamp(5), pd.NaT]}, index=[0, 1, 2])
     expected.index.name = "grouping"

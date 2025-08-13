@@ -756,8 +756,10 @@ FIXED_STRINGS_SUFFIX = "fixed_strings"
 
 def generic_filter_test(lib, symbol, arctic_query, expected):
     received = lib.read(symbol, query_builder=arctic_query).data
+    if isinstance(received, pa.Table):
+        received = convert_arrow_to_pandas_and_remove_categoricals(received)
     if not np.array_equal(expected, received):
-        original_df = lib.read(symbol).data
+        original_df = lib.read(symbol, output_format=OutputFormat.PANDAS).data
         print(
             f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
             f"""\nPandas result:\n{expected}\nArcticDB result:\n{received}"""
@@ -776,6 +778,8 @@ def generic_filter_test_strings(lib, base_symbol, arctic_query, expected):
 
 def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
     received = lib.read(symbol, query_builder=arctic_query).data
+    if isinstance(received, pa.Table):
+        received = convert_arrow_to_pandas_and_remove_categoricals(received)
     assert len(received) == sum([len(queried_slice) for queried_slice in queried_slices])
     start_row = 0
     arrays_equal = True
@@ -787,7 +791,7 @@ def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
                 arrays_equal = False
         start_row += len(queried_slice)
     if not arrays_equal:
-        original_df = lib.read(symbol).data
+        original_df = lib.read(symbol, output_format=OutputFormat.PANDAS).data
         print(
             f"""Original df (in ArcticDB, backfilled):\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
             f"""\nPandas result:\n{queried_slices}\nArcticDB result:\n{received}"""
@@ -814,6 +818,8 @@ def generic_filter_test_strings_dynamic(lib, base_symbol, slices, arctic_query, 
 # TODO: Replace with np.array_equal with equal_nan argument (added in 1.19.0)
 def generic_filter_test_nans(lib, symbol, arctic_query, expected):
     received = lib.read(symbol, query_builder=arctic_query).data
+    if isinstance(received, pa.Table):
+        received = convert_arrow_to_pandas_and_remove_categoricals(received)
     assert expected.shape == received.shape
     for col in expected.columns:
         expected_col = expected.loc[:, col]
@@ -833,6 +839,8 @@ def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
     expected = expected.reindex(columns=sorted(expected.columns))
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     received = lib.read(symbol, query_builder=q).data
+    if isinstance(received, pa.Table):
+        received = convert_arrow_to_pandas_and_remove_categoricals(received)
     received = received.reindex(columns=sorted(received.columns))
     received.sort_index(inplace=True)
     assert_frame_equal(expected, received, check_dtype=False)
@@ -851,6 +859,8 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
         expected = expected.astype(agg_dtypes)
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     received = lib.read(symbol, query_builder=q).data
+    if isinstance(received, pa.Table):
+        received = convert_arrow_to_pandas_and_remove_categoricals(received)
     received = received.reindex(columns=sorted(received.columns))
     received.sort_index(inplace=True)
     try:
@@ -982,6 +992,8 @@ def generic_resample_test(
     else:
         q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
     received = lib.read(sym, date_range=date_range, query_builder=q).data
+    if isinstance(received, pa.Table):
+        received = convert_arrow_to_pandas_and_remove_categoricals(received)
     received = received.reindex(columns=sorted(received.columns))
 
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))

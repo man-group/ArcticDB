@@ -12,10 +12,11 @@ import pytest
 from arcticdb_ext.exceptions import InternalException, UserInputException
 from arcticdb.exceptions import ArcticNativeException
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_dataframe
+from arcticdb.util.test import assert_frame_equal_with_arrow, make_dynamic, regularize_dataframe
+from arcticdb.options import OutputFormat
 
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 @pytest.mark.xfail(reason="""Fails on Pandas < 2 because of this logic:
     https://github.com/man-group/ArcticDB/blob/fc9514f25712d8e86fbdbd2f7e37e64f3a10df40/python/arcticdb/version_store/_normalization.py#L230
@@ -30,6 +31,7 @@ pytestmark = pytest.mark.pipeline
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_project_empty_dataframe(request, lib_type):
     lib = request.getfixturevalue(lib_type)
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": []})
     q = QueryBuilder()
     q = q.apply("new", q["a"] + 1)
@@ -41,6 +43,7 @@ def test_project_empty_dataframe(request, lib_type):
 
 def test_project_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q.apply("new", q["b"] + 1)
@@ -52,6 +55,7 @@ def test_project_column_not_present(lmdb_version_store_v1):
 
 def test_project_string_binary_arithmetic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_string_arithmetic"
     lib.write(symbol, pd.DataFrame({"col_a": [0], "col_b": ["hello"], "col_c": ["bonjour"]}))
     operands = ["col_a", "col_b", "col_c", "0", 0]
@@ -69,6 +73,7 @@ def test_project_string_binary_arithmetic(lmdb_version_store_v1):
 
 def test_project_string_unary_arithmetic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_string_unary_arithmetic"
     lib.write(symbol, pd.DataFrame({"a": ["hello"]}))
     q = QueryBuilder()
@@ -85,13 +90,14 @@ def test_project_string_unary_arithmetic(lmdb_version_store_v1):
 @pytest.mark.parametrize("value", [5, "hello"])
 def test_project_fixed_value(lmdb_version_store_tiny_segment, index, value):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_project_fixed_value"
     df = pd.DataFrame({"col1": [0, 1, 2], "col2": [3, 4, 5], "col3": [6, 7, 8]}, index=index)
     lib.write(sym, df)
     df["new_col"] = value
     q = QueryBuilder().apply("new_col", value)
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(df, received, check_dtype=False)
+    assert_frame_equal_with_arrow(df, received, check_dtype=False)
 
 
 def test_project_value_set():
@@ -101,6 +107,7 @@ def test_project_value_set():
 
 def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
         {
             "VWAP": np.arange(0, 10, dtype=np.float64),
@@ -117,7 +124,7 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
     data = lib.read("expression", query_builder=q).data
 
     df["ADJUSTED"] = df["ASK"] * df["VOL_ACC"] + 7
-    assert_frame_equal(df.astype({"ADJUSTED": "int64"}), data)
+    assert_frame_equal_with_arrow(df.astype({"ADJUSTED": "int64"}), data)
 
 
 ##################################
@@ -127,6 +134,7 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
 
 def test_project_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_dynamic"
 
     df = pd.DataFrame(
@@ -149,11 +157,12 @@ def test_project_dynamic(lmdb_version_store_dynamic_schema_v1):
     expected["ADJUSTED"] = expected["ASK"] * expected["ACVOL"] + 7
     received = regularize_dataframe(vit.data)
     expected = regularize_dataframe(expected)
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_column_types_changing_and_missing"
     # Floats
     expected = pd.DataFrame({"col_to_project": [0.5, 1.5], "data_col": [0, 1]}, index=np.arange(0, 2))
@@ -177,13 +186,14 @@ def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_sc
     q = QueryBuilder()
     q = q.apply("projected_col", q["col_to_project"] * 2)
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 @pytest.mark.parametrize("index", [None, "timeseries"])
 @pytest.mark.parametrize("value", [5, "hello"])
 def test_project_fixed_value_dynamic(lmdb_version_store_dynamic_schema_v1, index, value):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_project_fixed_value_dynamic"
     df0 = pd.DataFrame({"col1": [0, 0.1, 0.2], "col2": [0.3, 0.4, 0.5]}, index=pd.date_range("2025-01-01", periods=3) if index == "timeseries" else None)
     df1 = pd.DataFrame({"col2": [0.6, 0.7, 0.8]}, index=pd.date_range("2025-01-04", periods=3) if index == "timeseries" else None)
@@ -195,4 +205,4 @@ def test_project_fixed_value_dynamic(lmdb_version_store_dynamic_schema_v1, index
         expected.index = pd.RangeIndex(6)
     q = QueryBuilder().apply("new_col", value)
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
