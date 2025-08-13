@@ -168,13 +168,15 @@ void fix_descriptor_mismatch_or_throw(
             operation);
     }
     if (dynamic_schema && new_frame.norm_meta.has_series() && existing_isr.tsd().normalization().has_series()) {
-        // Series have one column. If there's an index, field 0 will be the index otherwise field 0 will be the column
-        const size_t column_index = new_frame.desc.fields().size() - 1;
+        // Series have one column. If there's a date time index or a Multiindex, the first fields will be for the index.
+        // The last field will always be the data column.
+        const size_t new_column_index = new_frame.desc.fields().size() - 1;
+        const size_t existing_column_index = existing_isr.tsd().fields().size() - 1;
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            new_frame.desc.fields()[column_index].name() == existing_isr.tsd().fields()[column_index].name(),
+            new_frame.desc.fields()[new_column_index].name() == existing_isr.tsd().fields()[existing_column_index].name(),
             "Series are not allowed to have columns with different names for append and update even for dynamic schema. Existing name: {}, new name: {}",
-            existing_isr.tsd().as_stream_descriptor().fields()[column_index].name(),
-            new_frame.desc.fields()[column_index].name());
+            existing_isr.tsd().as_stream_descriptor().fields()[existing_column_index].name(),
+            new_frame.desc.fields()[new_column_index].name());
     }
 }
 } // namespace arcticdb
