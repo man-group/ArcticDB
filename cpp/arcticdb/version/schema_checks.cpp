@@ -168,15 +168,18 @@ void fix_descriptor_mismatch_or_throw(
             operation);
     }
     if (dynamic_schema && new_frame.norm_meta.has_series() && existing_isr.tsd().normalization().has_series()) {
-        // Series have one column. If there's a date time index or a Multiindex, the first fields will be for the index.
-        // The last field will always be the data column.
-        const size_t new_column_index = new_frame.desc.fields().size() - 1;
-        const size_t existing_column_index = existing_isr.tsd().fields().size() - 1;
+        const bool both_dont_have_name =!new_frame.norm_meta.series().common().has_name() &&
+            !existing_isr.tsd().normalization().series().common().has_name();
+        const bool both_have_name = new_frame.norm_meta.series().common().has_name() &&
+            existing_isr.tsd().normalization().series().common().has_name();
+        const auto name_or_default = [](const proto::descriptors::NormalizationMetadata& meta) {
+            return meta.series().common().has_name() ? meta.series().common().name() : "<series_name_not_set>";
+        };
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
-            new_frame.desc.fields()[new_column_index].name() == existing_isr.tsd().fields()[existing_column_index].name(),
+            both_dont_have_name || (both_have_name && new_frame.norm_meta.series().common().name() == existing_isr.tsd().normalization().series().common().name()),
             "Series are not allowed to have columns with different names for append and update even for dynamic schema. Existing name: {}, new name: {}",
-            existing_isr.tsd().as_stream_descriptor().fields()[existing_column_index].name(),
-            new_frame.desc.fields()[new_column_index].name());
+            name_or_default(existing_isr.tsd().normalization()),
+            name_or_default(new_frame.norm_meta));
     }
 }
 } // namespace arcticdb
