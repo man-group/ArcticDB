@@ -2,6 +2,7 @@ import subprocess
 import json
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 import time
 import os
 from pathlib import Path
@@ -10,9 +11,6 @@ import pandas as pd
 from arcticdb import Arctic
 import click
 from typing import Union, List
-
-ac = Arctic("lmdb://test_pytest_results")
-lib = ac.get_library("pytest_results", create_if_missing=True)
 
 
 def fetch_page(page, per_page=100):
@@ -275,15 +273,15 @@ def unify_xml_for_run(run_id, download_dir):
     unified_root.set("time", f"{total_time:.3f}")
 
     # Write unified XML
-    unified_xml_path = download_dir / f"run_{run_id}_unified.xml"
+    unified_xml_path = download_dir / f"{run_id}.xml"
     tree = ET.ElementTree(unified_root)
     ET.indent(tree, space="  ")  # Pretty print
 
     with open(unified_xml_path, "w", encoding="utf-8") as f:
         tree.write(f, encoding="unicode", xml_declaration=True)
 
-    # print(f"Unified XML for run {run_id} written to {unified_xml_path}")
-    # print(f"  Total tests: {total_tests}, Failures: {total_failures}, Errors: {total_errors}, Skipped: {total_skipped}")
+    print(f"Unified XML for run {run_id} written to {unified_xml_path}")
+    print(f"  Total tests: {total_tests}, Failures: {total_failures}, Errors: {total_errors}, Skipped: {total_skipped}")
 
     return unified_xml_path
 
@@ -473,6 +471,18 @@ def get_all_workflow_runs_parallel(max_workers=5, max_pages=20):
     return all_runs
 
 
+def get_results_lib(arcticdb_library, arcticdb_client_override=None):
+    if arcticdb_client_override:
+        ac = Arctic(arcticdb_client_override)
+    else:
+        factory = real_s3_from_environment_variables(shared_path=True)
+        factory.default_prefix = "asv_results"
+        ac = factory.create_fixture().create_arctic()
+
+    lib = ac.get_library(arcticdb_library, create_if_missing=True)
+    return lib
+
+
 @click.command()
 @click.option("--max-workers", type=int, default=5)
 @click.option("--max-pages", type=int, default=20)
@@ -513,15 +523,15 @@ def main(max_workers, max_pages, download_dir, run_id):
     print(f"\nDownloaded {len(all_downloaded_files)} artifacts total")
     print(f"All files saved to: {download_dir.absolute()}")
 
-    # Get all the csv files
-    # csv_files = [f for f in download_dir.glob("*.csv")]
-    # print(f"Found {len(csv_files)} CSV files")
-    # for csv_file in csv_files:
-    #     df = pd.read_csv(csv_file)
-    #     # unique python versions
-    #     print(df["python_version"].unique(), df["test_type"].unique())
-    #     print(df.head())
-    #     lib.write(csv_file.stem, df)
+    lib = get_results_lib("pytest_results")
+    csv_files = [f for f in download_dir.glob("**/*.csv")]
+    print(f"Found {len(csv_files)} CSV files")
+    for csv_file in csv_files:
+        df = pd.read_csv(csv_file)
+        # unique python versions
+        print(df["python_version"].unique(), df["test_type"].unique())
+        print(df.head())
+        lib.write(csv_file.stem, df)
 
 
 if __name__ == "__main__":
