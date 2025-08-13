@@ -177,7 +177,7 @@ void fix_descriptor_mismatch_or_throw(
         };
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
             both_dont_have_name || (both_have_name && new_frame.norm_meta.series().common().name() == existing_isr.tsd().normalization().series().common().name()),
-            "Series are not allowed to have columns with different names for append and update even for dynamic schema. Existing name: {}, new name: {}",
+            "Series are not allowed to have different names for append and update even for dynamic schema. Existing name: {}, new name: {}",
             name_or_default(existing_isr.tsd().normalization()),
             name_or_default(new_frame.norm_meta));
     }
