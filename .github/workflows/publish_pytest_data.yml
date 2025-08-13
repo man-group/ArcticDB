@@ -19,6 +19,11 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Setup env vars
+        run: |
+          # runner.temp seems to be incorrect, so we need to define ARTEFACT_PATH
+          echo "ARTEFACT_PATH=${{ runner.temp }}/gh_artifacts" >> $GITHUB_ENV
+
       - name: Gather pytest xmls from run ${{ github.run_id }}
         id: gather-pytest-xmls
         uses: actions/download-artifact@v4
@@ -26,7 +31,7 @@ jobs:
             pattern: "pytest-*"
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
-            path: ${{runner.temp}}/gh_artifacts
+            path: ${{ env.ARTEFACT_PATH }}
 
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -53,5 +58,5 @@ jobs:
 
       - name: Process pytest xmls
         run: |
-          ls -R ${{runner.temp}}/gh_artifacts
-          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{runner.temp}}/gh_artifacts --run-id ${{ github.run_id }}
+          ls -R ${{ env.ARTEFACT_PATH }}
+          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --run-id ${{ github.run_id }}
