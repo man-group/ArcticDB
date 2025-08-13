@@ -681,7 +681,11 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
     (pd.Series([1]), pd.DataFrame({"a": [2]})),
     (pd.Series([1]), np.array([2])),
     (np.array([1]), pd.DataFrame({"a": [2]})),
-    (np.array([1]), pd.Series([2]))
+    (np.array([1]), pd.Series([2])),
+    (pd.DataFrame({"a": [1], "b": [2]}), pd.Series([2])),
+    (pd.DataFrame({"a": [1], "b": [2]}), np.array([2])),
+    (pd.Series([1]), pd.DataFrame({"a": [2], "b": [2]})),
+    (np.array([1]), pd.DataFrame({"a": [2], "b": [2]}))
 ])
 def test_append_mismatched_object_kind(to_write, to_append, lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1

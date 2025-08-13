@@ -168,7 +168,7 @@ void fix_descriptor_mismatch_or_throw(
             operation);
     }
     if (dynamic_schema && new_frame.norm_meta.has_series() && existing_isr.tsd().normalization().has_series()) {
-        const bool both_dont_have_name =!new_frame.norm_meta.series().common().has_name() &&
+        const bool both_dont_have_name = !new_frame.norm_meta.series().common().has_name() &&
             !existing_isr.tsd().normalization().series().common().has_name();
         const bool both_have_name = new_frame.norm_meta.series().common().has_name() &&
             existing_isr.tsd().normalization().series().common().has_name();
