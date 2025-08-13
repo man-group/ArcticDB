@@ -38,31 +38,6 @@ SegmentInMemory lock_segment(const StreamId &name, uint64_t timestamp) {
 
 } // namespace
 
-struct OnExit {
-    folly::Func func_;
-    bool released_ = false;
-
-    ARCTICDB_NO_MOVE_OR_COPY(OnExit);
-
-    explicit OnExit(folly::Func&& func) :
-        func_(std::move(func)) {}
-
-    ~OnExit() {
-        if(!released_) {
-            // Must not throw in destructor to avoid crashes
-            try {
-                func_();
-            } catch (const std::exception& e) {
-                log::lock().error("Exception in OnExit: {}", e.what());
-            }
-        }
-    }
-
-    void release() {
-        released_ = true;
-    }
-};
-
 struct StorageLockTimeout : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
@@ -109,21 +84,12 @@ class StorageLock {
 
     bool try_lock(const std::shared_ptr<Store>& store) {
         ARCTICDB_DEBUG(log::lock(), "Storage lock: try lock");
-        if(!mutex_.try_lock()) {
+        std::unique_lock<std::mutex> lock(mutex_, std::try_to_lock);
+        if(!lock.owns_lock()) {
             ARCTICDB_DEBUG(log::lock(), "Storage lock: failed local lock");
             return false;
         }
-
-        OnExit x{[that=this] () {
-            that->mutex_.unlock();
-        }};
-
-        const bool try_lock = try_acquire_lock(store);
-        if (try_lock) {
-            x.release();
-        }
-
-        return try_lock;
+        return try_acquire_lock(store);
     }
 
     void _test_release_local_lock() {

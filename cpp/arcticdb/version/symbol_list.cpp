@@ -32,6 +32,31 @@ using CollectionType = std::vector<SymbolListEntry>;
 constexpr std::string_view version_string = "_v2_";
 constexpr NumericIndex version_identifier = std::numeric_limits<NumericIndex>::max();
 
+struct OnExit {
+    folly::Func func_;
+    bool released_ = false;
+
+    ARCTICDB_NO_MOVE_OR_COPY(OnExit);
+
+    explicit OnExit(folly::Func&& func) :
+        func_(std::move(func)) {}
+
+    ~OnExit() {
+        if(!released_) {
+            // Must not throw in destructor to avoid crashes
+            try {
+                func_();
+            } catch (const std::exception& e) {
+                log::lock().error("Exception in OnExit: {}", e.what());
+            }
+        }
+    }
+
+    void release() {
+        released_ = true;
+    }
+};
+
 SymbolListData::SymbolListData(std::shared_ptr<VersionMap> version_map, StreamId type_indicator, uint32_t seed) :
     type_holder_(std::move(type_indicator)),
     seed_(seed),
