@@ -570,6 +570,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
             .value("SPEED", PipelineOptimisation::SPEED)
             .value("MEMORY", PipelineOptimisation::MEMORY);
 
+    py::enum_<Slicing>(version, "Slicing")
+            .value("NoSlicing", Slicing::NoSlicing)
+            .value("RowSlicing", Slicing::RowSlicing);
+
     py::class_<ExpressionContext, std::shared_ptr<ExpressionContext>>(version, "ExpressionContext")
             .def(py::init())
             .def("add_expression_node", &ExpressionContext::add_expression_node)
@@ -758,6 +762,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("write_versioned_dataframe",
              &PythonVersionStore::write_versioned_dataframe,
              py::call_guard<SingleThreadMutexHolder>(), "Write the most recent version of this dataframe to the store")
+        .def("_test_write_versioned_segment",
+             &PythonVersionStore::test_write_versioned_segment,
+             py::call_guard<SingleThreadMutexHolder>(), "Write the most recent version of this segment to the store")
         .def("write_versioned_composite_data",
              &PythonVersionStore::write_versioned_composite_data,
              py::call_guard<SingleThreadMutexHolder>(), "Allows the user to write multiple dataframes in a batch with one version entity")

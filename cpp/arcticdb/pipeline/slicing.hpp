@@ -95,10 +95,10 @@ inline auto end_index_generator(T end_index){//works for both rawtype and rawtyp
     }
 }
 
-inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, TypedStreamVersion key) {
+inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, const TypedStreamVersion& key) {
     using PartialKey = stream::StreamSink::PartialKey;
 
-    return [frame=std::move(frame), key = std::move(key)](const FrameSlice& s) {
+    return [frame=std::move(frame), &key](const FrameSlice& s) {
         if (frame->has_index()) {
             util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in get_partial_key_gen");
             auto& idx = frame->index_tensor.value();
@@ -114,6 +114,31 @@ inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, TypedSt
                     entity::safe_convert_to_numeric_index(s.row_range.second, "Rows")};
         }
     };
+}
+
+inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(const IndexDescriptorImpl& index, const TypedStreamVersion& key, const SegmentInMemory& slice) {
+    using PartialKey = stream::StreamSink::PartialKey;
+
+    if (index.field_count() != 0) {
+        util::check(static_cast<bool>(index.type() == IndexDescriptor::Type::TIMESTAMP), "Got unexpected index type in get_partial_key_for_segment_slice");
+        auto& idx = slice.column(0);
+        util::check(idx.scalar_at<timestamp>(0).has_value(), "First element of index column of slice does not contain a value");
+        util::check(idx.scalar_at<timestamp>(slice.row_count()-1).has_value(), "Last element of index column of slice does not contain a value");
+        auto start = idx.scalar_at<timestamp>(0).value();
+        auto end = idx.scalar_at<timestamp>(slice.row_count()-1).value();
+        return PartialKey{
+                key.type, key.version_id, key.id, start, end_index_generator(end)
+        };
+    }
+    else {
+        return PartialKey{
+                key.type,
+                key.version_id,
+                key.id,
+                entity::safe_convert_to_numeric_index(slice.offset(), "Rows"),
+                entity::safe_convert_to_numeric_index(slice.offset() + slice.row_count(), "Rows")
+        };
+    }
 }
 
 } //arcticdb::pipelines

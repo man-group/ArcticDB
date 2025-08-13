@@ -186,6 +186,13 @@ public:
         bool validate_index
     ) override;
 
+    VersionedItem write_segment(
+            const StreamId& stream_id,
+            SegmentInMemory&& segment,
+            bool prune_previous_versions,
+            Slicing slicing
+    ) override;
+
     VersionedItem write_versioned_metadata_internal(
         const StreamId& stream_id,
         bool prune_previous_versions,
@@ -241,12 +248,6 @@ public:
     ColumnStats get_column_stats_info_version_internal(
         const StreamId& stream_id,
         const VersionQuery& version_query);
-
-    VersionedItem write_individual_segment(
-        const StreamId& stream_id,
-        SegmentInMemory&& segment,
-        bool prune_previous_versions
-    ) override;
 
     std::set<StreamId> get_incomplete_symbols() override;
     std::set<StreamId> get_incomplete_refs() override;
