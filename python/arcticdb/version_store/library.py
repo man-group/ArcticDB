@@ -780,7 +780,7 @@ class Library:
         self._nvs._normalizer.df.set_skip_df_consolidation()
         self._dev_tools = DevTools(nvs)
 
-    def __repr__(self):
+    def __repr__(self) ->str:
         return "Library(%s, path=%s, storage=%s)" % (
             self.arctic_instance_desc,
             self._nvs._lib_cfg.lib_desc.name,
@@ -790,7 +790,7 @@ class Library:
     def __getitem__(self, symbol: str) -> VersionedItem:
         return self.read(symbol)
 
-    def __contains__(self, symbol: str):
+    def __contains__(self, symbol: str) -> bool:
         return self.has_symbol(symbol)
 
     def options(self) -> LibraryOptions:
@@ -818,7 +818,7 @@ class Library:
         validate_index=True,
         sort_on_index=False,
         sort_columns: List[str] = None,
-    ):
+    ) -> None:
         """
         Write a staged data chunk to storage, that will not be visible until finalize_staged_data is called on
         the symbol. Equivalent to write() with staged=True.
@@ -1157,7 +1157,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: bool = False,
         validate_index: bool = True,
-    ) -> Optional[VersionedItem]:
+    ) -> VersionedItem:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
         be created to reference the newly-appended data. Append only accepts data for which the index of the first
@@ -1477,7 +1477,7 @@ class Library:
         )
         return batch_update_result
 
-    def delete_staged_data(self, symbol: str):
+    def delete_staged_data(self, symbol: str) -> None:
         """
         Removes staged data.
 
@@ -2311,7 +2311,7 @@ class Library:
         self._nvs.version_store.verify_snapshot(snapshot_name)
         self._nvs.snapshot(snap_name=snapshot_name, metadata=metadata, skip_symbols=skip_symbols, versions=versions)
 
-    def delete(self, symbol: str, versions: Optional[Union[int, Iterable[int]]] = None):
+    def delete(self, symbol: str, versions: Optional[Union[int, Iterable[int]]] = None) -> None:
         """
         Delete all versions of the symbol from the library, unless ``version`` is specified, in which case only those
         versions are deleted.
@@ -2379,7 +2379,7 @@ class Library:
 
         return self._nvs.version_store.batch_delete(symbols, versions)
 
-    def prune_previous_versions(self, symbol):
+    def prune_previous_versions(self, symbol) -> None:
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
 
         Parameters
@@ -2394,7 +2394,7 @@ class Library:
         symbol: str,
         date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
         prune_previous_versions: bool = False,
-    ):
+    ) -> None:
         """Delete data within the given date range, creating a new version of ``symbol``.
 
         The existing symbol version must be timeseries-indexed.
@@ -2781,7 +2781,7 @@ class Library:
 
         return description_results
 
-    def reload_symbol_list(self):
+    def reload_symbol_list(self) -> None:
         """
         Forces the symbol list cache to be reloaded.
 
@@ -2900,11 +2900,11 @@ class Library:
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
     @property
-    def name(self):
+    def name(self) -> str:
         """The name of this library."""
         return self._nvs.name()
 
-    def admin_tools(self):
+    def admin_tools(self) -> AdminTools:
         """Administrative utilities that operate on this library."""
         return AdminTools(self._nvs)
 
