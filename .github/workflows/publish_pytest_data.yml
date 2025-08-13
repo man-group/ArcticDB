@@ -10,10 +10,9 @@ on:
 run-name: Publish ${{github.ref}} to arcticdb-pytest-data
 jobs:
   sync_pytest_xmls:
+    runs-on: ubuntu-22.04
     container:
       image: ubuntu:22.04 # Native runner doesn't allow setting up the ca softlinks required below
-    permissions:
-      contents: write
     steps:
       - name: Select Python
         uses: actions/setup-python@v4.7.1
