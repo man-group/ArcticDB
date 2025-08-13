@@ -14,6 +14,11 @@ jobs:
   sync_pytest_xmls:
     runs-on: ubuntu-22.04
     steps:
+      - name: Select Python
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: "3.11"
+
       - name: Gather pytest xmls from run ${{ github.run_id }}
         id: gather-pytest-xmls
         uses: actions/download-artifact@v4
@@ -28,7 +33,16 @@ jobs:
 
       - name: Install requirements
         run: |
+          apt update
+          apt install -y git
           python3 -m pip install arcticdb[Testing] click
+
+      - name: Setup softlink for SSL
+        shell: bash -el {0}
+        run: |
+            mkdir -p /etc/pki/tls
+            ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
+            ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
