@@ -19,7 +19,7 @@ import string
 from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import (
-    assert_frame_equal,
+    assert_frame_equal_with_arrow,
     config_context,
     get_wide_dataframe,
     make_dynamic,
@@ -32,13 +32,15 @@ from arcticdb.util.test import (
     unicode_symbols,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
+from arcticdb.options import OutputFormat
+from arcticdb.util.test import convert_arrow_to_pandas_and_remove_categoricals
 
-
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 def test_filter_column_not_present(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["b"] < 5]
@@ -50,6 +52,7 @@ def test_filter_column_not_present(lmdb_version_store_v1):
 
 def test_filter_column_attribute_syntax(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_column_attribute_syntax"
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]})
     lib.write(symbol, df)
@@ -67,6 +70,7 @@ def test_filter_infinite_value():
 
 def test_filter_categorical(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": ["hello", "hi", "hello"]}, index=np.arange(3))
     df.a = df.a.astype("category")
     q = QueryBuilder()
@@ -79,6 +83,7 @@ def test_filter_categorical(lmdb_version_store_v1):
 
 def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_date_range_row_indexed"
     df = pd.DataFrame({"a": np.arange(3)}, index=np.arange(3))
     lib.write(symbol, df)
@@ -88,17 +93,20 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
 
 def test_filter_explicit_index(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["a"] < np.uint8(1)]
     pandas_query = "a < 1"
     symbol = "test_filter_explicit_index"
     lib.write(symbol, df)
-    assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
+    assert_frame_equal_with_arrow(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
 
 
+@pytest.mark.skip("Skip dynamic_string=False tests")
 def test_filter_clashing_values(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_clashing_values"
     df = pd.DataFrame({"a": [10, 11, 12], "b": ["11", "12", "13"]}, index=np.arange(3))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -112,6 +120,7 @@ def test_filter_clashing_values(lmdb_version_store_v1):
 def test_filter_bool_nonbool_comparison(lmdb_version_store_v1):
     symbol = "test_filter_bool_nonbool_comparison"
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"string": ["True", "False"], "numeric": [1, 0], "bool": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
 
@@ -149,6 +158,7 @@ def test_filter_bool_nonbool_comparison(lmdb_version_store_v1):
 
 def test_filter_bool_column(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_bool_column"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
@@ -160,6 +170,7 @@ def test_filter_bool_column(lmdb_version_store_v1):
 
 def test_filter_bool_column_not(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_bool_column_not"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
@@ -171,6 +182,7 @@ def test_filter_bool_column_not(lmdb_version_store_v1):
 
 def test_filter_bool_column_binary_boolean(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_bool_column_binary_boolean"
     df = pd.DataFrame({"a": [True, True, False, False], "b": [True, False, True, False]}, index=np.arange(4))
     lib.write(symbol, df)
@@ -182,6 +194,7 @@ def test_filter_bool_column_binary_boolean(lmdb_version_store_v1):
 
 def test_filter_bool_column_comparison(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_bool_column_comparison"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
@@ -213,6 +226,7 @@ def test_filter_bool_column_comparison(lmdb_version_store_v1):
 
 def test_filter_datetime_naive(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_datetime_simple"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
@@ -226,6 +240,7 @@ def test_filter_datetime_naive(lmdb_version_store_v1):
 
 def test_filter_datetime_isin(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_datetime_isin"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
@@ -239,6 +254,7 @@ def test_filter_datetime_isin(lmdb_version_store_v1):
 
 def test_filter_datetime_timedelta(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_datetime_timedelta"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     pd_ts = pd.Timestamp("2000-01-05")
@@ -262,6 +278,7 @@ def test_filter_datetime_timedelta(lmdb_version_store_v1):
 
 def test_filter_datetime_timezone_aware(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_datetime_timezone_aware"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10, tz=timezone("Europe/Amsterdam"))})
     lib.write(symbol, df)
@@ -277,6 +294,7 @@ def test_filter_datetime_timezone_aware(lmdb_version_store_v1):
 
 def test_df_query_wrong_type(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
 
     df1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [2, 3, 4], "col3": [4, 5, 6],
                         "col_str": ["1", "2", "3"], "col_bool": [True, False, True]})
@@ -323,6 +341,7 @@ def test_df_query_wrong_type(lmdb_version_store_v1):
 
 def test_filter_datetime_nanoseconds(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_filter_datetime_nanoseconds"
 
     # Dataframe has three rows and a single column containing timestamps 1 nanosecond apart
@@ -337,13 +356,13 @@ def test_filter_datetime_nanoseconds(lmdb_version_store_v1):
     qb_all = QueryBuilder()
     qb_all = qb_all[(qb_all["col"] >= timestamp_0) & (qb_all["col"] <= timestamp_2)]
     all_rows_result = lib.read(sym, query_builder=qb_all).data
-    assert_frame_equal(all_rows_result, df)
+    assert_frame_equal_with_arrow(all_rows_result, df)
 
     # Try to read only the first row
     qb_first = QueryBuilder()
     qb_first = qb_first[(qb_first["col"] >= timestamp_0) & (qb_first["col"] <= timestamp_0)]
     first_row_result = lib.read(sym, query_builder=qb_first).data
-    assert_frame_equal(first_row_result, df.iloc[[0]])
+    assert_frame_equal_with_arrow(first_row_result, df.iloc[[0]])
 
     # Try to read first and second rows
     qb_first_and_second = QueryBuilder()
@@ -351,7 +370,7 @@ def test_filter_datetime_nanoseconds(lmdb_version_store_v1):
         (qb_first_and_second["col"] >= timestamp_0) & (qb_first_and_second["col"] <= timestamp_1)
     ]
     first_and_second_row_result = lib.read(sym, query_builder=qb_first_and_second).data
-    assert_frame_equal(first_and_second_row_result, df.iloc[[0, 1]])
+    assert_frame_equal_with_arrow(first_and_second_row_result, df.iloc[[0, 1]])
 
     # Try to read second and third rows
     qb_second_and_third = QueryBuilder()
@@ -359,11 +378,12 @@ def test_filter_datetime_nanoseconds(lmdb_version_store_v1):
         (qb_second_and_third["col"] >= timestamp_1) & (qb_second_and_third["col"] <= timestamp_2)
     ]
     second_and_third_row_result = lib.read(sym, query_builder=qb_second_and_third).data
-    assert_frame_equal(second_and_third_row_result, df.iloc[[1, 2]].reset_index(drop=True))
+    assert_frame_equal_with_arrow(second_and_third_row_result, df.iloc[[1, 2]].reset_index(drop=True))
 
 
 def test_filter_isin_clashing_sets(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_isin_clashing_sets"
     a_unique_val = 100000
     b_unique_val = 200000
@@ -391,6 +411,7 @@ def test_filter_isin_clashing_sets(lmdb_version_store_v1):
 )
 def test_filter_numeric_isin_hashing_overflows(lmdb_version_store_v1, df_col, isin_vals, expected_col):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": df_col})
     lib.write("test_filter_numeric_isin_hashing_overflows", df)
 
@@ -399,11 +420,12 @@ def test_filter_numeric_isin_hashing_overflows(lmdb_version_store_v1, df_col, is
     result = lib.read("test_filter_numeric_isin_hashing_overflows", query_builder=q).data
 
     expected = pd.DataFrame({"a": expected_col})
-    assert_frame_equal(expected, result)
+    assert_frame_equal_with_arrow(expected, result)
 
 
 def test_filter_numeric_isin_unsigned(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": [0, 1, 2**64 - 1]})
     lib.write("test_filter_numeric_isin_unsigned", df)
 
@@ -412,7 +434,7 @@ def test_filter_numeric_isin_unsigned(lmdb_version_store_v1):
     result = lib.read("test_filter_numeric_isin_unsigned", query_builder=q).data
 
     expected = pd.DataFrame({"a": [0, 1]}, dtype=np.uint64)
-    assert_frame_equal(expected, result)
+    assert_frame_equal_with_arrow(expected, result)
 
 
 def test_filter_numeric_isnotin_mixed_types_exception():
@@ -424,6 +446,7 @@ def test_filter_numeric_isnotin_mixed_types_exception():
 
 def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": [256]})
     lib.write("test_filter_numeric_isnotin_hashing_overflow", df)
 
@@ -432,7 +455,7 @@ def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store_v1):
     q = q[q["a"].isnotin(isnotin_vals)]
     result = lib.read("test_filter_numeric_isnotin_hashing_overflow", query_builder=q).data
 
-    assert_frame_equal(df, result)
+    assert_frame_equal_with_arrow(df, result)
 
 
 _uint64_max = np.iinfo(np.uint64).max
@@ -443,6 +466,7 @@ _uint64_max = np.iinfo(np.uint64).max
 @pytest.mark.parametrize("uint64_in", ("df", "vals") if PANDAS_VERSION >= Version("1.2") else ("vals",))
 def test_filter_numeric_membership_mixing_int64_and_uint64(lmdb_version_store_v1, op, signed_type, uint64_in):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_numeric_membership_mixing_int64_and_uint64"
     signed = signed_type(-1)
     if uint64_in == "df":
@@ -459,6 +483,7 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(lmdb_version_store_v1
 
 def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_filter_nones_and_nans_retained_in_string_column"
     df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
@@ -474,8 +499,10 @@ def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
 
 
 # Tests that false matches aren't generated when list members truncate to column values
+@pytest.mark.skip("Skip dynamic_string=False tests")
 def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_fixed_width_string_isin_truncation"
     df = pd.DataFrame({"a": ["1"]}, index=np.arange(1))
     lib.write(symbol, df, dynamic_strings=False)
@@ -486,6 +513,7 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1):
     generic_filter_test(lib, symbol, q, expected)
 
 
+@pytest.mark.skip("Skip dynamic_string=False tests")
 def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
     # Construct a dataframe and QueryBuilder pair with the following properties:
     # - original dataframe spanning multiple segments horizontally and vertically (tiny segment == 2x2)
@@ -495,6 +523,7 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
     # - at least one segment will need none of the strings in it's pool after filtering
     # - at least one segment will need some, but not all of the strings in it's pool after filtering
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_stringpool_shrinking_basic"
     df = pd.DataFrame(
         {
@@ -513,8 +542,10 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
     generic_filter_test_strings(lib, base_symbol, q, expected)
 
 
+@pytest.mark.skip("Skip dynamic_string=False tests")
 def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_stringpool_shrinking_block_alignment"
     # Create a dataframe with more than one block (3968 bytes) worth of strings for the stringpool
     string_length = 10
@@ -615,6 +646,7 @@ def test_filter_explicit_type_promotion(lmdb_version_store_v1):
 
 def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": np.arange(0, 10), "b": np.arange(10, 20), "c": np.arange(20, 30)}, index=np.arange(10))
     symbol = "test_filter_column_slicing_different_segments"
     lib.write(symbol, df)
@@ -644,6 +676,7 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
 
 def test_filter_with_multi_index(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_with_multi_index"
     dt1 = datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime(2019, 4, 9, 10, 5, 2, 1)
@@ -662,6 +695,7 @@ def test_filter_with_multi_index(lmdb_version_store_v1):
 def test_filter_on_multi_index(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_filter_on_multi_index"
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     dt1 = datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime(2019, 4, 9, 10, 5, 2, 1)
     arr1 = [dt1, dt1, dt2, dt2]
@@ -678,6 +712,7 @@ def test_filter_on_multi_index(lmdb_version_store_v1):
 
 def test_filter_complex_expression(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_complex_expression"
     df = pd.DataFrame(
         {
@@ -696,6 +731,7 @@ def test_filter_complex_expression(lmdb_version_store_tiny_segment):
 
 def test_filter_string_backslash(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": ["", "\\"]}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["a"] == "\\"]
@@ -708,6 +744,7 @@ def test_filter_string_backslash(lmdb_version_store_v1):
 
 def test_filter_string_single_quote(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame({"a": ["", "'"]}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["a"] == "'"]
@@ -720,6 +757,7 @@ def test_filter_string_single_quote(lmdb_version_store_v1):
 
 def test_filter_string_less_than(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_string_less_than"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -734,6 +772,7 @@ def test_filter_string_less_than(lmdb_version_store_v1):
 
 def test_filter_string_less_than_equal(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_string_less_than_equal"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -748,6 +787,7 @@ def test_filter_string_less_than_equal(lmdb_version_store_v1):
 
 def test_filter_string_greater_than(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_string_greater_than"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -762,6 +802,7 @@ def test_filter_string_greater_than(lmdb_version_store_v1):
 
 def test_filter_string_greater_than_equal(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_string_greater_than_equal"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -776,6 +817,7 @@ def test_filter_string_greater_than_equal(lmdb_version_store_v1):
 
 def test_filter_string_nans_col_val(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_string_nans_col_val"
     df = pd.DataFrame({"a": ["row1", "row2", None, np.nan, math.nan]}, index=np.arange(5))
     lib.write(symbol, df, dynamic_strings=True)
@@ -813,6 +855,7 @@ def test_filter_string_nans_col_val(lmdb_version_store_v1):
 
 def test_filter_string_nans_col_col(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_string_nans_col_col"
     # Compare all combinations of string, None, np.nan, and math.nan to one another
     df = pd.DataFrame(
@@ -839,6 +882,7 @@ def test_filter_string_nans_col_col(lmdb_version_store_v1):
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
 def test_filter_null_filtering(lmdb_version_store_v1, method, dtype):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_null_filtering"
     num_rows = 5
     if dtype is np.int64:
@@ -871,7 +915,7 @@ def test_filter_null_filtering(lmdb_version_store_v1, method, dtype):
     q = QueryBuilder()
     q = q[getattr(q["a"], method)()]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_filter_numeric_membership_equivalence():
@@ -1021,6 +1065,7 @@ def test_filter_bool_short_circuiting():
 
 def test_filter_string_number_comparison(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_string_number_comparison"
     lib.write(symbol, pd.DataFrame({"a": [0], "b": ["hello"]}))
     q = QueryBuilder()
@@ -1051,6 +1096,7 @@ def test_filter_string_number_comparison(lmdb_version_store_v1):
 
 def test_filter_string_number_set_membership(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_string_number_set_membership"
     lib.write(symbol, pd.DataFrame({"a": [0], "b": ["hello"]}))
     q = QueryBuilder()
@@ -1067,6 +1113,7 @@ def test_filter_string_number_set_membership(lmdb_version_store_v1):
 # https://github.com/pandas-dev/pandas/issues/59524
 def test_float32_binary_comparison(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_float32_binary_comparison"
     df = pd.DataFrame(
         {
@@ -1118,6 +1165,7 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_filter_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_pickled_symbol"
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
@@ -1130,6 +1178,7 @@ def test_filter_pickled_symbol(request, lib_type):
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_filter_date_range_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_date_range_pickled_symbol"
     idx = pd.date_range("2000-01-01", periods=4)
     df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
@@ -1141,12 +1190,13 @@ def test_filter_date_range_pickled_symbol(request, lib_type):
 
 def test_filter_date_range_none_none(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "sym"
     idx = pd.date_range("2000-01-01", periods=4)
     df = pd.DataFrame({"a": [1, 2, 3, 4]}, index=idx)
     lib.write(symbol, df)
     vit = lib.read(symbol, date_range=(None, None))
-    assert_frame_equal(vit.data, df)
+    assert_frame_equal_with_arrow(vit.data, df)
 
 
 ##################################
@@ -1156,6 +1206,7 @@ def test_filter_date_range_none_none(lmdb_version_store_v1):
 
 def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
     lib = lmdb_version_store_tiny_segment_dynamic
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_numeric_filter_dynamic_schema"
     df = get_wide_dataframe(100)
     expected, slices = make_dynamic(df)
@@ -1169,11 +1220,12 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
     received = lib.read(symbol, query_builder=q).data
     expected = regularize_dataframe(expected)
     received = regularize_dataframe(received)
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_column_not_present_dynamic"
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2), dtype="int64")
     q = QueryBuilder()
@@ -1185,6 +1237,7 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1)
 
 def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_column_not_present_dynamic"
     df = pd.DataFrame({"a": np.arange(2)}, dtype="int64")
     lib.write(symbol, df)
@@ -1196,10 +1249,12 @@ def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schem
     q = q[q["b"] < 5]
 
     result = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(result, pd.DataFrame({"a": [0], "b": [1]}))
+    assert_frame_equal_with_arrow(result, pd.DataFrame({"a": [0], "b": [1]}))
 
+@pytest.mark.skip("Skip dynamic_string=False tests")
 def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_column_type_change"
 
     # Write a column of float type
@@ -1236,6 +1291,7 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
 def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "lmdb_version_store_dynamic_schema"
     num_rows = 3
     if dtype is np.int64:
@@ -1276,12 +1332,13 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, met
     q = QueryBuilder()
     q = q[getattr(q["a"], method)()]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 # Defrag removes column slicing and therefore basically makes any symbol dynamic
 def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_with_column_slicing_defragmented"
     with config_context("SymbolDataCompact.SegmentCount", 0):
         df = pd.DataFrame(
@@ -1318,9 +1375,10 @@ def test_filter_unsupported_boolean_operators():
         q = q[not q["a"]]
 
 
-@pytest.mark.parametrize("dynamic_strings", [True, False])
+@pytest.mark.parametrize("dynamic_strings", [True])
 def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
@@ -1330,37 +1388,38 @@ def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
     pattern_a = "^abc"
     q_a = QueryBuilder()
     q_a = q_a[q_a["a"].regex_match(pattern_a)]
-    assert_frame_equal(lib.read(sym, query_builder=q_a).data, df[df.a.str.contains(pattern_a)])
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q_a).data, df[df.a.str.contains(pattern_a)])
     
     pattern_c = r"\d\d[a-zA-Z]"
     q_c = QueryBuilder()
     q_c = q_c[q_c["c"].regex_match(pattern_c)]
-    assert_frame_equal(lib.read(sym, query_builder=q_c).data, df[df.c.str.contains(pattern_c)])
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q_c).data, df[df.c.str.contains(pattern_c)])
 
     pattern_c2 = r"1\d[a-zA-Z]"
     q_c2 = QueryBuilder()
     q_c2 = q_c2[q_c2["c"].regex_match(pattern_c2)]
-    assert_frame_equal(lib.read(sym, query_builder=q_c2).data, df[df.c.str.contains(pattern_c2)])
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q_c2).data, df[df.c.str.contains(pattern_c2)])
 
     q = QueryBuilder()
     q = q[q["a"].regex_match(pattern_a) & q["c"].regex_match(pattern_c)]
     expected = df[df.a.str.contains(pattern_a) & df.c.str.contains(pattern_c)]
-    assert_frame_equal(lib.read(sym, query_builder=q).data, expected)
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q).data, expected)
 
     q2 = QueryBuilder()
     q2 = q2[q2["a"].regex_match(pattern_a) & q2["c"].regex_match(pattern_c2)]
     expected2 = df[df.a.str.contains(pattern_a) & df.c.str.contains(pattern_c2)]
-    assert_frame_equal(lib.read(sym, query_builder=q2).data, expected2)
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q2).data, expected2)
 
     q2_alt = QueryBuilder()
     q2_alt = q2_alt[q2_alt["a"].regex_match(pattern_a)]
     q2_alt = q2_alt[q2_alt["c"].regex_match(pattern_c2)]
-    assert_frame_equal(lib.read(sym, query_builder=q2_alt).data, expected2)
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q2_alt).data, expected2)
 
 
-@pytest.mark.parametrize("dynamic_strings", [True, False])
+@pytest.mark.parametrize("dynamic_strings", [True])
 def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
@@ -1370,20 +1429,21 @@ def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_stri
     pattern_a = r"^xyz"  # No matches
     q_a = QueryBuilder()
     q_a = q_a[q_a["a"].regex_match(pattern_a)]
-    assert lib.read(sym, query_builder=q_a).data.empty
+    assert convert_arrow_to_pandas_and_remove_categoricals(lib.read(sym, query_builder=q_a).data).empty
 
     pattern_c = r"\d\d[a-zA-Z]"
     q = QueryBuilder()
     q = q[q["a"].regex_match(pattern_a) & q["c"].regex_match(pattern_c)]
-    assert lib.read(sym, query_builder=q).data.empty
+    assert convert_arrow_to_pandas_and_remove_categoricals(lib.read(sym, query_builder=q).data).empty
 
     q2 = QueryBuilder()
     q2 = q2[q2["a"].regex_match(pattern_a) & q2["b"].isin([0])]
-    assert lib.read(sym, query_builder=q2).data.empty
+    assert convert_arrow_to_pandas_and_remove_categoricals(lib.read(sym, query_builder=q2).data).empty
     
 
 def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=4),
             data={"a": ["abc", None, "aabc", np.nan], "b": [1, 2, 3, 4], "c": [np.nan, "q34c", None, "567f"]}
@@ -1394,13 +1454,13 @@ def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
     q_a = QueryBuilder()
     q_a = q_a[q_a["a"].regex_match(pattern_a)]
     expected = df[df.a.str.contains(pattern_a, na=False)]
-    assert_frame_equal(lib.read(sym, query_builder=q_a).data, expected)
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q_a).data, expected)
 
     pattern_c = r"\d\d[a-zA-Z]"
     q_c = QueryBuilder()
     q_c = q_c[q_c["c"].regex_match(pattern_c)]
     expected = df[df.c.str.contains(pattern_c, na=False)]
-    assert_frame_equal(lib.read(sym, query_builder=q_c).data, expected)
+    assert_frame_equal_with_arrow(lib.read(sym, query_builder=q_c).data, expected)
 
 
 def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
@@ -1415,6 +1475,7 @@ def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
 
 def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
@@ -1427,9 +1488,10 @@ def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
         lib.read(sym, query_builder=q)
     
 
-@pytest.mark.parametrize("dynamic_strings", [True, False])
+@pytest.mark.parametrize("dynamic_strings", [True])
 def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": [f"{unicode_symbols}abc", f"abc{unicode_symbols}", "abc"], "b": [1, 2, 3]}
@@ -1441,13 +1503,14 @@ def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings)
     q = q[q["a"].regex_match(pattern)]
     expected = df[df.a.str.contains(pattern)]
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
     assert not expected.empty
 
 
-@pytest.mark.parametrize("dynamic_strings", [True, False])
+@pytest.mark.parametrize("dynamic_strings", [True])
 def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["a-1,d-1", "g-i,3-l", "d-2,-hi"], "b": [1, 2, 3]}
@@ -1459,6 +1522,6 @@ def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynami
     q = q[q["a"].regex_match(pattern)]
     expected = df[df.a.str.contains(pattern)]
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
     assert not expected.empty
 

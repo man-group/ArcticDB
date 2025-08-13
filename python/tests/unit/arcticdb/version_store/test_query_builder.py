@@ -21,7 +21,7 @@ from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.options import OutputFormat
 import arcticdb.toolbox.query_stats as qs
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 def sort_by_index(df_or_table : Union[pa.Table, pd.DataFrame]):

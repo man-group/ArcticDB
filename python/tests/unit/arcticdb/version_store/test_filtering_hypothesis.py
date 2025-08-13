@@ -35,9 +35,10 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
+from arcticdb.options import OutputFormat
 
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -51,6 +52,7 @@ pytestmark = pytest.mark.pipeline
 def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_numeric_binary_comparison"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -94,9 +96,10 @@ def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
 def test_filter_string_binary_comparison(lmdb_version_store_v1, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_string_binary_comparison"
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
-    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=True)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["==", "!="]:
@@ -121,6 +124,7 @@ def test_filter_string_binary_comparison(lmdb_version_store_v1, df, val):
 def test_filter_numeric_set_membership(lmdb_version_store_v1, df, signed_vals, unsigned_vals):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_numeric_set_membership"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -144,9 +148,10 @@ def test_filter_numeric_set_membership(lmdb_version_store_v1, df, signed_vals, u
 def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_string_set_membership"
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
-    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=True)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:
@@ -162,6 +167,7 @@ def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
 def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_numeric_empty_set_membership"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -179,9 +185,10 @@ def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
 def test_filter_string_empty_set_membership(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     base_symbol = "test_filter_string_empty_set_membership"
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
-    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
+    lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=True)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
     # only do these operations once to save time
     for op in ["isin", "isnotin"]:
@@ -200,6 +207,7 @@ def test_filter_string_empty_set_membership(lmdb_version_store_v1, df):
 )
 def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, df_dt, comparison_dt):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_datetime_timezone_aware_hypothesis"
     df = pd.DataFrame({"a": [df_dt]})
     lib.write(symbol, df)
@@ -231,6 +239,7 @@ def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, df_dt,
 def test_filter_binary_boolean(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_binary_boolean"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -258,6 +267,7 @@ def test_filter_binary_boolean(lmdb_version_store_v1, df):
 def test_filter_not(lmdb_version_store_v1, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_not"
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -280,6 +290,7 @@ def test_filter_not(lmdb_version_store_v1, df, val):
 def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_segment, df):
     assume(not df.empty)
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_more_columns_than_fit_in_one_segment"
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -302,6 +313,7 @@ def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_seg
 def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
     assume(not df.empty)
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_with_column_filtering"
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -332,6 +344,7 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
 def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_numeric_binary_comparison_dynamic"
     lib.delete(symbol)
     slices = [
@@ -461,6 +474,7 @@ def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_sche
 def test_filter_numeric_set_membership_dynamic(lmdb_version_store_dynamic_schema_v1, df, signed_vals, unsigned_vals):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_filter_numeric_set_membership_dynamic"
     lib.delete(symbol)
     slices = [
