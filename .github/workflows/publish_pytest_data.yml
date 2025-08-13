@@ -22,7 +22,7 @@ jobs:
       - name: Setup env vars
         run: |
           # runner.temp seems to be incorrect, so we need to define ARTEFACT_PATH
-          echo "ARTEFACT_PATH=${{ runner.temp }}/gh_artifacts" >> $GITHUB_ENV
+          echo "ARTEFACT_PATH=$GITHUB_WORKSPACE/gh_artifacts" >> $GITHUB_ENV
 
       - name: Gather pytest xmls from run ${{ github.run_id }}
         id: gather-pytest-xmls
