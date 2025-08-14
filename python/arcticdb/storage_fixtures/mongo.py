@@ -123,9 +123,17 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
     def _safe_enter(self):
         cmd = [self._executable, "--port", str(self._port), "--dbpath", self._data_dir]
-        self._p = GracefulProcessUtils.start(cmd)
-        self.mongo_uri = f"mongodb://localhost:{self._port}"
-        wait_for_server_to_come_up(f"http://localhost:{self._port}", "mongod", self._p)
+        for i in range(2): # retry in case of connection problems
+                try:
+                    self._p = GracefulProcessUtils.start(cmd)
+                    self.mongo_uri = f"mongodb://localhost:{self._port}"
+                    # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
+                    # Due to this, we need to wait for the server to come up for a longer time        
+                    wait_for_server_to_come_up(f"http://localhost:{self._port}", "mongod", self._p, timeout=240)
+                    continue
+                except AssertionError:
+                    pass 
+            
         self._client = get_mongo_client(self.mongo_uri)
 
     def __exit__(self, exc_type, exc_value, traceback):

@@ -812,19 +812,24 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         spawn_context = multiprocessing.get_context(
             "spawn"
         )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
-        self._p = spawn_context.Process(
-            target=run_s3_server,
-            args=(
-                port,
-                self.key_file if self.http_protocol == "https" else None,
-                self.cert_file if self.http_protocol == "https" else None,
-            ),
-        )
-        self._p.start()
-        # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
-        # Due to this, we need to wait for the server to come up for a longer time
-        wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
-
+        for i in range(2): # retry in case of connection problems
+            try:
+                self._p = spawn_context.Process(
+                    target=run_s3_server,
+                    args=(
+                        port,
+                        self.key_file if self.http_protocol == "https" else None,
+                        self.cert_file if self.http_protocol == "https" else None,
+                    ),
+                )
+                self._p.start()
+                # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
+                # Due to this, we need to wait for the server to come up for a longer time
+                wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
+                continue
+            except AssertionError:
+                pass 
+    
     def _safe_enter(self):
         for _ in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
             try:
