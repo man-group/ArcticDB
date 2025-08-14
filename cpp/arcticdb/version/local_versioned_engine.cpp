@@ -757,30 +757,83 @@ std::pair<VersionedItem, TimeseriesDescriptor> LocalVersionedEngine::restore_ver
     return res.at(0);
 }
 
-VersionedItem LocalVersionedEngine::write_individual_segment(
-    const StreamId& stream_id,
-    SegmentInMemory&& segment,
-    bool prune_previous_versions
-    ) {
+VersionedItem LocalVersionedEngine::write_segment(
+        const StreamId& stream_id,
+        SegmentInMemory&& segment,
+        bool prune_previous_versions,
+        Slicing slicing
+) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
-
+    util::check(segment.descriptor().id() == stream_id, "Stream_id does not match the one in the SegmentInMemory. Stream_id was {}, but SegmentInMemory had {}", stream_id, segment.descriptor().id());
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write individual segment");
     auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
     auto version_id = get_next_version_from_key(maybe_prev);
     ARCTICDB_DEBUG(log::version(), "write individual segment for stream_id: {} , version_id = {}", stream_id, version_id);
-    auto index = index_type_from_descriptor(segment.descriptor());
-    auto range = get_range_from_segment(index, segment);
 
-    stream::StreamSink::PartialKey pk{
-        KeyType::TABLE_DATA, version_id, stream_id, range.start_, range.end_
-    };
+    auto write_options = get_write_options();
+    auto de_dup_map = get_de_dup_map(stream_id, maybe_prev, write_options);
 
-    auto frame_slice = FrameSlice{segment};
-    auto descriptor = make_timeseries_descriptor(segment.row_count(),segment.descriptor().clone(), {}, std::nullopt,std::nullopt, std::nullopt, false);
-    auto key = store_->write(pk, std::move(segment)).get();
-    std::vector sk{SliceAndKey{frame_slice, to_atom(key)}};
-    auto index_key_fut = index::write_index(index, std::move(descriptor), std::move(sk), IndexPartialKey{stream_id, version_id}, store_);
-    auto versioned_item = VersionedItem{std::move(index_key_fut).get()};
+    if(version_id == 0){
+        auto check_outcome = verify_symbol_key(stream_id);
+        if (std::holds_alternative<Error>(check_outcome)) {
+            std::get<Error>(check_outcome).throw_error();
+        }
+    }
+    auto partial_key = IndexPartialKey(stream_id, version_id);
+
+    // TODO: do the segment splitting in parallel
+    std::vector<SegmentInMemory> slices;
+    switch (slicing) {
+    case Slicing::NoSlicing:
+        slices = std::vector<SegmentInMemory>({segment});
+        break;
+    case Slicing::RowSlicing:
+        slices = segment.split(get_write_options().segment_row_size, true);
+        break;
+    }
+
+    TypedStreamVersion tsv{partial_key.id, partial_key.version_id, KeyType::TABLE_DATA};
+    int64_t write_window = write_window_size();
+    auto fut_slice_keys = folly::collect(folly::window(std::move(slices), [sink = store(), de_dup_map, index_desc = segment.descriptor().index(), tsv=std::move(tsv)](auto&& slice) {
+            auto descriptor = std::make_shared<entity::StreamDescriptor>(slice.descriptor());
+            ColRange column_slice = {arcticdb::pipelines::get_index_field_count(slice), slice.descriptor().field_count()};
+            RowRange row_slice = {slice.offset(), slice.offset() + slice.row_count()};
+            auto frame_slice = FrameSlice{descriptor, column_slice, row_slice};
+            auto pkey = get_partial_key_for_segment_slice(index_desc, tsv, slice);
+            auto ks = std::make_tuple(
+                    std::move(pkey), std::move(slice), std::move(frame_slice)
+            );
+            return sink->async_write(std::move(ks), de_dup_map);
+        },write_window)).via(&async::io_executor());
+
+    auto index = stream::index_type_from_descriptor(segment.descriptor());
+
+    // Create a TimeseriesDescriptor needed for the index key if segment doesn't already have one
+    auto tsd = [&] () {
+        if(!segment.has_index_descriptor()) {
+            auto tsd = TimeseriesDescriptor();
+            tsd.set_stream_descriptor(segment.descriptor());
+            tsd.set_total_rows(segment.row_count());
+            arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
+            norm_meta.mutable_df()->mutable_common()->mutable_index()->set_is_physically_stored(false);
+            norm_meta.mutable_df()->mutable_common()->mutable_index()->set_start(0);
+            norm_meta.mutable_df()->mutable_common()->mutable_index()->set_step(1);
+            tsd.set_normalization_metadata(std::move(norm_meta));
+            return tsd;
+        }
+        else {
+            return segment.index_descriptor();
+        }
+    }();
+
+    auto atom_key_fut = std::move(fut_slice_keys).thenValue([partial_key = std::move(partial_key), sink = store(), tsd = std::move(tsd), index = std::move(index)](auto&& slice_keys) {
+                                    return index::write_index(index, tsd, std::forward<decltype(slice_keys)>(slice_keys), partial_key, sink);
+                                });
+
+    auto versioned_item = VersionedItem(std::move(atom_key_fut).get());
+
+    if(cfg().symbol_list())
+        symbol_list().add_symbol(store(), stream_id, versioned_item.key_.version_id());
 
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
     return versioned_item;
@@ -1225,7 +1278,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
                                                         read_query = read_queries.empty() ? std::make_shared<ReadQuery>(): read_queries[idx],
                                                         idx,
                                                         read_options,
-                                                        &component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
+                                                        component_manager](std::optional<AtomKey>&& opt_index_key) mutable {
                     auto version_info = get_version_identifier(
                             (*stream_ids)[idx],
                             (*version_queries)[idx],

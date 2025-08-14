@@ -30,6 +30,10 @@ struct DeleteRangeOptions {
     bool prune_previous_versions_;
 };
 
+enum class Slicing {
+    NoSlicing, RowSlicing
+};
+
 /**
  * The VersionedEngine interface contains methods that are portable between languages.
  *
@@ -114,10 +118,11 @@ public:
         bool validate_index
     ) = 0;
 
-    virtual VersionedItem write_individual_segment(
-        const StreamId& stream_id,
-        SegmentInMemory&& segment,
-        bool prune_previous_versions
+    virtual VersionedItem write_segment(
+            const StreamId& stream_id,
+            SegmentInMemory&& segment,
+            bool prune_previous_versions,
+            Slicing slicing
     ) = 0;
 
     virtual std::set<StreamId> list_streams_internal(
