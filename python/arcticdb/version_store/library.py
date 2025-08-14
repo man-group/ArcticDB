@@ -500,7 +500,7 @@ class LazyDataFrameCollection(QueryBuilder):
         }
         check(
             len(output_format_set) in [0, 1],
-            f"LazyDataFrameCollection init requires all provided lazy dataframes to have the same output_format, but received: {[output_format for output_format in output_format_set]}",
+            f"LazyDataFrameCollection init requires all provided lazy dataframes to have the same output_format, but received: {output_format_set}",
             )
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
