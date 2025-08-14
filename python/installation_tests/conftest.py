@@ -10,7 +10,9 @@ from datetime import datetime
 import os
 import random
 import re
+import sys
 import threading
+import traceback
 from typing import Generator
 import uuid
 import pytest
@@ -18,7 +20,12 @@ import pytest
 import arcticdb as adb
 from arcticdb.version_store.library import Library
 from arcticdb.arctic import Arctic
+
 from client_utils import StorageTypes, create_arctic_client
+from logger import get_logger
+
+
+logger = get_logger()
 
 
 @pytest.fixture()
@@ -37,16 +44,28 @@ def ac_client(request) -> Generator[Arctic, None, None]:
             storage = request.param
         else:
             storage, extras = request.param
-    print("CREATES ARCTIC:", storage)
-    ac = create_arctic_client(storage, **extras)            
+    logger.info(f"Create arctic type: {storage}")
+    ac:Arctic = create_arctic_client(storage, **extras)            
+    arctic_uri = ac.get_uri() if ac else "Arctic is None (not created)"
+    logger.info(f"Arctic uri : {arctic_uri}")
     if ac is None:
         pytest.skip("Storage not activated")
     yield ac
+    libs = ac.list_libraries()
+    for lname in libs:
+        logger.error(f"Library '{lname}' not deleted after test."
+                     + "You have to delete it in test with try: ... finally: delete_library(ac, lib_name)")
+        if not (os.getenv("GITHUB_ACTIONS") == "true"):
+            raise Exception("(Development only exception): "
+                            + "You receive this error because there is undeleted data in storage."
+                            + "Check the error message above and and fix the tests."
+                            + "This error will not be raised in Github")
 
 
 @pytest.fixture(scope="function")
 def ac_library_factory(request, ac_client, lib_name) -> Library:
     def create_library(library_options=None, name: str = lib_name):
+        logger.info(f"Create library : {lib_name}")
         ac_client.create_library(name, library_options)
         lib = ac_client.get_library(name)
         return lib 
@@ -61,9 +80,20 @@ def ac_library(request, ac_client, lib_name) -> Generator[Library, None, None]:
         config = request.param
     ac: Arctic = ac_client
     if ac is None: pytest.skip()
+    logger.info(f"Create library : {lib_name}")
     ac.create_library(lib_name, **config)
     lib = ac.get_library(lib_name)
     yield lib
     ac.delete_library(lib_name)    
 
+#region Pytest special xfail handling
 
+def pytest_runtest_makereport(item, call):
+    import pytest_xfail
+    return pytest_xfail.pytest_runtest_makereport(item, call)
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    import pytest_xfail
+    pytest_xfail.pytest_terminal_summary(terminalreporter, exitstatus, config)
+
+#endregion
