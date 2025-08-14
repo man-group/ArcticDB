@@ -925,7 +925,8 @@ struct ReduceColumnTask : async::BaseTask {
                     auto& prev_buffer = column.buffer();
                     swap(prev_buffer, new_buffer);
                 } else {
-                    column.default_initialize_rows(0, frame_.row_count(), false, default_value);
+                    NullValueReducer null_reducer{column, context_, frame_, shared_data_, handler_data_, read_options_.output_format(), default_value};
+                    null_reducer.finalize();
                 }
             }
         } else if (column_data != slice_map_->columns_.end()) {
