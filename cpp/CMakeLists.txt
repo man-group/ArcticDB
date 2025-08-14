@@ -74,6 +74,12 @@ if(ARCTICDB_SANITIZER_FLAGS)
     message(STATUS "Building ArcticDB with sanitizers. Compiler flags: ${ARCTICDB_SANITIZER_FLAGS}")
 endif()
 
+if(${ARCTICDB_USING_CONDA})
+        # Required to be able to include headers from glog since glog 0.7
+        # See: https://github.com/google/glog/pull/1030
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGLOG_USE_GLOG_EXPORT")
+endif()
+
 if(WIN32)
     add_compile_definitions(
         NOGDI WIN32_LEAN_AND_MEAN HAVE_SNPRINTF NOMINMAX
@@ -85,9 +91,22 @@ if(WIN32)
     # Guide to MSVC compilation warnings https://learn.microsoft.com/en-us/cpp/error-messages/compiler-warnings/compiler-warnings-c4000-through-c4199?view=msvc-170
     add_compile_options(
         /DWIN32 /D_WINDOWS /GR /EHsc /bigobj /Z7 /wd4244 /wd4267
-        "$<$<CONFIG:Debug>:/Od;/MTd>"
-        "$<$<CONFIG:Release>:/MT;/Ox>"
     )
+    
+    if(${ARCTICDB_USING_CONDA})
+        # Conda builds use dynamic linkage
+        add_compile_options(
+            "$<$<CONFIG:Debug>:/MDd>"
+            "$<$<CONFIG:Release>:/MD;/Ox>"
+        )
+    else()
+        # PyPI builds use static linkage
+        add_compile_options(
+            "$<$<CONFIG:Debug>:/Od;/MTd>"
+            "$<$<CONFIG:Release>:/MT;/Ox>"
+        )
+    endif()
+    
     if(${ARCTICDB_MSVC_OMIT_RUNTIME_CHECKS})
         message(STATUS "Removing MSVC runtime checks")
         foreach(flag_var CMAKE_CXX_FLAGS CMAKE_CXX_FLAGS_DEBUG CMAKE_CXX_FLAGS_RELEASE CMAKE_CXX_FLAGS_MINSIZEREL CMAKE_CXX_FLAGS_RELWITHDEBINFO)
@@ -96,9 +115,7 @@ if(WIN32)
     endif()
 else()
     if(${ARCTICDB_USING_CONDA})
-        # Required to be able to include headers from glog since glog 0.7
-        # See: https://github.com/google/glog/pull/1030
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra -DGLOG_USE_GLOG_EXPORT")
+        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wextra")
     else()
         set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
     endif()
