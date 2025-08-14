@@ -31,7 +31,7 @@ from arcticdb.util.test import (
     random_floats,
 )
 from arcticdb.version_store.processing import QueryBuilder
-from installation_tests.client_utils import delete_library
+from client_utils import delete_library
 
 
 PRE_4_X_X = (

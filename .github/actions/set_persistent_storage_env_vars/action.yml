@@ -23,7 +23,7 @@ runs:
       
       run: |
         # Common
-        if [[ "${{inputs.persistent_storage}}" != "no" ]]; then 
+        if [[ -n "${{ inputs.persistent_storage }}" && "${{inputs.persistent_storage}}" != "no" ]]; then 
           echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
         fi
         echo "ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID=${{ github.ref_name }}_${{ github.run_id }}" >> $GITHUB_ENV
