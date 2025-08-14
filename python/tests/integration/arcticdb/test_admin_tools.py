@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import time
 import numpy as np
 import pandas as pd
-from arcticdb.util.utils import get_logger
+from arcticdb.util.logger import get_logger
 import arcticdb_ext
 from arcticdb.util.test import sample_dataframe
 from arcticdb import KeyType, Size, Arctic
