@@ -37,6 +37,7 @@ from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.encoding_version import EncodingVersion
+from arcticdb.tools import strtobool
 from arcticdb_ext import get_config_int
 from arcticdb_ext.storage import (
     create_mem_config_resolver as _create_mem_config_resolver,
@@ -2994,24 +2995,28 @@ class NativeVersionStore:
             result = True
 
         result |= norm_meta.WhichOneof("input_type") == "msg_pack_frame"
-        if result and log.is_active(_LogLevel.WARN):
+        log_warning_message = strtobool(os.getenv("VersionStore.WillItemBePickledWarningMsg", "1")) and log.is_active(_LogLevel.WARN)
+        if result and log_warning_message:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
             resolved_recursive_normalizers = resolve_defaults(
                 "recursive_normalizers", proto_cfg, global_default=False, uppercase=False, **{"recursive_normalizers": recursive_normalizers}
             )
-            if resolved_recursive_normalizers:
-                is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
-                warning_msg = ""
-                if is_recursive_normalize_preferred:
-                    warning_msg = ("As recursive_normalizers is enabled, the item will be "
-                                   "recursively normalized in `write`. However, this API will "
-                                   "still return True for historical reason, such as recursively "
-                                   "normalized data not being data_range searchable like "
-                                   "pickled data. ")
-                    fl = Flattener()
-                    if fl.will_obj_be_partially_pickled(item):
-                        warning_msg += "Please note the item will still be partially pickled."
-                log.warning(warning_msg)
+            warning_msg = ""
+            is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
+            if resolved_recursive_normalizers and is_recursive_normalize_preferred:
+                warning_msg = ("As recursive_normalizers is enabled, the item will be "
+                                "recursively normalized in `write`. However, this API will "
+                                "still return True for historical reason, such as recursively "
+                                "normalized data not being data_range searchable like "
+                                "pickled data. ")
+                fl = Flattener()
+                if fl.will_obj_be_partially_pickled(item):
+                    warning_msg += "Please note the item will still be partially pickled."
+            elif not is_recursive_normalize_preferred:
+                warning_msg = ("The item will be msgpack normalized in `write`. "
+                               "Msgpack normalization is considered `pickled` in ArcticDB, "
+                               "therefore this API will return True. ")
+            log.warning(warning_msg)
                 
         return result
 

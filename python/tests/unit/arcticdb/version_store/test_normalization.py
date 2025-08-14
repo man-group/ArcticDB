@@ -555,6 +555,27 @@ def test_will_item_be_pickled_recursive_normalizer(lmdb_version_store_v1, data, 
     assert "the item will be recursively normalized" in captured_stderr
 
 
+def test_will_item_pickled_msgpack(lmdb_version_store_v1, capfd):
+    lib = lmdb_version_store_v1
+    assert lib.will_item_be_pickled({"hello": "there"}) == True
+    _, captured_stderr = capfd.readouterr()
+    assert "item will be msgpack normalized" in captured_stderr
+
+
+@pytest.mark.parametrize("enable_warning_msg", [1, 0, None])
+def test_will_item_pickled_warning_message(lmdb_version_store_v1, capfd, enable_warning_msg, monkeypatch):
+    if enable_warning_msg != None:
+        monkeypatch.setenv("VersionStore.WillItemBePickledWarningMsg", str(enable_warning_msg))
+    lib = lmdb_version_store_v1
+    assert lib.will_item_be_pickled({"a": {"b": {"c": {"d": np.arange(24)}}}}, recursive_normalizers=True) == True
+
+    _, captured_stderr = capfd.readouterr()
+    if enable_warning_msg or enable_warning_msg == None:
+        assert "the item will be recursively normalized" in captured_stderr
+    else:
+        assert "the item will be recursively normalized" not in captured_stderr
+
+
 def test_numpy_ts_col_with_none(lmdb_version_store):
     df = pd.DataFrame(data={"a": [None, None]})
     df.loc[0, "a"] = pd.Timestamp(0)

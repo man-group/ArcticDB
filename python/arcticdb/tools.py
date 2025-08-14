@@ -71,3 +71,7 @@ def set_config_from_env_vars(env_vars: Dict[str, str]):
 
     if log_level_changes or default_log_level != Defaults.DEFAULT_LOG_LEVEL:
         set_log_level(default_level=default_log_level, specific_log_levels=log_level_changes)
+
+def strtobool(value: str) -> bool:
+    value = value.lower()
+    return value in ("y", "yes", "on", "1", "true", "t")

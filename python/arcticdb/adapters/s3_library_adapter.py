@@ -17,6 +17,7 @@ from arcticdb.version_store.helper import add_s3_library_to_env
 from arcticdb.config import _DEFAULT_ENV
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
+from arcticdb.tools import strtobool
 from arcticdb_ext.storage import (
     StorageOverride,
     S3Override,
@@ -32,10 +33,6 @@ from dataclasses import dataclass, fields
 PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 USE_AWS_CRED_PROVIDERS_TOKEN = "_RBAC_"
 
-
-def strtobool(value: str) -> bool:
-    value = value.lower()
-    return value in ("y", "yes", "on", "1", "true", "t")
 
 
 @dataclass
