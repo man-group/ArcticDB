@@ -86,7 +86,10 @@
     },
     {
       "name": "windows-cl-conda-debug",
-      "inherits": ["common_conda", "windows"]
+      "inherits": ["common_conda", "windows"],
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo"
+      }
     },
 
     {
