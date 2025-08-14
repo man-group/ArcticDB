@@ -165,7 +165,7 @@ def unify_xml_for_run(run_id, download_dir):
         python_version = None
         py_match = re.search(r"cp(\d+)", artifact_name)
         test_type = artifact_name.split("-")[3]
-        print(f"Test type: {test_type}")
+
         if py_match:
             python_version = f"{py_match.group(1)}"
 
@@ -180,7 +180,7 @@ def unify_xml_for_run(run_id, download_dir):
     xml_files = []
 
     for xml_file in download_dir.glob("**/*.xml"):
-        if xml_file.is_file() and "pytest" in xml_file.name:
+        if xml_file.is_file() and "pytest" in xml_file.name and run_id in str(xml_file):
             xml_files.append(xml_file)
 
     if not xml_files:
@@ -203,8 +203,6 @@ def unify_xml_for_run(run_id, download_dir):
     # Process each XML file
     for xml_file in xml_files:
         python_version, test_type = parse_artifact_info_from_path(xml_file)
-
-        print(f"  Processing {xml_file.name} (Python {python_version}, {test_type})")
 
         try:
             tree = ET.parse(xml_file)
@@ -373,6 +371,18 @@ def create_csv_from_unified_xml(unified_xml_path, csv_path=None):
     return csv_path
 
 
+def download_pytest_xmls_in_parallel(runs, download_dir, max_workers=5):
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_run = {}
+        for run in runs:
+            future = executor.submit(process_workflow_run, run, download_dir)
+            future_to_run[future] = run
+        for future in as_completed(future_to_run):
+            run = future_to_run[future]
+            downloaded_files = future.result()
+            print(f"Downloaded {len(downloaded_files)} files for run {run}")
+
+
 def process_workflow_run(run: Union[dict, str], download_dir: Path) -> List[Path]:
     """Process a single workflow run - get artifacts and download them"""
     if isinstance(run, dict):
@@ -416,14 +426,12 @@ def process_workflow_run(run: Union[dict, str], download_dir: Path) -> List[Path
         extract_dir = zip_path.parent / "extracted"
         extract_zip(zip_path, extract_dir)
 
+    return downloaded_files
+
+
+def extract_csv_from_xmls(run_id, download_dir):
     # Unify XML files for this run
     unified_xml = unify_xml_for_run(run_id, download_dir)
-    if unified_xml:
-        downloaded_files.append(unified_xml)
-
-    if not unified_xml:
-        print(f"No unified XML file found for run {run_id}")
-        return downloaded_files
 
     csv_path = unified_xml.with_suffix(".csv")
 
@@ -431,10 +439,7 @@ def process_workflow_run(run: Union[dict, str], download_dir: Path) -> List[Path
         # Create CSV from unified XML
         csv_path = create_csv_from_unified_xml(unified_xml, csv_path)
 
-    if csv_path:
-        downloaded_files.append(csv_path)
-
-    return downloaded_files
+    return csv_path
 
 
 def get_all_workflow_runs_parallel(max_workers=5, max_pages=20):
@@ -476,11 +481,21 @@ def get_results_lib(arcticdb_library, arcticdb_client_override=None):
         ac = Arctic(arcticdb_client_override)
     else:
         factory = real_s3_from_environment_variables(shared_path=True)
-        factory.default_prefix = "asv_results"
+        factory.default_prefix = "pytest_results"
         ac = factory.create_fixture().create_arctic()
 
     lib = ac.get_library(arcticdb_library, create_if_missing=True)
     return lib
+
+
+def save_csv_files_to_lib(csv_files):
+    lib = get_results_lib("pytest_results")
+
+    for csv_file in csv_files:
+        run_id = csv_file.stem
+        print(f"Saving {csv_file} for {run_id}")
+        df = pd.read_csv(csv_file)
+        lib.write(run_id, df)
 
 
 @click.command()
@@ -500,10 +515,16 @@ def main(max_workers, max_pages, download_dir, run_id):
             # Get workflow runs
             print("Fetching workflow runs...")
             start_time = time.time()
-            all_runs = get_all_workflow_runs_parallel(max_workers=5, max_pages=20)
+            all_runs = get_all_workflow_runs_parallel(max_workers=max_workers, max_pages=max_pages)
             end_time = time.time()
 
             print(f"\nTotal workflow runs fetched: {len(all_runs)}")
+            print(f"Time taken: {end_time - start_time:.2f} seconds")
+
+            print("Downloading pytest XMLs...")
+            start_time = time.time()
+            download_pytest_xmls_in_parallel(all_runs, download_dir, max_workers=max_workers)
+            end_time = time.time()
             print(f"Time taken: {end_time - start_time:.2f} seconds")
         else:
             all_runs = [run.stem.split("_")[1] for run in download_dir.glob("*.xml")]
@@ -515,23 +536,20 @@ def main(max_workers, max_pages, download_dir, run_id):
     print(f"\nProcessing {len(all_runs)} workflow runs...")
 
     # Process runs in parallel
-    all_downloaded_files = []
+    all_csv_files = []
     for run in all_runs:
-        downloaded_files = process_workflow_run(run, download_dir)
-        all_downloaded_files.extend(downloaded_files)
+        csv_file = extract_csv_from_xmls(run, download_dir)
+        all_csv_files.append(csv_file)
 
-    print(f"\nDownloaded {len(all_downloaded_files)} artifacts total")
+    assert len(all_csv_files) == len(all_runs), (
+        f"Number of CSV files should be equal to number of runs,"
+        f"found {len(all_csv_files)} CSV files for {len(all_runs)} runs"
+    )
+
+    print(f"\nProduced {len(all_csv_files)} CSV files")
     print(f"All files saved to: {download_dir.absolute()}")
 
-    lib = get_results_lib("pytest_results")
-    csv_files = [f for f in download_dir.glob("**/*.csv")]
-    print(f"Found {len(csv_files)} CSV files")
-    for csv_file in csv_files:
-        df = pd.read_csv(csv_file)
-        # unique python versions
-        print(df["python_version"].unique(), df["test_type"].unique())
-        print(df.head())
-        lib.write(csv_file.stem, df)
+    save_csv_files_to_lib(all_csv_files)
 
 
 if __name__ == "__main__":
