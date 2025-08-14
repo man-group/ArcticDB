@@ -14,6 +14,7 @@ if sys.version_info >= (3, 9):
     import zoneinfo
 from datetime import timedelta
 import math
+import json
 
 import numpy as np
 import os
@@ -39,7 +40,7 @@ from arcticdb_ext.version_store import SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
-from typing import Dict, NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple
+from typing import Dict, NamedTuple, List, Union, Mapping, Any, TypeVar, Tuple, Optional
 
 from arcticdb._msgpack_compat import packb, padded_packb, unpackb, ExtType
 from arcticdb.log import version as log
@@ -581,6 +582,214 @@ class Normalizer(object):
 
 _IDX_PREFIX = "__idx__"
 _IDX_PREFIX_LEN = len(_IDX_PREFIX)
+
+
+class ArrowNormalizationOperations(NamedTuple):
+    """
+    ArrowNormalizationOperations holds all operations which needs to be applied to an arrow table from C++ layer.
+
+    Attributes
+    ----------
+    renames_for_table : Mapping[int, str]
+        Column renames coming from normalization metadata to be applied to the pyarrow table. E.g. index names
+    timezones: Mapping[int, str]
+        Timezones to apply to timezone-naive timestamp columns
+    range_index: Optional[Dict[str, Any]]
+        Range index details to place in pandas_metadata
+    pandas_indexes: Optional[int]
+        Num index columns to place in pandas_metadata
+    renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
+        Column renames which can only be applied to pandas_metadata. E.g. renaming a column to an int
+    """
+    renames_for_table : Mapping[int, str]
+    timezones: Mapping[int, str]
+    range_index: Optional[Dict[str, Any]]
+    pandas_indexes: Optional[int]
+    renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
+
+
+class ArrowTableNormalizer(Normalizer):
+    def construct_pandas_metadata(self, fields, op : ArrowNormalizationOperations) -> Dict[str, Any]:
+        import pyarrow as pa
+
+        # Construct index_columns metadata
+        if op.range_index is not None:
+            index_columns = [dict(op.range_index, kind="range")]
+        elif op.pandas_indexes is not None:
+            index_columns = [field.name for field in fields[:op.pandas_indexes]]
+        else:
+            index_columns = []
+
+        # Construct pandas_columns metadata
+        pandas_columns = []
+        for i, field in enumerate(fields):
+            name = field.name
+            if i in op.renames_for_pandas_metadata:
+                name = op.renames_for_pandas_metadata[i]
+
+            pandas_type = str(field.type)
+            numpy_type = str(field.type)
+            metadata = None
+            if isinstance(field.type, pa.DictionaryType):
+                # Arrow backend produces DictionaryTypes for string columns
+                assert field.type.value_type == pa.large_string()
+                pandas_type = "unicode"
+                numpy_type = "object"
+            elif isinstance(field.type, pa.TimestampType):
+                numpy_type = "datetime64[ns]"
+                if field.type.tz is None:
+                    pandas_type = "datetime"
+                else:
+                    pandas_type = "datetimetz"
+                    metadata = {"timezone": str(field.type.tz)}
+
+            pandas_columns.append({
+                "name": name,
+                "field_name": field.name,
+                "pandas_type": pandas_type,
+                "numpy_type": numpy_type,
+                "metadata": metadata,
+            })
+
+        # Construct column_index metadata
+        column_index = {
+            "name": None,
+            "field_name": None,
+            "pandas_type": 'unicode',
+            "numpy_type": 'object',
+            "metadata": {'encoding': 'UTF-8'}
+        }
+        renames_to_ints = len([new_name for new_name in op.renames_for_pandas_metadata.values() if isinstance(new_name, int)])
+        if renames_to_ints == len(fields):
+            column_index["pandas_type"] = "int64"
+            column_index["numpy_type"] = "int64"
+            column_index["metadata"] = None
+        elif renames_to_ints > 1:
+            column_index["pandas_type"] = "mixed-integer"
+            column_index["metadata"] = None
+
+        return {
+            "index_columns": index_columns,
+            "column_indexes": [column_index],
+            "columns": pandas_columns
+        }
+
+
+    def apply_pyarrow_operations(self, table, op: ArrowNormalizationOperations):
+        # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
+        import pyarrow as pa
+
+        if (len(op.renames_for_table) == 0 and
+            len(op.timezones) == 0 and
+            op.range_index is None and
+            op.pandas_indexes is None and
+            len(op.renames_for_pandas_metadata) == 0):
+            return table
+
+        new_columns = []
+        new_fields = []
+
+        for i, col in enumerate(table.columns):
+            field = table.field(i)
+            if i in op.renames_for_table:
+                field = field.with_name(op.renames_for_table[i])
+            if i in op.timezones:
+                timezone = op.timezones[i]
+                # All arcticdb timestamps are stored as UTC for timezone aware timestamps.
+                col = pa.compute.assume_timezone(col, timezone="UTC")
+                col = col.cast(pa.timestamp("ns", timezone))
+                field = field.with_type(pa.timestamp("ns", timezone))
+            new_columns.append(col)
+            new_fields.append(field)
+
+        pandas_metadata = self.construct_pandas_metadata(new_fields, op)
+
+        return pa.Table.from_arrays(
+            new_columns,
+            schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
+        )
+    def normalize(self, item, **kwargs):
+        raise NotImplementedError("Arrow write is not yet implemented")
+
+    def denormalize(self, item, norm_meta):
+        # type: (pa.Table, NormalizationMetadata) -> pa.Table
+        renames_for_table = {}
+        timezones = {}
+        range_index = None
+        pandas_indexes = None
+        renames_for_pandas_metadata = {}
+
+        input_type = norm_meta.WhichOneof("input_type")
+        if input_type == "df":
+            pandas_meta = norm_meta.df.common
+        elif input_type == "series":
+            # For pandas series we always return a dataframe (to not lose the index information).
+            # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
+            pandas_meta = norm_meta.series.common
+        else:
+            raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
+
+        index_type = pandas_meta.WhichOneof("index_type")
+        if index_type == "index":
+            index_meta = pandas_meta.index
+            if index_meta.is_physically_stored:
+                pandas_indexes = 1
+                if index_meta.tz:
+                    timezones[0] = index_meta.tz
+                if index_meta.name:
+                    renames_for_table[0] = index_meta.name
+                if index_meta.fake_name:
+                    renames_for_pandas_metadata[0] = None
+            else:
+                index_name = index_meta.name if index_meta.name else None
+                range_index = {
+                    "name": index_name,
+                    "start": index_meta.start,
+                    "step": index_meta.step,
+                    "stop": index_meta.start + len(item)*index_meta.step,
+                }
+        else:
+            multi_index_meta = pandas_meta.multi_index
+            pandas_indexes = multi_index_meta.field_count+1
+            fake_field_pos = set(multi_index_meta.fake_field_pos)
+            for index_col_idx in range(pandas_indexes):
+                if index_col_idx==0:
+                    tz = multi_index_meta.tz
+                else:
+                    tz = multi_index_meta.timezone.get(index_col_idx, "")
+                if tz != "":
+                    timezones[index_col_idx] = tz
+
+                if index_col_idx in fake_field_pos:
+                    renames_for_pandas_metadata[index_col_idx] = None
+                elif index_col_idx==0:
+                    renames_for_table[0] = multi_index_meta.name
+                else:
+                    new_name = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
+                    if new_name == renames_for_table.get(0, item.column_names[0]):
+                        # If the new_name would collide with the first index name we only want to apply the new name
+                        # to the pandas metadata.
+                        # TODO: Something similar needs to be done when we support multiple pandas indices with
+                        # equal names (Monday ref: 9714233101)
+                        renames_for_pandas_metadata[index_col_idx] = new_name
+                    else:
+                        renames_for_table[index_col_idx] = new_name
+
+        for i, col in enumerate(item.column_names):
+            if col in pandas_meta.col_names:
+                col_data = pandas_meta.col_names[col]
+                if col_data.is_none:
+                    renames_for_pandas_metadata[i] = None
+                elif col_data.is_empty:
+                    renames_for_pandas_metadata[i] = ""
+                elif col_data.is_int:
+                    renames_for_pandas_metadata[i] = int(col)
+                elif col_data.original_name != col:
+                    renames_for_pandas_metadata[i] = col_data.original_name
+
+        op = ArrowNormalizationOperations(renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata)
+        item = self.apply_pyarrow_operations(item, op)
+        return item
 
 
 class _PandasNormalizer(Normalizer):
@@ -1168,11 +1377,17 @@ class KnownTypeFallbackOnError(Normalizer):
 
 
 class CompositeNormalizer(Normalizer):
-    def __init__(self, fallback_normalizer=None):
+    def __init__(self, fallback_normalizer=None, use_norm_failure_handler_known_types=False):
         self.df = DataFrameNormalizer()
         self.series = SeriesNormalizer()
         self.tf = TimeFrameNormalizer()
         self.np = NdArrayNormalizer()
+
+        if use_norm_failure_handler_known_types and fallback_normalizer is not None:
+            self.df = KnownTypeFallbackOnError(self.df, fallback_normalizer)
+            self.series = KnownTypeFallbackOnError(self.series, fallback_normalizer)
+            self.tf = KnownTypeFallbackOnError(self.tf, fallback_normalizer)
+            self.np = KnownTypeFallbackOnError(self.np, fallback_normalizer)
 
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer

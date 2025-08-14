@@ -8,7 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import enum
 from typing import Callable, Generator, Union
-from arcticdb.util.environment_setup import get_console_logger
+from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
 import hypothesis
@@ -28,7 +28,7 @@ from tempfile import mkdtemp
 
 from arcticdb import LibraryOptions
 from arcticdb.storage_fixtures.api import StorageFixture
-from arcticdb.storage_fixtures.azure import AzureContainer, AzuriteStorageFixtureFactory
+from arcticdb.storage_fixtures.azure import AzureContainer, AzureStorageFixtureFactory, AzuriteStorageFixtureFactory
 from arcticdb.storage_fixtures.lmdb import LmdbStorageFixture
 from arcticdb.storage_fixtures.s3 import (
     BaseGCPStorageFixtureFactory,
@@ -46,6 +46,7 @@ from arcticdb.storage_fixtures.s3 import (
     real_s3_sts_resources_ready,
     real_s3_sts_clean_up,
 )
+from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
 from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
@@ -55,8 +56,10 @@ from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
 from .util.mark import (
     LMDB_TESTS_MARK,
+    LOCAL_STORAGE_TESTS_ENABLED,
     MACOS_WHEEL_BUILD,
     MEM_TESTS_MARK,
+    REAL_AZURE_TESTS_MARK,
     SIM_GCP_TESTS_MARK,
     SIM_NFS_TESTS_MARK,
     SIM_S3_TESTS_MARK,
@@ -117,7 +120,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"
+    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"[:200]
 
 
 @pytest.fixture
@@ -149,11 +152,16 @@ def pytest_generate_tests(metafunc):
         metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
 
 
+def check_local_storage_enabled():
+    if not LOCAL_STORAGE_TESTS_ENABLED: pytest.skip("Local storage not enabled")
+
+
 # endregion
 # region ======================================= Storage Fixtures =======================================
 
 @pytest.fixture(scope="session")
 def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
+    check_local_storage_enabled()
     tmp_path = tmp_path_factory.mktemp("lmdb")
     with LmdbStorageFixture(tmp_path) as f:
         yield f
@@ -161,6 +169,7 @@ def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None,
 
 @pytest.fixture(scope="function")
 def lmdb_storage(tmp_path) -> Generator[LmdbStorageFixture, None, None]:
+    check_local_storage_enabled()
     with LmdbStorageFixture(tmp_path) as f:
         yield f
 
@@ -351,11 +360,24 @@ def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
     )
 
 
+@pytest.fixture(scope="session")
+def real_azure_storage_factory() -> AzureStorageFixtureFactory:
+    return real_azure_from_environment_variables(
+        shared_path=False,
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+    )
+
+
 @pytest.fixture(
     scope="session",
-    params=[pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK)],
+    params=[
+        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), 
+        pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure", marks=REAL_AZURE_TESTS_MARK),
+        ],
 )
-def real_storage_factory(request) -> Union[BaseGCPStorageFixtureFactory, BaseGCPStorageFixtureFactory]:
+def real_storage_factory(request) -> Union[BaseS3StorageFixtureFactory, 
+                                           BaseGCPStorageFixtureFactory, AzureStorageFixtureFactory]:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_factory")
     return storage_fixture
 
@@ -369,8 +391,15 @@ def real_s3_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
 
 
 @pytest.fixture(scope="session")
-def real_gcp_shared_path_storage_factory() -> BaseS3StorageFixtureFactory:
+def real_gcp_shared_path_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
+        shared_path=True,
+        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+    )
+
+@pytest.fixture(scope="session")
+def real_azure_shared_path_storage_factory() -> AzureStorageFixtureFactory:
+    return real_azure_from_environment_variables(
         shared_path=True,
         additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
@@ -387,6 +416,11 @@ def real_gcp_storage_without_clean_up(real_gcp_shared_path_storage_factory) -> S
 
 
 @pytest.fixture(scope="session")
+def real_azure_storage_without_clean_up(real_azure_shared_path_storage_factory) -> S3Bucket:
+    return real_azure_shared_path_storage_factory.create_fixture()
+
+
+@pytest.fixture(scope="session")
 def real_s3_storage(real_s3_storage_factory) -> Generator[S3Bucket, None, None]:
     with real_s3_storage_factory.create_fixture() as f:
         yield f
@@ -399,8 +433,9 @@ def real_gcp_storage(real_gcp_storage_factory) -> Generator[GcpS3Bucket, None, N
 
 
 @pytest.fixture(scope="session")
-def real_s3_library(real_s3_storage, lib_name) -> Library:
-    return real_s3_storage.create_arctic().create_library(lib_name)
+def real_azure_storage(real_azure_storage_factory) -> Generator[AzureContainer, None, None]:
+    with real_azure_storage_factory.create_fixture() as f:
+        yield f
 
 
 @pytest.fixture(scope="session")
@@ -546,6 +581,7 @@ def filter_out_unwanted_mark(request, current_param):
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure", marks=REAL_AZURE_TESTS_MARK),
     ],
 )
 def arctic_client(request, encoding_version) -> Arctic:
@@ -567,6 +603,7 @@ def arctic_client(request, encoding_version) -> Arctic:
         pytest.param("mongo", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure", marks=REAL_AZURE_TESTS_MARK),
     ],
 )
 def arctic_client_v1(request) -> Arctic:
@@ -618,6 +655,7 @@ def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Generator[Library, None
         pytest.param("mem", marks=MEM_TESTS_MARK),
         pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure", marks=REAL_AZURE_TESTS_MARK),
     ],
 )
 def basic_arctic_client(request, encoding_version) -> Arctic:
@@ -653,7 +691,7 @@ def _store_factory(lib_name, bucket, delete_bucket = True) -> Generator[Callable
         try:
             bucket.slow_cleanup()
         except Exception as e:
-            get_console_logger().warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
+            get_logger().warning(f"Exception caught during NativeVersionStore clear: {repr(e)}")
 
 
 @pytest.fixture
@@ -662,7 +700,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
     # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS))     
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))     
 
 
 @pytest.fixture
@@ -709,6 +747,10 @@ def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Generator[Ca
 def real_gcp_store_factory(lib_name, real_gcp_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, real_gcp_storage)
 
+@pytest.fixture
+def real_azure_store_factory(lib_name, real_azure_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
+    yield from _store_factory(lib_name, real_azure_storage)
+
 
 @pytest.fixture
 def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
@@ -748,8 +790,18 @@ def real_gcp_version_store(real_gcp_store_factory) -> NativeVersionStore:
 
 
 @pytest.fixture
+def real_azure_version_store(real_azure_store_factory) -> NativeVersionStore:
+    return real_azure_store_factory()
+
+
+@pytest.fixture
 def real_gcp_version_store_dynamic_schema(real_gcp_store_factory) -> NativeVersionStore:
     return real_gcp_store_factory(dynamic_strings=True, dynamic_schema=True)
+
+
+@pytest.fixture
+def real_azure_version_store_dynamic_schema(real_azure_store_factory) -> NativeVersionStore:
+    return real_azure_store_factory(dynamic_strings=True, dynamic_schema=True)
 
 
 @pytest.fixture
@@ -850,6 +902,7 @@ def mongo_version_store(mongo_store_factory) -> NativeVersionStore:
         pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure_store_factory", marks=REAL_AZURE_TESTS_MARK),
     ],
 )
 def object_store_factory(request) -> Callable[..., NativeVersionStore]:
@@ -914,6 +967,7 @@ def local_object_version_store_prune_previous(local_object_store_factory) -> Nat
         pytest.param("version_store_factory", marks=LMDB_TESTS_MARK),
         pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
+        pytest.param("real_azure_store_factory", marks=REAL_AZURE_TESTS_MARK),
     ]
 )
 def version_store_and_real_s3_basic_store_factory(request):
@@ -931,6 +985,7 @@ def version_store_and_real_s3_basic_store_factory(request):
         pytest.param("in_memory_store_factory", marks=MEM_TESTS_MARK),
         pytest.param("real_s3_store_factory", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp_store_factory", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure_store_factory", marks=REAL_AZURE_TESTS_MARK),
     ]
 )
 def basic_store_factory(request) -> Callable[..., NativeVersionStore]:
@@ -1300,6 +1355,7 @@ def lmdb_version_store_static_and_dynamic(request) -> Generator[NativeVersionSto
         pytest.param("mongo_version_store", marks=MONGO_TESTS_MARK),
         pytest.param("real_s3_version_store", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp_version_store", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure_version_store", marks=REAL_AZURE_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store(request) -> Generator[NativeVersionStore, None, None]:
@@ -1323,6 +1379,7 @@ def object_and_mem_and_lmdb_version_store(request) -> Generator[NativeVersionSto
         pytest.param("azure_version_store_dynamic_schema", marks=AZURE_TESTS_MARK),
         pytest.param("real_s3_version_store_dynamic_schema", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp_version_store_dynamic_schema", marks=REAL_GCP_TESTS_MARK),
+        pytest.param("real_azure_version_store_dynamic_schema", marks=REAL_AZURE_TESTS_MARK),
     ),
 )
 def object_and_mem_and_lmdb_version_store_dynamic_schema(request) -> Generator[NativeVersionStore, None, None]:
@@ -1423,3 +1480,16 @@ def clear_query_stats():
     yield
     query_stats.disable()
     query_stats.reset_stats()
+
+
+#region Pytest special xfail handling
+
+def pytest_runtest_makereport(item, call):
+    from tests.pytest_xfail import  pytest_runtest_makereport
+    return pytest_runtest_makereport(item, call)
+
+def pytest_terminal_summary(terminalreporter, exitstatus, config):
+    from tests.pytest_xfail import  pytest_terminal_summary
+    pytest_terminal_summary(terminalreporter, exitstatus, config)
+
+#endregion    

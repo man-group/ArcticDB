@@ -13,6 +13,9 @@ on:
       pytest_xdist_mode: {default: "", type: string, description: additional argument to pass for pytest-xdist}
       pytest_args:       {default: "", type: string, description: a way to rewrite the pytest args to change what tests are being run}
       version_cache_full_test: {default: false, type: boolean, description: if true - tests will run with both version cache 0 and 2000000000 otherwise only 2000000000}
+      run_full_matrix_of_persistent_tests: {default: false, type: boolean, description: if true - persistent tests will run for all python versions else only for 12 }
+      DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
+      DEBUG_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
 jobs:
   compile:
     strategy:
@@ -231,9 +234,16 @@ jobs:
             docker inspect --type=image "${{inputs.cibw_image_tag}}" \
               --format='manylinux_image={{index .Config.Labels "io.arcticdb.base"}}' | tee -a $GITHUB_ENV
 
+      - name: Select Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
-        run: pipx run cibuildwheel==${{inputs.cibw_version}}
+        run: |
+          python -m pip install pipx
+          python -m pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
@@ -315,7 +325,7 @@ jobs:
       python_impl_name: ${{needs.compile.outputs.python_impl_name}}
       distinguishing_name: ${{matrix.os}}-${{needs.compile.outputs.python_impl_name}}-${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-      real_tests_storage_type: ${{inputs.persistent_storage || 'no'}}
+      real_tests_storage_type: ${{(inputs.run_full_matrix_of_persistent_tests || needs.compile.outputs.python_impl_name == 'cp311') && inputs.persistent_storage || 'no'}}
     steps:
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -350,6 +360,17 @@ jobs:
           maximum-size: 8GB
           disk-root: "D:"  # This is also the checkout directory. Total size 12GB.
         continue-on-error: true
+
+      - name: Windows download timezone data for pyarrow
+        if: matrix.os == 'windows'
+        shell: pwsh
+        # Script sourced from: https://arrow.apache.org/docs/cpp/build_system.html#download-timezone-database
+        run: |
+          curl https://data.iana.org/time-zones/releases/tzdata2021e.tar.gz --output tzdata.tar.gz
+          mkdir tzdata
+          tar --extract --file tzdata.tar.gz --directory tzdata
+          move tzdata C:\Users\runneradmin\Downloads\tzdata
+          curl https://raw.githubusercontent.com/unicode-org/cldr/master/common/supplemental/windowsZones.xml --output C:\Users\runneradmin\Downloads\tzdata\windowsZones.xml
 
       # GitHub runner image does not come with npm
       - name: Install npm (Linux and macOS)
@@ -400,8 +421,19 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.DEBUG_ENABLED == '1' }}  
+        
+      - name: Set ArcticDB Debug Logging
+        if: ${{ inputs.DEBUG_LOGGING_ENABLED == '1' }}        
+        uses: ./.github/actions/enable_logging
+
       - name: Run test
         run: |
+          # find ssl directory where cacerts are (for Azure)
+          openssl version -d 
+          # list file descriptors and other limits of the runner
           ulimit -a
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
@@ -419,6 +451,7 @@ jobs:
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
           PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
+          STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
 

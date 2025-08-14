@@ -2,6 +2,8 @@
 pandas~=1.0
 numpy~=1.18
 protobuf~=3.20
-attrs~=19.3
+attrs~=21.3
 msgpack~=1.0
 prometheus_client~=0.14
+pyyaml~=3.13
+packaging~=21.3

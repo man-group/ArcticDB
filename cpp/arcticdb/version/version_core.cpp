@@ -12,7 +12,6 @@
 #include <arcticdb/pipeline/slicing.hpp>
 #include <iterator>
 #include <arcticdb/pipeline/frame_utils.hpp>
-#include <util/key_utils.hpp>
 #include <pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
@@ -44,6 +43,12 @@
 #include <ranges>
 
 namespace arcticdb::version_store {
+
+[[nodiscard]] static ReadOptions defragmentation_read_options_generator(const WriteOptions &options){
+    ReadOptions read_options;
+    read_options.set_dynamic_schema(options.dynamic_schema);
+    return read_options;
+}
 
 namespace ranges = std::ranges;
 
@@ -77,7 +82,7 @@ static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>&
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
     bool sparsify_floats,
@@ -94,7 +99,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     VersionId version_id,
     const std::shared_ptr<InputTensorFrame>& frame,
     const WriteOptions& options,
-    const std::shared_ptr<DeDupMap> &de_dup_map,
+    const std::shared_ptr<DeDupMap>& de_dup_map,
     bool sparsify_floats,
     bool validate_index
     ) {

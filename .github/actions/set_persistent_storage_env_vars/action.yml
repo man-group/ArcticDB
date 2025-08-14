@@ -23,7 +23,9 @@ runs:
       
       run: |
         # Common
-        echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+        if [[ "${{inputs.persistent_storage}}" != "no" ]]; then 
+          echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
+        fi
         echo "ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID=${{ github.ref_name }}_${{ github.run_id }}" >> $GITHUB_ENV
         echo "ARCTICDB_PERSISTENT_STORAGE_STRATEGY_BRANCH=${{ inputs.strategy_branch }}" >> $GITHUB_ENV
         # This is the top level path for all test, this is where to write data that should be shared between jobs (e.g. seed job)

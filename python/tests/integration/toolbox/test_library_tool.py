@@ -12,6 +12,7 @@ from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType
 from arcticdb_ext.exceptions import SchemaException, InternalException
+from arcticdb_ext.version_store import Slicing
 from arcticdb_ext.stream import SegmentInMemory
 
 
@@ -362,6 +363,49 @@ def test_overwrite_append_data(lmdb_version_store_v1):
     lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)
     assert read_append_data_keys_from_ref(sym) == []
     assert_frame_equal(lib.read(sym).data, get_df(18, 0, np.int64))
+
+
+@pytest.mark.parametrize("slicing", [Slicing.NoSlicing, Slicing.RowSlicing])
+def test_write_segment_in_memory(lmdb_version_store_tiny_segment, slicing):
+    lib = lmdb_version_store_tiny_segment
+    lib_tool = lib.library_tool()
+    sym = "sym"
+    sample_df = sample_dataframe()
+
+    segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
+    lib_tool.write_segment_in_memory(sym, segment, slicing)
+    dataframe = lib.read(sym).data
+    version_id = lib.read(sym).version
+
+    assert version_id == 0
+    assert_frame_equal(dataframe, sample_df)
+
+    data_keys = lib_tool.find_keys(KeyType.TABLE_DATA)
+
+    index_key_count = len(lib_tool.find_keys(KeyType.TABLE_INDEX))
+    version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
+
+    if slicing == Slicing.RowSlicing:
+        assert sorted([(dkey.start_index, dkey.end_index) for dkey in data_keys]) == [(i, i+2) for i in range(0, len(sample_df), 2)]
+    elif slicing == Slicing.NoSlicing:
+        assert [(dkey.start_index, dkey.end_index) for dkey in data_keys] == [(0, len(sample_df))]
+
+    assert index_key_count == 1
+    assert version_key_count == 1
+
+    lib.write(sym, sample_df)
+    lib.write(sym, sample_df)
+    lib.delete_versions(sym, [0])
+    lib.write(sym, sample_df, prune_previous_version=True)
+
+    segment = lib_tool.dataframe_to_segment_in_memory(sym, sample_df)
+    lib_tool.write_segment_in_memory(sym, segment, slicing)
+    dataframe = lib.read(sym).data
+    version_id = lib.read(sym).version
+
+    assert version_id == 4
+    assert_frame_equal(dataframe, sample_df)
+    
 
 def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
     df = sample_dataframe()
