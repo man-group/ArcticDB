@@ -23,8 +23,9 @@ jobs:
 
       - name: Setup env vars
         run: |
-          # runner.temp seems to be incorrect, so we need to define ARTEFACT_PATH
-          echo "ARTEFACT_PATH=$GITHUB_WORKSPACE/gh_artifacts" >> $GITHUB_ENV
+          # We are using an absolute path here because for some reason the upload-artifact action
+          # does not work correctly with a relative path.
+          echo "ARTEFACT_PATH=/tmp" >> $GITHUB_ENV
 
       - name: Gather pytest xmls from run ${{ github.run_id }}
         id: gather-pytest-xmls
@@ -33,7 +34,7 @@ jobs:
             pattern: "pytest-*"
             run-id: ${{ github.run_id }}
             github-token: ${{github.token}}  
-            path: /tmp
+            path: ${{ env.ARTEFACT_PATH }}
 
       - name: Checkout
         uses: actions/checkout@v3.3.0
@@ -60,5 +61,5 @@ jobs:
 
       - name: Process pytest xmls
         run: |
-          ls -R /tmp
-          python3 build_tooling/process_pytest_artifacts.py --download-dir /tmp --run-id ${{ github.run_id }}
+          ls -R ${{ env.ARTEFACT_PATH }}
+          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --run-id ${{ github.run_id }}
