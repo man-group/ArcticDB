@@ -23,6 +23,8 @@ from arcticdb.util.test import (
 from arcticdb.exceptions import (
     InternalException,
     SortingException,
+    NormalizationException,
+    SchemaException
 )
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from tests.util.date import DateRange
@@ -925,3 +927,31 @@ def test_regular_update_dynamic_schema_named_index(
         lib.update(sym, df_1, upsert=True)
 
     assert "date" in str(exception_info.value)
+
+@pytest.mark.parametrize("to_write, to_update", [
+    (pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])), pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)]))),
+    (pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
+    (pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])), pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))),
+    (pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
+    (np.array([1]), pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))),
+    (np.array([1]), pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)])))
+])
+def test_update_mismatched_object_kind(to_write, to_update, lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.write("sym", to_write)
+    if isinstance(to_update, np.ndarray) or isinstance(to_write, np.ndarray):
+        with pytest.raises(Exception) as e:
+            assert "Index mismatch" in str(e.value)
+    else:
+        with pytest.raises(NormalizationException) as e:
+            lib.update("sym", to_update)
+        assert "Update" in str(e.value)
+
+def test_update_series_with_different_column_name_throws(lmdb_version_store_dynamic_schema_v1):
+    # It makes sense to create a new column and turn the whole thing into a dataframe. This would require changes in the
+    # logic for storing normalization metadata which is tricky. Noone has requested this, so we just throw.
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.write("sym", pd.Series([1, 2, 3], name="name_1", index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)])))
+    with pytest.raises(SchemaException) as e:
+        lib.update("sym", pd.Series([1], name="name_2", index=pd.DatetimeIndex([pd.Timestamp(0)])))
+    assert "name_1" in str(e.value) and "name_2" in str(e.value)
