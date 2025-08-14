@@ -26,7 +26,7 @@ jobs:
           # We are using an absolute path here because for some reason the upload-artifact action
           # does not work correctly with a relative path.
           echo "ARTEFACT_PATH=/tmp/${{ github.run_id }}" >> $GITHUB_ENV
-          mkdir -p ${{ env.ARTEFACT_PATH }}
+          mkdir ${{ env.ARTEFACT_PATH }}
 
       - name: Gather pytest xmls from run ${{ github.run_id }}
         id: gather-pytest-xmls
