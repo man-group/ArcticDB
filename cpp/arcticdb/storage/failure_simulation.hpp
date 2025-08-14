@@ -23,6 +23,7 @@ namespace arcticdb {
 enum class FailureType : int {
     WRITE = 0,
     READ,
+    WRITE_LOCK, // TODO: Remove this when refactoring StorageFailureSimulator
     ITERATE,
     DELETE,
 };
@@ -30,6 +31,7 @@ enum class FailureType : int {
 static const char* failure_names[] = {
         "WRITE",
         "READ",
+        "WRITE_LOCK", // TODO: Remove this when refactoring StorageFailureSimulator
         "ITERATE",
         "DELETE",
 };
@@ -77,29 +79,62 @@ inline std::ostream& operator<<(std::ostream& out, const FailureAction& action) 
     return out;
 }
 
-namespace action_factories { // To allow `using namespace`
+namespace action_factories {
+// To allow `using namespace`
 static inline const FailureAction no_op("no_op", [](FailureType){});
+
+static FailureAction::FunctionWrapper maybe_execute(double probability, FailureAction::FunctionWrapper func) {
+    util::check_arg(probability >= 0 && probability <= 1.0, "Bad probability: {}", probability);
+
+    return [probability, f = std::move(func)](FailureType type) mutable {
+        ARCTICDB_DEBUG(log::lock(), "Probability to use StorageFailureSimulator, {}", probability);
+        if (probability == 0) {
+            return;
+        }
+
+        if (probability == 1.0) {
+            f(type);
+            return;
+        }
+
+        thread_local std::uniform_int_distribution<size_t> dist(0.0, 1.0);
+        thread_local std::mt19937 gen(std::random_device{}());
+        double rnd = dist(gen);
+        if (rnd < probability) {
+            f(type);
+        }
+    };
+}
 
 /** Raises the given exception with the given probability. */
 template<class Exception = StorageException>
-static inline FailureAction fault(double probability = 1.0) {
-    util::check_arg(probability >= 0, "Bad probability: {}", probability);
-
-    if (probability >= 1.0) {
-        return {"raise",  [](FailureType failure_type) {
-            throw Exception(fmt::format("Simulating {} storage failure", failure_type));
-        }};
-    } else {
-        return {fmt::format("fault({})", probability),
-                [prob=probability](FailureType failure_type) {
-                    thread_local std::once_flag flag;
-                    std::call_once(flag, [seed = uint64_t(&failure_type)]() { init_random(seed); });
-                    if (random_probability() < prob) {
-                        throw Exception(fmt::format("Simulating {} storage failure", failure_type));
-                    }
-                }};
-    }
+static FailureAction fault(double probability = 1.0) {
+    return {fmt::format("fault({})", probability), maybe_execute(probability, [](FailureType failure_type) {
+                throw Exception(fmt::format("Simulating {} storage failure", failure_type));
+    })};
 }
+
+static FailureAction slow_action(double probability, int slow_down_ms_min, int slow_down_ms_max) {
+    return {fmt::format("slow_down({})", probability), maybe_execute(probability, [slow_down_ms_min, slow_down_ms_max](FailureType) {
+        thread_local std::uniform_int_distribution<size_t> dist(slow_down_ms_min, slow_down_ms_max);
+        thread_local std::mt19937 gen(std::random_device{}());
+        int sleep_ms = dist(gen);
+        ARCTICDB_INFO(log::storage(), "Testing: Sleeping for {} ms", sleep_ms);
+        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+    })};
+}
+
+/** Simulate storage delays - sleep, but then respond normally. **/
+template< class Rep, class Period>
+static inline FailureAction sleep_for(const std::chrono::duration<Rep, Period>& sleep_duration) {
+    return {
+        fmt::format("sleep_for({}ms)", std::chrono::milliseconds(sleep_duration).count()),
+        [dur=sleep_duration](FailureType) {
+            std::this_thread::sleep_for(dur);
+        }
+    };
+}
+
 }
 
 /** Independent state for each FailureType. Thread-safe except for the c'tors. */
@@ -141,26 +176,41 @@ public:
      */
     using Params = std::unordered_map<FailureType, ParamActionSequence>;
 
-    static std::shared_ptr<StorageFailureSimulator> instance();
-    static void reset() {
-        instance_ = std::make_shared<StorageFailureSimulator>();
+    static std::shared_ptr<StorageFailureSimulator>& instance() {
+        static auto instance_ = std::make_shared<StorageFailureSimulator>();
+        return instance_;
     }
-    static void destroy_instance(){instance_.reset();}
+    static void reset() {
+        instance() = std::make_shared<StorageFailureSimulator>();
+    }
+    static void destroy_instance() {
+        instance().reset();
+    }
 
     StorageFailureSimulator() : configured_(false) {}
 
-    void configure(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg)  {
-        configure({{FailureType::WRITE, {action_factories::fault(cfg.write_failure_prob())}},
-                   {FailureType::READ, {action_factories::fault(cfg.read_failure_prob())}}});
-    }
+    void configure(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) {
+        using enum arcticdb::FailureType;
+        log::storage().info("Initializing storage failure simulator from proto config");
+
+        if (cfg.read_failure_prob() > 0) {
+            categories_.try_emplace(READ, ParamActionSequence{action_factories::fault(cfg.read_failure_prob())});
+        }
+        if (cfg.write_failure_prob() > 0) {
+            categories_.try_emplace(WRITE, ParamActionSequence{action_factories::fault(cfg.write_failure_prob())});
+        }
+        else if (cfg.write_slowdown_prob() > 0) {
+            categories_.try_emplace(WRITE_LOCK, ParamActionSequence{action_factories::slow_action(
+                cfg.write_slowdown_prob(), cfg.slow_down_min_ms(), cfg.slow_down_max_ms())});
+        }
+        configured_ = true;
+    };
 
     void configure(const Params& params) {
         log::storage().info("Initializing storage failure simulator");
         for (const auto& [type, sequence]: params) {
             // Due to the atomic in FailureTypeState, it cannot be moved, so has to be constructed in-place:
-            categories_.emplace(std::piecewise_construct,
-                    std::forward_as_tuple(type),
-                    std::forward_as_tuple(sequence));
+            categories_.try_emplace(type, sequence);
         }
         configured_ = true;
     }
@@ -182,9 +232,6 @@ public:
     }
 
 private:
-    static std::shared_ptr<StorageFailureSimulator> instance_;
-    static std::once_flag init_flag_;
-
     std::unordered_map<FailureType, FailureTypeState> categories_;
     bool configured_;
 };

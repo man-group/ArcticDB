@@ -953,15 +953,17 @@ class QueryBuilder:
         self._python_clauses = self._python_clauses + [PythonRowRangeClause(row_range_type=_RowRangeType.TAIL, n=n)]
         return self
 
-    def row_range(self, row_range: Tuple[int, int]):
+    def row_range(self, row_range: Tuple[Optional[int], Optional[int]]):
         """
         Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
         Should behave the same as df.iloc[start:end], including in the handling of negative start/end values.
 
         Parameters
         ----------
-        row_range : Tuple[int, int]
+        row_range : Tuple[Optional[int], Optional[int]]
             Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
 
         Returns
         -------
@@ -970,6 +972,15 @@ class QueryBuilder:
         """
         start = row_range[0]
         end = row_range[1]
+
+        if start is not None and not isinstance(start, int):
+            raise UserInputException(f"The first element of row_range must be None or int but was: {start}")
+
+        if end is not None and not isinstance(end, int):
+            raise UserInputException(f"The second element of row_range must be None or int but was: {end}")
+
+        if end is None and not start:
+            return self  # no-op
 
         self.clauses = self.clauses + [_RowRangeClause(start, end)]
         self._python_clauses = self._python_clauses + [PythonRowRangeClause(start=start, end=end)]
@@ -1126,7 +1137,7 @@ class QueryBuilder:
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):
-                if python_clause.start is not None and python_clause.end is not None:
+                if python_clause.row_range_type is None:
                     self.clauses = self.clauses + [_RowRangeClause(python_clause.start, python_clause.end)]
                 else:
                     self.clauses = self.clauses + [_RowRangeClause(python_clause.row_range_type, python_clause.n)]

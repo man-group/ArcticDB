@@ -312,7 +312,14 @@ class NativeVersionStore:
         if nfh is None or nfh == "msg_pack":
             if nfh is not None:
                 nfh = getattr(self._cfg, nfh, None)
-            self._normalizer = CompositeNormalizer(MsgPackNormalizer(nfh))
+
+            use_norm_failure_handler_known_types = (
+                self._cfg.use_norm_failure_handler_known_types if self._cfg is not None else False
+            )
+
+            self._normalizer = CompositeNormalizer(
+                MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
+            )
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
@@ -616,8 +623,10 @@ class NativeVersionStore:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
 
+        pickle_on_failure = resolve_defaults(
+            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
+        )
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
@@ -693,27 +702,6 @@ class NativeVersionStore:
                 )
             dynamic_strings = True
         return dynamic_strings
-
-    def _resolve_pickle_on_failure(self, existing_value):
-        """
-        The parameter name is pickle_on_failure, but the protobuf field is use_norm_failure_handler_known_types, and
-        for safety we should check both env vars, so resolve_defaults is insufficient for this case
-        """
-        if existing_value is not None:
-            return existing_value
-        env_value_1 = os.getenv("USE_NORM_FAILURE_HANDLER_KNOWN_TYPES")
-        if env_value_1 is not None:
-            return env_value_1 not in ("", "0") and not env_value_1.lower().startswith("f")
-        env_value_2 = os.getenv("PICKLE_ON_FAILURE")
-        if env_value_2 is not None:
-            return env_value_2 not in ("", "0") and not env_value_2.lower().startswith("f")
-        try:
-            config_value = getattr(self._lib_cfg.lib_desc.version, "use_norm_failure_handler_known_types")
-            if config_value is not None:
-                return config_value
-        except AttributeError:
-            pass
-        return False
 
     last_mismatch_msg: Optional[str] = None
 
@@ -1135,8 +1123,10 @@ class NativeVersionStore:
         date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
             List of date ranges to filter the symbols.
             i-th entry corresponds to i-th element of `symbols`.
-        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
-            List of row ranges to filter the symbols.
+        row_ranges : `Optional[List[Tuple[Optional[int], Optional[int]]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             i-th entry corresponds to i-th element of `symbols`.
         columns: `List[List[str]]`, default=None
             Which columns to return for a dataframe.
@@ -1584,7 +1574,9 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
+        pickle_on_failure = resolve_defaults(
+            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
+        )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
@@ -2013,10 +2005,12 @@ class NativeVersionStore:
             slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
             details.
             Only one of date_range or row_range can be provided.
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
             the handling of negative start/end values.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
             Applicable only for dataframes. Determines which columns to return data for.

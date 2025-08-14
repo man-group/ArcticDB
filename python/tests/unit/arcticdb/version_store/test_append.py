@@ -14,6 +14,7 @@ from arcticdb_ext.exceptions import (
     InternalException,
     NormalizationException,
     SortingException,
+    SchemaException
 )
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
@@ -692,3 +693,51 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
     assert list(lmdb_version_store.list_versions(sym))[0]["version"] == 0
     with pytest.raises(InternalException):
         lmdb_version_store.defragment_symbol_data(sym)
+
+@pytest.mark.parametrize("to_write, to_append", [
+    (pd.DataFrame({"a": [1]}), pd.Series([2])),
+    (pd.DataFrame({"a": [1]}), np.array([2])),
+    (pd.Series([1]), pd.DataFrame({"a": [2]})),
+    (pd.Series([1]), np.array([2])),
+    (np.array([1]), pd.DataFrame({"a": [2]})),
+    (np.array([1]), pd.Series([2])),
+    (pd.DataFrame({"a": [1], "b": [2]}), pd.Series([2])),
+    (pd.DataFrame({"a": [1], "b": [2]}), np.array([2])),
+    (pd.Series([1]), pd.DataFrame({"a": [2], "b": [2]})),
+    (np.array([1]), pd.DataFrame({"a": [2], "b": [2]}))
+])
+def test_append_mismatched_object_kind(to_write, to_append, lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.write("sym", to_write)
+    with pytest.raises(NormalizationException) as e:
+        lib.append("sym", to_append)
+    assert "Append" in str(e.value)
+
+@pytest.mark.parametrize("to_write, to_append", [
+    (pd.Series([1, 2, 3], name="name_1"), pd.Series([4, 5, 6], name="name_2")),
+    (
+            pd.Series([1, 2, 3], name="name_1", index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)])),
+            pd.Series([4, 5, 6], name="name_2", index=pd.DatetimeIndex([pd.Timestamp(3), pd.Timestamp(4), pd.Timestamp(5)]))
+    )
+])
+def test_append_series_with_different_column_name_throws(lmdb_version_store_dynamic_schema_v1, to_write, to_append):
+    # It makes sense to create a new column and turn the whole thing into a dataframe. This would require changes in the
+    # logic for storing normalization metadata which is tricky. Noone has requested this, so we just throw.
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.write("sym", to_write)
+    with pytest.raises(SchemaException) as e:
+        lib.append("sym", to_append)
+    assert "name_1" in str(e.value) and "name_2" in str(e.value)
+
+def test_append_series_with_different_row_range_index_name(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    to_write = pd.Series([1, 2, 3])
+    to_write.index.name = "index_name_1"
+    to_append = pd.Series([4, 5, 6])
+    to_append.index.name = "index_name_2"
+    lib.write("sym", to_write)
+    lib.append("sym", to_append)
+    # The current behavior is the last modification operation is setting the index name.
+    # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
+    # datetime index because it's a physical column. It's a potentially breaking change.
+    assert lib.read("sym").data.index.name == "index_name_2"

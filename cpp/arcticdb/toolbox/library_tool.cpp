@@ -75,6 +75,17 @@ void LibraryTool::overwrite_segment_in_memory(VariantKey key, SegmentInMemory& s
     write(key, segment);
 }
 
+SegmentInMemory LibraryTool::item_to_segment_in_memory(
+        const StreamId &stream_id,
+        const py::tuple &item,
+        const py::object &norm,
+        const py::object &user_meta,
+        std::optional<AtomKey> next_key) {
+    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, engine_.cfg().write_options().empty_types());
+    auto segment_in_memory = incomplete_segment_from_frame(frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse());
+    return segment_in_memory;
+}
+
 SegmentInMemory LibraryTool::overwrite_append_data(
         VariantKey key,
         const py::tuple &item,
@@ -92,8 +103,7 @@ SegmentInMemory LibraryTool::overwrite_append_data(
     }
 
     auto stream_id = util::variant_match(key, [](const auto& key){return key.id();});
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, engine_.cfg().write_options().empty_types());
-    auto segment_in_memory = incomplete_segment_from_frame(frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse());
+    auto segment_in_memory = item_to_segment_in_memory(stream_id, item, norm, user_meta, next_key);
     overwrite_segment_in_memory(key, segment_in_memory);
     return old_segment_in_memory;
 }
