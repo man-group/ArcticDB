@@ -106,7 +106,7 @@ struct SchedulerWrapper : public SchedulerType {
 #ifdef _WIN32
         const auto to_remove_copy = SchedulerType::threadList_.get();
         for (const auto& thread : to_remove_copy) {
-            const bool is_signaled = WaitForSingleObject(thread->handle.native_handle(), 0) == WAIT_OBJECT_0;
+            const bool is_signaled = WaitForSingleObject(thread->handle.native_handle(), 5000) == WAIT_OBJECT_0;
             if (is_signaled) {
                 SchedulerType::threadList_.remove(thread);
             }
