@@ -10,6 +10,7 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
 try:
     # from pytest this way will work
     from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
@@ -132,10 +133,16 @@ def get_real_gcp_uri(shared_path: bool = True):
     )
     return aws_uri
 
+def get_real_azure_uri(shared_path: bool = True):
+    return real_azure_from_environment_variables(
+        shared_path=shared_path,
+        ).get_arctic_uri()
+
 
 class PersistentTestType(Enum):
     AWS_S3 = 1,
     GCP = 2,
+    AZURE = 3,
 
 
 def persistent_test_type() -> PersistentTestType:
@@ -145,8 +152,11 @@ def persistent_test_type() -> PersistentTestType:
     will raise error
     """
     if PERSISTENT_STORAGE_TESTS_ENABLED:
-        if os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS_TYPE", "").lower() == "gcp":
+        storage_type = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS_TYPE", "").lower()
+        if storage_type == "gcp":
             return PersistentTestType.GCP
+        elif storage_type == "azure":
+            return PersistentTestType.AZURE
         return PersistentTestType.AWS_S3
     else:
         raise Exception("Persistence storage tests are not enabled or not configured properly")
@@ -155,6 +165,8 @@ def persistent_test_type() -> PersistentTestType:
 def get_real_uri(shared_path: bool = True):
     if persistent_test_type() == PersistentTestType.GCP:
        return get_real_gcp_uri(shared_path)
+    if persistent_test_type() == PersistentTestType.AZURE:
+       return get_real_azure_uri(shared_path)
     return get_real_s3_uri(shared_path)
 
 
