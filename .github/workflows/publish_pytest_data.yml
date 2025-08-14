@@ -8,6 +8,8 @@ on:
       environment: { type: environment, required: true }
       run_id: { type: number, required: true }
 run-name: Publish ${{github.ref}} to arcticdb-pytest-data
+permissions:
+  contents: read
 jobs:
   sync_pytest_xmls:
     runs-on: ubuntu-22.04
