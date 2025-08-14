@@ -102,5 +102,24 @@ struct formatter<arcticdb::entity::Field> {
             return fmt::format_to(ctx.out(), "FD<type={}>", fd.type());
     }
 };
+
+template<>
+struct formatter<arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) { return ctx.begin(); }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::proto::descriptors::NormalizationMetadata::InputTypeCase& type, FormatContext& ctx) const {
+        switch (type) {
+            case arcticdb::proto::descriptors::NormalizationMetadata::kDf: return fmt::format_to(ctx.out(), "DataFrame");
+            case arcticdb::proto::descriptors::NormalizationMetadata::kSeries: return fmt::format_to(ctx.out(), "Series");
+            case arcticdb::proto::descriptors::NormalizationMetadata::kTs: return fmt::format_to(ctx.out(), "TimeSeries");
+            case arcticdb::proto::descriptors::NormalizationMetadata::kMsgPackFrame: return fmt::format_to(ctx.out(), "Pickled data");
+            case arcticdb::proto::descriptors::NormalizationMetadata::kNp: return fmt::format_to(ctx.out(), "Array");
+            default: return fmt::format_to(ctx.out(), "Unknown");
+        }
+    }
+};
+
 } //namespace fmt
 
