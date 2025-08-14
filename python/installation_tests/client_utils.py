@@ -21,8 +21,10 @@ from packaging import version
 
 
 from logger import get_logger
-from mark import LINUX
 
+MACOS = sys.platform.lower().startswith("darwin")
+LINUX = sys.platform.lower().startswith("linux")
+WINDOWS = sys.platform.lower().startswith("win32")
 
 logger = get_logger()
 
