@@ -90,5 +90,9 @@ struct ReadOptions {
     [[nodiscard]] OutputFormat output_format() const {
         return data_->output_format_;
     }
+
+    [[nodiscard]] ReadOptions clone() const {
+        return ReadOptions(std::make_shared<ReadOptionsData>(*data_));
+    }
 };
 } //namespace arcticdb

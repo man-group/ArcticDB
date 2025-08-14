@@ -1293,7 +1293,7 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
     }
     auto clauses_ptr = std::make_shared<std::vector<std::shared_ptr<Clause>>>(std::move(clauses));
     return folly::collect(symbol_processing_result_futs).via(&async::io_executor())
-    .thenValueInline([this, &handler_data, clauses_ptr, component_manager](std::vector<SymbolProcessingResult>&& symbol_processing_results) mutable {
+    .thenValueInline([this, &handler_data, clauses_ptr, component_manager, read_options](std::vector<SymbolProcessingResult>&& symbol_processing_results) mutable {
         auto [input_schemas, entity_ids, res_versioned_items, res_metadatas] = unpack_symbol_processing_results(std::move(symbol_processing_results));
         auto pipeline_context = setup_join_pipeline_context(std::move(input_schemas), *clauses_ptr);
         return schedule_remaining_iterations(std::move(entity_ids), clauses_ptr)
@@ -1301,14 +1301,14 @@ MultiSymbolReadOutput LocalVersionedEngine::batch_read_and_join_internal(
             auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
             return collect_segments(std::move(proc));
         })
-        .thenValueInline([store=store(), &handler_data, pipeline_context](std::vector<SliceAndKey>&& slice_and_keys) mutable {
-            return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, ReadOptions{}, handler_data);
+        .thenValueInline([store=store(), &handler_data, pipeline_context, read_options](std::vector<SliceAndKey>&& slice_and_keys) mutable {
+            return prepare_output_frame(std::move(slice_and_keys), pipeline_context, store, read_options, handler_data);
         })
-        .thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas](SegmentInMemory&& frame) mutable {
+        .thenValueInline([&handler_data, pipeline_context, res_versioned_items, res_metadatas, read_options](SegmentInMemory&& frame) mutable {
             // Needed to force our usual backfilling behaviour when columns have been outer-joined and some are not present in all input symbols
-            ReadOptions read_options;
-            read_options.set_dynamic_schema(true);
-            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+            ReadOptions read_options_with_dynamic_schema = read_options.clone();
+            read_options_with_dynamic_schema.set_dynamic_schema(true);
+            return reduce_and_fix_columns(pipeline_context, frame, read_options_with_dynamic_schema, handler_data)
             .thenValueInline([pipeline_context, frame, res_versioned_items, res_metadatas](auto&&) mutable {
                 return MultiSymbolReadOutput{
                     std::move(*res_versioned_items),

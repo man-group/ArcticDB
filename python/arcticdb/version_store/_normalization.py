@@ -23,6 +23,7 @@ import pandas as pd
 import pickle
 from abc import ABCMeta, abstractmethod
 
+from arcticdb.dependencies import pyarrow as pa
 from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
@@ -610,8 +611,6 @@ class ArrowNormalizationOperations(NamedTuple):
 
 class ArrowTableNormalizer(Normalizer):
     def construct_pandas_metadata(self, fields, op : ArrowNormalizationOperations) -> Dict[str, Any]:
-        import pyarrow as pa
-
         # Construct index_columns metadata
         if op.range_index is not None:
             index_columns = [dict(op.range_index, kind="range")]
@@ -677,8 +676,6 @@ class ArrowTableNormalizer(Normalizer):
 
     def apply_pyarrow_operations(self, table, op: ArrowNormalizationOperations):
         # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
-        import pyarrow as pa
-
         if (len(op.renames_for_table) == 0 and
             len(op.timezones) == 0 and
             op.range_index is None and

@@ -230,7 +230,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_timestamp", &VersionQuery::set_timestamp)
         .def("set_version", &VersionQuery::set_version);
 
-    py::enum_<OutputFormat>(version, "OutputFormat")
+    py::enum_<OutputFormat>(version, "InternalOutputFormat")
         .value("PANDAS", OutputFormat::PANDAS)
         .value("ARROW", OutputFormat::ARROW);
 
