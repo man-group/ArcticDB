@@ -10,6 +10,7 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/column_store/column_map.hpp>
 
 #include <google/protobuf/any.pb.h>
 
