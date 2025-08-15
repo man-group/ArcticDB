@@ -1,4 +1,120 @@
 {
+    "arrow.ArrowReadNumeric.peakmem_read": {
+        "code": "class ArrowReadNumeric:\n    def peakmem_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n\n    def setup_cache(self):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        num_rows, date_ranges = self.params\n        num_cols = 9 # 10 including the index column\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac.get_library(self.lib_name)\n        for rows in num_rows:\n            df = pd.DataFrame(\n                {\n                    f\"col{idx}\": np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)\n                },\n                index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n            )\n            lib.write(self.symbol_name(rows), df)",
+        "name": "arrow.ArrowReadNumeric.peakmem_read",
+        "param_names": [
+            "rows",
+            "date_range"
+        ],
+        "params": [
+            [
+                "100000",
+                "100000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ]
+        ],
+        "setup_cache_key": "arrow:30",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "f41e907f991caa155f765981fb845308e6ac55ba912a18f44b73ec87587d3667"
+    },
+    "arrow.ArrowReadNumeric.time_read": {
+        "code": "class ArrowReadNumeric:\n    def time_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n\n    def setup_cache(self):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        num_rows, date_ranges = self.params\n        num_cols = 9 # 10 including the index column\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac.get_library(self.lib_name)\n        for rows in num_rows:\n            df = pd.DataFrame(\n                {\n                    f\"col{idx}\": np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)\n                },\n                index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n            )\n            lib.write(self.symbol_name(rows), df)",
+        "min_run_count": 2,
+        "name": "arrow.ArrowReadNumeric.time_read",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "date_range"
+        ],
+        "params": [
+            [
+                "100000",
+                "100000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:30",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "2e1ac87c8fa79349da6d59f4f8618a1fdb207b72b692092d0c9c2c69c26c297f",
+        "warmup_time": 0
+    },
+    "arrow.ArrowReadStrings.peakmem_read": {
+        "code": "class ArrowReadStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count):\n        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n\n    def setup_cache(self):\n        rng = np.random.default_rng()\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        num_rows, date_ranges, unique_string_counts = self.params\n        num_cols = 10\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac.get_library(self.lib_name)\n        for unique_string_count in unique_string_counts:\n            strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True))\n            for rows in num_rows:\n                df = pd.DataFrame(\n                    {\n                        f\"col{idx}\": rng.choice(strings, rows) for idx in range(num_cols)\n                    },\n                    index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n                )\n                lib.write(self.symbol_name(rows, unique_string_count), df)",
+        "name": "arrow.ArrowReadStrings.peakmem_read",
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count"
+        ],
+        "params": [
+            [
+                "10000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "1",
+                "100",
+                "100000"
+            ]
+        ],
+        "setup_cache_key": "arrow:78",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "daf31f0aa67cce7ace0d495e3648983ba46ca8cb5a4184f5875421398de5a862"
+    },
+    "arrow.ArrowReadStrings.time_read": {
+        "code": "class ArrowReadStrings:\n    def time_read(self, rows, date_range, unique_string_count):\n        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n\n    def setup_cache(self):\n        rng = np.random.default_rng()\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        num_rows, date_ranges, unique_string_counts = self.params\n        num_cols = 10\n        self.ac.delete_library(self.lib_name)\n        self.ac.create_library(self.lib_name)\n        lib = self.ac.get_library(self.lib_name)\n        for unique_string_count in unique_string_counts:\n            strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True))\n            for rows in num_rows:\n                df = pd.DataFrame(\n                    {\n                        f\"col{idx}\": rng.choice(strings, rows) for idx in range(num_cols)\n                    },\n                    index = pd.date_range(\"1970-01-01\", freq=\"ns\", periods=rows)\n                )\n                lib.write(self.symbol_name(rows, unique_string_count), df)",
+        "min_run_count": 2,
+        "name": "arrow.ArrowReadStrings.time_read",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count"
+        ],
+        "params": [
+            [
+                "10000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "1",
+                "100",
+                "100000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:78",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "5879913710f02f75634c0d679be8af1f8ec3e017af5a6300c3ee965779f5ffbb",
+        "warmup_time": 0
+    },
     "basic_functions.BasicFunctions.peakmem_read": {
         "code": "class BasicFunctions:\n    def peakmem_read(self, rows):\n        self.lib.read(f\"sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n        rows_values = BasicFunctions.params\n    \n        self.dfs = {rows: generate_pseudo_random_dataframe(rows) for rows in rows_values}\n        for rows in rows_values:\n            lib = get_prewritten_lib_name(rows)\n            self.ac.delete_library(lib)\n            self.ac.create_library(lib)\n            lib = self.ac[lib]\n            lib.write(f\"sym\", self.dfs[rows])\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )\n    \n        lib_name = get_prewritten_lib_name(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS)\n        self.ac.delete_library(lib_name)\n        lib = self.ac.create_library(lib_name)\n        lib.write(\n            \"ultra_short_wide_sym\",\n            generate_random_floats_dataframe(BasicFunctions.ULTRA_SHORT_WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS),\n        )",
         "name": "basic_functions.BasicFunctions.peakmem_read",
