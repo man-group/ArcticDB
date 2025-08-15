@@ -60,7 +60,7 @@ jobs:
         if: inputs.arcticdb_version == 'latest'
         run: |
           pip download arcticdb --dest ./wheels
-          python -m pip install --force-reinstall  $(ls ./wheels/arcticdb*.whl)[Testing] 
+          pip install --force-reinstall  $(ls ./wheels/arcticdb*.whl)[Testing] 
           pip install pytest arcticdb "protobuf<5"
       
       # Currently, the oldest "supported" release is 3.0.0
@@ -107,7 +107,7 @@ jobs:
           pip download arcticdb --dest ./wheels
           pip install --force-reinstall  $(ls ./wheels/arcticdb*.whl)[Testing] 
           pip install --upgrade pyopenssl
-          pip install--force-reinstall pytest arcticdb "protobuf<5"
+          pip install --force-reinstall pytest arcticdb "protobuf<5"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
