@@ -63,41 +63,41 @@ void ArrowStringHandler::convert_type(
     struct DictEntry {
         int32_t offset_buffer_pos_;
         int64_t string_buffer_pos_;
+        std::string_view strv;
     };
     std::vector<StringPool::offset_t> unique_offsets_in_order;
     ankerl::unordered_dense::map<StringPool::offset_t, DictEntry> unique_offsets;
+    // Trade some memory for more performance
+    // TODO: Use unique count column stat in V2 encoding
+    unique_offsets_in_order.reserve(source_column.row_count());
+    unique_offsets.reserve(source_column.row_count());
     int64_t bytes = 0;
+    int32_t unique_offset_count = 0;
     auto dest_ptr = reinterpret_cast<int32_t*>(dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(int32_t)));
 
     // First go through the source column once to compute the size of offset and string buffers.
     while(pos != end) {
-        auto [entry, is_emplaced] = unique_offsets.try_emplace(*pos, DictEntry{static_cast<int32_t>(unique_offsets_in_order.size()), bytes});
+        auto [entry, is_emplaced] = unique_offsets.try_emplace(*pos, DictEntry{unique_offset_count, bytes, string_pool->get_const_view(*pos)});
         if(is_emplaced) {
-            bytes += string_pool->get_const_view(*pos).size();
+            bytes += entry->second.strv.size();
             unique_offsets_in_order.push_back(*pos);
+            ++unique_offset_count;
         }
         ++pos;
-        *dest_ptr = entry->second.offset_buffer_pos_;
-        ++dest_ptr;
+        *dest_ptr++ = entry->second.offset_buffer_pos_;
     }
     auto& string_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE);
     auto& offsets_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::OFFSET, (unique_offsets_in_order.size() + 1) * sizeof(int64_t), AllocationType::DETACHABLE);
-
     // Then go through unique_offsets to fill up the offset and string buffers.
     auto offsets_ptr = reinterpret_cast<int64_t*>(offsets_buffer.data());
     auto string_ptr = reinterpret_cast<char*>(string_buffer.data());
-    auto string_begin_ptr = string_ptr;
-    for(auto i=0u; i<unique_offsets_in_order.size(); ++i) {
-        auto string_pool_offset = unique_offsets_in_order[i];
-        auto& entry = unique_offsets[string_pool_offset];
-        util::check(static_cast<int32_t>(i) == entry.offset_buffer_pos_, "Mismatch in offset buffer pos");
-        util::check(string_ptr - string_begin_ptr == entry.string_buffer_pos_, "Mismatch in string buffer pos");
-        offsets_ptr[i] = entry.string_buffer_pos_;
-        const auto strv = string_pool->get_const_view(string_pool_offset);
-        memcpy(string_ptr, strv.data(), strv.size());
-        string_ptr += strv.size();
+    for (auto unique_offset: unique_offsets_in_order) {
+        const auto& entry = unique_offsets[unique_offset];
+        *offsets_ptr++ = entry.string_buffer_pos_;
+        memcpy(string_ptr, entry.strv.data(), entry.strv.size());
+        string_ptr += entry.strv.size();
     }
-    offsets_ptr[unique_offsets_in_order.size()] = bytes;
+    *offsets_ptr = bytes;
 }
 
 TypeDescriptor ArrowStringHandler::output_type(const TypeDescriptor&) const {
