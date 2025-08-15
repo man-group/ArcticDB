@@ -386,7 +386,8 @@ void Column::default_initialize_rows(size_t start_pos, size_t num_rows, bool ens
             if (ensure_alloc) {
                 data_.ensure<uint8_t>(bytes);
             }
-            auto type_ptr = data_.ptr_cast<RawType>(start_pos, bytes);
+            // This doesn't work if we default_initialize bytes which span across multiple blocks.
+            auto type_ptr = reinterpret_cast<RawType *>(data_.bytes_at(start_pos * sizeof(RawType), bytes));
             util::initialize<T>(reinterpret_cast<uint8_t*>(type_ptr), bytes, default_value);
             if (ensure_alloc) {
                 data_.commit();

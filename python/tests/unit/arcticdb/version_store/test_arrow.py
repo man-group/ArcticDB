@@ -566,3 +566,26 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
         expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
         received = lib.read(sym).data
     assert expected.equals(received)
+
+
+@pytest.mark.parametrize(
+    "type_to_drop", [pa.int64(), pa.float64(), pa.large_string()]
+)
+def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_v1, type_to_drop):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    column_to_drop = pa.array(["a", "b"], type_to_drop) if type_to_drop == pa.large_string() else pa.array([1, 2], type_to_drop)
+    table_1 = pa.table({"col": pa.array([0, 1])})
+    table_2 = pa.table({"col": pa.array([5, 6]), "col_to_drop": column_to_drop})
+    table_3 = pa.table({"col": pa.array([2, 3])})
+    # TODO: Remove to_pandas() when we support writing Arrow structures directly
+    lib.write(sym, table_1.to_pandas())
+    lib.append(sym, table_2.to_pandas())
+    lib.append(sym, table_3.to_pandas())
+    expected = pa.concat_tables([table_1, table_2, table_3], promote_options="permissive")
+    expected = expected.filter(pa.compute.field("col") < 5)
+    q = QueryBuilder()
+    q = q[q["col"] < 5]
+    received = stringify_dictionary_encoded_columns(lib.read(sym, query_builder=q).data)
+    assert expected.equals(received)
