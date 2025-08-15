@@ -1,4 +1,5 @@
 from enum import Enum
+import sys
 import pandas as pd
 from pandas.testing import assert_frame_equal
 import os
@@ -10,7 +11,6 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-from arcticdb.storage_fixtures.utils import _LINUX
 try:
     # from pytest this way will work
     from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
@@ -146,6 +146,23 @@ def get_real_gcp_uri(shared_path: bool = True):
     )
     return aws_uri
 
+def find_ca_certs():
+    # Common CA certificates locations
+    default_paths = ssl.get_default_verify_paths()
+    possible_paths =  [
+        default_paths.cafile,
+        default_paths.openssl_cafile_env,
+        default_paths.openssl_cafile,
+        '/etc/ssl/certs/ca-certificates.crt',
+        '/usr/lib/ssl/certs/ca-certificates.crt',
+        '/etc/pki/tls/certs/ca-bundle.crt',
+        '/etc/ssl/cert.pem'
+    ]
+    for path in possible_paths:
+        if path and os.path.isfile(path):
+            return path
+    return None
+
 ### IMPORTANT: When adding new STORAGE we must implement
 ###  the whole connection logic here even if this does mean effectively duplicating the code
 ###   
@@ -153,12 +170,12 @@ def get_real_gcp_uri(shared_path: bool = True):
 ###  there is no way how arcticdb 3.0 could have had the functions that we are going to implement
 ###  and support from now on
 def get_real_azure_uri(shared_path: bool = True):
-
     container, constr, path_prefix = real_azure_credentials(shared_path)
-
+    ca_certs_file = find_ca_certs()
     uri = f"azure://Container={container};Path_prefix={path_prefix}"
-    if _LINUX:
-        uri += f";CA_cert_path={self.client_cert_file}"
+    assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
+    if sys.platform.lower().startswith("linux"):
+        uri += f";CA_cert_path={ca_certs_file}"
     url += f";{constr}"
     return url
 
