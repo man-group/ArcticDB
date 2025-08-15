@@ -10,7 +10,7 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
+from arcticdb.storage_fixtures.utils import _LINUX
 try:
     # from pytest this way will work
     from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
@@ -96,6 +96,19 @@ def real_gcp_credentials(shared_path: bool = True):
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
 
+def real_azure_credentials(shared_path: bool = True):
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "")
+    constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
+    container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
+
+    clear = str(os.getenv("ARCTICDB_REAL_GCP_CLEAR")).lower() in ("true", "1")
+
+    return container, constr, path_prefix, clear
+
+
 def get_real_s3_uri(shared_path: bool = True):
     # TODO: Remove this when the latest version that we support
     # contains the s3 fixture code as defined here:
@@ -133,10 +146,21 @@ def get_real_gcp_uri(shared_path: bool = True):
     )
     return aws_uri
 
+### IMPORTANT: When adding new STORAGE we must implement
+###  the whole connection logic here even if this does mean effectively duplicating the code
+###   
+### REASON: We run this file from command line on arcticdb version 3.0. 
+###  there is no way how arcticdb 3.0 could have had the functions that we are going to implement
+###  and support from now on
 def get_real_azure_uri(shared_path: bool = True):
-    return real_azure_from_environment_variables(
-        shared_path=shared_path,
-        ).get_arctic_uri()
+
+    container, constr, path_prefix = real_azure_credentials(shared_path)
+
+    uri = f"azure://Container={container};Path_prefix={path_prefix}"
+    if _LINUX:
+        uri += f";CA_cert_path={self.client_cert_file}"
+    url += f";{constr}"
+    return url
 
 
 class PersistentTestType(Enum):
