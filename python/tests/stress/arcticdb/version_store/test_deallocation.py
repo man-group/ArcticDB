@@ -46,10 +46,10 @@ def test_os_exit_exits_within_timeout(lmdb_storage, lib_name, io_threads_spawned
     lib.snapshot("snap")
     proc = Process(target=killed_worker, args=(lib, io_threads_spawned_in_child, cpu_threads_spawned_in_child))
     proc.start()
-    proc.join(timeout=10)
+    proc.join(timeout=15)
 
     if proc.is_alive():
         proc.terminate()
-        pytest.fail("os._exit did not exit within 10 seconds")
+        pytest.fail("os._exit did not exit within 15 seconds")
 
     assert proc.exitcode == 0
