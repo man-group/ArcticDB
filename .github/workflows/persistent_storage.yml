@@ -59,6 +59,8 @@ jobs:
       - name: Install latest release
         if: inputs.arcticdb_version == 'latest'
         run: |
+          pip download arcticdb --dest ./wheels
+          python -m pip install --force-reinstall  $(ls ./wheels/arcticdb*.whl)[Testing] 
           pip install pytest arcticdb "protobuf<5"
       
       # Currently, the oldest "supported" release is 3.0.0
@@ -79,8 +81,6 @@ jobs:
       - name: Seed the storage
         if: inputs.job_type == 'seed'
         run: |
-          pip download arcticdb --dest ./wheels
-          python -m pip install --force-reinstall  $(ls ./wheels/arcticdb*.whl)[Testing] 
           echo "Running seed for ${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }} on ${{matrix.os}}_${{env.python_impl_name}}"
           python python/tests/util/storage_test.py --type seed --version ${{inputs.arcticdb_version}}
 
@@ -104,7 +104,10 @@ jobs:
 
       - name: Install latest release
         run: |
-          pip install pytest arcticdb "protobuf<5"
+          pip download arcticdb --dest ./wheels
+          pip install --force-reinstall  $(ls ./wheels/arcticdb*.whl)[Testing] 
+          pip install --upgrade pyopenssl
+          pip install--force-reinstall pytest arcticdb "protobuf<5"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -115,6 +118,4 @@ jobs:
       - name: Clean the storage
         run: |
           echo "Running cleanup for ${{ github.ref_name }}"
-          pip download arcticdb --dest ./wheels
-          python -m pip install --force-reinstall  $(ls ./wheels/arcticdb*.whl)[Testing] 
           python python/tests/util/storage_test.py --type cleanup
