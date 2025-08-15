@@ -15,7 +15,6 @@
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <boost/iterator/iterator_facade.hpp>
 
@@ -27,6 +26,11 @@ namespace google::protobuf {
 namespace arcticdb {
 
 class ColumnMap;
+
+namespace entity {
+    struct StreamDescriptor;
+}
+
 
 class SegmentInMemoryImpl;
 
@@ -289,15 +293,7 @@ public:
         const StreamDescriptor& desc,
         size_t expected_column_size,
         AllocationType presize,
-        Sparsity allow_sparse) :
-            SegmentInMemoryImpl(
-                desc,
-                expected_column_size,
-                presize,
-                allow_sparse,
-                OutputFormat::NATIVE,
-                DataTypeMode::INTERNAL) {
-    }
+        Sparsity allow_sparse);
 
     SegmentInMemoryImpl(
         const StreamDescriptor& desc,
@@ -599,9 +595,9 @@ public:
 
 private:
     ssize_t row_id_ = -1;
-    std::shared_ptr<StreamDescriptor> descriptor_ = std::make_shared<StreamDescriptor>();
+    std::shared_ptr<StreamDescriptor> descriptor_;
     std::vector<std::shared_ptr<Column>> columns_;
-    std::shared_ptr<StringPool> string_pool_ = std::make_shared<StringPool>();
+    std::shared_ptr<StringPool> string_pool_;
     ssize_t offset_ = 0u;
     std::unique_ptr<google::protobuf::Any> metadata_;
     mutable std::shared_ptr<ColumnMap> column_map_;

@@ -11,6 +11,7 @@
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/column_store/column_map.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <google/protobuf/any.pb.h>
 
@@ -377,7 +378,9 @@ const arcticdb::proto::descriptors::UserDefinedMetadata& SegmentInMemoryImpl::us
     return tsd_->user_metadata();
 }
 
-SegmentInMemoryImpl::SegmentInMemoryImpl() = default;
+SegmentInMemoryImpl::SegmentInMemoryImpl() :
+    descriptor_(std::make_shared<StreamDescriptor>()),
+    string_pool_(std::make_shared<StringPool>()) {}
 
 SegmentInMemoryImpl::SegmentInMemoryImpl(
     const StreamDescriptor& desc,
@@ -387,8 +390,23 @@ SegmentInMemoryImpl::SegmentInMemoryImpl(
     OutputFormat output_format,
     DataTypeMode mode) :
         descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() })),
+        string_pool_(std::make_shared<StringPool>()),
         allow_sparse_(allow_sparse) {
     on_descriptor_change(desc, expected_column_size, presize, allow_sparse, output_format, mode);
+}
+
+SegmentInMemoryImpl::SegmentInMemoryImpl(
+    const StreamDescriptor& desc,
+    size_t expected_column_size,
+    AllocationType presize,
+    Sparsity allow_sparse) :
+        SegmentInMemoryImpl(
+            desc,
+            expected_column_size,
+            presize,
+            allow_sparse,
+            OutputFormat::NATIVE,
+            DataTypeMode::INTERNAL) {
 }
 
 SegmentInMemoryImpl::~SegmentInMemoryImpl() {
