@@ -21,7 +21,6 @@ on:
           - 'GCPXML'
           - 'AZURE'
         default: 'no'
-
       pypi_publish:
         type: boolean
       publish_env:
@@ -391,7 +390,7 @@ jobs:
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}            
 
   persistent_storage_verify_linux:
-    needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
+    needs: [common_config, build-python-wheels-linux, build-python-wheels-windows, storage_type]
     # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
@@ -416,6 +415,7 @@ jobs:
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   persistent_storage_verify_windows:
+    needs: [common_config, storage_type]
     # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
