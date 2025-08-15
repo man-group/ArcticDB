@@ -91,9 +91,9 @@ class StorageSetup:
 
             # Azure variable setup
             cls._azure_factory = real_azure_from_environment_variables(shared_path=True)
-            cls._aws_default_factory.default_prefix = None
-            cls._aws_default_factory.default_bucket = AZURE_DEFAULT_CONTAINER
-            cls._aws_default_factory.clean_bucket_on_fixture_exit = False
+            cls._azure_factory.default_prefix = None
+            cls._azure_factory.default_container = AZURE_DEFAULT_CONTAINER
+            cls._azure_factory.clean_bucket_on_fixture_exit = False
             
    
     @classmethod
