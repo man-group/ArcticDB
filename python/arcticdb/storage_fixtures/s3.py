@@ -812,6 +812,14 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         spawn_context = multiprocessing.get_context(
             "spawn"
         )  # In py3.7, multiprocess with forking will lead to seg fault in moto, possibly due to the handling of file descriptors
+        self._p = spawn_context.Process(
+            target=run_s3_server,
+            args=(
+                port,
+                self.key_file if self.http_protocol == "https" else None,
+                self.cert_file if self.http_protocol == "https" else None,
+            ),
+        )
         self._p.start()
         # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
         # Due to this, we need to wait for the server to come up for a longer time
