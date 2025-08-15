@@ -200,7 +200,8 @@ def persistent_test_type() -> PersistentTestType:
             return PersistentTestType.AZURE
         return PersistentTestType.AWS_S3
     else:
-        raise Exception("Persistence storage tests are not enabled or not configured properly")
+        raise Exception("Persistence storage tests are not enabled or not configured properly."
+                        + "ARCTICDB_PERSISTENT_STORAGE_TESTS_ENABLED environment variable is not set")
 
 
 def get_real_uri(shared_path: bool = True):
