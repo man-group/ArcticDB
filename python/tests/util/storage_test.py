@@ -104,7 +104,7 @@ def real_azure_credentials(shared_path: bool = True):
     constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
     container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
 
-    clear = str(os.getenv("ARCTICDB_REAL_GCP_CLEAR")).lower() in ("true", "1")
+    clear = str(os.getenv("ARCTICDB_REALL_AZURE_CLEAR")).lower() in ("true", "1")
 
     return container, constr, path_prefix, clear
 
