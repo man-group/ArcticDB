@@ -9,50 +9,26 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/util/preconditions.hpp>
 
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
-#include <arcticdb/column_store/column_map.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <boost/iterator/iterator_facade.hpp>
-#include <folly/container/Enumerate.h>
 
-namespace google::protobuf
-{
+
+namespace google::protobuf {
     class Any;
 }
 
 namespace arcticdb {
 
+class ColumnMap;
+
 class SegmentInMemoryImpl;
-
-namespace {
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index);
-
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_dense_segment(const StreamDescriptor& descriptor, size_t row_count);
-
-inline void check_output_bitset(const arcticdb::util::BitSet& output,
-                                const arcticdb::util::BitSet& filter,
-                                const arcticdb::util::BitSet& column_bitset
-                                ){
-    // TODO: Do this in O(1)
-    // The logic here is that the filter bitset defines how the output bitset should look like
-    // The set bits in filter decides the row ids in the output. The corresponding values in sparse_map
-    // should match output bitset
-    auto filter_iter = filter.first();
-    arcticdb::util::BitSetSizeType output_pos = 0;
-    while(filter_iter != filter.end()) {
-        arcticdb::util::check_rte(column_bitset.test(*(filter_iter++)) == output.test(output_pos++),
-                                 "Mismatch in output bitset in filter_segment");
-    }
-}
-} // namespace
-
 
 class SegmentInMemoryImpl {
 public:
@@ -98,9 +74,7 @@ public:
             });
         }
 
-        [[nodiscard]] bool has_value() const {
-            return parent_->has_value_at(row_id_, position_t(column_id_));
-        }
+        [[nodiscard]] bool has_value() const;
 
         template<typename RawType>
         RawType &value() {
@@ -112,9 +86,7 @@ public:
             return parent_->reference_at<RawType>(row_id_, column_id_);
         }
 
-        bool operator==(const Location &other) const {
-            return row_id_ == other.row_id_ && column_id_ == other.column_id_;
-        }
+        bool operator==(const Location &other) const;
 
         SegmentInMemoryImpl *const parent_;
         ssize_t row_id_;
@@ -172,31 +144,23 @@ public:
         };
 
     struct Row {
+        using iterator = RowIterator<Location>;
+        using const_iterator = RowIterator<const Location>;
+
         Row() = default;
 
         ~Row() = default;
         Row(const Row& other) = default;
 
-        Row(SegmentInMemoryImpl *parent, ssize_t row_id_) :
-        parent_(parent),
-        row_id_(row_id_) {}
+        Row(SegmentInMemoryImpl *parent, ssize_t row_id_);
 
-        [[nodiscard]] SegmentInMemoryImpl& segment() const {
-            return *parent_;
-        }
+        [[nodiscard]] SegmentInMemoryImpl& segment() const;
 
-        [[nodiscard]] const StreamDescriptor &descriptor() const {
-            return parent_->descriptor();
-        }
+        [[nodiscard]] const StreamDescriptor &descriptor() const;
 
-        bool operator<(const Row &other) const {
-            return entity::visit_field(parent_->field(0), [this, &other](auto type_desc_tag) {
-                using RawType =  typename decltype(type_desc_tag)::DataTypeTag::raw_type;
-                return parent_->scalar_at<RawType>(row_id_, 0) < other.parent_->scalar_at<RawType>(other.row_id_, 0);
-            });
-        }
+        bool operator<(const Row &other) const;
 
-        [[nodiscard]] size_t row_pos() const { return row_id_; }
+        [[nodiscard]] size_t row_pos() const;
 
         template<class IndexType>
         [[nodiscard]] auto index() const {
@@ -204,52 +168,23 @@ public:
             return parent_->scalar_at<RawType>(row_id_, 0).value();
         }
 
-        friend void swap(Row &left, Row &right) noexcept {
-            using std::swap;
-
-            auto a = left.begin();
-            auto b = right.begin();
-            for (; a != left.end(); ++a, ++b) {
-                util::check(a->has_value() && b->has_value(), "Can't swap sparse column values, unsparsify first?");
-                a->visit([&b](auto &val) {
-                    using ValType = std::decay_t<decltype(val)>;
-                    swap(val, b->value<ValType>());
-                });
-            }
-        }
+        friend void swap(Row &left, Row &right) noexcept;
 
         Row &operator=(const Row &other) = default;
 
-        Location operator[](int pos) const {
-            return Location{parent_, row_id_, size_t(pos)};
-        }
+        Location operator[](int pos) const;
 
-        using iterator = RowIterator<Location>;
-        using const_iterator = RowIterator<const Location>;
+        iterator begin();
 
-        iterator begin() {
-            return {parent_, row_id_};
-        }
+        iterator end();
 
-        iterator end() {
-            return {parent_, row_id_, size_t(parent_->descriptor().fields().size())};
-        }
+        [[nodiscard]] const_iterator begin() const;
 
-        [[nodiscard]] const_iterator begin() const {
-            return {parent_, row_id_};
-        }
+        [[nodiscard]] const_iterator end() const;
 
-        [[nodiscard]] const_iterator end() const {
-            return {parent_, row_id_, size_t(parent_->descriptor().fields().size())};
-        }
+        bool operator==(const Row &other) const;
 
-        bool operator==(const Row &other) const {
-            return row_id_ == other.row_id_ && parent_ == other.parent_;
-        }
-
-        void swap_parent(const Row &other) {
-            parent_ = other.parent_;
-        }
+        void swap_parent(const Row &other);
 
         template<class S>
         std::optional<S> scalar_at(std::size_t col) const {
@@ -281,9 +216,7 @@ public:
             return val;
         }
 
-        [[nodiscard]] std::optional<std::string_view> string_at(std::size_t col) const {
-            return parent_->string_at(row_id_, position_t(col));
-        }
+        [[nodiscard]] std::optional<std::string_view> string_at(std::size_t col) const;
 
         SegmentInMemoryImpl *parent_;
         ssize_t row_id_;
@@ -376,21 +309,13 @@ public:
 
     ~SegmentInMemoryImpl();
 
-    iterator begin() { return iterator{this}; }
+    iterator begin();
 
-    iterator end() {
-        util::check(row_id_ != -1, "End iterator called with negative row id, iterator will never terminate");
-        return iterator{this, row_id_ + 1};
-    }
+    iterator end();
 
-    const_iterator begin() const {
-        return const_iterator{const_cast<SegmentInMemoryImpl*>(this)};
-    }
+    const_iterator begin() const;
 
-    const_iterator end() const {
-        util::check(row_id_ != -1, "End iterator called with negative row id, iterator will never terminate");
-        return const_iterator{const_cast<SegmentInMemoryImpl*>(this), row_id_} ;
-    }
+    const_iterator end() const;
 
     ARCTICDB_MOVE_ONLY_DEFAULT_EXCEPT(SegmentInMemoryImpl)
 
@@ -417,52 +342,23 @@ public:
 
     [[nodiscard]] std::optional<std::size_t> column_index_with_name_demangling(std::string_view name) const;
 
-    const Field& column_descriptor(size_t col) {
-        return (*descriptor_)[col];
-    }
+    const Field& column_descriptor(size_t col);
 
-    void end_row() {
-        row_id_++;
-    }
+    void end_row();
 
-    const TimeseriesDescriptor& index_descriptor() const {
-        util::check(tsd_.has_value(), "Index descriptor requested but not set");
-        return *tsd_;
-    }
+    const TimeseriesDescriptor& index_descriptor() const;
 
-    TimeseriesDescriptor& mutable_index_descriptor() {
-        util::check(tsd_.has_value(), "Index descriptor requested but not set");
-        return *tsd_;
-    }
+    TimeseriesDescriptor& mutable_index_descriptor();
 
-    void end_block_write(ssize_t size) {
-        row_id_ += size;
-    }
+    void end_block_write(ssize_t size);
 
-    void set_offset(ssize_t offset) {
-        offset_ = offset;
-    }
+    void set_offset(ssize_t offset);
 
-    ssize_t offset() const {
-        return offset_;
-    }
+    ssize_t offset() const;
 
-    void push_back(const Row &row) {
-        for (auto it : folly::enumerate(row)) {
-            it->visit([&it, that=this](const auto &val) {
-                if(val)
-                    that->set_scalar(it.index, val.value());
-            });
-        }
-        end_row();
-    }
+    void push_back(const Row &row);
 
-    void set_value(position_t idx, const Location &loc) {
-        loc.visit([that=this, idx](const auto& val) {
-            if(val)
-                that->set_scalar(idx, val.value());
-        });
-    }
+    void set_value(position_t idx, const Location &loc);
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
@@ -483,13 +379,9 @@ public:
         column_unchecked(idx).set_sparse_block(row_id_ + 1, val, rows_to_write);
     }
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
-        column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(bitset));
-    }
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset);
 
-    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
-        column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(shapes), std::move(bitset));
-    }
+    void set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset);
 
     template<class T>
     requires std::same_as<std::decay_t<T>, std::string>
@@ -513,75 +405,36 @@ public:
         column_unchecked(pos).set_array(row_id_ + 1, val);
     }
 
-    void set_string(position_t pos, std::string_view str) {
-        ARCTICDB_TRACE(log::version(), "Segment setting string {} at row {} column {}", str, row_id_ + 1, pos);
-        OffsetString ofstr = string_pool_->get(str);
-        column_unchecked(pos).set_scalar(row_id_ + 1, ofstr.offset());
-    }
+    void set_string(position_t pos, std::string_view str);
 
-    void set_string_at(position_t col, position_t row, const char *str, size_t size) {
-        OffsetString ofstr = string_pool_->get(str, size);
-        column_unchecked(col).set_scalar(row, ofstr.offset());
-    }
+    void set_string_at(position_t col, position_t row, const char *str, size_t size);
 
-    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data) {
-        check_column_index(idx);
-        column_unchecked(idx).set_string_array(row_id_ + 1, string_size, num_strings, data, string_pool());
-    }
+    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data);
 
-    void set_string_list(position_t idx, const std::vector<std::string> &input) {
-        check_column_index(idx);
-        column_unchecked(idx).set_string_list(row_id_ + 1, input, string_pool());
-    }
+    void set_string_list(position_t idx, const std::vector<std::string> &input);
 
     //pybind11 can't resolve const and non-const version of column()
-    Column &column_ref(position_t idx) {
-        return column(idx);
-    }
+    Column &column_ref(position_t idx);
 
-    Column &column(position_t idx) {
-        check_column_index(idx);
-        return column_unchecked(idx);
-    }
+    Column &column(position_t idx);
 
-    const Column &column(position_t idx) const {
-        check_column_index(idx);
-        return column_unchecked(idx);
-    }
+    const Column &column(position_t idx) const;
 
-    Column &column_unchecked(position_t idx) {
-        return *columns_[idx];
-    }
+    Column &column_unchecked(position_t idx);
 
-    std::shared_ptr<Column> column_ptr(position_t idx) const {
-        return columns_[idx];
-    }
+    std::shared_ptr<Column> column_ptr(position_t idx) const;
 
-    const Column &column_unchecked(position_t idx) const {
-        return *columns_[idx];
-    }
+    const Column &column_unchecked(position_t idx) const;
 
-    std::vector<std::shared_ptr<Column>> &columns() {
-        return columns_;
-    }
+    std::vector<std::shared_ptr<Column>> &columns();
 
-    const std::vector<std::shared_ptr<Column>> &columns() const {
-        return columns_;
-    }
+    const std::vector<std::shared_ptr<Column>> &columns() const;
 
-    bool empty() const {
-        return row_count() <= 0 && !metadata();
-    }
+    bool empty() const;
 
-    void unsparsify() const {
-        for(const auto& column : columns_)
-            column->unsparsify(row_count());
-    }
+    void unsparsify() const;
 
-    void sparsify() const {
-        for(const auto& column : columns_)
-            column->sparsify();
-    }
+    void sparsify() const;
 
     void append(const SegmentInMemoryImpl& other);
 
@@ -610,9 +463,7 @@ public:
         return column(col).scalar_at<T>(row);
     }
 
-    bool has_value_at(position_t row, position_t col) const {
-        return column(col).has_value_at(row);
-    }
+    bool has_value_at(position_t row, position_t col) const;
 
     template<typename T>
     T &reference_at(position_t row, position_t col) {
@@ -634,87 +485,49 @@ public:
 
     size_t num_bytes() const;
 
-    size_t num_columns() const { return columns_.size(); }
+    size_t num_columns() const;
 
-    size_t num_fields() const { return descriptor().field_count(); }
+    size_t num_fields() const;
 
-    size_t row_count() const { return row_id_ + 1 < 0 ? 0 : size_t(row_id_ + 1); }
+    size_t row_count() const;
 
-    void clear() {
-        columns_.clear();
-        string_pool_->clear();
-    }
+    void clear();
 
-    size_t string_pool_size() const { return string_pool_->size(); }
+    size_t string_pool_size() const;
 
-    bool has_string_pool() const { return string_pool_size() > 0; }
+    bool has_string_pool() const;
 
-    const std::shared_ptr<StringPool>& string_pool_ptr() const {
-        return string_pool_;
-    }
+    const std::shared_ptr<StringPool>& string_pool_ptr() const;
 
-    void check_column_index(position_t idx) const {
-        util::check_arg(idx < position_t(columns_.size()), "Column index {} out of bounds", idx);
-    }
+    void check_column_index(position_t idx) const;
 
     void init_column_map() const;
 
-    ColumnData string_pool_data() const {
-        return ColumnData{
-            &string_pool_->data(),
-            &string_pool_->shapes(),
-            string_pool_descriptor().type(),
-            nullptr
-        };
-    }
+    ColumnData string_pool_data() const;
 
-    void compact_blocks() const {
-        for(const auto& column : columns_)
-            column->compact_blocks();
-    }
+    void compact_blocks() const;
 
-    const auto &fields() const {
-        return descriptor().fields();
-    }
+    const FieldCollection& fields() const;
 
-    ColumnData column_data(size_t col) const {
-        return columns_[col]->data();
-    }
+    ColumnData column_data(size_t col) const;
 
-    const StreamDescriptor &descriptor() const {
-        return *descriptor_;
-    }
+    const StreamDescriptor &descriptor() const;
 
-    StreamDescriptor &descriptor() {
-        return *descriptor_;
-    }
+    StreamDescriptor &descriptor();
 
-    const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const {
-        util::check(static_cast<bool>(descriptor_), "Descriptor pointer is null");
-        return descriptor_;
-    }
+    const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const;
 
-    void attach_descriptor(std::shared_ptr<StreamDescriptor> desc) {
-        descriptor_ = std::move(desc);
-    }
+    void attach_descriptor(std::shared_ptr<StreamDescriptor> desc);
 
     void drop_column(std::string_view name);
 
-    const Field& field(size_t index) const {
-        return descriptor()[index];
-    }
+    const Field& field(size_t index) const;
 
-    void set_row_id(ssize_t rid) {
-        row_id_ = rid;
-    }
+    void set_row_id(ssize_t rid);
 
-    void set_row_data(ssize_t rid) {
-        set_row_id(rid);
-        for(const auto& column : columns())
-            column->set_row_data(row_id_);
-    }
+    void set_row_data(ssize_t rid);
 
-    StringPool &string_pool() { return *string_pool_; } //TODO protected
+    StringPool &string_pool();
 
     void reset_metadata();
 
@@ -726,36 +539,22 @@ public:
 
     bool is_index_sorted() const;
 
-    bool compacted() const {
-        return compacted_;
-    }
+    bool compacted() const;
 
-    void set_compacted(bool value) {
-        compacted_ = value;
-    }
+    void set_compacted(bool value);
 
-    void check_magic() const {
-        magic_.check();
-    }
+    void check_magic() const;
 
     friend bool operator==(const SegmentInMemoryImpl& left, const SegmentInMemoryImpl& right);
 
-    bool allow_sparse() const{
-        return allow_sparse_ == Sparsity::PERMITTED;
-    }
+    bool allow_sparse() const;
 
     // TODO: Very slow, fix this by storing it in protobuf
-    bool is_sparse() const {
-        return std::any_of(std::begin(columns_), std::end(columns_), [] (const auto& c) {
-            return c->is_sparse();
-        });
-    }
+    bool is_sparse() const;
 
     SegmentInMemoryImpl clone() const;
 
-    void set_string_pool(std::shared_ptr<StringPool> string_pool) {
-        string_pool_ = std::move(string_pool);
-    }
+    void set_string_pool(std::shared_ptr<StringPool> string_pool);
 
     std::shared_ptr<SegmentInMemoryImpl> get_output_segment(size_t num_values, bool pre_allocate=true) const;
 
@@ -763,9 +562,7 @@ public:
                                                 bool filter_down_stringpool=false,
                                                 bool validate=false) const;
 
-    bool has_index_descriptor() const {
-        return tsd_.has_value();
-    }
+    bool has_index_descriptor() const;
 
     void set_timeseries_descriptor(const TimeseriesDescriptor& tsd);
 
@@ -773,13 +570,9 @@ public:
 
     void calculate_statistics();
 
-    bool has_user_metadata() {
-        return tsd_.has_value() && !tsd_->proto_is_null() && tsd_->proto().has_user_meta();
-    }
+    bool has_user_metadata();
 
-    const arcticdb::proto::descriptors::UserDefinedMetadata& user_metadata() const {
-        return tsd_->user_metadata();
-    }
+    const arcticdb::proto::descriptors::UserDefinedMetadata& user_metadata() const;
 
     /// @brief Construct a copy of the segment containing only rows in [start_row; end_row)
     /// @param start_row Start of the row range (inclusive)
@@ -818,15 +611,5 @@ private:
     util::MagicNum<'M', 'S', 'e', 'g'> magic_;
     std::optional<TimeseriesDescriptor> tsd_;
 };
-
-namespace {
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index) {
-    return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index}, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-}
-
-inline std::shared_ptr<SegmentInMemoryImpl> allocate_dense_segment(const StreamDescriptor& descriptor, size_t row_count) {
-    return std::make_shared<SegmentInMemoryImpl>(descriptor, row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-}
-} // namespace anon
 
 } // namespace arcticdb
