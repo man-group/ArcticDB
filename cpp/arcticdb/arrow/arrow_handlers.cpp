@@ -57,9 +57,6 @@ void ArrowStringHandler::convert_type(
     const std::shared_ptr<StringPool>& string_pool) const {
     using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
     auto input_data = source_column.data();
-    auto pos = input_data.cbegin<ArcticStringColumnTag>();
-    const auto end = input_data.cend<ArcticStringColumnTag>();
-
     struct DictEntry {
         int32_t offset_buffer_pos_;
         int64_t string_buffer_pos_;
@@ -75,29 +72,52 @@ void ArrowStringHandler::convert_type(
     int32_t unique_offset_count = 0;
     auto dest_ptr = reinterpret_cast<int32_t*>(dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(int32_t)));
 
+    util::BitSet bitset;
+    util::BitSet::bulk_insert_iterator inserter(bitset);
+    const auto end = input_data.cend<ArcticStringColumnTag, IteratorType::ENUMERATED>();
     // First go through the source column once to compute the size of offset and string buffers.
-    while(pos != end) {
-        auto [entry, is_emplaced] = unique_offsets.try_emplace(*pos, DictEntry{unique_offset_count, bytes, string_pool->get_const_view(*pos)});
-        if(is_emplaced) {
-            bytes += entry->second.strv.size();
-            unique_offsets_in_order.push_back(*pos);
-            ++unique_offset_count;
+    // TODO: This can't be right if the column was sparse as it has only been decoded, not expanded
+    for (auto en = input_data.cbegin<ArcticStringColumnTag, IteratorType::ENUMERATED>(); en != end; ++en) {
+        if (is_a_string(en->value())) {
+            auto [entry, is_emplaced] = unique_offsets.try_emplace(en->value(), DictEntry{static_cast<int32_t>(unique_offset_count), bytes, string_pool->get_const_view(en->value())});
+            if (is_emplaced) {
+                bytes += entry->second.strv.size();
+                unique_offsets_in_order.push_back(en->value());
+                ++unique_offset_count;
+            }
+            *dest_ptr = entry->second.offset_buffer_pos_;
+        } else {
+            inserter = en->idx();
         }
-        ++pos;
-        *dest_ptr++ = entry->second.offset_buffer_pos_;
+        ++dest_ptr;
     }
-    auto& string_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE);
-    auto& offsets_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::OFFSET, (unique_offsets_in_order.size() + 1) * sizeof(int64_t), AllocationType::DETACHABLE);
-    // Then go through unique_offsets to fill up the offset and string buffers.
-    auto offsets_ptr = reinterpret_cast<int64_t*>(offsets_buffer.data());
-    auto string_ptr = reinterpret_cast<char*>(string_buffer.data());
-    for (auto unique_offset: unique_offsets_in_order) {
-        const auto& entry = unique_offsets[unique_offset];
-        *offsets_ptr++ = entry.string_buffer_pos_;
-        memcpy(string_ptr, entry.strv.data(), entry.strv.size());
-        string_ptr += entry.strv.size();
+    inserter.flush();
+    // At this point bitset has ones where the source column contained None or NaN
+    // Inverting and shrinking to the source column size it then makes a sparse map for the input data
+    bitset.invert();
+    // TODO: row_count() here won't be right when the original data was sparse, but we don't support sparse
+    // string columns yet anyway
+    bitset.resize(source_column.row_count());
+    if (bitset.count() != bitset.size()) {
+        handle_truncation(bitset, mapping.truncate_);
+        create_dense_bitmap(mapping.offset_bytes_, bitset, dest_column, AllocationType::DETACHABLE);
+    } // else there weren't any Nones or NaNs
+    // bitset.count() == 0 is the special case where all of the rows contained None or NaN. In this case, do not create
+    // the extra string and offset buffers. string_dict_from_block will then do the right thing and call minimal_strings_dict
+    if (bitset.count() > 0) {
+        auto& string_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE);
+        auto& offsets_buffer = dest_column.create_extra_buffer(mapping.offset_bytes_, ExtraBufferType::OFFSET, (unique_offsets_in_order.size() + 1) * sizeof(int64_t), AllocationType::DETACHABLE);
+        // Then go through unique_offsets to fill up the offset and string buffers.
+        auto offsets_ptr = reinterpret_cast<int64_t*>(offsets_buffer.data());
+        auto string_ptr = reinterpret_cast<char*>(string_buffer.data());
+        for (auto unique_offset: unique_offsets_in_order) {
+            const auto& entry = unique_offsets[unique_offset];
+            *offsets_ptr++ = entry.string_buffer_pos_;
+            memcpy(string_ptr, entry.strv.data(), entry.strv.size());
+            string_ptr += entry.strv.size();
+        }
+        *offsets_ptr = bytes;
     }
-    *offsets_ptr = bytes;
 }
 
 TypeDescriptor ArrowStringHandler::output_type(const TypeDescriptor&) const {
