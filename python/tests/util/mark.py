@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import sys
 import pytest
-from typing import Union
+from typing import Optional, Union
 from datetime import date
 from numpy import datetime64
 from copy import deepcopy
@@ -20,11 +20,53 @@ MACOS = sys.platform.lower().startswith("darwin")
 LINUX = sys.platform.lower().startswith("linux")
 WINDOWS = sys.platform.lower().startswith("win32")
 
+# Defined shorter logs on errors
+SHORTER_LOGS = marks.SHORTER_LOGS
+
+
+def getenv_strip(env_var_name: str, default_value: Optional[str] = None) -> Optional[str]:
+    """
+    Get environment variable and strip whitespace safely.
+
+    Useful for string variables that represent enum values like "0" and "1".
+    Returns the stripped value or the default if the variable is not set.
+    """
+    value = os.getenv(env_var_name)
+    return value.strip() if value is not None else default_value
+
+
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
 ARCTICDB_USING_CONDA = marks.ARCTICDB_USING_CONDA
 MACOS_CONDA_BUILD = ARCTICDB_USING_CONDA and MACOS
 MACOS_WHEEL_BUILD = not ARCTICDB_USING_CONDA and MACOS
+
+# These two should become pytest marks as opposed to variables feeding into skipif
+PERSISTENT_STORAGE_TESTS_ENABLED = getenv_strip("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
+FAST_TESTS_ONLY = getenv_strip("ARCTICDB_FAST_TESTS_ONLY") == "1"
+DISABLE_SLOW_TESTS = getenv_strip("ARCTICDB_DISABLE_SLOW_TESTS") == "1"
+STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3", "1") == "1" 
+STORAGE_GCP = getenv_strip("ARCTICDB_STORAGE_GCP") == "1"
+# Local storage tests are all LMDB, simulated and a real mongo process/service
+LOCAL_STORAGE_TESTS_ENABLED = getenv_strip("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", "1") == "1"
+# Each storage can be controlled individually
+STORAGE_LMDB = getenv_strip("ARCTICDB_STORAGE_LMDB") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+                                                                and getenv_strip("ARCTICDB_STORAGE_LMDB") != "0")
+STORAGE_AZURITE = getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+                                                                      and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0")
+STORAGE_MONGO = getenv_strip("ARCTICDB_STORAGE_MONGO") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+                                                                  and getenv_strip("ARCTICDB_STORAGE_MONGO") != "0")
+STORAGE_MEM = getenv_strip("ARCTICDB_STORAGE_MEM") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+                                                              and getenv_strip("ARCTICDB_STORAGE_MEM") != "0")
+STORAGE_NFS = getenv_strip("ARCTICDB_STORAGE_NFS") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+                                                              and getenv_strip("ARCTICDB_STORAGE_NFS") != "0")
+# When a real storage is turned on the simulated storage is turned off
+STORAGE_SIM_S3 = (not STORAGE_AWS_S3) and (getenv_strip("ARCTICDB_STORAGE_SIM_S3", "1") == "1" 
+                                           or LOCAL_STORAGE_TESTS_ENABLED == "1")
+STORAGE_SIM_GCP = (not STORAGE_GCP) and (getenv_strip("ARCTICDB_STORAGE_SIM_GCP", "1") == "1" 
+                                         or LOCAL_STORAGE_TESTS_ENABLED == "1")
+TEST_ENCODING_V1 = getenv_strip("ARCTICDB_TEST_ENCODING_V1", "1") == "1"
+TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "0") == "1"
 
 _MACOS_AZURE_TESTS_SKIP_REASON = (
     "Tests fail for macOS vcpkg builds, either because Azurite is improperly configured"
@@ -56,16 +98,6 @@ SLOW_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or DISABLE_SLOW_TESTS, reason="Skipping test as it takes a long time to run"
 )
 
-AZURE_TESTS_MARK = pytest.mark.skipif(
-    FAST_TESTS_ONLY or MACOS or not LOCAL_STORAGE_TESTS_ENABLED, reason=_MACOS_AZURE_TESTS_SKIP_REASON
-)
-"""Mark to skip all Azure tests when MACOS or ARCTICDB_FAST_TESTS_ONLY is set."""
-
-# Mongo tests will run under local storage tests
-MONGO_TESTS_MARK = pytest.mark.skipif(
-    FAST_TESTS_ONLY or sys.platform != "linux" or not LOCAL_STORAGE_TESTS_ENABLED,
-    reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY and if local storage tests are disabled",
-)
 """Mark on tests using the mongo storage fixtures. Currently skips if ARCTICDB_FAST_TESTS_ONLY."""
 
 REAL_S3_TESTS_MARK = pytest.mark.skipif(
@@ -90,13 +122,13 @@ REAL_AZURE_TESTS_MARK = pytest.mark.skipif(
 """Mark on tests using S3 model storage.
 """
 SIM_S3_TESTS_MARK = pytest.mark.skipif(
-    not LOCAL_STORAGE_TESTS_ENABLED,
+    not STORAGE_SIM_S3,
     reason="Ability to disable local storages - simulates s3 is disabled",
 )
 """Mark on tests using GCP model storage.
 """
 SIM_GCP_TESTS_MARK = pytest.mark.skipif(
-    not LOCAL_STORAGE_TESTS_ENABLED,
+    not STORAGE_SIM_GCP,
     reason="Ability to disable local storages - simulates gcp is disabled",
 )
 """Mark on tests using the real GCP storage.
@@ -110,18 +142,39 @@ LMDB_TESTS_MARK = pytest.mark.skipif(
 """Mark on tests using the MEM storage.
 """
 MEM_TESTS_MARK = pytest.mark.skipif(
-    not LOCAL_STORAGE_TESTS_ENABLED,
+    not STORAGE_MEM,
     reason="Ability to disable local storages - mem storage is disabled",
 )
 """Mark on tests using the NFS model storage.
 """
 SIM_NFS_TESTS_MARK = pytest.mark.skipif(
-    not LOCAL_STORAGE_TESTS_ENABLED,
+    not STORAGE_NFS,
     reason="Ability to disable local storages - simulated nfs is disabled",
 )
 """Mark on tests using the real GCP storage.
 """
+AZURE_TESTS_MARK = pytest.mark.skipif(
+    FAST_TESTS_ONLY or MACOS or not STORAGE_AZURITE, reason=_MACOS_AZURE_TESTS_SKIP_REASON
+)
+"""Mark to skip all Azure tests when MACOS or ARCTICDB_FAST_TESTS_ONLY is set."""
 
+# Mongo tests will run under local storage tests
+MONGO_TESTS_MARK = pytest.mark.skipif(
+    FAST_TESTS_ONLY or (not LINUX) or (not STORAGE_MONGO),
+    reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY and if local storage tests are disabled",
+)
+"""Mark on tests or fixtures that need to skip V1 encoding tests
+"""
+TEST_ENCODING_V1_MARK = pytest.mark.skipif(
+    not TEST_ENCODING_V1,
+    reason="Ability to disable encoding tests - V1 is disabled",
+)
+"""Mark on tests or fixtures that need to skip V2 encoding tests
+"""
+TEST_ENCODING_V2_MARK = pytest.mark.skipif(
+    not TEST_ENCODING_V2,
+    reason="Ability to disable encoding tests - V2 is disabled",
+)
 
 """Windows and MacOS have different handling of self-signed CA cert for test.
 TODO: https://github.com/man-group/ArcticDB/issues/1394"""
