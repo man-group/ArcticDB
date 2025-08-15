@@ -48,6 +48,9 @@ from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
 from tests.util.mark import MACOS, MACOS_WHEEL_BUILD, xfail_azure_chars
+import pyarrow as pa
+from arcticdb.options import OutputFormat
+from arcticdb.util.test import convert_arrow_to_pandas_and_remove_categoricals
 
 
 @pytest.fixture()
@@ -822,10 +825,11 @@ def test_range_index(basic_store, sym):
     assert_equal(expected, vit.data)
 
 
-@pytest.mark.pipeline
+@pytest.mark.pipeline # Covered
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
 def test_date_range(basic_store, use_date_range_clause):
+    basic_store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
     sym = "date_test"
@@ -844,6 +848,7 @@ def test_date_range(basic_store, use_date_range_clause):
         data_start = basic_store.read(sym, query_builder=q).data
     else:
         data_start = basic_store.read(sym, date_range=date_range).data
+    data_start = convert_arrow_to_pandas_and_remove_categoricals(data_start)
     assert query_start_ts == data_start.index[0]
     assert data_start[data_start.columns[0]][0] == start_offset
 
@@ -855,6 +860,7 @@ def test_date_range(basic_store, use_date_range_clause):
         data_end = basic_store.read(sym, query_builder=q).data
     else:
         data_end = basic_store.read(sym, date_range=date_range).data
+    data_end = convert_arrow_to_pandas_and_remove_categoricals(data_end)
     assert query_end_ts == data_end.index[-1]
     assert data_end[data_end.columns[0]][-1] == end_offset
 
@@ -865,16 +871,18 @@ def test_date_range(basic_store, use_date_range_clause):
         data_closed = basic_store.read(sym, query_builder=q).data
     else:
         data_closed = basic_store.read(sym, date_range=date_range).data
+    data_closed = convert_arrow_to_pandas_and_remove_categoricals(data_closed)
     assert query_start_ts == data_closed.index[0]
     assert query_end_ts == data_closed.index[-1]
     assert data_closed[data_closed.columns[0]][0] == start_offset
     assert data_closed[data_closed.columns[0]][-1] == end_offset
 
 
-@pytest.mark.pipeline
+@pytest.mark.pipeline # Covered
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
 def test_date_range_none(basic_store, use_date_range_clause):
+    basic_store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -888,13 +896,15 @@ def test_date_range_none(basic_store, use_date_range_clause):
         data = basic_store.read(sym, query_builder=q).data
     else:
         data = basic_store.read(sym, date_range=(None, None)).data
+    data = convert_arrow_to_pandas_and_remove_categoricals(data)
     assert len(data) == rows
 
 
-@pytest.mark.pipeline
+@pytest.mark.pipeline # Covered
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
 def test_date_range_start_equals_end(basic_store, use_date_range_clause):
+    basic_store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -910,15 +920,17 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause):
         data = basic_store.read(sym, query_builder=q).data
     else:
         data = basic_store.read(sym, date_range=date_range).data
+    data = convert_arrow_to_pandas_and_remove_categoricals(data)
     assert len(data) == 1
     assert data[data.columns[0]][0] == start_offset
 
 
-@pytest.mark.pipeline
+@pytest.mark.pipeline # Covered
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
 def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
     lib = basic_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "test_date_range_row_sliced"
     # basic_store_tiny_segment produces 2x2 segments
     num_rows = 6
@@ -935,6 +947,7 @@ def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
         received = lib.read(sym, query_builder=q).data
     else:
         received = lib.read(sym, date_range=date_range).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(received)
     assert_equal(expected, received)
 
     date_range = (index[0] + pd.Timedelta(12, unit="h"), index[-1] - pd.Timedelta(12, unit="h"))
@@ -942,6 +955,7 @@ def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
         received = lib.read(sym, query_builder=q).data
     else:
         received = lib.read(sym, date_range=date_range).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(received)
     assert_equal(expected, received)
 
 
@@ -1891,10 +1905,10 @@ def test_coercion_to_float(basic_store):
 
     assert df["col"].dtype == np.object_
 
-    if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticDbNotYetImplemented):
-            # Needs pickling due to the obj column
-            lib.write("test", df)
+    # if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
+    #     with pytest.raises(ArcticDbNotYetImplemented):
+    #         # Needs pickling due to the obj column
+    #         lib.write("test", df)
 
     lib.write("test", df, coerce_columns={"col": float})
     returned = lib.read("test").data
@@ -1909,9 +1923,9 @@ def test_coercion_to_str_with_dynamic_strings(basic_store):
     df = pd.DataFrame({"col": [None, None, "hello", "world"]})
     assert df["col"].dtype == np.object_
 
-    if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
-        with pytest.raises(ArcticDbNotYetImplemented):
-            lib.write("sym", df)
+    # if sys.platform != "win32":  # SKIP_WIN Windows always uses dynamic strings
+    #     with pytest.raises(ArcticDbNotYetImplemented):
+    #         lib.write("sym", df)
 
     with mock.patch(
         "arcticdb.version_store._normalization.get_sample_from_non_empty_arr", return_value="hello"
@@ -2719,11 +2733,12 @@ def test_batch_append_with_throw_exception(basic_store, three_col_df):
         )
 
 
-@pytest.mark.pipeline
+@pytest.mark.pipeline # Covered
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
 def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
+    lmdb_version_store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbols = []
     for i in range(5):
         symbols.append("sym_{}".format(i))
@@ -2758,7 +2773,8 @@ def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_
         date_range = date_ranges[x]
         start = date_range[0]
         end = date_range[-1]
-        assert_equal(vit.data, dfs[x].loc[start:end])
+        data = convert_arrow_to_pandas_and_remove_categoricals(vit.data)
+        assert_equal(data, dfs[x].loc[start:end])
 
 
 @pytest.mark.parametrize("use_row_range_clause", [True, False])

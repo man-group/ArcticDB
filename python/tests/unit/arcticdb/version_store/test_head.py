@@ -12,49 +12,58 @@ from pandas import DataFrame
 import pytest
 
 from arcticdb_ext.exceptions import InternalException
+from arcticdb.options import OutputFormat
+from arcticdb.util.test import convert_arrow_to_pandas_and_remove_categoricals
 
-
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 def generic_head_test(version_store, symbol, df, num_rows):
     version_store.write(symbol, df)
-    assert np.array_equal(df.head(num_rows), version_store.head(symbol, num_rows).data)
+    assert np.array_equal(df.head(num_rows), convert_arrow_to_pandas_and_remove_categoricals(version_store.head(symbol, num_rows).data))
 
 
 def test_head_large_segment(lmdb_version_store):
+    lmdb_version_store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = DataFrame({"x": np.arange(100_000, dtype=np.int64)})
     generic_head_test(lmdb_version_store, "test_head_large_segment", df, 50_000)
 
 
 def test_head_zero_num_rows(lmdb_version_store, one_col_df):
+    lmdb_version_store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     generic_head_test(lmdb_version_store, "test_head_zero_num_rows", one_col_df(), 0)
 
 
 def test_head_one_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     generic_head_test(lmdb_version_store_tiny_segment, "test_head_one_num_rows", one_col_df(), 1)
 
 
 def test_head_segment_boundary_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     # lmdb_version_store_tiny_segment has segment_row_size set to 2
     generic_head_test(lmdb_version_store_tiny_segment, "test_head_segment_boundary_num_rows", one_col_df(), 2)
 
 
 def test_head_multiple_segments(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     # lmdb_version_store_tiny_segment has segment_row_size set to 2
     generic_head_test(lmdb_version_store_tiny_segment, "test_head_multiple_segments", one_col_df(), 7)
 
 
 def test_head_negative_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     generic_head_test(lmdb_version_store_tiny_segment, "test_head_negative_num_rows", one_col_df(), -7)
 
 
 def test_head_num_rows_equals_table_length(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     # one_col_df generates a dataframe with 10 rows
     generic_head_test(lmdb_version_store_tiny_segment, "test_head_num_rows_greater_than_table_length", one_col_df(), 10)
 
 
 def test_head_negative_num_rows_equals_table_length(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     # one_col_df generates a dataframe with 10 rows
     generic_head_test(
         lmdb_version_store_tiny_segment, "test_head_negative_num_rows_equals_table_length", one_col_df(), -10
@@ -62,11 +71,13 @@ def test_head_negative_num_rows_equals_table_length(lmdb_version_store_tiny_segm
 
 
 def test_head_num_rows_greater_than_table_length(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     # one_col_df generates a dataframe with 10 rows
     generic_head_test(lmdb_version_store_tiny_segment, "test_head_num_rows_greater_than_table_length", one_col_df(), 11)
 
 
 def test_head_negative_num_rows_greater_than_table_length(lmdb_version_store_tiny_segment, one_col_df):
+    lmdb_version_store_tiny_segment.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     # one_col_df generates a dataframe with 10 rows
     generic_head_test(
         lmdb_version_store_tiny_segment, "test_head_negative_num_rows_greater_than_table_length", one_col_df(), -11
@@ -94,6 +105,7 @@ def test_head_with_column_filter(lmdb_version_store_tiny_segment, three_col_df):
 
 
 def test_head_pickled_symbol(lmdb_version_store):
+    lmdb_version_store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_head_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
@@ -104,8 +116,9 @@ def test_head_pickled_symbol(lmdb_version_store):
 @pytest.mark.parametrize("n", range(6))
 def test_dynamic_schema_head(lmdb_version_store_dynamic_schema, n):
     lib = lmdb_version_store_dynamic_schema
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     lib.write("sym", DataFrame({"a": [1, 2]}, index=[0, 1]))
     lib.append("sym", DataFrame({"b": [5, 6]}, index=[2, 3]))
-    result = lib.head("sym", n=n).data
+    result = convert_arrow_to_pandas_and_remove_categoricals(lib.head("sym", n=n).data)
     assert len(result) == min(n, 4)
     assert set(result.columns) == {"a", "b"}

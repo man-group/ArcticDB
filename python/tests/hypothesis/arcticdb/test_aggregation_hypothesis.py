@@ -21,9 +21,10 @@ from arcticdb.util.hypothesis import (
     column_strategy,
     supported_string_dtypes
 )
+from arcticdb.options import OutputFormat
 
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -39,6 +40,7 @@ pytestmark = pytest.mark.pipeline
 def test_aggregation_numeric(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_aggregation_numeric"
     lib.write(symbol, df)
 
@@ -73,6 +75,7 @@ def test_aggregation_numeric(lmdb_version_store_v1, df):
 def test_aggregation_strings(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_aggregation_strings"
     lib.write(symbol, df)
 
@@ -118,6 +121,7 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
     assume(any('grouping_column' in df.columns for df in dfs) and common_agg_type is not None)
 
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_aggregation_numeric_dynamic"
     lib.delete(symbol)
     for df in dfs:
@@ -158,6 +162,7 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
 def test_aggregation_strings_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_aggregation_strings_dynamic"
     lib.delete(symbol)
     slices = [

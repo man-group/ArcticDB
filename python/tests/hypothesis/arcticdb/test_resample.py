@@ -12,8 +12,8 @@ from arcticdb.util.test import (
     compute_common_type_for_columns
 )
 from arcticdb.util._versions import IS_PANDAS_TWO
-
 from arcticdb.util.logger import get_logger
+from arcticdb.options import OutputFormat
 
 
 COLUMN_DTYPE = ["float", "int", "uint"]
@@ -21,7 +21,7 @@ ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 MIN_DATE = np.datetime64('1969-06-01')
 MAX_DATE = np.datetime64('1970-06-01')
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 @st.composite
@@ -151,6 +151,7 @@ def dynamic_schema_column_list(draw):
 )
 def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "sym"
     logger = get_logger()
     logger.info(f"Data frame generated has {df.shape[0]} rows")
@@ -200,6 +201,7 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
 def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, rule, origin, offset):
     common_column_types = compute_common_type_for_columns_in_df_list(df_list)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     lib.version_store.clear()
     sym = "sym"
     agg = {f"{name}_{op}": (name, op) for name in common_column_types for op in ALL_AGGREGATIONS}

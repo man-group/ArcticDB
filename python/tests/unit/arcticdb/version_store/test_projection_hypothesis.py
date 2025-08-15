@@ -11,7 +11,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal_with_arrow
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     supported_numeric_dtypes,
@@ -20,9 +20,10 @@ from arcticdb.util.hypothesis import (
     column_strategy,
     numeric_type_strategies,
 )
+from arcticdb.options import OutputFormat
 
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -39,6 +40,7 @@ pytestmark = pytest.mark.pipeline
 def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_numeric_binary_operation"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -66,7 +68,7 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
                 df["c"] = pandas_lhs / pandas_rhs
             received = lib.read(symbol, query_builder=q).data
             try:
-                assert_frame_equal(df, received, check_dtype=False)
+                assert_frame_equal_with_arrow(df, received, check_dtype=False)
             except AssertionError as e:
                 original_df = lib.read(symbol).data
                 print(
@@ -82,19 +84,20 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
 def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_numeric_unary_operation"
     lib.write(symbol, df)
     q = QueryBuilder()
     q = q.apply("b", abs(q["a"]))
     df["b"] = abs(df["a"].astype(np.float64))
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received, check_dtype=False)
+    assert_frame_equal_with_arrow(df, received, check_dtype=False)
     q = QueryBuilder()
     q = q.apply("b", -q["a"])
     df["b"] = -(df["a"].astype(np.float64))
     received = lib.read(symbol, query_builder=q).data
     try:
-        assert_frame_equal(df, received, check_dtype=False)
+        assert_frame_equal_with_arrow(df, received, check_dtype=False)
     except AssertionError as e:
         original_df = lib.read(symbol).data
         print(
@@ -124,6 +127,7 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
 def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_numeric_binary_operation_dynamic"
     lib.delete(symbol)
     slices = [
@@ -157,7 +161,7 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
                 df["c"] = pandas_lhs / pandas_rhs
             received = lib.read(symbol, query_builder=q).data
             try:
-                assert_frame_equal(df, received, check_dtype=False)
+                assert_frame_equal_with_arrow(df, received, check_dtype=False)
             except AssertionError as e:
                 original_df = lib.read(symbol).data
                 print(
@@ -174,6 +178,7 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
 def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     symbol = "test_project_numeric_unary_operation_dynamic"
     lib.delete(symbol)
     slices = [
@@ -187,9 +192,9 @@ def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_sche
     q = q.apply("c", abs(q["a"]))
     df["c"] = abs(df["a"])
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received, check_dtype=False)
+    assert_frame_equal_with_arrow(df, received, check_dtype=False)
     q = QueryBuilder()
     q = q.apply("c", -q["a"])
     df["c"] = -df["a"]
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal(df, received, check_dtype=False)
+    assert_frame_equal_with_arrow(df, received, check_dtype=False)

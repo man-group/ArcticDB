@@ -92,6 +92,7 @@ class StorageFixture(_SaferContextManager):
         lib = protobuf_cfg.env_by_id[Defaults.ENV].lib_by_path[name]
         # Use symbol list by default (can still be overridden by kwargs)
         lib.version.symbol_list = True
+        lib.version.write_options.dynamic_strings = True # We use dynamic_strings=True by default for arrow tests
         apply_lib_cfg(lib, kwargs)
         out = ArcticMemoryConfig(protobuf_cfg, Defaults.ENV, native_cfg)[name]
         suffix = 0

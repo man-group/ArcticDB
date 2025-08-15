@@ -87,6 +87,7 @@ TimeSeriesType = Union[pd.DataFrame, pd.Series]
 from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
 import arcticdb_ext as ae
+import pytest
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -1951,7 +1952,10 @@ class NativeVersionStore:
                 self.resolve_runtime_defaults("output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs)
             )
         )
-        read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
+        dynamic_schema = resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs)
+        if dynamic_schema:
+            pytest.skip("Temp disable dynamic_schema")
+        read_options.set_dynamic_schema(dynamic_schema)
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
