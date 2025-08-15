@@ -93,6 +93,42 @@ def test_strings_basic(lmdb_version_store_arrow, dynamic_strings):
     assert_frame_equal_with_arrow(table, df)
 
 
+@pytest.mark.parametrize("row_range", [None, (2, 3), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6)])
+def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range):
+    lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    # lmdb_version_store_tiny_segment has 2 rows per segment
+    # This column is constructed so that every 2-element permutation of strings, Nones, and NaNs are tested
+    df = pd.DataFrame(
+        {
+            "x": [
+                "a",
+                "b",
+                "c",
+                None,
+                None,
+                "d",
+                "e",
+                np.nan,
+                np.nan,
+                "f",
+                None,
+                None,
+                None,
+                np.nan,
+                np.nan,
+                None,
+                np.nan,
+                np.nan,
+            ]
+        }
+    )
+    lib.write("arrow", df, dynamic_strings=True)
+    table = lib.read("arrow", row_range=row_range).data
+    expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
+
+
 @pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
 def test_fixed_width_strings(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
