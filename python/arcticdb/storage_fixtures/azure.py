@@ -193,15 +193,10 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             self.client_cert_dir = ""
         if self.http_protocol == "https":
             args += f" --key {self.key_file} --cert {self.cert_file}"
-        for i in range(2): # retry in case of connection problems
-            try:
-                self._p = GracefulProcessUtils.start(args, cwd=self.working_dir)
-                # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
-                # Due to this, we need to wait for the server to come up for a longer time                
-                wait_for_server_to_come_up(self.endpoint_root, "azurite", self._p, timeout=240)
-                continue
-            except AssertionError:
-                pass 
+        self._p = GracefulProcessUtils.start_with_retry(url=self.endpoint_root, 
+                                                        service_name="azurite", num_retries=2, timeout=240,
+                                                        process_start_cmd=args,
+                                                        cwd=self.working_dir)            
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
