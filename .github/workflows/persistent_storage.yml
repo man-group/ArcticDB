@@ -79,7 +79,10 @@ jobs:
       - name: Seed the storage
         if: inputs.job_type == 'seed'
         run: |
-          python -m pip install --force-reinstall  $(ls *${{env.python_impl_name}}*.whl)[Testing] pytest-split
+          pip download arcticdb --dest ./wheels
+          ls ./wheels
+          ls ./wheels/*
+          python -m pip install --force-reinstall  ./wheels/*.whl)[Testing] 
           echo "Running seed for ${{ env.ARCTICDB_PERSISTENT_STORAGE_UNIQUE_ID }} on ${{matrix.os}}_${{env.python_impl_name}}"
           python python/tests/util/storage_test.py --type seed --version ${{inputs.arcticdb_version}}
 
@@ -114,5 +117,8 @@ jobs:
       - name: Clean the storage
         run: |
           echo "Running cleanup for ${{ github.ref_name }}"
-          python -m pip install --force-reinstall  $(ls *${{env.python_impl_name}}*.whl)[Testing] pytest-split
+          pip download arcticdb --dest ./wheels
+          ls ./wheels
+          ls ./wheels/*
+          python -m pip install --force-reinstall  ./wheels/*.whl)[Testing] 
           python python/tests/util/storage_test.py --type cleanup
