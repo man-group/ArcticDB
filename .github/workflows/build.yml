@@ -230,6 +230,7 @@ jobs:
     secrets: inherit
     with:
       job_type: cleanup
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup, storage_type]
@@ -254,6 +255,8 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
+
 
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup, storage_type]
@@ -278,6 +281,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   cpp-test-linux:
     needs: [cibw_docker_image, common_config]
@@ -409,6 +413,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   persistent_storage_verify_windows:
     # This step is valid only for AWS_S3.
@@ -432,6 +437,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, storage_type]
@@ -446,6 +452,7 @@ jobs:
     secrets: inherit
     with:
       job_type: cleanup
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   build-python-wheels-macos:
     needs: [common_config, storage_type]
