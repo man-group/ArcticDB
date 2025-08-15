@@ -491,10 +491,10 @@ def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
     q = q[q["filter_column"] == 1]
     q.optimise_for_memory()
     expected = df.query("filter_column == 1")
-    received = lib.read(sym, query_builder=q).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(lib.read(sym, query_builder=q).data)
     assert np.array_equal(expected["filter_column"], received["filter_column"])
     assert received["string_column"].iloc[0] == "1"
-    assert np.isnan(received["string_column"].iloc[1])
+    assert received["string_column"].iloc[1] is None or np.isnan(received["string_column"].iloc[1])
     assert received["string_column"].iloc[2] is None
 
 
@@ -655,7 +655,7 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
     q = q[q["c"] == 22]
     pandas_query = "c == 22"
     expected = df.query(pandas_query).loc[:, ["a"]]
-    received = lib.read(symbol, columns=["a"], query_builder=q).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(lib.read(symbol, columns=["a"], query_builder=q).data)
     assert np.array_equal(expected, received)
 
     # Filter on column c (in second column slice), and display all columns
@@ -663,14 +663,14 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
     q = q[q["c"] == 22]
     pandas_query = "c == 22"
     expected = df.query(pandas_query)
-    received = lib.read(symbol, query_builder=q).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(lib.read(symbol, query_builder=q).data)
     assert np.array_equal(expected, received)
     # Filter on column c (in second column slice), and only display column c
     q = QueryBuilder()
     q = q[q["c"] == 22]
     pandas_query = "c == 22"
     expected = df.query(pandas_query).loc[:, ["c"]]
-    received = lib.read(symbol, columns=["c"], query_builder=q).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(lib.read(symbol, columns=["c"], query_builder=q).data)
     assert np.array_equal(expected, received)
 
 
@@ -738,7 +738,7 @@ def test_filter_string_backslash(lmdb_version_store_v1):
     symbol = "test_filter_string_backslash"
     lib.write(symbol, df, dynamic_strings=True)
     expected = pd.DataFrame({"a": ["\\"]}, index=np.arange(1, 2))
-    received = lib.read(symbol, query_builder=q).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(lib.read(symbol, query_builder=q).data)
     assert np.array_equal(expected, received)
 
 
@@ -751,7 +751,7 @@ def test_filter_string_single_quote(lmdb_version_store_v1):
     symbol = "test_filter_string_single_quote"
     lib.write(symbol, df, dynamic_strings=True)
     expected = pd.DataFrame({"a": ["'"]}, index=np.arange(1, 2))
-    received = lib.read(symbol, query_builder=q).data
+    received = convert_arrow_to_pandas_and_remove_categoricals(lib.read(symbol, query_builder=q).data)
     assert np.array_equal(expected, received)
 
 
@@ -1358,7 +1358,7 @@ def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment
             lib.append(symbol, df[1:2])
             lib.defragment_symbol_data(symbol, None)
             lib.append(symbol, df[2:])
-            received = lib.read(symbol, query_builder=q).data
+            received = convert_arrow_to_pandas_and_remove_categoricals(lib.read(symbol, query_builder=q).data)
             expected = df.query(pandas_query)
             assert np.array_equal(expected, received) and (not expected.empty and not received.empty)
 

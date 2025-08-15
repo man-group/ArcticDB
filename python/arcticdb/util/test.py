@@ -832,7 +832,7 @@ def generic_filter_test_nans(lib, symbol, arctic_query, expected):
             elif expected_val is None:
                 assert received_val is None
             elif np.isnan(expected_val):
-                assert np.isnan(received_val)
+                assert received_val is None or np.isnan(received_val)
 
 
 def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
