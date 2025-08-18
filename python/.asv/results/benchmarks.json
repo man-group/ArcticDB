@@ -1154,7 +1154,7 @@
         "version": "219e33422ea9ced5dc92ced39e0eea27dee1870cf991a82db139498f17446fe0"
     },
     "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache: CachedDFGenerator, param: int):\n        cachedDF = cache\n    \n        # Unfortunately there is no way to tell asv to run single time\n        # each of finalize_stage_data() tests if we do the large setup in the\n        # setup_cache() method. We can only force it to work with single execution\n        # if the symbol setup with stage data is in the setup() method\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(\n            0, cachedDF.TIME_UNIT\n        )  # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
+        "code": "class FinalizeStagedData:\n    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache: CachedDFGenerator, param: int):\n        cachedDF = cache\n        self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.lib_name)\n        self.symbol = f\"symbol{param}\"\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        ac = Arctic(f\"lmdb://{FinalizeStagedData.ARCTIC_DIR}?map_size=40GB\")\n        ac.delete_library(self.lib_name)\n        lib = ac.create_library(self.lib_name)\n        for param in FinalizeStagedData.params:\n            symbol = f\"symbol{param}\"\n            INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(\n                0, cachedDF.TIME_UNIT\n            )  # Synchronize index frequency\n    \n            df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n            list_of_chunks = [10000] * param\n    \n            lib.write(symbol, data=df, prune_previous_versions=True)\n            print(\"LIBRARY:\", lib)\n            print(\"Created Symbol:\", symbol)\n            stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)\n    \n        return cachedDF",
         "name": "finalize_staged_data.FinalizeStagedData.peakmem_finalize_staged_data",
         "param_names": [
             "param1"
@@ -1165,14 +1165,14 @@
                 "2000"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:41",
+        "setup_cache_key": "finalize_staged_data:45",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "9dcfdaf896125a0fe0d16b5538b5a8b556997064e107c8b58b93dc6e6f32d8b1"
+        "version": "ee741047ef3b219be91e94d1412f8239f8271eab8c951f430067c85afd3295ed"
     },
     "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data": {
-        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache: CachedDFGenerator, param: int):\n        cachedDF = cache\n    \n        # Unfortunately there is no way to tell asv to run single time\n        # each of finalize_stage_data() tests if we do the large setup in the\n        # setup_cache() method. We can only force it to work with single execution\n        # if the symbol setup with stage data is in the setup() method\n    \n        self.ac = Arctic(f\"lmdb://{self.lib_name}{param}?map_size=40GB\")\n        self.ac.delete_library(self.lib_name)\n        self.lib = self.ac.create_library(self.lib_name)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(\n            0, cachedDF.TIME_UNIT\n        )  # Synchronize index frequency\n    \n        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n        list_of_chunks = [10000] * param\n        self.symbol\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        return cachedDF",
+        "code": "class FinalizeStagedData:\n    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        print(\">>> Library:\", self.lib)\n        print(\">>> Symbol:\", self.symbol)\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache: CachedDFGenerator, param: int):\n        cachedDF = cache\n        self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)\n        self.lib = self.ac.get_library(self.lib_name)\n        self.symbol = f\"symbol{param}\"\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data types\n        cachedDF = CachedDFGenerator(350000, [5])\n        ac = Arctic(f\"lmdb://{FinalizeStagedData.ARCTIC_DIR}?map_size=40GB\")\n        ac.delete_library(self.lib_name)\n        lib = ac.create_library(self.lib_name)\n        for param in FinalizeStagedData.params:\n            symbol = f\"symbol{param}\"\n            INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(\n                0, cachedDF.TIME_UNIT\n            )  # Synchronize index frequency\n    \n            df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)\n            list_of_chunks = [10000] * param\n    \n            lib.write(symbol, data=df, prune_previous_versions=True)\n            print(\"LIBRARY:\", lib)\n            print(\"Created Symbol:\", symbol)\n            stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)\n        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.\n        # Then on each teardown we restore the initial state by overwriting the modified with the original.\n        copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)\n    \n        return cachedDF",
         "min_run_count": 1,
         "name": "finalize_staged_data.FinalizeStagedData.time_finalize_staged_data",
         "number": 1,
@@ -1185,14 +1185,14 @@
                 "2000"
             ]
         ],
-        "repeat": 1,
+        "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:41",
+        "setup_cache_key": "finalize_staged_data:45",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "c3c02d1e2369dd420b2e241fc69c4c8872d31da89d0c19c1111d503a84fb9521",
+        "version": "f2a5d04e2fed62444d7c81da518585fa0f1815cda78fe52f2e9c2e514ac66650",
         "warmup_time": 0
     },
     "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.peakmem_finalize_staged_data": {
@@ -1207,7 +1207,7 @@
                 "2000"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:92",
+        "setup_cache_key": "finalize_staged_data:103",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1227,10 +1227,10 @@
                 "2000"
             ]
         ],
-        "repeat": 1,
+        "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:92",
+        "setup_cache_key": "finalize_staged_data:103",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",

@@ -12,6 +12,7 @@ from arcticdb.arctic import Arctic
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from .common import *
+from shutil import copytree, rmtree
 
 
 class FinalizeStagedData:
@@ -23,8 +24,13 @@ class FinalizeStagedData:
 
     number = 1
     rounds = 1
-    repeat = 1
+    repeat = 5
     min_run_count = 1
+
+    ARCTIC_DIR = "staged_data"
+    ARCTIC_DIR_ORIGINAL = "staged_data_original"
+    CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}?map_size=40GB"
+
 
     warmup_time = 0    
     timeout = 600
@@ -35,36 +41,37 @@ class FinalizeStagedData:
 
     def __init__(self):
         self.lib_name = FinalizeStagedData.LIB_NAME
-        self.symbol = "symbol"
-        self.time_runs = {}
 
     def setup_cache(self):
         # Generating dataframe with all kind of supported data types
         cachedDF = CachedDFGenerator(350000, [5])
-        return cachedDF
+        ac = Arctic(f"lmdb://{FinalizeStagedData.ARCTIC_DIR}?map_size=40GB")
+        ac.delete_library(self.lib_name)
+        lib = ac.create_library(self.lib_name)
+        for param in FinalizeStagedData.params:
+            symbol = f"symbol{param}"
+            INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(
+                0, cachedDF.TIME_UNIT
+            )  # Synchronize index frequency
 
+            df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)
+            list_of_chunks = [10000] * param
+
+            lib.write(symbol, data=df, prune_previous_versions=True)
+            print("LIBRARY:", lib)
+            print("Created Symbol:", symbol)
+            stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
+        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.
+        # Then on each teardown we restore the initial state by overwriting the modified with the original.
+        copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
+
+        return cachedDF
+    
     def setup(self, cache: CachedDFGenerator, param: int):
         cachedDF = cache
-
-        # Unfortunately there is no way to tell asv to run single time
-        # each of finalize_stage_data() tests if we do the large setup in the
-        # setup_cache() method. We can only force it to work with single execution
-        # if the symbol setup with stage data is in the setup() method
-
-        self.ac = Arctic(f"lmdb://{self.lib_name}{param}?map_size=40GB")
-        self.ac.delete_library(self.lib_name)
-        self.lib = self.ac.create_library(self.lib_name)
-
-        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(
-            0, cachedDF.TIME_UNIT
-        )  # Synchronize index frequency
-
-        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)
-        list_of_chunks = [10000] * param
-        self.symbol
-
-        self.lib.write(self.symbol, data=df, prune_previous_versions=True)
-        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
+        self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)
+        self.lib = self.ac.get_library(self.lib_name)
+        self.symbol = f"symbol{param}"
 
     def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
         print(">>> Library:", self.lib)
@@ -77,7 +84,11 @@ class FinalizeStagedData:
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
     def teardown(self, cache: CachedDFGenerator, param: int):
-        self.ac.delete_library(self.lib_name)
+        # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
+        # TODO: We can use dirs_exist_ok=True on copytree instead of removing first if we run with python version >=3.8
+        rmtree(FinalizeStagedData.ARCTIC_DIR)
+        copytree(FinalizeStagedData.ARCTIC_DIR_ORIGINAL, FinalizeStagedData.ARCTIC_DIR)
+        del self.ac
 
 
 from asv_runner.benchmarks.mark import SkipNotImplemented
