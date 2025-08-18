@@ -36,7 +36,7 @@ def pytest_runtest_makereport(item, call):
                 marked_tests.append(item.nodeid)
                 return report
 
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
+def pytest_terminal_summary(terminalreporter, exitstatus):
     if marked_tests:
         terminalreporter.write("\n=== SPECIAL XFAIL SUMMARY ===\n", bold=True)
         for test_id in marked_tests:
