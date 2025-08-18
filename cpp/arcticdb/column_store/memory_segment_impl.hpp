@@ -126,8 +126,7 @@ public:
         private:
             friend class boost::iterator_core_access;
 
-            template<class> friend
-                class SegmentIterator;
+            template<class> friend  class SegmentRowIterator;
 
             template<class OtherValue>
             bool equal(const RowIterator<OtherValue> &other) const {
@@ -227,65 +226,62 @@ public:
     };
 
     template<class ValueType>
-        class SegmentIterator
-            : public boost::iterator_facade<SegmentIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
-        public:
-            using value_type = ValueType;
+    class SegmentRowIterator
+        : public boost::iterator_facade<SegmentRowIterator<ValueType>, ValueType, boost::random_access_traversal_tag> {
+    public:
+        using value_type = ValueType;
 
-            explicit SegmentIterator(SegmentInMemoryImpl *parent) :
-            row_(parent, 0) {
-            }
+        explicit SegmentRowIterator(SegmentInMemoryImpl *parent) :
+        row_(parent, 0) {
+        }
 
-            ~SegmentIterator() = default;
+        ~SegmentRowIterator() = default;
 
-            SegmentIterator(const SegmentIterator& other) = default;
+        SegmentRowIterator(const SegmentRowIterator& other) = default;
 
-            SegmentIterator &operator=(const SegmentIterator &other) {
-                row_.swap_parent(other.row_);
-                row_.row_id_ = other.row_.row_id_;
-                return *this;
-            }
+        SegmentRowIterator &operator=(const SegmentRowIterator &other) {
+            row_.swap_parent(other.row_);
+            row_.row_id_ = other.row_.row_id_;
+            return *this;
+        }
 
-            SegmentIterator(SegmentInMemoryImpl *parent, ssize_t row_id_) :
-            row_(parent, row_id_) {
-            }
+        SegmentRowIterator(SegmentInMemoryImpl *parent, ssize_t row_id_) :
+        row_(parent, row_id_) {
+        }
 
-            template<class OtherValue>
-                explicit SegmentIterator(const SegmentIterator<OtherValue> &other)
-                : row_(other.row_) {}
+        template<class OtherValue>
+            explicit SegmentRowIterator(const SegmentRowIterator<OtherValue> &other)
+            : row_(other.row_) {}
 
-        private:
-            friend class boost::iterator_core_access;
+    private:
+        friend class boost::iterator_core_access;
 
-            template<class> friend
-                class SegmentIterator;
+        template<class> friend class SegmentRowIterator;
 
-            template<class OtherValue>
-            bool equal(const SegmentIterator<OtherValue> &other) const {
-                return row_ == other.row_;
-            }
+        template<class OtherValue>
+        bool equal(const SegmentRowIterator<OtherValue> &other) const {
+            return row_ == other.row_;
+        }
 
-            std::ptrdiff_t distance_to(const SegmentIterator &other) const {
-                return other.row_.row_id_ - row_.row_id_;
-            }
+        std::ptrdiff_t distance_to(const SegmentRowIterator &other) const {
+            return other.row_.row_id_ - row_.row_id_;
+        }
 
-            void increment() { ++row_.row_id_; }
+        void increment() { ++row_.row_id_; }
 
-            void decrement() { --row_.row_id_; }
+        void decrement() { --row_.row_id_; }
 
-            void advance(ptrdiff_t n) { row_.row_id_ += n; }
+        void advance(ptrdiff_t n) { row_.row_id_ += n; }
 
-            ValueType &dereference() const {
-                return row_;
-            }
+        ValueType &dereference() const {
+            return row_;
+        }
 
-            mutable Row row_;
-        };
+        mutable Row row_;
+    };
 
-    using iterator = SegmentIterator<Row>;
-    using const_iterator = SegmentIterator<const Row>;
-
-
+    using iterator = SegmentRowIterator<Row>;
+    using const_iterator = SegmentRowIterator<const Row>;
 
     SegmentInMemoryImpl();
 
