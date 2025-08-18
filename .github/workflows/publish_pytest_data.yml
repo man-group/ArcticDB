@@ -26,6 +26,8 @@ jobs:
           # We are using an absolute path here because for some reason the upload-artifact action
           # does not work correctly with a relative path.
           echo "ARTEFACT_PATH=/tmp/${{ github.run_id }}" >> $GITHUB_ENV
+          # get the current date and time in UTC
+          echo "GITHUB_RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
 
       - name: Gather pytest xmls from run ${{ github.run_id }}
         id: gather-pytest-xmls
@@ -62,4 +64,4 @@ jobs:
       - name: Process pytest xmls
         run: |
           ls -R ${{ env.ARTEFACT_PATH }}
-          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --run-id ${{ github.run_id }}
+          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --use-github-actions

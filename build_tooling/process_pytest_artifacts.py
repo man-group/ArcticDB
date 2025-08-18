@@ -25,11 +25,7 @@ def fetch_page(page, per_page=100):
         f"/repos/man-group/ArcticDB/actions/runs?per_page={per_page}&page={page}",
     ]
 
-    output = subprocess.run(cmd, capture_output=True, text=True)
-
-    if output.returncode != 0:
-        print(f"Error on page {page}: {output.stderr}")
-        return []
+    output = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
     data = json.loads(output.stdout)
     runs = data.get("workflow_runs", [])
@@ -39,6 +35,84 @@ def fetch_page(page, per_page=100):
 
     print(f"Fetched page {page}: {len(runs)} runs")
     return runs
+
+
+def get_total_runs_and_pages(per_page=100):
+    """Get total number of runs and pages by checking the first page response"""
+    cmd = [
+        "gh",
+        "api",
+        "-H",
+        "Accept: application/vnd.github+json",
+        "-H",
+        "X-GitHub-Api-Version: 2022-11-28",
+        f"/repos/man-group/ArcticDB/actions/runs?per_page={per_page}&page=1",
+    ]
+
+    output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+
+    data = json.loads(output.stdout)
+    total_count = data.get("total_count", 0)
+
+    # Calculate total pages
+    total_pages = (total_count + per_page - 1) // per_page  # Ceiling division
+
+    print(f"Total runs: {total_count}, Total pages: {total_pages}")
+    return total_count, total_pages
+
+
+class Run:
+    def __init__(self, run):
+        self.run_id = run["id"]
+        self.branch = run["head_branch"]
+        self.timestamp = pd.to_datetime(run["run_started_at"])
+        self.commit_hash = run["head_commit"]["id"]
+        self.run_status = run.get("status", "Unknown")
+        self.run_conclusion = run.get("conclusion", "Unknown")
+        self.artifacts_url = run.get("artifacts_url", "")
+
+    @property
+    def unix_timestamp(self):
+        """Get UNIX timestamp (seconds since epoch)"""
+        return int(self.timestamp.timestamp())
+
+    @property
+    def unix_timestamp_ms(self):
+        """Get UNIX timestamp in milliseconds"""
+        return int(self.timestamp.timestamp() * 1000)
+
+    def __str__(self):
+        return f"Run(run_id={self.run_id}, branch={self.branch}, timestamp={self.timestamp.strftime('%Y-%m-%d %H:%M:%S')} (UNIX: {self.unix_timestamp}), commit_hash={self.commit_hash})"
+
+    def __repr__(self):
+        return self.__str__()
+
+
+def create_run_from_github_actions():
+    import os
+
+    run_id = os.environ.get("GITHUB_RUN_ID")
+    branch = os.environ.get("GITHUB_REF_NAME")
+    commit_hash = os.environ.get("GITHUB_SHA")
+
+    start_time = os.environ.get("GITHUB_RUN_STARTED_AT")
+    if not start_time:
+        start_time = pd.Timestamp.now().isoformat()
+
+    if not all([run_id, branch, commit_hash]):
+        raise ValueError(
+            f"Missing required GitHub Actions environment variables. "
+            f"GITHUB_RUN_ID: {run_id}, GITHUB_REF_NAME: {branch}, GITHUB_SHA: {commit_hash}"
+        )
+
+    run_dict = {
+        "id": run_id,
+        "head_branch": branch,
+        "run_started_at": start_time,
+        "head_commit": {"id": commit_hash},
+    }
+
+    return Run(run_dict)
 
 
 def get_artifacts_for_run(artifact_download_url):
@@ -53,11 +127,10 @@ def get_artifacts_for_run(artifact_download_url):
         f"{artifact_download_url}",
     ]
 
-    output = subprocess.run(cmd, capture_output=True, text=True)
+    output = subprocess.run(cmd, capture_output=True, text=True, check=True)
 
     if output.returncode != 0:
-        print(f"Error getting artifacts for run {artifact_download_url}: {output.stderr}")
-        return []
+        raise Exception(f"Error getting artifacts for run {artifact_download_url}: {output.stderr}")
 
     data = json.loads(output.stdout)
     artifacts = data.get("artifacts", [])
@@ -66,11 +139,10 @@ def get_artifacts_for_run(artifact_download_url):
     return artifacts
 
 
-def download_artifact(artifact, download_dir):
+def download_artifact(run: Run, artifact: dict, download_dir: Path) -> Path:
     """Download a single artifact"""
     artifact_id = artifact["id"]
     artifact_name = artifact["name"]
-    download_url = artifact["archive_download_url"]
 
     # check if the file contains pytest
     if "pytest" not in artifact_name:
@@ -78,14 +150,13 @@ def download_artifact(artifact, download_dir):
         return None
 
     # Create directory for this artifact
-    artifact_dir = download_dir / f"run_{artifact['workflow_run']['id']}_{artifact_name}"
+    artifact_dir = download_dir / f"run_{run.run_id}_{artifact_name}"
 
     # check if the directory already exists
     if artifact_dir.exists():
-        # print(f"Artifact {artifact_name} already exists, skipping...")
-        return None
+        raise Exception(f"Artifact {artifact_name} already exists")
 
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir.mkdir(parents=True)
 
     # Download the zip file
     zip_path = artifact_dir / f"{artifact_name}.zip"
@@ -109,14 +180,8 @@ def download_artifact(artifact, download_dir):
             f"/repos/man-group/ArcticDB/actions/artifacts/{artifact_id}/zip",
         ]
 
-        output = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE)
+        subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, check=True)
 
-    if output.returncode != 0:
-        print(f"Error downloading {artifact_name}: {output.stderr.decode()}")
-        zip_path.unlink(missing_ok=True)  # Remove the file if download failed
-        return None
-
-    # print(f"Downloaded {artifact_name} to {zip_path}")
     return zip_path
 
 
@@ -161,7 +226,6 @@ def unify_xml_for_run(run_id, download_dir):
         # run_16522631587_pytest-linux-cp38-{hypothesis,nonreg,scripts}-DefaultCache
         artifact_name = run_dir.replace(f"run_{run_id}_", "")
 
-        # Extract Python version
         python_version = None
         py_match = re.search(r"cp(\d+)", artifact_name)
         test_type = artifact_name.split("-")[3]
@@ -175,7 +239,9 @@ def unify_xml_for_run(run_id, download_dir):
 
         python_version = f"3.{subversion}"
 
-        return python_version, test_type
+        cache_type = artifact_name.split("-")[4]
+
+        return python_version, test_type, cache_type
 
     xml_files = []
 
@@ -202,7 +268,7 @@ def unify_xml_for_run(run_id, download_dir):
 
     # Process each XML file
     for xml_file in xml_files:
-        python_version, test_type = parse_artifact_info_from_path(xml_file)
+        python_version, test_type, cache_type = parse_artifact_info_from_path(xml_file)
 
         try:
             tree = ET.parse(xml_file)
@@ -219,10 +285,12 @@ def unify_xml_for_run(run_id, download_dir):
             file_testsuite.set("python_version", python_version)
         if test_type:
             file_testsuite.set("test_type", test_type)
+        if cache_type:
+            file_testsuite.set("cache_type", cache_type)
 
         # Copy attributes from original testsuite
         for key, value in root.attrib.items():
-            if key not in ["name", "source_file", "python_version", "test_type"]:
+            if key not in ["name", "source_file", "python_version", "test_type", "cache_type"]:
                 file_testsuite.set(key, value)
 
         # Process all testcases
@@ -241,6 +309,8 @@ def unify_xml_for_run(run_id, download_dir):
                     new_testcase.set("python_version", python_version)
                 if test_type:
                     new_testcase.set("test_type", test_type)
+                if cache_type:
+                    new_testcase.set("cache_type", cache_type)
 
                 # Copy child elements (failure, error, skipped, etc.)
                 for child in testcase:
@@ -312,7 +382,7 @@ def create_csv_from_unified_xml(unified_xml_path, csv_path=None):
     for testsuite in root.findall(".//testsuite"):
         python_version = testsuite.get("python_version", "unknown")
         test_type = testsuite.get("test_type", "unknown")
-
+        cache_type = testsuite.get("cache_type", "unknown")
         # Process each testcase
         for testcase in testsuite.findall(".//testcase"):
             test_name = testcase.get("name", "unknown")
@@ -348,6 +418,7 @@ def create_csv_from_unified_xml(unified_xml_path, csv_path=None):
                 "status": status,
                 "time": time,
                 "message": message,
+                "cache_type": cache_type,
             }
 
             csv_rows.append(row)
@@ -371,7 +442,7 @@ def create_csv_from_unified_xml(unified_xml_path, csv_path=None):
     return csv_path
 
 
-def download_pytest_xmls_in_parallel(runs, download_dir, max_workers=5):
+def download_pytest_xmls_in_parallel(runs, download_dir, max_workers):
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_run = {}
         for run in runs:
@@ -383,43 +454,26 @@ def download_pytest_xmls_in_parallel(runs, download_dir, max_workers=5):
             print(f"Downloaded {len(downloaded_files)} files for run {run}")
 
 
-def process_workflow_run(run: Union[dict, str], download_dir: Path) -> List[Path]:
+def process_workflow_run(run: Run, download_dir: Path) -> List[Path]:
     """Process a single workflow run - get artifacts and download them"""
-    if isinstance(run, dict):
-        run_id = run["id"]
-        run_name = run.get("name", "Unknown")
-        run_status = run.get("status", "Unknown")
-        run_conclusion = run.get("conclusion", "Unknown")
-        run_started_at = run.get("run_started_at", "Unknown")
-    else:
-        assert isinstance(run, str), f"Run must be a dict or a string, got {type(run)}"
-        run_id = run
-        run_name = "Unknown"
-        run_status = "Completed"
-        run_conclusion = "Unknown"
-        run_started_at = "Unknown"
 
-    if run_conclusion == "cancelled":
-        print(f"Skipping run {run_id} - cancelled")
+    if run.run_conclusion.lower() == "cancelled":
+        print(f"Skipping run {run.run_id} - cancelled")
         return []
 
-    print(f"\nProcessing run {run_id}: {run_name} ({run_status}/{run_conclusion}) {run_started_at}")
+    print(f"\nProcessing run {run.run_id}: ({run.run_status}/{run.run_conclusion}) {run.timestamp}")
 
     # Only process completed runs
-    if run_status.lower() != "completed":
-        print(f"Skipping run {run_id} - not completed")
+    if run.run_status.lower() != "completed":
+        print(f"Skipping run {run.run_id} - not completed")
         return []
 
     downloaded_zips = []
-    # Get artifacts for this run
-    if isinstance(run, dict):
-        artifacts = get_artifacts_for_run(run["artifacts_url"])
-        for artifact in artifacts:
-            zip_path = download_artifact(artifact, download_dir)
-            if zip_path:
-                downloaded_zips.append(zip_path)
-    else:
-        downloaded_zips = list(download_dir.glob("*.zip"))
+    artifacts = get_artifacts_for_run(run.artifacts_url)
+    for artifact in artifacts:
+        zip_path = download_artifact(run, artifact, download_dir)
+        if zip_path:
+            downloaded_zips.append(zip_path)
 
     downloaded_files = []
     for zip_path in downloaded_zips:
@@ -442,22 +496,22 @@ def extract_csv_from_xmls(run_id, download_dir):
     return csv_path
 
 
-def get_all_workflow_runs_parallel(max_workers=5, max_pages=20):
+def get_all_workflow_runs_parallel(max_workers, max_pages=None):
     """Get all workflow runs using parallel requests"""
     all_runs = []
 
-    # First, get the first page
-    first_page = fetch_page(1, 100)
-    if not first_page:
-        return []
-
-    all_runs.extend(first_page)
+    # If max_pages is not provided, determine it dynamically
+    if max_pages is None:
+        print("Determining total number of pages dynamically...")
+        total_runs, total_pages = get_total_runs_and_pages(100)
+        max_pages = total_pages
+        print(f"Found {total_runs} total runs across {total_pages} pages")
 
     # Fetch remaining pages in parallel
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_page = {}
 
-        for page_num in range(2, max_pages + 1):
+        for page_num in range(1, max_pages + 1):
             future = executor.submit(fetch_page, page_num, 100)
             future_to_page[future] = page_num
 
@@ -473,6 +527,7 @@ def get_all_workflow_runs_parallel(max_workers=5, max_pages=20):
             except Exception as e:
                 print(f"Error processing page {page_num}: {e}")
 
+    all_runs = [Run(run) for run in all_runs]
     return all_runs
 
 
@@ -488,57 +543,71 @@ def get_results_lib(arcticdb_library, arcticdb_client_override=None):
     return lib
 
 
-def save_csv_files_to_lib(csv_files):
+def save_csv_files_to_lib(run_ids, csv_files):
     lib = get_results_lib("pytest_results")
 
     for csv_file in csv_files:
         run_id = csv_file.stem
         print(f"Saving {csv_file} for {run_id}")
         df = pd.read_csv(csv_file)
-        lib.write(run_id, df)
+        run = run_ids[run_id]
+        symbol = f"{run.branch}_{run.commit_hash}_{run.timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{run.run_id}"
+        lib.write(symbol, df)
+
+    # run a list_symbols to compact the symbol list, if needed
+    lib.list_symbols()
 
 
 @click.command()
 @click.option("--max-workers", type=int, default=5)
-@click.option("--max-pages", type=int, default=20)
 @click.option("--download-dir", type=str, default="gh_artifacts")
-@click.option("--run-id", type=str, default=None)
-def main(max_workers, max_pages, download_dir, run_id):
-    # Configuration
+@click.option("--max-pages", type=int, default=None, help="Maximum number of pages to fetch (default: auto-detect)")
+@click.option(
+    "--use-github-actions",
+    is_flag=True,
+    default=False,
+    help="Automatically use GitHub Actions environment variables to construct Run object",
+)
+def main(max_workers, download_dir, max_pages, use_github_actions):
     download_dir = Path(download_dir)
-
-    if run_id is None:
-        # Get all workflow runs
-        if not download_dir.exists():
-            print(f"Download directory {download_dir} does not exist")
-
-            # Get workflow runs
-            print("Fetching workflow runs...")
-            start_time = time.time()
-            all_runs = get_all_workflow_runs_parallel(max_workers=max_workers, max_pages=max_pages)
-            end_time = time.time()
-
-            print(f"\nTotal workflow runs fetched: {len(all_runs)}")
-            print(f"Time taken: {end_time - start_time:.2f} seconds")
-
-            print("Downloading pytest XMLs...")
-            start_time = time.time()
-            download_pytest_xmls_in_parallel(all_runs, download_dir, max_workers=max_workers)
-            end_time = time.time()
-            print(f"Time taken: {end_time - start_time:.2f} seconds")
-        else:
-            all_runs = [run.stem.split("_")[1] for run in download_dir.glob("*.xml")]
+    if use_github_actions:
+        try:
+            run_obj = create_run_from_github_actions()
+            print(f"Created Run object from GitHub Actions environment: {run_obj}")
+            all_runs = {run_obj.run_id: run_obj}
+        except Exception as e:
+            print(f"Error creating Run object from GitHub Actions environment: {e}")
+            print("Falling back to manual parameter mode...")
+            use_github_actions = False
     else:
-        # Get a single workflow run
-        all_runs = [run_id]
+        # Get workflow runs
+        print("Fetching workflow runs...")
+        start_time = time.time()
+        all_runs = get_all_workflow_runs_parallel(max_workers, max_pages)
+        all_runs = {run.run_id: run for run in all_runs}
+        end_time = time.time()
 
-    # Process runs and download artifacts
+        print(f"\nTotal workflow runs fetched: {len(all_runs)}")
+        print(f"Time taken: {end_time - start_time:.2f} seconds")
+
+        print("Downloading pytest XMLs...")
+        start_time = time.time()
+        try:
+            download_dir.mkdir(parents=True)
+            download_pytest_xmls_in_parallel(all_runs.values(), download_dir, max_workers)
+        except Exception as e:
+            print(f"Error downloading pytest XMLs: {e}")
+            download_dir.rmdir()
+            raise
+
+        end_time = time.time()
+        print(f"Time taken: {end_time - start_time:.2f} seconds")
+
     print(f"\nProcessing {len(all_runs)} workflow runs...")
 
-    # Process runs in parallel
     all_csv_files = []
-    for run in all_runs:
-        csv_file = extract_csv_from_xmls(run, download_dir)
+    for run_id in all_runs.keys():
+        csv_file = extract_csv_from_xmls(run_id, download_dir)
         all_csv_files.append(csv_file)
 
     assert len(all_csv_files) == len(all_runs), (
@@ -549,7 +618,7 @@ def main(max_workers, max_pages, download_dir, run_id):
     print(f"\nProduced {len(all_csv_files)} CSV files")
     print(f"All files saved to: {download_dir.absolute()}")
 
-    save_csv_files_to_lib(all_csv_files)
+    save_csv_files_to_lib(all_runs, all_csv_files)
 
 
 if __name__ == "__main__":
