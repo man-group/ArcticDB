@@ -265,16 +265,13 @@ jobs:
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
         echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
 
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
-      if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
-
     - name: Set ArcticDB Debug Logging
       if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
       uses: ./.github/actions/enable_logging
 
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
+      shell: bash -l {0} 
       if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
