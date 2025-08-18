@@ -271,7 +271,6 @@ jobs:
 
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
-      shell: bash -l {0} 
       if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
@@ -303,6 +302,7 @@ jobs:
         name: logs-${{ matrix.os || inputs.os }}-${{ matrix.python || inputs.python}}
         path: |
           ./*test*        
+          **/*.log
 
 
           
