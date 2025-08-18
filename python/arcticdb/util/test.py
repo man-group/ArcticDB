@@ -19,6 +19,7 @@ import random
 import time
 import attr
 from functools import wraps, reduce
+from arcticdb.dependencies import pyarrow as pa
 
 from arcticdb.util.marks import SHORTER_LOGS
 
@@ -29,6 +30,7 @@ except ImportError:
 
 from arcticdb import QueryBuilder
 from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.util.arrow import stringify_dictionary_encoded_columns
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -253,38 +255,15 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
 
 
 def convert_arrow_to_pandas_and_remove_categoricals(table):
-    """
-    Converts a pyarrow.Table to a pandas.DataFrame and unwinds all dictionary encoded columns.
-
-    Useful for testing because ArcticDB currently returns string columns in arrow as dictionary encoded, but when
-    comparing to the source pandas dataframes we want regular string columns instead of categoricals.
-    """
-    import pyarrow as pa
-    new_columns = []
-    new_fields = []
-    metadata = table.schema.metadata
-
-    for i, col in enumerate(table.columns):
-        field = table.field(i)
-        if isinstance(field.type, pa.DictionaryType):
-            col = pa.compute.cast(col, field.type.value_type)
-            field = field.with_type(field.type.value_type)
-        new_columns.append(col)
-        new_fields.append(field)
-
-    new_table = pa.Table.from_arrays(
-        new_columns,
-        schema=pa.schema(new_fields).with_metadata(metadata)
-    )
+    new_table = stringify_dictionary_encoded_columns(table)
     return new_table.to_pandas()
 
-def assert_frame_equal_with_arrow(left, right):
-    import pyarrow as pa
+def assert_frame_equal_with_arrow(left, right, **kwargs):
     if isinstance(left, pa.Table):
         left = convert_arrow_to_pandas_and_remove_categoricals(left)
     if isinstance(right, pa.Table):
         right = convert_arrow_to_pandas_and_remove_categoricals(right)
-    assert_frame_equal(left, right)
+    assert_frame_equal(left, right, **kwargs)
 
 
 unicode_symbol = "\u00A0"  # start of latin extensions

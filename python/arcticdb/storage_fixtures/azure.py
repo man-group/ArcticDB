@@ -281,13 +281,17 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         return f"[{type(self)}=Container:{self.default_container}], ConnectionString:{self.connection_string}"
 
     def initialize_from_connection_sting(self, constr: str, container: str, prefix: str = None) -> "AzureStorageFixtureFactory":
+        def extract_from_regex(re_expr: str, constr: str) -> str:
+            match = re.search(re_expr, constr)
+            return match.group(1) if match else ""
+
         if constr is None: get_logger().error(f"Azure connection string not available: {constr}") 
         if container is None: get_logger().error(f"Azure container not available: {container}") 
         AzureStorageFixtureFactory.connection_string = constr
-        AzureStorageFixtureFactory.account_name = re.search(r'AccountName=([^;]+)', constr).group(1)
-        AzureStorageFixtureFactory.account_key = re.search(r'AccountKey=([^;]+)', constr).group(1)
-        AzureStorageFixtureFactory.protocol = re.search(r'DefaultEndpointsProtocol=([^;]+)', constr).group(1)
-        endpoint_suffix = re.search(r'EndpointSuffix=([^;]+)', constr).group(1)
+        AzureStorageFixtureFactory.account_name = extract_from_regex(r'AccountName=([^;]+)', constr)
+        AzureStorageFixtureFactory.account_key = extract_from_regex(r'AccountKey=([^;]+)', constr)
+        AzureStorageFixtureFactory.protocol = extract_from_regex(r'DefaultEndpointsProtocol=([^;]+)', constr)
+        endpoint_suffix = extract_from_regex(r'EndpointSuffix=([^;]+)', constr)
         AzureStorageFixtureFactory.endpoint = f"{AzureStorageFixtureFactory.protocol}://{AzureStorageFixtureFactory.account_name}.blob.{endpoint_suffix}"
         AzureStorageFixtureFactory.default_container = container
         if prefix:

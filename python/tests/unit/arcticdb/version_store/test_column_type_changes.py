@@ -220,7 +220,6 @@ def test_type_promotion_int32_and_float32_up_to_float64(lmdb_version_store_dynam
     assert data.dtypes["a"] == np.float64
     assert expected_result.dtypes["a"] == np.float64
 
-@pytest.mark.xfail(MACOS, reason="bug??? https://github.com/man-group/ArcticDB/actions/runs/16517098026/job/46710177373?pr=2506")
 def test_type_promotion_int64_and_float64_up_to_float64(lmdb_version_store_dynamic_schema):
     """We unavoidably lose precision in this case, this test just shows what happens when we do."""
     # Given
@@ -241,14 +240,13 @@ def test_type_promotion_int64_and_float64_up_to_float64(lmdb_version_store_dynam
     # When
     data = lib.read("test").data.astype(original_type)
 
-    # Then
-    if MACOS_WHEEL_BUILD:
-        # This test gives other results on MacOS, but it's not a problem for us as the assertions below are meant
-        # for illustrating the issue, not for testing the behaviour strictly.
-        return
-
     assert data.iloc[0, 0] == np.iinfo(original_type).min  # out by one compared to original
-    assert data.iloc[1, 0] == np.iinfo(original_type).min  # overflowed
+    if MACOS: # Should be related to the disparity of overflow handling in ARM64 vs x86_64 rather than OS
+        # e.g. (int32_t)(double(std::numeric_limits<int32_t>::max()) + 1)
+        # -2147483648 on linux, 2147483647 on macOS
+        assert data.iloc[1, 0] == np.iinfo(original_type).max
+    else:
+        assert data.iloc[1, 0] == np.iinfo(original_type).min  # overflowed
     assert data.iloc[2, 0] == 2 ** 53 - 1  # fine, this fits in float64 which has an 11 bit exponent
     assert data.iloc[3, 0] == 2 ** 53  # also fine
     assert data.iloc[4, 0] == 2 ** 53  # off by one, should be 2 ** 53 + 1 but we lost precision
