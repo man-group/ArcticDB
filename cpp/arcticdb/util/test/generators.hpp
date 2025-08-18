@@ -369,7 +369,7 @@ inline auto get_test_config_data(std::string name = "test") {
 }
 
 inline std::shared_ptr<arcticdb::storage::Library> get_test_library(storage::LibraryDescriptor::VariantStoreConfig cfg = {}, std::string name = "test") {
-    auto [path, storages] = get_test_config_data_named(name);
+    auto [path, storages] = get_test_config_data(name);
     auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
     return library;
 }
