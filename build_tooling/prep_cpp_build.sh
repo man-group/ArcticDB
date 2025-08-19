@@ -34,6 +34,7 @@ case `uname -a` in
     popd || return
     ;;
 *)
+    pushd $(realpath $(dirname $BASH_SOURCE))/../cpp
     if [[ -n "$ARCTICDB_BUILD_DIR" ]] ; then
         if [[ "$CIBUILDWHEEL" == "1" ]] ; then
             ARCTICDB_BUILD_DIR="/host$ARCTICDB_BUILD_DIR"
@@ -43,5 +44,6 @@ case `uname -a` in
         [[ ! -e out ]] || rm -rf out
         ln -s "$ARCTICDB_BUILD_DIR" out
     fi
+    popd || return
 esac
 

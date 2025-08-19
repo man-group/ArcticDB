@@ -1,4 +1,5 @@
 from enum import Enum
+import sys
 import pandas as pd
 from pandas.testing import assert_frame_equal
 import os
@@ -10,7 +11,6 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
-from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
 try:
     # from pytest this way will work
     from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
@@ -96,6 +96,19 @@ def real_gcp_credentials(shared_path: bool = True):
     return endpoint, bucket, region, access_key, secret_key, path_prefix, clear
 
 
+def real_azure_credentials(shared_path: bool = True):
+    if shared_path:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
+    else:
+        path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "")
+    constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
+    container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
+
+    clear = str(os.getenv("ARCTICDB_REALL_AZURE_CLEAR")).lower() in ("true", "1")
+
+    return container, constr, path_prefix, clear
+
+
 def get_real_s3_uri(shared_path: bool = True):
     # TODO: Remove this when the latest version that we support
     # contains the s3 fixture code as defined here:
@@ -133,10 +146,38 @@ def get_real_gcp_uri(shared_path: bool = True):
     )
     return aws_uri
 
+def find_ca_certs():
+    # Common CA certificates locations
+    default_paths = ssl.get_default_verify_paths()
+    possible_paths =  [
+        default_paths.cafile,
+        default_paths.openssl_cafile_env,
+        default_paths.openssl_cafile,
+        '/etc/ssl/certs/ca-certificates.crt',
+        '/usr/lib/ssl/certs/ca-certificates.crt',
+        '/etc/pki/tls/certs/ca-bundle.crt',
+        '/etc/ssl/cert.pem'
+    ]
+    for path in possible_paths:
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+### IMPORTANT: When adding new STORAGE we must implement
+###  the whole connection logic here even if this does mean effectively duplicating the code
+###   
+### REASON: We run this file from command line on arcticdb version 3.0. 
+###  there is no way how arcticdb 3.0 could have had the functions that we are going to implement
+###  and support from now on
 def get_real_azure_uri(shared_path: bool = True):
-    return real_azure_from_environment_variables(
-        shared_path=shared_path,
-        ).get_arctic_uri()
+    container, constr, path_prefix = real_azure_credentials(shared_path)
+    ca_certs_file = find_ca_certs()
+    uri = f"azure://Container={container};Path_prefix={path_prefix}"
+    assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
+    if sys.platform.lower().startswith("linux"):
+        uri += f";CA_cert_path={ca_certs_file}"
+    url += f";{constr}"
+    return url
 
 
 class PersistentTestType(Enum):
@@ -159,7 +200,8 @@ def persistent_test_type() -> PersistentTestType:
             return PersistentTestType.AZURE
         return PersistentTestType.AWS_S3
     else:
-        raise Exception("Persistence storage tests are not enabled or not configured properly")
+        raise Exception("Persistence storage tests are not enabled or not configured properly."
+                        + "ARCTICDB_PERSISTENT_STORAGE_TESTS_ENABLED environment variable is not set")
 
 
 def get_real_uri(shared_path: bool = True):
