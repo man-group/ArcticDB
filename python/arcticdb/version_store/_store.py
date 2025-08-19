@@ -31,7 +31,7 @@ import time
 
 from arcticdb.dependencies import pyarrow as pa
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import SortedValue, StageResult
+from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -539,6 +539,10 @@ class NativeVersionStore:
             )
 
     @staticmethod
+    def _valid_item_type(item):
+        return isinstance(item, NPDDataFrame) or (isinstance(item, list) and all(isinstance(el, RecordBatchData) for el in item))
+
+    @staticmethod
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
         return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, **kwargs)
 
@@ -568,7 +572,7 @@ class NativeVersionStore:
             coerce_columns=None,
             norm_failure_options_msg=norm_failure_options_msg,
         )
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             return self.version_store.write_parallel(
                 symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
             )
@@ -698,7 +702,7 @@ class NativeVersionStore:
             coerce_columns,
             norm_failure_options_msg,
         )
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             if parallel or incomplete:
                 warn(
                     "Staging data with write() is deprecated. Use stage() instead.",
@@ -830,7 +834,7 @@ class NativeVersionStore:
 
         write_if_missing = kwargs.get("write_if_missing", True)
 
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
                     warn(
@@ -945,7 +949,7 @@ class NativeVersionStore:
             self.norm_failure_options_msg_update,
         )
 
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 call_time = time.time_ns()
                 vit = self.version_store.update(
@@ -1116,8 +1120,8 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
 
-    def _batch_read_keys(self, atom_keys):
-        for result in self.version_store.batch_read_keys(atom_keys):
+    def _batch_read_keys(self, atom_keys, read_query):
+        for result in self.version_store.batch_read_keys(atom_keys, read_query):
             read_result = ReadResult(*result)
             vitem = self._adapt_read_res(read_result)
             yield vitem
@@ -1220,7 +1224,7 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
-                vitem = self._post_process_dataframe(read_result, read_query, implement_read_index)
+                vitem = self._post_process_dataframe(read_result, read_query, read_options, implement_read_index)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -2073,7 +2077,7 @@ class NativeVersionStore:
         )
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, implement_read_index)
+        return self._post_process_dataframe(read_result, read_query, read_options, implement_read_index)
 
     def head(
         self,
@@ -2110,7 +2114,7 @@ class NativeVersionStore:
             as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, implement_read_index, head=n)
+        return self._post_process_dataframe(read_result, read_query, read_options, implement_read_index, head=n)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -2143,39 +2147,38 @@ class NativeVersionStore:
             as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, implement_read_index, tail=n)
+        return self._post_process_dataframe(read_result, read_query, read_options, implement_read_index, tail=n)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
-        if isinstance(read_result.frame_data, ArrowOutputFrame):
-            # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
-            return self._adapt_read_res(read_result)
-        index_type = read_result.norm.df.common.WhichOneof("index_type")
-        index_is_rowcount = (
-            index_type == "index"
-            and not read_result.norm.df.common.index.is_physically_stored
-            and len(read_result.frame_data.index_columns) == 0
-        )
-        if implement_read_index and read_query.columns == [] and index_is_rowcount:
-            row_range = None
-            if head:
-                row_range = (0, head)
-            elif tail:
-                row_range = (-tail, None)
-            elif read_query.row_filter is not None:
-                row_range = self._compute_filter_start_end_row(read_result, read_query)
-            return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
+    def _post_process_dataframe(self, read_result, read_query, read_options, implement_read_index=False, head=None, tail=None):
+        # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
+        if not isinstance(read_result.frame_data, ArrowOutputFrame):
+            index_type = read_result.norm.df.common.WhichOneof("index_type")
+            index_is_rowcount = (
+                index_type == "index"
+                and not read_result.norm.df.common.index.is_physically_stored
+                and len(read_result.frame_data.index_columns) == 0
+            )
+            if implement_read_index and read_query.columns == [] and index_is_rowcount:
+                row_range = None
+                if head:
+                    row_range = (0, head)
+                elif tail:
+                    row_range = (-tail, None)
+                elif read_query.row_filter is not None:
+                    row_range = self._compute_filter_start_end_row(read_result, read_query)
+                return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
 
-        if read_query.row_filter is not None and read_query.needs_post_processing:
-            # post filter
-            start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
-            data = []
-            for c in read_result.frame_data.data:
-                data.append(c[start_idx:end_idx])
-            row_count = len(data[0]) if len(data) else 0
-            read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns, row_count, read_result.frame_data.offset)
+            if read_query.row_filter is not None and read_query.needs_post_processing:
+                # post filter
+                start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+                data = []
+                for c in read_result.frame_data.data:
+                    data.append(c[start_idx:end_idx])
+                row_count = len(data[0]) if len(data) else 0
+                read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns, row_count, read_result.frame_data.offset)
 
         vitem = self._adapt_read_res(read_result)
 
@@ -2183,7 +2186,7 @@ class NativeVersionStore:
         if len(read_result.keys) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
 
-            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys)}
+            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys, read_options)}
             original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
 
             return VersionedItem(
@@ -2409,7 +2412,11 @@ class NativeVersionStore:
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            table = pa.Table.from_batches(record_batches)
+            if len(record_batches):
+                table = pa.Table.from_batches(record_batches)
+            else:
+                # Roundtrip empty tables correctly
+                table = pa.Table.from_arrays([])
             data = self._arrow_normalizer.denormalize(table, read_result.norm)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)

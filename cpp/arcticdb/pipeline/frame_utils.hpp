@@ -11,7 +11,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -73,7 +73,7 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
 
 
 TimeseriesDescriptor index_descriptor_from_frame(
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputFrame>& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key = {});
 
@@ -363,6 +363,6 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
 
 std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::PipelineContext>& context);
 
-bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputTensorFrame& frame);
+bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputFrame& frame);
 
 } //namespace arcticdb

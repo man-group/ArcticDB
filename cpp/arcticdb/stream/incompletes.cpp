@@ -147,7 +147,7 @@ TimeseriesDescriptor pack_timeseries_descriptor(
 }
 
 SegmentInMemory incomplete_segment_from_frame(
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputFrame>& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key,
     bool allow_sparse
@@ -231,7 +231,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 [[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteIncompleteOptions& options) {
     ARCTICDB_SAMPLE(WriteIncompleteFrameWithSorting, 0)
     log::version().debug("Command: write_incomplete_frame_with_sorting {}", stream_id);
@@ -248,12 +248,13 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     bool sparsify_floats{false};
 
     auto next_key = std::nullopt;
-    auto segment = incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
+    // This clone is unnecessarily expensive. We should have a sort method that produces a new segment (current one is in-place)
+    auto segment = frame->seg.has_value() ? frame->seg->clone() : incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;
-        for (auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
-            cols.emplace_back(frame->desc.fields(i).name());
+        for (auto i = 0UL; i < frame->desc().index().field_count(); ++i) {
+            cols.emplace_back(frame->desc().fields(i).name());
         }
         if (options.sort_columns) {
             for (auto& extra_sort_col : *options.sort_columns) {
@@ -267,9 +268,9 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     }
 
     auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
-    auto stream_desc = frame->desc;
+    auto stream_desc = frame->desc();
     auto norm_meta = timeseries_desc.proto().normalization();
-    auto tsd = pack_timeseries_descriptor(frame->desc, frame->num_rows, std::nullopt, std::move(norm_meta));
+    auto tsd = pack_timeseries_descriptor(frame->desc(), frame->num_rows, std::nullopt, std::move(norm_meta));
     segment.set_timeseries_descriptor(tsd);
 
     bool is_timestamp_index = std::holds_alternative<stream::TimeseriesIndex>(frame->index);
@@ -304,7 +305,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 [[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteIncompleteOptions& options) {
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
     log::version().debug("Command: write_incomplete_frame {}", stream_id);
@@ -320,7 +321,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
-    const auto index = std::move(frame->index);
+    const auto index = frame->index;
 
     WriteOptions write_options = options.write_options;
     write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
@@ -357,17 +358,16 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
 
-    auto desc = frame->desc;
+    auto desc = frame->desc();
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
-    auto bucketize_dynamic = frame->bucketize_dynamic;
     bool sparsify_floats{false};
 
     TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
     return folly::collect(folly::window(std::move(slice_and_rowcount),
         [frame, slicing_policy, key = std::move(key),
          store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
-            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
+            de_dup_map, desc, norm_meta, user_meta](
             auto&& slice) {
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,
@@ -377,7 +377,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                 slice.second,
                 frame->index,
                 sparsify_floats))
-                .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
+                .thenValue([store, de_dup_map, desc, norm_meta, user_meta](
                     std::tuple<stream::StreamSink::PartialKey,
                                SegmentInMemory,
                                pipelines::FrameSlice> &&ks) {
@@ -392,7 +392,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                         user_meta,
                         prev_key,
                         next_key,
-                        bucketize_dynamic
+                        false
                     );
                     seg.set_timeseries_descriptor(tsd);
 
@@ -416,7 +416,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 std::vector<AtomKey> write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteIncompleteOptions& options) {
     // Apply validation for new symbols, but don't interfere with pre-existing symbols that would fail our modern validation.
     CheckOutcome check_outcome = verify_symbol_key(stream_id);
@@ -529,7 +529,7 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
 void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     bool validate_index) {
     using namespace arcticdb::proto::descriptors;
     using namespace arcticdb::stream;
@@ -543,7 +543,7 @@ void append_incomplete(
     auto [next_key, total_rows] = read_head(store, stream_id);
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
-    auto desc = frame->desc.clone();
+    auto desc = frame->desc().clone();
 
     auto index_range = frame->index_range;
     auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);

@@ -15,7 +15,7 @@
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
@@ -75,14 +75,14 @@ public:
     VersionedItem update_internal(
         const StreamId& stream_id,
         const UpdateQuery & query,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool upsert,
         bool dynamic_schema,
         bool prune_previous_versions) override;
 
     VersionedItem append_internal(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool upsert,
         bool prune_previous_versions,
         bool validate_index) override;
@@ -103,7 +103,7 @@ public:
 
     void append_incomplete_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool validate_index) const override;
 
     void remove_incomplete(
@@ -154,7 +154,7 @@ public:
 
     StageResult write_parallel_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool validate_index,
         bool sort_on_index,
         const std::optional<std::vector<std::string>>& sort_columns) const override;
@@ -179,7 +179,7 @@ public:
 
     VersionedItem  write_versioned_dataframe_internal(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
         bool validate_index
@@ -262,7 +262,7 @@ public:
     std::vector<folly::Future<AtomKey>> batch_write_internal(
         const std::vector<VersionId>& version_ids,
         const std::vector<StreamId>& stream_ids,
-        std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+        std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps,
         bool validate_index
     );
@@ -275,7 +275,7 @@ public:
 
     std::vector<std::variant<VersionedItem, DataError>> batch_append_internal(
         const std::vector<StreamId>& stream_ids,
-        std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+        std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         bool prune_previous_versions,
         bool validate_index,
         bool upsert,
@@ -283,12 +283,12 @@ public:
 
     std::vector<std::variant<VersionedItem, DataError>> batch_update_internal(
         const std::vector<StreamId>& stream_ids,
-        std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+        std::vector<std::shared_ptr<InputFrame>>&& frames,
         const std::vector<UpdateQuery>& update_queries,
         bool prune_previous_versions,
         bool upsert);
 
-    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys, std::any& handler_data);
+    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys, const ReadOptions& read_options, std::any& handler_data);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,
@@ -375,7 +375,7 @@ public:
 
     std::vector<std::variant<VersionedItem, DataError>> batch_write_versioned_dataframe_internal(
         const std::vector<StreamId>& stream_ids,
-        std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+        std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         bool prune_previous_versions,
         bool validate_index,
         bool throw_on_error

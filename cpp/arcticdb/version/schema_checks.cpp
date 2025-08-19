@@ -31,11 +31,11 @@ IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, c
 void check_normalization_index_match(
     NormalizationOperation operation,
     const StreamDescriptor& old_descriptor,
-    const pipelines::InputTensorFrame& frame,
+    const pipelines::InputFrame& frame,
     bool empty_types
 ) {
     const IndexDescriptor::Type old_idx_kind = old_descriptor.index().type();
-    const IndexDescriptor::Type new_idx_kind = frame.desc.index().type();
+    const IndexDescriptor::Type new_idx_kind = frame.desc().index().type();
     if (operation == UPDATE) {
         const bool new_is_timeseries = std::holds_alternative<arcticdb::stream::TimeseriesIndex>(frame.index);
         util::check_rte(
@@ -143,7 +143,7 @@ void fix_descriptor_mismatch_or_throw(
     NormalizationOperation operation,
     bool dynamic_schema,
     const pipelines::index::IndexSegmentReader &existing_isr,
-    const pipelines::InputTensorFrame &new_frame,
+    const pipelines::InputFrame&new_frame,
     bool empty_types) {
     const auto &old_sd = existing_isr.tsd().as_stream_descriptor();
     check_normalization_index_match(operation, old_sd, new_frame, empty_types);
@@ -151,21 +151,21 @@ void fix_descriptor_mismatch_or_throw(
     fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
 
     // We need to check that the index names match regardless of the dynamic schema setting
-    if(!index_names_match(old_sd, new_frame.desc)) {
+    if(!index_names_match(old_sd, new_frame.desc())) {
         throw StreamDescriptorMismatch(
             "The index names in the argument are not identical to that of the existing version",
-            new_frame.desc.id(),
+            new_frame.desc().id(),
             old_sd,
-            new_frame.desc,
+            new_frame.desc(),
             operation);
     }
 
-    if (!dynamic_schema && !columns_match(old_sd, new_frame.desc)) {
+    if (!dynamic_schema && !columns_match(old_sd, new_frame.desc())) {
         throw StreamDescriptorMismatch(
             "The columns (names and types) in the argument are not identical to that of the existing version",
-            new_frame.desc.id(),
+            new_frame.desc().id(),
             old_sd,
-            new_frame.desc,
+            new_frame.desc(),
             operation);
     }
     if (dynamic_schema && new_frame.norm_meta.has_series() && existing_isr.tsd().normalization().has_series()) {

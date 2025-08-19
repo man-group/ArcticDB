@@ -245,7 +245,7 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.hpp
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
-        pipeline/input_tensor_frame.hpp
+        pipeline/input_frame.hpp
         pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
@@ -453,6 +453,7 @@ set(arcticdb_srcs
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
+        pipeline/input_frame.cpp
         pipeline/pipeline_context.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
@@ -931,7 +932,8 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
-            arrow/test/test_arrow.cpp
+            arrow/test/test_arrow_read.cpp
+            arrow/test/test_arrow_write.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
@@ -1125,12 +1127,14 @@ if(${TEST})
             column_store/test/rapidcheck_column_map.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
+            util/test/rapidcheck_bitset.cpp
             util/test/rapidcheck_decimal.cpp
             util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
-            version/test/rapidcheck_version_map.cpp)
+            version/test/rapidcheck_version_map.cpp
+    )
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 

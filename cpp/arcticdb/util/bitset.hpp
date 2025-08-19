@@ -49,4 +49,24 @@ inline void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
     }
 }
 
+inline void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, uint8_t* dest_ptr) {
+    auto leftover_bits = num_bits % 8;
+    int64_t num_bytes = (num_bits + 7) / 8;
+    if (leftover_bits == 0) {
+        ++num_bytes;
+    }
+    for (auto idx = 0; idx < num_bytes - 1; ++idx, ++packed_bits) {
+        uint8_t byte = *packed_bits;
+        for (size_t bit = 0; bit < 8; ++bit) {
+            *dest_ptr++ = static_cast<bool>((byte >> bit) % 2);
+        }
+    }
+    if (leftover_bits > 0) {
+        uint8_t byte = *packed_bits;
+        for (size_t bit = 0; bit < leftover_bits; ++bit) {
+            *dest_ptr++ = static_cast<bool>((byte >> bit) % 2);
+        }
+    }
+}
+
 }

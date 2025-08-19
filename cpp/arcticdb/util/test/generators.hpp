@@ -9,7 +9,7 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/storage/storages.hpp>
@@ -429,11 +429,11 @@ inline NativeTensor tensor_from_column(const Column &column) {
 
 struct SegmentToInputFrameAdapter {
     SegmentInMemory segment_;
-    std::shared_ptr<pipelines::InputTensorFrame> input_frame_ = std::make_shared<pipelines::InputTensorFrame>();
+    std::shared_ptr<pipelines::InputFrame> input_frame_ = std::make_shared<pipelines::InputFrame>();
 
     explicit SegmentToInputFrameAdapter(SegmentInMemory &&segment) :
         segment_(std::move(segment)) {
-        input_frame_->desc = segment_.descriptor();
+        input_frame_->desc() = segment_.descriptor();
         input_frame_->num_rows = segment_.row_count();
         size_t col{0};
         if (segment_.descriptor().index().type() != IndexDescriptorImpl::Type::ROWCOUNT) {

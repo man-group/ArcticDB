@@ -50,7 +50,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     VersionedItem write_versioned_dataframe(
         const StreamId& stream_id,
-        const py::tuple& item,
+        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
         const py::object& norm,
         const py::object& user_meta,
         bool prune_previous_versions,
@@ -67,7 +67,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const py::object &metastruct,
         const std::vector<StreamId> &sub_keys,
-        const std::vector<py::tuple> &items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
         const std::vector<py::object> &norm_metas,
         const py::object &user_meta,
         bool prune_previous_versions);
@@ -85,7 +85,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     VersionedItem append(
         const StreamId& stream_id,
-        const py::tuple &item,
+        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
         const py::object &norm,
         const py::object & user_meta,
         bool upsert,
@@ -95,7 +95,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem update(
         const StreamId& stream_id,
         const UpdateQuery & query,
-        const py::tuple &item,
+        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
         const py::object &norm,
         const py::object & user_meta,
         bool upsert,
@@ -129,7 +129,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     StageResult write_parallel(
         const StreamId& stream_id,
-        const py::tuple& item,
+        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
         const py::object& norm,
         bool validate_index,
         bool sort_on_index,
@@ -274,7 +274,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     // Batch methods
     std::vector<VersionedItemOrError> batch_write(
         const std::vector<StreamId> &stream_ids,
-        const std::vector<py::tuple> &items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
@@ -289,7 +289,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<VersionedItemOrError> batch_append(
         const std::vector<StreamId> &stream_ids,
-        const std::vector<py::tuple> &items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
@@ -310,7 +310,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<VersionedItemOrError> batch_update(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<py::tuple>& items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>>& items,
         const std::vector<py::object>& norms,
         const std::vector<py::object>& user_metas,
         const std::vector<UpdateQuery>& update_qeries,
@@ -384,11 +384,11 @@ struct ManualClockVersionStore : PythonVersionStore {
             PythonVersionStore(library, util::ManualClock{}) {}
 };
 
-inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors) {
+inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(std::vector<ReadVersionOutput>&& keys_frame_and_descriptors, const ReadOptions& read_options) {
     std::vector<std::variant<ReadResult, DataError>> read_results;
     read_results.reserve(keys_frame_and_descriptors.size());
     for (auto& read_version_output : keys_frame_and_descriptors) {
-        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, OutputFormat::PANDAS, std::move(read_version_output.frame_and_descriptor_)));
+        read_results.emplace_back(create_python_read_result(read_version_output.versioned_item_, read_options.output_format(), std::move(read_version_output.frame_and_descriptor_)));
     }
     return read_results;
 }

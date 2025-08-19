@@ -9,7 +9,7 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #undef GetMessage  // defined as GetMessageA on Windows
 
@@ -183,7 +183,7 @@ bool check_ndarray_append(const NormalizationMetadata &old_norm, NormalizationMe
 void fix_normalization_or_throw(
     bool is_append,
     const pipelines::index::IndexSegmentReader &existing_isr,
-    const pipelines::InputTensorFrame &new_frame) {
+    const pipelines::InputFrame&new_frame) {
     auto &old_norm = existing_isr.tsd().proto().normalization();
     auto &new_norm = new_frame.norm_meta;
     normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
@@ -193,7 +193,7 @@ void fix_normalization_or_throw(
     );
     if (check_pandas_like(old_norm, new_norm)) {
         const IndexDescriptor::Type old_index_type = existing_isr.tsd().index().type();
-        const IndexDescriptor::Type new_index_type = new_frame.desc.index().type();
+        const IndexDescriptor::Type new_index_type = new_frame.desc().index().type();
         if (old_index_type == new_index_type && old_index_type == IndexDescriptor::Type::ROWCOUNT) {
             update_rowcount_normalization_data(old_norm, new_norm, existing_isr.tsd().total_rows());
         }

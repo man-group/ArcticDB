@@ -281,7 +281,8 @@ const std::shared_ptr<StringPool>& SegmentInMemoryImpl::string_pool_ptr() const 
 }
 
 void SegmentInMemoryImpl::check_column_index(position_t idx) const {
-    util::check_arg(idx < position_t(columns_.size()), "Column index {} out of bounds", idx);
+    if (!(idx < position_t(columns_.size())))
+        util::check_arg(idx < position_t(columns_.size()), "Column index {} out of bounds", idx);
 }
 
 ColumnData SegmentInMemoryImpl::string_pool_data() const {

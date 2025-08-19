@@ -66,7 +66,7 @@ struct MultiSymbolReadOutput {
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
     bool allow_sparse = false,
@@ -76,7 +76,7 @@ VersionedItem write_dataframe_impl(
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputFrame>& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
     bool allow_sparse,
@@ -86,7 +86,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 folly::Future<AtomKey> async_append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteOptions& options,
     bool validate_index,
     bool empty_types);
@@ -94,7 +94,7 @@ folly::Future<AtomKey> async_append_impl(
 VersionedItem append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteOptions& options,
     bool validate_index,
     bool empty_types);
@@ -103,7 +103,7 @@ VersionedItem update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery & query,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types);
@@ -112,7 +112,7 @@ folly::Future<AtomKey> async_update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types);

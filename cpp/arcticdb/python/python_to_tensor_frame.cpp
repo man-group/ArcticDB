@@ -11,12 +11,14 @@
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_types.hpp>
+#include <arcticdb/stream/index.hpp>
 #include <pybind11/numpy.h>
 
 namespace arcticdb::convert {
 constexpr const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
 
 using namespace arcticdb::pipelines;
+using namespace arcticdb::stream;
 
 [[nodiscard]] static inline bool is_unicode(PyObject *obj) {
     return PyUnicode_Check(obj);
@@ -201,90 +203,110 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     return {nbytes, arr->nd, strides.data(), shapes.data(), dt, elsize, data, ndim};
 }
 
-std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
+std::shared_ptr<InputFrame> py_ndf_to_frame(
     const StreamId& stream_name,
-    const py::tuple &item,
+    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
     const py::object &norm_meta,
     const py::object &user_meta,
     bool empty_types) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
-    auto res = std::make_shared<InputTensorFrame>();
-    res->desc.set_id(stream_name);
+    auto res = std::make_shared<InputFrame>();
     res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
     if (!user_meta.is_none())
         python_util::pb_from_python(user_meta, res->user_meta);
 
-    // Fill index
-    auto idx_names = item[0].cast<std::vector<std::string>>();
-    auto idx_vals = item[2].cast<std::vector<py::object>>();
-    util::check(idx_names.size() == idx_vals.size(),
+    if (std::holds_alternative<py::tuple>(item)) {
+        // Fill index
+        const auto& tuple = std::get<py::tuple>(item);
+        auto idx_names = tuple[0].cast<std::vector<std::string>>();
+        auto idx_vals = tuple[2].cast<std::vector<py::object>>();
+        util::check(
+                idx_names.size() == idx_vals.size(),
                 "Number idx names {} and values {} do not match",
-                idx_names.size(), idx_vals.size());
+                idx_names.size(),
+                idx_vals.size()
+        );
 
-    if (!idx_names.empty()) {
-        util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
-        auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
-        util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
-        util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
-        std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
-        res->num_rows = static_cast<size_t>(index_tensor.shape(0));
-        // TODO handle string indexes
-        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
-            res->desc.set_index_field_count(1);
-            res->desc.set_index_type(IndexDescriptor::Type::TIMESTAMP);
+        if (!idx_names.empty()) {
+            util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
+            auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
+            util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
+            util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
+            std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
+            res->num_rows = static_cast<size_t>(index_tensor.shape(0));
+            // TODO handle string indexes
+            if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
+                res->desc().set_index_field_count(1);
+                res->desc().set_index_type(IndexDescriptor::Type::TIMESTAMP);
 
-            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            res->index = stream::TimeseriesIndex(index_column_name);
-            res->index_tensor = std::move(index_tensor);
-        } else {
+                res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
+                res->index = stream::TimeseriesIndex(index_column_name);
+                res->index_tensor = std::move(index_tensor);
+            } else {
+                res->index = stream::RowCountIndex();
+                res->desc().set_index_type(IndexDescriptor::Type::ROWCOUNT);
+                res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
+                res->field_tensors.push_back(std::move(index_tensor));
+            }
+        }
+
+        // Fill tensors
+        auto col_names = tuple[1].cast<std::vector<std::string>>();
+        auto col_vals = tuple[3].cast<std::vector<py::object>>();
+        auto sorted = tuple[4].cast<SortedValue>();
+
+        res->set_sorted(sorted);
+
+        for (auto i = 0u; i < col_vals.size(); ++i) {
+            auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
+            res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
+            if (tensor.expanded_dim() == 1) {
+                res->desc().add_field(scalar_field(tensor.data_type(), col_names[i]));
+            } else if (tensor.expanded_dim() == 2) {
+                res->desc().add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+            }
+            res->field_tensors.push_back(std::move(tensor));
+        }
+
+        // idx_names are passed by the python layer. They are empty in case row count index is used see:
+        // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
+        // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
+        if (idx_names.empty()) {
             res->index = stream::RowCountIndex();
-            res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
-            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            res->field_tensors.push_back(std::move(index_tensor));
+            res->desc().set_index_type(IndexDescriptor::Type::ROWCOUNT);
+        }
+
+        if (empty_types && res->num_rows == 0) {
+            res->index = stream::EmptyIndex();
+            res->desc().set_index_type(IndexDescriptor::Type::EMPTY);
+        }
+
+        ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
+    } else {
+        const auto& record_batches = std::get<std::vector<RecordBatchData>>(item);
+        std::vector<sparrow::record_batch> sp_record_batches;
+        sp_record_batches.reserve(record_batches.size());
+        for (const auto& record_batch: record_batches) {
+            sp_record_batches.emplace_back(&record_batch.array_, &record_batch.schema_);
+        }
+        res->seg = arrow_data_to_segment(sp_record_batches);
+        res->seg->descriptor().set_id(stream_name);
+        res->num_rows = res->seg->row_count();
+        if (res->desc().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+            res->index = TimeseriesIndex{std::string(res->desc().field(0).name())};
+        } else {
+            res->index = RowCountIndex{};
         }
     }
-
-    // Fill tensors
-    auto col_names = item[1].cast<std::vector<std::string>>();
-    auto col_vals = item[3].cast<std::vector<py::object>>();
-    auto sorted = item[4].cast<SortedValue>();
-
-    res->set_sorted(sorted);
-
-    for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
-        res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
-        if(tensor.expanded_dim() == 1) {
-            res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else if(tensor.expanded_dim() == 2) {
-            res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
-        }
-        res->field_tensors.push_back(std::move(tensor));
-    }
-
-    // idx_names are passed by the python layer. They are empty in case row count index is used see:
-    // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
-    // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify
-    // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
-    if (idx_names.empty()) {
-        res->index = stream::RowCountIndex();
-        res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
-    }
-
-    if (empty_types && res->num_rows == 0) {
-        res->index = stream::EmptyIndex();
-        res->desc.set_index_type(IndexDescriptor::Type::EMPTY);
-    }
-
-    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
     res->set_index_range();
+    res->desc().set_id(stream_name);
     return res;
 }
 
-std::shared_ptr<InputTensorFrame> py_none_to_frame() {
+std::shared_ptr<InputFrame> py_none_to_frame() {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
-    auto res = std::make_shared<InputTensorFrame>();
+    auto res = std::make_shared<InputFrame>();
     res->num_rows = 0u;
 
     arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;
@@ -294,7 +316,7 @@ std::shared_ptr<InputTensorFrame> py_none_to_frame() {
 
     // Fill index
     res->index = stream::RowCountIndex();
-    res->desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
+    res->desc().set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
 
     // Fill tensors
     auto col_name = "bytes";
@@ -307,10 +329,10 @@ std::shared_ptr<InputTensorFrame> py_none_to_frame() {
     constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
     res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
-    res->desc.add_field(scalar_field(tensor.data_type(), col_name));
+    res->desc().add_field(scalar_field(tensor.data_type(), col_name));
     res->field_tensors.push_back(std::move(tensor));
 
-    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
+    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     res->set_index_range();
     return res;
 }

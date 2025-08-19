@@ -13,7 +13,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
@@ -119,7 +119,7 @@ void remove_incomplete_segments(
 std::vector<AtomKey> write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputFrame>& frame,
     const WriteIncompleteOptions& options);
 
 void write_head(
@@ -135,11 +135,11 @@ void append_incomplete_segment(
 void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputFrame>& frame,
     bool validate_index);
 
 SegmentInMemory incomplete_segment_from_frame(
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputFrame>& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key,
     bool allow_sparse);

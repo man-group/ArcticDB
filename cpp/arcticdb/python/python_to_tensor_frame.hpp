@@ -7,8 +7,9 @@
 
 #pragma once
 
+#include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/python/gil_lock.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <string>
 
@@ -81,13 +82,13 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
 
 NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types);
 
-std::shared_ptr<pipelines::InputTensorFrame> py_ndf_to_frame(
+std::shared_ptr<pipelines::InputFrame> py_ndf_to_frame(
     const StreamId& stream_name,
-    const py::tuple &item,
+    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
     const py::object &norm_meta,
     const py::object &user_meta,
     bool empty_types);
 
-std::shared_ptr<pipelines::InputTensorFrame> py_none_to_frame();
+std::shared_ptr<pipelines::InputFrame> py_none_to_frame();
 
 } // namespace arcticdb::convert

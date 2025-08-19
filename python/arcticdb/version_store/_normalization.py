@@ -37,7 +37,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
-from arcticdb_ext.version_store import SortedValue as _SortedValue
+from arcticdb_ext.version_store import RecordBatchData, SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -705,16 +705,18 @@ class ArrowTableNormalizer(Normalizer):
             new_columns,
             schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
         )
-    def normalize(self, item, **kwargs):
-        raise NotImplementedError("Arrow write is not yet implemented")
+    def normalize(self, table, **kwargs):
+        pa_record_batches = table.to_batches()
+        arcticdb_record_batches = []
+        for pa_record_batch in pa_record_batches:
+            arcticdb_record_batch = RecordBatchData()
+            pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
+            arcticdb_record_batches.append(arcticdb_record_batch)
+        return arcticdb_record_batches, NormalizationMetadata()
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
-        renames_for_table = {}
-        timezones = {}
-        range_index = None
-        pandas_indexes = None
-        renames_for_pandas_metadata = {}
+
 
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
@@ -723,8 +725,16 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
+        elif input_type is None:
+            return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
+
+        renames_for_table = {}
+        timezones = {}
+        range_index = None
+        pandas_indexes = None
+        renames_for_pandas_metadata = {}
 
         index_type = pandas_meta.WhichOneof("index_type")
         if index_type == "index":
@@ -1379,6 +1389,7 @@ class CompositeNormalizer(Normalizer):
         self.series = SeriesNormalizer()
         self.tf = TimeFrameNormalizer()
         self.np = NdArrayNormalizer()
+        self.pa = ArrowTableNormalizer()
 
         if use_norm_failure_handler_known_types and fallback_normalizer is not None:
             self.df = KnownTypeFallbackOnError(self.df, fallback_normalizer)
@@ -1437,6 +1448,9 @@ class CompositeNormalizer(Normalizer):
 
         if isinstance(item, np.ndarray):
             return self.np.normalize
+
+        if isinstance(item, pa.Table):
+            return self.pa.normalize
 
         if self.fallback_normalizer is not None:
             # Msgpack normalize if everything else fails.

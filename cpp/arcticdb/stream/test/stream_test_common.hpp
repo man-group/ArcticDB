@@ -11,7 +11,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/version/version_store_api.hpp>
@@ -192,11 +192,11 @@ struct TestTensorFrame {
         segment_(std::move(desc), num_rows) {}
 
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::pipelines::InputTensorFrame> frame_ = std::make_shared<arcticdb::pipelines::InputTensorFrame>();
+    std::shared_ptr<arcticdb::pipelines::InputFrame> frame_ = std::make_shared<arcticdb::pipelines::InputFrame>();
 };
 
 template<class ContainerType, typename DTT>
-void fill_test_column(arcticdb::pipelines::InputTensorFrame &frame,
+void fill_test_column(arcticdb::pipelines::InputFrame&frame,
                       ContainerType &container,
                       DTT data_type_tag,
                       size_t num_rows,
@@ -218,7 +218,7 @@ void fill_test_column(arcticdb::pipelines::InputTensorFrame &frame,
 }
 
 inline void fill_test_frame(SegmentInMemory &segment,
-                            arcticdb::pipelines::InputTensorFrame &frame,
+                            arcticdb::pipelines::InputFrame&frame,
                             size_t num_rows,
                             size_t start_val,
                             size_t opt_row_offset) {
@@ -261,10 +261,10 @@ TestTensorFrame get_test_frame(const StreamId &id,
     using namespace arcticdb::pipelines;
     TestTensorFrame output(get_test_descriptor<IndexType>(id, fields), num_rows);
 
-    output.frame_->desc = get_test_descriptor<IndexType>(id, fields);
-    output.frame_->index = index_type_from_descriptor(output.frame_->desc);
+    output.frame_->desc() = get_test_descriptor<IndexType>(id, fields);
+    output.frame_->index = index_type_from_descriptor(output.frame_->desc());
     output.frame_->num_rows = num_rows;
-    output.frame_->desc.set_sorted(SortedValue::ASCENDING);
+    output.frame_->desc().set_sorted(SortedValue::ASCENDING);
 
     fill_test_frame(output.segment_, *output.frame_, num_rows, start_val, opt_row_offset);
 
