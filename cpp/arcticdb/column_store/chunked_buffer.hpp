@@ -386,6 +386,9 @@ class ChunkedBufferImpl {
 
     template<typename T>
     T *ptr_cast(size_t pos_bytes, size_t required_bytes) {
+        // TODO: This check doesn't verify we're overreaching outside of block boundaries.
+        // We should instead use `bytes_at` which does the correct check like so:
+        // return reinterpret_cast<T *>(bytes_at(pos_bytes, required_bytes))
         check_bytes(pos_bytes, required_bytes);
         return reinterpret_cast<T *>(&operator[](pos_bytes));
     }

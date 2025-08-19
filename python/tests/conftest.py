@@ -81,6 +81,7 @@ from packaging.version import Version
 from arcticdb.util.venv import Venv
 from .util.marking import Mark
 import arcticdb.toolbox.query_stats as query_stats
+from arcticdb.options import OutputFormat
 
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -1040,6 +1041,17 @@ def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore
     return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
+@pytest.fixture
+def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
+    store = lmdb_version_store_v1
+    store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    return store
+
+@pytest.fixture(params=list(OutputFormat))
+def any_output_format(request) -> OutputFormat:
+    return request.param
+
+
 @pytest.fixture(scope="function", params=("lmdb_version_store_v1", "lmdb_version_store_v2"))
 def lmdb_version_store(request) -> Generator[NativeVersionStore, None, None]:
     yield request.getfixturevalue(request.param)
@@ -1184,6 +1196,11 @@ def lmdb_version_store_small_segment(version_store_factory) -> NativeVersionStor
 @pytest.fixture
 def lmdb_version_store_tiny_segment(version_store_factory) -> NativeVersionStore:
     return version_store_factory(column_group_size=2, segment_row_size=2, lmdb_config={"map_size": 2**30})
+
+
+@pytest.fixture
+def lmdb_version_store_tiny_segment_dynamic_strings(version_store_factory) -> NativeVersionStore:
+    return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True, lmdb_config={"map_size": 2**30})
 
 
 @pytest.fixture
@@ -1561,9 +1578,9 @@ def pytest_runtest_makereport(item, call):
     from tests.pytest_xfail import  pytest_runtest_makereport
     return pytest_runtest_makereport(item, call)
 
-def pytest_terminal_summary(terminalreporter, exitstatus, config):
+def pytest_terminal_summary(terminalreporter, exitstatus):
     from tests.pytest_xfail import  pytest_terminal_summary
-    pytest_terminal_summary(terminalreporter, exitstatus, config)
+    pytest_terminal_summary(terminalreporter, exitstatus)
 
 #endregion    
 

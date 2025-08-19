@@ -6,11 +6,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-from typing import Optional
+from typing import Optional, Union
 from enum import Enum
 
+from arcticdb.dependencies import _PYARROW_AVAILABLE
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
+from arcticdb_ext.version_store import InternalOutputFormat
 
 
 DEFAULT_ENCODING_VERSION = EncodingVersion.V1
@@ -144,6 +146,35 @@ class LibraryOptions:
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
             f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'})"
         )
+
+
+# TODO: Use enum.StrEnum when we no longer need to support python 3.9
+class OutputFormat(str, Enum):
+    PANDAS = "PANDAS"
+    EXPERIMENTAL_ARROW = "EXPERIMENTAL_ARROW"
+
+
+def output_format_to_internal(output_format: Union[OutputFormat, str]) -> InternalOutputFormat:
+    if output_format.lower() == OutputFormat.PANDAS.lower():
+        return InternalOutputFormat.PANDAS
+    elif output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
+        if not _PYARROW_AVAILABLE:
+            raise ModuleNotFoundError("ArcticDB's pyarrow optional dependency missing but is required to use arrow output format.")
+        return InternalOutputFormat.ARROW
+    else:
+        raise ValueError(f"Unknown OutputFormat: {output_format}")
+
+class RuntimeOptions:
+    def __init__(
+        self,
+        *,
+        output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
+    ):
+        self.output_format=output_format
+
+
+    def set_output_format(self, output_format: Union[OutputFormat, str]):
+        self.output_format = output_format
 
 
 class EnterpriseLibraryOptions:

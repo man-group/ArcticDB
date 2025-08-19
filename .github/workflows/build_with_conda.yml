@@ -144,7 +144,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage }}
+          persistent_storage: ${{ inputs.persistent_storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}        
@@ -248,7 +248,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage }}
+          persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}        
