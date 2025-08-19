@@ -79,7 +79,6 @@ from .util.mark import (
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
-from .util.marking import Mark
 import arcticdb.toolbox.query_stats as query_stats
 from arcticdb.options import OutputFormat
 
