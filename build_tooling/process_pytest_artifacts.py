@@ -26,7 +26,13 @@ def fetch_page(page, per_page=100):
         f"/repos/man-group/ArcticDB/actions/runs?per_page={per_page}&page={page}",
     ]
 
-    output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {' '.join(cmd)}")
+        print(f"Return code: {e.returncode}")
+        print(f"Error output: {e.stderr.decode('utf-8')}")
+        raise
 
     data = json.loads(output.stdout)
     runs = data.get("workflow_runs", [])
@@ -50,7 +56,13 @@ def get_total_runs_and_pages(per_page=100):
         f"/repos/man-group/ArcticDB/actions/runs?per_page={per_page}&page=1",
     ]
 
-    output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {' '.join(cmd)}")
+        print(f"Return code: {e.returncode}")
+        print(f"Error output: {e.stderr.decode('utf-8')}")
+        raise
 
     data = json.loads(output.stdout)
     total_count = data.get("total_count", 0)
@@ -128,7 +140,13 @@ def get_artifacts_for_run(artifact_download_url):
         f"{artifact_download_url}",
     ]
 
-    output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    try:
+        output = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Error running command: {' '.join(cmd)}")
+        print(f"Return code: {e.returncode}")
+        print(f"Error output: {e.stderr.decode('utf-8')}")
+        raise
 
     if output.returncode != 0:
         raise Exception(f"Error getting artifacts for run {artifact_download_url}: {output.stderr}")
@@ -153,7 +171,7 @@ def download_artifact(run: Run, artifact: dict, download_dir: Path) -> Path:
     # Create directory for this artifact
     artifact_dir = download_dir / f"run_{run.run_id}_{artifact_name}"
 
-    artifact_dir.mkdir(parents=True, exist_ok=True)
+    artifact_dir.mkdir(parents=True)
 
     # Download the zip file
     zip_path = artifact_dir / f"{artifact_name}.zip"
@@ -177,7 +195,13 @@ def download_artifact(run: Run, artifact: dict, download_dir: Path) -> Path:
             f"/repos/man-group/ArcticDB/actions/artifacts/{artifact_id}/zip",
         ]
 
-        subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, check=True)
+        try:
+            result = subprocess.run(cmd, stdout=f, stderr=subprocess.PIPE, check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"Error running command: {' '.join(cmd)}")
+            print(f"Return code: {e.returncode}")
+            print(f"Error output: {e.stderr.decode('utf-8')}")
+            raise
 
     return zip_path
 
@@ -493,14 +517,14 @@ def extract_csv_from_xmls(run_id, download_dir):
     return csv_path
 
 
-def get_all_workflow_runs_parallel(max_workers, max_pages=None):
+def get_all_workflow_runs_parallel(max_workers, max_pages):
     """Get all workflow runs using parallel requests"""
     all_runs = []
 
     # If max_pages is not provided, determine it dynamically
-    if max_pages is None:
+    if max_pages == 0:
         print("Determining total number of pages dynamically...")
-        total_runs, total_pages = get_total_runs_and_pages()
+        total_runs, total_pages = get_total_runs_and_pages(100)
         max_pages = total_pages
         print(f"Found {total_runs} total runs across {total_pages} pages")
 
@@ -509,7 +533,7 @@ def get_all_workflow_runs_parallel(max_workers, max_pages=None):
         future_to_page = {}
 
         for page_num in range(1, max_pages + 1):
-            future = executor.submit(fetch_page, page_num)
+            future = executor.submit(fetch_page, page_num, 100)
             future_to_page[future] = page_num
 
         for future in as_completed(future_to_page):
@@ -542,18 +566,19 @@ def save_csv_files_to_lib(run_ids, csv_files):
         print(f"Saving {csv_file} for {run_id}")
         df = pd.read_csv(csv_file)
         run = run_ids[str(run_id)]
-        symbol = f"{run.branch}_{run.commit_hash}_{run.timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{run.run_id}"
+        symbol = f"{run.branch}|{run.commit_hash}|{run.timestamp.strftime('%Y-%m-%d_%H-%M-%S')}|{run.run_id}"
         lib.write(symbol, df)
-
-    # run a list_symbols to compact the symbol list, if needed
-    for symbol in lib.list_symbols():
-        print(symbol)
 
 
 @click.command()
 @click.option("--max-workers", type=int, default=5)
 @click.option("--download-dir", type=str, default="gh_artifacts")
-@click.option("--max-pages", type=int, default=None, help="Maximum number of pages to fetch (default: auto-detect)")
+@click.option(
+    "--max-pages",
+    type=int,
+    default=20,
+    help="Maximum number of pages to fetch (default: 20), set to 0 to fetch all pages",
+)
 @click.option(
     "--use-github-actions",
     is_flag=True,
