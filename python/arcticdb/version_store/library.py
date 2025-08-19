@@ -14,6 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
+from arcticdb.dependencies import pyarrow as pa
 from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
@@ -41,6 +42,7 @@ AsOf = Union[int, str, datetime.datetime]
 
 
 NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
+_EXPERIMENTAL_NORMALIZABLE_TYPES = (pa.Table,)
 
 
 NormalizableType = Union[NORMALIZABLE_TYPES]
@@ -183,7 +185,9 @@ class WritePayload:
     One instance of ``WritePayload`` refers to one unit that can be written through to ArcticDB.
     """
 
-    def __init__(self, symbol: str, data: Union[Any, NormalizableType], metadata: Any = None):
+    def __init__(
+        self, symbol: str, data: Union[Any, NormalizableType], metadata: Any = None, index_column: Optional[str] = None
+    ):
         """
         Constructor.
 
@@ -196,6 +200,9 @@ class WritePayload:
             Data to be written. If data is not of NormalizableType then it will be pickled.
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         See Also
         --------
@@ -204,10 +211,12 @@ class WritePayload:
         self.symbol = symbol
         self.data = data
         self.metadata = metadata
+        self.index_column = index_column
 
     def __repr__(self):
         res = f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}"
         res += f", metadata={self.metadata}" if self.metadata is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column is not None else ""
         res += ")"
         return res
 
@@ -216,6 +225,8 @@ class WritePayload:
         yield self.data
         if self.metadata is not None:
             yield self.metadata
+        if self.index_column is not None:
+            yield self.index_column
 
 
 class WriteMetadataPayload:
@@ -363,6 +374,7 @@ class UpdatePayload:
         data: NormalizableType,
         metadata: Any = None,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
+        index_column: Optional[str] = None,
     ):
         """
         Constructor.
@@ -379,18 +391,23 @@ class UpdatePayload:
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
             Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
             side of the range open-ended.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
         """
         self.symbol = symbol
         self.data = data
         self.metadata = metadata
         self.date_range = date_range
+        self.index_column = index_column
 
     def __repr__(self):
-        return (
-            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata}"
-            if self.metadata is not None
-            else f", date_range={self.date_range}" if self.date_range is not None else ""
-        )
+        res = f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
+        res += f", metadata={self.metadata}" if self.metadata is not None else ""
+        res += f", date_range={self.date_range}" if self.date_range is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column is not None else ""
+        res += ")"
+        return res
 
 
 class LazyDataFrame(QueryBuilder):
@@ -857,6 +874,7 @@ class Library:
         validate_index=True,
         sort_on_index=False,
         sort_columns: List[str] = None,
+        index_column: Optional[str] = None,
     ) -> None:
         """
         Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they
@@ -878,6 +896,9 @@ class Library:
             index will be used as the primary sort column, and the others as secondaries.
         sort_columns:
             Sort the data by specific columns prior to writing.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -886,12 +907,22 @@ class Library:
             or ``sort_and_finalize_staged_data`` to specify which data to finalize.
 
         """
+
+        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
+            pass
+        elif not isinstance(data, NORMALIZABLE_TYPES):
+            raise ArcticUnsupportedDataTypeException(
+                "data is of a type that cannot be normalized. Consider using "
+                f"write_pickle instead. type(data)=[{type(data)}]"
+            )
+
         return self._nvs.stage(
             symbol,
             data,
             validate_index=validate_index,
             sort_on_index=sort_on_index,
             sort_columns=sort_columns,
+            index_column=index_column,
             norm_failure_options_msg="Failed to normalize data. It is inadvisable to pickle staged data"
             " as it will not be possible to finalize it.",
         )
@@ -904,6 +935,7 @@ class Library:
         prune_previous_versions: bool = False,
         staged=False,
         validate_index=True,
+        index_column: Optional[str] = None,
     ) -> VersionedItem:
         """
         Write ``data`` to the specified ``symbol``. If ``symbol`` already exists then a new version will be created to
@@ -948,6 +980,9 @@ class Library:
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -976,7 +1011,9 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
-        if not isinstance(data, NORMALIZABLE_TYPES):
+        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
+            pass
+        elif not isinstance(data, NORMALIZABLE_TYPES):
             raise ArcticUnsupportedDataTypeException(
                 "data is of a type that cannot be normalized. Consider using "
                 f"write_pickle instead. type(data)=[{type(data)}]"
@@ -990,6 +1027,7 @@ class Library:
             pickle_on_failure=False,
             parallel=staged,
             validate_index=validate_index,
+            index_column=index_column,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
             "(such as date_range filtering and column selection) will not work on pickled data.",
         )
@@ -1049,11 +1087,12 @@ class Library:
         if len(symbols) < len(batch):
             raise ArcticDuplicateSymbolsInBatchException
 
-    @staticmethod
-    def _raise_if_unsupported_type_in_write_batch(payloads):
+    def _raise_if_unsupported_type_in_write_batch(self, payloads):
         bad_symbols = []
         for p in payloads:
-            if not isinstance(p.data, NORMALIZABLE_TYPES):
+            if isinstance(p.data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
+                pass
+            elif not isinstance(p.data, NORMALIZABLE_TYPES):
                 bad_symbols.append((p.symbol, type(p.data)))
 
         if not bad_symbols:
@@ -1137,6 +1176,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=False,
             validate_index=validate_index,
+            index_column_vector=[p.index_column for p in payloads],
             throw_on_error=throw_on_error,
             norm_failure_options_msg="Using write_pickle_batch will allow the object to be written. However, many "
             "operations (such as date_range filtering and column selection) will not work on "
@@ -1192,6 +1232,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: bool = False,
         validate_index: bool = True,
+        index_column: Optional[str] = None,
     ) -> VersionedItem:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
@@ -1221,6 +1262,9 @@ class Library:
         validate_index
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -1264,12 +1308,21 @@ class Library:
         2018-01-05       5
         2018-01-06       6
         """
+
+        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
+            pass
+        elif not isinstance(data, NORMALIZABLE_TYPES):
+            raise ArcticUnsupportedDataTypeException(
+                f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
+            )
+
         return self._nvs.append(
             symbol=symbol,
             dataframe=data,
             metadata=metadata,
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
+            index_column=index_column,
         )
 
     def append_batch(
@@ -1319,6 +1372,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
             throw_on_error=throw_on_error,
+            index_column_vector=[p.index_column for p in append_payloads],
         )
 
     def update(
@@ -1329,6 +1383,7 @@ class Library:
         upsert: bool = False,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
         prune_previous_versions: bool = False,
+        index_column: Optional[str] = None,
     ) -> VersionedItem:
         """
         Overwrites existing symbol data with the contents of ``data``. The entire range between the first and last index
@@ -1369,6 +1424,9 @@ class Library:
             modified, even if ``data`` covers a wider date range.
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -1424,6 +1482,14 @@ class Library:
         2024-01-11 00:00:00.000000 2024-02-01 00:00:00.000000001           1   b'test'  1738599073268493107   5975110026983744452          84         2          1        2     200009   200031
 
         """
+
+        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
+            pass
+        elif not isinstance(data, NORMALIZABLE_TYPES):
+            raise ArcticUnsupportedDataTypeException(
+                f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
+            )
+
         return self._nvs.update(
             symbol=symbol,
             data=data,
@@ -1431,6 +1497,7 @@ class Library:
             upsert=upsert,
             date_range=date_range,
             prune_previous_version=prune_previous_versions,
+            index_column=index_column,
         )
 
     def update_batch(
@@ -1509,6 +1576,7 @@ class Library:
             [p.date_range for p in update_payloads],
             prune_previous_version=prune_previous_versions,
             upsert=upsert,
+            index_column_vector=[p.index_column for p in update_payloads],
         )
         return batch_update_result
 

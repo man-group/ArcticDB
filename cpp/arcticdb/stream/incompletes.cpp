@@ -141,7 +141,7 @@ TimeseriesDescriptor pack_timeseries_descriptor(
 }
 
 SegmentInMemory incomplete_segment_from_frame(
-        const std::shared_ptr<pipelines::InputTensorFrame>& frame, size_t existing_rows,
+        const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key, bool allow_sparse
 ) {
     using namespace arcticdb::stream;
@@ -149,11 +149,11 @@ SegmentInMemory incomplete_segment_from_frame(
     auto offset_in_frame = 0;
     auto slice_num_for_column = 0;
     const auto num_rows = frame->num_rows;
-    auto index_tensor = std::move(frame->index_tensor);
+    auto index_tensor = std::move(frame->opt_index_tensor());
     const bool has_index = frame->has_index();
     const auto index = std::move(frame->index);
 
-    auto field_tensors = std::move(frame->field_tensors);
+    auto field_tensors = std::move(frame->field_tensors());
     auto output = std::visit(
             [&](const auto& idx) {
                 using IdxType = std::decay_t<decltype(idx)>;
@@ -256,7 +256,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 }
 
 [[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
-        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
 ) {
     ARCTICDB_SAMPLE(WriteIncompleteFrameWithSorting, 0)
@@ -275,12 +275,15 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     bool sparsify_floats{false};
 
     auto next_key = std::nullopt;
-    auto segment = incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
+    // This clone is unnecessarily expensive. We should have a sort method that produces a new segment (current one is
+    // in-place)
+    auto segment = frame->has_tensors() ? incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats)
+                                        : frame->segment().clone();
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;
-        for (auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
-            cols.emplace_back(frame->desc.fields(i).name());
+        for (auto i = 0UL; i < frame->desc().index().field_count(); ++i) {
+            cols.emplace_back(frame->desc().fields(i).name());
         }
         if (options.sort_columns) {
             for (auto& extra_sort_col : *options.sort_columns) {
@@ -294,9 +297,9 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     }
 
     auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
-    auto stream_desc = frame->desc;
+    auto stream_desc = frame->desc();
     auto norm_meta = timeseries_desc.proto().normalization();
-    auto tsd = pack_timeseries_descriptor(frame->desc, frame->num_rows, std::nullopt, std::move(norm_meta));
+    auto tsd = pack_timeseries_descriptor(frame->desc(), frame->num_rows, std::nullopt, std::move(norm_meta));
     segment.set_timeseries_descriptor(tsd);
 
     bool is_timestamp_index = std::holds_alternative<stream::TimeseriesIndex>(frame->index);
@@ -340,7 +343,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 }
 
 [[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
-        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
 ) {
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
@@ -360,7 +363,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     );
 
     auto index_range = frame->index_range;
-    const auto index = std::move(frame->index);
+    const auto index = frame->index;
 
     WriteOptions write_options = options.write_options;
     write_options.column_group_size =
@@ -400,7 +403,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
 
-    auto desc = frame->desc;
+    auto desc = frame->desc();
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
     auto bucketize_dynamic = frame->bucketize_dynamic;
@@ -471,7 +474,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 }
 
 std::vector<AtomKey> write_parallel_impl(
-        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         const WriteIncompleteOptions& options
 ) {
     // Apply validation for new symbols, but don't interfere with pre-existing symbols that would fail our modern
@@ -578,7 +581,7 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
 }
 
 void append_incomplete(
-        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame,
         bool validate_index
 ) {
     using namespace arcticdb::proto::descriptors;
@@ -594,7 +597,7 @@ void append_incomplete(
     auto [next_key, total_rows] = read_head(store, stream_id);
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
-    auto desc = frame->desc.clone();
+    auto desc = frame->desc().clone();
 
     auto index_range = frame->index_range;
     auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);

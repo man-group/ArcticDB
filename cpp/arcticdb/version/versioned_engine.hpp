@@ -17,7 +17,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 
@@ -43,12 +43,12 @@ class VersionedEngine {
 
   public:
     virtual VersionedItem update_internal(
-            const StreamId& stream_id, const UpdateQuery& query, const std::shared_ptr<InputTensorFrame>& frame,
-            bool upsert, bool dynamic_schema, bool prune_previous_versions
+            const StreamId& stream_id, const UpdateQuery& query, const std::shared_ptr<InputFrame>& frame, bool upsert,
+            bool dynamic_schema, bool prune_previous_versions
     ) = 0;
 
     virtual VersionedItem append_internal(
-            const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool upsert,
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert,
             bool prune_previous_versions, bool validate_index
     ) = 0;
 
@@ -61,7 +61,7 @@ class VersionedEngine {
     ) = 0;
 
     virtual void append_incomplete_frame(
-            const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool validate_index
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index
     ) const = 0;
 
     virtual void append_incomplete_segment(const StreamId& stream_id, SegmentInMemory&& seg) = 0;
@@ -69,7 +69,7 @@ class VersionedEngine {
     virtual void remove_incomplete(const StreamId& stream_id) = 0;
 
     virtual StageResult write_parallel_frame(
-            const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool validate_index,
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index,
             bool sort_on_index, const std::optional<std::vector<std::string>>& sort_columns
     ) const = 0;
 
@@ -90,7 +90,7 @@ class VersionedEngine {
     ) = 0;
 
     virtual VersionedItem write_versioned_dataframe_internal(
-            const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool prune_previous_versions,
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool prune_previous_versions,
             bool allow_sparse, bool validate_index
     ) = 0;
 
