@@ -417,6 +417,12 @@ class ChunkedBufferImpl {
         new(ptr) MemBlock(data, size, offset, ts, false);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
         bytes_ += size;
+        // TODO: Check if this change is correct for other uses of this method
+        // Also check if offset really needs to be a parameter or can always be inferred from block_offsets_
+        if(block_offsets_.empty())
+            block_offsets_.emplace_back(0);
+
+        block_offsets_.emplace_back(last_offset() + size);
     }
 
     void add_detachable_block(size_t capacity, size_t offset) {
