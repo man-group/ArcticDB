@@ -77,7 +77,7 @@ static void modify_descriptor(
 }
 
 VersionedItem write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
         const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
         bool validate_index
 ) {
@@ -85,7 +85,7 @@ VersionedItem write_dataframe_impl(
     ARCTICDB_DEBUG(
             log::version(),
             "write_dataframe_impl stream_id: {} , version_id: {}, {} rows",
-            frame->desc.id(),
+            frame->desc().id(),
             version_id,
             frame->num_rows
     );
@@ -95,22 +95,21 @@ VersionedItem write_dataframe_impl(
 }
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
         const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
         bool validate_index
 ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame->desc.id());
+        auto check_outcome = verify_symbol_key(frame->desc().id());
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
     }
 
     // Slice the frame according to the write options
-    frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
-    auto partial_key = IndexPartialKey{frame->desc.id(), version_id};
+    auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
     if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling write with validate_index enabled, input data must be sorted"
@@ -136,7 +135,7 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
 }
 } // namespace
 
-void sorted_data_check_append(const InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader) {
+void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader& index_segment_reader) {
     if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling append with validate_index enabled, input data must be sorted"
@@ -150,18 +149,16 @@ void sorted_data_check_append(const InputTensorFrame& frame, index::IndexSegment
 }
 
 folly::Future<AtomKey> async_append_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
-        const std::shared_ptr<InputTensorFrame>& frame, const WriteOptions& options, bool validate_index,
-        bool empty_types
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
+        const WriteOptions& options, bool validate_index, bool empty_types
 ) {
 
     util::check(
             update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to"
     );
-    const StreamId stream_id = frame->desc.id();
+    const StreamId stream_id = frame->desc().id();
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
-    bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
     auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     frame->set_offset(static_cast<ssize_t>(row_offset));
@@ -170,7 +167,6 @@ folly::Future<AtomKey> async_append_impl(
         sorted_data_check_append(*frame, index_segment_reader);
     }
 
-    frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
     return append_frame(
             IndexPartialKey{stream_id, update_info.next_version_id_},
@@ -184,9 +180,8 @@ folly::Future<AtomKey> async_append_impl(
 }
 
 VersionedItem append_impl(
-        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
-        const std::shared_ptr<InputTensorFrame>& frame, const WriteOptions& options, bool validate_index,
-        bool empty_types
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const std::shared_ptr<InputFrame>& frame,
+        const WriteOptions& options, bool validate_index, bool empty_types
 ) {
 
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
@@ -342,13 +337,13 @@ VersionedItem delete_range_impl(
     return versioned_item;
 }
 
-void check_update_data_is_sorted(const InputTensorFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
+void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader) {
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
             is_time_series, "When calling update, the input data must be a time series."
     );
     bool input_data_is_sorted =
-            frame.desc.sorted() == SortedValue::ASCENDING || frame.desc.sorted() == SortedValue::UNKNOWN;
+            frame.desc().sorted() == SortedValue::ASCENDING || frame.desc().sorted() == SortedValue::UNKNOWN;
     // If changing this error message, the corresponding message in _normalization.py::restrict_data_to_date_range_only
     // should also be updated
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -368,8 +363,7 @@ struct UpdateRanges {
 };
 
 static UpdateRanges compute_update_ranges(
-        const FilterRange& row_filter, const InputTensorFrame& update_frame,
-        std::span<SliceAndKey> update_slice_and_keys
+        const FilterRange& row_filter, const InputFrame& update_frame, std::span<SliceAndKey> update_slice_and_keys
 ) {
     return util::variant_match(
             row_filter,
@@ -397,8 +391,8 @@ static UpdateRanges compute_update_ranges(
 }
 
 static void check_can_update(
-        const InputTensorFrame& frame, const index::IndexSegmentReader& index_segment_reader,
-        const UpdateInfo& update_info, bool dynamic_schema, bool empty_types
+        const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader, const UpdateInfo& update_info,
+        bool dynamic_schema, bool empty_types
 ) {
     util::check(
             update_info.previous_index_key_.has_value(),
@@ -413,7 +407,7 @@ static void check_can_update(
 }
 
 static std::shared_ptr<std::vector<SliceAndKey>> get_keys_affected_by_update(
-        const index::IndexSegmentReader& index_segment_reader, const InputTensorFrame& frame, const UpdateQuery& query,
+        const index::IndexSegmentReader& index_segment_reader, const InputFrame& frame, const UpdateQuery& query,
         bool dynamic_schema
 ) {
     std::vector<FilterQuery<index::IndexSegmentReader>> queries = build_update_query_filters<index::IndexSegmentReader>(
@@ -467,7 +461,7 @@ static std::pair<std::vector<SliceAndKey>, size_t> get_slice_and_keys_for_update
 
 folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputTensorFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
 ) {
     return index::async_get_index_reader(*(update_info.previous_index_key_), store)
             .thenValue([store, update_info, query, frame, options = std::move(options), dynamic_schema, empty_types](
@@ -477,14 +471,13 @@ folly::Future<AtomKey> async_update_impl(
                 ARCTICDB_DEBUG(
                         log::version(),
                         "Update versioned dataframe for stream_id: {} , version_id = {}",
-                        frame->desc.id(),
+                        frame->desc().id(),
                         update_info.previous_index_key_->version_id()
                 );
-                frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
                 return slice_and_write(
                                frame,
                                get_slicing_policy(options, *frame),
-                               IndexPartialKey{frame->desc.id(), update_info.next_version_id_},
+                               IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
                                store
                 )
                         .via(&async::cpu_executor())
@@ -540,7 +533,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 index_type_from_descriptor(tsd.as_stream_descriptor()),
                                                 std::move(tsd),
                                                 std::move(flattened_slice_and_keys),
-                                                IndexPartialKey{frame->desc.id(), update_info.next_version_id_},
+                                                IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
                                                 store
                                         );
                                     });
@@ -550,13 +543,13 @@ folly::Future<AtomKey> async_update_impl(
 
 VersionedItem update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
-        const std::shared_ptr<InputTensorFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+        const std::shared_ptr<InputFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
 ) {
     auto versioned_item = VersionedItem(
             async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get()
     );
     ARCTICDB_DEBUG(
-            log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_
+            log::version(), "updated stream_id: {} , version_id: {}", frame->desc().id(), update_info.next_version_id_
     );
     return versioned_item;
 }

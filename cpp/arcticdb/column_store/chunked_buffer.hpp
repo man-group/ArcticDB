@@ -329,6 +329,11 @@ class ChunkedBufferImpl {
         return const_cast<ChunkedBufferImpl*>(this)->bytes_at(pos_bytes, required);
     }
 
+    bool bytes_within_one_block(size_t pos_bytes, size_t required) const {
+        auto [block, pos, _] = block_and_offset(pos_bytes);
+        return pos + required <= block->bytes();
+    }
+
     uint8_t& operator[](size_t pos_bytes) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
         util::check(
@@ -420,14 +425,17 @@ class ChunkedBufferImpl {
 
     void add_block(size_t capacity, size_t offset) { blocks_.emplace_back(create_regular_block(capacity, offset)); }
 
-    void add_external_block(const uint8_t* data, size_t size, size_t offset) {
+    void add_external_block(const uint8_t* data, size_t size) {
         if (!no_blocks() && last_block().empty())
             free_last_block();
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        new (ptr) MemBlock(data, size, offset, ts, false);
+        new (ptr) MemBlock(data, size, last_offset(), ts, false);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
         bytes_ += size;
+        if (block_offsets_.empty())
+            block_offsets_.emplace_back(0);
+        block_offsets_.emplace_back(last_offset() + size);
     }
 
     void add_detachable_block(size_t capacity, size_t offset) {
@@ -468,7 +476,7 @@ class ChunkedBufferImpl {
 
     [[nodiscard]] size_t free_space() const { return no_blocks() ? 0 : last_block().free_space(); }
 
-    [[nodiscard]] size_t last_offset() const { return block_offsets_.empty() ? 0 : *block_offsets_.rbegin(); }
+    [[nodiscard]] size_t last_offset() const { return block_offsets_.empty() ? 0 : block_offsets_.back(); }
 
     inline void assert_size(size_t bytes) const {
         util::check(bytes <= bytes_, "Expected allocation size {} smaller than actual allocation {}", bytes, bytes_);
