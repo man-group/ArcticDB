@@ -6,6 +6,7 @@
  */
 #include <arcticdb/codec/segment_header.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 
 namespace arcticdb {
 

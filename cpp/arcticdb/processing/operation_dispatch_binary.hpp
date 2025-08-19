@@ -24,6 +24,7 @@
 #include <arcticdb/processing/operation_dispatch.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/type_conversion.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 
 namespace arcticdb {
 

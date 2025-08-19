@@ -431,6 +431,7 @@ set(arcticdb_srcs
         column_store/column.cpp
         column_store/column_data.cpp
         column_store/key_segment.cpp
+        column_store/memory_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
         column_store/statistics.hpp

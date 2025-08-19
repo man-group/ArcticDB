@@ -7,6 +7,7 @@
 
 #include <arcticdb/column_store/key_segment.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 
 namespace arcticdb {
 

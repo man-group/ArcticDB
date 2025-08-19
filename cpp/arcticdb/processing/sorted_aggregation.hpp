@@ -15,6 +15,7 @@
 
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/processing/expression_node.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 
 namespace arcticdb {
 

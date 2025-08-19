@@ -12,6 +12,81 @@
 
 namespace arcticdb {
 
+// N.B. this will not catch all the things that C++ considers to be narrowing conversions, because
+// it doesn't take into account integral promotion, however we don't care about that for the
+// purpose for which it is used in this file.
+template <typename SourceType, typename TargetType>
+constexpr bool is_narrowing_conversion() {
+    if(sizeof(TargetType) < sizeof(SourceType))
+        return true;
+
+    if(sizeof(SourceType) == sizeof(TargetType) && std::is_integral_v<TargetType> && std::is_unsigned_v<SourceType> && std::is_signed_v<TargetType>) {
+        return true;
+    }
+
+    return false;
+}
+
+JiveTable create_jive_table(const std::vector<std::shared_ptr<Column>>& columns) {
+    JiveTable output(columns[0]->row_count());
+    std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
+
+    // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
+    for(auto it = std::rbegin(columns); it != std::rend(columns); ++it) {
+        auto& column = *it;
+        user_input::check<ErrorCode::E_SORT_ON_SPARSE>(!column->is_sparse(), "Can't sort on sparse column with type {}", column->type());
+        details::visit_type(column->type().data_type(), [&output, &column] (auto type_desc_tag) {
+            using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
+            auto column_data = column->data();
+            auto accessor = random_accessor<typename type_info::TDT>(&column_data);
+            std::stable_sort(std::begin(output.orig_pos_),
+                      std::end(output.orig_pos_),
+                      [&](const auto &a, const auto &b) -> bool {
+                          return accessor.at(a) < accessor.at(b);
+                      });
+        });
+        // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
+        for (auto i = 0u; i < output.orig_pos_.size(); ++i) {
+            output.sorted_pos_[output.orig_pos_[i]] = i;
+        }
+    }
+
+    return output;
+}
+
+bool operator==(const ExtraBufferIndex& lhs, const ExtraBufferIndex& rhs) {
+    return (lhs.offset_bytes_ == rhs.offset_bytes_) && (lhs.type_ == rhs.type_);
+}
+
+std::size_t ExtraBufferIndexHash::operator()(const ExtraBufferIndex& index) const {
+    return folly::hash::hash_combine(index.offset_bytes_, index.type_);
+}
+
+ChunkedBuffer& ExtraBufferContainer::create_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type) {
+    std::lock_guard lock(mutex_);
+    auto inserted = buffers_.try_emplace(ExtraBufferIndex{offset, type}, ChunkedBuffer{size, allocation_type});
+    util::check(inserted.second, "Failed to insert additional chunked buffer at position {}", offset);
+    return inserted.first->second;
+}
+
+void ExtraBufferContainer::set_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
+    std::lock_guard lock(mutex_);
+    buffers_.try_emplace(ExtraBufferIndex{offset, type}, std::move(buffer));
+}
+
+ChunkedBuffer& ExtraBufferContainer::get_buffer(size_t offset, ExtraBufferType type) const {
+    std::lock_guard lock(mutex_);
+    auto it = buffers_.find(ExtraBufferIndex{offset, type});
+    util::check(it != buffers_.end(), "Failed to find additional chunked buffer at position {}", offset);
+    return const_cast<ChunkedBuffer&>(it->second);
+}
+
+bool ExtraBufferContainer::has_buffer(size_t offset, ExtraBufferType type) const {
+    std::lock_guard lock(mutex_);
+    auto it = buffers_.find(ExtraBufferIndex{offset, type});
+    return it != buffers_.end();
+}
+
 void initialise_output_column(const Column& input_column, Column& output_column) {
     if (&input_column != &output_column) {
         size_t output_physical_rows;
@@ -111,6 +186,215 @@ bool operator==(const Column& left, const Column& right) {
 
 bool operator!=(const Column& left, const Column& right) {
     return !(left == right);
+}
+
+Column::Column() : type_(null_type_descriptor()) {}
+
+Column::Column(TypeDescriptor type) :
+        Column(type, 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED) {
+}
+
+Column::Column(TypeDescriptor type, Sparsity allow_sparse) :
+        Column(type, 0, AllocationType::DYNAMIC, allow_sparse) {
+}
+
+Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer) :
+        data_(std::move(buffer)),
+        type_(type),
+        allow_sparse_(allow_sparse) {
+}
+
+Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes) :
+        data_(std::move(buffer)),
+        shapes_(std::move(shapes)),
+        type_(type),
+        allow_sparse_(allow_sparse) {
+}
+
+Column::Column(
+        TypeDescriptor type,
+        size_t expected_rows,
+        AllocationType presize,
+        Sparsity allow_sparse) :
+            data_(expected_rows * entity::internal_data_type_size(type), presize),
+            type_(type),
+            allow_sparse_(allow_sparse) {
+    ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
+}
+
+Column::Column(
+        TypeDescriptor type,
+        size_t expected_rows,
+        AllocationType presize,
+        Sparsity allow_sparse,
+        OutputFormat output_format,
+        DataTypeMode mode) :
+        data_(expected_rows * entity::data_type_size(type, output_format, mode), presize),
+        type_(type),
+        allow_sparse_(allow_sparse) {
+    ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
+}
+
+void Column::set_statistics(FieldStatsImpl stats) {
+    stats_ = stats;
+}
+
+bool Column::has_statistics() const {
+    return stats_.set_;
+};
+
+FieldStatsImpl Column::get_statistics() const  {
+    return stats_;
+}
+
+void Column::backfill_sparse_map(ssize_t to_row) {
+    ARCTICDB_TRACE(log::version(), "Backfilling sparse map to position {}", to_row);
+    // Initialise the optional to an empty bitset if it has not been created yet
+    auto& bitset = sparse_map();
+    if (to_row >= 0) {
+        bitset.set_range(0, bv_size(to_row), true);
+    }
+}
+
+void Column::set_sparse_block(ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+    data_.buffer() = std::move(buffer);
+    sparse_map_ = std::move(bitset);
+}
+
+void Column::set_sparse_block(ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+    data_.buffer() = std::move(buffer);
+    shapes_.buffer() = std::move(shapes);
+    sparse_map_ = std::move(bitset);
+}
+
+ChunkedBuffer&& Column::release_buffer() {
+    return std::move(data_.buffer());
+}
+
+Buffer&& Column::release_shapes() {
+    return std::move(shapes_.buffer());
+}
+
+std::optional<Column::StringArrayData> Column::string_array_at(position_t idx, const StringPool &string_pool) {
+    util::check_arg(idx < row_count(), "String array index out of bounds in column");
+    util::check_arg(type_.dimension() == Dimension::Dim1, "String array should always be one dimensional");
+    if (!inflated_)
+        inflate_string_arrays(string_pool);
+
+    const shape_t *shape_ptr = shape_index(idx);
+    auto num_strings = *shape_ptr;
+    ssize_t string_size = offsets_[idx] / num_strings;
+    return StringArrayData{num_strings, string_size, data_.ptr_cast<char>(bytes_offset(idx), num_strings * string_size)};
+}
+
+ChunkedBuffer::Iterator Column::get_iterator() const {
+    return {const_cast<ChunkedBuffer*>(&data_.buffer()), get_type_size(type_.data_type())};
+}
+
+size_t Column::bytes() const {
+    return data_.bytes();
+}
+
+ColumnData Column::data() const {
+    return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
+}
+
+const uint8_t* Column::ptr() const {
+    return data_.buffer().data();
+}
+
+uint8_t* Column::ptr() {
+    return data_.buffer().data();
+}
+
+TypeDescriptor Column::type() const { return type_; }
+
+size_t Column::num_blocks() const  {
+    return data_.buffer().num_blocks();
+}
+
+const shape_t* Column::shape_ptr() const {
+    return shapes_.ptr_cast<shape_t>(0, num_shapes());
+}
+
+void Column::set_orig_type(const TypeDescriptor& desc) {
+    orig_type_ = desc;
+}
+
+bool Column::has_orig_type() const {
+    return static_cast<bool>(orig_type_);
+}
+
+const TypeDescriptor& Column::orig_type() const  {
+    return orig_type_.value();
+}
+
+void Column::compact_blocks() {
+    data_.compact_blocks();
+}
+
+shape_t* Column::allocate_shapes(std::size_t bytes) {
+    shapes_.ensure_bytes(bytes);
+    return reinterpret_cast<shape_t *>(shapes_.cursor());
+}
+
+uint8_t* Column::allocate_data(std::size_t bytes) {
+    util::check(bytes != 0, "Allocate data called with zero size");
+    data_.ensure_bytes(bytes);
+    return data_.cursor();
+}
+
+void Column::advance_data(std::size_t size) {
+    data_.advance(position_t(size));
+}
+
+void Column::advance_shapes(std::size_t size) {
+    shapes_.advance(position_t(size));
+}
+
+[[nodiscard]] ChunkedBuffer& Column::buffer() {
+    return data_.buffer();
+}
+
+uint8_t* Column::bytes_at(size_t bytes, size_t required) {
+    ARCTICDB_TRACE(log::inmem(), "Column returning {} bytes at position {}", required, bytes);
+    return data_.bytes_at(bytes, required);
+}
+
+const uint8_t* Column::bytes_at(size_t bytes, size_t required) const {
+    return data_.bytes_at(bytes, required);
+}
+
+void Column::assert_size(size_t bytes) const {
+    data_.buffer().assert_size(bytes);
+}
+
+void Column::init_buffer() {
+    std::call_once(*init_buffer_, [this] () {
+        extra_buffers_ = std::make_unique<ExtraBufferContainer>();
+    });
+}
+
+ChunkedBuffer& Column::create_extra_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type) {
+    init_buffer();
+    return extra_buffers_->create_buffer(offset, type, size, allocation_type);
+}
+
+ChunkedBuffer& Column::get_extra_buffer(size_t offset, ExtraBufferType type) const {
+    util::check(static_cast<bool>(extra_buffers_), "Extra buffer {} requested but pointer is null", offset);
+    return extra_buffers_->get_buffer(offset, type);
+}
+
+void Column::set_extra_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
+    init_buffer();
+    extra_buffers_->set_buffer(offset, type, std::move(buffer));
+}
+
+bool Column::has_extra_buffer(size_t offset, ExtraBufferType type) const {
+    if(!extra_buffers_)
+        return false;
+
+    return extra_buffers_->has_buffer(offset, type);
 }
 
 // Column public methods
