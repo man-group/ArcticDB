@@ -563,10 +563,10 @@ def save_csv_files_to_lib(run_ids, csv_files):
 
     for csv_file in csv_files:
         run_id = csv_file.stem
-        print(f"Saving {csv_file} for {run_id}")
-        df = pd.read_csv(csv_file)
         run = run_ids[str(run_id)]
         symbol = f"{run.branch}|{run.commit_hash}|{run.timestamp.strftime('%Y-%m-%d_%H-%M-%S')}|{run.run_id}"
+        print(f"Saving {csv_file} to {symbol}")
+        df = pd.read_csv(csv_file)
         lib.write(symbol, df)
 
 
