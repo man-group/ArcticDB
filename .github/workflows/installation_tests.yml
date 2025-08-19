@@ -266,6 +266,8 @@ jobs:
         echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
     
     - name: Set environment variables based on arcticdb version for GCP
+      if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
       run: |
         version=$(python -c "import arcticdb; print(arcticdb.__version__)")
         echo "Detected arcticdb version: $version"
