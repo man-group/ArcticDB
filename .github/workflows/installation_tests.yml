@@ -264,11 +264,23 @@ jobs:
         echo "ARCTICDB_STORAGE_GCP=${{ env.real_gcp }}" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
         echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
+    
+    - name: Set environment variables based on arcticdb version for GCP
+      if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
+      run: |
+        version=$(python -c "import arcticdb; print(arcticdb.__version__)")
+        echo "Detected arcticdb version: $version"
 
-    - name: Setup tmate session
-      uses: mxschmitt/action-tmate@v3
-      if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
-
+        # Compare version using sort -V
+        if [ "$(printf '%s\n' "$version" "5.6.0" | sort -V | head -n1)" = "$version" ]; then
+          echo "Setting AWS environment variables for arcticdb <= 5.6.0"
+          echo "AWS_RESPONSE_CHECKSUM_VALIDATION=when_required" >> $GITHUB_ENV
+          echo "AWS_REQUEST_CHECKSUM_CALCULATION=when_required" >> $GITHUB_ENV
+        else
+          echo "No need to set AWS environment variables"
+        fi
+          
     - name: Set ArcticDB Debug Logging
       if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
       uses: ./.github/actions/enable_logging
@@ -306,6 +318,7 @@ jobs:
         name: logs-${{ matrix.os || inputs.os }}-${{ matrix.python || inputs.python}}
         path: |
           ./*test*        
+          **/*.log
 
 
           

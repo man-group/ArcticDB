@@ -94,6 +94,7 @@ def pytest_runtest_makereport(item, call):
 
 def pytest_terminal_summary(terminalreporter, exitstatus, config):
     import pytest_xfail
-    pytest_xfail.pytest_terminal_summary(terminalreporter, exitstatus, config)
+    pytest_xfail.pytest_terminal_summary(terminalreporter, exitstatus)
+
 
 #endregion
