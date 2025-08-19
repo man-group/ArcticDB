@@ -93,7 +93,7 @@ void fill_chunked_string_column(Column& column, size_t num_rows, size_t chunk_si
     }
 }
 
-TEST(Arrow, ColumnBasic) {
+TEST(ArrowRead, ColumnBasic) {
     const size_t num_rows = 100;
     const size_t chunk_size = 5;
     const size_t num_chunks = num_rows / chunk_size;
@@ -111,7 +111,7 @@ TEST(Arrow, ColumnBasic) {
     }
 }
 
-TEST(Arrow, ColumnString) {
+TEST(ArrowRead, ColumnString) {
     const size_t num_rows = 100;
     const size_t chunk_size = 5;
     const size_t num_chunks = num_rows / chunk_size;
@@ -172,7 +172,7 @@ TEST(Arrow, ColumnString) {
     }
 }
 
-TEST(Arrow, ConvertSegmentBasic) {
+TEST(ArrowRead, ConvertSegmentBasic) {
     const auto symbol = "symbol";
     const auto num_rows = 100u;
     const auto chunk_size = 10u;
@@ -218,7 +218,7 @@ void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std:
     }
 }
 
-TEST(Arrow, ConvertSegmentMultipleStringColumns) {
+TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
     const auto symbol = "symbol";
     const auto num_rows = 100u;
     const auto chunk_size = 19u;

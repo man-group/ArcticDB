@@ -86,4 +86,8 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
     return output;
 }
 
+SegmentInMemory arrow_data_to_segment(ARCTICDB_UNUSED const std::vector<sparrow::record_batch>& record_batches) {
+    return {};
+}
+
 } // namespace arcticdb
