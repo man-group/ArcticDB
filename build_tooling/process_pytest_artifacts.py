@@ -1,16 +1,17 @@
 import subprocess
 import json
-import requests
+import shutil
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from arcticdb.storage_fixtures.s3 import real_s3_from_environment_variables
 import time
-import os
 from pathlib import Path
 import zipfile
 import pandas as pd
 from arcticdb import Arctic
 import click
-from typing import Union, List
+from typing import Dict, List
+import xml.etree.ElementTree as ET
+import csv
 
 
 def fetch_page(page, per_page=100):
@@ -135,7 +136,7 @@ def get_artifacts_for_run(artifact_download_url):
     data = json.loads(output.stdout)
     artifacts = data.get("artifacts", [])
 
-    print(f"Found {len(artifacts)} artifacts for run {artifact_download_url}")
+    # print(f"Found {len(artifacts)} artifacts for run {artifact_download_url}")
     return artifacts
 
 
@@ -152,11 +153,7 @@ def download_artifact(run: Run, artifact: dict, download_dir: Path) -> Path:
     # Create directory for this artifact
     artifact_dir = download_dir / f"run_{run.run_id}_{artifact_name}"
 
-    # check if the directory already exists
-    if artifact_dir.exists():
-        raise Exception(f"Artifact {artifact_name} already exists")
-
-    artifact_dir.mkdir(parents=True)
+    artifact_dir.mkdir(parents=True, exist_ok=True)
 
     # Download the zip file
     zip_path = artifact_dir / f"{artifact_name}.zip"
@@ -190,7 +187,7 @@ def extract_zip(zip_path, extract_dir):
     try:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_dir)
-        print(f"Extracted {zip_path} to {extract_dir}")
+        # print(f"Extracted {zip_path} to {extract_dir}")
 
         # remove the zip file
         zip_path.unlink(missing_ok=True)
@@ -228,7 +225,9 @@ def unify_xml_for_run(run_id, download_dir):
 
         python_version = None
         py_match = re.search(r"cp(\d+)", artifact_name)
-        test_type = artifact_name.split("-")[3]
+        test_data = artifact_name.split("-")
+        test_type = test_data[3]
+        cache_type = test_data[4] if len(test_data) > 4 else "DefaultCache"
 
         if py_match:
             python_version = f"{py_match.group(1)}"
@@ -239,14 +238,12 @@ def unify_xml_for_run(run_id, download_dir):
 
         python_version = f"3.{subversion}"
 
-        cache_type = artifact_name.split("-")[4]
-
         return python_version, test_type, cache_type
 
     xml_files = []
 
     for xml_file in download_dir.glob("**/*.xml"):
-        if xml_file.is_file() and "pytest" in xml_file.name and run_id in str(xml_file):
+        if xml_file.is_file() and "pytest" in xml_file.name and str(run_id) in str(xml_file):
             xml_files.append(xml_file)
 
     if not xml_files:
@@ -281,12 +278,9 @@ def unify_xml_for_run(run_id, download_dir):
         file_testsuite = ET.SubElement(unified_root, "testsuite")
         file_testsuite.set("name", xml_file.name)
         file_testsuite.set("source_file", str(xml_file))
-        if python_version:
-            file_testsuite.set("python_version", python_version)
-        if test_type:
-            file_testsuite.set("test_type", test_type)
-        if cache_type:
-            file_testsuite.set("cache_type", cache_type)
+        file_testsuite.set("python_version", python_version)
+        file_testsuite.set("test_type", test_type)
+        file_testsuite.set("cache_type", cache_type)
 
         # Copy attributes from original testsuite
         for key, value in root.attrib.items():
@@ -305,12 +299,9 @@ def unify_xml_for_run(run_id, download_dir):
 
                 # Add source information
                 new_testcase.set("source_run", str(run_id))
-                if python_version:
-                    new_testcase.set("python_version", python_version)
-                if test_type:
-                    new_testcase.set("test_type", test_type)
-                if cache_type:
-                    new_testcase.set("cache_type", cache_type)
+                new_testcase.set("python_version", python_version)
+                new_testcase.set("test_type", test_type)
+                new_testcase.set("cache_type", cache_type)
 
                 # Copy child elements (failure, error, skipped, etc.)
                 for child in testcase:
@@ -354,11 +345,7 @@ def unify_xml_for_run(run_id, download_dir):
     return unified_xml_path
 
 
-def create_csv_from_unified_xml(unified_xml_path, csv_path=None):
-    """Create a CSV file from a unified XML file"""
-    import xml.etree.ElementTree as ET
-    import csv
-
+def create_csv_from_unified_xml(unified_xml_path, csv_path):
     try:
         tree = ET.parse(unified_xml_path)
         root = tree.getroot()
@@ -374,6 +361,7 @@ def create_csv_from_unified_xml(unified_xml_path, csv_path=None):
         "status",
         "time",
         "message",
+        "cache_type",
     ]
 
     csv_rows = []
@@ -442,31 +430,39 @@ def create_csv_from_unified_xml(unified_xml_path, csv_path=None):
     return csv_path
 
 
-def download_pytest_xmls_in_parallel(runs, download_dir, max_workers):
+def download_pytest_xmls_in_parallel(runs, download_dir, max_workers) -> List[str]:
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_run = {}
         for run in runs:
             future = executor.submit(process_workflow_run, run, download_dir)
             future_to_run[future] = run
+
+        runs_to_remove = []
         for future in as_completed(future_to_run):
             run = future_to_run[future]
-            downloaded_files = future.result()
-            print(f"Downloaded {len(downloaded_files)} files for run {run}")
+            result = future.result()
+            # print(f"Downloaded {len(downloaded_files)} files for run {run}")
+
+            for run_id, downloaded_files in result.items():
+                if not downloaded_files:
+                    runs_to_remove.append(str(run_id))
+
+        return runs_to_remove
 
 
-def process_workflow_run(run: Run, download_dir: Path) -> List[Path]:
+def process_workflow_run(run: Run, download_dir: Path) -> Dict[str, Path]:
     """Process a single workflow run - get artifacts and download them"""
 
-    if run.run_conclusion.lower() == "cancelled":
-        print(f"Skipping run {run.run_id} - cancelled")
-        return []
-
-    print(f"\nProcessing run {run.run_id}: ({run.run_status}/{run.run_conclusion}) {run.timestamp}")
+    if run.run_conclusion and run.run_conclusion.lower() == "cancelled":
+        # print(f"Skipping run {run.run_id} - cancelled")
+        return {run.run_id: None}
 
     # Only process completed runs
-    if run.run_status.lower() != "completed":
-        print(f"Skipping run {run.run_id} - not completed")
-        return []
+    if run.run_status and run.run_status.lower() != "completed":
+        # print(f"Skipping run {run.run_id} - not completed")
+        return {run.run_id: None}
+
+    print(f"Processing run {run.run_id}: ({run.run_status}/{run.run_conclusion}) {run.timestamp}")
 
     downloaded_zips = []
     artifacts = get_artifacts_for_run(run.artifacts_url)
@@ -479,19 +475,20 @@ def process_workflow_run(run: Run, download_dir: Path) -> List[Path]:
     for zip_path in downloaded_zips:
         extract_dir = zip_path.parent / "extracted"
         extract_zip(zip_path, extract_dir)
+        downloaded_files.append(extract_dir)
 
-    return downloaded_files
+    return {str(run.run_id): downloaded_files}
 
 
 def extract_csv_from_xmls(run_id, download_dir):
     # Unify XML files for this run
     unified_xml = unify_xml_for_run(run_id, download_dir)
+    if not unified_xml:
+        raise Exception(f"No unified XML found for run {run_id}")
 
     csv_path = unified_xml.with_suffix(".csv")
 
-    if not csv_path.exists():
-        # Create CSV from unified XML
-        csv_path = create_csv_from_unified_xml(unified_xml, csv_path)
+    csv_path = create_csv_from_unified_xml(unified_xml, csv_path)
 
     return csv_path
 
@@ -503,7 +500,7 @@ def get_all_workflow_runs_parallel(max_workers, max_pages=None):
     # If max_pages is not provided, determine it dynamically
     if max_pages is None:
         print("Determining total number of pages dynamically...")
-        total_runs, total_pages = get_total_runs_and_pages(100)
+        total_runs, total_pages = get_total_runs_and_pages()
         max_pages = total_pages
         print(f"Found {total_runs} total runs across {total_pages} pages")
 
@@ -512,20 +509,14 @@ def get_all_workflow_runs_parallel(max_workers, max_pages=None):
         future_to_page = {}
 
         for page_num in range(1, max_pages + 1):
-            future = executor.submit(fetch_page, page_num, 100)
+            future = executor.submit(fetch_page, page_num)
             future_to_page[future] = page_num
 
         for future in as_completed(future_to_page):
             page_num = future_to_page[future]
-            try:
-                runs = future.result()
-                if runs:
-                    all_runs.extend(runs)
-                else:
-                    print(f"Empty page {page_num}, reached the end")
-                    break
-            except Exception as e:
-                print(f"Error processing page {page_num}: {e}")
+            runs = future.result()
+            if runs:
+                all_runs.extend(runs)
 
     all_runs = [Run(run) for run in all_runs]
     return all_runs
@@ -550,12 +541,13 @@ def save_csv_files_to_lib(run_ids, csv_files):
         run_id = csv_file.stem
         print(f"Saving {csv_file} for {run_id}")
         df = pd.read_csv(csv_file)
-        run = run_ids[run_id]
+        run = run_ids[str(run_id)]
         symbol = f"{run.branch}_{run.commit_hash}_{run.timestamp.strftime('%Y-%m-%d_%H-%M-%S')}_{run.run_id}"
         lib.write(symbol, df)
 
     # run a list_symbols to compact the symbol list, if needed
-    lib.list_symbols()
+    for symbol in lib.list_symbols():
+        print(symbol)
 
 
 @click.command()
@@ -570,11 +562,12 @@ def save_csv_files_to_lib(run_ids, csv_files):
 )
 def main(max_workers, download_dir, max_pages, use_github_actions):
     download_dir = Path(download_dir)
+
     if use_github_actions:
         try:
             run_obj = create_run_from_github_actions()
             print(f"Created Run object from GitHub Actions environment: {run_obj}")
-            all_runs = {run_obj.run_id: run_obj}
+            all_runs = {str(run_obj.run_id): run_obj}
         except Exception as e:
             print(f"Error creating Run object from GitHub Actions environment: {e}")
             print("Falling back to manual parameter mode...")
@@ -584,7 +577,7 @@ def main(max_workers, download_dir, max_pages, use_github_actions):
         print("Fetching workflow runs...")
         start_time = time.time()
         all_runs = get_all_workflow_runs_parallel(max_workers, max_pages)
-        all_runs = {run.run_id: run for run in all_runs}
+        all_runs = {str(run.run_id): run for run in all_runs}
         end_time = time.time()
 
         print(f"\nTotal workflow runs fetched: {len(all_runs)}")
@@ -594,10 +587,14 @@ def main(max_workers, download_dir, max_pages, use_github_actions):
         start_time = time.time()
         try:
             download_dir.mkdir(parents=True)
-            download_pytest_xmls_in_parallel(all_runs.values(), download_dir, max_workers)
+            runs_to_remove = download_pytest_xmls_in_parallel(all_runs.values(), download_dir, max_workers)
+
+            print(f"Removing {len(runs_to_remove)} runs that were intentionally skipped")
+            for run_id in runs_to_remove:
+                del all_runs[run_id]
         except Exception as e:
             print(f"Error downloading pytest XMLs: {e}")
-            download_dir.rmdir()
+            shutil.rmtree(download_dir)
             raise
 
         end_time = time.time()
@@ -608,17 +605,16 @@ def main(max_workers, download_dir, max_pages, use_github_actions):
     all_csv_files = []
     for run_id in all_runs.keys():
         csv_file = extract_csv_from_xmls(run_id, download_dir)
-        all_csv_files.append(csv_file)
-
-    assert len(all_csv_files) == len(all_runs), (
-        f"Number of CSV files should be equal to number of runs,"
-        f"found {len(all_csv_files)} CSV files for {len(all_runs)} runs"
-    )
+        if csv_file:
+            all_csv_files.append(csv_file)
 
     print(f"\nProduced {len(all_csv_files)} CSV files")
     print(f"All files saved to: {download_dir.absolute()}")
 
     save_csv_files_to_lib(all_runs, all_csv_files)
+
+    # remove the download directory
+    shutil.rmtree(download_dir)
 
 
 if __name__ == "__main__":
