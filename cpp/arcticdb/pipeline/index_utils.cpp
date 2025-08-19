@@ -40,17 +40,17 @@ folly::Future<entity::AtomKey> write_index(
 }
 
 folly::Future<entity::AtomKey> write_index(
-        const std::shared_ptr<InputTensorFrame>& frame, std::vector<SliceAndKey>&& slice_and_keys,
+        const std::shared_ptr<InputFrame>& frame, std::vector<SliceAndKey>&& slice_and_keys,
         const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink
 ) {
     auto offset = frame->offset;
-    auto index = stream::index_type_from_descriptor(frame->desc);
+    auto index = stream::index_type_from_descriptor(frame->desc());
     auto timeseries_desc = index_descriptor_from_frame(frame, offset);
     return write_index(index, timeseries_desc, std::move(slice_and_keys), partial_key, sink);
 }
 
 folly::Future<entity::AtomKey> write_index(
-        const std::shared_ptr<InputTensorFrame>& frame, std::vector<folly::Future<SliceAndKey>>&& slice_and_keys,
+        const std::shared_ptr<InputFrame>& frame, std::vector<folly::Future<SliceAndKey>>&& slice_and_keys,
         const IndexPartialKey& partial_key, const std::shared_ptr<stream::StreamSink>& sink
 ) {
     auto keys_fut = folly::collect(std::move(slice_and_keys)).via(&async::cpu_executor());
@@ -73,20 +73,20 @@ std::pair<index::IndexSegmentReader, std::vector<SliceAndKey>> read_index_to_vec
 
 TimeseriesDescriptor get_merged_tsd(
         size_t row_count, bool dynamic_schema, const TimeseriesDescriptor& existing_tsd,
-        const std::shared_ptr<pipelines::InputTensorFrame>& new_frame
+        const std::shared_ptr<pipelines::InputFrame>& new_frame
 ) {
     auto existing_descriptor = existing_tsd.as_stream_descriptor();
     auto merged_descriptor = existing_descriptor;
     if (existing_tsd.total_rows() == 0) {
         // If the existing dataframe is empty, we use the descriptor of the new_frame
-        merged_descriptor = new_frame->desc;
+        merged_descriptor = new_frame->desc();
     } else if (dynamic_schema) {
         // In case of dynamic schema
-        const std::array fields_ptr = {new_frame->desc.fields_ptr()};
+        const std::array fields_ptr = {new_frame->desc().fields_ptr()};
         merged_descriptor = merge_descriptors(existing_descriptor, fields_ptr, {});
     } else {
         // In case of static schema, we only promote empty types and fixed->dynamic strings
-        const auto& new_fields = new_frame->desc.fields();
+        const auto& new_fields = new_frame->desc().fields();
         for (size_t i = 0; i < new_fields.size(); ++i) {
             const auto& new_type = new_fields.at(i).type();
             TypeDescriptor& result_type = merged_descriptor.mutable_field(i).mutable_type();
@@ -102,7 +102,7 @@ TimeseriesDescriptor get_merged_tsd(
             }
         }
     }
-    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame->desc.sorted()));
+    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame->desc().sorted()));
     return make_timeseries_descriptor(
             row_count,
             std::move(merged_descriptor),

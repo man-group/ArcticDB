@@ -98,7 +98,7 @@ void SegmentHeader::deserialize_from_bytes(const uint8_t* data, bool copy_data) 
         fields_buffer.ensure(fields_bytes);
         memcpy(fields_buffer.data(), data, fields_bytes);
     } else {
-        fields_buffer.add_external_block(data, fields_bytes, 0UL);
+        fields_buffer.add_external_block(data, fields_bytes);
     }
 
     data += data_.field_buffer_.fields_bytes_;

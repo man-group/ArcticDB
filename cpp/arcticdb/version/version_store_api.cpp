@@ -14,7 +14,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
@@ -66,11 +66,11 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     return versioned_item;
 }
 
-std::vector<std::shared_ptr<InputTensorFrame>> create_input_tensor_frames(
-        const std::vector<StreamId>& stream_ids, const std::vector<py::tuple>& items,
+std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
+        const std::vector<StreamId>& stream_ids, const std::vector<convert::InputItem>& items,
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool empty_types
 ) {
-    std::vector<std::shared_ptr<InputTensorFrame>> output;
+    std::vector<std::shared_ptr<InputFrame>> output;
     output.reserve(stream_ids.size());
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         output.emplace_back(
@@ -81,7 +81,7 @@ std::vector<std::shared_ptr<InputTensorFrame>> create_input_tensor_frames(
 }
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write(
-        const std::vector<StreamId>& stream_ids, const std::vector<py::tuple>& items,
+        const std::vector<StreamId>& stream_ids, const std::vector<convert::InputItem>& items,
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool prune_previous_versions,
         bool validate_index, bool throw_on_error
 ) {
@@ -93,7 +93,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
 }
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
-        const std::vector<StreamId>& stream_ids, const std::vector<py::tuple>& items,
+        const std::vector<StreamId>& stream_ids, const std::vector<convert::InputItem>& items,
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas, bool prune_previous_versions,
         bool validate_index, bool upsert, bool throw_on_error
 ) {
@@ -569,8 +569,8 @@ VersionedItem PythonVersionStore::write_partitioned_dataframe(
 
 VersionedItem PythonVersionStore::write_versioned_composite_data(
         const StreamId& stream_id, const py::object& metastruct, const std::vector<StreamId>& sub_keys,
-        const std::vector<py::tuple>& items, const std::vector<py::object>& norm_metas, const py::object& user_meta,
-        bool prune_previous_versions
+        const std::vector<convert::InputItem>& items, const std::vector<py::object>& norm_metas,
+        const py::object& user_meta, bool prune_previous_versions
 ) {
     ARCTICDB_SAMPLE(WriteVersionedMultiKey, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: write_versioned_composite_data");
@@ -619,7 +619,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
 }
 
 VersionedItem PythonVersionStore::write_versioned_dataframe(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
+        const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
         bool prune_previous_versions, bool sparsify_floats, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataframe, 0)
@@ -642,7 +642,7 @@ VersionedItem PythonVersionStore::test_write_versioned_segment(
 }
 
 VersionedItem PythonVersionStore::append(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
+        const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, const py::object& user_meta,
         bool upsert, bool prune_previous_versions, bool validate_index
 ) {
     return append_internal(
@@ -655,7 +655,7 @@ VersionedItem PythonVersionStore::append(
 }
 
 VersionedItem PythonVersionStore::update(
-        const StreamId& stream_id, const UpdateQuery& query, const py::tuple& item, const py::object& norm,
+        const StreamId& stream_id, const UpdateQuery& query, const convert::InputItem& item, const py::object& norm,
         const py::object& user_meta, bool upsert, bool dynamic_schema, bool prune_previous_versions
 ) {
     return update_internal(
@@ -803,7 +803,7 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
 }
 
 StageResult PythonVersionStore::write_parallel(
-        const StreamId& stream_id, const py::tuple& item, const py::object& norm, bool validate_index,
+        const StreamId& stream_id, const convert::InputItem& item, const py::object& norm, bool validate_index,
         bool sort_on_index, std::optional<std::vector<std::string>> sort_columns
 ) const {
     auto frame = convert::py_ndf_to_frame(stream_id, item, norm, py::none(), cfg().write_options().empty_types());
@@ -839,7 +839,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
 }
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_update(
-        const std::vector<StreamId>& stream_ids, const std::vector<py::tuple>& items,
+        const std::vector<StreamId>& stream_ids, const std::vector<convert::InputItem>& items,
         const std::vector<py::object>& norms, const std::vector<py::object>& user_metas,
         const std::vector<UpdateQuery>& update_qeries, bool prune_previous_versions, bool upsert
 ) {

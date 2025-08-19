@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/python/normalization_checks.hpp>
 
 namespace arcticdb {
@@ -26,8 +26,8 @@ struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTO
 IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right);
 
 void check_normalization_index_match(
-        NormalizationOperation operation, const StreamDescriptor& old_descriptor,
-        const pipelines::InputTensorFrame& frame, bool empty_types
+        NormalizationOperation operation, const StreamDescriptor& old_descriptor, const pipelines::InputFrame& frame,
+        bool empty_types
 );
 
 bool index_names_match(const StreamDescriptor& df_in_store_descriptor, const StreamDescriptor& new_df_descriptor);
@@ -39,6 +39,6 @@ bool columns_match(
 
 void fix_descriptor_mismatch_or_throw(
         NormalizationOperation operation, bool dynamic_schema, const pipelines::index::IndexSegmentReader& existing_isr,
-        const pipelines::InputTensorFrame& new_frame, bool empty_types
+        const pipelines::InputFrame& new_frame, bool empty_types
 );
 } // namespace arcticdb

@@ -269,4 +269,135 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
     return output;
 }
 
+DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
+    switch (arrow_type) {
+    case sparrow::data_type::BOOL:
+        return DataType::BOOL8;
+    case sparrow::data_type::UINT8:
+        return DataType::UINT8;
+    case sparrow::data_type::UINT16:
+        return DataType::UINT16;
+    case sparrow::data_type::UINT32:
+        return DataType::UINT32;
+    case sparrow::data_type::UINT64:
+        return DataType::UINT64;
+    case sparrow::data_type::INT8:
+        return DataType::INT8;
+    case sparrow::data_type::INT16:
+        return DataType::INT16;
+    case sparrow::data_type::INT32:
+        return DataType::INT32;
+    case sparrow::data_type::INT64:
+        return DataType::INT64;
+    case sparrow::data_type::FLOAT:
+        return DataType::FLOAT32;
+    case sparrow::data_type::DOUBLE:
+        return DataType::FLOAT64;
+    case sparrow::data_type::TIMESTAMP_NANOSECONDS:
+        return DataType::NANOSECONDS_UTC64;
+    default:
+        schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                "Unsupported Arrow data type provided `{}`", sparrow::data_type_to_format(arrow_type)
+        );
+        return DataType::UNKNOWN; // Prevent "control reaches end of non-void function"
+    }
+}
+
+std::pair<std::vector<DataType>, std::optional<size_t>> find_data_types_and_index_position(
+        const sparrow::record_batch& record_batch, const std::optional<std::string>& index_name
+) {
+    std::vector<DataType> data_types;
+    data_types.reserve(record_batch.nb_columns());
+    std::optional<size_t> index_column_position;
+    for (size_t idx = 0; idx < record_batch.nb_columns(); ++idx) {
+        if (index_name.has_value() && record_batch.get_column_name(idx) == *index_name) {
+            index_column_position = idx;
+        }
+        data_types.emplace_back(arcticdb_type_from_arrow_type(record_batch.get_column(idx).data_type()));
+    }
+    if (index_name.has_value()) {
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
+                index_column_position.has_value(), "Specified index column named '{}' not present in data", *index_name
+        );
+    }
+    return {std::move(data_types), index_column_position};
+}
+
+std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
+        const std::vector<sparrow::record_batch>& record_batches, const std::optional<std::string>& index_name
+) {
+    SegmentInMemory seg;
+    if (record_batches.empty()) {
+        return {seg, std::nullopt};
+    }
+    auto record_batch = record_batches.cbegin();
+    auto [data_types, index_column_position] = find_data_types_and_index_position(*record_batch, index_name);
+    uint64_t total_rows = std::accumulate(
+            record_batches.cbegin(),
+            record_batches.cend(),
+            uint64_t(0),
+            [](const uint64_t& accum, const sparrow::record_batch& record_batch) {
+                return accum + record_batch.nb_rows();
+            }
+    );
+    std::vector<ChunkedBuffer> chunked_buffers(record_batch->nb_columns());
+    uint64_t start_row{0};
+    for (; record_batch != record_batches.cend(); ++record_batch) {
+        for (size_t idx = 0; idx < record_batch->nb_columns(); ++idx) {
+            auto& chunked_buffer = chunked_buffers[idx];
+            const auto& data_type = data_types[idx];
+            const auto& array = record_batch->get_column(idx);
+            auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
+            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                    arrow_array->null_count == 0,
+                    "Column '{}' contains null values, which are not currently supported",
+                    record_batch->names()[idx]
+            );
+            auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
+            // arrow_array_buffers.at(0) seems to be the validity bitmap, and may be NULL if there are no null values
+            // need to handle it being non-NULL and all 1s though
+            const auto* data = arrow_array_buffers[1].data<uint8_t>();
+            if (is_bool_type(data_type)) {
+                // Arrow bool columns are packed bitsets
+                // This is the limiting factor when writing a lot of bool data as it is serial. This should be moved to
+                // WriteToSegmentTask
+                if (record_batch == record_batches.cbegin()) {
+                    chunked_buffer = ChunkedBuffer::presized(total_rows);
+                }
+                packed_bits_to_buffer(
+                        data, array.size(), arrow_array->offset, chunked_buffer.bytes_at(start_row, array.size())
+                );
+            } else {
+                data += arrow_array->offset * get_type_size(data_type);
+                const auto bytes = array.size() * get_type_size(data_type);
+                chunked_buffer.add_external_block(data, bytes);
+            }
+        }
+        start_row += record_batch->nb_rows();
+    }
+    auto column_names = record_batches.front().names();
+    if (index_column_position.has_value()) {
+        auto idx = *index_column_position;
+        seg.add_column(
+                scalar_field(data_types[idx], column_names[idx]),
+                std::make_shared<Column>(
+                        make_scalar_type(data_types[idx]), Sparsity::NOT_PERMITTED, std::move(chunked_buffers[idx])
+                )
+        );
+    }
+    for (size_t idx = 0; idx < column_names.size(); ++idx) {
+        if (!index_column_position.has_value() || idx != *index_column_position) {
+            // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
+            seg.add_column(
+                    scalar_field(data_types[idx], column_names[idx]),
+                    std::make_shared<Column>(
+                            make_scalar_type(data_types[idx]), Sparsity::NOT_PERMITTED, std::move(chunked_buffers[idx])
+                    )
+            );
+        }
+    }
+    seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
+    return {seg, index_column_position};
+}
+
 } // namespace arcticdb

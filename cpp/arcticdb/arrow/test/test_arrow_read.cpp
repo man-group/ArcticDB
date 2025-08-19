@@ -104,7 +104,27 @@ void fill_chunked_string_column(
     }
 }
 
-TEST(Arrow, ColumnBasic) {
+TEST(ArrowRead, ZeroCopy) {
+    size_t num_rows{10};
+    uint8_t* data_ptr = std::allocator<uint8_t>().allocate(sizeof(uint64_t) * num_rows);
+    auto typed_ptr = reinterpret_cast<uint64_t*>(data_ptr);
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        typed_ptr[idx] = idx;
+    }
+    sparrow::u8_buffer<uint64_t> u8_buffer(typed_ptr, num_rows);
+    sparrow::primitive_array<uint64_t> primitive_array(std::move(u8_buffer), num_rows);
+    sparrow::array array{std::move(primitive_array)};
+    auto arrow_structures = sparrow::get_arrow_structures(array);
+    auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_structures.first, *arrow_structures.second);
+    const auto* roundtripped_ptr = reinterpret_cast<uint64_t*>(arrow_array_buffers.at(1).data<uint8_t>());
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        ASSERT_EQ(typed_ptr[idx], idx);
+        ASSERT_EQ(roundtripped_ptr[idx], idx);
+    }
+    ASSERT_EQ(roundtripped_ptr, typed_ptr);
+}
+
+TEST(ArrowRead, ColumnBasic) {
     const size_t num_rows = 100;
     const size_t chunk_size = 5;
     const size_t num_chunks = num_rows / chunk_size;
@@ -124,7 +144,7 @@ TEST(Arrow, ColumnBasic) {
     }
 }
 
-TEST(Arrow, ColumnString) {
+TEST(ArrowRead, ColumnString) {
     const size_t num_rows = 100;
     const size_t chunk_size = 5;
     const size_t num_chunks = num_rows / chunk_size;
@@ -184,7 +204,7 @@ TEST(Arrow, ColumnString) {
     }
 }
 
-TEST(Arrow, ConvertSegmentBasic) {
+TEST(ArrowRead, ConvertSegmentBasic) {
     const auto symbol = "symbol";
     const auto num_rows = 100u;
     const auto chunk_size = 10u;
@@ -230,7 +250,7 @@ void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std:
     }
 }
 
-TEST(Arrow, ConvertSegmentMultipleStringColumns) {
+TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
     const auto symbol = "symbol";
     const auto num_rows = 100u;
     const auto chunk_size = 19u;

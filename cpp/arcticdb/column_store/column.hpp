@@ -323,8 +323,7 @@ class Column {
                 row_offset
         );
         auto bytes = sizeof(T) * size;
-        const_cast<ChunkedBuffer&>(data_.buffer())
-                .add_external_block(reinterpret_cast<const uint8_t*>(val), bytes, data_.buffer().last_offset());
+        const_cast<ChunkedBuffer&>(data_.buffer()).add_external_block(reinterpret_cast<const uint8_t*>(val), bytes);
         last_logical_row_ += static_cast<ssize_t>(size);
         last_physical_row_ = last_logical_row_;
     }
