@@ -24,7 +24,9 @@ TEST(ArrowWrite, SingleRecordBatch) {
     sparrow::array array{std::move(primitive_array)};
     sparrow::record_batch record_batch{};
     record_batch.add_column("col", array);
-    auto seg = arrow_data_to_segment({record_batch});
+    std::vector<sparrow::record_batch> record_batches;
+    record_batches.emplace_back(std::move(record_batch));
+    auto seg = arrow_data_to_segment(record_batches);
 
     ASSERT_EQ(seg.fields().size(), 1);
     ASSERT_EQ(seg.num_columns(), 1);
