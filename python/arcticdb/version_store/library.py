@@ -2043,6 +2043,78 @@ class Library:
                 output_format=output_format,
             )
 
+    def batch_read(
+        self,
+        symbols: List[str],
+        as_ofs: Optional[List[AsOf]] = None,
+        date_ranges: Optional[List[Optional[DateRangeInput]]] = None,
+        row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
+        query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
+        columns: Optional[List[List[str]]] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+    ) -> Dict[str, VersionedItem]:
+        """
+        Reads multiple symbols in a batch fashion. This is more efficient than making multiple `read` calls in succession
+        as some constant-time operations can be executed only once rather than once for each element of `symbols`.
+
+        Parameters
+        ----------
+        symbols: List[str]
+            List of symbols to read
+        as_ofs: Optional[List[AsOf]], default=None
+            List of version queries. See documentation of `read` method for more details.
+            i-th entry corresponds to i-th element of `symbols`.
+        date_ranges: Optional[List[Optional[DateRangeInput]]], default=None
+            List of date ranges to filter the symbols.
+            i-th entry corresponds to i-th element of `symbols`.
+        row_ranges : Optional[List[Tuple[Optional[int], Optional[int]]]], default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
+            i-th entry corresponds to i-th element of `symbols`.
+        columns: List[List[str]], default=None
+            Which columns to return for a dataframe.
+            i-th entry restricts columns for the i-th element in `symbols`.
+        query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]], default=None
+            Either a single QueryBuilder object to apply to all of the dataframes before they are
+            returned, or a list of QueryBuilder objects of the same length as the symbols list.
+            For more information see the documentation for the QueryBuilder class.
+            i-th entry corresponds to i-th element of `symbols`.
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Controls the output format of the result dataframes.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
+
+        Examples
+        --------
+
+        >>> lib.batch_read(
+                ['1', '2', '3'],  # Three symbols to read in batch mode
+                date_ranges=[
+                    (pd.Timestamp('2000-01-01 00:00:00'), pd.Timestamp('2000-02-01 00:00:00'))
+                ]*3  # Note that number of date ranges must match number of symbols
+            )
+
+        Returns
+        -------
+        Dict[str, VersionedItem]
+            Dictionary of symbol mapping with the versioned items
+
+        See Also
+        --------
+        read_batch : Alternative batch reading method with slightly different API
+        read
+        """
+        return self._nvs.batch_read(
+            symbols=symbols,
+            as_ofs=as_ofs,
+            date_ranges=date_ranges,
+            row_ranges=row_ranges,
+            query_builder=query_builder,
+            columns=columns,
+            output_format=output_format,
+        )
+
     def read_batch_and_join(
         self,
         symbols: List[ReadRequest],

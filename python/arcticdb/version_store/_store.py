@@ -1128,6 +1128,7 @@ class NativeVersionStore:
         row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
         columns: Optional[List[List[str]]] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
         **kwargs,
     ) -> Dict[str, VersionedItem]:
         """
@@ -1157,6 +1158,10 @@ class NativeVersionStore:
             returned, or a list of QueryBuilder objects of the same length as the symbols list.
             For more information see the documentation for the QueryBuilder class.
             i-th entry corresponds to i-th element of `symbols`.
+        output_format: `Optional[Union[OutputFormat, str]]`, default=None
+            Controls the output format of the result dataframes.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Examples
         --------
@@ -1183,6 +1188,7 @@ class NativeVersionStore:
             columns=columns,
             query_builder=query_builder,
             throw_on_error=throw_on_error,
+            output_format=output_format,
             **kwargs,
         )
         check(
@@ -1224,6 +1230,7 @@ class NativeVersionStore:
         row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
         columns: Optional[List[List[str]]] = None,
         per_symbol_query_builders: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
         **kwargs,
     ) -> VersionedItemWithJoin:
         """
@@ -1255,6 +1262,10 @@ class NativeVersionStore:
             QueryBuilder objects of the same length as the symbols list.
             For more information see the documentation for the QueryBuilder class.
             i-th entry corresponds to i-th element of `symbols`.
+        output_format: `Optional[Union[OutputFormat, str]]`, default=None
+            Controls the output format of the result dataframes.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Examples
         --------
