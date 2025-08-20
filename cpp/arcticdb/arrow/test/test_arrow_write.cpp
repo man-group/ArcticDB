@@ -5,6 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
+#include <folly/container/Enumerate.h>
 #include <gtest/gtest.h>
 #include <sparrow/record_batch.hpp>
 
@@ -179,4 +180,49 @@ TEST(ArrowDataToSegmentBool, Simple) {
     }
 }
 
-// Test record_batches with multiple column types
+TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
+    size_t num_rows{10};
+    std::vector<DataType> numeric_data_types{
+            DataType::UINT8, DataType::UINT16, DataType::UINT32, DataType::UINT64,
+            DataType::INT8, DataType::INT16, DataType::INT32, DataType::INT64,
+            DataType::FLOAT32, DataType::FLOAT64
+    };
+    std::vector<std::pair<std::string, sparrow::array>> columns;
+    for (auto data_type: numeric_data_types) {
+        details::visit_type(data_type, [&](auto tag) {
+            using type_info = ScalarTypeInfo<decltype(tag)>;
+            std::vector<typename type_info::RawType> data(num_rows);
+            std::iota(data.begin(), data.end(), 0);
+            auto array = create_array(data);
+            columns.emplace_back(fmt::format("{}", data_type), array);
+        });
+    }
+    auto record_batch = create_record_batch(columns);
+
+    std::vector<sparrow::record_batch> record_batches;
+    record_batches.emplace_back(std::move(record_batch));
+    auto seg = arrow_data_to_segment(record_batches);
+
+    auto num_columns = numeric_data_types.size();
+    ASSERT_EQ(seg.fields().size(), num_columns);
+    ASSERT_EQ(seg.num_columns(), num_columns);
+    ASSERT_EQ(seg.row_count(), num_rows);
+    for (auto [idx, data_type]: folly::enumerate(numeric_data_types)) {
+        ARCTICDB_UNUSED const auto column_index = seg.column_index(fmt::format("{}", data_type));
+        ASSERT_TRUE(column_index.has_value());
+        ASSERT_EQ(*column_index, idx);
+        const auto& col = seg.column(idx);
+        ASSERT_EQ(col.type(), make_scalar_type(data_type));
+        ASSERT_EQ(col.row_count(), num_rows);
+        ASSERT_EQ(col.last_row(), num_rows - 1);
+        ASSERT_FALSE(col.is_sparse());
+        details::visit_type(data_type, [&](auto tag) {
+            using type_info = ScalarTypeInfo<decltype(tag)>;
+            for (size_t row = 0; row < num_rows; ++row) {
+                ASSERT_EQ(*col.scalar_at<typename type_info::RawType>(row), row);
+            }
+        });
+    }
+}
+
+// Test timestamps
