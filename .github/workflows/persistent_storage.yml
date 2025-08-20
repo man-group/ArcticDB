@@ -12,6 +12,8 @@ on:
       endpoint:          {default: 's3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
       region:            {default: 'eu-west-1', type: string, description: The S3 region of the bucket}
       clear:             {default: 0, type: number, description: Controls wheather we will clear the libraries in the versions stores that we test against}      
+      persistent_storage: {required: true, default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
+
 jobs:
   setup:
     if: inputs.job_type != 'cleanup'
@@ -75,6 +77,7 @@ jobs:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
           strategy_branch: "${{matrix.os}}_${{env.python_impl_name}}"
+          persistent_storage: ${{ inputs.persistent_storage }}
         
       - name: Seed the storage
         if: inputs.job_type == 'seed'
@@ -109,6 +112,7 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          persistent_storage: ${{ inputs.persistent_storage }}
       
       - name: Clean the storage
         run: |
