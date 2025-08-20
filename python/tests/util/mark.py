@@ -15,6 +15,7 @@ from numpy import datetime64
 from copy import deepcopy
 
 from arcticdb.util import marks
+from arcticdb.util.logger import get_logger
 
 MACOS = sys.platform.lower().startswith("darwin")
 LINUX = sys.platform.lower().startswith("linux")
@@ -32,7 +33,7 @@ def getenv_strip(env_var_name: str, default_value: Optional[str] = None) -> Opti
     Returns the stripped value or the default if the variable is not set.
     """
     value = os.getenv(env_var_name)
-    return value.strip() if value is not None else default_value
+    return default_value if value is None or value.strip() == "" else value.strip()
 
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
@@ -45,53 +46,83 @@ MACOS_WHEEL_BUILD = not ARCTICDB_USING_CONDA and MACOS
 PERSISTENT_STORAGE_TESTS_ENABLED = getenv_strip("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
 FAST_TESTS_ONLY = getenv_strip("ARCTICDB_FAST_TESTS_ONLY") == "1"
 DISABLE_SLOW_TESTS = getenv_strip("ARCTICDB_DISABLE_SLOW_TESTS") == "1"
-STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3", "1") == "1" 
+if PERSISTENT_STORAGE_TESTS_ENABLED:
+    # This is for legacy reasons AWS has different treatment because of persistent storages test workflow at github
+    STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3", "1") == "1" 
+else:
+    STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3") == "1" 
 STORAGE_GCP = getenv_strip("ARCTICDB_STORAGE_GCP") == "1"
+STORAGE_AZURE = getenv_strip("ARCTICDB_STORAGE_AZURE") == "1"
 # Local storage tests are all LMDB, simulated and a real mongo process/service
 LOCAL_STORAGE_TESTS_ENABLED = getenv_strip("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", "1") == "1"
 # Each storage can be controlled individually
-STORAGE_LMDB = getenv_strip("ARCTICDB_STORAGE_LMDB") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+STORAGE_LMDB = getenv_strip("ARCTICDB_STORAGE_LMDB") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
                                                                 and getenv_strip("ARCTICDB_STORAGE_LMDB") != "0")
-STORAGE_AZURITE = getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+STORAGE_AZURITE = getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
                                                                       and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0")
-STORAGE_MONGO = getenv_strip("ARCTICDB_STORAGE_MONGO") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+STORAGE_MONGO = getenv_strip("ARCTICDB_STORAGE_MONGO") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
                                                                   and getenv_strip("ARCTICDB_STORAGE_MONGO") != "0")
-STORAGE_MEM = getenv_strip("ARCTICDB_STORAGE_MEM") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+STORAGE_MEM = getenv_strip("ARCTICDB_STORAGE_MEM") == "1" or (LOCAL_STORAGE_TESTS_ENABLED
                                                               and getenv_strip("ARCTICDB_STORAGE_MEM") != "0")
-STORAGE_NFS = getenv_strip("ARCTICDB_STORAGE_NFS") == "1" or (LOCAL_STORAGE_TESTS_ENABLED == "1" 
+STORAGE_NFS = getenv_strip("ARCTICDB_STORAGE_NFS") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
                                                               and getenv_strip("ARCTICDB_STORAGE_NFS") != "0")
 # When a real storage is turned on the simulated storage is turned off
-STORAGE_SIM_S3 = (not STORAGE_AWS_S3) and (getenv_strip("ARCTICDB_STORAGE_SIM_S3", "1") == "1" 
-                                           or LOCAL_STORAGE_TESTS_ENABLED == "1")
-STORAGE_SIM_GCP = (not STORAGE_GCP) and (getenv_strip("ARCTICDB_STORAGE_SIM_GCP", "1") == "1" 
-                                         or LOCAL_STORAGE_TESTS_ENABLED == "1")
+if STORAGE_AWS_S3:
+    STORAGE_SIM_S3 = False 
+else:
+    STORAGE_SIM_S3 = (getenv_strip("ARCTICDB_STORAGE_SIM_S3") == "1" 
+                      or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_SIM_S3") != "0"))
+if STORAGE_GCP:
+    STORAGE_SIM_GCP = False
+else:
+    STORAGE_SIM_GCP = (getenv_strip("ARCTICDB_STORAGE_SIM_GCP") == "1" 
+                       or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_SIM_GCP") != "0"))
+if STORAGE_AZURE:
+    STORAGE_AZURITE = False
+else:
+    STORAGE_AZURITE = (getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" 
+                       or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0"))
 TEST_ENCODING_V1 = getenv_strip("ARCTICDB_TEST_ENCODING_V1", "1") == "1"
 TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "0") == "1"
+
+
+# Defined shorter logs on errors
+SHORTER_LOGS = marks.SHORTER_LOGS
+logger = get_logger()
+
+if not SHORTER_LOGS:
+    logger.info("-" * 120)
+    logger.info("  ARCTICDB ENVIRONMENT VARIABLES:")
+    for name, value in os.environ.items():
+        if name.startswith("ARCTICDB_"):
+            logger.info(f"{name}={value}")
+    logger.info("-" * 120)
+    logger.info("  STORAGE STATUS:")
+    logger.info("AccountKey=fewqf erwfrefgr evfevf")
+    logger.info(f"LOCAL_STORAGE_TESTS_ENABLED ={LOCAL_STORAGE_TESTS_ENABLED}")
+    logger.info(f"STORAGE_LMDB                ={STORAGE_LMDB}")
+    logger.info(f"STORAGE_MEM                 ={STORAGE_MEM}")
+    logger.info(f"STORAGE_S3  (SIMULATED)     ={STORAGE_SIM_S3}")
+    logger.info(f"STORAGE_GCP (SIMULATED)     ={STORAGE_SIM_GCP}")
+    logger.info(f"STORAGE_AZURITE             ={STORAGE_AZURITE}")
+    logger.info(f"STORAGE_NFS                 ={STORAGE_NFS}")
+    logger.info(f"STORAGE_MONGO               ={STORAGE_MONGO}")
+    logger.info(f"STORAGE_AWS_S3              ={STORAGE_AWS_S3}")
+    logger.info(f"STORAGE_GCP                 ={STORAGE_GCP}")
+    logger.info(f"STORAGE_AZURE               ={STORAGE_AZURE}")
+    logger.info(f"Enc.V1                      ={TEST_ENCODING_V1}")
+    logger.info(f"Enc.V2                      ={TEST_ENCODING_V2}")
+    logger.info("-" * 120)
+
 
 _MACOS_AZURE_TESTS_SKIP_REASON = (
     "Tests fail for macOS vcpkg builds, either because Azurite is improperly configured"
     "on the CI or because there's problem with Azure SDK for C++ in this configuration."
 )
-
 SKIP_CONDA_MARK = pytest.mark.skipif(
     ARCTICDB_USING_CONDA,
     reason="Those tests are skipped on conda",
 )
-
-# These two should become pytest marks as opposed to variables feeding into skipif
-PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
-FAST_TESTS_ONLY = os.getenv("ARCTICDB_FAST_TESTS_ONLY") == "1"
-DISABLE_SLOW_TESTS = os.getenv("ARCTICDB_DISABLE_SLOW_TESTS") == "1"
-# Local storage tests are all LMDB, simulated and a real mongo process/service
-LOCAL_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", "1") == "1"
-STORAGE_LMDB = os.getenv("ARCTICDB_STORAGE_LMDB", "1") == "1" or LOCAL_STORAGE_TESTS_ENABLED == "1"
-STORAGE_AWS_S3 = os.getenv("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
-STORAGE_GCP = os.getenv("ARCTICDB_STORAGE_GCP") == "1"
-STORAGE_AZURE = os.getenv("ARCTICDB_STORAGE_AZURE") == "1"
-
-# Defined shorter logs on errors
-SHORTER_LOGS = marks.SHORTER_LOGS
-
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
 # This is to avoid the risk of the name becoming out of sync with the actual condition.
 SLOW_TESTS_MARK = pytest.mark.skipif(
