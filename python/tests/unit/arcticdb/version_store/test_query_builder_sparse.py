@@ -12,7 +12,7 @@ import pandas as pd
 import pytest
 
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 
 
@@ -46,87 +46,99 @@ class TestQueryBuilderSparse:
         lib.compact_incomplete(self.sym, False, False, sparsify=True)
         self.df = pd.concat([df_0, df_1])
 
-    def test_filter_isnull(self, lmdb_version_store):
+    def test_filter_isnull(self, lmdb_version_store, any_output_format):
+        lmdb_version_store.set_output_format(any_output_format)
         expected = self.df[self.df["sparse1"].isnull()]
         q = QueryBuilder()
         q = q[q["sparse1"].isnull()]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
-    def test_filter_notnull(self, lmdb_version_store):
+    def test_filter_notnull(self, lmdb_version_store, any_output_format):
+        lmdb_version_store.set_output_format(any_output_format)
         expected = self.df[self.df["sparse1"].notnull()]
         q = QueryBuilder()
         q = q[q["sparse1"].notnull()]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
     def test_filter_col_equals_val(self, lmdb_version_store):
+    lmdb_version_store.set_output_format(any_output_format)
         expected = self.df.query("sparse1 == 1")
         q = QueryBuilder()
         q = q[q["sparse1"] == 1]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
-    def test_filter_col_not_equals_val(self, lmdb_version_store):
+    def test_filter_col_not_equals_val(self, lmdb_version_store, any_output_format):
+        lmdb_version_store.set_output_format(any_output_format)
         expected = self.df.query("sparse1 != 2")
         q = QueryBuilder()
         q = q[q["sparse1"] != 2]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
     def test_filter_col_isin_value_set(self, lmdb_version_store):
+    lmdb_version_store.set_output_format(any_output_format)
         expected = self.df.query("sparse1 in [1]")
         q = QueryBuilder()
         q = q[q["sparse1"].isin([1])]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
-    def test_filter_col_isnotin_value_set(self, lmdb_version_store):
+    def test_filter_col_isnotin_value_set(self, lmdb_version_store, any_output_format):
+        lmdb_version_store.set_output_format(any_output_format)
         expected = self.df.query("sparse1 not in [1]")
         q = QueryBuilder()
         q = q[q["sparse1"].isnotin([1])]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
     def test_filter_col_equals_col(self, lmdb_version_store):
+    lmdb_version_store.set_output_format(any_output_format)
         expected = self.df.query("sparse1 == sparse2")
         q = QueryBuilder()
         q = q[q["sparse1"] == q["sparse2"]]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
-    def test_filter_col_not_equals_col(self, lmdb_version_store):
+    def test_filter_col_not_equals_col(self, lmdb_version_store, any_output_format):
+        lmdb_version_store.set_output_format(any_output_format)
         expected = self.df.query("sparse1 != sparse2")
         q = QueryBuilder()
         q = q[q["sparse1"] != q["sparse2"]]
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
     def test_project_minus_col(self, lmdb_version_store):
+    lmdb_version_store.set_output_format(any_output_format)
         expected = self.df
         expected["projected"] = -expected["sparse1"]
         q = QueryBuilder()
         q = q.apply("projected", -q["sparse1"])
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
-    def test_project_col_plus_val(self, lmdb_version_store):
+    def test_project_col_plus_val(self, lmdb_version_store, any_output_format):
+        lmdb_version_store.set_output_format(any_output_format)
         expected = self.df
         expected["projected"] = expected["sparse1"] + 1
         q = QueryBuilder()
         q = q.apply("projected", q["sparse1"] + 1)
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
     def test_project_col_divided_by_col(self, lmdb_version_store):
+    lmdb_version_store.set_output_format(any_output_format)
         expected = self.df
         expected["projected"] = expected["sparse1"] / expected["sparse2"]
         q = QueryBuilder()
         q = q.apply("projected", q["sparse1"] / q["sparse2"])
         received = lmdb_version_store.read(self.sym, query_builder=q).data
-        assert_frame_equal(expected, received)
+        assert_frame_equal_with_arrow(expected, received)
 
-    def test_groupby(self, lmdb_version_store):
+    def test_groupby(self, lmdb_version_store, any_output_format):
+        lmdb_version_store.set_output_format(any_output_format)
         aggs = {
             "sum": ("sparse2", "sum"),
             "min": ("sparse2", "min"),
@@ -141,10 +153,11 @@ class TestQueryBuilderSparse:
         received = lmdb_version_store.read(self.sym, query_builder=q).data
         received = received.reindex(columns=sorted(received.columns))
         received.sort_index(inplace=True)
-        assert_frame_equal(expected, received, check_dtype=False)
+        assert_frame_equal_with_arrow(expected, received, check_dtype=False)
 
 
 def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dynamic_schema):
+        lmdb_version_store.set_output_format(any_output_format)
     lib = lmdb_version_store_dynamic_schema
     sym = "test_query_builder_sparse_dynamic_schema_type_change"
     df_0 = pd.DataFrame(
@@ -172,7 +185,7 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
     q = QueryBuilder()
     q = q[q["sparse1"].isnull()]
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
@@ -186,9 +199,10 @@ def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dyna
         ),
     ),
 )
-def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df):
+def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df, any_output_format):
     assume(not df.empty and not df["sparse1"].isnull().all() and not df["sparse2"].isnull().all())
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym = "test_query_builder_sparse_hypothesis"
 
     df.index = pd.date_range("2024-01-01", periods=len(df))
@@ -200,7 +214,7 @@ def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df):
     q = QueryBuilder()
     q = q[q["sparse1"].isnull()]
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
     # Projection
     expected = df
@@ -208,11 +222,11 @@ def test_query_builder_sparse_hypothesis(lmdb_version_store_v1, df):
     q = QueryBuilder()
     q = q.apply("projected", q["sparse1"] + q["sparse2"])
     received = lib.read(sym, query_builder=q).data
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)
 
     # Groupby + aggregation
     expected = df.groupby("sparse1").agg({"sparse2": "sum"})
     q = QueryBuilder().groupby("sparse1").agg({"sparse2": "sum"})
     received = lib.read(sym, query_builder=q).data
     received.sort_index(inplace=True)
-    assert_frame_equal(expected, received)
+    assert_frame_equal_with_arrow(expected, received)

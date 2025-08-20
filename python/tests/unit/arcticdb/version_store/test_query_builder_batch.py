@@ -13,13 +13,15 @@ from arcticdb.exceptions import ArcticNativeException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.exceptions import InternalException, StorageException, UserInputException
+from arcticdb.util.test import assert_frame_equal_with_arrow
 
 
 pytestmark = pytest.mark.pipeline
 
 
-def test_filter_batch_one_query(lmdb_version_store_v1):
+def test_filter_batch_one_query(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -33,12 +35,13 @@ def test_filter_batch_one_query(lmdb_version_store_v1):
     batch_res = lib.batch_read([sym1, sym2], query_builder=q)
     res1 = batch_res[sym1].data
     res2 = batch_res[sym2].data
-    assert np.array_equal(df1.query(pandas_query), res1)
-    assert np.array_equal(df2.query(pandas_query), res2)
+    assert_frame_equal_with_arrow(df1.query(pandas_query), res1)
+    assert_frame_equal_with_arrow(df2.query(pandas_query), res2)
 
 
-def test_filter_batch_multiple_queries(lmdb_version_store_v1):
+def test_filter_batch_multiple_queries(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -55,12 +58,13 @@ def test_filter_batch_multiple_queries(lmdb_version_store_v1):
     batch_res = lib.batch_read([sym1, sym2], query_builder=[q1, q2])
     res1 = batch_res[sym1].data
     res2 = batch_res[sym2].data
-    assert np.array_equal(df1.query(pandas_query1), res1)
-    assert np.array_equal(df2.query(pandas_query2), res2)
+    assert_frame_equal_with_arrow(df1.query(pandas_query1), res1)
+    assert_frame_equal_with_arrow(df2.query(pandas_query2), res2)
 
 
-def test_filter_batch_multiple_queries_with_none(lmdb_version_store_v1):
+def test_filter_batch_multiple_queries_with_none(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -74,8 +78,8 @@ def test_filter_batch_multiple_queries_with_none(lmdb_version_store_v1):
     batch_res = lib.batch_read([sym1, sym2], query_builder=[None, q2])
     res1 = batch_res[sym1].data
     res2 = batch_res[sym2].data
-    assert np.array_equal(df1, res1)
-    assert np.array_equal(df2.query(pandas_query2), res2)
+    assert_frame_equal_with_arrow(df1, res1)
+    assert_frame_equal_with_arrow(df2.query(pandas_query2), res2)
 
 
 def test_filter_batch_incorrect_query_count(lmdb_version_store_v1):
