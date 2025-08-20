@@ -148,9 +148,6 @@ def get_artifacts_for_run(artifact_download_url):
         print(f"Error output: {e.stderr.decode('utf-8')}")
         raise
 
-    if output.returncode != 0:
-        raise Exception(f"Error getting artifacts for run {artifact_download_url}: {output.stderr}")
-
     data = json.loads(output.stdout)
     artifacts = data.get("artifacts", [])
 
@@ -595,8 +592,7 @@ def main(max_workers, download_dir, max_pages, use_github_actions):
             all_runs = {str(run_obj.run_id): run_obj}
         except Exception as e:
             print(f"Error creating Run object from GitHub Actions environment: {e}")
-            print("Falling back to manual parameter mode...")
-            use_github_actions = False
+            raise
     else:
         # Get workflow runs
         print("Fetching workflow runs...")
