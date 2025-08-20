@@ -17,9 +17,8 @@ from arcticdb.util.test import random_strings_of_length
 
 
 class Resample:
-    number = 5
+    number = 7
     rounds = 1
-    warmup_time = 0
 
     LIB_NAME = "resample"
     CONNECTION_STRING = "lmdb://resample?map_size=5GB"

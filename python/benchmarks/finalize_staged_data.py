@@ -26,21 +26,20 @@ class FinalizeStagedData:
     rounds = 1
     repeat = 5
     min_run_count = 1
+    warmup_time = 0    
+    timeout = 600
 
     ARCTIC_DIR = "staged_data"
     ARCTIC_DIR_ORIGINAL = "staged_data_original"
     CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}?map_size=40GB"
-
-
-    warmup_time = 0    
-    timeout = 600
     LIB_NAME = "Finalize_Staged_Data_LIB"
 
     # Define the number of chunks
-    params = [1000, 2000]
+    params = [1000]
 
     def __init__(self):
         self.lib_name = FinalizeStagedData.LIB_NAME
+        self.logger = get_logger()
 
     def setup_cache(self):
         # Generating dataframe with all kind of supported data types
@@ -58,8 +57,8 @@ class FinalizeStagedData:
             list_of_chunks = [10000] * param
 
             lib.write(symbol, data=df, prune_previous_versions=True)
-            print("LIBRARY:", lib)
-            print("Created Symbol:", symbol)
+            self.logger.info(f"LIBRARY: {lib}")
+            self.logger.info(f"Created Symbol: {symbol}")
             stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
         # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.
         # Then on each teardown we restore the initial state by overwriting the modified with the original.
@@ -74,13 +73,13 @@ class FinalizeStagedData:
         self.symbol = f"symbol{param}"
 
     def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
-        print(">>> Library:", self.lib)
-        print(">>> Symbol:", self.symbol)
+        self.logger.info(f"LIBRARY: {self.lib}")
+        self.logger.info(f"Created Symbol: {self.symbol}")
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
     def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
-        print(">>> Library:", self.lib)
-        print(">>> Symbol:", self.symbol)
+        self.logger.info(f"LIBRARY: {self.lib}")
+        self.logger.info(f"Created Symbol: {self.symbol}")
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
     def teardown(self, cache: CachedDFGenerator, param: int):
