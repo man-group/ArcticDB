@@ -121,3 +121,25 @@ def test_read_batch_and_join(lmdb_storage, lib_name, arctic_output_format, outpu
     assert isinstance(result, expected_output_type(arctic_output_format, None, output_format_override))
     expected_df = pd.concat(expected_dfs).reset_index(drop=True)
     assert_frame_equal_with_arrow(expected_df, result)
+
+
+@pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
+@pytest.mark.parametrize("output_format_override", no_str_output_format_args)
+def test_batch_read(lmdb_storage, lib_name, arctic_output_format, output_format_override):
+    """Test batch_read method with OutputFormat.EXPERIMENTAL_ARROW support"""
+    ac = lmdb_storage.create_arctic(output_format=arctic_output_format)
+    lib = ac.create_library(lib_name)
+    syms = ["sym", "sym_1", "sym_2"]
+    expected_df = {}
+    for sym in syms:
+        df = sample_dataframe()
+        expected_df[sym] = df
+        lib.write(sym, df)
+
+    batch_results = lib.batch_read(syms, output_format=output_format_override)
+    output_type = expected_output_type(arctic_output_format, None, output_format_override)
+    
+    for sym in syms:
+        result = batch_results[sym]
+        assert isinstance(result.data, output_type)
+        assert_frame_equal_with_arrow(expected_df[sym], result.data)
