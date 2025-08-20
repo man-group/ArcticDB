@@ -364,6 +364,7 @@ TEST(VersionMap, GetNextVersionInEntry) {
 }
 
 TEST(VersionMap, ForceRewriteVersion) {
+    ScopedConfig sc("VersionMap.ReloadInterval", 0);
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_fix_ref"};
 
@@ -387,9 +388,13 @@ TEST(VersionMap, ForceRewriteVersion) {
     const bool prevent_non_increasing_version_id = false;   
     version_map->write_version(store, key3_new, key2, prevent_non_increasing_version_id);
 
-    std::vector<AtomKey> expected{key3_new, key2, key1};
+    std::vector<AtomKey> expected{key3_new, key3, key2, key1};
     auto result = get_all_versions(store, version_map, id);
     ASSERT_EQ(result, expected);
+
+    auto entry_ref = std::make_shared<VersionMapEntry>();
+    version_map->load_via_ref_key(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, entry_ref);
+    ASSERT_EQ(get_prev_version_in_entry(entry_ref, 3).value(), 2);
 }
 
 TEST(VersionMap, FixRefKey) {
