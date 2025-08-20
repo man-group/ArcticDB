@@ -19,6 +19,7 @@ import random
 import time
 import attr
 from functools import wraps, reduce
+from arcticdb.dependencies import pyarrow as pa
 
 from arcticdb.util.marks import SHORTER_LOGS
 
@@ -29,6 +30,7 @@ except ImportError:
 
 from arcticdb import QueryBuilder
 from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
+from arcticdb.util.arrow import stringify_dictionary_encoded_columns
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -250,6 +252,18 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
+
+
+def convert_arrow_to_pandas_and_remove_categoricals(table):
+    new_table = stringify_dictionary_encoded_columns(table)
+    return new_table.to_pandas()
+
+def assert_frame_equal_with_arrow(left, right, **kwargs):
+    if isinstance(left, pa.Table):
+        left = convert_arrow_to_pandas_and_remove_categoricals(left)
+    if isinstance(right, pa.Table):
+        right = convert_arrow_to_pandas_and_remove_categoricals(right)
+    assert_frame_equal(left, right, **kwargs)
 
 
 unicode_symbol = "\u00A0"  # start of latin extensions

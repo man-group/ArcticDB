@@ -17,7 +17,7 @@ from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
-from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions
+from arcticdb.options import LibraryOptions, EnterpriseLibraryOptions, OutputFormat
 from arcticdb.preconditions import check
 from arcticdb.supported_types import Timestamp
 from arcticdb.util._versions import IS_PANDAS_TWO
@@ -25,7 +25,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, OutputFormat, StageResult, KeyNotFoundInStageResultInfo
+from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
 
 import pandas as pd
 import numpy as np
@@ -263,7 +263,7 @@ class ReadRequest(NamedTuple):
         See `read` method.
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=none
         See `read`method.
-    row_range: Optional[Tuple[int, int]], default=none
+    row_range: Optional[Tuple[Optional[int], Optional[int]]], default=none
         See `read` method.
     columns: Optional[List[str]], default=none
         See `read` method.
@@ -278,9 +278,10 @@ class ReadRequest(NamedTuple):
     symbol: str
     as_of: Optional[AsOf] = None
     date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None
-    row_range: Optional[Tuple[int, int]] = None
+    row_range: Optional[Tuple[Optional[int], Optional[int]]] = None
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
+    output_format: Optional[Union[OutputFormat, str]] = None
 
     def __repr__(self):
         res = f"ReadRequest(symbol={self.symbol}"
@@ -289,6 +290,7 @@ class ReadRequest(NamedTuple):
         res += f", row_range={self.row_range}" if self.row_range is not None else ""
         res += f", columns={self.columns}" if self.columns is not None else ""
         res += f", query_builder={self.query_builder}" if self.query_builder is not None else ""
+        res += f", output_format={self.output_format}" if self.output_format is not None else ""
         res += ")"
         return res
 
@@ -421,6 +423,7 @@ class LazyDataFrame(QueryBuilder):
             date_range=self.read_request.date_range,
             row_range=self.read_request.row_range,
             columns=self.read_request.columns,
+            output_format=self.read_request.output_format,
             query_builder=q,
         )
 
@@ -491,10 +494,19 @@ class LazyDataFrameCollection(QueryBuilder):
             len(lib_set) in [0, 1],
             f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}",
         )
+        output_format_set = {
+            lazy_dataframe.read_request.output_format for lazy_dataframe in lazy_dataframes
+            if lazy_dataframe.read_request.output_format is not None
+        }
+        check(
+            len(output_format_set) in [0, 1],
+            f"LazyDataFrameCollection init requires all provided lazy dataframes to have the same output_format, but received: {output_format_set}",
+            )
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
         if len(self._lazy_dataframes):
             self._lib = self._lazy_dataframes[0].lib
+            self._output_format = self._lazy_dataframes[0].read_request.output_format
 
     def split(self) -> List[LazyDataFrame]:
         """
@@ -517,7 +529,7 @@ class LazyDataFrameCollection(QueryBuilder):
         """
         if not len(self._lazy_dataframes):
             return []
-        return self._lib.read_batch(self._read_requests())
+        return self._lib.read_batch(self._read_requests(), output_format=self._output_format)
 
     def _read_requests(self) -> List[ReadRequest]:
         # Combines queries for individual LazyDataFrames with the global query associated with this
@@ -591,7 +603,7 @@ class LazyDataFrameAfterJoin(QueryBuilder):
             return []
         else:
             lib = self._lazy_dataframes._lib
-            return lib.read_batch_and_join(self._lazy_dataframes._read_requests(), self)
+            return lib.read_batch_and_join(self._lazy_dataframes._read_requests(), self, output_format=self._lazy_dataframes._output_format)
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
@@ -780,7 +792,7 @@ class Library:
         self._nvs._normalizer.df.set_skip_df_consolidation()
         self._dev_tools = DevTools(nvs)
 
-    def __repr__(self):
+    def __repr__(self) ->str:
         return "Library(%s, path=%s, storage=%s)" % (
             self.arctic_instance_desc,
             self._nvs._lib_cfg.lib_desc.name,
@@ -790,7 +802,7 @@ class Library:
     def __getitem__(self, symbol: str) -> VersionedItem:
         return self.read(symbol)
 
-    def __contains__(self, symbol: str):
+    def __contains__(self, symbol: str) -> bool:
         return self.has_symbol(symbol)
 
     def options(self) -> LibraryOptions:
@@ -818,7 +830,7 @@ class Library:
         validate_index=True,
         sort_on_index=False,
         sort_columns: List[str] = None,
-    ):
+    ) -> None:
         """
         Write a staged data chunk to storage, that will not be visible until finalize_staged_data is called on
         the symbol. Equivalent to write() with staged=True.
@@ -863,9 +875,8 @@ class Library:
         primitive.
 
         ``data`` must be of a format that can be normalised into Arctic's internal storage structure. Pandas
-        DataFrames, Pandas Series and Numpy NDArrays of numeric types, strings, and timestamps can all be normalised.
-        Normalised data will be split along both the columns and rows into segments. By default, a segment will contain
-        100,000 rows and 127 columns.
+        DataFrames, Pandas Series and Numpy NDArrays can all be normalised. Normalised data will be split along both the
+        columns and rows into segments. By default, a segment will contain 100,000 rows and 127 columns.
 
         If this library has ``write_deduplication`` enabled then segments will be deduplicated against storage prior to
         write to reduce required IO operations and storage requirements. Data will be effectively deduplicated for all
@@ -912,7 +923,7 @@ class Library:
         Raises
         ------
         ArcticUnsupportedDataTypeException
-            If ``data`` is not of NormalizableType. See `write_pickle` for options in this case.
+            If ``data`` is not of NormalizableType.
         UnsortedDataException
             If data is unsorted and validate_index is set to True.
 
@@ -965,7 +976,7 @@ class Library:
     ) -> VersionedItem:
         """
         See `write`. This method differs from `write` only in that ``data`` can be of any type that is serialisable via
-        msgpack or the Pickle library. There are significant downsides to storing data in this way:
+        the Pickle library. There are significant downsides to storing data in this way:
 
         - Retrieval can only be done in bulk. Calls to `read` will not support `date_range`, `query_builder` or `columns`.
         - The data cannot be updated or appended to via the update and append methods.
@@ -1158,7 +1169,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: bool = False,
         validate_index: bool = True,
-    ) -> Optional[VersionedItem]:
+    ) -> VersionedItem:
         """
         Appends the given data to the existing, stored data. Append always appends along the index. A new version will
         be created to reference the newly-appended data. Append only accepts data for which the index of the first
@@ -1478,7 +1489,7 @@ class Library:
         )
         return batch_update_result
 
-    def delete_staged_data(self, symbol: str):
+    def delete_staged_data(self, symbol: str) -> None:
         """
         Removes staged data.
 
@@ -1768,6 +1779,7 @@ class Library:
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
         lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1798,11 +1810,12 @@ class Library:
 
             Only one of date_range or row_range can be provided.
 
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
             the handling of negative start/end values.
-
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             Only one of date_range or row_range can be provided.
 
         columns: List[str], default=None
@@ -1817,6 +1830,11 @@ class Library:
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrame` object. See documentation
             on `LazyDataFrame` for more details.
+
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Controls the output format of the result dataframe.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Returns
         -------
@@ -1842,6 +1860,15 @@ class Library:
         0       5
         1       6
         2       7
+
+        Passing an output_format can change the resulting dataframe type. E.g. we can use the experimental arrow output
+        format:
+
+        >>> lib.read("symbol", output_format="EXPERIMENTAL_ARROW").data
+        pyarrow.Table
+        column: int64
+        ----
+        column: [[5,6,7]]
         """
         if lazy:
             return LazyDataFrame(
@@ -1853,6 +1880,7 @@ class Library:
                     row_range=row_range,
                     columns=columns,
                     query_builder=query_builder,
+                    output_format=output_format,
                 ),
             )
         else:
@@ -1863,6 +1891,7 @@ class Library:
                 row_range=row_range,
                 columns=columns,
                 query_builder=query_builder,
+                output_format=output_format,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
             )
@@ -1872,6 +1901,7 @@ class Library:
         symbols: List[Union[str, ReadRequest]],
         query_builder: Optional[QueryBuilder] = None,
         lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[List[Union[VersionedItem, DataError]], LazyDataFrameCollection]:
         """
         Reads multiple symbols.
@@ -1888,6 +1918,11 @@ class Library:
         lazy: bool, default=False:
             Defer query execution until `collect` is called on the returned `LazyDataFrameCollection` object. See
             documentation on `LazyDataFrameCollection` for more details.
+
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Controls the output format of the result dataframes.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Returns
         -------
@@ -1989,6 +2024,7 @@ class Library:
                             row_range=row_ranges[idx],
                             columns=columns[idx],
                             query_builder=q,
+                            output_format=output_format,
                         ),
                     )
                 )
@@ -2004,12 +2040,14 @@ class Library:
                 throw_on_error,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
+                output_format=output_format,
             )
 
     def read_batch_and_join(
         self,
         symbols: List[ReadRequest],
         query_builder: QueryBuilder,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> VersionedItemWithJoin:
         """
         Reads multiple symbols in a batch, and then joins them together using the first clause in the `query_builder`
@@ -2024,6 +2062,11 @@ class Library:
         query_builder: QueryBuilder
             The first clause must be a multi-symbol join, such as `concat`. Any subsequent clauses must work on
             individual dataframes, and will be applied to the joined data.
+
+        output_format: Optional[Union[OutputFormat, str]], default=None
+            Controls the output format of the result dataframe.
+            For more information see documentation of `Arctic.__init__`.
+            If `None` uses the default output format from the `Library` instance.
 
         Returns
         -------
@@ -2122,6 +2165,7 @@ class Library:
             per_symbol_query_builders,
             implement_read_index=True,
             iterate_snapshots_if_tombstoned=False,
+            output_format=output_format
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -2311,7 +2355,7 @@ class Library:
         self._nvs.version_store.verify_snapshot(snapshot_name)
         self._nvs.snapshot(snap_name=snapshot_name, metadata=metadata, skip_symbols=skip_symbols, versions=versions)
 
-    def delete(self, symbol: str, versions: Optional[Union[int, Iterable[int]]] = None):
+    def delete(self, symbol: str, versions: Optional[Union[int, Iterable[int]]] = None) -> None:
         """
         Delete all versions of the symbol from the library, unless ``version`` is specified, in which case only those
         versions are deleted.
@@ -2379,7 +2423,7 @@ class Library:
 
         return self._nvs.version_store.batch_delete(symbols, versions)
 
-    def prune_previous_versions(self, symbol):
+    def prune_previous_versions(self, symbol) -> None:
         """Removes all (non-snapshotted) versions from the database for the given symbol, except the latest.
 
         Parameters
@@ -2394,7 +2438,7 @@ class Library:
         symbol: str,
         date_range: Tuple[Optional[Timestamp], Optional[Timestamp]],
         prune_previous_versions: bool = False,
-    ):
+    ) -> None:
         """Delete data within the given date range, creating a new version of ``symbol``.
 
         The existing symbol version must be timeseries-indexed.
@@ -2574,6 +2618,7 @@ class Library:
         as_of: Optional[AsOf] = None,
         columns: List[str] = None,
         lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
@@ -2589,6 +2634,8 @@ class Library:
         columns
             See documentation on `read`.
         lazy : bool, default=False
+            See documentation on `read`.
+        output_format: Optional[Union[OutputFormat, str]], default=None
             See documentation on `read`.
 
         Returns
@@ -2606,6 +2653,7 @@ class Library:
                     as_of=as_of,
                     columns=columns,
                     query_builder=q,
+                    output_format=output_format,
                 ),
             )
         else:
@@ -2616,6 +2664,7 @@ class Library:
                 columns=columns,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
+                output_format=output_format,
             )
 
     def tail(
@@ -2625,6 +2674,7 @@ class Library:
         as_of: Optional[Union[int, str]] = None,
         columns: List[str] = None,
         lazy: bool = False,
+        output_format : Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.
@@ -2640,6 +2690,8 @@ class Library:
         columns
             See documentation on `read`.
         lazy : bool, default=False
+            See documentation on `read`.
+        output_format: Optional[Union[OutputFormat, str]], default=None
             See documentation on `read`.
 
         Returns
@@ -2657,6 +2709,7 @@ class Library:
                     as_of=as_of,
                     columns=columns,
                     query_builder=q,
+                    output_format=output_format,
                 ),
             )
         else:
@@ -2667,6 +2720,7 @@ class Library:
                 columns=columns,
                 implement_read_index=True,
                 iterate_snapshots_if_tombstoned=False,
+                output_format=output_format,
             )
 
     @staticmethod
@@ -2781,7 +2835,7 @@ class Library:
 
         return description_results
 
-    def reload_symbol_list(self):
+    def reload_symbol_list(self) -> None:
         """
         Forces the symbol list cache to be reloaded.
 
@@ -2900,11 +2954,11 @@ class Library:
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
     @property
-    def name(self):
+    def name(self) -> str:
         """The name of this library."""
         return self._nvs.name()
 
-    def admin_tools(self):
+    def admin_tools(self) -> AdminTools:
         """Administrative utilities that operate on this library."""
         return AdminTools(self._nvs)
 

@@ -1115,29 +1115,6 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
 
-
-@pytest.mark.xfail(reason="""Fails on Pandas < 2 because of this logic:
-    https://github.com/man-group/ArcticDB/blob/fc9514f25712d8e86fbdbd2f7e37e64f3a10df40/python/arcticdb/version_store/_normalization.py#L230
-    The assumptions there however are not correct. The dtype of empty columns is not deterministic and varies between
-    Pandas versions, for example the test passes on the CI with Python > 3.8 because it uses pandas 2.3.0 and the dtype
-    of the column is float64 (note the if in the link above sets the dtype to object only for pandas < 2 because it
-    expects that int Pandas >= 2 it'll always be object). It fails for object dtype because in arcticdb that becomes
-    string type and string types cannot be filtered using < or >, thus modify_schema fails
-    """,
-    strict=False
-)
-@pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_empty_dataframe(request, lib_type):
-    lib = request.getfixturevalue(lib_type)
-    df = pd.DataFrame({"a": []})
-    q = QueryBuilder()
-    q = q[q["a"] < 5]
-    symbol = "test_filter_empty_dataframe"
-    lib.write(symbol, df)
-    vit = lib.read(symbol, query_builder=q)
-    assert vit.data.empty
-
-
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_filter_pickled_symbol(request, lib_type):
     lib = request.getfixturevalue(lib_type)

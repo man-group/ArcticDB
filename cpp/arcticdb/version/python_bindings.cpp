@@ -230,7 +230,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("set_timestamp", &VersionQuery::set_timestamp)
         .def("set_version", &VersionQuery::set_version);
 
-    py::enum_<OutputFormat>(version, "OutputFormat")
+    py::enum_<OutputFormat>(version, "InternalOutputFormat")
         .value("PANDAS", OutputFormat::PANDAS)
         .value("ARROW", OutputFormat::ARROW);
 
@@ -388,7 +388,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def_property_readonly("diff", &pipelines::RowRange::diff);
 
     py::class_<pipelines::SignedRowRange, std::shared_ptr<pipelines::SignedRowRange>>(version, "SignedRowRange")
-    .def(py::init([](int64_t start, int64_t end){
+    .def(py::init([](std::optional<int64_t> start, std::optional<int64_t> end){
         return SignedRowRange{start, end};
     }));
 
@@ -456,7 +456,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
 
     py::class_<RowRangeClause, std::shared_ptr<RowRangeClause>>(version, "RowRangeClause")
             .def(py::init<RowRangeClause::RowRangeType, int64_t>())
-            .def(py::init<int64_t, int64_t>())
+            .def(py::init<std::optional<int64_t>, std::optional<int64_t>>())
             .def("__str__", &RowRangeClause::to_string);
 
     py::class_<DateRangeClause, std::shared_ptr<DateRangeClause>>(version, "DateRangeClause")
@@ -569,6 +569,10 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
     py::enum_<PipelineOptimisation>(version, "PipelineOptimisation")
             .value("SPEED", PipelineOptimisation::SPEED)
             .value("MEMORY", PipelineOptimisation::MEMORY);
+
+    py::enum_<Slicing>(version, "Slicing")
+            .value("NoSlicing", Slicing::NoSlicing)
+            .value("RowSlicing", Slicing::RowSlicing);
 
     py::class_<ExpressionContext, std::shared_ptr<ExpressionContext>>(version, "ExpressionContext")
             .def(py::init())
@@ -758,6 +762,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         .def("write_versioned_dataframe",
              &PythonVersionStore::write_versioned_dataframe,
              py::call_guard<SingleThreadMutexHolder>(), "Write the most recent version of this dataframe to the store")
+        .def("_test_write_versioned_segment",
+             &PythonVersionStore::test_write_versioned_segment,
+             py::call_guard<SingleThreadMutexHolder>(), "Write the most recent version of this segment to the store")
         .def("write_versioned_composite_data",
              &PythonVersionStore::write_versioned_composite_data,
              py::call_guard<SingleThreadMutexHolder>(), "Allows the user to write multiple dataframes in a batch with one version entity")

@@ -31,6 +31,7 @@ from arcticdb.util.test import (
     random_floats,
 )
 from arcticdb.version_store.processing import QueryBuilder
+from client_utils import delete_library
 
 
 PRE_4_X_X = (
@@ -346,53 +347,56 @@ def test_read_batch_mixed_with_snapshots(ac_library):
 def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     lib_opts = LibraryOptions(dynamic_schema=True, rows_per_segment=2, columns_per_segment=2)
     lib = ac_client.get_library(lib_name, create_if_missing=True, library_options=lib_opts)
-    symbol = "AAPL"
-    sort_cols = ["timestamp", "col1"]
+    try:
+        symbol = "AAPL"
+        sort_cols = ["timestamp", "col1"]
 
-    df1 = pd.DataFrame(
-        {
-            "timestamp": pd.date_range("2023-01-01", periods=7, freq="h"),
-            "col1": np.arange(1, 8, dtype=np.uint8),
-            "col2": [f"a{i:02d}" for i in range(1, 8)],
-            "col3": np.arange(1, 8, dtype=np.int32),
-        }
-    ).set_index("timestamp")
+        df1 = pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2023-01-01", periods=7, freq="h"),
+                "col1": np.arange(1, 8, dtype=np.uint8),
+                "col2": [f"a{i:02d}" for i in range(1, 8)],
+                "col3": np.arange(1, 8, dtype=np.int32),
+            }
+        ).set_index("timestamp")
 
-    df2 = pd.DataFrame(
-        {
-            "timestamp": pd.date_range("2023-01-04", periods=7, freq="h"),
-            "col1": np.arange(8, 15, dtype=np.int32),
-            "col2": [f"b{i:02d}" for i in range(8, 15)],
-            "col3": np.arange(8, 15, dtype=np.uint16),
-        }
-    ).set_index("timestamp")
+        df2 = pd.DataFrame(
+            {
+                "timestamp": pd.date_range("2023-01-04", periods=7, freq="h"),
+                "col1": np.arange(8, 15, dtype=np.int32),
+                "col2": [f"b{i:02d}" for i in range(8, 15)],
+                "col3": np.arange(8, 15, dtype=np.uint16),
+            }
+        ).set_index("timestamp")
 
-    df1_shuffled = df1.sample(frac=1)
-    df2_shuffled = df2.sample(frac=1)
+        df1_shuffled = df1.sample(frac=1)
+        df2_shuffled = df2.sample(frac=1)
 
-    lib.stage(symbol, df1_shuffled, False, False, sort_cols)
-    lib.stage(symbol, df2_shuffled, False, False, sort_cols)
+        lib.stage(symbol, df1_shuffled, False, False, sort_cols)
+        lib.stage(symbol, df2_shuffled, False, False, sort_cols)
 
-    lib_tool = lib._dev_tools.library_tool()
-    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
-    ## NOTE: Conditional on the version check.
-    ##       Reasons for failure of older version is not investigated
-    if PRE_5_2_X:
-        assert len(data_keys) == 2
-    else:
-        assert len(data_keys) == 8
-    for k in data_keys:
-        df = lib_tool.read_to_dataframe(k)
-        assert df.index.is_monotonic_increasing
+        lib_tool = lib._dev_tools.library_tool()
+        data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
+        ## NOTE: Conditional on the version check.
+        ##       Reasons for failure of older version is not investigated
+        if PRE_5_2_X:
+            assert len(data_keys) == 2
+        else:
+            assert len(data_keys) == 8
+        for k in data_keys:
+            df = lib_tool.read_to_dataframe(k)
+            assert df.index.is_monotonic_increasing
 
-    lib.finalize_staged_data(symbol)
-    data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
-    assert not data_keys
+        lib.finalize_staged_data(symbol)
+        data_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)
+        assert not data_keys
 
-    result = lib.read(symbol).data
+        result = lib.read(symbol).data
 
-    expected = pd.concat([df1, df2]).sort_values(sort_cols)
-    pd.testing.assert_frame_equal(result, expected)
+        expected = pd.concat([df1, df2]).sort_values(sort_cols)
+        pd.testing.assert_frame_equal(result, expected)
+    finally:
+        delete_library(ac_client, lib_name)
 
 @pytest.mark.skipif(PRE_4_X_X, reason = "ModifiableEnterpriseLibraryOption not present before")
 def test_modify_options_affect_persistent_lib_config(ac_client, lib_name):
@@ -400,14 +404,17 @@ def test_modify_options_affect_persistent_lib_config(ac_client, lib_name):
     ac = ac_client
     lib = ac.create_library(lib_name)
 
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
-    ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
+    try:
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.REPLICATION, True)
+        ac.modify_library_option(lib, ModifiableEnterpriseLibraryOption.BACKGROUND_DELETION, True)
 
-    new_client = Arctic(ac.get_uri())
-    new_lib = new_client[lib_name]
-    proto_options = new_lib._nvs.lib_cfg().lib_desc.version.write_options
-    assert proto_options.sync_passive.enabled
-    assert proto_options.delayed_deletes
+        new_client = Arctic(ac.get_uri())
+        new_lib = new_client[lib_name]
+        proto_options = new_lib._nvs.lib_cfg().lib_desc.version.write_options
+        assert proto_options.sync_passive.enabled
+        assert proto_options.delayed_deletes
+    finally:
+        delete_library(ac_client, lib_name)
 
 @pytest.mark.skipif(PRE_4_X_X, reason = "compact_symbol_list not present before")
 def test_force_compact_symbol_list(ac_library):

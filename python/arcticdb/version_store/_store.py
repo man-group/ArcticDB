@@ -28,6 +28,7 @@ from typing import Any, Optional, Union, List, Sequence, Tuple, Dict, Set
 from contextlib import contextmanager
 import time
 
+from arcticdb.dependencies import pyarrow as pa
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
 from arcticdb_ext.version_store import SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
@@ -57,7 +58,8 @@ from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
-from arcticdb_ext.version_store import OutputFormat, ArrowOutputFrame
+from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat
+from arcticdb.options import RuntimeOptions, OutputFormat, output_format_to_internal
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
 from arcticdb.flattener import Flattener
@@ -71,6 +73,7 @@ from arcticdb.version_store._normalization import (
     denormalize_dataframe,
     MsgPackNormalizer,
     CompositeNormalizer,
+    ArrowTableNormalizer,
     FrameData,
     _IDX_PREFIX_LEN,
     get_timezone_from_metadata,
@@ -88,9 +91,9 @@ import arcticdb_ext as ae
 IS_WINDOWS = sys.platform == "win32"
 
 
-def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, runtime_options=None, **kwargs):
     """
-    Precedence: existing_value > kwargs > env > proto_cfg > global_default
+    Precedence: existing_value > kwargs > runtime_defaults > env > proto_cfg > global_default
 
     Parameters
     ----------
@@ -105,6 +108,9 @@ def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None,
     uppercase
         If true (default), will look for `param_name.upper()` in OS environment variables; otherwise, the original
         case.
+    runtime_options:
+        The RuntimeOptions to use for the library.
+        Uses the param_name attribute of runtime_options.
     kwargs
         For passing through the caller's kwargs in which we look for `param_name`
         *Deprecating: use `existing_value`*
@@ -116,6 +122,14 @@ def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None,
     param_value = kwargs.get(param_name)
     if param_value is not None:
         return param_value
+
+    try:
+        if runtime_options is not None:
+            option_value = getattr(runtime_options, param_name)
+            if option_value is not None:
+                return option_value
+    except AttributeError:
+        pass
 
     env_name = param_name.upper() if uppercase else param_name
     env_value = os.getenv(env_name)
@@ -299,11 +313,11 @@ class NativeVersionStore:
     norm_failure_options_msg_append = "Data must be normalizable to be appended to existing data."
     norm_failure_options_msg_update = "Data must be normalizable to be used to update existing data."
 
-    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None):
+    def __init__(self, library, env, lib_cfg=None, open_mode=OpenMode.DELETE, native_cfg=None, runtime_options=None):
         # type: (_Library, Optional[str], Optional[LibraryConfig], OpenMode)->None
         fail_on_missing = library.config.fail_on_missing_custom_normalizer if library.config is not None else False
         custom_normalizer = get_custom_normalizer(fail_on_missing)
-        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg)
+        self._initialize(library, env, lib_cfg, custom_normalizer, open_mode, native_cfg, runtime_options)
 
     def _init_norm_failure_handler(self):
         # init normalization failure handler
@@ -311,20 +325,34 @@ class NativeVersionStore:
         if nfh is None or nfh == "msg_pack":
             if nfh is not None:
                 nfh = getattr(self._cfg, nfh, None)
-            self._normalizer = CompositeNormalizer(MsgPackNormalizer(nfh))
+
+            use_norm_failure_handler_known_types = (
+                self._cfg.use_norm_failure_handler_known_types if self._cfg is not None else False
+            )
+
+            self._normalizer = CompositeNormalizer(
+                MsgPackNormalizer(nfh), use_norm_failure_handler_known_types=use_norm_failure_handler_known_types
+            )
         else:
             raise ArcticDbNotYetImplemented("No other normalization failure handler")
 
-    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None):
+    def _initialize(self, library, env, lib_cfg, custom_normalizer, open_mode, native_cfg=None, runtime_options=None):
         self._library = library
         self._cfg = library.config
         self.version_store = _PythonVersionStore(self._library)
         self.env = env or "local"
         self._lib_cfg = lib_cfg
         self._custom_normalizer = custom_normalizer
+        self._arrow_normalizer = ArrowTableNormalizer()
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
+        self._runtime_options=runtime_options
+
+    def set_output_format(self, output_format: Union[OutputFormat, str]):
+        if self._runtime_options is None:
+            self._runtime_options = RuntimeOptions()
+        self._runtime_options.set_output_format(output_format)
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
@@ -502,7 +530,10 @@ class NativeVersionStore:
 
     @staticmethod
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
-        return resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs)
+        return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, **kwargs)
+
+    def resolve_runtime_defaults(self, param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
+        return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, runtime_options=self._runtime_options, **kwargs)
 
     def _write_options(self):
         return self._lib_cfg.lib_desc.version.write_options
@@ -614,8 +645,10 @@ class NativeVersionStore:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
 
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
 
+        pickle_on_failure = resolve_defaults(
+            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
+        )
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
@@ -691,27 +724,6 @@ class NativeVersionStore:
                 )
             dynamic_strings = True
         return dynamic_strings
-
-    def _resolve_pickle_on_failure(self, existing_value):
-        """
-        The parameter name is pickle_on_failure, but the protobuf field is use_norm_failure_handler_known_types, and
-        for safety we should check both env vars, so resolve_defaults is insufficient for this case
-        """
-        if existing_value is not None:
-            return existing_value
-        env_value_1 = os.getenv("USE_NORM_FAILURE_HANDLER_KNOWN_TYPES")
-        if env_value_1 is not None:
-            return env_value_1 not in ("", "0") and not env_value_1.lower().startswith("f")
-        env_value_2 = os.getenv("PICKLE_ON_FAILURE")
-        if env_value_2 is not None:
-            return env_value_2 not in ("", "0") and not env_value_2.lower().startswith("f")
-        try:
-            config_value = getattr(self._lib_cfg.lib_desc.version, "use_norm_failure_handler_known_types")
-            if config_value is not None:
-                return config_value
-        except AttributeError:
-            pass
-        return False
 
     last_mismatch_msg: Optional[str] = None
 
@@ -1132,8 +1144,10 @@ class NativeVersionStore:
         date_ranges: `Optional[List[Optional[DateRangeInput]]]`, default=None
             List of date ranges to filter the symbols.
             i-th entry corresponds to i-th element of `symbols`.
-        row_ranges: `Optional[List[Optional[Tuple[int, int]]]]`, default=None
-            List of row ranges to filter the symbols.
+        row_ranges : `Optional[List[Tuple[Optional[int], Optional[int]]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             i-th entry corresponds to i-th element of `symbols`.
         columns: `List[List[str]]`, default=None
             Which columns to return for a dataframe.
@@ -1581,7 +1595,9 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
-        pickle_on_failure = self._resolve_pickle_on_failure(pickle_on_failure)
+        pickle_on_failure = resolve_defaults(
+            "pickle_on_failure", proto_cfg, global_default=False, existing_value=pickle_on_failure, **kwargs
+        )
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
 
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
@@ -1930,7 +1946,11 @@ class NativeVersionStore:
         read_options = _PythonVersionStoreReadOptions()
         read_options.set_force_strings_to_object(_assume_false("force_string_to_object", kwargs))
         read_options.set_optimise_string_memory(_assume_false("optimise_string_memory", kwargs))
-        read_options.set_output_format(kwargs.get("_output_format") or OutputFormat.PANDAS)
+        read_options.set_output_format(
+            output_format_to_internal(
+                self.resolve_runtime_defaults("output_format", proto_cfg, global_default=OutputFormat.PANDAS, **kwargs)
+            )
+        )
         read_options.set_dynamic_schema(resolve_defaults("dynamic_schema", proto_cfg, global_default=False, **kwargs))
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
@@ -1961,6 +1981,7 @@ class NativeVersionStore:
         else:
             index = pd.DatetimeIndex([])
         meta = denormalize_user_metadata(read_result.udm, self._normalizer)
+
         return VersionedItem(
             symbol=read_result.version.symbol,
             library=self._library.library_path,
@@ -1980,6 +2001,7 @@ class NativeVersionStore:
         if not implement_read_index and is_columns_empty:
             columns = None
         return columns
+
 
     def read(
         self,
@@ -2010,10 +2032,12 @@ class NativeVersionStore:
             slower, but return data with a smaller memory footprint. See the QueryBuilder.date_range docstring for more
             details.
             Only one of date_range or row_range can be provided.
-        row_range: `Optional[Tuple[int, int]]`, default=None
-            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound
+        row_range : `Optional[Tuple[Optional[int], Optional[int]]]`, default=None
+            Row range to read data for. Inclusive of the lower bound, exclusive of the upper bound.
             lib.read(symbol, row_range=(start, end)).data should behave the same as df.iloc[start:end], including in
             the handling of negative start/end values.
+            Leaving either element as None leaves that side of the range open-ended. For example (5, None) would
+            include everything from the 5th row onwards.
             Only one of date_range or row_range can be provided.
         columns: `Optional[List[str]]`, default=None
             Applicable only for dataframes. Determines which columns to return data for.
@@ -2367,15 +2391,15 @@ class NativeVersionStore:
 
         return index_columns
 
+
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
-            import pyarrow as pa
-
             frame_data = read_result.frame_data
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            data = pa.Table.from_batches(record_batches)
+            table = pa.Table.from_batches(record_batches)
+            data = self._arrow_normalizer.denormalize(table, read_result.norm)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):
@@ -2409,6 +2433,7 @@ class NativeVersionStore:
                 host=self.env,
                 timestamp=read_result.version.timestamp,
             )
+
 
     def list_versions(
         self,

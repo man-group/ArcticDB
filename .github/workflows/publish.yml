@@ -87,7 +87,7 @@ jobs:
       - name: Skip uploading macos wheels for now
         run: |
             rm *macos*.whl
-        continue-on-error: false
+        continue-on-error: true
             
       - name: Upload to Pypi
         run: |

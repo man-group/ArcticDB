@@ -51,7 +51,23 @@ on:
       run_on_real_s3:
         description: 'Execute tests on Amazon S3'
         required: true
-        default: '1'
+        default: '0'
+        type: choice
+        options:
+          - "1"
+          - "0"
+      run_on_real_gcp:
+        description: 'Execute tests on GCP'
+        required: true
+        default: '0'
+        type: choice
+        options:
+          - "1"
+          - "0"
+      run_on_real_azure:
+        description: 'Execute tests on Azure'
+        required: true
+        default: '0'
         type: choice
         options:
           - "1"
@@ -61,6 +77,21 @@ on:
         description: 'Run the build with debugging enabled'
         required: false
         default: false                  
+      run_enable_logging:
+        description: 'Enabled debug logging'
+        type: boolean
+        required: false
+        default: false        
+      run_commandline:
+        description: 'Run custom commandline before tests, Like: export ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0; ...'
+        type: string
+        required: false
+        default: ""        
+      run_custom_pytest_command:
+        description: '*Run custom pytest command, instead of standard(Note: curdir is project root). For example: pytest -v -s --log-file="tests.log" python/installation_tests/test_installation.py::test_list_versions_write_append_update[StorageTypes.REAL_AZURE]'
+        type: string
+        required: false
+        default: ""        
 
 jobs:
 
@@ -99,6 +130,8 @@ jobs:
       arcticdb_version: ${{ inputs.arcticdb_version || '1.6.2' }}
       lmdb: ${{ inputs.run_on_lmdb || '1' }}
       real_s3: ${{ inputs.run_on_real_s3 || '1' }}
+      real_azure: ${{ inputs.run_on_real_azure || '1' }}
+      real_gcp: ${{ inputs.run_on_real_gcp || '1' }}
 
     steps:
 
@@ -204,7 +237,7 @@ jobs:
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}
       shell: bash -l {0}
       run: |
-          micromamba activate arcticdb
+          micromamba activate arcticdb 
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
 
     - name: Set persistent storage variables
@@ -227,24 +260,56 @@ jobs:
         echo "ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=0" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_LMDB=${{ env.lmdb }}" >> $GITHUB_ENV
         echo "ARCTICDB_STORAGE_AWS_S3=${{ env.real_s3 }}" >> $GITHUB_ENV        
-        echo "ARCTICDB_STORAGE_GCP=0" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_AZURE=${{ env.real_azure }}" >> $GITHUB_ENV        
+        echo "ARCTICDB_STORAGE_GCP=${{ env.real_gcp }}" >> $GITHUB_ENV        
         echo "ARCTICDB_PERSISTENT_STORAGE_TESTS=1" >> $GITHUB_ENV
         echo "ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0" >> $GITHUB_ENV
+    
+    - name: Set environment variables based on arcticdb version for GCP
+      if: ${{ env.SKIP_JOB != 'true' }}
+      shell: bash -l {0}      
+      run: |
+        version=$(python -c "import arcticdb; print(arcticdb.__version__)")
+        echo "Detected arcticdb version: $version"
+
+        # Compare version using sort -V
+        if [ "$(printf '%s\n' "$version" "5.6.0" | sort -V | head -n1)" = "$version" ]; then
+          echo "Setting AWS environment variables for arcticdb <= 5.6.0"
+          echo "AWS_RESPONSE_CHECKSUM_VALIDATION=when_required" >> $GITHUB_ENV
+          echo "AWS_REQUEST_CHECKSUM_CALCULATION=when_required" >> $GITHUB_ENV
+        else
+          echo "No need to set AWS environment variables"
+        fi
+          
+    - name: Set ArcticDB Debug Logging
+      if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.run_enable_logging }}        
+      uses: ./.github/actions/enable_logging
 
     - name: Setup tmate session
       uses: mxschmitt/action-tmate@v3
-      if: ${{ github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
+      if: ${{ env.SKIP_JOB != 'true' && github.event_name == 'workflow_dispatch' && inputs.debug_enabled }}        
 
     - name: Run tests
       if: ${{ env.SKIP_JOB != 'true' }}
       shell: bash -l {0}      
       run: |
-        echo $pwd
-        echo "Running tests against arcticdb version: ${{ env.arcticdb_version }}"
-        pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
-        
-        ## For testing
-        #pytest -v --log-file="tests.log" python/tests/integration/arcticdb/test_arctic.py::test_append_prune_previous_versions
+        echo "Run commandline: $COMMANDLINE"
+        eval "$COMMANDLINE"
+        export ARCTICDB_RAND_SEED=$RANDOM
+        if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+          command="python -m $ARCTICDB_PYTEST_ARGS"
+          echo "Run custom pytest command: $command"
+          python -m pip  install pytest-repeat
+          echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
+          eval "$command"
+        else
+          echo $pwd
+          echo "Running tests against arcticdb version: ${{ env.arcticdb_version }}"
+          pytest -v --log-file="tests.log" -n auto python/installation_tests/test_installation.py
+        fi
+      env:
+        COMMANDLINE: ${{ inputs.run_commandline }}
+        ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
 
     - name: Upload the logs
       if: ${{ env.SKIP_JOB != 'true' }}
@@ -253,6 +318,7 @@ jobs:
         name: logs-${{ matrix.os || inputs.os }}-${{ matrix.python || inputs.python}}
         path: |
           ./*test*        
+          **/*.log
 
 
           

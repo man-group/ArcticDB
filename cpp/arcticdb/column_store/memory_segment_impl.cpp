@@ -10,30 +10,408 @@
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
+#include <arcticdb/column_store/column_map.hpp>
+#include <arcticdb/entity/stream_descriptor.hpp>
 
 #include <google/protobuf/any.pb.h>
 
 #include <arcticdb/stream/index.hpp>
 
 namespace arcticdb {
-
-    SegmentInMemoryImpl::SegmentInMemoryImpl() = default;
-
-    SegmentInMemoryImpl::SegmentInMemoryImpl(
-        const StreamDescriptor& desc,
-        size_t expected_column_size,
-        AllocationType presize,
-        Sparsity allow_sparse,
-        OutputFormat output_format,
-        DataTypeMode mode) :
-            descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() })),
-            allow_sparse_(allow_sparse) {
-        on_descriptor_change(desc, expected_column_size, presize, allow_sparse, output_format, mode);
+namespace {
+    std::shared_ptr<SegmentInMemoryImpl> allocate_sparse_segment(const StreamId& id, const IndexDescriptorImpl& index) {
+        return std::make_shared<SegmentInMemoryImpl>(StreamDescriptor{id, index}, 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
     }
 
-    SegmentInMemoryImpl::~SegmentInMemoryImpl() {
-        ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
+    std::shared_ptr<SegmentInMemoryImpl> allocate_dense_segment(const StreamDescriptor& descriptor, size_t row_count) {
+        return std::make_shared<SegmentInMemoryImpl>(descriptor, row_count, AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
     }
+
+    void check_output_bitset(const arcticdb::util::BitSet& output,
+                                    const arcticdb::util::BitSet& filter,
+                                    const arcticdb::util::BitSet& column_bitset
+                                    ){
+        // TODO: Do this in O(1)
+        // The logic here is that the filter bitset defines how the output bitset should look like
+        // The set bits in filter decides the row ids in the output. The corresponding values in sparse_map
+        // should match output bitset
+        auto filter_iter = filter.first();
+        arcticdb::util::BitSetSizeType output_pos = 0;
+        while(filter_iter != filter.end()) {
+            arcticdb::util::check_rte(column_bitset.test(*(filter_iter++)) == output.test(output_pos++),
+                                     "Mismatch in output bitset in filter_segment");
+        }
+    }
+} // namespace
+
+bool SegmentInMemoryImpl::Location::has_value() const {
+    return parent_->has_value_at(row_id_, position_t(column_id_));
+}
+
+bool SegmentInMemoryImpl::Location::operator==(const Location &other) const {
+    return row_id_ == other.row_id_ && column_id_ == other.column_id_;
+}
+
+SegmentInMemoryImpl::Row::Row(SegmentInMemoryImpl *parent, ssize_t row_id_) : parent_(parent), row_id_(row_id_) {}
+
+SegmentInMemoryImpl& SegmentInMemoryImpl::Row::segment() const {
+    return *parent_;
+}
+
+const StreamDescriptor& SegmentInMemoryImpl::Row::descriptor() const {
+    return parent_->descriptor();
+}
+
+bool SegmentInMemoryImpl::Row::operator<(const Row &other) const {
+    return entity::visit_field(parent_->field(0), [this, &other](auto type_desc_tag) {
+        using RawType =  typename decltype(type_desc_tag)::DataTypeTag::raw_type;
+        return parent_->scalar_at<RawType>(row_id_, 0) < other.parent_->scalar_at<RawType>(other.row_id_, 0);
+    });
+}
+
+size_t SegmentInMemoryImpl::Row::row_pos() const { return row_id_; }
+
+void swap(SegmentInMemoryImpl::Row &left, SegmentInMemoryImpl::Row &right) noexcept {
+    using std::swap;
+
+    auto a = left.begin();
+    auto b = right.begin();
+    for (; a != left.end(); ++a, ++b) {
+        util::check(a->has_value() && b->has_value(), "Can't swap sparse column values, unsparsify first?");
+        a->visit([&b](auto &val) {
+            using ValType = std::decay_t<decltype(val)>;
+            swap(val, b->value<ValType>());
+        });
+    }
+}
+
+SegmentInMemoryImpl::Location SegmentInMemoryImpl::Row::operator[](int pos) const {
+    return Location{parent_, row_id_, size_t(pos)};
+}
+
+SegmentInMemoryImpl::Row::iterator SegmentInMemoryImpl::Row::begin() {
+    return {parent_, row_id_};
+}
+
+SegmentInMemoryImpl::Row::iterator SegmentInMemoryImpl::Row::end() {
+    return {parent_, row_id_, size_t(parent_->descriptor().fields().size())};
+}
+
+SegmentInMemoryImpl::Row::const_iterator SegmentInMemoryImpl::Row::begin() const {
+    return {parent_, row_id_};
+}
+
+SegmentInMemoryImpl::Row::const_iterator SegmentInMemoryImpl::Row::end() const {
+    return {parent_, row_id_, size_t(parent_->descriptor().fields().size())};
+}
+
+bool SegmentInMemoryImpl::Row::operator==(const Row &other) const {
+    return row_id_ == other.row_id_ && parent_ == other.parent_;
+}
+
+void SegmentInMemoryImpl::Row::swap_parent(const Row &other) {
+    parent_ = other.parent_;
+}
+
+std::optional<std::string_view> SegmentInMemoryImpl::Row::string_at(std::size_t col) const {
+    return parent_->string_at(row_id_, position_t(col));
+}
+
+SegmentInMemoryImpl::iterator SegmentInMemoryImpl::begin() { return iterator{this}; }
+
+SegmentInMemoryImpl::iterator SegmentInMemoryImpl::end() {
+    util::check(row_id_ != -1, "End iterator called with negative row id, iterator will never terminate");
+    return iterator{this, row_id_ + 1};
+}
+
+SegmentInMemoryImpl::const_iterator SegmentInMemoryImpl::begin() const {
+    return const_iterator{const_cast<SegmentInMemoryImpl*>(this)};
+}
+
+SegmentInMemoryImpl::const_iterator SegmentInMemoryImpl::end() const {
+    util::check(row_id_ != -1, "End iterator called with negative row id, iterator will never terminate");
+    return const_iterator{const_cast<SegmentInMemoryImpl*>(this), row_id_} ;
+}
+
+const Field& SegmentInMemoryImpl::column_descriptor(size_t col) {
+    return (*descriptor_)[col];
+}
+
+void SegmentInMemoryImpl::end_row() {
+    row_id_++;
+}
+
+const TimeseriesDescriptor& SegmentInMemoryImpl::index_descriptor() const {
+    util::check(tsd_.has_value(), "Index descriptor requested but not set");
+    return *tsd_;
+}
+
+TimeseriesDescriptor& SegmentInMemoryImpl::mutable_index_descriptor() {
+    util::check(tsd_.has_value(), "Index descriptor requested but not set");
+    return *tsd_;
+}
+
+void SegmentInMemoryImpl::end_block_write(ssize_t size) {
+    row_id_ += size;
+}
+
+void SegmentInMemoryImpl::set_offset(ssize_t offset) {
+    offset_ = offset;
+}
+
+ssize_t SegmentInMemoryImpl::offset() const {
+    return offset_;
+}
+
+void SegmentInMemoryImpl::push_back(const Row &row) {
+    for (auto it : folly::enumerate(row)) {
+        it->visit([&it, that=this](const auto &val) {
+            if(val)
+                that->set_scalar(it.index, val.value());
+        });
+    }
+    end_row();
+}
+
+void SegmentInMemoryImpl::set_value(position_t idx, const Location &loc) {
+    loc.visit([this, idx](const auto& val) {
+        if(val)
+            set_scalar(idx, val.value());
+    });
+}
+
+void SegmentInMemoryImpl::set_sparse_block(position_t idx, ChunkedBuffer&& buffer, util::BitSet&& bitset) {
+    column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(bitset));
+}
+
+void SegmentInMemoryImpl::set_sparse_block(position_t idx, ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
+    column_unchecked(idx).set_sparse_block(std::move(buffer), std::move(shapes), std::move(bitset));
+}
+
+void SegmentInMemoryImpl::set_string(position_t pos, std::string_view str) {
+    ARCTICDB_TRACE(log::version(), "Segment setting string {} at row {} column {}", str, row_id_ + 1, pos);
+    OffsetString ofstr = string_pool_->get(str);
+    column_unchecked(pos).set_scalar(row_id_ + 1, ofstr.offset());
+}
+
+void SegmentInMemoryImpl::set_string_at(position_t col, position_t row, const char *str, size_t size) {
+    OffsetString ofstr = string_pool_->get(str, size);
+    column_unchecked(col).set_scalar(row, ofstr.offset());
+}
+
+void SegmentInMemoryImpl::set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data) {
+    check_column_index(idx);
+    column_unchecked(idx).set_string_array(row_id_ + 1, string_size, num_strings, data, string_pool());
+}
+
+void SegmentInMemoryImpl::set_string_list(position_t idx, const std::vector<std::string> &input) {
+    check_column_index(idx);
+    column_unchecked(idx).set_string_list(row_id_ + 1, input, string_pool());
+}
+
+Column& SegmentInMemoryImpl::column_ref(position_t idx) {
+    return column(idx);
+}
+
+Column& SegmentInMemoryImpl::column(position_t idx) {
+    check_column_index(idx);
+    return column_unchecked(idx);
+}
+
+const Column& SegmentInMemoryImpl::column(position_t idx) const {
+    check_column_index(idx);
+    return column_unchecked(idx);
+}
+
+Column& SegmentInMemoryImpl::column_unchecked(position_t idx) {
+    return *columns_[idx];
+}
+
+std::shared_ptr<Column> SegmentInMemoryImpl::column_ptr(position_t idx) const {
+    return columns_[idx];
+}
+
+const Column& SegmentInMemoryImpl::column_unchecked(position_t idx) const {
+    return *columns_[idx];
+}
+
+std::vector<std::shared_ptr<Column>>& SegmentInMemoryImpl::columns() {
+    return columns_;
+}
+
+const std::vector<std::shared_ptr<Column>>& SegmentInMemoryImpl::columns() const {
+    return columns_;
+}
+
+bool SegmentInMemoryImpl::empty() const {
+    return row_count() <= 0 && !metadata();
+}
+
+void SegmentInMemoryImpl::unsparsify() const {
+    for(const auto& column : columns_)
+        column->unsparsify(row_count());
+}
+
+void SegmentInMemoryImpl::sparsify() const {
+    for(const auto& column : columns_)
+        column->sparsify();
+}
+
+bool SegmentInMemoryImpl::has_value_at(position_t row, position_t col) const {
+    return column(col).has_value_at(row);
+}
+
+size_t SegmentInMemoryImpl::num_columns() const { return columns_.size(); }
+
+size_t SegmentInMemoryImpl::num_fields() const { return descriptor().field_count(); }
+
+size_t SegmentInMemoryImpl::row_count() const { return row_id_ + 1 < 0 ? 0 : size_t(row_id_ + 1); }
+
+void SegmentInMemoryImpl::clear() {
+    columns_.clear();
+    string_pool_->clear();
+}
+
+size_t SegmentInMemoryImpl::string_pool_size() const { return string_pool_->size(); }
+
+bool SegmentInMemoryImpl::has_string_pool() const { return string_pool_size() > 0; }
+
+const std::shared_ptr<StringPool>& SegmentInMemoryImpl::string_pool_ptr() const {
+    return string_pool_;
+}
+
+void SegmentInMemoryImpl::check_column_index(position_t idx) const {
+    util::check_arg(idx < position_t(columns_.size()), "Column index {} out of bounds", idx);
+}
+
+ColumnData SegmentInMemoryImpl::string_pool_data() const {
+    return ColumnData{
+        &string_pool_->data(),
+        &string_pool_->shapes(),
+        string_pool_descriptor().type(),
+        nullptr
+    };
+}
+
+ void SegmentInMemoryImpl::compact_blocks() const {
+    for(const auto& column : columns_)
+        column->compact_blocks();
+}
+
+const FieldCollection& SegmentInMemoryImpl::fields() const {
+    return descriptor().fields();
+}
+
+ColumnData SegmentInMemoryImpl::column_data(size_t col) const {
+    return columns_[col]->data();
+}
+
+const StreamDescriptor& SegmentInMemoryImpl::descriptor() const {
+    return *descriptor_;
+}
+
+StreamDescriptor& SegmentInMemoryImpl::descriptor() {
+    return *descriptor_;
+}
+
+const std::shared_ptr<StreamDescriptor>& SegmentInMemoryImpl::descriptor_ptr() const {
+    util::check(static_cast<bool>(descriptor_), "Descriptor pointer is null");
+    return descriptor_;
+}
+
+void SegmentInMemoryImpl::attach_descriptor(std::shared_ptr<StreamDescriptor> desc) {
+    descriptor_ = std::move(desc);
+}
+
+const Field& SegmentInMemoryImpl::field(size_t index) const {
+    return descriptor()[index];
+}
+
+void SegmentInMemoryImpl::set_row_id(ssize_t rid) {
+    row_id_ = rid;
+}
+
+void SegmentInMemoryImpl::set_row_data(ssize_t rid) {
+    set_row_id(rid);
+    for(const auto& column : columns())
+        column->set_row_data(row_id_);
+}
+
+StringPool& SegmentInMemoryImpl::string_pool() { return *string_pool_; } //TODO protected
+
+bool SegmentInMemoryImpl::compacted() const {
+    return compacted_;
+}
+
+void SegmentInMemoryImpl::set_compacted(bool value) {
+    compacted_ = value;
+}
+
+void SegmentInMemoryImpl::check_magic() const {
+    magic_.check();
+}
+
+bool SegmentInMemoryImpl::allow_sparse() const{
+    return allow_sparse_ == Sparsity::PERMITTED;
+}
+
+bool SegmentInMemoryImpl::is_sparse() const {
+    // TODO: Very slow, fix this by storing it in protobuf
+    return std::ranges::any_of(columns_, [] (const auto& c) {
+        return c->is_sparse();
+    });
+}
+
+void SegmentInMemoryImpl::set_string_pool(std::shared_ptr<StringPool> string_pool) {
+    string_pool_ = std::move(string_pool);
+}
+
+bool SegmentInMemoryImpl::has_index_descriptor() const {
+    return tsd_.has_value();
+}
+
+bool SegmentInMemoryImpl::has_user_metadata() {
+    return tsd_.has_value() && !tsd_->proto_is_null() && tsd_->proto().has_user_meta();
+}
+
+const arcticdb::proto::descriptors::UserDefinedMetadata& SegmentInMemoryImpl::user_metadata() const {
+    return tsd_->user_metadata();
+}
+
+SegmentInMemoryImpl::SegmentInMemoryImpl() :
+    descriptor_(std::make_shared<StreamDescriptor>()),
+    string_pool_(std::make_shared<StringPool>()) {}
+
+SegmentInMemoryImpl::SegmentInMemoryImpl(
+    const StreamDescriptor& desc,
+    size_t expected_column_size,
+    AllocationType presize,
+    Sparsity allow_sparse,
+    OutputFormat output_format,
+    DataTypeMode mode) :
+        descriptor_(std::make_shared<StreamDescriptor>(StreamDescriptor{ desc.id(), desc.index() })),
+        string_pool_(std::make_shared<StringPool>()),
+        allow_sparse_(allow_sparse) {
+    on_descriptor_change(desc, expected_column_size, presize, allow_sparse, output_format, mode);
+}
+
+SegmentInMemoryImpl::SegmentInMemoryImpl(
+    const StreamDescriptor& desc,
+    size_t expected_column_size,
+    AllocationType presize,
+    Sparsity allow_sparse) :
+        SegmentInMemoryImpl(
+            desc,
+            expected_column_size,
+            presize,
+            allow_sparse,
+            OutputFormat::NATIVE,
+            DataTypeMode::INTERNAL) {
+}
+
+SegmentInMemoryImpl::~SegmentInMemoryImpl() {
+    ARCTICDB_TRACE(log::version(), "Destroying segment in memory");
+}
 
 // Append any columns that exist both in this segment and in the 'other' segment onto the
 // end of the column in this segment. Any columns that exist in this segment but not in the
@@ -620,12 +998,12 @@ std::optional<std::string_view> SegmentInMemoryImpl::string_at(position_t row, p
         auto ptr = col_ref.data().buffer().ptr_cast<char>(row * string_size, string_size);
         return std::string_view(ptr, string_size);
     } else {
-
-        auto offset = col_ref.scalar_at<entity::position_t>(row);
-        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder())
+        const auto offset = col_ref.scalar_at<entity::position_t>(row);
+        if (offset != std::nullopt && *offset != not_a_string() && *offset != nan_placeholder()) {
             return string_pool_->get_view(*offset);
-        else
+        } else {
             return std::nullopt;
+        }
     }
 }
 
@@ -639,7 +1017,9 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::split(siz
         util::BitSetSizeType end = std::min(start + rows, total_rows);
         // set_range is close interval on [left, right]
         bitset.set_range(start, end - 1, true);
-        output.emplace_back(filter(std::move(bitset), filter_down_stringpool));
+        auto output_segment = filter(std::move(bitset), filter_down_stringpool);
+        output_segment->set_offset(start);
+        output.emplace_back(std::move(output_segment));
     }
     return output;
 }

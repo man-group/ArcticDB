@@ -25,6 +25,8 @@ import trustme
 from arcticdb.util.marks import ARCTICDB_USING_CONDA
 
 _WINDOWS = platform.system() == "Windows"
+_MACOS = sys.platform.lower().startswith("darwin")
+_LINUX = sys.platform.lower().startswith("linux")
 _DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
 
 
@@ -59,6 +61,23 @@ class GracefulProcessUtils:
         print("About to run:", cmd)
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if _WINDOWS else 0
         return subprocess.Popen(cmd, creationflags=creation_flags, **kwargs)
+    
+    @staticmethod
+    def start_with_retry(url: str, service_name: str, num_retries: int, timeout: int, 
+                         process_start_cmd: str, **kwargs):
+        """Attempts to start the process up to specified times.
+        
+        Each time will wait for service to be avil at specified url up to the specified timeout"""
+        for i in range(num_retries): # retry in case of connection problems
+            try:
+                p = GracefulProcessUtils.start(process_start_cmd, **kwargs)
+                wait_for_server_to_come_up(url, service_name, p, timeout=timeout)
+                return p
+            except AssertionError:
+                try:
+                    p.terminate()
+                except:
+                    pass
 
     @staticmethod
     def wait(p: ProcessUnion, timeout_sec: int):
