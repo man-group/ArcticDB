@@ -4,9 +4,11 @@ ArcticDB is licensed under the [Business Source License 1.1 (BSL)](https://githu
 
 ## Is ArcticDB free to use?
 
-All versions of ArcticDB are free to use for non-production usage - except if being used to provide an offering that allows third parties (other than your employees and contractors) to operate a database.
+ArcticDB is free for personal use and trials only.
 
-Under the BSL, ArcticDB cannot be used for production usage. For more information on what constitutes production usage, please see the [MariaDB BSL FAQ](https://mariadb.com/bsl-faq-mariadb/). 
+For BSL versions of ArcticDB, a commercial agreement is required for any business use.
+
+That includes usage in research or dev environments, where any economic benefit is being derived. Please contact [info@arcticdb.io](http://arcticdb.io) for any additional information.
 
 Once a version of ArcticDB has converted to the Apache 2.0 license, it may be used for production usage without acquiring an additional license.
 
