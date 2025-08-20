@@ -142,6 +142,7 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
             } else {
                 num_rows = array.size();
             }
+            // TODO: Remove const-cast when sparrow github issue #528 fixed
             auto arrow_structures = sparrow::get_arrow_structures(const_cast<sparrow::array&>(array));
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_structures.first, *arrow_structures.second);
             // arrow_array_buffers.at(1) seems to be the validity bitmap, and may be NULL if there are no null values
@@ -149,7 +150,7 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
             const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
             const auto& block_offsets = chunked_buffers.at(idx).block_offsets();
             const auto bytes = *num_rows * get_type_size(data_types.at(idx));
-            const auto offset = block_offsets.empty() ? 0 : block_offsets.back() + bytes;
+            const auto offset = block_offsets.empty() ? 0 : block_offsets.back();
             chunked_buffers.at(idx).add_external_block(data, bytes, offset);
         }
         total_rows += *num_rows;
