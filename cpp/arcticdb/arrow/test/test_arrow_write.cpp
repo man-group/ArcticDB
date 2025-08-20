@@ -9,6 +9,7 @@
 #include <gtest/gtest.h>
 #include <sparrow/record_batch.hpp>
 
+#include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
@@ -180,6 +181,33 @@ TEST(ArrowDataToSegmentBool, Simple) {
     }
 }
 
+TEST(ArrowDataToSegmentTimestamp, Simple) {
+    size_t num_rows = 10;
+    auto* data_ptr = reinterpret_cast<timestamp*>(allocate_detachable_memory(num_rows * sizeof(timestamp)));
+    std::iota(data_ptr, data_ptr + num_rows, 0UL);
+    auto array = sparrow::array{create_timestamp_array(data_ptr, num_rows, std::nullopt)};
+    auto record_batch = create_record_batch({{"col", array}});
+
+    std::vector<sparrow::record_batch> record_batches;
+    record_batches.emplace_back(std::move(record_batch));
+    auto seg = arrow_data_to_segment(record_batches);
+
+    ASSERT_EQ(seg.fields().size(), 1);
+    ASSERT_EQ(seg.num_columns(), 1);
+    ASSERT_EQ(seg.row_count(), num_rows);
+    const auto column_index = seg.column_index("col");
+    ASSERT_TRUE(column_index.has_value());
+    ASSERT_EQ(*column_index, 0);
+    const auto& col = seg.column(0);
+    ASSERT_EQ(col.type(), make_scalar_type(DataType::NANOSECONDS_UTC64));
+    ASSERT_EQ(col.row_count(), num_rows);
+    ASSERT_EQ(col.last_row(), num_rows - 1);
+    ASSERT_FALSE(col.is_sparse());
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        ASSERT_EQ(*col.scalar_at<timestamp>(idx), idx);
+    }
+}
+
 TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
     size_t num_rows{10};
     std::vector<DataType> numeric_data_types{
@@ -224,5 +252,3 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
         });
     }
 }
-
-// Test timestamps

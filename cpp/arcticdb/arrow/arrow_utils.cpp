@@ -88,7 +88,6 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
 
 DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
     // TODO: Include string repr of data type in error message
-    // TODO: Work out if TIMESTAMP_NANOSECONDS is the right time type
     // TODO: Add support for other time types
     // TODO: Add support for strings
     switch (arrow_type) {
@@ -127,8 +126,7 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
     }
     uint64_t total_rows{0};;
     for (; record_batch != record_batches.cend(); ++record_batch) {
-        // Could skip this check on first iteration
-        util::check(std::ranges::equal(column_names, record_batch->names()),
+        util::check(record_batch == record_batches.cbegin() || std::ranges::equal(column_names, record_batch->names()),
                 "Record batches do not contain the same column names: {} != {}", column_names, record_batch->names());
         std::optional<size_t> num_rows;
         for (size_t idx = 0; idx < num_columns; ++idx) {
