@@ -618,7 +618,7 @@ def arctic_client(request, encoding_version) -> Arctic:
 def arctic_client_v1(request) -> Arctic:
     filter_out_unwanted_mark(request, request.param)
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
-    ac = storage_fixture.create_arctic(encoding_version=DEFAULT_ENCODING)
+    ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V1)
     return ac
 
 

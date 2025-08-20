@@ -1,4 +1,6 @@
-# In  this case the simulated real storages will be skipped
+# In  this case the simulated real storages will be skipped,
+# because even they are enabled, the real storages are also enabled
+# and then simulated will not be executed
 export ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED=1
 export ARCTICDB_STORAGE_LMDB=
 export ARCTICDB_STORAGE_AZURITE=
