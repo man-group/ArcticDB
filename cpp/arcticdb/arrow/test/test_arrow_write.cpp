@@ -150,3 +150,33 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
     }
     ASSERT_EQ(buffer.block_offsets().back(), bytes);
 }
+
+TEST(ArrowDataToSegmentBool, Simple) {
+    size_t num_rows = 16;
+    std::vector<bool> data(num_rows);
+    auto array = create_array(data);
+    auto record_batch = create_record_batch({{"col", array}});
+
+    std::vector<sparrow::record_batch> record_batches;
+    record_batches.emplace_back(std::move(record_batch));
+    auto seg = arrow_data_to_segment(record_batches);
+
+    ASSERT_EQ(seg.fields().size(), 1);
+    ASSERT_EQ(seg.num_columns(), 1);
+    ASSERT_EQ(seg.row_count(), num_rows);
+    const auto column_index = seg.column_index("col");
+    ASSERT_TRUE(column_index.has_value());
+    ASSERT_EQ(*column_index, 0);
+    const auto& col = seg.column(0);
+    ASSERT_EQ(col.type(), make_scalar_type(DataType::BOOL8));
+    // Arrow bool columns use a packed bitset representation
+    auto bytes = bitset_packed_size_bytes(num_rows);
+    ASSERT_EQ(col.row_count(), bytes);
+    ASSERT_EQ(col.last_row(), bytes - 1);
+    ASSERT_FALSE(col.is_sparse());
+    for (size_t idx = 0; idx < bytes; ++idx) {
+        ASSERT_EQ(*col.scalar_at<uint8_t>(idx), 0);
+    }
+}
+
+// Test record_batches with multiple column types

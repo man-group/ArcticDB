@@ -149,7 +149,8 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
             // need to handle it being non-NULL and all 1s though
             const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
             const auto& block_offsets = chunked_buffers.at(idx).block_offsets();
-            const auto bytes = *num_rows * get_type_size(data_types.at(idx));
+            // Arrow bool columns are packed bitsets
+            const auto bytes = is_bool_type(data_types.at(idx)) ? bitset_packed_size_bytes(*num_rows) : *num_rows * get_type_size(data_types.at(idx));
             const auto offset = block_offsets.empty() ? 0 : block_offsets.back();
             chunked_buffers.at(idx).add_external_block(data, bytes, offset);
         }
@@ -160,8 +161,11 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
         // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
         seg.add_column(scalar_field(data_types.at(idx), column_names[idx]),
                        std::make_shared<Column>(make_scalar_type(data_types.at(idx)), Sparsity::NOT_PERMITTED, std::move(chunked_buffers.at(idx))));
+        // Cannot just use seg.set_row_data, as bool columns are still in a packed bitset representation, and so would
+        // be marked as sparse
+        seg.column(idx).set_row_data(seg.column(idx).row_count() - 1);
     }
-    seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
+    seg.set_row_id(static_cast<ssize_t>(total_rows) - 1);
     return seg;
 }
 
