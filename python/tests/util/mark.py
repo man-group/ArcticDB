@@ -21,9 +21,12 @@ MACOS = sys.platform.lower().startswith("darwin")
 LINUX = sys.platform.lower().startswith("linux")
 WINDOWS = sys.platform.lower().startswith("win32")
 
+
 # Defined shorter logs on errors
 SHORTER_LOGS = marks.SHORTER_LOGS
+logger = get_logger()
 
+RUNS_ON_GITHUB = os.getenv("GITHUB_ACTIONS") == "true"
 
 def getenv_strip(env_var_name: str, default_value: Optional[str] = None) -> Optional[str]:
     """
@@ -83,12 +86,9 @@ else:
     STORAGE_AZURITE = (getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" 
                        or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0"))
 TEST_ENCODING_V1 = getenv_strip("ARCTICDB_TEST_ENCODING_V1", "1") == "1"
-TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "0") == "1"
+# On local environment default is without V2 on github it is always on
+TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "1" if RUNS_ON_GITHUB else "0") == "1"
 
-
-# Defined shorter logs on errors
-SHORTER_LOGS = marks.SHORTER_LOGS
-logger = get_logger()
 
 if not SHORTER_LOGS:
     logger.info("-" * 120)
@@ -98,7 +98,7 @@ if not SHORTER_LOGS:
             logger.info(f"{name}={value}")
     logger.info("-" * 120)
     logger.info("  STORAGE STATUS:")
-    logger.info("AccountKey=fewqf erwfrefgr evfevf")
+    logger.info(f"RUNS_ON_GITHUB              ={RUNS_ON_GITHUB}")
     logger.info(f"LOCAL_STORAGE_TESTS_ENABLED ={LOCAL_STORAGE_TESTS_ENABLED}")
     logger.info(f"STORAGE_LMDB                ={STORAGE_LMDB}")
     logger.info(f"STORAGE_MEM                 ={STORAGE_MEM}")
