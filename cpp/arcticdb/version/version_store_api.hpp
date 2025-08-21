@@ -57,7 +57,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     VersionedItem write_versioned_dataframe(
         const StreamId& stream_id,
-        const py::tuple& item,
+        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
         const py::object& norm,
         const py::object& user_meta,
         bool prune_previous_versions,

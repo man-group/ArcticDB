@@ -204,7 +204,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
 
 std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     const StreamId& stream_name,
-    const py::tuple &item,
+    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
     const py::object &norm_meta,
     const py::object &user_meta,
     bool empty_types) {
@@ -216,70 +216,87 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     if (!user_meta.is_none())
         python_util::pb_from_python(user_meta, res->user_meta);
 
-    // Fill index
-    auto idx_names = item[0].cast<std::vector<std::string>>();
-    auto idx_vals = item[2].cast<std::vector<py::object>>();
-    util::check(idx_names.size() == idx_vals.size(),
+    if (std::holds_alternative<py::tuple>(item)) {
+        // Fill index
+        const auto& tuple = std::get<py::tuple>(item);
+        auto idx_names = tuple[0].cast<std::vector<std::string>>();
+        auto idx_vals = tuple[2].cast<std::vector<py::object>>();
+        util::check(
+                idx_names.size() == idx_vals.size(),
                 "Number idx names {} and values {} do not match",
-                idx_names.size(), idx_vals.size());
+                idx_names.size(),
+                idx_vals.size()
+        );
 
-    if (!idx_names.empty()) {
-        util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
-        auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
-        util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
-        util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
-        std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
-        res->num_rows = static_cast<size_t>(index_tensor.shape(0));
-        // TODO handle string indexes
-        if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
-            res->desc.set_index_field_count(1);
-            res->desc.set_index_type(IndexDescriptor::Type::TIMESTAMP);
+        if (!idx_names.empty()) {
+            util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
+            auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
+            util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
+            util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
+            std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
+            res->num_rows = static_cast<size_t>(index_tensor.shape(0));
+            // TODO handle string indexes
+            if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
+                res->desc.set_index_field_count(1);
+                res->desc.set_index_type(IndexDescriptor::Type::TIMESTAMP);
 
-            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            res->index = stream::TimeseriesIndex(index_column_name);
-            res->index_tensor = std::move(index_tensor);
-        } else {
+                res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
+                res->index = stream::TimeseriesIndex(index_column_name);
+                res->index_tensor = std::move(index_tensor);
+            } else {
+                res->index = stream::RowCountIndex();
+                res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
+                res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
+                res->field_tensors.push_back(std::move(index_tensor));
+            }
+        }
+
+        // Fill tensors
+        auto col_names = tuple[1].cast<std::vector<std::string>>();
+        auto col_vals = tuple[3].cast<std::vector<py::object>>();
+        auto sorted = tuple[4].cast<SortedValue>();
+
+        res->set_sorted(sorted);
+
+        for (auto i = 0u; i < col_vals.size(); ++i) {
+            auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
+            res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
+            if (tensor.expanded_dim() == 1) {
+                res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+            } else if (tensor.expanded_dim() == 2) {
+                res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+            }
+            res->field_tensors.push_back(std::move(tensor));
+        }
+
+        // idx_names are passed by the python layer. They are empty in case row count index is used see:
+        // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
+        // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
+        if (idx_names.empty()) {
             res->index = stream::RowCountIndex();
             res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
-            res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
-            res->field_tensors.push_back(std::move(index_tensor));
         }
-    }
 
-    // Fill tensors
-    auto col_names = item[1].cast<std::vector<std::string>>();
-    auto col_vals = item[3].cast<std::vector<py::object>>();
-    auto sorted = item[4].cast<SortedValue>();
-
-    res->set_sorted(sorted);
-
-    for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
-        res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
-        if(tensor.expanded_dim() == 1) {
-            res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else if(tensor.expanded_dim() == 2) {
-            res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+        if (empty_types && res->num_rows == 0) {
+            res->index = stream::EmptyIndex();
+            res->desc.set_index_type(IndexDescriptor::Type::EMPTY);
         }
-        res->field_tensors.push_back(std::move(tensor));
-    }
 
-    // idx_names are passed by the python layer. They are empty in case row count index is used see:
-    // https://github.com/man-group/ArcticDB/blob/4184a467d9eee90600ddcbf34d896c763e76f78f/python/arcticdb/version_store/_normalization.py#L291
-    // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify
-    // index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
-    if (idx_names.empty()) {
-        res->index = stream::RowCountIndex();
-        res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
+        ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
+        res->set_index_range();
+    } else {
+        const auto& record_batches = std::get<std::vector<RecordBatchData>>(item);
+        std::vector<sparrow::record_batch> sp_record_batches;
+        sp_record_batches.reserve(record_batches.size());
+        for (const auto& record_batch: record_batches) {
+            // TODO: Talk to QS about these pointers needing to be non-const
+            sparrow::arrow_proxy arrow_proxy{const_cast<ArrowArray*>(&record_batch.array_), const_cast<ArrowSchema*>(&record_batch.schema_)};
+            sparrow::struct_array struct_array{arrow_proxy};
+            sp_record_batches.emplace_back(std::move(struct_array));
+        }
+        res->seg = arrow_data_to_segment(sp_record_batches);
+        res->num_rows = res->seg->row_count();
     }
-
-    if (empty_types && res->num_rows == 0) {
-        res->index = stream::EmptyIndex();
-        res->desc.set_index_type(IndexDescriptor::Type::EMPTY);
-    }
-
-    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
-    res->set_index_range();
     return res;
 }
 

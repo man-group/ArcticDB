@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -30,6 +31,8 @@ concept ValidIndex = util::any_of<
 struct InputTensorFrame {
     InputTensorFrame() :
         index(stream::empty_index()) {}
+
+    std::optional<SegmentInMemory> seg;
 
     StreamDescriptor desc;
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;

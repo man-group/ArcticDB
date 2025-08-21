@@ -712,7 +712,10 @@ class ArrowTableNormalizer(Normalizer):
             arcticdb_record_batch = RecordBatchData()
             pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
             arcticdb_record_batches.append(arcticdb_record_batch)
-        return arcticdb_record_batches
+        # If input table was created by from_pandas, then we can populate this with inverse of construct_pandas_metadata
+        # May also need Arrow-specific norm metadata, although this can be handled in the C++ layer as it is not Python
+        # specific
+        return arcticdb_record_batches, NormalizationMetadata()
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
@@ -1385,6 +1388,7 @@ class CompositeNormalizer(Normalizer):
         self.series = SeriesNormalizer()
         self.tf = TimeFrameNormalizer()
         self.np = NdArrayNormalizer()
+        self.pa = ArrowTableNormalizer()
 
         if use_norm_failure_handler_known_types and fallback_normalizer is not None:
             self.df = KnownTypeFallbackOnError(self.df, fallback_normalizer)
@@ -1443,6 +1447,10 @@ class CompositeNormalizer(Normalizer):
 
         if isinstance(item, np.ndarray):
             return self.np.normalize
+
+        # TODO: Handle other related pyarrow types
+        if isinstance(item, pa.Table):
+            return self.pa.normalize
 
         if self.fallback_normalizer is not None:
             # Msgpack normalize if everything else fails.

@@ -34,3 +34,12 @@ def test_multiple_record_batches_roundtrip():
     returned_table = pa.Table.from_batches(pa_record_batches)
     assert table.equals(returned_table)
 
+
+def test_basic_write(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_basic_write"
+    table = pa.table({"col": pa.array([0, 1], pa.int64())})
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+

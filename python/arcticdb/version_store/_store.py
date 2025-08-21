@@ -30,7 +30,7 @@ import time
 
 from arcticdb.dependencies import pyarrow as pa
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import SortedValue, StageResult
+from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -692,7 +692,7 @@ class NativeVersionStore:
             coerce_columns,
             norm_failure_options_msg,
         )
-        if isinstance(item, NPDDataFrame):
+        if isinstance(item, NPDDataFrame) or (isinstance(item, list) and all(isinstance(el, RecordBatchData) for el in item)):
             if parallel or incomplete:
                 is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
                 if is_new_stage_api_enabled:
