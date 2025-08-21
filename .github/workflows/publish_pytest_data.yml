@@ -1,0 +1,67 @@
+name: Publish pytest data to S3
+on: 
+  workflow_call:
+    inputs:
+      environment: { type: string, required: true }
+  workflow_dispatch:
+    inputs:
+      environment: { type: environment, required: true }
+      run_id: { type: number, required: true }
+run-name: Publish ${{github.ref}} to arcticdb-pytest-data
+permissions:
+  contents: read
+jobs:
+  sync_pytest_xmls:
+    runs-on: ubuntu-22.04
+    container:
+      image: ubuntu:22.04 # Native runner doesn't allow setting up the ca softlinks required below
+    steps:
+      - name: Select Python
+        uses: actions/setup-python@v4.7.1
+        with:
+          python-version: "3.11"
+
+      - name: Setup env vars
+        run: |
+          # We are using an absolute path here because for some reason the upload-artifact action
+          # does not work correctly with a relative path.
+          echo "ARTEFACT_PATH=/tmp/${{ github.run_id }}" >> $GITHUB_ENV
+          # get the current date and time in UTC
+          echo "GITHUB_RUN_STARTED_AT=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> $GITHUB_ENV
+
+      - name: Gather pytest xmls from run ${{ github.run_id }}
+        id: gather-pytest-xmls
+        uses: actions/download-artifact@v4
+        with:
+            pattern: "pytest-*"
+            run-id: ${{ github.run_id }}
+            github-token: ${{github.token}}  
+            path: ${{ env.ARTEFACT_PATH }}
+
+      - name: Checkout
+        uses: actions/checkout@v3.3.0
+
+      - name: Install requirements
+        run: |
+          apt update
+          apt install -y git
+          python3 -m pip install arcticdb[Testing] click
+
+      - name: Setup softlink for SSL
+        shell: bash -el {0}
+        run: |
+            mkdir -p /etc/pki/tls
+            ln -s /usr/lib/ssl/certs /etc/pki/tls/certs
+            ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          bucket: "arcticdb-ci-pytest-results"
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+
+      - name: Process pytest xmls
+        run: |
+          ls -R ${{ env.ARTEFACT_PATH }}
+          python3 build_tooling/process_pytest_artifacts.py --download-dir ${{ env.ARTEFACT_PATH }} --use-github-actions
