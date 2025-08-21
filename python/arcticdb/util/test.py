@@ -1203,3 +1203,15 @@ def compute_common_type_for_columns(segment_columns: List[dict]):
             else:
                 common_types[name] = valid_common_type(common_types[name], np.dtype(dtype))
     return common_types
+
+def assert_vit_equals_except_data(left, right):
+    """
+    Checks if two VersionedItem objects are equal disregarding differences in the data field. This is because when a
+    write is performed the returned VersionedItem does not contain a data field.
+    """
+    assert left.symbol == right.symbol
+    assert left.library == right.library
+    assert left.version == right.version
+    assert left.metadata == right.metadata
+    assert left.host == right.host
+    assert left.timestamp == right.timestamp
