@@ -295,10 +295,11 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
             sp_record_batches.emplace_back(std::move(struct_array));
         }
         res->seg = arrow_data_to_segment(sp_record_batches);
-        res->num_rows = res->seg->row_count();
         // TODO: Work out the index field count at some point
+        res->seg->descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+        res->seg->descriptor().set_id(stream_name);
+        res->num_rows = res->seg->row_count();
         res->desc = res->seg->descriptor();
-        res->desc.set_id(stream_name);
         // TODO: populate res->index and res->desc.sorted() for index_is_not_timeseries_or_is_sorted_ascending
     }
     return res;
