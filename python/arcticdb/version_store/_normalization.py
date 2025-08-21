@@ -37,7 +37,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
-from arcticdb_ext.version_store import SortedValue as _SortedValue
+from arcticdb_ext.version_store import RecordBatchData, SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -705,8 +705,14 @@ class ArrowTableNormalizer(Normalizer):
             new_columns,
             schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
         )
-    def normalize(self, item, **kwargs):
-        raise NotImplementedError("Arrow write is not yet implemented")
+    def normalize(self, table, **kwargs):
+        pa_record_batches = table.to_batches()
+        arcticdb_record_batches = []
+        for pa_record_batch in pa_record_batches:
+            arcticdb_record_batch = RecordBatchData()
+            pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
+            arcticdb_record_batches.append(arcticdb_record_batch)
+        return arcticdb_record_batches
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table

@@ -16,6 +16,8 @@ namespace arcticdb {
 
 // C arrow representation of a record batch. Can be converted to a pyarrow.RecordBatch zero copy.
 struct RecordBatchData {
+    RecordBatchData() = default;
+
     RecordBatchData(ArrowArray array, ArrowSchema schema) :
         array_(array),
         schema_(schema) {

@@ -268,6 +268,7 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
         ;
 
         py::class_<RecordBatchData>(version, "RecordBatchData")
+            .def(py::init<>())
             .def("array", &RecordBatchData::array)
             .def("schema", &RecordBatchData::schema)
         ;
