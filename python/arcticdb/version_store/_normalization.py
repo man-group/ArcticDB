@@ -719,11 +719,7 @@ class ArrowTableNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
-        renames_for_table = {}
-        timezones = {}
-        range_index = None
-        pandas_indexes = None
-        renames_for_pandas_metadata = {}
+
 
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
@@ -732,8 +728,16 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
+        elif input_type is None:
+            return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
+
+        renames_for_table = {}
+        timezones = {}
+        range_index = None
+        pandas_indexes = None
+        renames_for_pandas_metadata = {}
 
         index_type = pandas_meta.WhichOneof("index_type")
         if index_type == "index":
