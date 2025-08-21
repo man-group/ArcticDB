@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import time
 from arcticdb import Arctic
 
 from benchmarks.common import *
@@ -22,7 +23,15 @@ class ListFunctions:
 
     rows = 50
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):
         self.ac = Arctic("lmdb://list_functions")
 
         num_symbols = ListFunctions.params

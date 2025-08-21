@@ -8,6 +8,7 @@ from arcticdb.util.utils import TimestampNumber
 """
 
 import sys
+import time
 from arcticdb.arctic import Arctic
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
@@ -42,9 +43,13 @@ class FinalizeStagedData:
         self.logger = get_logger()
 
     def setup_cache(self):
-        # Generating dataframe with all kind of supported data types
-        cachedDF = CachedDFGenerator(350000, [5])
+        start = time.time()
+        self._setup_cache(CachedDFGenerator(350000, [5]))
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self, cachedDF):
         ac = Arctic(f"lmdb://{FinalizeStagedData.ARCTIC_DIR}?map_size=40GB")
+        self.logger.info(f"{ac}")
         ac.delete_library(self.lib_name)
         lib = ac.create_library(self.lib_name)
         for param in FinalizeStagedData.params:
@@ -64,29 +69,24 @@ class FinalizeStagedData:
         # Then on each teardown we restore the initial state by overwriting the modified with the original.
         copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
 
-        return cachedDF
-    
-    def setup(self, cache: CachedDFGenerator, param: int):
-        cachedDF = cache
+    def setup(self, param: int):
         self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)
         self.lib = self.ac.get_library(self.lib_name)
         self.symbol = f"symbol{param}"
 
-    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
+    def time_finalize_staged_data(self, param: int):
         self.logger.info(f"LIBRARY: {self.lib}")
         self.logger.info(f"Created Symbol: {self.symbol}")
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
-    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
+    def peakmem_finalize_staged_data(self, param: int):
         self.logger.info(f"LIBRARY: {self.lib}")
         self.logger.info(f"Created Symbol: {self.symbol}")
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
-    def teardown(self, cache: CachedDFGenerator, param: int):
-        # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
-        # TODO: We can use dirs_exist_ok=True on copytree instead of removing first if we run with python version >=3.8
+    def teardown(self, param: int):
         rmtree(FinalizeStagedData.ARCTIC_DIR)
-        copytree(FinalizeStagedData.ARCTIC_DIR_ORIGINAL, FinalizeStagedData.ARCTIC_DIR)
+        copytree(FinalizeStagedData.ARCTIC_DIR_ORIGINAL, FinalizeStagedData.ARCTIC_DIR, dirs_exist_ok=True)
         del self.ac
 
 
@@ -101,27 +101,31 @@ class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
 
     def setup_cache(self):
         # Generating dataframe with all kind of supported data type
+        if not SLOW_TESTS:
+            return #Avoid setup when skipping
         cachedDF = CachedDFGenerator(
             350000, [5, 25, 50]
         )  # 3 times wider DF with bigger string columns
-        return cachedDF
+        start = time.time()
+        self._setup_cache(cachedDF)
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def setup(self, cache: CachedDFGenerator, param: int):
+    def setup(self, param: int):
         if not SLOW_TESTS:
             raise SkipNotImplemented("Slow tests are skipped")
-        super().setup(cache, param)
+        super().setup(param)
 
-    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
+    def time_finalize_staged_data(self, param: int):
         if not SLOW_TESTS:
             raise SkipNotImplemented("Slow tests are skipped")
-        super().time_finalize_staged_data(cache, param)
+        super().time_finalize_staged_data(param)
 
-    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
+    def peakmem_finalize_staged_data(self, param: int):
         if not SLOW_TESTS:
             raise SkipNotImplemented("Slow tests are skipped")
-        super().peakmem_finalize_staged_data(cache, param)
+        super().peakmem_finalize_staged_data(param)
 
-    def teardown(self, cache: CachedDFGenerator, param: int):
+    def teardown(self, param: int):
         if SLOW_TESTS:
             # Run only on slow tests
             self.ac.delete_library(self.lib_name)
