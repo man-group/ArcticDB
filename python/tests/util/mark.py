@@ -86,8 +86,7 @@ else:
     STORAGE_AZURITE = (getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" 
                        or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0"))
 TEST_ENCODING_V1 = getenv_strip("ARCTICDB_TEST_ENCODING_V1", "1") == "1"
-# On local environment default is without V2 on github it is always on
-TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "1" if RUNS_ON_GITHUB else "0") == "1"
+TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "1") == "1"
 
 
 if not SHORTER_LOGS:
