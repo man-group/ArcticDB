@@ -43,8 +43,9 @@ class ComparisonBenchmarks:
 
     def setup_cache(self):
         start = time.time()
-        self._setup_cache()
+        df, dict = self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        return (df, dict)
 
     def _setup_cache(self):        
         st = time.time()
