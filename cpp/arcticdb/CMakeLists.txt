@@ -85,6 +85,11 @@ else()
 
     set(Zstd_LIBRARY zstd::libzstd_shared)
 
+    # Make sure libraries using auto-linking (Boost) are found when using a Conda env
+    if(MSVC)
+        link_directories("$ENV{CONDA_PREFIX}/Library/lib/")
+    endif()
+
 endif()
 
 if(${ARCTICDB_USING_CONDA} OR CMAKE_SYSTEM_NAME STREQUAL "Darwin")
