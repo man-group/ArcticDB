@@ -44,21 +44,6 @@ using py_array_t = py::array_t<T>;
 
 using namespace arcticdb::entity;
 
-// N.B. this will not catch all the things that C++ considers to be narrowing conversions, because
-// it doesn't take into account integral promotion, however we don't care about that for the
-// purpose for which it is used in this file.
-template <typename SourceType, typename TargetType>
-constexpr bool is_narrowing_conversion() {
-    if(sizeof(TargetType) < sizeof(SourceType))
-        return true;
-
-    if(sizeof(SourceType) == sizeof(TargetType) && std::is_integral_v<TargetType> && std::is_unsigned_v<SourceType> && std::is_signed_v<TargetType>) {
-        return true;
-    }
-
-    return false;
-}
-
 struct JiveTable {
     explicit JiveTable(size_t num_rows) :
         orig_pos_(num_rows),
@@ -94,46 +79,24 @@ struct ExtraBufferIndex {
     ExtraBufferType type_;
 };
 
-inline bool operator==(const ExtraBufferIndex& lhs, const ExtraBufferIndex& rhs) {
-    return (lhs.offset_bytes_ == rhs.offset_bytes_) && (lhs.type_ == rhs.type_);
-}
+bool operator==(const ExtraBufferIndex& lhs, const ExtraBufferIndex& rhs);
 
 struct ExtraBufferIndexHash {
-    std::size_t operator()(const ExtraBufferIndex& index) const {
-        return folly::hash::hash_combine(index.offset_bytes_, index.type_);
-    }
+    std::size_t operator()(const ExtraBufferIndex& index) const;
 };
 
 struct ExtraBufferContainer {
     mutable std::mutex mutex_;
     std::unordered_map<ExtraBufferIndex, ChunkedBuffer, ExtraBufferIndexHash> buffers_;
 
-    ChunkedBuffer& create_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type) {
-        std::lock_guard lock(mutex_);
-        auto inserted = buffers_.try_emplace(ExtraBufferIndex{offset, type}, ChunkedBuffer{size, allocation_type});
-        util::check(inserted.second, "Failed to insert additional chunked buffer at position {}", offset);
-        return inserted.first->second;
-    }
+    ChunkedBuffer& create_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type);
 
-    void set_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
-        std::lock_guard lock(mutex_);
-        buffers_.try_emplace(ExtraBufferIndex{offset, type}, std::move(buffer));
-    }
+    void set_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer);
 
-    ChunkedBuffer& get_buffer(size_t offset, ExtraBufferType type) const {
-        std::lock_guard lock(mutex_);
-        auto it = buffers_.find(ExtraBufferIndex{offset, type});
-        util::check(it != buffers_.end(), "Failed to find additional chunked buffer at position {}", offset);
-        return const_cast<ChunkedBuffer&>(it->second);
-    }
+    ChunkedBuffer& get_buffer(size_t offset, ExtraBufferType type) const;
 
-    bool has_buffer(size_t offset, ExtraBufferType type) const {
-        std::lock_guard lock(mutex_);
-        auto it = buffers_.find(ExtraBufferIndex{offset, type});
-        return it != buffers_.end();
-    }
+    bool has_buffer(size_t offset, ExtraBufferType type) const;
 };
-
 
 class Column;
 class StringPool;
@@ -269,52 +232,24 @@ public:
         }
     };
 
-    Column() : type_(null_type_descriptor()) {}
+    Column();
 
-    Column(TypeDescriptor type) :
-        Column(type, 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED) {
-    }
+    Column(TypeDescriptor type);
 
-    Column(TypeDescriptor type, Sparsity allow_sparse) :
-        Column(type, 0, AllocationType::DYNAMIC, allow_sparse) {
-    }
+    Column(TypeDescriptor type, Sparsity allow_sparse);
 
-    Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer) :
-        data_(std::move(buffer)),
-        type_(type),
-        allow_sparse_(allow_sparse) {
-    }
+    Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer);
 
-    Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes) :
-        data_(std::move(buffer)),
-        shapes_(std::move(shapes)),
-        type_(type),
-        allow_sparse_(allow_sparse) {
-    }
+    Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes);
 
-    Column(
-        TypeDescriptor type,
-        size_t expected_rows,
-        AllocationType presize,
-        Sparsity allow_sparse) :
-            data_(expected_rows * entity::internal_data_type_size(type), presize),
-            type_(type),
-            allow_sparse_(allow_sparse) {
-        ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
-    }
+    Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse);
 
-    Column(
-        TypeDescriptor type,
+    Column(TypeDescriptor type,
         size_t expected_rows,
         AllocationType presize,
         Sparsity allow_sparse,
         OutputFormat output_format,
-        DataTypeMode mode) :
-        data_(expected_rows * entity::data_type_size(type, output_format, mode), presize),
-        type_(type),
-        allow_sparse_(allow_sparse) {
-        ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
-    }
+        DataTypeMode mode);
 
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 
@@ -329,26 +264,13 @@ public:
 
     bool sparse_permitted() const;
 
-    void set_statistics(FieldStatsImpl stats) {
-        stats_ = stats;
-    }
+    void set_statistics(FieldStatsImpl stats);
 
-    bool has_statistics() const {
-        return stats_.set_;
-    };
+    bool has_statistics() const;
 
-    FieldStatsImpl get_statistics() const  {
-        return stats_;
-    }
+    FieldStatsImpl get_statistics() const;
 
-    void backfill_sparse_map(ssize_t to_row) {
-        ARCTICDB_TRACE(log::version(), "Backfilling sparse map to position {}", to_row);
-        // Initialise the optional to an empty bitset if it has not been created yet
-        auto& bitset = sparse_map();
-        if (to_row >= 0) {
-            bitset.set_range(0, bv_size(to_row), true);
-        }
-    }
+    void backfill_sparse_map(ssize_t to_row);
 
     [[nodiscard]] util::BitMagic& sparse_map();
     [[nodiscard]] const util::BitMagic& sparse_map() const;
@@ -357,8 +279,8 @@ public:
 
     template<typename TagType>
     auto begin() const {
-            using RawType = typename TagType::DataTypeTag::raw_type;
-            return TypedColumnIterator<TagType, const RawType>(*this, true);
+        using RawType = typename TagType::DataTypeTag::raw_type;
+        return TypedColumnIterator<TagType, const RawType>(*this, true);
     }
 
     template<typename TagType>
@@ -414,7 +336,7 @@ public:
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    inline void set_external_block(ssize_t row_offset, T *val, size_t size) {
+    void set_external_block(ssize_t row_offset, T *val, size_t size) {
         util::check_arg(last_logical_row_ + 1 == row_offset, "set_external_block expected row {}, actual {} ", last_logical_row_ + 1, row_offset);
         auto bytes = sizeof(T) * size;
         const_cast<ChunkedBuffer&>(data_.buffer()).add_external_block(reinterpret_cast<const uint8_t*>(val), bytes, data_.buffer().last_offset());
@@ -423,30 +345,19 @@ public:
     }
 
     template<class T, std::enable_if_t<std::is_integral_v<T> || std::is_floating_point_v<T>, int> = 0>
-    inline void set_sparse_block(ssize_t row_offset, T *ptr, size_t rows_to_write) {
+    void set_sparse_block(ssize_t row_offset, T *ptr, size_t rows_to_write) {
         util::check(row_offset == 0, "Cannot write sparse column with existing data");
         auto new_buffer = util::scan_floating_point_to_sparse(ptr, rows_to_write, sparse_map());
         std::swap(data_.buffer(), new_buffer);
     }
 
-    inline void set_sparse_block(ChunkedBuffer&& buffer, util::BitSet&& bitset) {
-        data_.buffer() = std::move(buffer);
-        sparse_map_ = std::move(bitset);
-    }
+    void set_sparse_block(ChunkedBuffer&& buffer, util::BitSet&& bitset);
 
-    inline void set_sparse_block(ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset) {
-        data_.buffer() = std::move(buffer);
-        shapes_.buffer() = std::move(shapes);
-        sparse_map_ = std::move(bitset);
-    }
+    void set_sparse_block(ChunkedBuffer&& buffer, Buffer&& shapes, util::BitSet&& bitset);
 
-    ChunkedBuffer&& release_buffer() {
-        return std::move(data_.buffer());
-    }
+    ChunkedBuffer&& release_buffer();
 
-    Buffer&& release_shapes() {
-        return std::move(shapes_.buffer());
-    }
+    Buffer&& release_shapes();
 
     template<class T, template<class> class Tensor>
     requires std::is_integral_v<T> || std::is_floating_point_v<T>
@@ -561,63 +472,31 @@ public:
 
     position_t row_count() const;
 
-    std::optional<StringArrayData> string_array_at(position_t idx, const StringPool &string_pool) {
-        util::check_arg(idx < row_count(), "String array index out of bounds in column");
-        util::check_arg(type_.dimension() == Dimension::Dim1, "String array should always be one dimensional");
-        if (!inflated_)
-            inflate_string_arrays(string_pool);
+    std::optional<StringArrayData> string_array_at(position_t idx, const StringPool &string_pool);
 
-        const shape_t *shape_ptr = shape_index(idx);
-        auto num_strings = *shape_ptr;
-        ssize_t string_size = offsets_[idx] / num_strings;
-        return StringArrayData{num_strings, string_size, data_.ptr_cast<char>(bytes_offset(idx), num_strings * string_size)};
-    }
+    ChunkedBuffer::Iterator get_iterator() const;
 
-    ChunkedBuffer::Iterator get_iterator() const {
-        return {const_cast<ChunkedBuffer*>(&data_.buffer()), get_type_size(type_.data_type())};
-    }
+    size_t bytes() const;
 
-    size_t bytes() const {
-        return data_.bytes();
-    }
+    ColumnData data() const;
 
-    ColumnData data() const {
-        return ColumnData(&data_.buffer(), &shapes_.buffer(), type_, sparse_map_ ? &*sparse_map_ : nullptr);
-    }
+    const uint8_t* ptr() const;
 
-    const uint8_t* ptr() const {
-        return data_.buffer().data();
-    }
+    uint8_t* ptr();
 
-    uint8_t* ptr() {
-        return data_.buffer().data();
-    }
+    TypeDescriptor type() const;
 
-    TypeDescriptor type() const { return type_; }
+    size_t num_blocks() const;
 
-    size_t num_blocks() const  {
-        return data_.buffer().num_blocks();
-    }
+    const shape_t* shape_ptr() const;
 
-    const shape_t* shape_ptr() const {
-        return shapes_.ptr_cast<shape_t>(0, num_shapes());
-    }
+    void set_orig_type(const TypeDescriptor& desc);
 
-    void set_orig_type(const TypeDescriptor& desc) {
-        orig_type_ = desc;
-    }
+    bool has_orig_type() const;
 
-    bool has_orig_type() const {
-        return static_cast<bool>(orig_type_);
-    }
+    const TypeDescriptor& orig_type() const;
 
-    const TypeDescriptor& orig_type() const  {
-        return orig_type_.value();
-    }
-
-    void compact_blocks() {
-        data_.compact_blocks();
-    }
+    void compact_blocks();
 
     const auto& blocks() const {
         return data_.buffer().blocks();
@@ -627,24 +506,13 @@ public:
         return data_.buffer().block_offsets();
     }
 
-    inline shape_t *allocate_shapes(std::size_t bytes) {
-        shapes_.ensure_bytes(bytes);
-        return reinterpret_cast<shape_t *>(shapes_.cursor());
-    }
+    shape_t *allocate_shapes(std::size_t bytes);
 
-    inline uint8_t *allocate_data(std::size_t bytes) {
-        util::check(bytes != 0, "Allocate data called with zero size");
-        data_.ensure_bytes(bytes);
-        return data_.cursor();
-    }
+    uint8_t *allocate_data(std::size_t bytes);
 
-    inline void advance_data(std::size_t size) {
-        data_.advance(position_t(size));
-    }
+    void advance_data(std::size_t size);
 
-    inline void advance_shapes(std::size_t size) {
-        shapes_.advance(position_t(size));
-    }
+    void advance_shapes(std::size_t size);
 
     template<typename T>
     std::optional<T> scalar_at(position_t row) const {
@@ -702,22 +570,13 @@ public:
         return const_cast<T*>(const_cast<const Column*>(this)->ptr_cast<T>(idx, required_bytes));
     }
 
-    [[nodiscard]] auto& buffer() {
-        return data_.buffer();
-    }
+    [[nodiscard]] ChunkedBuffer& buffer();
 
-    uint8_t* bytes_at(size_t bytes, size_t required) {
-        ARCTICDB_TRACE(log::inmem(), "Column returning {} bytes at position {}", required, bytes);
-        return data_.bytes_at(bytes, required);
-    }
+    uint8_t* bytes_at(size_t bytes, size_t required);
 
-    const uint8_t* bytes_at(size_t bytes, size_t required) const {
-        return data_.bytes_at(bytes, required);
-    }
+    const uint8_t* bytes_at(size_t bytes, size_t required) const;
 
-    void assert_size(size_t bytes) const {
-        data_.buffer().assert_size(bytes);
-    }
+    void assert_size(size_t bytes) const;
 
     template<typename T>
     std::optional<position_t> search_unsorted(T val) const {
@@ -1017,33 +876,15 @@ public:
         inserter.flush();
     }
 
-    void init_buffer() {
-        std::call_once(*init_buffer_, [this] () {
-            extra_buffers_ = std::make_unique<ExtraBufferContainer>();
-        });
-    }
+    void init_buffer();
 
-    ChunkedBuffer& create_extra_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type) {
-        init_buffer();
-        return extra_buffers_->create_buffer(offset, type, size, allocation_type);
-    }
+    ChunkedBuffer& create_extra_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type);
 
-    ChunkedBuffer& get_extra_buffer(size_t offset, ExtraBufferType type) const {
-        util::check(static_cast<bool>(extra_buffers_), "Extra buffer {} requested but pointer is null", offset);
-        return extra_buffers_->get_buffer(offset, type);
-    }
+    ChunkedBuffer& get_extra_buffer(size_t offset, ExtraBufferType type) const;
 
-    void set_extra_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
-        init_buffer();
-        extra_buffers_->set_buffer(offset, type, std::move(buffer));
-    }
+    void set_extra_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer);
 
-    bool has_extra_buffer(size_t offset, ExtraBufferType type) const {
-        if(!extra_buffers_)
-            return false;
-
-        return extra_buffers_->has_buffer(offset, type);
-    }
+    bool has_extra_buffer(size_t offset, ExtraBufferType type) const;
 private:
     position_t last_offset() const;
     void update_offsets(size_t nbytes);
@@ -1078,8 +919,6 @@ private:
 
     std::unique_ptr<std::once_flag> init_buffer_ = std::make_unique<std::once_flag>();
 
-
-
     std::unique_ptr<ExtraBufferContainer> extra_buffers_;
     util::MagicNum<'D', 'C', 'o', 'l'> magic_;
 };
@@ -1104,31 +943,6 @@ JiveTable create_jive_table(const Column& column) {
     return output;
 }
 
-inline JiveTable create_jive_table(const std::vector<std::shared_ptr<Column>>& columns) {
-    JiveTable output(columns[0]->row_count());
-    std::iota(std::begin(output.orig_pos_), std::end(output.orig_pos_), 0);
-
-    // Calls to scalar_at are expensive, so we precompute them to speed up the sort compare function.
-    for(auto it = std::rbegin(columns); it != std::rend(columns); ++it) {
-        auto& column = *it;
-        user_input::check<ErrorCode::E_SORT_ON_SPARSE>(!column->is_sparse(), "Can't sort on sparse column with type {}", column->type());
-        details::visit_type(column->type().data_type(), [&output, &column] (auto type_desc_tag) {
-            using type_info = ScalarTypeInfo<decltype(type_desc_tag)>;
-            auto column_data = column->data();
-            auto accessor = random_accessor<typename type_info::TDT>(&column_data);
-            std::stable_sort(std::begin(output.orig_pos_),
-                      std::end(output.orig_pos_),
-                      [&](const auto &a, const auto &b) -> bool {
-                          return accessor.at(a) < accessor.at(b);
-                      });
-        });
-        // Obtain the sorted_pos_ by reversing the orig_pos_ permutation
-        for (auto i = 0u; i < output.orig_pos_.size(); ++i) {
-            output.sorted_pos_[output.orig_pos_[i]] = i;
-        }
-    }
-
-    return output;
-}
+JiveTable create_jive_table(const std::vector<std::shared_ptr<Column>>& columns);
 
 } //namespace arcticdb

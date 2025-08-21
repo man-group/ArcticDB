@@ -3,6 +3,7 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 
 /*
  * Contains similar functions to stream_utils.hpp but assumes that many keys are mixed in together, so we can't guarantee that

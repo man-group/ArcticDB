@@ -8,6 +8,7 @@
 #pragma once
 
 #include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/column_store/string_pool.hpp>
 #include <fmt/format.h>
 
 #include <pybind11/numpy.h>

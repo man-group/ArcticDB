@@ -21,7 +21,6 @@ on:
           - 'GCPXML'
           - 'AZURE'
         default: 'no'
-
       pypi_publish:
         type: boolean
       publish_env:
@@ -230,6 +229,7 @@ jobs:
     secrets: inherit
     with:
       job_type: cleanup
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup, storage_type]
@@ -254,6 +254,8 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
+
 
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup, storage_type]
@@ -278,6 +280,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   cpp-test-linux:
     needs: [cibw_docker_image, common_config]
@@ -387,7 +390,7 @@ jobs:
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}            
 
   persistent_storage_verify_linux:
-    needs: [common_config, build-python-wheels-linux, build-python-wheels-windows]
+    needs: [common_config, build-python-wheels-linux, build-python-wheels-windows, storage_type]
     # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
@@ -409,8 +412,10 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   persistent_storage_verify_windows:
+    needs: [common_config, storage_type]
     # This step is valid only for AWS_S3.
     if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
     strategy:
@@ -432,6 +437,7 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   post_verify_cleanup:
     needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, storage_type]
@@ -446,6 +452,7 @@ jobs:
     secrets: inherit
     with:
       job_type: cleanup
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   build-python-wheels-macos:
     needs: [common_config, storage_type]
@@ -474,6 +481,17 @@ jobs:
       pytest_args: ${{inputs.pytest_args}}
       DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}            
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}            
+
+  publish_pytest_data:
+    needs: [common_config,build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
+    if: |
+      always() &&
+      !cancelled()
+    uses: ./.github/workflows/publish_pytest_data.yml
+    secrets: inherit
+    permissions: {contents: write}
+    with:
+      environment: ${{needs.common_config.outputs.publish_env}}
 
   can_merge:
     needs: [cpp-test-linux, cpp-test-windows, cpp-test-macos, build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos, persistent_storage_verify_linux, persistent_storage_verify_windows]

@@ -93,6 +93,42 @@ def test_strings_basic(lmdb_version_store_arrow, dynamic_strings):
     assert_frame_equal_with_arrow(table, df)
 
 
+@pytest.mark.parametrize("row_range", [None, (2, 3), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6)])
+def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range):
+    lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    # lmdb_version_store_tiny_segment has 2 rows per segment
+    # This column is constructed so that every 2-element permutation of strings, Nones, and NaNs are tested
+    df = pd.DataFrame(
+        {
+            "x": [
+                "a",
+                "b",
+                "c",
+                None,
+                None,
+                "d",
+                "e",
+                np.nan,
+                np.nan,
+                "f",
+                None,
+                None,
+                None,
+                np.nan,
+                np.nan,
+                None,
+                np.nan,
+                np.nan,
+            ]
+        }
+    )
+    lib.write("arrow", df, dynamic_strings=True)
+    table = lib.read("arrow", row_range=row_range).data
+    expected = lib.read("arrow", row_range=row_range, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
+
+
 @pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
 def test_fixed_width_strings(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
@@ -565,4 +601,27 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
     else:
         expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
         received = lib.read(sym).data
+    assert expected.equals(received)
+
+
+@pytest.mark.parametrize(
+    "type_to_drop", [pa.int64(), pa.float64(), pa.large_string()]
+)
+def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_v1, type_to_drop):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    column_to_drop = pa.array(["a", "b"], type_to_drop) if type_to_drop == pa.large_string() else pa.array([1, 2], type_to_drop)
+    table_1 = pa.table({"col": pa.array([0, 1])})
+    table_2 = pa.table({"col": pa.array([5, 6]), "col_to_drop": column_to_drop})
+    table_3 = pa.table({"col": pa.array([2, 3])})
+    # TODO: Remove to_pandas() when we support writing Arrow structures directly
+    lib.write(sym, table_1.to_pandas())
+    lib.append(sym, table_2.to_pandas())
+    lib.append(sym, table_3.to_pandas())
+    expected = pa.concat_tables([table_1, table_2, table_3], promote_options="permissive")
+    expected = expected.filter(pa.compute.field("col") < 5)
+    q = QueryBuilder()
+    q = q[q["col"] < 5]
+    received = stringify_dictionary_encoded_columns(lib.read(sym, query_builder=q).data)
     assert expected.equals(received)
