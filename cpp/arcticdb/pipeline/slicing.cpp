@@ -55,7 +55,6 @@ std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::Inpu
 std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::InputTensorFrame& frame) const {
     const auto [index_count, total_field_count] = get_index_and_field_count(frame);
     auto field_count = total_field_count - index_count;
-    auto tensor_pos = std::begin(frame.field_tensors);
     auto fields_pos = std::begin(frame.desc.fields());
     std::advance(fields_pos, index_count);
 
@@ -63,7 +62,7 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
     auto index = frame.desc.index();
 
     std::vector<FrameSlice> slices;
-    slices.reserve(field_count / col_per_slice_ + std::size_t((field_count % col_per_slice_) == 0ULL));
+    slices.reserve((field_count + col_per_slice_ - 1) / col_per_slice_);
 
     const auto [first_row, last_row] = get_first_and_last_row(frame);
 
@@ -71,10 +70,8 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
     // way, one will need to modify the mark_index_slices method to use two passes instead of one
     auto col = index_count;
     do {
-        auto tensor_next = tensor_pos;
         auto fields_next = fields_pos;
-        auto distance = std::min(size_t(std::distance(tensor_pos, std::end(frame.field_tensors))), col_per_slice_);
-        std::advance(tensor_next, distance);
+        auto distance = std::min(size_t(std::distance(fields_pos, std::end(frame.desc.fields()))), col_per_slice_);
         std::advance(fields_next, distance);
 
         // systematically writing the index in the column group
@@ -96,9 +93,8 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
         }
 
         col += col_per_slice_;
-        tensor_pos = tensor_next;
         fields_pos = fields_next;
-    } while (tensor_pos!=std::end(frame.field_tensors));
+    } while (fields_pos!=std::end(frame.desc.fields()));
     return slices;
 }
 
