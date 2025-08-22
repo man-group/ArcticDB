@@ -1446,7 +1446,7 @@ def old_venv(request, tmp_path_factory):
         yield old_venv
 
 
-@pytest.fixture(scope="session", params=[pytest.param("tmp_path_factory", marks=PANDAS_2_COMPAT_TESTS_MARK)])
+@pytest.fixture(scope="function", params=[pytest.param("tmp_path_factory", marks=PANDAS_2_COMPAT_TESTS_MARK)])
 def pandas_v1_venv(request):
     """A venv with Pandas v1 installed (and an old ArcticDB version). To help test compat across Pandas versions."""
     version = "1.6.2"

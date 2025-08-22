@@ -84,7 +84,9 @@ class Venv:
             "-r",
             self.requirements_file,
         ]
-        run_shell_command(command, self.path)
+        result = run_shell_command(command, self.path)
+        if result.returncode != 0:
+            raise ErrorInVenv(f"Failed to init venv: Stdout: {result.stdout.decode('utf-8')}, Stderr: {result.stderr.decode('utf-8')}.")
 
     def tear_down_venv(self):
         shutil.rmtree(self.path, ignore_errors=True)

@@ -80,7 +80,8 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
             assert cfg_after_use == expected_cfg
 
 
-def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+@pytest.mark.parametrize("run", range(100))
+def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, run):
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
     with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
         # Create library using old version and write pickled Pandas 1 metadata
