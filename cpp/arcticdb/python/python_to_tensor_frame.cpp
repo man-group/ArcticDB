@@ -289,12 +289,15 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         std::vector<sparrow::record_batch> sp_record_batches;
         sp_record_batches.reserve(record_batches.size());
         for (const auto& record_batch: record_batches) {
+            // TODO: Use non-owning arrow_proxy ctor when possible
+            sparrow::arrow_proxy arrow_proxy{std::move(const_cast<RecordBatchData&>(record_batch).array_), std::move(const_cast<RecordBatchData&>(record_batch).schema_)};
             // TODO: Talk to QS about these pointers needing to be non-const
-            sparrow::arrow_proxy arrow_proxy{const_cast<ArrowArray*>(&record_batch.array_), const_cast<ArrowSchema*>(&record_batch.schema_)};
-            sparrow::struct_array struct_array{arrow_proxy};
+//            sparrow::arrow_proxy arrow_proxy{const_cast<ArrowArray*>(&record_batch.array_), const_cast<ArrowSchema*>(&record_batch.schema_)};
+            sparrow::struct_array struct_array{std::move(arrow_proxy)};
             sp_record_batches.emplace_back(std::move(struct_array));
         }
         res->seg = arrow_data_to_segment(sp_record_batches);
+        res->record_batches = std::move(sp_record_batches);
         // TODO: Work out the index field count at some point
         res->seg->descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         res->seg->descriptor().set_id(stream_name);

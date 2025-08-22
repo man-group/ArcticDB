@@ -68,7 +68,6 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             // TODO: Handle strings
             // Inclusive
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
-            // Exclusive
             const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
             ChunkedBuffer chunked_buffer;
             chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);

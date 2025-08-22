@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <sparrow/record_batch.hpp>
+
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/stream/index.hpp>
@@ -33,6 +35,9 @@ struct InputTensorFrame {
         index(stream::empty_index()) {}
 
     std::optional<SegmentInMemory> seg;
+    // TODO: Remove once a const view sparrow::record_batch is available
+    // Until then, this is required to keep memory alive
+    std::vector<sparrow::record_batch> record_batches;
 
     StreamDescriptor desc;
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
