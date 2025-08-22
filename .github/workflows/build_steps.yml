@@ -378,9 +378,11 @@ jobs:
           node-version: '16'
 
       - name: Install Azurite
-        uses: ./.github/actions/retry_install_azurite
+        uses: nick-fields/retry@v3
         with:
-          max_retries: "3"
+          timeout_minutes: 10
+          max_attempts: 3
+          command: npm install -g azurite 
 
       - name: Install the wheel and dependencies
         run: |
