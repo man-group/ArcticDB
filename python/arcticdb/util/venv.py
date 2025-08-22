@@ -95,7 +95,7 @@ class Venv:
     def tear_down_venv(self):
         shutil.rmtree(self.path, ignore_errors=True)
 
-    def execute_python_file(self, python_path: Union[str, os.PathLike]) -> subprocess.CompletedProcess:
+    def execute_python_file(self, python_path: Union[str, os.PathLike]) -> None:
         command = [get_os_specific_venv_python(), python_path]
         run_shell_command(command, self.path)
 
