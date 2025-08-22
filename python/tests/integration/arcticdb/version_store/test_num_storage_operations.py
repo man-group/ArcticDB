@@ -413,7 +413,7 @@ def test_update_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, u
         # - read TABLE_INDEX
         assert sum_operations_by_type(stats, "S3_GetObject") == expected_data_keys + 4
 
-        expected_df = ArcticSymbolSimulator().simulate_arctic_update(init_df, update_df, dynamic_schema=False)
+        expected_df = ArcticSymbolSimulator.simulate_arctic_update(init_df, update_df, dynamic_schema=False)
         result_df = lib.read(sym).data
         qs.reset_stats()
         assert_frame_equal(result_df, expected_df)

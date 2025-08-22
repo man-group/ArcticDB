@@ -61,9 +61,9 @@ def test_read_batch_2tables_7reads_different_slices(arctic_library):
     df1_1 = create_df_index_datetime(num_columns=7, start_hour=4, end_hour=6)
     df1_2 = create_df_index_datetime(num_columns=7, start_hour=6, end_hour=10)
     df1_3 = create_df_index_datetime(num_columns=7, start_hour=0, end_hour=10)
-    df1_till2 = ArcticSymbolSimulator().simulate_arctic_update(df1_0, df1_1, dynamic_schema=False)  # DF of state 0+1
+    df1_till2 = ArcticSymbolSimulator.simulate_arctic_update(df1_0, df1_1, dynamic_schema=False)  # DF of state 0+1
     df1_till3 = dataframe_concat_sort(df1_till2, df1_2) # DF of state 0+1+2
-    df1_all = ArcticSymbolSimulator().simulate_arctic_update(df1_till3, df1_3, dynamic_schema=False)
+    df1_all = ArcticSymbolSimulator.simulate_arctic_update(df1_till3, df1_3, dynamic_schema=False)
 
     symbol2 = "sym2"
     df2_0 = create_df_index_datetime(num_columns=200, start_hour=0, end_hour=100)  

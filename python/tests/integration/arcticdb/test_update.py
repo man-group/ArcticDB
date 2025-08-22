@@ -273,7 +273,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df1_num_rows = ROWS_PER_SEGMENT*5
     df1 = g.get_dataframe(number_columns=df1_num_cols, number_rows=df1_num_rows, start_time=start_time)
     update1 = ug.generate_update(df1, UpdatePositionType.INSIDE, df1_num_cols, ROWS_PER_SEGMENT * 3)
-    expected_updated_df1 = ArcticSymbolSimulator().simulate_arctic_update(df1, update1, dynamic_schema=False)
+    expected_updated_df1 = ArcticSymbolSimulator.simulate_arctic_update(df1, update1, dynamic_schema=False)
 
     # Update exactly at 'rows_per_segment'
     sym2 = '_s_2'
@@ -282,7 +282,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df2 = g.get_dataframe(number_columns=df2_num_cols, number_rows=df2_num_rows, start_time=start_time)
     update2 = ug.generate_update(df2, UpdatePositionType.AFTER, df2_num_cols, ROWS_PER_SEGMENT)
     metadata2 = {1, 2, 3, "something", UpdatesGenerator, ug}
-    expected_updated_df2 = ArcticSymbolSimulator().simulate_arctic_update(df2, update2, dynamic_schema=False)
+    expected_updated_df2 = ArcticSymbolSimulator.simulate_arctic_update(df2, update2, dynamic_schema=False)
 
     # Update below 'rows_per_segment'
     sym3 = '_s_3'
@@ -291,7 +291,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df3 = g.get_dataframe(number_columns=df3_num_cols, number_rows=df3_num_rows, start_time=start_time)
     update3 = ug.generate_update(df3, UpdatePositionType.INSIDE_OVERLAP_END, df3_num_cols, ROWS_PER_SEGMENT - 2)
     metadata3 = random_metadata()
-    expected_updated_df3 = ArcticSymbolSimulator().simulate_arctic_update(df3, update3, dynamic_schema=False)
+    expected_updated_df3 = ArcticSymbolSimulator.simulate_arctic_update(df3, update3, dynamic_schema=False)
 
     # Error update due to mismatch in columns
     sym4 = '_s_4'
@@ -382,7 +382,7 @@ def test_update_batch_types_upgrade(custom_library):
         original_dataframes[symbol_name] = df1
         # Calculate expected dataframe
         upgrade_dataframe_types(df1, upgrade)
-        expected_results[symbol_name] = ArcticSymbolSimulator().simulate_arctic_update(df1, df2, dynamic_schema=False)
+        expected_results[symbol_name] = ArcticSymbolSimulator.simulate_arctic_update(df1, df2, dynamic_schema=False)
         update_batch.append(UpdatePayload(symbol_name, df2))
         write_batch.append(WritePayload(symbol_name, df1))
 
@@ -519,7 +519,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
             symbol_names.append(symbol_name)
             # Calculate expected dataframe
             expected_df = original_dataframe.copy(deep=True)
-            expected_results[symbol_name] = ArcticSymbolSimulator().simulate_arctic_update(expected_df, update)
+            expected_results[symbol_name] = ArcticSymbolSimulator.simulate_arctic_update(expected_df, update)
             update_batch.append(UpdatePayload(symbol_name, update))
             write_batch.append(WritePayload(symbol_name, original_dataframe))
     
@@ -535,7 +535,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     logger.info(f"Verify expected results for updates with rows count: {number_rows}")
     for index, result in enumerate(update_result):
         assert result.version == 1 
-        ArcticSymbolSimulator().assert_frame_equal_rebuild_index_first(expected_results[result.symbol], read_data[result.symbol].data)
+        ArcticSymbolSimulator.assert_frame_equal_rebuild_index_first(expected_results[result.symbol], read_data[result.symbol].data)
           
 
 

@@ -839,7 +839,7 @@ def test_delete_snapshot_on_updated_and_appended_dataframe(basic_store_tiny_segm
     # this dataframe has both values before the date and within the dates of df_1
     df_2 = create_df_index_datetime(10, 1, 5)
     df_3 = create_df_index_datetime(10, 20, 30)
-    df_updated = ArcticSymbolSimulator().simulate_arctic_update(df_1, df_2, dynamic_schema=False)
+    df_updated = ArcticSymbolSimulator.simulate_arctic_update(df_1, df_2, dynamic_schema=False)
     df_final = pd.concat([df_updated, df_3])
 
     symbol1 = "sym1"

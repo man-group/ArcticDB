@@ -143,7 +143,7 @@ def test_write_append_update_read_scenario_with_different_series_combinations(ve
                                                    start_time=timestamp + timedelta(seconds=total_length - 1), seed=None)
             total_length += append_series_length
             lib.update(symbol, update_series, metadata=meta)
-            result_series = ArcticSymbolSimulator().simulate_arctic_update(result_series, update_series, dynamic_schema=False)
+            result_series = ArcticSymbolSimulator.simulate_arctic_update(result_series, update_series, dynamic_schema=False)
             ver = lib.read(symbol)
             assert_series_equal_pandas_1(result_series, ver.data, check_index_type=(len(result_series) > 0))
             assert meta == ver.metadata
