@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import numpy as np
 import pyarrow as pa
+import pytest
 
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 
@@ -45,10 +46,17 @@ def test_basic_write(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
-def test_write_row_sliced(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
-    sym = "test_write_row_sliced"
-    table = pa.table({"col": pa.array(np.arange(210_000, dtype=np.uint32), pa.uint32())})
+@pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
+def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
+    lib = lmdb_version_store_tiny_segment
+    lib.set_output_format("experimental_arrow")
+    sym = "test_write_sliced"
+    table = pa.table(
+        {
+            f"col{idx}": pa.array(np.arange(idx * num_rows, (idx + 1) * num_rows), pa.uint32()) for idx in range(num_cols)
+        }
+    )
     lib.write(sym, table)
     received = lib.read(sym).data
     assert table.equals(received)
