@@ -100,12 +100,21 @@ inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, const T
 
     return [frame=std::move(frame), &key](const FrameSlice& s) {
         if (frame->has_index()) {
-            util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in get_partial_key_gen");
-            auto& idx = frame->index_tensor.value();
-            auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(s, *frame));
-            auto end = *idx.ptr_cast<timestamp>(slice_end_pos(s, *frame));
-            return PartialKey{
-                    key.type, key.version_id, key.id, start, end_index_generator(end)};
+            if (frame->seg.has_value()) {
+                const auto& index_column = frame->seg->column(0);
+                // TODO: Doesn't look like scalar_at will work with non-contiguous buffers, and therefore with multiple record batches
+                auto start = *index_column.scalar_at<timestamp>(slice_begin_pos(s, *frame));
+                auto end = *index_column.scalar_at<timestamp>(slice_end_pos(s, *frame));
+                return PartialKey{
+                        key.type, key.version_id, key.id, start, end_index_generator(end)};
+            } else {
+                util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in get_partial_key_gen");
+                auto& idx = frame->index_tensor.value();
+                auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(s, *frame));
+                auto end = *idx.ptr_cast<timestamp>(slice_end_pos(s, *frame));
+                return PartialKey{
+                        key.type, key.version_id, key.id, start, end_index_generator(end)};
+            }
         }
         else {
             return PartialKey{

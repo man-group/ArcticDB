@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pytest
 
@@ -41,6 +42,15 @@ def test_basic_write(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_basic_write"
     table = pa.table({"col": pa.array([0, 1], pa.int64())})
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
+def test_write_with_index(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_with_index"
+    table = pa.table({"ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")), "col": pa.array([0, 1], pa.int64())})
     lib.write(sym, table)
     received = lib.read(sym).data
     assert table.equals(received)

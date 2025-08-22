@@ -164,6 +164,14 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
         seg.column(idx).set_row_data(seg.column(idx).row_count() - 1);
     }
     seg.set_row_id(static_cast<ssize_t>(total_rows) - 1);
+    if (num_columns > 0 && is_time_type(seg.column(0).type().data_type())) {
+        // For now assume that if the first column is a time type that this is an ordered index
+        // TODO: Come up with better system, and maybe move this logic somewhere else
+        seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+        seg.descriptor().set_sorted(SortedValue::ASCENDING);
+    } else {
+        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+    }
     return seg;
 }
 

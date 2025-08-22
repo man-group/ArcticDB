@@ -298,12 +298,14 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
         }
         res->seg = arrow_data_to_segment(sp_record_batches);
         res->record_batches = std::move(sp_record_batches);
-        // TODO: Work out the index field count at some point
-        res->seg->descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         res->seg->descriptor().set_id(stream_name);
         res->num_rows = res->seg->row_count();
         res->desc = res->seg->descriptor();
-        // TODO: populate res->index and res->desc.sorted() for index_is_not_timeseries_or_is_sorted_ascending
+        if (res->desc.index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+            res->index = TimeseriesIndex{std::string(res->desc.field(0).name())};
+        } else {
+            res->index = RowCountIndex{};
+        }
     }
     return res;
 }

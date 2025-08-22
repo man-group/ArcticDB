@@ -715,6 +715,7 @@ class ArrowTableNormalizer(Normalizer):
         # If input table was created by from_pandas, then we can populate this with inverse of construct_pandas_metadata
         # May also need Arrow-specific norm metadata, although this can be handled in the C++ layer as it is not Python
         # specific
+        # TODO: Also need to set the PandasIndex if this is a timeseries
         return arcticdb_record_batches, NormalizationMetadata()
 
     def denormalize(self, item, norm_meta):

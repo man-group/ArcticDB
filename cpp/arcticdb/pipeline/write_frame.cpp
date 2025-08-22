@@ -59,7 +59,19 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         // TODO: Use attach_descriptor rather than adding one field at a time
 //        seg.attach_descriptor(slice_.desc());
         if (frame_->desc.index().field_count() > 0) {
-            // TODO: Add index column to all segments
+            seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+        } else {
+            seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+        }
+        for (size_t col_idx = 0; col_idx < frame_->desc.index().field_count(); ++col_idx) {
+            const auto& source_column = frame.column(col_idx);
+            // TODO: Handle multiple record batches
+            const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
+            const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
+            ChunkedBuffer chunked_buffer;
+            chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
+            seg.add_column(frame.field(col_idx),
+                           std::make_shared<Column>(source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)));
         }
         for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
             const auto& source_column = frame.column(col_idx);
@@ -75,7 +87,6 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                            std::make_shared<Column>(source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)));
         }
         seg.descriptor().set_id(key.stream_id);
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
         return {std::move(key), std::move(seg), std::move(slice_)};
     } else {
