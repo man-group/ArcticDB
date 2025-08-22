@@ -378,7 +378,7 @@ jobs:
           node-version: '16'
 
       - name: Install Azurite
-        uses: ./.github/actions/retry_install-azurite
+        uses: ./.github/actions/retry_install_azurite
         with:
           max_retries: "3"
 
