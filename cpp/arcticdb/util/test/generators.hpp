@@ -361,12 +361,19 @@ inline SegmentInMemory get_sparse_timeseries_segment_floats(const std::string& n
  *
  * To use LMDB storage, try the factories in stream_test_common.hpp.
  */
-inline auto get_test_config_data() {
+inline auto get_test_config_data(std::string name = "test") {
     using namespace arcticdb::storage;
-    LibraryPath path{"test", "store"};
+    LibraryPath path{name.c_str(), "store"};
     auto storages = create_storages(path, OpenMode::DELETE, {memory::pack_config()});
     return std::make_tuple(path, std::move(storages));
 }
+
+inline std::shared_ptr<arcticdb::storage::Library> get_test_library(storage::LibraryDescriptor::VariantStoreConfig cfg = {}, std::string name = "test") {
+    auto [path, storages] = get_test_config_data(name);
+    auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
+    return library;
+}
+
 
 /**
  * Creates a LocalVersionedEngine from get_test_config_data().
@@ -374,10 +381,8 @@ inline auto get_test_config_data() {
  * See also python_version_store_in_memory() and stream_test_common.hpp for alternatives using LMDB.
  */
 template<typename VersionStoreType = version_store::LocalVersionedEngine>
-inline VersionStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
-    auto [path, storages] = get_test_config_data();
-    auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
-    return VersionStoreType(library);
+inline VersionStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}, std::string name = "test") {
+    return VersionStoreType(get_test_library(cfg, name));
 }
 
 /**
