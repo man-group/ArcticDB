@@ -673,7 +673,8 @@ def test_symbol_concat_pickled_data(lmdb_library):
         concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect()
 
 
-def test_symbol_concat_docstring_example(lmdb_library):
+@pytest.mark.parametrize("run", range(1000))
+def test_symbol_concat_docstring_example(lmdb_library, run):
     lib = lmdb_library
     df0 = pd.DataFrame(
         {
