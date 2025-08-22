@@ -412,7 +412,7 @@ def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     lib_tool = lib.library_tool()
     sym = "sym"
-    lib.write(sym, sample_dataframe)
+    lib.write(sym, df)
 
     tdata_key = lib_tool.find_keys(KeyType.TABLE_DATA)[0]
 
