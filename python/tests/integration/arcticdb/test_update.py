@@ -22,7 +22,7 @@ import string
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
-from arcticdb.util.utils import DFGenerator, TimestampNumber, get_logger, set_seed
+from arcticdb.util.utils import DFGenerator, TimestampNumber, set_seed
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.library import Library, UpdatePayload, WritePayload
@@ -535,7 +535,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     logger.info(f"Verify expected results for updates with rows count: {number_rows}")
     for index, result in enumerate(update_result):
         assert result.version == 1 
-        ArcticSymbolSimulator().assert_frames_equal(expected_results[result.symbol], read_data[result.symbol].data)
+        ArcticSymbolSimulator().assert_frame_equal_rebuild_index_first(expected_results[result.symbol], read_data[result.symbol].data)
           
 
 

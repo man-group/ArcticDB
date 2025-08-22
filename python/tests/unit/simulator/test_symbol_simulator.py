@@ -12,9 +12,32 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from arcticdb.util.arctic_simulator import ArcticSymbolSimulatorWrapper, calculate_different_and_common_parts
+from arcticdb.util.arctic_simulator import ArcticSymbolSimulator, calculate_different_and_common_parts
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.utils import verify_dynamically_added_columns
+from arcticdb.version_store.library import Library
+from arcticdb_ext.exceptions import SchemaException, NormalizationException
+
+
+def append_and_compare(asim: ArcticSymbolSimulator, df: pd.DataFrame, 
+                        sym_name: str, lib: Library):
+    asim.append(df)
+    lib.append(sym_name, df)
+    asim.assert_equal_to(lib.read(sym_name).data)
+
+
+def write_and_compare(asim: ArcticSymbolSimulator, df: pd.DataFrame, 
+                        sym_name: str, lib: Library):
+    asim.write(df)
+    lib.write(sym_name, df)
+    asim.assert_equal_to(lib.read(sym_name).data)
+
+
+def update_and_compare(asim: ArcticSymbolSimulator, df: pd.DataFrame, 
+                       sym_name: str, lib: Library):
+    asim.update(df)
+    lib.update(sym_name, df)
+    asim.assert_equal_to(lib.read(sym_name).data)
 
 
 def test_simulator_append_basic_test_range_index():
@@ -39,13 +62,13 @@ def test_simulator_append_basic_test_range_index():
         'D': [0, 0, 11, 12],
     })
 
-    asym = ArcticSymbolSimulatorWrapper(keep_versions=True)
-    asym.write(df1)
-    asym.append(df2)
-    df_result = asym.read()
+    asim = ArcticSymbolSimulator(keep_versions=True)
+    asim.write(df1)
+    asim.append(df2)
+    df_result = asim.read()
 
     assert_frame_equal(df_expected, df_result)
-    assert_frame_equal(df1, asym.read(as_of=0))
+    assert_frame_equal(df1, asim.read(as_of=0))
 
 
 def test_simulator_append_basic_test_timestamp_index():
@@ -74,8 +97,8 @@ def test_simulator_append_basic_test_timestamp_index():
         'D': [0, 0, 11, 12]
     }, index=all_index)
 
-    asym = ArcticSymbolSimulatorWrapper()
-    df_result = asym.simulate_arctic_append(df1, df2)
+    asim = ArcticSymbolSimulator()
+    df_result = asim.simulate_arctic_append(df1, df2)
     assert_frame_equal(df_expected, df_result)
     
 
@@ -118,71 +141,81 @@ def test_simulator_update_all_types_check_simulator_versions_store():
     # Now df is several rows and latest timestamp
     # so from timeline perspective it is this timeline df2, df1, df
 
-    asym = ArcticSymbolSimulatorWrapper(keep_versions=True, dynamic_schema=True)
-    asym.write(df)
-    asym.update(df1)
+    asim = ArcticSymbolSimulator(keep_versions=True, dynamic_schema=True)
+    asim.write(df)
+    asim.update(df1)
     
-    assert df.shape[0] + df1.shape[0] == asym.read().shape[0] # Result dataframe is combination of both
-    assert_frame_equal(df1, asym.read().iloc[[0]]) # First row is updated
-    assert_frame_equal(df, asym.read(as_of=1).iloc[1:]) # df starts from 2nd row
-    assert_frame_equal(df, asym.read(as_of=0)) # First version is df
+    assert df.shape[0] + df1.shape[0] == asim.read().shape[0] # Result dataframe is combination of both
+    assert_frame_equal(df1, asim.read().iloc[[0]]) # First row is updated
+    assert_frame_equal(df, asim.read(as_of=1).iloc[1:]) # df starts from 2nd row
+    assert_frame_equal(df, asim.read(as_of=0)) # First version is df
 
-    asym.update(df2)
-    assert df.shape[0] + df1.shape[0] + df1.shape[0] == asym.read().shape[0] 
-    assert_frame_equal(df2, asym.read().iloc[[0]]) # First row is updated
+    asim.update(df2)
+    assert df.shape[0] + df1.shape[0] + df1.shape[0] == asim.read().shape[0] 
+    assert_frame_equal(df2, asim.read().iloc[[0]]) # First row is updated
     # Verify new columns added to first line from previous version are correct
-    new_cols = calculate_different_and_common_parts(df2, df1)[0].columns.to_list()
-    verify_dynamically_added_columns(asym.read(), df1.index[0], new_cols)
+    new_cols = calculate_different_and_common_parts(df2, df1, dynamic_schema=True)[0].columns.to_list()
+    verify_dynamically_added_columns(asim.read(), df1.index[0], new_cols)
     # Verify new columns added to second line from previous version are correct
-    new_cols = calculate_different_and_common_parts(df2, df)[0].columns.to_list()
-    verify_dynamically_added_columns(asym.read(), df.index[1], new_cols)
+    new_cols = calculate_different_and_common_parts(df2, df, dynamic_schema=True)[0].columns.to_list()
+    verify_dynamically_added_columns(asim.read(), df.index[1], new_cols)
 
-    asym = ArcticSymbolSimulatorWrapper(keep_versions=True, dynamic_schema=False)
-    asym.write(df)
-    asym.update(df1)
+    asim = ArcticSymbolSimulator(keep_versions=True, dynamic_schema=False)
+    asim.write(df)
+    asim.update(df1)
     # Update with static schema will not pass
     with pytest.raises(AssertionError):
-        asym.update(df2)
+        asim.update(df2)
 
 
 def test_simulator_append_series():
     s1 = pd.Series([10, 20, 30], name="name", index=pd.to_datetime(['2023-01-01', '2023-01-02', '2023-01-03']))
     s2 = pd.Series([40, 50], name="name", index=pd.to_datetime(['2023-01-04', '2023-01-05']))
-    asym = ArcticSymbolSimulatorWrapper()
-    asym.write(s1)
-    asym.append(s2)
-    assert 5 == len(asym.read())
-    assert 10 == asym.read().iloc[0]
-    assert 50 == asym.read().iloc[-1]
+    asim = ArcticSymbolSimulator()
+    asim.write(s1)
+    asim.append(s2)
+    assert 5 == len(asim.read())
+    assert 10 == asim.read().iloc[0]
+    assert 50 == asim.read().iloc[-1]
 
     s1 = pd.Series([10, 20, 30], name="name")
     s2 = pd.Series([40, 50], name="name")
-    asym.write(s1)
-    asym.append(s2)
-    assert 5 == len(asym.read())
-    assert 10 == asym.read().iloc[0]
-    assert 50 == asym.read().iloc[-1]
+    asim.write(s1)
+    asim.append(s2)
+    assert 5 == len(asim.read())
+    assert 10 == asim.read().iloc[0]
+    assert 50 == asim.read().iloc[-1]
 
 
 def test_simulator_append_series_and_dataframe(lmdb_library_dynamic_schema):
-    lib = lmdb_library_dynamic_schema
-    asym = ArcticSymbolSimulatorWrapper().associate_arctic_lib(lib)
+    lib: Library = lmdb_library_dynamic_schema
+    asim = ArcticSymbolSimulator()
     s1 = pd.Series([10, 20, 30], name="name")
     df1 = pd.DataFrame({
         'A': [1, 2],
         'B': [3, 4],
         'C': [5, 6]
     })
-    asym.write(s1).arctic_lib().write("s", s1)
-    asym.append(df1).arctic_lib().append("s", df1)
-    asym.assert_equal_to_associated_lib("s")
+
+    # A scenario where we append DataFrame to symbol containing Series
+    write_and_compare(asim, s1, "s_err", lib)
+    asim.append(df1)
+    with pytest.raises(NormalizationException):
+        lib.append("s_err", df1)
+
+    # A scenario where we append DataFrame to symbol containing Series first converted to dataframe
+    s1 = pd.DataFrame(s1)
+    write_and_compare(asim, s1, "s", lib)
+    append_and_compare(asim, s1, "s", lib)
 
 
 def test_simulator_append_series_and_dataframe_with_timestamp(lmdb_library_dynamic_schema):
-    lib = lmdb_library_dynamic_schema
-    asym = ArcticSymbolSimulatorWrapper().associate_arctic_lib(lib)
+    """ We cannot have Series + Dataframes mix, so we convert to one of them
+    """
+    lib: Library = lmdb_library_dynamic_schema
+    asim0 = ArcticSymbolSimulator()
     index_dates = pd.date_range(start=datetime.datetime(2025, 6, 18), periods=3, freq="D")
-    s1 = pd.Series([10, 20, 30], name="name", index=index_dates)
+    s1 = pd.DataFrame(pd.Series([10, 20, 30], name="name", index=index_dates))
     index_dates = pd.date_range(start=datetime.datetime(2025, 7, 18), periods=1, freq="D")
     df1 = pd.DataFrame({
         "int_col": [111],
@@ -191,18 +224,33 @@ def test_simulator_append_series_and_dataframe_with_timestamp(lmdb_library_dynam
         "str_col": ["Z"],
         "timestamp_col": index_dates + pd.to_timedelta(2, unit="h")
     }, index=index_dates)
-    asym.write(s1).arctic_lib().write("s", s1)
-    asym.append(df1).arctic_lib().append("s", df1)
-    asym.assert_equal_to_associated_lib("s")
+
+    write_and_compare(asim0, s1, "s", lib)
+    append_and_compare(asim0, df1, "s", lib)
 
 
-@pytest.mark.xfail(True, reason="Currently adding series to symbol does not work (9754433454)")
 def test_simulator_append_series_and_dataframe_mix(lmdb_library_dynamic_schema):
+    """ This currently is supported only if start Series and any Series appended 
+    is converted to dataframe
+    """
+
+    def append_and_compare(asim: ArcticSymbolSimulator, df: pd.DataFrame, 
+                           sym_name: str, lib: Library):
+        asim.append(df)
+        lib.append(sym_name, df)
+        asim.assert_equal_to(lib.read(sym_name).data)
+
+    def write_and_compare(asim: ArcticSymbolSimulator, df: pd.DataFrame, 
+                          sym_name: str, lib: Library):
+        asim.write(df)
+        lib.write(sym_name, df)
+        asim.assert_equal_to(lib.read(sym_name).data)
+
     lib = lmdb_library_dynamic_schema
-    asym = ArcticSymbolSimulatorWrapper().associate_arctic_lib(lib)
-    s1 = pd.Series([10, 20, 30], name="name")
-    s2 = pd.Series([100, 200, 300], name="ioop")
-    s3 = pd.Series([1000, 2000, 3000], name="name")
+    asim = ArcticSymbolSimulator()
+    s1 =  pd.DataFrame(pd.Series([10, 20, 30], name="name"))
+    s2 =  pd.DataFrame(pd.Series([100, 200, 300], name="ioop"))
+    s3 =  pd.DataFrame(pd.Series([1000, 2000, 3000], name="name"))
     df1 = pd.DataFrame({
         'A': [1, 2],
         'B': [3, 4],
@@ -216,20 +264,19 @@ def test_simulator_append_series_and_dataframe_mix(lmdb_library_dynamic_schema):
         "str_col": ["Z"],
         "timestamp_col": index_dates + pd.to_timedelta(2, unit="h")
     })
-    asym.write(s1).arctic_lib().write("s", s1)
-    asym.append(df1).arctic_lib().append("s", df1)
-    asym.assert_equal_to_associated_lib("s")
-    asym.append(s2).arctic_lib().append("s", s2)
-    asym.assert_equal_to_associated_lib("s")
-    asym.append(s3).arctic_lib().append("s", s3)
-    asym.assert_equal_to_associated_lib("s")
-    asym.append(s3).arctic_lib().append("s", df2)
-    asym.assert_equal_to_associated_lib("s")
+    write_and_compare(asim, s1, "s",  lib)
+    append_and_compare(asim, df1, "s", lib)
+    append_and_compare(asim, df1, "s", lib)
+    append_and_compare(asim, df1, "s", lib)
+    append_and_compare(asim, s2, "s", lib)
+    append_and_compare(asim, s2, "s", lib)
+    append_and_compare(asim, s3, "s", lib)
+    append_and_compare(asim, df2, "s", lib)
 
 
 def test_simulator_update_all_columns_promote_in_type(lmdb_library_dynamic_schema):
     lib = lmdb_library_dynamic_schema
-    asym = ArcticSymbolSimulatorWrapper().associate_arctic_lib(lib)
+    asym = ArcticSymbolSimulator()
     index_dates = pd.date_range(start=datetime.datetime(2025, 8, 1), periods=3, freq="D")
     df1 = pd.DataFrame({
         "int_col": np.array([10, 20, 30], dtype=np.int16),
@@ -257,55 +304,56 @@ def test_simulator_update_all_columns_promote_in_type(lmdb_library_dynamic_schem
         "str_col": ["a"],
         "timestamp_col": index_dates + pd.to_timedelta(2, unit="h")
     }, index=index_dates)
-    asym.write(df1).arctic_lib().write("s", df1)
-    asym.update(df2).arctic_lib().update("s", df2)
-    asym.assert_equal_to_associated_lib("s")
+    write_and_compare(asym, df1, "s", lib)
+    update_and_compare(asym, df1, "s", lib)
     assert 3 == len(asym.read())
 
 
-def test_simulator_append_serries_supported_combos(lmdb_library_dynamic_schema):
+def test_simulator_append_serries_converted_to_dataframes_supported_combos(lmdb_library_dynamic_schema):
 
-    def test_append_serries(s1, s2):
-        lib = lmdb_library_dynamic_schema
-        asym = ArcticSymbolSimulatorWrapper().associate_arctic_lib(lib)
-        asym.write(s1).arctic_lib().write("s", s1)
-        asym.append(s2).arctic_lib().append("s", s2)
-        asym.assert_equal_to_associated_lib("s")
-        return asym.read()
+    def test_append_serries_converted_to_dataframes(s1, s2):
+        lib: Library = lmdb_library_dynamic_schema
+        asim = ArcticSymbolSimulator()
+        df1 = pd.DataFrame(s1)
+        df2 = pd.DataFrame(s2)
+        write_and_compare(asim, df1, "s", lib)
+        append_and_compare(asim, df2, "s", lib)
+        return asim.read()
 
     s1 = pd.Series([10, 20, 30], name="name")
     s2 = pd.Series([100, 200, 300], name="name")
-    test_append_serries(s1, s2)
+    test_append_serries_converted_to_dataframes(s1, s2)
 
     s1 = pd.Series([10, 20, 30])
     s2 = pd.Series([100, 200, 300])
-    test_append_serries(s1, s2)
+    test_append_serries_converted_to_dataframes(s1, s2)
 
     # Series and Dataframe - results in Dataframe
     s1 = pd.Series([10, 20, 30], name="name")
     s2 = pd.DataFrame(pd.Series([100, 200, 300], name="name"))
-    df: pd.DataFrame = test_append_serries(s1, s2)
+    df: pd.DataFrame = test_append_serries_converted_to_dataframes(s1, s2)
     assert 1 == df.shape[1]
 
     # Series and Dataframe - results in Dataframe
     # when column names different - we have 2 cols
     s1 = pd.Series([10, 20, 30], name="name")
     s2 = pd.DataFrame(pd.Series([100, 200, 300], name="name2"))
-    df: pd.DataFrame = test_append_serries(s1, s2)
+    df: pd.DataFrame = test_append_serries_converted_to_dataframes(s1, s2)
     assert 2 == df.shape[1]
 
-@pytest.mark.xfail(True, reason="Currently adding series to symbol does not work (9754433454)")
+
 def test_simulator_append_serries_supported_errors(lmdb_library_dynamic_schema):
 
-    def test_append_serries(s1, s2):
+    def test_append_serries_with_error(s1, s2):
         lib = lmdb_library_dynamic_schema
-        asym = ArcticSymbolSimulatorWrapper().associate_arctic_lib(lib)
-        asym.write(s1).arctic_lib().write("s", s1)
-        asym.append(s2).arctic_lib().append("s", s2)
-        asym.assert_equal_to_associated_lib("s")
-        return asym.read()
+        asim = ArcticSymbolSimulator()
+        asim.write(s1)
+        lib.write("s", s1)
+        asim.append(s2)
+        with pytest.raises(SchemaException):
+            lib.append("s", s2)
 
     s1 = pd.Series([10, 20, 30], name="name")
     s2 = pd.Series([100, 200, 300], name="name2")
-    test_append_serries(s1, s2)
+    test_append_serries_with_error(s1, s2)
 

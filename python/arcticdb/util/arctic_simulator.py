@@ -10,12 +10,16 @@ from datetime import datetime, timedelta
 from typing import List, Optional, Union
 import pandas as pd
 import numpy as np
+from arcticdb.util.logger import get_logger
 from arcticdb.util.test import (
     assert_frame_equal_rebuild_index_first,
     assert_series_equal_pandas_1,
 )
 from arcticdb.util.utils import ARCTICDB_NA_VALUE_BOOL, ARCTICDB_NA_VALUE_FLOAT, ARCTICDB_NA_VALUE_INT, ARCTICDB_NA_VALUE_STRING, ARCTICDB_NA_VALUE_TIMESTAMP
 from arcticdb.version_store.library import Library
+
+
+logger = get_logger()
 
 
 def calculate_different_and_common_parts(df1: pd.DataFrame, df2: pd.DataFrame, 
@@ -46,6 +50,9 @@ def calculate_different_and_common_parts(df1: pd.DataFrame, df2: pd.DataFrame,
                 raise TypeError(
                     f"Column '{col}' has different types: df1={dtype1}, df2={dtype2}. Type mismatch not supported."
                 )
+        # for static schema it does not allow adding new columns.
+        assert len(only_in_df1) == 0
+        assert len(only_in_df2) == 0
 
     # Create the resulting DataFrames
     df_only_df1 = df1[only_in_df1].copy(deep=True)
@@ -140,18 +147,18 @@ class ArcticSymbolSimulator:
         return df.copy(deep=True) if df is not None else None
     
     def assert_equal_to(self, other_df_or_series: Union[pd.DataFrame, pd.Series]):
-        self.assert_frames_equal(self.read(), other_df_or_series)
+        self.assert_frame_equal_rebuild_index_first(self.read(), other_df_or_series)
 
-    @classmethod
-    def assert_frames_equal(self, expected: Union[pd.DataFrame, pd.Series], actual: Union[pd.DataFrame, pd.Series]):
+    @staticmethod
+    def assert_frame_equal_rebuild_index_first(expected: Union[pd.DataFrame, pd.Series], actual: Union[pd.DataFrame, pd.Series]):
         if isinstance(expected, pd.Series) and isinstance(actual, pd.Series):
             assert_series_equal_pandas_1(expected, actual)
         else:
             actual_df_same_col_sequence = actual[expected.columns]
             assert_frame_equal_rebuild_index_first(expected, actual_df_same_col_sequence)
 
-    @classmethod
-    def simulate_arctic_append(cls, df1: Union[pd.DataFrame, pd.Series], 
+    @staticmethod
+    def simulate_arctic_append(df1: Union[pd.DataFrame, pd.Series], 
                                df2: Union[pd.DataFrame, pd.Series], 
                                dynamic_schema: bool = True) -> pd.DataFrame:
         """Simulates arctic append operation
@@ -257,8 +264,8 @@ class ArcticSymbolSimulator:
 
             return append_df_to_df1
 
-    @classmethod
-    def simulate_arctic_update(cls, existing_df: Union[pd.DataFrame, pd.Series], 
+    @staticmethod
+    def simulate_arctic_update(existing_df: Union[pd.DataFrame, pd.Series], 
                                update_df: Union[pd.DataFrame, pd.Series],
                                dynamic_schema: bool = True) -> Union[pd.DataFrame, pd.Series]:
         """
@@ -297,35 +304,9 @@ class ArcticSymbolSimulator:
         if dynamic_schema:
             result_df = chunks[0]
             for i in range(1, len(chunks), 1):
-                result_df = cls.simulate_arctic_append(result_df, chunks[i])
+                if len(chunks[i]) > 0:
+                    result_df = ArcticSymbolSimulator.simulate_arctic_append(result_df, chunks[i])
             return result_df
         else:
             return pd.concat(chunks)
-
-
-class ArcticSymbolSimulatorWrapper(ArcticSymbolSimulator):
-    """The wrapper class provides ability to do one line operations with simulator and arcticdb
-
-    Use like:
-
-        asym = ArcticSymbolSimulator(keep_versions=True).associate_arctic_lib(lib)
-        asym.write(initial_df).arctic_lib().write(symbol, initial_df)
-        asym.append(initial_df).arctic_lib().append(symbol, initial_df)
-        asym.assert_equal_to_associated_lib(symbol)
-
-    """
-
-    def __init__(self, keep_versions: bool = False, dynamic_schema: bool = True):
-        super().__init__(keep_versions, dynamic_schema)
-
-    def associate_arctic_lib(self, lib: Library) -> 'ArcticSymbolSimulatorWrapper':
-        self._ac_lib: Library = lib
-        return self
-
-    def arctic_lib(self) -> Library:
-        return self._ac_lib
-
-    def assert_equal_to_associated_lib(self, symbol: str, as_of: Optional[int] = None):
-        assoc_data = self.arctic_lib().read(symbol, as_of=as_of).data
-        self.assert_frames_equal(self.read(as_of=as_of), assoc_data)
 
