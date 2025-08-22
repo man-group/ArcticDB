@@ -377,9 +377,13 @@ jobs:
         with:
           node-version: '16'
 
+      - name: Install Azurite
+        uses: ./.github/actions/retry_install-azurite
+        with:
+          max_retries: "3"
+
       - name: Install the wheel and dependencies
         run: |
-          npm install -g azurite
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           python -V
           cd "$RUNNER_TEMP" # Works for Windows-style paths as well

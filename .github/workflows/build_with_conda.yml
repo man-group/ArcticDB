@@ -123,10 +123,10 @@ jobs:
         with:
           node-version: '16'
 
-      - name: Install azurite
-        shell: bash -l {0}
-        run: |
-          npm install -g azurite
+      - name: Install Azurite
+        uses: ./.github/actions/retry_install-azurite
+        with:
+          max_retries: "3"          
 
       - name: Check no arcticdb file depend on tests package
         shell: bash -l {0}
@@ -235,9 +235,9 @@ jobs:
           node-version: '16'
 
       - name: Install azurite
-        shell: bash -l {0}
-        run: |
-          npm install -g azurite
+        uses: ./.github/actions/retry_install-azurite
+        with:
+          max_retries: "3"   
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
