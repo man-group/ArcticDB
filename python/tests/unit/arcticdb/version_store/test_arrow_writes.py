@@ -74,10 +74,8 @@ def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
     assert table.equals(received)
 
 
-# @pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])
-# @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
-@pytest.mark.parametrize("num_rows", [5])
-@pytest.mark.parametrize("num_cols", [5])
+@pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])
+@pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
 def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_cols):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format("experimental_arrow")
