@@ -87,7 +87,8 @@ jobs:
         shell: bash -l {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
-          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 180 -v -e .
+          # We should always retry due to instable nature of connections and environments
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
@@ -127,6 +128,7 @@ jobs:
         uses: nick-fields/retry@v3
         with:
           timeout_minutes: 10
+          # We should always retry due to instable nature of connections and environments
           max_attempts: 3
           command: npm install -g azurite
 
@@ -211,7 +213,7 @@ jobs:
         shell: bash -l {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
-          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 180 -v -e .
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
@@ -239,6 +241,7 @@ jobs:
       - name: Install Azurite
         uses: nick-fields/retry@v3
         with:
+          # We should always retry due to instable nature of connections and environments
           timeout_minutes: 10
           max_attempts: 3
           command: npm install -g azurite
