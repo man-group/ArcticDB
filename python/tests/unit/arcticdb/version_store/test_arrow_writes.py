@@ -54,7 +54,7 @@ def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
     sym = "test_write_sliced"
     table = pa.table(
         {
-            f"col{idx}": pa.array(np.arange(idx * num_rows, (idx + 1) * num_rows), pa.uint32()) for idx in range(num_cols)
+            f"col{idx}": pa.array(np.arange(idx * num_rows, (idx + 1) * num_rows, dtype=np.uint32), pa.uint32()) for idx in range(num_cols)
         }
     )
     lib.write(sym, table)
