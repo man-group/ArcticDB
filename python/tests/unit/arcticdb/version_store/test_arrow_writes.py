@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import numpy as np
 import pyarrow as pa
 
 from arcticdb.version_store._normalization import ArrowTableNormalizer
@@ -39,6 +40,15 @@ def test_basic_write(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_basic_write"
     table = pa.table({"col": pa.array([0, 1], pa.int64())})
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
+def test_write_row_sliced(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_row_sliced"
+    table = pa.table({"col": pa.array(np.arange(210_000, dtype=np.uint32), pa.uint32())})
     lib.write(sym, table)
     received = lib.read(sym).data
     assert table.equals(received)
