@@ -234,6 +234,9 @@ public:
             entry->validate();
     }
 
+    // prevent_non_increasing_version_id should be set false only:
+    // - testing purposes i.e. setting up a library with a broken version chain
+    // - in a background job in cases where we want to explicitly do this e.g. to replicate a divergent version chain
     void write_version(std::shared_ptr<Store> store,
         const AtomKey &key,
         const std::optional<AtomKey>& previous_key,
@@ -562,15 +565,18 @@ public:
             if (key.type() == KeyType::TABLE_INDEX) {
                 util::check(!has_index_key, "There should be at most one index key in the list of keys when trying to write an entry to the store, keys: {}", fmt::format("{}", keys));
                 has_index_key = true;
-                auto message = fmt::format("Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {} This is most likely due to parallel writes to the same symbol, which is not supported.",
-                    key.version_id(), original_head ? original_head->version_id() : VariantId{""});
-                if (prevent_non_increasing_version_id) {
-                    storage::check<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(!original_head.has_value() || key.version_id() > original_head->version_id(),
-                        "{}",
-                        message);
-                } else {
-                    // This should happen only in tests and background jobs
-                    log::version().warn("{}", message);
+                bool is_version_increasing = !original_head.has_value() || key.version_id() > original_head->version_id();
+
+                if (!is_version_increasing) {
+                    if (prevent_non_increasing_version_id) {
+                        storage::raise<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(
+                            "Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {} This is most likely due to parallel writes to the same symbol, which is not supported.",
+                            key.version_id(), original_head ? original_head->version_id() : VariantId{""});
+                    } else {
+                        // This should happen only in tests and background jobs
+                        log::version().warn("Force writing TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {}",
+                            key.version_id(), original_head ? original_head->version_id() : VariantId{""});
+                    }
                 }
             }
 
