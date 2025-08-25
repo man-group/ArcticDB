@@ -235,7 +235,7 @@ jobs:
       uses: nick-fields/retry@v3
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
       with:
-        shell: bash -l 
+        shell: bash 
         timeout_minutes: 10
         max_attempts: 5
         command: |
@@ -247,7 +247,7 @@ jobs:
       uses: nick-fields/retry@v3
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
       with:
-        shell: bash -l 
+        shell: bash
         timeout_minutes: 10
         max_attempts: 5
         command: |
