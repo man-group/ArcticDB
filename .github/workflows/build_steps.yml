@@ -240,7 +240,7 @@ jobs:
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
         run: |
-          python -m pip install pipx
+          python -m pip install pipx --retries 3 --timeout 180
           python -m pipx run cibuildwheel==${{inputs.cibw_version}}
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
@@ -377,16 +377,22 @@ jobs:
         with:
           node-version: '16'
 
+      - name: Install Azurite
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: npm install -g azurite 
+
       - name: Install the wheel and dependencies
         run: |
-          npm install -g azurite
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           python -V
           cd "$RUNNER_TEMP" # Works for Windows-style paths as well
-          python -m pip install --force-reinstall  $(ls *${{env.python_impl_name}}*.whl)[Testing] pytest-split
+          python -m pip install --force-reinstall  --retries 3 --timeout 500 $(ls *${{env.python_impl_name}}*.whl)[Testing] pytest-split
           if [[ -n "${{matrix.python_deps || ''}}" ]] ; then
             echo "Using deps ${{matrix.python_deps}}"
-            python -m pip install --force-reinstall -r $GITHUB_WORKSPACE/build_tooling/${{matrix.python_deps}}
+            python -m pip install --force-reinstall --retries 3 --timeout 500 -r $GITHUB_WORKSPACE/build_tooling/${{matrix.python_deps}}
           fi
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
           python -m pip list
