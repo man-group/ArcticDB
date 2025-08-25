@@ -304,75 +304,45 @@ class TestMergeTimeseries:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 1
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_merge_update_row_slicing(self, lmdb_library_factory, monkeypatch):
-        lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=3))
-        target = pd.DataFrame({"a": range(7), "b": np.arange(7, dtype=np.float64)}, index=pd.date_range("2024-01-01", periods=7))
+    @pytest.mark.parametrize("slicing_policy", [
+        {"rows_per_segment": 2},
+        {"columns_per_segment": 2},
+        {"rows_per_segment": 2, "columns_per_segment": 2}
+    ])
+    def test_merge_update_row_slicing(self, lmdb_library_factory, slicing_policy, monkeypatch):
+        lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3, 4, 5], "b": [1.0 , 2.0, 3.0, 4.0, 5.0], "c": ["a", "b", "c", "d", "e"]},
+            index=pd.date_range("2024-01-01", periods=5))
         lib.write("sym", target)
 
         monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
 
-        source = pd.DataFrame({"a": [30, 50], "b": [31.0, 51.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-06")]))
+        source = pd.DataFrame({"a": [30, 50], "b": [30.1, 50.1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-05")]))
         lib.merge("sym", source, strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
 
-        expected = pd.DataFrame({"a": [0, 1, 2, 30, 4, 50, 6], "b": [0.0, 1.0, 2.0, 31.0, 4.0, 51.0, 6.0]})
+        expected = pd.DataFrame({"a": [1, 2, 30, 4, 50], "b": [1.0, 2.0, 31.1, 4.0, 50.1]})
         monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
         lt = lib._dev_tools.library_tool()
-        monkeypatch.setattr(lt, "find_keys_for_symbol", mock_find_keys_for_symbol({KeyType.TABLE_DATA: 4, KeyType.TABLE_INDEX: 2, KeyType.VERSION: 2}))
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 4
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
-        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
-
-    def test_merge_upgrade_column_slicing(self, lmdb_library_factory, monkeypatch):
-        lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2))
-        target = pd.DataFrame({f"col_{i}": range(10) for i in range(5)}, index=pd.date_range("2024-01-01", periods=10))
-        lib.write("sym", target)
-
-        monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
-
-        source = pd.DataFrame(
-            {f"col_{i}": [20 + i, 30 + i, 40 + i] for i in range(5)},
-            index=pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-04"), pd.Timestamp("2024-01-07")])
-        )
-        lib.merge("sym", source, strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
-
-        expected = target.copy(deep=True)
-        for i in range(len(source)):
-            expected.loc[source.index[i]] = source.iloc[i]
-
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
-        assert_frame_equal(lib.read("sym").data, expected)
-
-        lt = lib._dev_tools.library_tool()
-        monkeypatch.setattr(lt, "find_keys_for_symbol", mock_find_keys_for_symbol({KeyType.TABLE_DATA: 6, KeyType.TABLE_INDEX: 2, KeyType.VERSION: 2}))
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 6
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
-        assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
-
-    def test_merge_update_column_and_row_slicing(self, lmdb_library_factory, monkeypatch):
-        lib = lmdb_library_factory(arcticdb.LibraryOptions(columns_per_segment=2, rows_per_segment=2))
-        lt = lib._dev_tools.library_tool()
-        target = pd.DataFrame({f"col_{i}": range(10) for i in range(5)}, index=pd.date_range("2024-01-01", periods=10))
-        lib.write("sym", target)
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 15
-
-        source = pd.DataFrame({f"col_{i}": [100 + i, 200 + i] for i in range(5)}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-05")]))
-        expected = target.copy(deep=True)
-        for i in range(len(source)):
-            expected.loc[source.index[i]] = source.iloc[i]
-
-        monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
-        lib.merge("sym", source, strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
-
-        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
-        received = lib.read("sym").data
-        assert_frame_equal(received, expected)
-
-        lt = lib._dev_tools.library_tool()
-        monkeypatch.setattr(lt, "find_keys_for_symbol", mock_find_keys_for_symbol({KeyType.TABLE_DATA: 21, KeyType.TABLE_INDEX: 2, KeyType.VERSION: 2}))
-        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 21
+        if "rows_per_segment" in slicing_policy and "columns_per_segment" in slicing_policy:
+            # Start with 3 row slices and 2 column slices = 6 data keys
+            # The second segment is overwritten with column slicing = 2 data keys
+            # The third segment is overwritten with column slicing = 2 data keys
+            expected_data_keys = 10
+        elif "rows_per_segment" in slicing_policy:
+            # Start with 3 row slices and no column slices -> 3 data keys
+            # The second segment is overwritten with column slicing = 1 data key
+            # The third segment is overwritten with column slicing = 1 data key
+            expected_data_keys = 5
+        elif "columns_per_segment" in slicing_policy:
+            # Start with one row slice and 2 column slices -> 2 data keys
+            # The segment is overwritten with column slicing = 2 data key
+            expected_data_keys = 4
+        monkeypatch.setattr(lt, "find_keys_for_symbol", mock_find_keys_for_symbol({KeyType.TABLE_DATA: expected_data_keys, KeyType.TABLE_INDEX: 2, KeyType.VERSION: 2}))
+        assert len(lt.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == expected_data_keys
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
