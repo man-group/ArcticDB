@@ -65,6 +65,8 @@ from .util.mark import (
     SIM_NFS_TESTS_MARK,
     SIM_S3_TESTS_MARK,
     REAL_GCP_TESTS_MARK,
+    TEST_ENCODING_V1_MARK,
+    TEST_ENCODING_V2_MARK,
     WINDOWS,
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -142,17 +144,23 @@ class EncodingVersion(enum.IntEnum):
     V1 = 0
     V2 = 1
 
+# The current default encoding of ArcticDB release
+DEFAULT_ENCODING = EncodingVersion.V1
 
-@pytest.fixture(scope="session")
-def only_test_encoding_version_v1():
-    """Dummy fixture to reference at module/class level to reduce test cases"""
+# endregion
+# region =================================== Encoding Fixtures ====================================
+
+@pytest.fixture(scope="session", 
+                params=[pytest.param(DEFAULT_ENCODING, marks=TEST_ENCODING_V1_MARK)])
+def only_test_encoding_version_v1(request):
+    return request.param
 
 
-def pytest_generate_tests(metafunc):
-    if "encoding_version" in metafunc.fixturenames:
-        only_v1 = "only_test_encoding_version_v1" in metafunc.fixturenames
-        metafunc.parametrize("encoding_version", [EncodingVersion.V1] if only_v1 else list(EncodingVersion))
-
+@pytest.fixture(scope="session",
+                params=[pytest.param(EncodingVersion.V1, marks=TEST_ENCODING_V1_MARK), 
+                        pytest.param(EncodingVersion.V2, marks=TEST_ENCODING_V2_MARK)],)
+def encoding_version(request):
+    return request.param
 
 def check_local_storage_enabled():
     if not LOCAL_STORAGE_TESTS_ENABLED: pytest.skip("Local storage not enabled")
