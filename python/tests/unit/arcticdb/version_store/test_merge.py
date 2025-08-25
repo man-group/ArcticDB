@@ -13,7 +13,7 @@ import arcticdb
 from arcticdb.version_store import VersionedItem
 from arcticdb_ext.storage import KeyType
 import numpy as np
-from arcticdb.exceptions import SchemaException, UserInputException
+from arcticdb.exceptions import SchemaException, UserInputException, SortingException
 from typing import NamedTuple
 
 class MergeAction(Enum):
@@ -58,6 +58,9 @@ def raise_wrapper(exception, message=None):
 
 class TestMergeTimeseries:
 
+    # ================================================================================================
+    # ================================= APPLIES TO ALL STRATEGIES ====================================
+    # ================================================================================================
     @pytest.mark.parametrize("strategy", (
         MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
         MergeStrategy(MergeAction.INSERT, MergeAction.DO_NOTHING),
@@ -179,6 +182,30 @@ class TestMergeTimeseries:
         monkeypatch.setattr(lib.__class__, "merge", raise_wrapper(SchemaException), raising=False)
 
         with pytest.raises(SchemaException):
+            lib.merge("sym", source, strategy=strategy)
+
+    @pytest.mark.parametrize("strategy", (
+            MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
+            MergeStrategy(MergeAction.INSERT, MergeAction.DO_NOTHING),
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+            MergeStrategy(MergeAction.INSERT, MergeAction.INSERT)
+    ))
+    def test_throws_if_source_is_not_sorted(self, lmdb_library, strategy, monkeypatch):
+        # This requirement can be lifted, however, passing a sorted source will be faster. We can start with it and
+        # extend if needed.
+        lib = lmdb_library
+        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        lib.write("sym", target)
+
+        source = pd.DataFrame(
+            {"a": [10, 20, 30], "b": [10.1, 20.1, 30.1]},
+            index=pd.DatetimeIndex([pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-01")])
+        )
+
+        monkeypatch.setattr(lib.__class__, "merge", raise_wrapper(SortingException), raising=False)
+
+        with pytest.raises(SortingException):
             lib.merge("sym", source, strategy=strategy)
 
     # ================================================================================================
