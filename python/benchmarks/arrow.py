@@ -7,10 +7,12 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 
+import time
 import numpy as np
 import pandas as pd
 
 from arcticdb import Arctic, OutputFormat
+from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
 
@@ -27,7 +29,15 @@ class ArrowReadNumeric:
     def symbol_name(self, num_rows: int):
         return f"numeric_{num_rows}_rows"
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):        
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
         num_rows, date_ranges = self.params
         num_cols = 9 # 10 including the index column
@@ -75,7 +85,15 @@ class ArrowReadStrings:
     def symbol_name(self, num_rows: int, unique_strings: int):
         return f"string_{num_rows}_rows_{unique_strings}_unique_strings"
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):        
         rng = np.random.default_rng()
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
         num_rows, date_ranges, unique_string_counts = self.params
