@@ -221,39 +221,24 @@ jobs:
         python -m pip install --upgrade pip $RETRY
         pip install wheel setuptools pytest pytest-xdist $RETRY
 
-    - name: (conda) Setup micromamba
+      # Install conda environment
+    - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge
       uses: mamba-org/setup-micromamba@v2.0.0
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
       with:
+        environment-file: "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml" 
         environment-name: arcticdb
         init-shell: >-
           bash
         cache-environment: true
         post-cleanup: 'all'
 
-    - name: (conda) Install arcticdb (${{ env.arcticdb_version }}) from conda-forge (retry)
-      uses: nick-fields/retry@v3
-      if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
-      with:
-        shell: bash 
-        timeout_minutes: 10
-        max_attempts: 5
-        command: |
-          micromamba install -y -n arcticdb -f "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml"
-          micromamba clean --all --yes
-
-    - name: (conda) Install other dependencies (${{ env.conda_file }}) (retry)
-      uses: nick-fields/retry@v3
-      if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
-      with:
-        shell: bash
-        timeout_minutes: 10
-        max_attempts: 5
-        command: |
-          eval "$(micromamba shell hook --shell bash)"          
-          micromamba activate arcticdb
+    - name: (conda) Install other dependencies ${{ env.conda_file }}
+      if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes'))}}
+      shell: bash -l {0}
+      run: |
+          micromamba activate arcticdb 
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
-          micromamba clean --all --yes
 
     - name: Set persistent storage variables
       # Should be executed for all persistent storages but not for LMDB
