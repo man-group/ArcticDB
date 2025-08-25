@@ -14,11 +14,12 @@ from arcticdb import col, LazyDataFrame, LazyDataFrameCollection, QueryBuilder, 
 from arcticdb.util.test import assert_frame_equal
 
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
-def test_lazy_read(lmdb_library):
+def test_lazy_read(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_read"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -34,8 +35,9 @@ def test_lazy_read(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_date_range(lmdb_library):
+def test_lazy_date_range(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_date_range"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -50,8 +52,9 @@ def test_lazy_date_range(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_filter(lmdb_library):
+def test_lazy_filter(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_filter"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -66,8 +69,9 @@ def test_lazy_filter(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_head(lmdb_library):
+def test_lazy_head(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_head"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -82,8 +86,9 @@ def test_lazy_head(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_tail(lmdb_library):
+def test_lazy_tail(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_tail"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -98,8 +103,9 @@ def test_lazy_tail(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_apply(lmdb_library):
+def test_lazy_apply(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_apply"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -115,8 +121,9 @@ def test_lazy_apply(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_apply_inline_col(lmdb_library):
+def test_lazy_apply_inline_col(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_apply_inline_col"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -131,8 +138,9 @@ def test_lazy_apply_inline_col(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_project(lmdb_library):
+def test_lazy_project(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -148,8 +156,9 @@ def test_lazy_project(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_project_constant_value(lmdb_library):
+def test_lazy_project_constant_value(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -165,8 +174,9 @@ def test_lazy_project_constant_value(lmdb_library):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_lazy_ternary(lmdb_library):
+def test_lazy_ternary(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_ternary"
     df = pd.DataFrame(
         {
@@ -187,8 +197,9 @@ def test_lazy_ternary(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_groupby(lmdb_library):
+def test_lazy_groupby(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_groupby"
     df = pd.DataFrame({"col1": [0, 1, 0, 1, 2, 2], "col2": np.arange(6, dtype=np.int64)})
     lib.write(sym, df)
@@ -202,8 +213,9 @@ def test_lazy_groupby(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_resample(lmdb_library):
+def test_lazy_resample(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_resample"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -220,8 +232,9 @@ def test_lazy_resample(lmdb_library):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_regex_match(lmdb_library, sym):
+def test_lazy_regex_match(lmdb_library, sym, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
             index=pd.date_range(pd.Timestamp(0), periods=3),
             data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
@@ -237,8 +250,9 @@ def test_lazy_regex_match(lmdb_library, sym):
     assert_frame_equal(expected, received)
 
 
-def test_lazy_with_initial_query_builder(lmdb_library):
+def test_lazy_with_initial_query_builder(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_chaining"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -256,8 +270,9 @@ def test_lazy_with_initial_query_builder(lmdb_library):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_lazy_chaining(lmdb_library):
+def test_lazy_chaining(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_chaining"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -273,8 +288,9 @@ def test_lazy_chaining(lmdb_library):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_lazy_batch_read(lmdb_library):
+def test_lazy_batch_read(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym_0 = "test_lazy_batch_read_0"
     sym_1 = "test_lazy_batch_read_1"
     df = pd.DataFrame(
@@ -300,8 +316,9 @@ def test_lazy_batch_read(lmdb_library):
     assert_frame_equal(expected_1, received[1].data)
 
 
-def test_lazy_batch_one_query(lmdb_library):
+def test_lazy_batch_one_query(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     syms = [f"test_lazy_batch_one_query_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -316,8 +333,9 @@ def test_lazy_batch_one_query(lmdb_library):
         assert_frame_equal(expected, vit.data)
 
 
-def test_lazy_batch_collect_separately(lmdb_library):
+def test_lazy_batch_collect_separately(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     syms = [f"test_lazy_batch_collect_separately_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -339,8 +357,9 @@ def test_lazy_batch_collect_separately(lmdb_library):
     assert_frame_equal(expected_2, received_2)
 
 
-def test_lazy_batch_separate_queries_collect_together(lmdb_library):
+def test_lazy_batch_separate_queries_collect_together(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     syms = [f"test_lazy_batch_separate_queries_collect_together_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -360,8 +379,9 @@ def test_lazy_batch_separate_queries_collect_together(lmdb_library):
     assert_frame_equal(expected_2, received[2].data)
 
 
-def test_lazy_batch_complex(lmdb_library):
+def test_lazy_batch_complex(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     syms = [f"test_lazy_batch_complex_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -399,8 +419,9 @@ def test_lazy_batch_complex(lmdb_library):
     assert_frame_equal(expected_2, received[2].data)
 
 
-def test_lazy_collect_multiple_times(lmdb_library):
+def test_lazy_collect_multiple_times(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_collect_multiple_times"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -421,8 +442,9 @@ def test_lazy_collect_multiple_times(lmdb_library):
     assert_frame_equal(expected, received_2, check_dtype=False)
 
 
-def test_lazy_batch_collect_multiple_times(lmdb_library):
+def test_lazy_batch_collect_multiple_times(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     syms = [f"test_lazy_batch_collect_multiple_times_{idx}" for idx in range(3)]
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
@@ -447,8 +469,9 @@ def test_lazy_batch_collect_multiple_times(lmdb_library):
         assert_frame_equal(expected, vit.data)
 
 
-def test_lazy_collect_twice_with_date_range(lmdb_library):
+def test_lazy_collect_twice_with_date_range(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_collect_twice_with_date_range"
     df = pd.DataFrame(
         {
@@ -466,8 +489,9 @@ def test_lazy_collect_twice_with_date_range(lmdb_library):
     assert_frame_equal(expected, received_1, check_dtype=False)
 
 
-def test_lazy_pickling(lmdb_library):
+def test_lazy_pickling(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_lazy_pickling"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -489,8 +513,9 @@ def test_lazy_pickling(lmdb_library):
     assert_frame_equal(expected, received_roundtripped, check_dtype=False)
 
 
-def test_lazy_batch_pickling(lmdb_library):
+def test_lazy_batch_pickling(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     syms = [f"test_lazy_batch_pickling_{idx}" for idx in range(3)]
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
