@@ -26,7 +26,7 @@ from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
 import itertools
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
@@ -68,8 +68,9 @@ def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_
 @pytest.mark.parametrize("date_range", (None, (pd.Timestamp("2024-01-02T12:00:00"), pd.Timestamp("2024-01-03T12:00:00"))))
 @pytest.mark.parametrize("closed", ("left", "right"))
 @pytest.mark.parametrize("label", ("left", "right"))
-def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
+def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling"
     # Want an index with data every minute for 2 days, with additional data points 1 nanosecond before and after each
     # minute to catch off-by-one errors
@@ -105,8 +106,9 @@ def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
 
 
 @pytest.mark.parametrize("closed", ("left", "right"))
-def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_store_v1, closed):
+def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_store_v1, closed, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_duplicated_index_value_on_segment_boundary"
     # Will group on microseconds
     df_0 = pd.DataFrame({"col": np.arange(4)}, index=np.array([0, 1, 2, 1000], dtype="datetime64[ns]"))
@@ -128,8 +130,9 @@ def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_stor
 
 class TestResamplingBucketInsideSegment:
 
-    def test_all_buckets_have_values(self, lmdb_version_store_v1):
+    def test_all_buckets_have_values(self, lmdb_version_store_v1, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_inner_buckets_are_empty"
         start = dt.datetime(2023, 12, 7, 23, 59, 47, 500000);
         idx = [start + i * pd.Timedelta('1s') for i in range(0, 8)]
@@ -140,8 +143,9 @@ class TestResamplingBucketInsideSegment:
         generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
 
     @pytest.mark.parametrize("closed", ("left", "right"))
-    def test_first_bucket_is_empy(self, lmdb_version_store_v1, closed):
+    def test_first_bucket_is_empy(self, lmdb_version_store_v1, closed, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_first_bucket_is_empy"
         idx = pd.DatetimeIndex([
             dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
@@ -158,8 +162,9 @@ class TestResamplingBucketInsideSegment:
         generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
 
     @pytest.mark.parametrize("closed", ("left", "right"))
-    def test_last_bucket_is_empty(self, lmdb_version_store_v1, closed):
+    def test_last_bucket_is_empty(self, lmdb_version_store_v1, closed, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_last_bucket_is_empty"
         idx = pd.DatetimeIndex([
             dt.datetime(2023, 12, 7, 23, 59, 47, 342000),
@@ -176,8 +181,9 @@ class TestResamplingBucketInsideSegment:
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 49, 500000))
         generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
     
-    def test_inner_buckets_are_empty(self, lmdb_version_store_v1):
+    def test_inner_buckets_are_empty(self, lmdb_version_store_v1, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_inner_buckets_are_empty"
         idx = pd.DatetimeIndex([
             dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
@@ -195,8 +201,9 @@ class TestResamplingBucketInsideSegment:
         
 
 
-def test_resampling_timezones(lmdb_version_store_v1):
+def test_resampling_timezones(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_timezones"
     # UK clocks go forward at 1am on March 31st in 2024
     index = pd.date_range("2024-03-31T00:00:00", freq="min", periods=240, tz="Europe/London")
@@ -223,13 +230,14 @@ def test_resampling_timezones(lmdb_version_store_v1):
     )
 
 
-def test_resampling_nan_correctness(version_store_factory):
+def test_resampling_nan_correctness(version_store_factory, any_output_format):
     lib = version_store_factory(
         column_group_size=2,
         segment_row_size=2,
         dynamic_strings=True,
         lmdb_config={"map_size": 2**30}
     )
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_nan_correctness"
     # NaN here means NaT for datetime columns and NaN/None in string columns
     # Create 5 buckets worth of data, each containing 3 values:
@@ -281,8 +289,9 @@ def test_resampling_nan_correctness(version_store_factory):
     generic_resample_test(lib, sym, "us", agg_dict, df)
 
 
-def test_resampling_bool_columns(lmdb_version_store_tiny_segment):
+def test_resampling_bool_columns(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_bool_columns"
 
     idx = [0, 1, 1000, 1001, 2000, 2001, 3000, 3001]
@@ -310,8 +319,9 @@ def test_resampling_bool_columns(lmdb_version_store_tiny_segment):
     )
 
 
-def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_schema_v1):
+def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_dynamic_schema_types_changing"
     # Will group on microseconds
     idx_0 = [0, 1, 2, 1000]
@@ -343,8 +353,9 @@ def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_sch
     )
 
 
-def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
+def test_resampling_empty_bucket_in_range(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_empty_bucket_in_range"
     # Group on microseconds, so bucket 1000-1999 will be empty
     idx = [0, 1, 2000, 2001]
@@ -383,7 +394,7 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
     )
 
 
-def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_segment):
+def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_segment, any_output_format):
     # Covers a corner case where the date_range argument specifies that a row-slice is needed, but the bucket boundaries
     # mean that all of the index values required fall into a bucket being handled by the previous row-slice, and so
     # the call to ResampleClause::process produces a segment with no rows
@@ -394,6 +405,7 @@ def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny
     # Therefore the only index value from the second row slice remaining to be processed is 3000ns. But this is outside
     # the specified date range, and so this call to ResampleClause::process produces a segment with no rows
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_row_slice_responsible_for_no_buckets"
     df = pd.DataFrame(
         {
@@ -414,8 +426,9 @@ def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny
 
 @pytest.mark.parametrize("tz", (None, "Europe/London"))
 @pytest.mark.parametrize("named_levels", (True, False))
-def test_resample_multiindex(lmdb_version_store_v1, tz, named_levels):
+def test_resample_multiindex(lmdb_version_store_v1, tz, named_levels, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resample_multiindex"
     multiindex = pd.MultiIndex.from_product([pd.date_range("2024-01-01", freq="h", periods=5, tz=tz), [0, 1], ["hello", "goodbye"]])
     if named_levels:
@@ -446,8 +459,9 @@ def test_resample_multiindex(lmdb_version_store_v1, tz, named_levels):
 
 @pytest.mark.parametrize("use_date_range", (True, False))
 @pytest.mark.parametrize("single_query", (True, False))
-def test_resampling_batch_read_query(lmdb_version_store_v1, use_date_range, single_query):
+def test_resampling_batch_read_query(lmdb_version_store_v1, use_date_range, single_query, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym_0 = "test_resampling_batch_read_query_0"
     sym_1 = "test_resampling_batch_read_query_1"
 
@@ -506,8 +520,9 @@ def test_resample_rejects_unsupported_frequency_strings(freq):
             QueryBuilder().resample(freq + "1h")
 
 
-def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1):
+def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_unsupported_aggregation_type_combos"
 
     df = pd.DataFrame({"string": ["hello"], "datetime": [pd.Timestamp(0)]}, index=[pd.Timestamp(0)])
@@ -525,8 +540,9 @@ def test_resampling_unsupported_aggregation_type_combos(lmdb_version_store_v1):
         lib.read(sym, query_builder=q)
 
 
-def test_resampling_sparse_data(lmdb_version_store_v1):
+def test_resampling_sparse_data(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_sparse_data"
 
     # col_1 will be dense, but with fewer rows than the index column, and so semantically sparse
@@ -547,8 +563,9 @@ def test_resampling_sparse_data(lmdb_version_store_v1):
         lib.read(sym, query_builder=q)
 
 
-def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
+def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1, any_output_format):
     lib = lmdb_version_store_empty_types_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_resampling_empty_type_column"
 
     lib.write(sym, pd.DataFrame({"col": ["hello"]}, index=[pd.Timestamp(0)]))
@@ -570,8 +587,9 @@ def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
 class TestResamplingOffset:
 
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
-    def test_offset_smaller_than_freq(self, lmdb_version_store_v1, closed, offset):
+    def test_offset_smaller_than_freq(self, lmdb_version_store_v1, closed, offset, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_offset_smaller_than_freq"
         idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
         rng = np.random.default_rng()
@@ -588,8 +606,9 @@ class TestResamplingOffset:
         )
 
     @pytest.mark.parametrize("offset", ("2min37s", pd.Timedelta(minutes=2, seconds=37)))
-    def test_offset_larger_than_freq(self, lmdb_version_store_v1, closed, offset):
+    def test_offset_larger_than_freq(self, lmdb_version_store_v1, closed, offset, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_offset_larger_than_freq"
         idx = pd.date_range(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-04"), freq="min")
         rng = np.random.default_rng()
@@ -606,8 +625,9 @@ class TestResamplingOffset:
         )
 
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
-    def test_values_on_offset_boundary(self, lmdb_version_store_v1, closed, offset):
+    def test_values_on_offset_boundary(self, lmdb_version_store_v1, closed, offset, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_offset_larger_than_freq"
         start = pd.Timestamp("2024-01-02")
         end = pd.Timestamp("2024-01-04")
@@ -634,8 +654,9 @@ class TestResamplingOffset:
         (dt.datetime(2024, 1, 2, 5, 0, 45), dt.datetime(2024, 1, 3, 5, 0, 50)),
         (dt.datetime(2024, 1, 2, 5, 0, 30, 1), dt.datetime(2024, 1, 3, 5, 0, 29, 999999))
     ])
-    def test_with_date_range(self, lmdb_version_store_v1, closed, date_range, offset):
+    def test_with_date_range(self, lmdb_version_store_v1, closed, date_range, offset, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_offset_larger_than_freq"
         start = pd.Timestamp("2024-01-02")
         end = pd.Timestamp("2024-01-04")
@@ -677,8 +698,9 @@ class TestResamplingOrigin:
             pd.Timestamp("2025-01-02 12:00:13")
         ]
     )
-    def test_origin(self, lmdb_version_store_v1, closed, origin):
+    def test_origin(self, lmdb_version_store_v1, closed, origin, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_origin_special_values"
         # Start and end are picked so that #bins * rule + start != end on purpose to test
         # the bin generation in case of end and end_day
@@ -709,8 +731,9 @@ class TestResamplingOrigin:
         (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:03")), # start is multiple of rule
         (pd.Timestamp("2025-01-01 10:00:03"), pd.Timestamp("2025-01-02 12:00:00")) # end is multiple of rule
     ])
-    def test_origin_is_multiple_of_freq(self, lmdb_version_store_v1, closed, origin, date_range):
+    def test_origin_is_multiple_of_freq(self, lmdb_version_store_v1, closed, origin, date_range, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_origin_special_values"
         start, end = date_range
         idx = pd.date_range(start, end, freq='10s')
@@ -735,8 +758,9 @@ class TestResamplingOrigin:
         pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
         "epoch"
     ])
-    def test_pre_epoch_data(self, lmdb_version_store_v1, closed, origin):
+    def test_pre_epoch_data(self, lmdb_version_store_v1, closed, origin, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_origin_special_values"
         start = pd.Timestamp("1800-01-01 10:00:00")
         end = pd.Timestamp("1800-01-02 10:00:00")
@@ -766,8 +790,9 @@ class TestResamplingOrigin:
             [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") + pd.Timedelta(1)],
             [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") + pd.Timedelta(1)]))
     )
-    def test_origin_off_by_one_on_boundary(self, lmdb_version_store_v1, closed, origin, date_range):
+    def test_origin_off_by_one_on_boundary(self, lmdb_version_store_v1, closed, origin, date_range, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_origin_special_values"
         start, end = date_range
         idx = pd.date_range(start, end, freq='10s')
@@ -791,8 +816,9 @@ class TestResamplingOrigin:
         pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
         pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
     ])
-    def test_non_epoch_origin_throws_with_daterange(self, lmdb_version_store_v1, origin, closed):
+    def test_non_epoch_origin_throws_with_daterange(self, lmdb_version_store_v1, origin, closed, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_origin_start_throws_with_daterange"
 
         lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])))
@@ -803,8 +829,9 @@ class TestResamplingOrigin:
         assert all(w in str(exception_info.value) for w in [origin, "origin"])
 
     @pytest.mark.parametrize("origin", ["epoch", pd.Timestamp("2025-01-03 12:00:00")])
-    def test_epoch_and_ts_origin_works_with_date_range(self, lmdb_version_store_v1, closed, origin):
+    def test_epoch_and_ts_origin_works_with_date_range(self, lmdb_version_store_v1, closed, origin, any_output_format):
         lib = lmdb_version_store_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_origin_special_values"
         # Start and end are picked so that #bins * rule + start != end on purpose to test
         # the bin generation in case of end and end_day
@@ -839,8 +866,9 @@ class TestResamplingOrigin:
     pd.Timestamp("2025-01-03 15:00:00")
 ])
 @pytest.mark.parametrize("offset", ['10s', '13s', '2min'])
-def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, offset):
+def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, offset, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_origin_special_values"
     # Start and end are picked so that #bins * rule + start != end on purpose to test
     # the bin generation in case of end and end_day
@@ -862,8 +890,9 @@ def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, of
         offset=offset
     )
 
-def test_max_with_one_infinity_element(lmdb_version_store_v1):
+def test_max_with_one_infinity_element(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_max_with_one_infinity_element"
 
     lib.write(sym, pd.DataFrame({"col": [np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
@@ -871,8 +900,9 @@ def test_max_with_one_infinity_element(lmdb_version_store_v1):
     q = q.resample('1min').agg({"col_max":("col", "max")})
     assert np.isinf(lib.read(sym, query_builder=q).data['col_max'][0])
 
-def test_min_with_one_infinity_element(lmdb_version_store_v1):
+def test_min_with_one_infinity_element(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_min_with_one_infinity_element"
 
     lib.write(sym, pd.DataFrame({"col": [-np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
@@ -881,8 +911,9 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
     assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
 
 
-def test_date_range_outside_symbol_timerange(lmdb_version_store_v1):
+def test_date_range_outside_symbol_timerange(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_date_range_outside_symbol_timerange"
     df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2025-01-01", periods=10))
     lib.write(sym, df)
@@ -898,9 +929,10 @@ class TestResampleDynamicSchema:
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
     @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
-    def test_aggregation_column_not_in_segment(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype):
+    def test_aggregation_column_not_in_segment(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype, any_output_format):
         rule = "10ns"
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "sym"
         df1 = pd.DataFrame({"aggregated": np.array([1, 2, 3], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(30)]))
         df2 = pd.DataFrame({"not_aggregated": np.array([4, 5, 6], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(50), pd.Timestamp(55), pd.Timestamp(80)]))
@@ -933,7 +965,7 @@ class TestResampleDynamicSchema:
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
     @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
-    def test_bucket_intersects_two_segments_aggregation_column_not_in_first(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype):
+    def test_bucket_intersects_two_segments_aggregation_column_not_in_first(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype, any_output_format):
         rule='10ns'
         df1 = pd.DataFrame({'col_0': np.array([1], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
         df2 = pd.DataFrame({'col_1': np.array([2, 3], dtype)}, index=pd.to_datetime([pd.Timestamp(10), pd.Timestamp(20)]))
@@ -941,6 +973,7 @@ class TestResampleDynamicSchema:
         df_list = [df1, df2, df3]
 
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "sym"
         for df in df_list:
             lib.append(sym, df)
@@ -969,8 +1002,9 @@ class TestResampleDynamicSchema:
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
-    def test_bucket_intersects_two_segments_aggregation_column_not_in_second(self, lmdb_version_store_dynamic_schema_v1, label, closed):
+    def test_bucket_intersects_two_segments_aggregation_column_not_in_second(self, lmdb_version_store_dynamic_schema_v1, label, closed, any_output_format):
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         dtype = np.int32
         df1 = pd.DataFrame({"col_0": np.array([1], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
         df2 = pd.DataFrame({"col_1": np.array([50], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(1)]))
@@ -1009,12 +1043,13 @@ class TestResampleDynamicSchema:
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
     @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
-    def test_bucket_spans_two_segments(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype):
+    def test_bucket_spans_two_segments(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype, any_output_format):
         """
         Both segments belong to the same bucket. Resampling two columns, col_0 is only in the first segment, col_1 is
         only in the second segment.
         """
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_bucket_spans_two_segments"
         df0 = pd.DataFrame(data={"col_0": np.array([1], dtype=dtype)}, index=[pd.Timestamp(1)])
         df1 = pd.DataFrame(data={"col_1": np.array([2], dtype=dtype)}, index=[pd.Timestamp(2)])
@@ -1063,12 +1098,13 @@ class TestResampleDynamicSchema:
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
     @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
-    def test_bucket_spans_three_segments(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype):
+    def test_bucket_spans_three_segments(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype, any_output_format):
         """
         Both segments belong to the same bucket. Resampling two columns, col_0 is only in the first segment, col_1 is
         only in the second segment.
         """
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_bucket_spans_two_segments"
         df0 = pd.DataFrame({"col_0": np.array([0, 0], dtype=dtype)}, index=pd.to_datetime([pd.Timestamp(0),pd.Timestamp(1)]))
         df1 = pd.DataFrame({"col_1": np.array([0], dtype=dtype)}, index=pd.to_datetime([pd.Timestamp(2)]))
@@ -1117,7 +1153,7 @@ class TestResampleDynamicSchema:
 
     @pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
     @pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
-    def test_sum_aggregation_type(self, lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype):
+    def test_sum_aggregation_type(self, lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype, any_output_format):
         """
         Sum aggregation in resamling promotes to the largest type of the respective category.
         int -> int64, uint -> uint64, float -> float64. Dynamic schema allows mixing int and uint.
@@ -1126,6 +1162,7 @@ class TestResampleDynamicSchema:
         configurations of dtypes and grouping options (same group vs different group)
         """
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         df1 = pd.DataFrame({"to_sum": np.array([1], first_dtype)}, index=pd.DatetimeIndex([pd.Timestamp(1)]))
         df2 = pd.DataFrame({"to_sum": np.array([1], second_dtype)}, index=pd.DatetimeIndex([pd.Timestamp(2)]))
         lib.write("sym", df1)
@@ -1143,8 +1180,9 @@ class TestResampleDynamicSchema:
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
-    def test_middle_segment_does_not_contain_column(self, lmdb_version_store_dynamic_schema_v1, label, closed):
+    def test_middle_segment_does_not_contain_column(self, lmdb_version_store_dynamic_schema_v1, label, closed, any_output_format):
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_middle_segment_does_not_contain_column"
         rule = "10ns"
         origin = "epoch"
@@ -1199,8 +1237,9 @@ class TestResampleDynamicSchema:
             drop_empty_buckets_for="_empty_bucket_tracker_",
             expected_types=expected_types)
 
-    def test_int_float_promotion(self, lmdb_version_store_dynamic_schema_v1):
+    def test_int_float_promotion(self, lmdb_version_store_dynamic_schema_v1, any_output_format):
         lib = lmdb_version_store_dynamic_schema_v1
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         sym = "test_int_float_promotion"
         rule = "10ns"
         origin = "epoch"
