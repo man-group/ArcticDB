@@ -7,7 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
-from typing import Callable, Generator, Union
+from typing import Callable, Generator, Iterable, Union
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import Library
@@ -54,6 +54,7 @@ from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
+from tests.util.marking import Mark
 from .util.mark import (
     LMDB_TESTS_MARK,
     LOCAL_STORAGE_TESTS_ENABLED,
@@ -1510,3 +1511,141 @@ def pytest_terminal_summary(terminalreporter, exitstatus):
     pytest_terminal_summary(terminalreporter, exitstatus)
 
 #endregion    
+
+# region =================================== Pytest plugins&hooks ====================================
+
+class Marks:
+    """Central Marks Registry
+    Usage:
+        @pmark([Marks.abc, Marks.cde])
+        def test_first():
+            ....
+        @Marks.abc.mark
+        def test_two():
+            ....
+    """
+    storage = Mark("storage")
+    authentication = Mark("authentication")
+    pipeline = Mark("pipeline")
+    compat = Mark("compat")
+    lmdb = Mark("lmdb")
+    mem = Mark("mem")
+    nfs = Mark("nfs")
+    mongo = Mark("mongo")
+    azurite = Mark("azurite")
+    s3 = Mark("s3")
+    gcp = Mark("gcp")
+    real_s3 = Mark("real_s3")
+    real_gcp = Mark("real_gcp")
+    real_azure = Mark("real_azure")
+    integration = Mark("integration")
+    unit = Mark("unit")
+    stress = Mark("stress")
+    nonreg = Mark("nonreg")
+    hypothesis = Mark("hypothesis")
+    arcticdb = Mark("arcticdb")
+    version_store = Mark("version_store")
+    toolbox = Mark("toolbox")
+    priority0 = Mark("priority0")
+
+    @classmethod
+    def list_all_marks(cls):
+        """Lists all marks in the registry"""
+        return [v for k, v in cls.__dict__.items() if isinstance(v, Mark)]
+    
+
+def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
+    """
+    Apply marks to pytest item if any of the source_values matches a rule.
+
+    :param item: pytest.Item
+    :param source_values: values to search in (e.g., [item.name], item.fixturenames, [item.fspath])
+    :param rules: dict of mark_name -> list[str | regex]
+    """
+    for mark_name, patterns in rules.items():
+   
+        # Deduplication guard
+        if item.get_closest_marker(mark_name):
+            continue
+            
+        for pattern in patterns:
+            for value in source_values:
+                value_lower = value.lower()
+                if isinstance(pattern, str):
+                    if pattern.lower() in value_lower:
+                        item.add_marker(mark_name)
+                        break
+                elif pattern.search(value):
+                    item.add_marker(mark_name)
+                    break
+
+
+# Define how fixtures map to marks
+ALL_FIXTURES = [ re.compile(r"^arctic_client(?!.*lmdb).*", re.I), 
+                re.compile(r"^arctic_library(?!.*lmdb).*", re.I), 
+                re.compile(r"^object_and_mem_and_lmdb.*", re.I)]
+ALL_FIXTURES_AND_LMDB = [ re.compile(r"^arctic_client.*", re.I), 
+                        re.compile(r"^arctic_library.*", re.I), 
+                        re.compile(r"^object_and_mem_and_lmdb.*", re.I)]
+BASIC_ARCTIC_FIXTURES = [re.compile(r"^basic_arctic", re.I)]
+BASIC_STORE_FIXTURES = [re.compile(r"^(basic_store.*|basic_version_.*) ", re.I)]
+OBJECT_STORE_FIXTURES = [re.compile(r"^(object_store.*|object_version_.*)", re.I)]
+LOCAL_OBJECT_STORE_FIXTURES = [re.compile(r"^(local_object_store.*|local_object_version.*)", re.I)]
+VERSION_STORE_AND_REAL_FIXTURES = [re.compile(r"^version_store_and_real*", re.I)]
+
+FIXTURES_TO_MARK = {
+    Marks.lmdb.name: [re.compile(r"^lmdb_.*", re.I)] 
+        + ALL_FIXTURES_AND_LMDB + VERSION_STORE_AND_REAL_FIXTURES + BASIC_STORE_FIXTURES,
+    Marks.mem.name: [re.compile(r"^(mem_.*|in_memory_.*)", re.I)] + ALL_FIXTURES + BASIC_STORE_FIXTURES,
+    Marks.s3.name: [re.compile(r"^s3_.*", re.I)] 
+        + ALL_FIXTURES + BASIC_STORE_FIXTURES + LOCAL_OBJECT_STORE_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks.nfs.name: [re.compile(r"^nfs_.*", re.I)] + ALL_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks.gcp.name: [re.compile(r"^gcp_.*", re.I)] + ALL_FIXTURES,
+    Marks.mongo.name: [re.compile(r"^mongo_.*", re.I)] + ALL_FIXTURES,
+    Marks.azurite.name: [re.compile(r"^(azurite_.*|azure_.*)", re.I)] 
+        + ALL_FIXTURES + LOCAL_OBJECT_STORE_FIXTURES + OBJECT_STORE_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks.real_s3.name: [re.compile(r"^real_s3_.*", re.I)] 
+        + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES +VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks.real_azure.name: [re.compile(r"^real_azure_.*", re.I)] 
+        + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES + VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks. real_gcp.name: [re.compile(r"^real_gcp_.*", re.I)] 
+        + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES + VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
+}
+
+ALL_FIXTUR_NAMES = set()
+
+def pytest_collection_modifyitems(config, items):
+    """ This hook is useful for filtering in out tests and modifying tests
+    as soon as pytest collects them before execution
+    """
+
+    def evaluate_item(item, part_string: str, mark_to_add: Mark):
+        """ Evaluate item(test) if its module path contains certain string
+        If there it will mark the test with specified mark
+        """
+        doc = item.module.__file__
+        if doc and part_string in doc.lower():
+            item.add_marker(mark_to_add)
+
+    for item in items:
+        ## Add custom marks to test depending file path name of module to the test
+        ## Electively this silently marks each test with its physical location in the repo
+        ## allowing later that physical location to be used in combination with other marks
+        ## 
+        ## Example: 
+        ##   pytest -s --co -m "toolbox and storage"
+        evaluate_item(item, Marks.unit.name, Marks.unit.mark)
+        evaluate_item(item, Marks.integration.name, Marks.integration.mark)
+        evaluate_item(item, Marks.stress.name, Marks.stress.mark)
+        evaluate_item(item, Marks.hypothesis.name, Marks.hypothesis.mark)
+        evaluate_item(item, Marks.nonreg.name, Marks.integration.mark)
+        evaluate_item(item, Marks.version_store.name, Marks.version_store.mark)
+        evaluate_item(item, Marks.toolbox.name, Marks.toolbox.mark)
+
+        # --- Auto‑mark by fixtures ---
+        fixtures = set(item.fixturenames)
+        ALL_FIXTUR_NAMES.update(fixtures)
+        apply_hybrid_marks(item, fixtures, FIXTURES_TO_MARK)
+
+
+# endregion
