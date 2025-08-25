@@ -7,6 +7,7 @@ import tempfile
 import venv
 import pandas as pd
 import numpy as np
+from retrying import retry
 
 
 from typing import Dict, List, Optional, Union
@@ -47,10 +48,12 @@ def run_shell_command(
             stdin=subprocess.DEVNULL,
         )
     if result.returncode != 0:
-        logger.error(
+        error_message = (
             f"Command '{command_string}' failed with return code {result.returncode}\n"
             f"stdout:\n{result.stdout.decode('utf-8')}\nstderr:\n{result.stderr.decode('utf-8')}"
         )
+        logger.error(error_message)
+        raise ErrorInVenv(error_message)
     return result
 
 
@@ -74,6 +77,9 @@ class Venv:
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.tear_down_venv()
 
+    # We have seen some flakyness in pip installing the required dependencies. We retry several times in case
+    # installing fails.
+    @retry(stop_max_attempt_number=5, wait_exponential_multiplier=1000, wait_exponential_max=10000)
     def init_venv(self):
         venv.create(self.path, with_pip=True, clear=True)
         command = [
@@ -89,9 +95,9 @@ class Venv:
     def tear_down_venv(self):
         shutil.rmtree(self.path, ignore_errors=True)
 
-    def execute_python_file(self, python_path: Union[str, os.PathLike]) -> subprocess.CompletedProcess:
+    def execute_python_file(self, python_path: Union[str, os.PathLike]) -> None:
         command = [get_os_specific_venv_python(), python_path]
-        return run_shell_command(command, self.path)
+        run_shell_command(command, self.path)
 
     def create_arctic(self, uri: str) -> "VenvArctic":
         return VenvArctic(self, uri)
@@ -183,9 +189,10 @@ class VenvArctic:
             with open(python_path, "w") as python_file:
                 python_file.write("\n".join(python_commands))
 
-            result = self.venv.execute_python_file(python_path)
-            if result.returncode != 0:
-                raise ErrorInVenv(f"Executing {python_commands} failed with return code {result.returncode}: {result}")
+            try:
+                self.venv.execute_python_file(python_path)
+            except Exception as e:
+                raise ErrorInVenv(f"Executing {python_commands} failed with exception: {e}")
 
     def init_storage(self):
         self.execute([])
