@@ -36,6 +36,7 @@ from arcticdb.version_store.library import (
     DeleteRequest,
 )
 
+from tests.conftest import Marks
 from tests.util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -43,6 +44,7 @@ from tests.util.mark import (
     SSL_TEST_SUPPORTED,
     SSL_TEST_SUPPORTED,
 )
+from tests.util.marking import marks
 from tests.util.storage_test import get_s3_storage_config
 
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
@@ -78,7 +80,7 @@ def test_library_creation_deletion(arctic_client, lib_name):
         ac.delete_library(lib_name)
 
 
-@pytest.mark.storage
+@marks([Marks.storage, Marks.dedup])
 def test_get_library(arctic_client, lib_name):
     ac = arctic_client
     # Throws if library doesn't exist
@@ -200,6 +202,7 @@ def test_modify_options_affect_persistent_lib_config(lmdb_storage, lib_name):
     assert proto_options.delayed_deletes
 
 
+@marks([Marks.dedup])
 def test_modify_options_dedup(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name)

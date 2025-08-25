@@ -42,6 +42,8 @@ from arcticdb.version_store.library import (
     ArcticInvalidApiUsageException,
     DeleteRequest,
 )
+from tests.conftest import Marks
+from tests.util.marking import marks
 
 
 @pytest.fixture
@@ -338,7 +340,7 @@ def test_write_pickle_batch_duplicate_symbols(arctic_library):
     assert not lib.list_symbols()
 
 
-@pytest.mark.storage
+@marks([Marks.storage, Marks.dedup])
 def test_write_pickle_batch_dataerror(library_factory):
     """Only way to trigger a DataError response with write_pickle_batch is to enable dedup and delete previous version's
     index key."""
@@ -405,7 +407,7 @@ def test_write_batch(library_factory):
         assert_frame_equal(read_batch_result[sym].data, original_dataframe)
 
 
-@pytest.mark.storage
+@marks([Marks.storage, Marks.dedup])
 def test_write_batch_dedup(library_factory):
     """Should be able to write different size of batch of data reusing deduplicated data from previous versions."""
     lib = library_factory(LibraryOptions(rows_per_segment=10, dedup=True))
@@ -825,7 +827,7 @@ def test_read_batch_with_columns(arctic_library):
     assert_frame_equal(pd.DataFrame({"B": [4, 5, 6], "C": [7, 8, 9]}), batch[0].data)
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_overall_query_builder(arctic_library):
     lib = arctic_library
 
@@ -841,7 +843,7 @@ def test_read_batch_overall_query_builder(arctic_library):
     assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4]}))
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_per_symbol_query_builder(arctic_library):
     lib = arctic_library
 
@@ -962,7 +964,7 @@ def test_read_batch_row_ranges(arctic_library):
     )
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_overall_query_builder_and_per_request_query_builder_raises(arctic_library):
     lib = arctic_library
 
@@ -1117,7 +1119,7 @@ def test_write_metadata_batch_missing_keys(arctic_library):
     assert batch[1].error_category == ErrorCategory.STORAGE
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_query_builder_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -1290,7 +1292,7 @@ def test_get_description_batch_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1310,7 +1312,7 @@ def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     assert batch[1].error_category == ErrorCategory.MISSING_DATA
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1340,7 +1342,7 @@ def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_delete_version_with_snapshot_batch(arctic_library):
     lib = arctic_library
     sym = "test_delete_version_with_snapshot_batch"
