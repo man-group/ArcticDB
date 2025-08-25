@@ -198,8 +198,9 @@ def test_filter_string_empty_set_membership(lmdb_version_store_v1, df):
     df_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
     comparison_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
 )
-def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, df_dt, comparison_dt):
+def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, df_dt, comparison_dt, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     symbol = "test_filter_datetime_timezone_aware_hypothesis"
     df = pd.DataFrame({"a": [df_dt]})
     lib.write(symbol, df)
@@ -299,9 +300,10 @@ def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_seg
         ]
     ),
 )
-def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
+def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df, any_output_format):
     assume(not df.empty)
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(any_output_format)
     symbol = "test_filter_with_column_filtering"
     lib.write(symbol, df)
     q = QueryBuilder()
