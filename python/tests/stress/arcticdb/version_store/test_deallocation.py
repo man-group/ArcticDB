@@ -37,6 +37,7 @@ def killed_worker(lib, io_threads, cpu_threads):
         lib.read("sym")
     os._exit(0)
 
+@pytest.mark.repeat(1000)
 @pytest.mark.parametrize("io_threads_spawned_in_child", [True, False])
 @pytest.mark.parametrize("cpu_threads_spawned_in_child", [True, False])
 def test_os_exit_exits_within_timeout(lmdb_storage, lib_name, io_threads_spawned_in_child, cpu_threads_spawned_in_child):
