@@ -88,6 +88,8 @@ from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
 import arcticdb_ext as ae
 
+from arcticdb.util.arrow import stringify_dictionary_encoded_columns
+
 IS_WINDOWS = sys.platform == "win32"
 
 
@@ -348,11 +350,16 @@ class NativeVersionStore:
         self._open_mode = open_mode
         self._native_cfg = native_cfg
         self._runtime_options=runtime_options
+        self._test_convert_arrow_back_to_pandas = False
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         if self._runtime_options is None:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_output_format(output_format)
+
+    def _set_output_format_for_pipeline_tests(self, output_format):
+        self.set_output_format(output_format)
+        self._test_convert_arrow_back_to_pandas = True
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
@@ -722,6 +729,9 @@ class NativeVersionStore:
                 log.debug(
                     "Windows only supports dynamic_strings=True, using dynamic strings despite configuration or kwarg"
                 )
+            dynamic_strings = True
+        if self._test_convert_arrow_back_to_pandas:
+            # TODO: Hackery, maybe better to skip
             dynamic_strings = True
         return dynamic_strings
 
@@ -2400,6 +2410,14 @@ class NativeVersionStore:
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
             table = pa.Table.from_batches(record_batches)
             data = self._arrow_normalizer.denormalize(table, read_result.norm)
+            if self._test_convert_arrow_back_to_pandas:
+                # TODO: Deduplicate with convert_arrow_to_pandas_and_remove_categoricals
+                data = stringify_dictionary_encoded_columns(data)
+                for i, name in enumerate(data.column_names):
+                    if pa.types.is_integer(data.column(i).type):
+                        new_col = data.column(i).fill_null(0)
+                        data = data.set_column(i, name, new_col)
+                data = data.to_pandas()
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):
