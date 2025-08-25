@@ -904,6 +904,72 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame, check_dtype=
                 check_equals_flags["rtol"] = 3e-4
             pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
 
+def create_resampler(data, rule, closed, label, offset=None, origin=None):
+    if PANDAS_VERSION >= Version("1.1.0"):
+        resample_args = {}
+        if origin:
+            resample_args["origin"] = origin
+        if offset:
+            resample_args["offset"] = offset
+        return data.resample(rule, closed=closed, label=label, **resample_args)
+    else:
+        return data.resample(rule, closed=closed, label=label)
+
+def expected_pandas_resample_generic(
+    original_data,
+    rule,
+    aggregations,
+    closed=None,
+    label=None,
+    offset=None,
+    origin=None,
+    drop_empty_buckets_for=None,
+    expected_types=None,
+):
+    pandas_aggregations = (
+        {**aggregations, "_bucket_size_": (drop_empty_buckets_for, "count")} if drop_empty_buckets_for else aggregations
+    )
+
+    resampler = create_resampler(original_data, rule, closed, label, offset, origin)
+    try:
+        expected = resampler.agg(None, **pandas_aggregations)
+    except ValueError:
+        bins = resampler.groups.keys()
+        if len(bins) == 0:
+            # This is due to a bug in Pandas https://github.com/pandas-dev/pandas/issues/44957
+            # When none of the values fall in any bucket Pandas, the groups in the resampler are empty, and Pandas
+            # throws ValueError. ArcticDB behaves reasonably and returns an empty DataFrame.
+            # This seems possible only if the origin is end_day
+            if expected_types is not None:
+                _expected_types = copy.deepcopy(expected_types)
+                _expected_types["_bucket_size_"] = np.uint64
+            else:
+                _expected_types = None
+            expected = pd.DataFrame(
+                {col_name: np.array([], dtype=_expected_types[col_name] if _expected_types else None) for col_name in pandas_aggregations},
+                index=pd.DatetimeIndex([])
+            )
+        else:
+            raise
+
+    if drop_empty_buckets_for:
+        expected = expected[expected["_bucket_size_"] > 0]
+        expected.drop(columns=["_bucket_size_"], inplace=True)
+    expected = expected.reindex(columns=sorted(expected.columns))
+
+    if expected_types:
+        for name, dtype in expected_types.items():
+            if pd.api.types.is_integer_dtype(dtype):
+                expected[name] = expected[name].fillna(0)
+        expected = expected.astype(expected_types)
+    return expected
+
+def assert_resampled_dataframes_are_equal(resampled_by_arcticdb, resampled_by_pandas, check_dtype=False):
+    has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(resampled_by_pandas.dtypes))
+    if has_float_column:
+        assert_dfs_approximate(resampled_by_pandas, resampled_by_arcticdb, check_dtype=check_dtype)
+    else:
+        assert_frame_equal(resampled_by_pandas, resampled_by_arcticdb, check_dtype=check_dtype)
 
 def generic_resample_test(
         lib,
@@ -932,50 +998,6 @@ def generic_resample_test(
     original_data = data if date_range is None else data.loc[date_range[0]:date_range[-1]]
     # Pandas 1.X needs None as the first argument to agg with named aggregators
 
-    pandas_aggregations = (
-        {**aggregations, "_bucket_size_": (drop_empty_buckets_for, "count")} if drop_empty_buckets_for else aggregations
-    )
-    resample_args = {}
-    if origin:
-        resample_args["origin"] = origin
-    if offset:
-        resample_args["offset"] = offset
-
-    if PANDAS_VERSION >= Version("1.1.0"):
-        resampler = original_data.resample(rule, closed=closed, label=label, **resample_args)
-        try:
-            expected = resampler.agg(None, **pandas_aggregations)
-        except ValueError:
-            bins = resampler.groups.keys()
-            if len(bins) == 0:
-                # This is due to a bug in Pandas https://github.com/pandas-dev/pandas/issues/44957
-                # When none of the values fall in any bucket Pandas, the groups in the resampler are empty, and Pandas
-                # throws ValueError. ArcticDB behaves reasonably and returns an empty DataFrame.
-                # This seems possible only if the origin is end_day
-                if expected_types is not None:
-                    _expected_types = copy.deepcopy(expected_types)
-                    _expected_types["_bucket_size_"] = np.uint64
-                else:
-                    _expected_types = None
-                expected = pd.DataFrame(
-                    {col_name: np.array([], dtype=_expected_types[col_name] if _expected_types else None) for col_name in pandas_aggregations},
-                    index=pd.DatetimeIndex([])
-                )
-            else:
-                raise
-    else:
-        expected = original_data.resample(rule, closed=closed, label=label).agg(None, **pandas_aggregations)
-    if drop_empty_buckets_for:
-        expected = expected[expected["_bucket_size_"] > 0]
-        expected.drop(columns=["_bucket_size_"], inplace=True)
-    expected = expected.reindex(columns=sorted(expected.columns))
-
-    if expected_types:
-        for name, dtype in expected_types.items():
-            if pd.api.types.is_integer_dtype(dtype):
-                expected[name] = expected[name].fillna(0)
-        expected = expected.astype(expected_types)
-
     q = QueryBuilder()
     if origin:
         q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
@@ -984,12 +1006,51 @@ def generic_resample_test(
     received = lib.read(sym, date_range=date_range, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
 
-    has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(expected.dtypes))
+    expected = expected_pandas_resample_generic(
+        original_data,
+        rule,
+        aggregations,
+        closed,
+        label,
+        offset,
+        origin,
+        drop_empty_buckets_for,
+        expected_types
+    )
+
     check_dtype = expected_types is not None
-    if has_float_column:
-        assert_dfs_approximate(expected, received, check_dtype=check_dtype)
-    else:
-        assert_frame_equal(expected, received, check_dtype=check_dtype)
+    try:
+        assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
+    except AssertionError:
+        if origin == "end_day" and closed == "right":
+            # Pandas has a bug https://github.com/pandas-dev/pandas/issues/62154
+            # When end_day is used with right closed, and the first rows lie on the bucket, Pandas includes them in the
+            # bucket, which is wrong since closed is right. We remove the first rows from the dataframe and run the
+            # resampling again.
+
+            resampler = create_resampler(original_data, rule, closed, "left", offset, origin)
+            first_bin = list(resampler.groups.keys())[0]
+            rows_to_pop = 0
+            while rows_to_pop < len(original_data) and original_data.index[rows_to_pop] == first_bin:
+                rows_to_pop += 1
+            if rows_to_pop == 0:
+                # If there are no rows to be removed, then this is not the same issue.
+                raise
+            original_data = original_data.tail(len(original_data) - rows_to_pop)
+            expected = expected_pandas_resample_generic(
+                original_data,
+                rule,
+                aggregations,
+                closed,
+                label,
+                offset,
+                origin,
+                drop_empty_buckets_for,
+                expected_types
+            )
+            assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
+        else:
+            raise
 
 
 def equals(x, y):
