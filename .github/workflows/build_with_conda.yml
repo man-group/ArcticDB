@@ -87,7 +87,8 @@ jobs:
         shell: bash -l {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
-          python -m pip install --no-build-isolation --no-deps -v -e .
+          # We should always retry due to instable nature of connections and environments
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
@@ -123,10 +124,13 @@ jobs:
         with:
           node-version: '16'
 
-      - name: Install azurite
-        shell: bash -l {0}
-        run: |
-          npm install -g azurite
+      - name: Install Azurite
+        uses: nick-fields/retry@v3
+        with:
+          timeout_minutes: 10
+          # We should always retry due to instable nature of connections and environments
+          max_attempts: 3
+          command: npm install -g azurite
 
       - name: Check no arcticdb file depend on tests package
         shell: bash -l {0}
@@ -163,7 +167,7 @@ jobs:
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
-            python -m pip  install pytest-repeat
+            python -m pip  --retries 3 --timeout 180 install pytest-repeat
             echo "Run custom pytest command: $command"
             eval "$command"
           else
@@ -209,7 +213,7 @@ jobs:
         shell: bash -l {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
-          python -m pip install --no-build-isolation --no-deps -v -e .
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
@@ -234,10 +238,13 @@ jobs:
         with:
           node-version: '16'
 
-      - name: Install azurite
-        shell: bash -l {0}
-        run: |
-          npm install -g azurite
+      - name: Install Azurite
+        uses: nick-fields/retry@v3
+        with:
+          # We should always retry due to instable nature of connections and environments
+          timeout_minutes: 10
+          max_attempts: 3
+          command: npm install -g azurite
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -268,7 +275,7 @@ jobs:
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             echo "Run custom pytest command: $command"
-            python -m pip  install pytest-repeat
+            python -m pip  install --retries 3 --timeout 180 pytest-repeat
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$command"
           else
