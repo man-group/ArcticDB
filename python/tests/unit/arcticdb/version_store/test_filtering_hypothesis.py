@@ -6,7 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 from datetime import datetime
-from hypothesis import assume, given, settings
+from hypothesis import assume, given, reproduce_failure, settings
 from hypothesis.extra.pytz import timezones as timezone_st
 import hypothesis.strategies as st
 import numpy as np
@@ -329,6 +329,7 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
     ),
     val=numeric_type_strategies(),
 )
+@reproduce_failure('6.72.4', b'AXicY2RmYGZmYGBQYGBnZGJgZISzmBiQACOCZIQKAQARdwBn')
 def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1

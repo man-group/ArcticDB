@@ -1533,6 +1533,7 @@ class Marks:
             ....
     """
     storage = Mark("storage")
+    dedup = Mark("dedup")
     authentication = Mark("authentication")
     pipeline = Mark("pipeline")
     compat = Mark("compat")

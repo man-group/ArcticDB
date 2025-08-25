@@ -53,6 +53,7 @@ exclude = '''
 [tool.pytest.ini_options]
 markers = [
     "storage: marks a test as a test against real storage (deselect with: -m 'not storage')",
+    "dedup: marks deduplication tests",
     "authentication: marks a test for authentication group (deselect with: -m 'not authentication')",
     "pipeline: Pipeline tests (deselect with: -m 'not pipeline')",
     "skip_fixture_params: will instruct fixture that supports excluding fixture values, which values to be excluded",

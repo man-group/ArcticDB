@@ -44,10 +44,12 @@ from arcticdb.util.test import (
     config_context,
     distinct_timestamps,
 )
+from tests.conftest import Marks
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
 from tests.util.mark import MACOS, MACOS_WHEEL_BUILD, xfail_azure_chars
+from tests.util.marking import marks
 
 
 @pytest.fixture()
@@ -1650,7 +1652,7 @@ def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
         assert set(lib.list_symbols()) == set(symbols)
 
 
-@pytest.mark.storage
+@marks([Marks.storage, Marks.dedup])
 def test_batch_write_missing_keys_dedup(basic_store_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
     versions in order to refer to the corresponding keys for the deduplicated data."""
