@@ -5,12 +5,12 @@ import pytest
 import pandas as pd
 import numpy as np
 
+from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     create_df,
     assert_frame_equal,
     config_context,
     config_context_string,
-    dataframe_simulate_arcticdb_update_static,
 )
 import arcticdb.toolbox.query_stats as qs
 
@@ -413,7 +413,7 @@ def test_update_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, u
         # - read TABLE_INDEX
         assert sum_operations_by_type(stats, "S3_GetObject") == expected_data_keys + 4
 
-        expected_df = dataframe_simulate_arcticdb_update_static(init_df, update_df)
+        expected_df = ArcticSymbolSimulator.simulate_arctic_update(init_df, update_df, dynamic_schema=False)
         result_df = lib.read(sym).data
         qs.reset_stats()
         assert_frame_equal(result_df, expected_df)
