@@ -82,6 +82,7 @@ dependencies:
   - asv
   - pymongo
   - pytest
+  - retrying
   - trustme
   - psutil
   # Use memray and pytest-memray only on Linux and MacOS
