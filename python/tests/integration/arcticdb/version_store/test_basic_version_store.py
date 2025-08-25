@@ -824,9 +824,8 @@ def test_range_index(basic_store, sym):
     assert_equal(expected, vit.data)
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range(basic_store, use_date_range_clause):
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
@@ -873,9 +872,8 @@ def test_date_range(basic_store, use_date_range_clause):
     assert data_closed[data_closed.columns[0]][-1] == end_offset
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range_none(basic_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
@@ -893,9 +891,8 @@ def test_date_range_none(basic_store, use_date_range_clause):
     assert len(data) == rows
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range_start_equals_end(basic_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
@@ -916,9 +913,8 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause):
     assert data[data.columns[0]][0] == start_offset
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
     lib = basic_store_tiny_segment
     sym = "test_date_range_row_sliced"
@@ -2721,9 +2717,8 @@ def test_batch_append_with_throw_exception(basic_store, three_col_df):
         )
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     symbols = []
@@ -2764,6 +2759,7 @@ def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_
 
 
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
+@marks([Marks.pipeline])
 def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
     lib = lmdb_version_store_v1
     num_symbols = 5

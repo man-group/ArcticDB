@@ -827,7 +827,7 @@ def test_read_batch_with_columns(arctic_library):
     assert_frame_equal(pd.DataFrame({"B": [4, 5, 6], "C": [7, 8, 9]}), batch[0].data)
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_overall_query_builder(arctic_library):
     lib = arctic_library
 
@@ -843,7 +843,7 @@ def test_read_batch_overall_query_builder(arctic_library):
     assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4]}))
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_per_symbol_query_builder(arctic_library):
     lib = arctic_library
 
@@ -964,7 +964,7 @@ def test_read_batch_row_ranges(arctic_library):
     )
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_overall_query_builder_and_per_request_query_builder_raises(arctic_library):
     lib = arctic_library
 
@@ -1119,7 +1119,7 @@ def test_write_metadata_batch_missing_keys(arctic_library):
     assert batch[1].error_category == ErrorCategory.STORAGE
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_query_builder_missing_keys(arctic_library):
     lib = arctic_library
 
@@ -1292,7 +1292,7 @@ def test_get_description_batch_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1312,7 +1312,7 @@ def test_read_batch_query_builder_symbol_doesnt_exist(arctic_library):
     assert batch[1].error_category == ErrorCategory.MISSING_DATA
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     lib = arctic_library
 
@@ -1342,7 +1342,7 @@ def test_read_batch_query_builder_version_doesnt_exist(arctic_library):
     assert batch[2].error_category == ErrorCategory.MISSING_DATA
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_delete_version_with_snapshot_batch(arctic_library):
     lib = arctic_library
     sym = "test_delete_version_with_snapshot_batch"

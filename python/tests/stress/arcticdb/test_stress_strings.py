@@ -14,6 +14,8 @@ from arcticdb.version_store._custom_normalizers import(
     register_normalizer,
     clear_registered_normalizers)
 from arcticdb.util.test import CustomDictNormalizer, CustomDict
+from tests.conftest import Marks
+from tests.util.marking import marks
 
 
 def test_stress_all_strings(lmdb_version_store_big_map):
@@ -104,6 +106,7 @@ class TestConcurrentHandlingOfNoneAndNan:
             self.done_reading.set()
         none_nan_background_creator.join()
 
+    @marks([Marks.pipeline])
     def test_stress_parallel_strings_query_builder(self, s3_storage, lib_name):
         ac = s3_storage.create_arctic()
         lib = ac.create_library(lib_name)

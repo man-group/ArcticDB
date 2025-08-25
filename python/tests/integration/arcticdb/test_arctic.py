@@ -1140,6 +1140,7 @@ def test_update_with_upsert(arctic_library):
     assert "symbol" in lib.list_symbols()
 
 
+@marks([Marks.pipeline, Marks.storage])
 def test_read_with_read_request_form(arctic_library):
     lib = arctic_library
 
