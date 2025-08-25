@@ -379,6 +379,7 @@ jobs:
 
       - name: Install the wheel and dependencies
         run: |
+          ls /opt/python/ 
           npm install -g azurite
           cmake -P cpp/CMake/CpuCount.cmake | sed 's/^-- //' | tee -a $GITHUB_ENV
           python -V
