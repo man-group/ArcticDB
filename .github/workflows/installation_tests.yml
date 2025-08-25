@@ -239,7 +239,6 @@ jobs:
         timeout_minutes: 10
         max_attempts: 5
         command: |
-          export PATH="$MAMBA_ROOT_PREFIX/bin:$PATH"
           micromamba install -y -n arcticdb -f "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml"
           micromamba clean --all --yes
 
@@ -251,7 +250,7 @@ jobs:
         timeout_minutes: 10
         max_attempts: 5
         command: |
-          export PATH="$MAMBA_ROOT_PREFIX/bin:$PATH"
+          eval "$(micromamba shell hook --shell bash)"          
           micromamba activate arcticdb
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
           micromamba clean --all --yes
