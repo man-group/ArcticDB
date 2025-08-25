@@ -235,10 +235,11 @@ jobs:
       uses: nick-fields/retry@v3
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
       with:
-        shell: bash -l {0}      
+        shell: bash -l 
         timeout_minutes: 10
         max_attempts: 5
         command: |
+          export PATH="$MAMBA_ROOT_PREFIX/bin:$PATH"
           micromamba install -y -n arcticdb -f "${{ env.install_tests_folder }}/requirements-${{ env.arcticdb_version }}.yml"
           micromamba clean --all --yes
 
@@ -246,10 +247,11 @@ jobs:
       uses: nick-fields/retry@v3
       if: ${{ (env.SKIP_JOB != 'true') && (contains(env.USE_CONDA, 'yes')) }}
       with:
-        shell: bash -l {0}      
+        shell: bash -l 
         timeout_minutes: 10
         max_attempts: 5
         command: |
+          export PATH="$MAMBA_ROOT_PREFIX/bin:$PATH"
           micromamba activate arcticdb
           micromamba install --no-pin --file "${{ env.install_tests_folder }}/${{ env.conda_file }}"
           micromamba clean --all --yes
