@@ -569,13 +569,9 @@ class NativeVersionStore:
             norm_failure_options_msg=norm_failure_options_msg,
         )
         if isinstance(item, NPDDataFrame):
-            is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
-            result = self.version_store.write_parallel(
+            return self.version_store.write_parallel(
                 symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
             )
-            if is_new_stage_api_enabled:
-                return result
-            return None
         else:
             log.warning("The data could not be normalized to an ArcticDB format and has not been written")
             return None
@@ -704,13 +700,11 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             if parallel or incomplete:
-                is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
-                if is_new_stage_api_enabled:
-                    warn(
-                        "Staging data with write() is deprecated. Use stage() instead.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
+                warn(
+                    "Staging data with write() is deprecated. Use stage() instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
@@ -2310,7 +2304,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         delete_staged_data_on_failure: bool = False,
-        _stage_results: Optional[List[StageResult]] = None,
+        stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -2348,6 +2342,8 @@ class NativeVersionStore:
               ``compact_incomplete``.
 
             To manually delete staged data, use the ``remove_incomplete`` function.
+        stage_results: Optional[List[StageResult]], default=None
+            If specified, only the data corresponding to the provided ``StageResult``s will be finalized. See ``stage``.
         Returns
         -------
         VersionedItem
@@ -2368,7 +2364,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             delete_staged_data_on_failure,
-            stage_results=_stage_results
+            stage_results=stage_results
         )
 
         if isinstance(compaction_result, ae.version_store.VersionedItem):
