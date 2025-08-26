@@ -87,9 +87,6 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
 }
 
 DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
-    // TODO: Include string repr of data type in error message
-    // TODO: Add support for other time types
-    // TODO: Add support for strings
     switch (arrow_type) {
     case sparrow::data_type::BOOL: return DataType::BOOL8;
     case sparrow::data_type::UINT8: return DataType::UINT8;
@@ -108,9 +105,6 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
 }
 
 SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches) {
-    // TODO: See if it is possible to produce something with zero record batches in Python
-    // Probably same as pandas empty df case, where the write/append/update should be a no-op and return the previous
-    // versioned item, although if no previous versions might be more ambiguous
     util::check(!record_batches.empty(), "Zero record batches provided");
     auto record_batch = record_batches.cbegin();
     auto num_columns = record_batch->nb_columns();
@@ -140,7 +134,6 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
             } else {
                 num_rows = array.size();
             }
-            // TODO: Remove const-cast when sparrow github issue #528 fixed
             auto arrow_structures = sparrow::get_arrow_structures(const_cast<sparrow::array&>(array));
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_structures.first, *arrow_structures.second);
             // arrow_array_buffers.at(1) seems to be the validity bitmap, and may be NULL if there are no null values
@@ -166,7 +159,6 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
     seg.set_row_id(static_cast<ssize_t>(total_rows) - 1);
     if (num_columns > 0 && is_time_type(seg.column(0).type().data_type())) {
         // For now assume that if the first column is a time type that this is an ordered index
-        // TODO: Come up with better system, and maybe move this logic somewhere else
         seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         seg.descriptor().set_sorted(SortedValue::ASCENDING);
     } else {

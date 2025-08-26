@@ -56,8 +56,6 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         auto key = partial_key_gen_(slice_);
         const auto& frame = *frame_->seg;
         SegmentInMemory seg;
-        // TODO: Use attach_descriptor rather than adding one field at a time
-//        seg.attach_descriptor(slice_.desc());
         if (frame_->desc.index().field_count() > 0) {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         } else {
@@ -65,7 +63,6 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         }
         for (size_t col_idx = 0; col_idx < frame_->desc.index().field_count(); ++col_idx) {
             const auto& source_column = frame.column(col_idx);
-            // TODO: Handle multiple record batches
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
             const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
             ChunkedBuffer chunked_buffer;
@@ -75,9 +72,6 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         }
         for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
             const auto& source_column = frame.column(col_idx);
-            // TODO: Handle multiple record batches
-            // TODO: Handle bool columns
-            // TODO: Handle strings
             // Inclusive
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
             const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;

@@ -712,10 +712,6 @@ class ArrowTableNormalizer(Normalizer):
             arcticdb_record_batch = RecordBatchData()
             pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
             arcticdb_record_batches.append(arcticdb_record_batch)
-        # If input table was created by from_pandas, then we can populate this with inverse of construct_pandas_metadata
-        # May also need Arrow-specific norm metadata, although this can be handled in the C++ layer as it is not Python
-        # specific
-        # TODO: Also need to set the PandasIndex if this is a timeseries
         return arcticdb_record_batches, NormalizationMetadata()
 
     def denormalize(self, item, norm_meta):
@@ -1453,7 +1449,6 @@ class CompositeNormalizer(Normalizer):
         if isinstance(item, np.ndarray):
             return self.np.normalize
 
-        # TODO: Handle other related pyarrow types
         if isinstance(item, pa.Table):
             return self.pa.normalize
 
