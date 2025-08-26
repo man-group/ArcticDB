@@ -18,7 +18,7 @@ from tempfile import mkdtemp
 
 from arcticdb.util.logger import get_logger
 from arcticdb_ext.storage import NativeVariantStorage
-
+from azure.core.exceptions import ResourceNotFoundError
 
 from .api import *
 from .utils import _LINUX, get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
@@ -208,14 +208,23 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         return AzureContainer(self)
 
     def cleanup_container(self, b: AzureContainer):
+
+        def delete_container_safely(client, timeout):
+            try:
+                client.delete_container(timeout=timeout)
+            except ResourceNotFoundError:
+                # Container didn't exist — that's fine, treat as success
+                pass
+
         if b.client:
             if not b.is_real_azure():
                 # This code is only for Azurite cleaning, it is faster than this for Azure
                 if b._admin_client:
-                    b._admin_client.delete_container(timeout=3)
+                    delete_container_safely(b._admin_client, timeout=3)
                     b._admin_client.close()
                 else:
-                    b.client.delete_container(timeout=3)
+                    delete_container_safely(b.client, timeout=3)
+                    
 
 def find_ca_certs():
     # Common CA certificates locations
