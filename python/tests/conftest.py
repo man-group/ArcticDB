@@ -1537,6 +1537,15 @@ class Marks:
     authentication = Mark("authentication")
     pipeline = Mark("pipeline")
     compat = Mark("compat")
+    dynamic_schema = Mark("dynamic_schema")
+    empty_types= Mark("empty_types")
+    delayed_deletes = Mark("delayed_deletes")
+    use_tombstones = Mark("use_tombstones")
+    sync_passive = Mark("sync_passive")
+    segment_size = Mark("segment_size")
+    dynamic_strings = Mark("dynamic_strings")
+    prune_previous = Mark("prune_previous")
+    bucketize_dynamic = Mark("bucketize_dynamic")
     lmdb = Mark("lmdb")
     mem = Mark("mem")
     nfs = Mark("nfs")
@@ -1617,8 +1626,31 @@ FIXTURES_TO_MARK = {
         + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES +VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
     Marks.real_azure.name: [re.compile(r"^real_azure_.*", re.I)] 
         + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES + VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
-    Marks. real_gcp.name: [re.compile(r"^real_gcp_.*", re.I)] 
+    Marks.real_gcp.name: [re.compile(r"^real_gcp_.*", re.I)] 
         + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES + VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks.dynamic_schema.name: [re.compile(r".*(dynamic_schema|dynamic(?!string)).*", re.I)],
+    Marks.empty_types.name : ["empty_types", "lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"],
+    Marks.delayed_deletes.name : ["delayed_deletes"],
+    Marks.use_tombstones.name : ["tombstone", "basic_store_prune_previous", "basic_store_prune_previous"],
+    Marks.sync_passive.name : ["sync_passive"],
+    Marks.bucketize_dynamic.name : ["buckets"],
+    Marks.prune_previous.name : ["prune_previous", "lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_tombstone_and_pruning", 
+                                 "basic_store_delayed_deletes_v1", "basic_store_delayed_deletes_v2"],
+    Marks.segment_size.name : ["segment", "lmdb_version_store_no_symbol_list"],
+    Marks.dynamic_strings.name : ["dynamic_strings", "real_s3_version_store_dynamic_schema", "real_gcp_version_store_dynamic_schema",
+                                  "real_azure_version_store_dynamic_schema", "nfs_backed_s3_version_store_v1", "nfs_backed_s3_version_store_v2",
+                                  "s3_version_store_v1", "s3_version_store_v2", "s3_version_store_dynamic_schema_v1",
+                                  "s3_version_store_dynamic_schema_v2", "nfs_backed_s3_version_store_dynamic_schema_v2", "nfs_backed_s3_version_store_dynamic_schema_v2",
+                                  "azure_version_store_dynamic_schema", "lmdb_version_store_v1", "lmdb_version_store_v2",
+                                  "lmdb_version_store_prune_previous", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2",
+                                  "lmdb_version_store_dynamic_schema", "lmdb_version_store_empty_types_v1", "lmdb_version_store_empty_types_v2",
+                                  "lmdb_version_store_empty_types_dynamic_schema_v1", "lmdb_version_store_empty_types_dynamic_schema_v2",
+                                  "lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2",
+                                  "lmdb_version_store_tombstones_no_symbol_list", "lmdb_version_store_allows_pickling",
+                                  "lmdb_version_store_tiny_segment_dynamic_strings", "basic_store_prune_previous", 
+                                  "basic_store_dynamic_schema_v1", "basic_store_dynamic_schema_v2", "basic_store_dynamic_schema",
+                                  "basic_store_delayed_deletes_v1", "basic_store_delayed_deletes_v2",
+                                  "basic_store_tombstones_no_symbol_list", "basic_store_allows_pickling"],
 }
 
 ALL_FIXTUR_NAMES = set()

@@ -79,4 +79,14 @@ markers = [
     "real_s3: Mark from test usage for execution against AWS S3 storage",
     "real_azure: Mark from test usage for execution against Azure storage",
     "real_gcp: Mark from test usage for execution against GCP storage",
+    "dynamic_schema: marks test using dynamic_schema=True",
+    "empty_types: marks test using empty_types=True",
+    "delayed_deletes: marks test using delayed_deletes=True",
+    "sync_passive: marks test using sync_passive=True",
+    "use_tombstones: marks test using use_tombstones=True",
+    "segment_size: marks test using any of library segment size settings",
+    "use_tombstones: marks test using use_tombstones=True",
+    "dynamic_strings: marks tests using dynamic_strings=True"
+    "bucketize_dynamic: marks tests using bucketize_dynamic=True"
+    "prune_previous: marks tests using prune_previous_version=True"
 ]
