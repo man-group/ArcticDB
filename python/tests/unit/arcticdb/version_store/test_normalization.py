@@ -547,6 +547,23 @@ def test_will_item_be_pickled(lmdb_version_store, sym):
     assert_frame_equal(not_so_bad_df, lmdb_version_store.read(sym).data)
 
 
+@pytest.mark.parametrize(
+    "data",
+    [
+        {"a": {"b": {"c": {"d": np.arange(24)}}}},
+        {"a": [1, 2, 3], "b": {"c": np.arange(24)}, "d": [TestCustomNormalizer()]} # A random item that will be pickled
+    ]
+)
+def test_will_item_be_pickled_recursive_normalizer(lmdb_version_store_v1, data):
+    lib = lmdb_version_store_v1
+    assert lib.will_item_be_pickled(data, recursive_normalizers=True) == True
+
+
+def test_will_item_pickled_msgpack(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    assert lib.will_item_be_pickled({"hello": "there"}) == True
+
+
 def test_numpy_ts_col_with_none(lmdb_version_store):
     df = pd.DataFrame(data={"a": [None, None]})
     df.loc[0, "a"] = pd.Timestamp(0)
