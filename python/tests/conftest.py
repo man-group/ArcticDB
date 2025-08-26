@@ -1538,6 +1538,7 @@ class Marks:
     pipeline = Mark("pipeline")
     compat = Mark("compat")
     dynamic_schema = Mark("dynamic_schema")
+    encoding_v2 = Mark("encoding_v2")
     empty_types= Mark("empty_types")
     delayed_deletes = Mark("delayed_deletes")
     use_tombstones = Mark("use_tombstones")
@@ -1651,6 +1652,19 @@ FIXTURES_TO_MARK = {
                                   "basic_store_dynamic_schema_v1", "basic_store_dynamic_schema_v2", "basic_store_dynamic_schema",
                                   "basic_store_delayed_deletes_v1", "basic_store_delayed_deletes_v2",
                                   "basic_store_tombstones_no_symbol_list", "basic_store_allows_pickling"],
+    Marks.encoding_v2.name: [re.compile(
+            r".*("
+            r"arctic_client|"
+            r"nfs_backed_s3_version_store_dynamic_schema|"
+            r"lmdb_version_store_|"
+            r"lmdb_version_store_dynamic_schema|"
+            r"lmdb_version_store_empty_types_|"
+            r"lmdb_version_store_empty_types_dynamic_schema|"
+            r"lmdb_version_store_delayed_deletes|"
+            r"basic_store_dynamic_schema"
+            r").*(?!v1).*",
+            re.I
+        )],
 }
 
 ALL_FIXTUR_NAMES = set()

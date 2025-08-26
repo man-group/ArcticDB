@@ -85,8 +85,8 @@ markers = [
     "sync_passive: marks test using sync_passive=True",
     "use_tombstones: marks test using use_tombstones=True",
     "segment_size: marks test using any of library segment size settings",
-    "use_tombstones: marks test using use_tombstones=True",
-    "dynamic_strings: marks tests using dynamic_strings=True"
-    "bucketize_dynamic: marks tests using bucketize_dynamic=True"
-    "prune_previous: marks tests using prune_previous_version=True"
+    "dynamic_strings: marks tests using dynamic_strings=True",
+    "bucketize_dynamic: marks tests using bucketize_dynamic=True",
+    "prune_previous: marks tests using prune_previous_version=True",
+    "encoding_v2: marks tests that use V2 encoding"
 ]
