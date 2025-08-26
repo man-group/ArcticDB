@@ -8,9 +8,7 @@
 #include <arcticdb/storage/mongo/mongo_client_interface.hpp>
 #include <arcticdb/storage/mock/mongo_mock_client.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
-
 #include <bsoncxx/builder/basic/document.hpp>
-#include <mongocxx/exception/operation_exception.hpp>
 #include <mongocxx/exception/bulk_write_exception.hpp>
 #include <mongocxx/exception/query_exception.hpp>
 

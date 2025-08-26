@@ -4,16 +4,13 @@
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/entity/key.hpp>
-#include <arcticdb/storage/storage_exceptions.hpp>
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/storages.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/codec/codec.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 
-#include <filesystem>
 
 namespace arcticdb::storage {
 

@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/version/snapshot.hpp>
-#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/version/version_log.hpp>
 
 #include <algorithm>

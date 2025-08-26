@@ -8,18 +8,15 @@
 #include <ranges>
 #include <iterator>
 #include <arcticdb/stream/incompletes.hpp>
-#include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/util/key_utils.hpp>
-#include <arcticdb/async/tasks.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
-#include <folly/futures/FutureSplitter.h>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_source.hpp>
@@ -28,8 +25,6 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
-#include <arcticdb/stream/segment_aggregator.hpp>
-#include <arcticdb/version/version_functions.hpp>
 
 namespace arcticdb {
 

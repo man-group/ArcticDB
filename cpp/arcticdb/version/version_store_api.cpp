@@ -8,10 +8,7 @@
 #include <arcticdb/version/version_store_api.hpp>
 
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/async/async_store.hpp>
 #include <arcticdb/version/version_map.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>
 
@@ -21,12 +18,9 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
-#include <arcticdb/pipeline/read_frame.hpp>
-#include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
-#include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
 #include <storage/file/file_store.hpp>
 

@@ -9,7 +9,6 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/stream/aggregator.hpp>
@@ -21,7 +20,6 @@
 
 #include <vector>
 #include <array>
-#include <ranges>
 
 namespace arcticdb::pipelines {
 

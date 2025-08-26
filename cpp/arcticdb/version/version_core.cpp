@@ -6,14 +6,12 @@
  */
 
 #include <arcticdb/version/version_core.hpp>
-#include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <iterator>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <pipeline/frame_slice.hpp>
-#include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <folly/futures/FutureSplitter.h>
@@ -40,7 +38,6 @@
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/format_date.hpp>
 
-#include <ranges>
 
 namespace arcticdb::version_store {
 

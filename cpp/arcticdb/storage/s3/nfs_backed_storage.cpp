@@ -9,9 +9,7 @@
 #include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
-#include <arcticdb/storage/s3/s3_client_interface.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
-#include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 namespace arcticdb::storage::nfs_backed {
 
 std::string add_suffix_char(const std::string& str) {

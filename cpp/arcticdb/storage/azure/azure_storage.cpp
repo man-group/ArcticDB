@@ -8,13 +8,9 @@
 #include <arcticdb/storage/azure/azure_storage.hpp>
 
 #include <arcticdb/log/log.hpp>
-#include <azure/core/http/curl_transport.hpp>
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
@@ -24,9 +20,7 @@
 #include <arcticdb/storage/mock/azure_mock_client.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
-#include <azure/storage/blobs.hpp>
 
-#include <boost/interprocess/streams/bufferstream.hpp>
 
 #include <folly/gen/Base.h>
 

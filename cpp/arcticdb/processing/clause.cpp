@@ -16,10 +16,10 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 #include <ankerl/unordered_dense.h>
 #include <arcticdb/util/movable_priority_queue.hpp>
+#include <arcticdb/stream/merge_utils.hpp>
 
 #include <ranges>
 

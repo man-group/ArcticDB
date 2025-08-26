@@ -9,7 +9,6 @@
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 
-#include <google/protobuf/text_format.h>
 #include <string>
 
 namespace arcticdb {

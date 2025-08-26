@@ -7,7 +7,6 @@
 
 #include <arcticdb/entity/metrics.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/util/pb_util.hpp>
 
 #ifdef _WIN32
 #    include <Winsock.h> // for gethostname

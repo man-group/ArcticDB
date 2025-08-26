@@ -11,7 +11,6 @@
 #include <arcticdb/util/regex_filter.hpp>
 #include <ankerl/unordered_dense.h>
 
-#include <pybind11/pybind11.h>
 
 namespace arcticdb {
 

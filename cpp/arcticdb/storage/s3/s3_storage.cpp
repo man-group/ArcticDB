@@ -15,13 +15,10 @@
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/configs_map.hpp>
-#include <aws/s3/model/DeleteObjectRequest.h>
 #include <arcticdb/storage/s3/s3_client_impl.hpp>
 #include <arcticdb/storage/mock/s3_mock_client.hpp>
 #include <arcticdb/storage/s3/detail-inl.hpp>
