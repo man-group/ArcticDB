@@ -574,7 +574,7 @@ public:
                             key.version_id(), original_head ? original_head->version_id() : VariantId{""});
                     } else {
                         // This should happen only in tests and background jobs
-                        log::version().warn("Force writing TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {}",
+                        log::version().warn("Force writing TABLE_INDEX key with a non-increasing version (Reading with as_of version numbers and timestamps may no longer work as expected). New version: {}, Last version: {}",
                             key.version_id(), original_head ? original_head->version_id() : VariantId{""});
                     }
                 }
