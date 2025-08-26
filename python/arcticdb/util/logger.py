@@ -82,7 +82,3 @@ class GitHubSanitizingException(Exception):
         super().__init__(sanitized_message)
 
 
-sanitized_message = " fgy 54654 ARCTICDB_REAL_S3_SECRET_KEY=AwsB1YWasZBtonDiBcsqtz36M3m4yPl9EsiTS57w"
-sanitized_message = re.sub(r'(.*SECRET_KEY=).*$', r'\1***', 
-                            sanitized_message, flags=re.IGNORECASE)
-print(sanitized_message)
