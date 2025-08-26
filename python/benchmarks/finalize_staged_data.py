@@ -7,8 +7,6 @@ from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import 
 from arcticdb.util.utils import TimestampNumber
 """
 
-from pathlib import Path
-import sys
 import time
 from arcticdb.arctic import Arctic
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
@@ -31,6 +29,9 @@ class FinalizeStagedData:
     warmup_time = 0    
     timeout = 600
 
+    # ASV creates temp directory for each run and then sets current working directory to it
+    # After end of test will remove all files and subfolders created there.
+    # No need for special tempfile handling
     ARCTIC_DIR = "staged_data"
     ARCTIC_DIR_ORIGINAL = "staged_data_original"
     CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}?map_size=40GB"
@@ -66,13 +67,7 @@ class FinalizeStagedData:
             self.logger.info(f"LIBRARY: {lib}")
             self.logger.info(f"Created Symbol: {symbol}")
             stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
-        dst_folder = copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
-        self.logger.info(f"Destination folder is: {dst_folder}")
-        cwd = Path.cwd()
-        self.logger.info(f"Current directory: {cwd}")
-        # List all entries
-        for item in cwd.iterdir():
-            self.logger.info(f"{item}")
+        copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
 
 
     def setup(self, param: int):
