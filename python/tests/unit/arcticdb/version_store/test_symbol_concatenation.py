@@ -15,7 +15,7 @@ from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
 from tests.util.mark import MACOS_WHEEL_BUILD, WINDOWS
 
-pytestmark = pytest.mark.pipeline
+pytestmark = pytest.mark.pipeline # Covered
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -23,8 +23,9 @@ pytestmark = pytest.mark.pipeline
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=12)])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index, join):
+def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, index, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -67,8 +68,9 @@ def test_symbol_concat_basic(lmdb_library_factory, dynamic_schema, rows_per_segm
 
 @pytest.mark.parametrize("first_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"])
 @pytest.mark.parametrize("second_type", ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"])
-def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type):
+def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df0 = pd.DataFrame({"col": np.arange(1, dtype=np.dtype(first_type))})
     df1 = pd.DataFrame({"col": np.arange(1, dtype=np.dtype(second_type))})
     lib.write("sym0", df0)
@@ -90,8 +92,9 @@ def test_symbol_concat_type_promotion(lmdb_library, first_type, second_type):
 @pytest.mark.parametrize("name_0", [None, "", "s1", "s2"])
 @pytest.mark.parametrize("name_1", [None, "", "s1", "s2"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_with_series(lmdb_library_factory, index, name_0, name_1, join):
+def test_symbol_concat_with_series(lmdb_library_factory, index, name_0, name_1, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(columns_per_segment=2))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     s_0 = pd.Series(np.arange(8, dtype=np.float64), index=index, name=name_0)
     s_1 = pd.Series(np.arange(10, 18, dtype=np.float64), index=index, name=name_1)
     lib.write("sym0", s_0)
@@ -102,14 +105,21 @@ def test_symbol_concat_with_series(lmdb_library_factory, index, name_0, name_1, 
     if index is None:
         expected.index = pd.RangeIndex(len(expected))
     expected.name = name_0 if name_0 == name_1 else None
-    assert_series_equal(expected, received)
+    if isinstance(received, pd.Series):
+        assert_series_equal(expected, received)
+    else:
+        # TODO: Resolve the skip
+        pytest.skip("Need to figure out how to convert the series to a dataframe like arrow and keep column name types")
+        expected = pd.DataFrame(expected)
+        assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schema, columns_per_segment, join):
+def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schema, columns_per_segment, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     # Use floats and strings so that our backfilling and Pandas' match
     df_0 = pd.DataFrame(
         {
@@ -140,8 +150,9 @@ def test_symbol_concat_different_column_sets(lmdb_library_factory, dynamic_schem
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
-def test_symbol_concat_integer_columns_outer_join(lmdb_library_factory, dynamic_schema, columns_per_segment):
+def test_symbol_concat_integer_columns_outer_join(lmdb_library_factory, dynamic_schema, columns_per_segment, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(5, dtype=np.int64),
@@ -172,8 +183,9 @@ def test_symbol_concat_integer_columns_outer_join(lmdb_library_factory, dynamic_
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join):
+def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=True))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(5, dtype=np.float64),
@@ -217,8 +229,9 @@ def test_symbol_concat_dynamic_schema_missing_columns(lmdb_library_factory, join
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=5)])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_schema, columns_per_segment, index, join):
+def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_schema, columns_per_segment, index, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, columns_per_segment=columns_per_segment))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(5, dtype=np.float64),
@@ -255,8 +268,9 @@ def test_symbol_concat_empty_column_intersection(lmdb_library_factory, dynamic_s
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns", [["col1"], ["col2"], ["col3"], ["col1", "col2"], ["col1", "col3"], ["col2", "col3"]])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns, join):
+def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, columns, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -286,8 +300,9 @@ def test_symbol_concat_column_slicing(lmdb_library_factory, dynamic_schema, rows
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_filtering_with_column_selection(lmdb_library_factory, dynamic_schema, join):
+def test_symbol_concat_filtering_with_column_selection(lmdb_library_factory, dynamic_schema, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -320,8 +335,9 @@ def test_symbol_concat_filtering_with_column_selection(lmdb_library_factory, dyn
 
 @pytest.mark.parametrize("only_incompletes", [True, False])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes, join):
+def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes, join, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     if not only_incompletes:
         df_0 = pd.DataFrame({"col1": np.arange(3, dtype=np.float64), "col2": np.arange(3, 6, dtype=np.float64)}, index=pd.date_range("2025-01-01", periods=3))
         lib.write("sym0", df_0)
@@ -357,8 +373,9 @@ def test_symbol_concat_with_streaming_incompletes(lmdb_library, only_incompletes
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_multiindex_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
+def test_symbol_concat_multiindex_basic(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         {
             "col1": np.arange(12, dtype=np.int64),
@@ -376,8 +393,9 @@ def test_symbol_concat_multiindex_basic(lmdb_library_factory, dynamic_schema, ro
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_with_date_range(lmdb_library, join):
+def test_symbol_concat_with_date_range(lmdb_library, join, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -408,8 +426,9 @@ def test_symbol_concat_with_date_range(lmdb_library, join):
 @pytest.mark.parametrize("rows_per_segment", [2, 100_000])
 @pytest.mark.parametrize("columns_per_segment", [2, 100_000])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join):
+def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_segment, columns_per_segment, join, any_output_format):
     lib = lmdb_library_factory(LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=rows_per_segment, columns_per_segment=columns_per_segment))
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
         "col1": np.arange(3, dtype=np.int64),
@@ -453,8 +472,9 @@ def test_symbol_concat_complex(lmdb_library_factory, dynamic_schema, rows_per_se
     assert_frame_equal(expected, received)
 
 
-def test_symbol_concat_querybuilder_syntax(lmdb_library):
+def test_symbol_concat_querybuilder_syntax(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(3, dtype=np.int64),
@@ -498,8 +518,9 @@ def test_symbol_concat_querybuilder_syntax(lmdb_library):
 @pytest.mark.parametrize("index_name_0", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("index_name_1", [None, "ts1", "ts2"])
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, index_name_1, join):
+def test_symbol_concat_differently_named_timeseries(lmdb_library, index_name_0, index_name_1, join, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame({"col1": np.arange(1, dtype=np.float64), "col2": np.arange(1, 2, dtype=np.float64)}, index=[pd.Timestamp(0)])
     df_1 = pd.DataFrame({"col1": np.arange(2, 3, dtype=np.float64), "col3": np.arange(3, 4, dtype=np.float64)}, index=[pd.Timestamp(1)])
     df_0.index.name = index_name_0
@@ -523,9 +544,11 @@ def test_symbol_concat_differently_named_multiindexes(
         index_name_0_level_1,
         index_name_1_level_0,
         index_name_1_level_1,
-        join
+        join,
+        any_output_format
 ):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(1, dtype=np.float64),
@@ -557,9 +580,11 @@ def test_symbol_concat_timezone_handling(
         lmdb_library,
         tz_0,
         tz_1,
-        join
+        join,
+        any_output_format
 ):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(1, dtype=np.float64),
@@ -593,9 +618,11 @@ def test_symbol_concat_multiindex_timezone_handling(
         tz_0_level_1,
         tz_1_level_0,
         tz_1_level_1,
-        join
+        join,
+        any_output_format
 ):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame(
         {
             "col1": np.arange(1, dtype=np.float64),
@@ -621,8 +648,9 @@ def test_symbol_concat_multiindex_timezone_handling(
 
 
 @pytest.mark.parametrize("join", ["inner", "outer"])
-def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
+def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df_0 = pd.DataFrame({"col": [0]}, index=pd.RangeIndex(1))
     df_1 = pd.DataFrame({"col": [0]}, index=[pd.Timestamp(0)])
     dt1 = pd.Timestamp(0)
@@ -654,16 +682,18 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
 
-def test_symbol_concat_non_existent_symbol(lmdb_library):
+def test_symbol_concat_non_existent_symbol(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_symbol_concat_non_existent_symbol"
     lib.write(sym, pd.DataFrame({"col": [0]}))
     with pytest.raises(NoSuchVersionException):
         concat(lib.read_batch([sym, "non-existent symbol"], lazy=True)).collect()
 
 
-def test_symbol_concat_pickled_data(lmdb_library):
+def test_symbol_concat_pickled_data(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"bytes": np.arange(10, dtype=np.uint64)})
     pickled_data = {"hi", "there"}
     lib.write("sym0", df)
@@ -673,8 +703,9 @@ def test_symbol_concat_pickled_data(lmdb_library):
         concat(lib.read_batch(["sym0", "sym1"], lazy=True)).collect()
 
 
-def test_symbol_concat_docstring_example(lmdb_library):
+def test_symbol_concat_docstring_example(lmdb_library, any_output_format):
     lib = lmdb_library
+    lib._nvs._set_output_format_for_pipeline_tests(any_output_format)
     df0 = pd.DataFrame(
         {
             "col": [0, 1, 2, 3, 4],
