@@ -1280,7 +1280,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:45",
+        "setup_cache_key": "finalize_staged_data:46",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1302,7 +1302,7 @@
         "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:45",
+        "setup_cache_key": "finalize_staged_data:46",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
@@ -1320,7 +1320,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "finalize_staged_data:102",
+        "setup_cache_key": "finalize_staged_data:108",
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
@@ -1342,7 +1342,7 @@
         "repeat": 5,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "finalize_staged_data:102",
+        "setup_cache_key": "finalize_staged_data:108",
         "timeout": 600,
         "type": "time",
         "unit": "seconds",

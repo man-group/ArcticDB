@@ -7,6 +7,7 @@ from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import 
 from arcticdb.util.utils import TimestampNumber
 """
 
+from pathlib import Path
 import sys
 import time
 from arcticdb.arctic import Arctic
@@ -65,9 +66,14 @@ class FinalizeStagedData:
             self.logger.info(f"LIBRARY: {lib}")
             self.logger.info(f"Created Symbol: {symbol}")
             stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
-        # We use the fact that we're running on LMDB to store a copy of the initial arctic directory.
-        # Then on each teardown we restore the initial state by overwriting the modified with the original.
-        copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
+        dst_folder = copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
+        self.logger.info(f"Destination folder is: {dst_folder}")
+        cwd = Path.cwd()
+        self.logger.info(f"Current directory: {cwd}")
+        # List all entries
+        for item in cwd.iterdir():
+            self.logger.info(f"{item}")
+
 
     def setup(self, param: int):
         self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)
