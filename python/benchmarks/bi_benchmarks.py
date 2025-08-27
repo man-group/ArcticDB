@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import os
 from typing import Union
+from arcticdb.util.logger import get_logger
 import arcticdb.util.test as test
 import pandas as pd
 from pathlib import Path
@@ -68,10 +69,14 @@ class BIBenchmarks:
     def __init__(self):
         self.lib_name = BIBenchmarks.LIB_NAME
         self.symbol = self.lib_name
-
+        self.logger = get_logger()
 
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
+    def _setup_cache(self):        
         start_time = time.time()
 
         file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)

@@ -7,11 +7,12 @@ from tests.stress.arcticdb.version_store.test_stress_finalize_stage_data import 
 from arcticdb.util.utils import TimestampNumber
 """
 
-import sys
+import time
 from arcticdb.arctic import Arctic
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
 from arcticdb.version_store.library import Library, StagedDataFinalizeMethod
 from .common import *
+from shutil import copytree, rmtree
 
 
 class FinalizeStagedData:
@@ -23,61 +24,71 @@ class FinalizeStagedData:
 
     number = 1
     rounds = 1
-    repeat = 1
+    repeat = 5
     min_run_count = 1
-
     warmup_time = 0    
     timeout = 600
+
+    # ASV creates temp directory for each run and then sets current working directory to it
+    # After end of test will remove all files and subfolders created there.
+    # No need for special tempfile handling
+    ARCTIC_DIR = "staged_data"
+    ARCTIC_DIR_ORIGINAL = "staged_data_original"
+    CONNECTION_STRING = f"lmdb://{ARCTIC_DIR}?map_size=40GB"
     LIB_NAME = "Finalize_Staged_Data_LIB"
 
     # Define the number of chunks
-    params = [1000, 2000]
+    params = [1000]
 
     def __init__(self):
         self.lib_name = FinalizeStagedData.LIB_NAME
-        self.symbol = "symbol"
-        self.time_runs = {}
+        self.logger = get_logger()
 
     def setup_cache(self):
-        # Generating dataframe with all kind of supported data types
-        cachedDF = CachedDFGenerator(350000, [5])
-        return cachedDF
+        start = time.time()
+        self._setup_cache(CachedDFGenerator(350000, [5]))
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def setup(self, cache: CachedDFGenerator, param: int):
-        cachedDF = cache
+    def _setup_cache(self, cachedDF):
+        ac = Arctic(f"lmdb://{FinalizeStagedData.ARCTIC_DIR}?map_size=40GB")
+        self.logger.info(f"{ac}")
+        ac.delete_library(self.lib_name)
+        lib = ac.create_library(self.lib_name)
+        for param in FinalizeStagedData.params:
+            symbol = f"symbol{param}"
+            INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(
+                0, cachedDF.TIME_UNIT
+            )  # Synchronize index frequency
 
-        # Unfortunately there is no way to tell asv to run single time
-        # each of finalize_stage_data() tests if we do the large setup in the
-        # setup_cache() method. We can only force it to work with single execution
-        # if the symbol setup with stage data is in the setup() method
+            df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)
+            list_of_chunks = [10000] * param
 
-        self.ac = Arctic(f"lmdb://{self.lib_name}{param}?map_size=40GB")
-        self.ac.delete_library(self.lib_name)
-        self.lib = self.ac.create_library(self.lib_name)
+            lib.write(symbol, data=df, prune_previous_versions=True)
+            self.logger.info(f"LIBRARY: {lib}")
+            self.logger.info(f"Created Symbol: {symbol}")
+            stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
+        copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
 
-        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(
-            0, cachedDF.TIME_UNIT
-        )  # Synchronize index frequency
 
-        df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)
-        list_of_chunks = [10000] * param
-        self.symbol
+    def setup(self, param: int):
+        self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)
+        self.lib = self.ac.get_library(self.lib_name)
+        self.symbol = f"symbol{param}"
 
-        self.lib.write(self.symbol, data=df, prune_previous_versions=True)
-        stage_chunks(self.lib, self.symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
-
-    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
-        print(">>> Library:", self.lib)
-        print(">>> Symbol:", self.symbol)
+    def time_finalize_staged_data(self, param: int):
+        self.logger.info(f"LIBRARY: {self.lib}")
+        self.logger.info(f"Created Symbol: {self.symbol}")
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
-    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
-        print(">>> Library:", self.lib)
-        print(">>> Symbol:", self.symbol)
+    def peakmem_finalize_staged_data(self, param: int):
+        self.logger.info(f"LIBRARY: {self.lib}")
+        self.logger.info(f"Created Symbol: {self.symbol}")
         self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)
 
-    def teardown(self, cache: CachedDFGenerator, param: int):
-        self.ac.delete_library(self.lib_name)
+    def teardown(self, param: int):
+        rmtree(FinalizeStagedData.ARCTIC_DIR)
+        copytree(FinalizeStagedData.ARCTIC_DIR_ORIGINAL, FinalizeStagedData.ARCTIC_DIR, dirs_exist_ok=True)
+        del self.ac
 
 
 from asv_runner.benchmarks.mark import SkipNotImplemented
@@ -91,27 +102,31 @@ class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
 
     def setup_cache(self):
         # Generating dataframe with all kind of supported data type
+        if not SLOW_TESTS:
+            return #Avoid setup when skipping
         cachedDF = CachedDFGenerator(
             350000, [5, 25, 50]
         )  # 3 times wider DF with bigger string columns
-        return cachedDF
+        start = time.time()
+        self._setup_cache(cachedDF)
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def setup(self, cache: CachedDFGenerator, param: int):
+    def setup(self, param: int):
         if not SLOW_TESTS:
             raise SkipNotImplemented("Slow tests are skipped")
-        super().setup(cache, param)
+        super().setup(param)
 
-    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
+    def time_finalize_staged_data(self, param: int):
         if not SLOW_TESTS:
             raise SkipNotImplemented("Slow tests are skipped")
-        super().time_finalize_staged_data(cache, param)
+        super().time_finalize_staged_data(param)
 
-    def peakmem_finalize_staged_data(self, cache: CachedDFGenerator, param: int):
+    def peakmem_finalize_staged_data(self, param: int):
         if not SLOW_TESTS:
             raise SkipNotImplemented("Slow tests are skipped")
-        super().peakmem_finalize_staged_data(cache, param)
+        super().peakmem_finalize_staged_data(param)
 
-    def teardown(self, cache: CachedDFGenerator, param: int):
+    def teardown(self, param: int):
         if SLOW_TESTS:
             # Run only on slow tests
             self.ac.delete_library(self.lib_name)

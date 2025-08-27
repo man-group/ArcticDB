@@ -38,7 +38,16 @@ class ComparisonBenchmarks:
     SYMBOL = "dataframe"
     NUMBER_ROWS = 3000000
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        df, dict = self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        return (df, dict)
+
+    def _setup_cache(self):        
         st = time.time()
         dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)
         df = pd.DataFrame(dict)
