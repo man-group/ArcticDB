@@ -424,10 +424,6 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.DEBUG_ENABLED == '1' }}  
         
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.DEBUG_LOGGING_ENABLED == '1' }}        
@@ -458,7 +454,10 @@ jobs:
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
           VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
-
+      
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
         uses: actions/upload-artifact@v4
