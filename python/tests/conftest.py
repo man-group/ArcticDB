@@ -56,6 +56,7 @@ from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
 from .util.mark import (
+    EXTENDED_MARKS,
     LMDB_TESTS_MARK,
     LOCAL_STORAGE_TESTS_ENABLED,
     MACOS_WHEEL_BUILD,
@@ -1682,6 +1683,10 @@ def pytest_collection_modifyitems(config, items):
         if doc and part_string in doc.lower():
             item.add_marker(mark_to_add)
 
+    # Apply this process only when asked for
+    if not EXTENDED_MARKS: return
+
+    start_time = time.time()
     for item in items:
         ## Add custom marks to test depending file path name of module to the test
         ## Electively this silently marks each test with its physical location in the repo
@@ -1701,6 +1706,8 @@ def pytest_collection_modifyitems(config, items):
         fixtures = set(item.fixturenames)
         ALL_FIXTUR_NAMES.update(fixtures)
         apply_hybrid_marks(item, fixtures, FIXTURES_TO_MARK)
+
+    get_logger().info(f"Extended marks applied for: {time.time() - start_time} sec.")
 
 
 # endregion

@@ -10,9 +10,18 @@ if [ $# -eq 0 ]; then
 else
     # Join all arguments into a single marker expression
     MARK_EXPR="$*"
-    pytest --co -q -m "$MARK_EXPR" \
-    | sed 's/\[.*\]//' \
-    | sort -u
+
+    # Collect and deduplicate test names
+    tests=$(pytest --co -q -m "$MARK_EXPR" \
+        | sed 's/\[.*\]//' \
+        | sort -u)
+
+    # Print tests
+    echo "$tests"
+
+    # Count them
+    count=$(echo "$tests" | grep -c '^')
+    echo "Total unique tests: $count"
 fi
 
 

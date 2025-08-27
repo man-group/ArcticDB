@@ -22,6 +22,9 @@ LINUX = sys.platform.lower().startswith("linux")
 WINDOWS = sys.platform.lower().startswith("win32")
 
 
+# Pre-process tests and assign marks
+EXTENDED_MARKS = os.getenv("ARCTICDB_EXTENDED_MARKS", "1") == "1"
+
 # Defined shorter logs on errors
 SHORTER_LOGS = marks.SHORTER_LOGS
 logger = get_logger()
