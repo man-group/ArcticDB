@@ -1127,12 +1127,14 @@ if(${TEST})
             column_store/test/rapidcheck_column_map.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
+            util/test/rapidcheck_bitset.cpp
             util/test/rapidcheck_decimal.cpp
             util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
-            version/test/rapidcheck_version_map.cpp)
+            version/test/rapidcheck_version_map.cpp
+    )
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 

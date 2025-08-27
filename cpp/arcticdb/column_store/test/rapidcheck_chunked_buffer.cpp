@@ -179,32 +179,6 @@ RC_GTEST_PROP(ChunkedBuffer, TruncateFirstLastBlock, (const std::vector<uint8_t>
     cb.blocks().at(1)->abandon();
 }
 
-RC_GTEST_PROP(ChunkedBuffer, PackedBitsToBuffer, (const std::vector<bool>& input)) {
-    using namespace arcticdb;
-    RC_PRE(!input.empty());
-    auto n = input.size();
-    util::BitSet bitset(n);
-    util::BitSet::bulk_insert_iterator inserter(bitset);
-    for (auto [idx, el]: folly::enumerate(input)) {
-        if (el) {
-            inserter = idx;
-        }
-    }
-    inserter.flush();
-    auto bytes = bitset_packed_size_bytes(n);
-    auto input_buffer = ChunkedBuffer::presized(bytes);
-    bitset_to_packed_bits(bitset, input_buffer.data());
-
-    auto start_bit = *rc::gen::inRange<size_t>(0, n - 1);
-    auto end_bit = *rc::gen::inRange<size_t>(start_bit + 1, n);
-
-    auto output_buffer = packed_bits_to_buffer(input_buffer, start_bit, end_bit);
-    for (size_t idx = 0; idx < end_bit - start_bit; ++idx) {
-        RC_ASSERT(static_cast<bool>(output_buffer[idx]) == input.at(start_bit + idx));
-    }
-}
-
-
 RC_GTEST_PROP(ChunkedBuffer, ReadWriteIrregular, (const std::vector<std::vector<uint64_t>> &inputs)) {
     using namespace arcticdb;
     CursoredBuffer<ChunkedBufferImpl<64>> cb;

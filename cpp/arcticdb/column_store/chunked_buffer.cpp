@@ -114,22 +114,4 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
 template ChunkedBufferImpl<64> truncate(const ChunkedBufferImpl<64>& input, size_t start_byte, size_t end_byte);
 template ChunkedBufferImpl<3968> truncate(const ChunkedBufferImpl<3968>& input, size_t start_byte, size_t end_byte);
 
-// Inclusive of start_bit, exclusive of end_bit
-template <size_t BlockSize>
-ChunkedBufferImpl<BlockSize> packed_bits_to_buffer(const ChunkedBufferImpl<BlockSize>& input, size_t start_bit, size_t end_bit) {
-    // TODO: Work with non-contiguous buffers
-    auto bytes = end_bit - start_bit;
-    auto res = ChunkedBufferImpl<BlockSize>::presized(bytes);
-    uint8_t* data = res.data();
-    for (size_t bit = start_bit; bit < end_bit; ++bit, ++data) {
-        auto byte = bit / 8;
-        auto shift = bit % 8;
-        *data = (input[byte] >> shift) % 2;
-    }
-    return res;
-}
-
-template ChunkedBufferImpl<64> packed_bits_to_buffer(const ChunkedBufferImpl<64>& input, size_t start_bit, size_t end_bit);
-template ChunkedBufferImpl<3968> packed_bits_to_buffer(const ChunkedBufferImpl<3968>& input, size_t start_bit, size_t end_bit);
-
 } //namespace arcticdb
