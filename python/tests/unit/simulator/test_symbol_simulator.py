@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 import pytest
 
-from arcticdb.util.arctic_simulator import ArcticSymbolSimulator, calculate_different_and_common_parts
+from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.utils import verify_dynamically_added_columns
 from arcticdb.version_store.library import Library
@@ -154,10 +154,10 @@ def test_simulator_update_all_types_check_simulator_versions_store():
     assert df.shape[0] + df1.shape[0] + df1.shape[0] == asim.read().shape[0] 
     assert_frame_equal(df2, asim.read().iloc[[0]]) # First row is updated
     # Verify new columns added to first line from previous version are correct
-    new_cols = calculate_different_and_common_parts(df2, df1, dynamic_schema=True)[0].columns.to_list()
+    new_cols = set(df2.columns) - set(df1.columns)
     verify_dynamically_added_columns(asim.read(), df1.index[0], new_cols)
     # Verify new columns added to second line from previous version are correct
-    new_cols = calculate_different_and_common_parts(df2, df, dynamic_schema=True)[0].columns.to_list()
+    new_cols = set(df2.columns) - set(df.columns)
     verify_dynamically_added_columns(asim.read(), df.index[1], new_cols)
 
     asim = ArcticSymbolSimulator(keep_versions=True, dynamic_schema=False)
