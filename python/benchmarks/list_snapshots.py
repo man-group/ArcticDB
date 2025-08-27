@@ -40,7 +40,15 @@ class SnaphotFunctions:
 
     rows = 10
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):
         start = time.time()
         self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)
 

@@ -22,9 +22,8 @@ from .common import *
 
 
 class IterateVersionChain:
-    number = 10
+    number = 13
     timeout = 6000
-    warmup_time = 0
     rounds = 1
     CONNECTION_STRING = "lmdb://version_chain?map_size=20GB"
     LIB_NAME = "lib"
@@ -37,7 +36,15 @@ class IterateVersionChain:
     def symbol(self, num_versions, deleted):
         return f"symbol_{num_versions}_{deleted}"
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):        
         self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)
 
         num_versions_list, caching_list, deleted_list = IterateVersionChain.params

@@ -8,18 +8,19 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 # Use this import when upgraded to ASV 0.6.0 or later
 # from asv_runner.benchmarks.mark import SkipNotImplemented
+import time
 import numpy as np
 import pandas as pd
 
 from arcticdb import Arctic
 from arcticdb import QueryBuilder
+from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
 
 class Resample:
-    number = 5
+    number = 7
     rounds = 1
-    warmup_time = 0
 
     LIB_NAME = "resample"
     CONNECTION_STRING = "lmdb://resample?map_size=5GB"
@@ -38,7 +39,15 @@ class Resample:
         ["sum", "mean", "min", "max", "first", "last", "count"],
     ]
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):        
         ac = Arctic(self.CONNECTION_STRING)
         ac.delete_library(self.LIB_NAME)
         lib = ac.create_library(self.LIB_NAME)
