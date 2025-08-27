@@ -17,7 +17,7 @@ from arcticdb_ext.storage import KeyType
 from arcticdb.util.test import assert_frame_equal
 from arcticdb_ext.types import DataType
 
-from tests.util.mark import MACOS, MACOS_WHEEL_BUILD
+from tests.util.mark import ARM64
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
@@ -241,12 +241,13 @@ def test_type_promotion_int64_and_float64_up_to_float64(lmdb_version_store_dynam
     data = lib.read("test").data.astype(original_type)
 
     assert data.iloc[0, 0] == np.iinfo(original_type).min  # out by one compared to original
-    if MACOS: # Should be related to the disparity of overflow handling in ARM64 vs x86_64 rather than OS
-        # e.g. (int32_t)(double(std::numeric_limits<int32_t>::max()) + 1)
-        # -2147483648 on linux, 2147483647 on macOS
-        assert data.iloc[1, 0] == np.iinfo(original_type).max
-    else:
-        assert data.iloc[1, 0] == np.iinfo(original_type).min  # overflowed
+
+    # x86_64 and arm64 have different overflow handling, so we need to check for both
+    # e.g. (int32_t)(double(std::numeric_limits<int32_t>::max()) + 1) is:
+    # -2147483648 on x86_64,
+    #  2147483647 on ARM64
+    expected_overflow = np.iinfo(original_type).max if ARM64 else np.iinfo(original_type).min
+    assert data.iloc[1, 0] == expected_overflow
     assert data.iloc[2, 0] == 2 ** 53 - 1  # fine, this fits in float64 which has an 11 bit exponent
     assert data.iloc[3, 0] == 2 ** 53  # also fine
     assert data.iloc[4, 0] == 2 ** 53  # off by one, should be 2 ** 53 + 1 but we lost precision
