@@ -94,6 +94,18 @@ def test_write_bools_sliced(lmdb_version_store_tiny_segment, data):
     assert table.equals(received)
 
 
+def test_basic_write_bools_multiple_record_batches(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_basic_write_bools_multiple_record_batches"
+    rb0 = pa.RecordBatch.from_arrays([pa.array([True, False, True, False])], names=["col"])
+    rb1 = pa.RecordBatch.from_arrays([pa.array([False, False])], names=["col"])
+    rb2 = pa.RecordBatch.from_arrays([pa.array([True])], names=["col"])
+    table = pa.Table.from_batches([rb0, rb1, rb2])
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
 def test_write_with_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_index"

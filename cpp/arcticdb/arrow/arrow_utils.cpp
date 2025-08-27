@@ -118,7 +118,10 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
         const auto arcticdb_data_type = arcticdb_type_from_arrow_type(arrow_data_type);
         data_types.emplace_back(arcticdb_data_type);
     }
-    uint64_t total_rows{0};;
+    uint64_t total_rows = std::accumulate(record_batches.cbegin(), record_batches.cend(), uint64_t(0),[](const uint64_t& accum, const sparrow::record_batch& record_batch) {
+        return accum + record_batch.nb_rows();
+    });
+    uint64_t rows{0};
     for (; record_batch != record_batches.cend(); ++record_batch) {
         util::check(record_batch == record_batches.cbegin() || std::ranges::equal(column_names, record_batch->names()),
                 "Record batches do not contain the same column names: {} != {}", column_names, record_batch->names());
@@ -136,17 +139,23 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
             }
             auto arrow_structures = sparrow::get_arrow_structures(const_cast<sparrow::array&>(array));
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_structures.first, *arrow_structures.second);
-            // arrow_array_buffers.at(1) seems to be the validity bitmap, and may be NULL if there are no null values
+            // arrow_array_buffers.at(0) seems to be the validity bitmap, and may be NULL if there are no null values
             // need to handle it being non-NULL and all 1s though
             const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
-            const auto& block_offsets = chunked_buffers.at(idx).block_offsets();
-            // Arrow bool columns are packed bitsets
-            // TODO: Add packed bool type just for Arrow inputs
-            const auto bytes = is_bool_type(data_types.at(idx)) ? bitset_packed_size_bytes(*num_rows) : *num_rows * get_type_size(data_types.at(idx));
-            const auto offset = block_offsets.empty() ? 0 : block_offsets.back();
-            chunked_buffers.at(idx).add_external_block(data, bytes, offset);
+            if (is_bool_type(data_types.at(idx))) {
+                // Arrow bool columns are packed bitsets
+                if (record_batch == record_batches.cbegin()) {
+                    chunked_buffers.at(idx).ensure(total_rows);
+                }
+                packed_bits_to_buffer(data, *num_rows, chunked_buffers.at(idx).bytes_at(rows, *num_rows));
+            } else {
+                const auto bytes = *num_rows * get_type_size(data_types.at(idx));
+                const auto& block_offsets = chunked_buffers.at(idx).block_offsets();
+                const auto offset = block_offsets.empty() ? 0 : block_offsets.back();
+                chunked_buffers.at(idx).add_external_block(data, bytes, offset);
+            }
         }
-        total_rows += *num_rows;
+        rows += *num_rows;
     }
     SegmentInMemory seg;
     for (size_t idx = 0; idx < num_columns; ++idx) {

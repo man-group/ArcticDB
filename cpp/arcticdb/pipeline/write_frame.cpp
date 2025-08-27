@@ -77,34 +77,23 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         }
         for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
             const auto& source_column = frame.column(col_idx);
-            if (is_bool_type(source_column.type().data_type())) {
-                auto chunked_buffer = packed_bits_to_buffer(source_column.data().buffer(), slice_.rows().first, slice_.rows().second);
-                seg.add_column(
-                        frame.field(col_idx),
-                        std::make_shared<Column>(
-                                source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)
-                        )
+            const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
+            const auto bytes =
+                    (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
+            ChunkedBuffer chunked_buffer;
+            if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
+                chunked_buffer.add_external_block(
+                        source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0
                 );
             } else {
-                // Inclusive
-                const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
-                const auto bytes =
-                        (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
-                ChunkedBuffer chunked_buffer;
-                if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-                    chunked_buffer.add_external_block(
-                            source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0
-                    );
-                } else {
-                    chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
-                }
-                seg.add_column(
-                        frame.field(col_idx),
-                        std::make_shared<Column>(
-                                source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)
-                        )
-                );
+                chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
             }
+            seg.add_column(
+                    frame.field(col_idx),
+                    std::make_shared<Column>(
+                            source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)
+                    )
+            );
         }
         seg.descriptor().set_id(key.stream_id);
         seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);

@@ -19,9 +19,19 @@ using namespace arcticdb;
 template<typename T>
 requires std::integral<T> || std::floating_point<T>
 sparrow::array create_array(const std::vector<T>& data) {
-    sparrow::u8_buffer<T> u8_buffer(data);
-    sparrow::primitive_array<T> primitive_array{std::move(u8_buffer), data.size()};
-    return sparrow::array{std::move(primitive_array)};
+    if constexpr (std::is_same_v<T, bool>) {
+        auto data_ptr = reinterpret_cast<bool*>(allocate_detachable_memory(data.size()));
+        for (size_t idx = 0; idx < data.size(); ++idx) {
+            data_ptr[idx] = data[idx];
+        }
+        auto buffer = sparrow::details::primitive_data_access<bool>::make_data_buffer(std::span{data_ptr, data.size()});
+        sparrow::primitive_array<bool> primitive_array{std::move(buffer), data.size()};
+        return sparrow::array{std::move(primitive_array)};
+    } else {
+        sparrow::u8_buffer<T> u8_buffer(data);
+        sparrow::primitive_array<T> primitive_array{std::move(u8_buffer), data.size()};
+        return sparrow::array{std::move(primitive_array)};
+    }
 }
 
 sparrow::record_batch create_record_batch(const std::vector<std::pair<std::string, sparrow::array>>& columns) {
@@ -36,6 +46,7 @@ template<typename types>
 class ArrowDataToSegmentNumeric : public testing::Test {};
 
 using test_types = ::testing::Types<
+        bool,
         uint8_t,
         uint16_t,
         uint32_t,
@@ -53,7 +64,14 @@ TYPED_TEST_SUITE(ArrowDataToSegmentNumeric, test_types);
 TYPED_TEST(ArrowDataToSegmentNumeric, Simple) {
     size_t num_rows = 10;
     std::vector<TypeParam> data(num_rows);
-    std::iota(data.begin(), data.end(), 0UL);
+    if constexpr (std::is_same_v<TypeParam, bool>) {
+        data[1] = true;
+        data[2] = true;
+        data[4] = true;
+        data[7] = true;
+    } else {
+        std::iota(data.begin(), data.end(), 0UL);
+    }
     auto array = create_array(data);
     auto record_batch = create_record_batch({{"col", array}});
 
@@ -83,7 +101,15 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultiColumn) {
     std::vector<std::pair<std::string, sparrow::array>> columns;
     for (size_t idx = 0; idx < num_columns; ++idx) {
         std::vector<TypeParam> data(num_rows);
-        std::iota(data.begin(), data.end(), num_rows * idx);
+        if constexpr (std::is_same_v<TypeParam, bool>) {
+            data[1] = true;
+            data[3] = true;
+            data[5] = true;
+            data[7] = true;
+            data[9] = true;
+        } else {
+            std::iota(data.begin(), data.end(), num_rows * idx);
+        }
         auto array = create_array(data);
         columns.emplace_back(fmt::format("col{}", idx), array);
     }
@@ -106,7 +132,11 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultiColumn) {
         ASSERT_EQ(col.last_row(), num_rows - 1);
         ASSERT_FALSE(col.is_sparse());
         for (size_t row = 0; row < num_rows; ++row) {
-            ASSERT_EQ(*col.scalar_at<TypeParam>(row), (idx * num_rows) + row);
+            if constexpr (std::is_same_v<TypeParam, bool>) {
+                ASSERT_EQ(*col.scalar_at<TypeParam>(row), row % 2 == 1);
+            } else {
+                ASSERT_EQ(*col.scalar_at<TypeParam>(row), (idx * num_rows) + row);
+            }
         }
     }
 }
@@ -117,7 +147,13 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
     size_t total_rows{0};
     for (auto num_rows: rows_per_batch) {
         std::vector<TypeParam> data(num_rows);
-        std::iota(data.begin(), data.end(), total_rows);
+        if constexpr (std::is_same_v<TypeParam, bool>) {
+            for (size_t idx = 0; idx < data.size(); ++idx) {
+                data[idx] = (total_rows + idx) % 3 == 0;
+            }
+        } else {
+            std::iota(data.begin(), data.end(), total_rows);
+        }
         total_rows += num_rows;
         auto array = create_array(data);
         record_batches.emplace_back(create_record_batch({{"col", array}}));
@@ -136,48 +172,28 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
     ASSERT_EQ(col.last_row(), total_rows - 1);
     ASSERT_FALSE(col.is_sparse());
     for (size_t idx = 0; idx < total_rows; ++idx) {
-        ASSERT_EQ(*col.scalar_at<TypeParam>(idx), idx);
+        if constexpr (std::is_same_v<TypeParam, bool>) {
+            ASSERT_EQ(*col.scalar_at<TypeParam>(idx), idx % 3 == 0);
+        } else {
+            ASSERT_EQ(*col.scalar_at<TypeParam>(idx), idx);
+        }
     }
     const auto& buffer = col.data().buffer();
     ASSERT_EQ(buffer.bytes(), total_rows * sizeof(TypeParam));
-    ASSERT_EQ(buffer.blocks().size(), rows_per_batch.size());
-    ASSERT_EQ(buffer.block_offsets().size(), rows_per_batch.size() + 1);
-    size_t bytes{0};
-    for (size_t idx = 0; idx < rows_per_batch.size(); ++idx) {
-        ASSERT_TRUE(buffer.blocks()[idx]->is_external());
-        ASSERT_EQ(buffer.blocks()[idx]->bytes(), rows_per_batch[idx] * sizeof(TypeParam));
-        ASSERT_EQ(buffer.blocks()[idx]->offset_, bytes);
-        ASSERT_EQ(buffer.block_offsets()[idx], bytes);
-        bytes += buffer.blocks()[idx]->bytes();
-    }
-    ASSERT_EQ(buffer.block_offsets().back(), bytes);
-}
-
-TEST(ArrowDataToSegmentBool, Simple) {
-    size_t num_rows = 16;
-    std::vector<bool> data(num_rows);
-    auto array = create_array(data);
-    auto record_batch = create_record_batch({{"col", array}});
-
-    std::vector<sparrow::record_batch> record_batches;
-    record_batches.emplace_back(std::move(record_batch));
-    auto seg = arrow_data_to_segment(record_batches);
-
-    ASSERT_EQ(seg.fields().size(), 1);
-    ASSERT_EQ(seg.num_columns(), 1);
-    ASSERT_EQ(seg.row_count(), num_rows);
-    const auto column_index = seg.column_index("col");
-    ASSERT_TRUE(column_index.has_value());
-    ASSERT_EQ(*column_index, 0);
-    const auto& col = seg.column(0);
-    ASSERT_EQ(col.type(), make_scalar_type(DataType::BOOL8));
-    // Arrow bool columns use a packed bitset representation
-    auto bytes = bitset_packed_size_bytes(num_rows);
-    ASSERT_EQ(col.row_count(), bytes);
-    ASSERT_EQ(col.last_row(), bytes - 1);
-    ASSERT_FALSE(col.is_sparse());
-    for (size_t idx = 0; idx < bytes; ++idx) {
-        ASSERT_EQ(*col.scalar_at<uint8_t>(idx), 0);
+    if constexpr (std::is_same_v<TypeParam, bool>) {
+        ASSERT_EQ(buffer.blocks().size(), 1);
+    } else {
+        ASSERT_EQ(buffer.blocks().size(), rows_per_batch.size());
+        ASSERT_EQ(buffer.block_offsets().size(), rows_per_batch.size() + 1);
+        size_t bytes{0};
+        for (size_t idx = 0; idx < rows_per_batch.size(); ++idx) {
+            ASSERT_TRUE(buffer.blocks()[idx]->is_external());
+            ASSERT_EQ(buffer.blocks()[idx]->bytes(), rows_per_batch[idx] * sizeof(TypeParam));
+            ASSERT_EQ(buffer.blocks()[idx]->offset_, bytes);
+            ASSERT_EQ(buffer.block_offsets()[idx], bytes);
+            bytes += buffer.blocks()[idx]->bytes();
+        }
+        ASSERT_EQ(buffer.block_offsets().back(), bytes);
     }
 }
 
