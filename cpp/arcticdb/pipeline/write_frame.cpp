@@ -91,7 +91,13 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                 const auto bytes =
                         (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
                 ChunkedBuffer chunked_buffer;
-                chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
+                if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
+                    chunked_buffer.add_external_block(
+                            source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0
+                    );
+                } else {
+                    chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+                }
                 seg.add_column(
                         frame.field(col_idx),
                         std::make_shared<Column>(
