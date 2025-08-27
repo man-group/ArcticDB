@@ -141,6 +141,7 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
             const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
             const auto& block_offsets = chunked_buffers.at(idx).block_offsets();
             // Arrow bool columns are packed bitsets
+            // TODO: Add packed bool type just for Arrow inputs
             const auto bytes = is_bool_type(data_types.at(idx)) ? bitset_packed_size_bytes(*num_rows) : *num_rows * get_type_size(data_types.at(idx));
             const auto offset = block_offsets.empty() ? 0 : block_offsets.back();
             chunked_buffers.at(idx).add_external_block(data, bytes, offset);

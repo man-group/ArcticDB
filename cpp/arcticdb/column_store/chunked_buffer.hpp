@@ -612,6 +612,9 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
 template <size_t BlockSize>
 ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input, size_t start_byte, size_t end_byte);
 
+template <size_t BlockSize>
+ChunkedBufferImpl<BlockSize> packed_bits_to_buffer(const ChunkedBufferImpl<BlockSize>& input, size_t start_bit, size_t end_bit);
+
 inline void hash_buffer(const ChunkedBuffer& buffer, HashAccum& accum) {
     for(const auto& block : buffer.blocks()) {
         accum(block->data(), block->bytes());

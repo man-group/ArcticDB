@@ -49,6 +49,39 @@ def test_basic_write(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+def test_basic_write_bools(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_basic_write_bools"
+    table = pa.table({"col": pa.array([True, False])})
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        [True],
+        [True, False],
+        [False, True, True],
+        [True, False, False, True],
+        [False, True, True, False, True],
+    ]
+)
+def test_write_bools_sliced(lmdb_version_store_tiny_segment, data):
+    lib = lmdb_version_store_tiny_segment
+    lib.set_output_format("experimental_arrow")
+    sym = "test_write_bools_sliced"
+    table = pa.table(
+        {
+            "col": pa.array(data)
+        }
+    )
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
 def test_write_with_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_index"
