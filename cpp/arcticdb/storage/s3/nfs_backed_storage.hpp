@@ -8,19 +8,9 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
-#include <aws/core/Aws.h>
-#include <aws/s3/model/PutObjectRequest.h>
-#include <aws/core/auth/AWSCredentialsProvider.h>
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
-#include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
-
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
-#include <arcticdb/storage/s3/detail-inl.hpp>
 
 namespace arcticdb::storage::nfs_backed {
 

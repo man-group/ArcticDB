@@ -25,9 +25,7 @@
 #ifdef __APPLE__
 #include <cstdio>
 #endif
-#include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
-
 #include <concepts>
 #include <numeric>
 #include <optional>
@@ -98,8 +96,6 @@ struct ExtraBufferContainer {
     bool has_buffer(size_t offset, ExtraBufferType type) const;
 };
 
-class Column;
-class StringPool;
 
 template <typename T>
 JiveTable create_jive_table(const Column& col);

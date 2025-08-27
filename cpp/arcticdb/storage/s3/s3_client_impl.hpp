@@ -8,20 +8,7 @@
 #pragma once
 
 #include <aws/s3/S3Client.h>
-
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
-
-#include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/log/log.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
-
-#include <arcticdb/storage/object_store_utils.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
-#include <arcticdb/entity/serialized_key.hpp>
-#include <arcticdb/util/exponential_backoff.hpp>
-#include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/util/composite.hpp>
 
 namespace arcticdb::storage::s3 {
 

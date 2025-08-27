@@ -7,6 +7,8 @@
 
 #include <arcticdb/version/snapshot.hpp>
 #include <arcticdb/version/version_log.hpp>
+#include <arcticdb/stream/index_aggregator.hpp>
+#include <arcticdb/python/python_utils.hpp>
 
 #include <algorithm>
 

@@ -7,11 +7,6 @@
 
 #pragma once
 
-#include <limits>
-
-// For `PyObject` and `PyFloat_FromDouble`
-#include <Python.h>
-
 // Unset the definition of `copysign` that is defined in `Python.h` for Python < 3.8 on Windows.
 // See: https://github.com/python/cpython/pull/23326
 #if defined(_MSC_VER) && PY_VERSION_HEX < 0x03080000
@@ -19,7 +14,6 @@
 #endif
 
 #include <ankerl/unordered_dense.h>
-
 #include <arcticdb/entity/types.hpp> // for entity::position_t
 #include <arcticdb/util/constants.hpp>
 

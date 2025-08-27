@@ -5,14 +5,11 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
 
 namespace arcticdb {

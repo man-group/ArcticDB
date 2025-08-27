@@ -7,21 +7,17 @@
 
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preprocess.hpp>
-
 #include <arcticdb/util/pb_util.hpp>
 #include <spdlog/sinks/stdout_sinks.h>
 #include <spdlog/sinks/daily_file_sink.h>
 #include <spdlog/sinks/basic_file_sink.h>
 #include <spdlog/sinks/rotating_file_sink.h>
 #include <spdlog/details/periodic_worker.h>
-#include <filesystem>
-
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/async_logger.h>
-#include <spdlog/sinks/stdout_sinks.h>
 #include <spdlog/async.h>
 #include <logger.pb.h>
-
+#include <filesystem>
 #include <memory>
 #include <mutex>
 #include <optional>

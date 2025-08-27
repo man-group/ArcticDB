@@ -6,12 +6,10 @@
  */
 
 #include <arcticdb/version/version_store_api.hpp>
-
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/util/ranges_from_future.hpp>
-
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -22,9 +20,8 @@
 #include <arcticdb/version/version_utils.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/version/snapshot.hpp>
-#include <storage/file/file_store.hpp>
-
-#include <regex>
+#include <arcticdb/storage/file/file_store.hpp>
+#include <arcticdb/version/version_functions.hpp>
 
 namespace arcticdb::version_store {
 

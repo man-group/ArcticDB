@@ -7,7 +7,10 @@
 
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
-#include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/entity/variant_key.hpp>
+#include <arcticdb/storage/store.hpp>
+#include <arcticdb/stream/stream_utils.hpp>
+#include <arcticdb/pipeline/read_query.hpp>
 
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;

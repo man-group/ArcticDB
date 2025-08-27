@@ -15,8 +15,6 @@
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
 
-#include <arcticdb/codec/encode_common.hpp>
-
 namespace arcticdb {
 
 constexpr TypeDescriptor metadata_type_desc() {

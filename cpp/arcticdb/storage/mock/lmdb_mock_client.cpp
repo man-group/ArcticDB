@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/storage/mock/lmdb_mock_client.hpp>
-
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
 #include <arcticdb/util/string_utils.hpp>

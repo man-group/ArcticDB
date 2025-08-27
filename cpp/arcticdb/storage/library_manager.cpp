@@ -1,5 +1,4 @@
 #include <arcticdb/storage/library_manager.hpp>
-
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/name_validation.hpp>
@@ -7,7 +6,6 @@
 #include <arcticdb/storage/open_mode.hpp>
 #include <arcticdb/storage/storages.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
-#include <arcticdb/codec/codec.hpp>
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/codec/default_codecs.hpp>
 

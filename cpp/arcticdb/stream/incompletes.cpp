@@ -5,17 +5,13 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <ranges>
-#include <iterator>
 #include <arcticdb/stream/incompletes.hpp>
-#include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/stream/schema.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/util/name_validation.hpp>
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
@@ -25,6 +21,8 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
+#include <arcticdb/pipeline/read_query.hpp>
+#include <iterator>
 
 namespace arcticdb {
 

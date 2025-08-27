@@ -9,13 +9,10 @@
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-#include <iterator>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <pipeline/frame_slice.hpp>
-#include <arcticdb/entity/protobuf_mappings.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <folly/futures/FutureSplitter.h>
-
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -37,6 +34,7 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <iterator>
 
 
 namespace arcticdb::version_store {

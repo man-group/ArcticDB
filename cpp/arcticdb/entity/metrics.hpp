@@ -14,19 +14,14 @@
 #include <prometheus/exposer.h>
 #include <prometheus/family.h>
 #include <prometheus/histogram.h>
-
-#ifndef _WIN32
-#include <sys/param.h>
-#include <unistd.h>
-#endif
-
-#include <arcticdb/util/hash.hpp>
-#include <arcticdb/util/timer.hpp>
+#include <fmt/format.h>
 #include <map>
 #include <unordered_map>
 #include <memory>
 #include <utility>
-#include <fmt/format.h>
+#include <arcticdb/util/preconditions.hpp>
+#include <folly/hash/Hash.h>
+
 
 namespace arcticdb {
 

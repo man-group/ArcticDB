@@ -19,6 +19,8 @@
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_map_batch_methods.hpp>
 #include <arcticdb/util/container_filter_wrapper.hpp>
+#include <arcticdb/version/version_functions.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 
 namespace arcticdb::version_store {
 

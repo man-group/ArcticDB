@@ -12,8 +12,6 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/constants.hpp>
 
-#include <memory>
-
 namespace arcticdb::stream {
 
 namespace {

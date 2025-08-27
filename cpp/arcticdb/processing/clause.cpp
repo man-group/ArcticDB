@@ -20,6 +20,7 @@
 #include <ankerl/unordered_dense.h>
 #include <arcticdb/util/movable_priority_queue.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
+#include <arcticdb/processing/unsorted_aggregation.hpp>
 
 #include <ranges>
 

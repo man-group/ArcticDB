@@ -7,6 +7,8 @@
  */
 
 #include <arcticdb/processing/operation_dispatch.hpp>
+#include <arcticdb/column_store/column.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
 
