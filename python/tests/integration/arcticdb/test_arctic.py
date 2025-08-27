@@ -46,6 +46,7 @@ from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.version_store.library import ArcticInvalidApiUsageException
 from ...util.mark import (
     AZURE_TESTS_MARK,
+    AZURITE_BUILT,
     MONGO_TESTS_MARK,
     REAL_S3_TESTS_MARK,
     SLOW_TESTS_MARK,
@@ -259,6 +260,9 @@ def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_f
 
 @AZURE_TESTS_MARK
 @SSL_TESTS_MARK
+@pytest.mark.skipif(AZURITE_BUILT, 
+        "Skipping for now due to failure with built locally version: " \
+        "https://github.com/man-group/ArcticDB/actions/runs/17260458465")
 @pytest.mark.parametrize("client_cert_file", parameter_display_status)
 @pytest.mark.parametrize("client_cert_dir", parameter_display_status)
 def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_file, client_cert_dir, lib_name):

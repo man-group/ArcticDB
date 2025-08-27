@@ -27,4 +27,6 @@ runs:
         npm run build
         npm install -g .
         echo "✅ Installed Azurite from source"
-        azurite --version
+        echo "ARCTICDB_AZURITE_BUILT=1" >> $GITHUB_OUTPUT
+
+
