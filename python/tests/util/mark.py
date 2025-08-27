@@ -28,6 +28,7 @@ logger = get_logger()
 
 RUNS_ON_GITHUB = os.getenv("GITHUB_ACTIONS") == "true"
 
+
 def getenv_strip(env_var_name: str, default_value: Optional[str] = None) -> Optional[str]:
     """
     Get environment variable and strip whitespace safely.
@@ -38,6 +39,8 @@ def getenv_strip(env_var_name: str, default_value: Optional[str] = None) -> Opti
     value = os.getenv(env_var_name)
     return default_value if value is None or value.strip() == "" else value.strip()
 
+
+AZURITE_BUILT = getenv_strip("ARCTICDB_AZURITE_BUILT") == "1"
 
 # TODO: Some tests are either segfaulting or failing on MacOS with conda builds.
 # This is meant to be used as a temporary flag to skip/xfail those tests.
