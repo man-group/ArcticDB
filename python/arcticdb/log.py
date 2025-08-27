@@ -16,7 +16,7 @@ class _Logger(object):
         self._id = id
 
     def log(self, lvl, msg, *args, **kwargs):
-        if not _is_active(self._id, lvl):
+        if not self.is_active(lvl):
             return
         _log(self._id, lvl, msg.format(*args, **kwargs))
 
@@ -28,6 +28,9 @@ class _Logger(object):
 
     def warning(self, msg, *args, **kwargs):
         self.log(_Lvl.WARN, msg, *args, **kwargs)
+
+    def is_active(self, lvl):
+        return _is_active(self._id, lvl)
 
     warn = warning
 

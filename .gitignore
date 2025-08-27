@@ -53,3 +53,7 @@ python/.asv/results/
 
 # Ignore azurite files
 __azurite_*
+
+# Ignore sports db and sports exports
+docs/mkdocs/docs/notebooks/arcticdb_sports/
+docs/mkdocs/docs/notebooks/exports/

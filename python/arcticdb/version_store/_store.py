@@ -12,6 +12,7 @@ import datetime
 import os
 import sys
 from warnings import warn
+from collections import namedtuple
 
 import pandas as pd
 import numpy as np
@@ -60,6 +61,7 @@ from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
 from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat
 from arcticdb.options import RuntimeOptions, OutputFormat, output_format_to_internal
+from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
 from arcticdb.flattener import Flattener
@@ -90,6 +92,7 @@ import arcticdb_ext as ae
 
 IS_WINDOWS = sys.platform == "win32"
 
+FlattenResult = namedtuple("FlattenResult", ["is_recursive_normalize_preferred", "metastruct", "to_write"])
 
 def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, runtime_options=None, **kwargs):
     """
@@ -491,42 +494,49 @@ class NativeVersionStore:
 
         return udm, item, norm_meta
 
+    def _try_flatten(self, data, symbol):
+        fl = Flattener()
+        if fl.can_flatten(data):
+            # Collect all normalized items and metadata for normalization to write.
+            # No items to write can happen if the entire structure is msgpack serializable. eg: [1,2] doesn't
+            # need to go through a multi key process as the msgpack normalizer can handle it as is.
+            metastruct, to_write = fl.create_meta_structure(data, symbol)
+            is_recursive_normalize_preferred = len(to_write) > 0
+            return FlattenResult(is_recursive_normalize_preferred, metastruct, to_write)
+        else:
+            return FlattenResult(False, None, None)
+
     def _try_flatten_and_write_composite_object(
         self, symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous
     ):
-        fl = Flattener()
-        if fl.can_flatten(data):
-            metastruct, to_write = fl.create_meta_structure(data, symbol)
-            # Collect all normalized items and metadata for normalization to write.
+        is_recursive_normalize_preferred, metastruct, to_write = self._try_flatten(data, symbol)
+        if is_recursive_normalize_preferred:
             items = []
             norm_metas = []
-            # No items to write can happen if the entire structure is msgpack serializable. eg: [1,2] doesn't
-            # need to go through a multi key process as the msgpack normalizer can handle it as is.
-            if len(to_write) > 0:
-                for k, v in to_write.items():
-                    _, item, norm_meta = self._try_normalize(k, v, None, pickle_on_failure, dynamic_strings, None)
-                    items.append(item)
-                    norm_metas.append(norm_meta)
-                normalized_udm = normalize_metadata(metadata)
-                normalized_metastruct = normalize_recursive_metastruct(metastruct)
-                vit_composite = self.version_store.write_versioned_composite_data(
-                    symbol,
-                    normalized_metastruct,
-                    list(to_write.keys()),
-                    items,
-                    norm_metas,
-                    normalized_udm,
-                    prune_previous,
-                )
-                return VersionedItem(
-                    symbol=vit_composite.symbol,
-                    library=self._library.library_path,
-                    version=vit_composite.version,
-                    metadata=metadata,
-                    data=None,
-                    host=self.env,
-                    timestamp=vit_composite.timestamp,
-                )
+            for k, v in to_write.items():
+                _, item, norm_meta = self._try_normalize(k, v, None, pickle_on_failure, dynamic_strings, None)
+                items.append(item)
+                norm_metas.append(norm_meta)
+            normalized_udm = normalize_metadata(metadata)
+            normalized_metastruct = normalize_recursive_metastruct(metastruct)
+            vit_composite = self.version_store.write_versioned_composite_data(
+                symbol,
+                normalized_metastruct,
+                list(to_write.keys()),
+                items,
+                norm_metas,
+                normalized_udm,
+                prune_previous,
+            )
+            return VersionedItem(
+                symbol=vit_composite.symbol,
+                library=self._library.library_path,
+                version=vit_composite.version,
+                metadata=metadata,
+                data=None,
+                host=self.env,
+                timestamp=vit_composite.timestamp,
+            )
 
     @staticmethod
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
@@ -2965,7 +2975,37 @@ class NativeVersionStore:
         """
         return self._normalizer.get_normalizer_for_type(item)
 
-    def will_item_be_pickled(self, item):
+    def will_item_be_pickled(self, item, recursive_normalizers: Optional[bool] = None):
+        """
+        Check if the data will be pickled.
+
+        Parameters
+        ----------
+        item : `Any`
+            Data to be checked.
+        recursive_normalizers : `Optional[bool]`, default=None
+            Whether recursive normalizer is enabled.
+            This should be provided if `recursive_normalizers` is also provided to `write`.
+            Otherwise, the fallback logic for environment variables, library config
+            options, etc will be used, as in `write`.
+            This parameter WILL NOT affect the behavior of this method, for the reason stated
+            in below `Notes` section, but rather giving better warning messages for
+            recursive normalizable data.
+
+        Notes
+        ----------
+        There is disparity between `will_item_be_pickled` and `is_symbol_pickled`.
+        For recursively normalized data, regardless of whether it's partially pickled or not,
+        `is_symbol_pickled` returns False and `will_item_be_pickled` returns True
+
+        Returns
+        -------
+        `bool`
+            True if the item will be pickled, False otherwise.
+            Note that for the sake of backward compatibility, even if item can be
+            recursively normalized, it is considered `pickled` as well.
+        """
+        result = False
         try:
             _udm, _item, norm_meta = self._try_normalize(
                 symbol="",
@@ -2977,9 +3017,33 @@ class NativeVersionStore:
             )
         except Exception:
             # This will also log the exception inside composite normalizer's normalize
-            return True
+            result = True
 
-        return norm_meta.WhichOneof("input_type") == "msg_pack_frame"
+        result |= norm_meta.WhichOneof("input_type") == "msg_pack_frame"
+        log_warning_message = get_config_int("VersionStore.WillItemBePickledWarningMsg") != 0 and log.is_active(_LogLevel.WARN)
+        if result and log_warning_message:
+            proto_cfg = self._lib_cfg.lib_desc.version.write_options
+            resolved_recursive_normalizers = resolve_defaults(
+                "recursive_normalizers", proto_cfg, global_default=False, uppercase=False, **{"recursive_normalizers": recursive_normalizers}
+            )
+            warning_msg = ""
+            is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
+            if resolved_recursive_normalizers and is_recursive_normalize_preferred:
+                warning_msg = ("As recursive_normalizers is enabled, the item will be "
+                                "recursively normalized in `write`. However, this API will "
+                                "still return True for historical reason, such as recursively "
+                                "normalized data not being data_range searchable like "
+                                "pickled data. ")
+                fl = Flattener()
+                if fl.will_obj_be_partially_pickled(item):
+                    warning_msg += "Please note the item will still be partially pickled."
+            elif not is_recursive_normalize_preferred:
+                warning_msg = ("The item will be msgpack normalized in `write`. "
+                               "Msgpack normalization is considered `pickled` in ArcticDB, "
+                               "therefore this API will return True. ")
+            log.warning(warning_msg)
+                
+        return result
 
     @staticmethod
     def get_arctic_style_type_info_for_norm(desc):
@@ -3014,6 +3078,12 @@ class NativeVersionStore:
             symbol name
         as_of : `Optional[VersionQueryInput]`, default=None
             See documentation of `read` method for more details.
+
+        Notes
+        ----------
+        There is disparity between `will_item_be_pickled` and `is_symbol_pickled`.
+        For recursively normalized data, regardless of whether it's partially pickled or not,
+        `is_symbol_pickled` returns False and `will_item_be_pickled` returns True
 
         Returns
         -------
