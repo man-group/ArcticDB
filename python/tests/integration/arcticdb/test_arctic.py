@@ -261,7 +261,7 @@ def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_f
 @AZURE_TESTS_MARK
 @SSL_TESTS_MARK
 @pytest.mark.skipif(AZURITE_BUILT, 
-        "Skipping for now due to failure with built locally version: " \
+        reason = "Skipping for now due to failure with built locally version: " \
         "https://github.com/man-group/ArcticDB/actions/runs/17260458465")
 @pytest.mark.parametrize("client_cert_file", parameter_display_status)
 @pytest.mark.parametrize("client_cert_dir", parameter_display_status)
