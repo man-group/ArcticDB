@@ -16,7 +16,7 @@ runs:
         echo "method=source" >> $GITHUB_OUTPUT
         echo "⚠️ npm install failed — will build from source"
 
-    - name: Fallback: build Azurite from source
+    - name: Fallback - build Azurite from source
       if: steps.npm_install.outputs.method == 'source'
       shell: bash -l {0}
       run: |
