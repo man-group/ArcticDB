@@ -125,12 +125,7 @@ jobs:
           node-version: '16'
 
       - name: Install Azurite
-        uses: nick-fields/retry@v3
-        with:
-          timeout_minutes: 10
-          # We should always retry due to instable nature of connections and environments
-          max_attempts: 3
-          command: npm install -g azurite
+        uses: ./.github/actions/install_azurite
 
       - name: Check no arcticdb file depend on tests package
         shell: bash -l {0}
@@ -239,12 +234,7 @@ jobs:
           node-version: '16'
 
       - name: Install Azurite
-        uses: nick-fields/retry@v3
-        with:
-          # We should always retry due to instable nature of connections and environments
-          timeout_minutes: 10
-          max_attempts: 3
-          command: npm install -g azurite
+        uses: ./.github/actions/install_azurite
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars

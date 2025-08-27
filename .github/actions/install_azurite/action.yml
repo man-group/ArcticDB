@@ -1,0 +1,30 @@
+name: 'Install Azurite with Fallback'
+description: 'Installs Azurite via npm, with a fallback to building from source if npm fails.'
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Try installing Azurite via npm
+      id: npm_install
+      shell: bash
+      run: |
+        echo "Attempting npm install -g azurite..."
+        echo "method=source" >> $GITHUB_OUTPUT
+        echo "⚠️ npm install failed — will build from source"
+
+    - name: Fallback: build Azurite from source
+      if: steps.npm_install.outputs.method == 'source'
+      shell: bash -l {0}
+      run: |
+        echo "Cloning Azurite repository..."
+        git clone https://github.com/Azure/Azurite.git
+        cd Azurite
+        npm install
+        npm run build
+        npm install -g .
+        echo "✅ Installed Azurite from source"
+        azurite --version
