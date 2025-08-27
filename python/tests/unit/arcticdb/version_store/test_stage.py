@@ -21,29 +21,35 @@ from arcticdb.util.test import assert_frame_equal, config_context
 from arcticdb.exceptions import MissingKeysInStageResultsError
 
 
+@pytest.fixture
+def new_staged_data_api_enabled():
+    with config_context("dev.stage_new_api_enabled", 1):
+        yield True
+
+
 @pytest.fixture(scope="function", params=["v1", "v2-regular", "v2-sort"])
 def arctic_api(request):
     return request.param
 
 
-def finalize(api_version, lib: Library, sym, mode="write", _stage_results=None, metadata=None,
+def finalize(api_version, lib: Library, sym, mode="write", stage_results=None, metadata=None,
              prune_previous_versions=False, validate_index=True, delete_staged_data_on_failure=False):
     if api_version == "v1":
-        lib._nvs.compact_incomplete(sym, append=mode == "append", _stage_results=_stage_results,
+        lib._nvs.compact_incomplete(sym, append=mode == "append", stage_results=stage_results,
                                     convert_int_to_float=False, metadata=metadata, prune_previous_version=prune_previous_versions,
                                     validate_index=validate_index, delete_staged_data_on_failure=delete_staged_data_on_failure)
     elif api_version == "v2-regular":
-        lib.finalize_staged_data(sym, mode=mode, _stage_results=_stage_results, prune_previous_versions=prune_previous_versions,
+        lib.finalize_staged_data(sym, mode=mode, stage_results=stage_results, prune_previous_versions=prune_previous_versions,
                                  metadata=metadata, validate_index=validate_index, delete_staged_data_on_failure=delete_staged_data_on_failure)
     elif api_version == "v2-sort":
-        lib.sort_and_finalize_staged_data(sym, mode=mode, _stage_results=_stage_results, prune_previous_versions=prune_previous_versions,
+        lib.sort_and_finalize_staged_data(sym, mode=mode, stage_results=stage_results, prune_previous_versions=prune_previous_versions,
                                  metadata=metadata, delete_staged_data_on_failure=delete_staged_data_on_failure)
     else:
         raise RuntimeError(f"Unexpected api_version {api_version}")
 
 
 @pytest.mark.parametrize("finalize_mode", ["write", "append"])
-def test_stage(lmdb_library_factory, should_enable_new_api, finalize_mode, arctic_api):
+def test_stage(lmdb_library_factory, finalize_mode, arctic_api):
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=1))
     not_staged = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}, index=pd.date_range("2025-01-01", periods=2))
@@ -65,7 +71,7 @@ def test_stage(lmdb_library_factory, should_enable_new_api, finalize_mode, arcti
     assert_frame_equal(lib.read(sym).data, expected_df, check_freq=False)
 
 
-def test_stage_result_pickle(lmdb_library_factory):
+def test_stage_result_pickle(lmdb_library_factory, new_staged_data_api_enabled):
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=1))
     df = pd.DataFrame({"col1": [1, 2], "col2": [3, 4]}, index=pd.date_range("2025-01-01", periods=2))
@@ -78,7 +84,7 @@ def test_stage_result_pickle(lmdb_library_factory):
     assert segments == segments_after_pickling
 
 
-def test_stage_submit_tokens_for_wrong_symbol(lmdb_library_factory, arctic_api):
+def test_stage_submit_tokens_for_wrong_symbol(lmdb_library_factory, new_staged_data_api_enabled, arctic_api):
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=1))
 
     data_to_stage = [
@@ -90,13 +96,13 @@ def test_stage_submit_tokens_for_wrong_symbol(lmdb_library_factory, arctic_api):
     staged_results = [lib.stage("sym", data_to_stage[0]), lib.stage("other_sym", data_to_stage[1]), lib.stage("sym", data_to_stage[2])]
 
     with pytest.raises(UserInputException, match="E_STAGE_RESULT_WITH_INCORRECT_SYMBOL"):
-        finalize(arctic_api, lib, "sym", _stage_results=staged_results)
+        finalize(arctic_api, lib, "sym", stage_results=staged_results)
 
     assert not lib.has_symbol("sym")
     staged_segments = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
     assert len(staged_segments) == 6
 
-    finalize(arctic_api, lib, "sym", _stage_results=[staged_results[0], staged_results[2]])
+    finalize(arctic_api, lib, "sym", stage_results=[staged_results[0], staged_results[2]])
     assert_frame_equal(lib.read("sym").data, pd.concat([data_to_stage[0], data_to_stage[2]]), check_freq=False)
 
     staged_segments = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
@@ -119,7 +125,7 @@ STRING_INDEXES = [["a", "b", "c"], ["d", "e"], ["f"], ["g", "h", "i", "j", "k"]]
 
 @pytest.mark.parametrize("dynamic_schema", (True, False))
 @pytest.mark.parametrize("indexes", [DATE_RANGE_INDEXES, ROWCOUNT_INDEXES, STRING_INDEXES])
-def test_finalize_with_tokens_append_mode(lmdb_library_factory, indexes, dynamic_schema, arctic_api):
+def test_finalize_with_tokens_append_mode(lmdb_library_factory, new_staged_data_api_enabled, indexes, dynamic_schema, arctic_api):
     if arctic_api == "v2-sort" and indexes is not DATE_RANGE_INDEXES:
         pytest.skip("sort_and_finalize_staged_data only supports datetime indexed data")
 
@@ -138,13 +144,13 @@ def test_finalize_with_tokens_append_mode(lmdb_library_factory, indexes, dynamic
 
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 4
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_1])
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_1])
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 2
 
     result = lib.read(sym).data
     assert_frame_equal(df_1, result)
 
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_2], mode="append")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_2], mode="append")
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 1
 
     result = lib.read(sym).data
@@ -153,7 +159,7 @@ def test_finalize_with_tokens_append_mode(lmdb_library_factory, indexes, dynamic
     stage_result_3 = lib.stage(sym, df_3)
     stage_result_4 = lib.stage(sym, df_4)
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 5
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_3, stage_result_4], mode="append")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_3, stage_result_4], mode="append")
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 1
 
     result = lib.read(sym).data
@@ -171,7 +177,7 @@ def test_finalize_with_tokens_append_mode(lmdb_library_factory, indexes, dynamic
         finalize(arctic_api, lib, sym)
 
 
-def test_finalize_with_tokens_write_mode(lmdb_library_factory, arctic_api):
+def test_finalize_with_tokens_write_mode(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
@@ -187,13 +193,13 @@ def test_finalize_with_tokens_write_mode(lmdb_library_factory, arctic_api):
 
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 7
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_3], mode="write")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_3], mode="write")
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 4
 
     result = lib.read(sym).data
     assert_frame_equal(pd.concat([df_1, df_3]), result)
 
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_2, stage_result_4], mode="write")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_2, stage_result_4], mode="write")
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 0
 
     result = lib.read(sym).data
@@ -203,14 +209,14 @@ def test_finalize_with_tokens_write_mode(lmdb_library_factory, arctic_api):
     df_5 = pd.DataFrame({"col1": [11, 12], "col2": [13, 14]}, index=pd.date_range("2025-12-01", periods=2))
     stage_result_5 = lib.stage(sym, df_5)
 
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_5], mode="append")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_5], mode="append")
 
     result = lib.read(sym).data
     assert_frame_equal(pd.concat([df_2, df_4, df_5]), result)
 
 
 @pytest.mark.parametrize("mode", ("write", "append"))
-def test_finalize_with_tokens_then_without(lmdb_library_factory, arctic_api, mode):
+def test_finalize_with_tokens_then_without(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, mode):
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
@@ -226,7 +232,7 @@ def test_finalize_with_tokens_then_without(lmdb_library_factory, arctic_api, mod
 
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 7
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2], mode=mode)
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2], mode=mode)
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 4
 
     result = lib.read(sym).data
@@ -246,7 +252,22 @@ def test_finalize_with_tokens_then_without(lmdb_library_factory, arctic_api, mod
         raise RuntimeError(f"Unexpected mode {mode}")
 
 
-def test_finalize_missing_keys(lmdb_library_factory, arctic_api):
+def test_finalize_with_tokens_new_api_disabled(lmdb_library_factory, arctic_api):
+    """We should raise if anyone attempts to use the new API without the feature flag."""
+    sym = "sym"
+    lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
+    indexes = DATE_RANGE_INDEXES
+    df_1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [3, 4, 5]}, index=indexes[0])
+    stage_result_1 = lib.stage(sym, df_1)
+
+    lt = lib._dev_tools.library_tool()
+    assert len(lt.find_keys(KeyType.APPEND_DATA)) == 2
+
+    assert len(lt.find_keys(KeyType.APPEND_DATA)) == 2
+    assert not lib.has_symbol(sym)
+
+
+def test_finalize_missing_keys(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
@@ -259,12 +280,12 @@ def test_finalize_missing_keys(lmdb_library_factory, arctic_api):
 
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 4
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2], mode="write")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2], mode="write")
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 1
 
     # Do we raise if someone finalizes a key that no longer exists?
     try:
-        finalize(arctic_api, lib, sym, _stage_results=[stage_result_3, stage_result_2, stage_result_1], mode="write")
+        finalize(arctic_api, lib, sym, stage_results=[stage_result_3, stage_result_2, stage_result_1], mode="write")
     except MissingKeysInStageResultsError as e:
         bad_tokens = e.stage_results_with_missing_keys
         assert len(bad_tokens) == 3
@@ -280,7 +301,7 @@ def test_finalize_missing_keys(lmdb_library_factory, arctic_api):
 
     assert lib.read(sym).version == 0
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 1
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_3], mode="write")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_3], mode="write")
     assert_frame_equal(lib.read(sym).data, df_3)
 
 
@@ -324,7 +345,7 @@ def test_missing_keys_error():
     assert error.stage_results_with_missing_keys == [info_one, info_two]
 
 
-def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api):
+def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
@@ -337,12 +358,12 @@ def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api):
 
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 4
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_3], mode="write")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_3], mode="write")
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 3
 
     # Do we raise if someone finalizes a key that no longer exists?
     with pytest.raises(MissingKeysInStageResultsError):
-        finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2, stage_result_3], mode="write")
+        finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2, stage_result_3], mode="write")
 
     # Do we leave everything that was on disk alone?
     res = lib.read(sym)
@@ -351,7 +372,7 @@ def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api):
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 3
 
     # Can we still go ahead and finalize without the missing key?
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2], mode="write")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2], mode="write")
 
     res = lib.read(sym)
     assert res.version == 1
@@ -360,7 +381,7 @@ def test_finalize_noop_if_any_missing_keys(lmdb_library_factory, arctic_api):
 
 
 @pytest.mark.parametrize("prune_previous_versions", (True, False))
-def test_finalize_with_tokens_and_prune_previous(lmdb_library_factory, arctic_api, prune_previous_versions):
+def test_finalize_with_tokens_and_prune_previous(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, prune_previous_versions):
     """Do we respect pruning when we also have tokens? This test also checks that we support metadata with tokens."""
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
@@ -374,7 +395,7 @@ def test_finalize_with_tokens_and_prune_previous(lmdb_library_factory, arctic_ap
 
     lt = lib._dev_tools.library_tool()
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 2
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_2],
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_2],
              prune_previous_versions=prune_previous_versions, metadata="blah")
     assert len(lt.find_keys(KeyType.APPEND_DATA)) == 1
 
@@ -391,7 +412,7 @@ def test_finalize_with_tokens_and_prune_previous(lmdb_library_factory, arctic_ap
 
 
 @pytest.mark.parametrize("validate_index", (True, False))
-def test_finalize_with_tokens_and_validate_index_all_ok(lmdb_library_factory, arctic_api, validate_index):
+def test_finalize_with_tokens_and_validate_index_all_ok(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, validate_index):
     sym = "good_sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
     indexes = DATE_RANGE_INDEXES
@@ -405,7 +426,7 @@ def test_finalize_with_tokens_and_validate_index_all_ok(lmdb_library_factory, ar
     stage_result_2 = lib.stage(sym, df_2)
 
     # We should still get an ordered index regardless of the ordering of the tokens
-    finalize(arctic_api, lib, sym, _stage_results=[stage_result_2, stage_result_1], validate_index=validate_index, mode="append")
+    finalize(arctic_api, lib, sym, stage_results=[stage_result_2, stage_result_1], validate_index=validate_index, mode="append")
 
     res = lib.read(sym)
     assert_frame_equal(res.data, pd.concat([df_0, df_1, df_2]))
@@ -413,7 +434,7 @@ def test_finalize_with_tokens_and_validate_index_all_ok(lmdb_library_factory, ar
 
 
 @pytest.mark.parametrize("indexes", [DATE_RANGE_INDEXES, ROWCOUNT_INDEXES, STRING_INDEXES])
-def test_ordering_of_tokens_should_not_matter(lmdb_library_factory, arctic_api, indexes):
+def test_ordering_of_tokens_should_not_matter(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, indexes):
     """The order that users submit the tokens in should not matter for date range indexes. For rowcount and string
     indexes the result will be saved with an arbitrary order."""
     is_datetime = isinstance(indexes[0], pd.DatetimeIndex)
@@ -433,7 +454,7 @@ def test_ordering_of_tokens_should_not_matter(lmdb_library_factory, arctic_api, 
         for i, p in enumerate(permutation):
             tokens[i] = stage_results[p]
 
-        finalize(arctic_api, lib, sym, _stage_results=tokens)
+        finalize(arctic_api, lib, sym, stage_results=tokens)
         res = lib.read(sym)
         if is_datetime:
             assert_frame_equal(res.data, pd.concat([df_1, df_2, df_3]))
@@ -446,7 +467,7 @@ def test_ordering_of_tokens_should_not_matter(lmdb_library_factory, arctic_api, 
 
 
 @pytest.mark.parametrize("indexes", [DATE_RANGE_INDEXES, ROWCOUNT_INDEXES, STRING_INDEXES])
-def test_sorting_of_result_without_tokens(lmdb_library_factory, arctic_api, indexes):
+def test_sorting_of_result_without_tokens(lmdb_library_factory, arctic_api, new_staged_data_api_enabled, indexes):
     """Same as the test above but without tokens, checking both paths through the API are interoperable when we finalize
     everything. """
     is_datetime = isinstance(indexes[0], pd.DatetimeIndex)
@@ -461,7 +482,7 @@ def test_sorting_of_result_without_tokens(lmdb_library_factory, arctic_api, inde
     for d in (df_1, df_2, df_3):
         lib.stage(sym, d)
 
-    finalize(arctic_api, lib, sym, _stage_results=None)
+    finalize(arctic_api, lib, sym, stage_results=None)
     res = lib.read(sym)
     if is_datetime:
         assert_frame_equal(res.data, pd.concat([df_1, df_2, df_3]))
@@ -474,7 +495,7 @@ def test_sorting_of_result_without_tokens(lmdb_library_factory, arctic_api, inde
 
 
 @pytest.mark.parametrize("validate_index", (True, False))
-def test_finalize_with_tokens_and_validate_index_out_of_order(lmdb_library_factory, arctic_api,
+def test_finalize_with_tokens_and_validate_index_out_of_order(lmdb_library_factory, arctic_api, new_staged_data_api_enabled,
                                                  validate_index):
     # Given a symbol starting in 2026
     sym = "bad_sym"
@@ -492,15 +513,15 @@ def test_finalize_with_tokens_and_validate_index_out_of_order(lmdb_library_facto
     # When we finalize
     if validate_index or arctic_api == "v2-sort":
         with pytest.raises(UnsortedDataException):
-            finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2], validate_index=validate_index, mode="append")
+            finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2], validate_index=validate_index, mode="append")
     else:
-        finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2], validate_index=validate_index, mode="append")
+        finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2], validate_index=validate_index, mode="append")
         res = lib.read(sym)
         assert_frame_equal(res.data, pd.concat([df_0, df_1, df_2]))
         assert not res.data.index.is_monotonic_increasing
 
 
-def test_compact_incomplete_with_tokens_without_via_iteration_not_ok(lmdb_library_factory):
+def test_compact_incomplete_with_tokens_without_via_iteration_not_ok(lmdb_library_factory, new_staged_data_api_enabled):
     """We validate against submitting with tokens and via_iteration False as this is not a required use case (and doesn't
     make a great deal of sense)."""
     sym = "sym"
@@ -512,14 +533,14 @@ def test_compact_incomplete_with_tokens_without_via_iteration_not_ok(lmdb_librar
     assert len(keys) == 2
 
     with pytest.raises(UserInputException):
-        lib._nvs.compact_incomplete(sym, append=False, _stage_results=[stage_result_1], convert_int_to_float=False, via_iteration=False)
+        lib._nvs.compact_incomplete(sym, append=False, stage_results=[stage_result_1], convert_int_to_float=False, via_iteration=False)
 
     assert not lib.has_symbol(sym)
     keys = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
     assert len(keys) == 2
 
 
-def test_delete_staged_data_on_failure_with_tokens_overlap(lmdb_library_factory, arctic_api):
+def test_delete_staged_data_on_failure_with_tokens_overlap(lmdb_library_factory, arctic_api, new_staged_data_api_enabled):
     """Check what happens to staged tokens when we fail due to an overlapping index in the staged segments."""
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
@@ -537,7 +558,7 @@ def test_delete_staged_data_on_failure_with_tokens_overlap(lmdb_library_factory,
     assert len(keys) == 4
 
     if arctic_api == "v2-sort":
-        finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2], delete_staged_data_on_failure=True)
+        finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2], delete_staged_data_on_failure=True)
 
         assert lib.has_symbol(sym)
         res = lib.read(sym)
@@ -547,19 +568,19 @@ def test_delete_staged_data_on_failure_with_tokens_overlap(lmdb_library_factory,
         assert len(keys) == 1
     else:
         with pytest.raises(SortingException):
-            finalize(arctic_api, lib, sym, _stage_results=[stage_result_1, stage_result_2], validate_index=True, delete_staged_data_on_failure=True)
+            finalize(arctic_api, lib, sym, stage_results=[stage_result_1, stage_result_2], validate_index=True, delete_staged_data_on_failure=True)
 
         assert not lib.has_symbol(sym)
         keys = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
         assert len(keys) == 1
 
-        finalize(arctic_api, lib, sym, _stage_results=[stage_result_3])
+        finalize(arctic_api, lib, sym, stage_results=[stage_result_3])
         res = lib.read(sym)
         assert_frame_equal(res.data, df_3)
         assert res.version == 0
 
 
-def test_delete_staged_data_on_failure_with_tokens_out_of_order_append(lmdb_library_factory, arctic_api):
+def test_delete_staged_data_on_failure_with_tokens_out_of_order_append(lmdb_library_factory, new_staged_data_api_enabled, arctic_api):
     """Check what happens to staged tokens when we fail due to an out of order append."""
     sym = "sym"
     lib = lmdb_library_factory(LibraryOptions(rows_per_segment=2))
@@ -577,7 +598,7 @@ def test_delete_staged_data_on_failure_with_tokens_out_of_order_append(lmdb_libr
 
     with pytest.raises(UnsortedDataException):
         # Expect this to fail as df_2's index starts before df_1, which has already been written
-        finalize(arctic_api, lib, sym, _stage_results=[stage_result_2], validate_index=True, mode="append", delete_staged_data_on_failure=True)
+        finalize(arctic_api, lib, sym, stage_results=[stage_result_2], validate_index=True, mode="append", delete_staged_data_on_failure=True)
 
     # We shouldn't delete the token that wasn't submitted to the failed call
     keys = lib._dev_tools.library_tool().find_keys(KeyType.APPEND_DATA)
