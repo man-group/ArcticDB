@@ -30,15 +30,15 @@ VariantKey write_multi_index_entry(
 ) {
     ARCTICDB_SAMPLE(WriteJournalEntry, 0)
     ARCTICDB_DEBUG(log::version(), "Version map writing multi key");
-    folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
+    VariantKey multi_key;
 
-    IndexAggregator<RowCountIndex> multi_index_agg(stream_id, [&multi_key_fut, &store, version_id, stream_id](auto &&segment) {
-        multi_key_fut = store->write(KeyType::MULTI_KEY,
+    IndexAggregator<RowCountIndex> multi_index_agg(stream_id, [&multi_key, &store, version_id, stream_id](auto &&segment) {
+        multi_key = store->write_sync(KeyType::MULTI_KEY,
                                      version_id,  // version_id
                                      stream_id,
                                      NumericIndex{0},  // start_index
                                      NumericIndex{0},  // end_index
-                                     std::forward<decltype(segment)>(segment)).wait();
+                                     std::forward<decltype(segment)>(segment));
     });
 
     for (const auto& key : keys) {
@@ -58,7 +58,7 @@ VariantKey write_multi_index_entry(
     }
     multi_index_agg.set_timeseries_descriptor(timeseries_descriptor);
     multi_index_agg.commit();
-    return multi_key_fut.wait().value();
+    return multi_key;
 }
 
 std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size)  {

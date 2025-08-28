@@ -2,6 +2,7 @@
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/async/tasks.hpp>
+#include <folly/futures/Future.h>
 
 namespace arcticdb {
 
@@ -51,8 +52,13 @@ AtomKey write_table_index_tree_from_source_to_target(
     // Out
     index::IndexWriter<stream::RowCountIndex> writer(target_store,
             {index_key.id(), new_version_id.value_or(index_key.version_id())},
-            std::move(index_segment_reader.mutable_tsd()));
+            std::move(index_segment_reader.mutable_tsd()),
+            /*key_type =*/std::nullopt,
+            /*sync =*/true
+        );
+    
     std::vector<folly::Future<async::CopyCompressedInterStoreTask::ProcessingResult>> futures;
+    
     // Process
     for (auto iter = index_segment_reader.begin(); iter != index_segment_reader.end(); ++iter) {
         auto& sk = *iter;
@@ -74,6 +80,7 @@ AtomKey write_table_index_tree_from_source_to_target(
             source_store,
             {target_store}}));
     }
+
     const std::vector<async::CopyCompressedInterStoreTask::ProcessingResult> store_results = collect(futures).get();
     for (const async::CopyCompressedInterStoreTask::ProcessingResult& res: store_results) {
         util::variant_match(
@@ -84,7 +91,7 @@ AtomKey write_table_index_tree_from_source_to_target(
             [](const auto&){});
     }
     // FUTURE: clean up already written keys if exception
-    return writer.commit().get();
+    return writer.commit_sync();
 }
 
 AtomKey copy_multi_key_from_source_to_target(
@@ -93,8 +100,7 @@ AtomKey copy_multi_key_from_source_to_target(
         const AtomKey& index_key,
         std::optional<VersionId> new_version_id) {
     using namespace arcticdb::stream;
-    auto fut_index = source_store->read(index_key);
-    auto [_, index_seg] = std::move(fut_index).get();
+    auto [_, index_seg] = source_store->read_sync(index_key);
     std::vector<AtomKey> keys;
     for (size_t idx = 0; idx < index_seg.row_count(); idx++) {
         keys.push_back(stream::read_key_row(index_seg, static_cast<ssize_t>(idx)));
@@ -107,14 +113,14 @@ AtomKey copy_multi_key_from_source_to_target(
     }
     // Write new MULTI_KEY
 
-    folly::Future<VariantKey> multi_key_fut = folly::Future<VariantKey>::makeEmpty();
-    IndexAggregator<RowCountIndex> multi_index_agg(index_key.id(), [&new_version_id, &index_key, &multi_key_fut, &target_store](auto &&segment) {
-        multi_key_fut = target_store->write(KeyType::MULTI_KEY,
+    VariantKey multi_key;
+    IndexAggregator<RowCountIndex> multi_index_agg(index_key.id(), [&new_version_id, &index_key, &multi_key, &target_store](auto &&segment) {
+        multi_key = target_store->write_sync(KeyType::MULTI_KEY,
                                             new_version_id.value_or(index_key.version_id()),  // version_id
                                             index_key.id(),
                                             0,  // start_index
                                             0,  // end_index
-                                            std::forward<SegmentInMemory>(segment)).wait();
+                                            std::forward<SegmentInMemory>(segment));
     });
     for (auto &key: new_data_keys) {
         multi_index_agg.add_key(to_atom(key));
@@ -127,7 +133,7 @@ AtomKey copy_multi_key_from_source_to_target(
         multi_index_agg.set_timeseries_descriptor(index_seg.index_descriptor());
     }
     multi_index_agg.commit();
-    return to_atom(multi_key_fut.value());
+    return to_atom(multi_key);
 }
 
 AtomKey copy_index_key_recursively(
