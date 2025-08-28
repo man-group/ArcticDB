@@ -19,7 +19,7 @@ std::pair<int64_t, int64_t> get_index_and_field_count(const arcticdb::pipelines:
 SlicingPolicy get_slicing_policy(
     const WriteOptions& options,
     const arcticdb::pipelines::InputFrame& frame) {
-    if(frame.bucketize_dynamic) {
+    if(options.bucketize_dynamic) {
         const auto [index_count, field_count] = get_index_and_field_count(frame);
         const auto col_count = field_count - index_count;
         const auto num_buckets = std::min(static_cast<size_t>(std::ceil(double(col_count) / options.column_group_size)), options.max_num_buckets);

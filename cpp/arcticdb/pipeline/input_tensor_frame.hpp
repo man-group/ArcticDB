@@ -49,7 +49,6 @@ struct InputFrame {
     IndexRange index_range;
     size_t num_rows = 0;
     mutable size_t offset = 0;
-    mutable bool bucketize_dynamic = 0;
 
     void set_offset(ssize_t off) const {
         offset = off;
@@ -62,10 +61,6 @@ struct InputFrame {
             case SortedValue::ASCENDING:desc.set_sorted(SortedValue::ASCENDING);break;
             default:desc.set_sorted(SortedValue::UNKNOWN);
         }
-    }
-
-    void set_bucketize_dynamic(bool bucketize) const {
-        bucketize_dynamic = bucketize;
     }
 
     bool has_index() const { return desc.index().field_count() != 0ULL; }

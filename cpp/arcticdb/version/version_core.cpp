@@ -112,7 +112,6 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     }
 
     // Slice the frame according to the write options
-    frame->set_bucketize_dynamic(options.bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
     auto partial_key = IndexPartialKey{frame->desc.id(), version_id};
     if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
@@ -157,7 +156,7 @@ folly::Future<AtomKey> async_append_impl(
     const StreamId stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
-    bool bucketize_dynamic = index_segment_reader.bucketize_dynamic();
+    util::check(options.bucketize_dynamic == index_segment_reader.bucketize_dynamic(), "Mismatch in bucketize_dynamic option");
     auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     frame->set_offset(static_cast<ssize_t>(row_offset));
@@ -166,7 +165,6 @@ folly::Future<AtomKey> async_append_impl(
         sorted_data_check_append(*frame, index_segment_reader);
     }
 
-    frame->set_bucketize_dynamic(bucketize_dynamic);
     auto slicing_arg = get_slicing_policy(options, *frame);
     return append_frame(IndexPartialKey{stream_id, update_info.next_version_id_}, frame, slicing_arg, index_segment_reader, store, options.dynamic_schema, options.ignore_sort_order);
 }
@@ -454,7 +452,6 @@ folly::Future<AtomKey> async_update_impl(
         ](index::IndexSegmentReader&& index_segment_reader) {
         check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
         ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->desc.id(), update_info.previous_index_key_->version_id());
-        frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
         return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store
         ).via(&async::cpu_executor()).thenValue([
             store,

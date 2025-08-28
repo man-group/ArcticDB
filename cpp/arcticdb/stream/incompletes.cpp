@@ -367,14 +367,13 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     auto desc = frame->desc;
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
-    auto bucketize_dynamic = frame->bucketize_dynamic;
     bool sparsify_floats{false};
 
     TypedStreamVersion typed_stream_version{stream_id, VersionId{0}, KeyType::APPEND_DATA};
     return folly::collect(folly::window(std::move(slice_and_rowcount),
         [frame, slicing_policy, key = std::move(key),
          store, sparsify_floats, typed_stream_version = std::move(typed_stream_version),
-            bucketize_dynamic, de_dup_map, desc, norm_meta, user_meta](
+            de_dup_map, desc, norm_meta, user_meta](
             auto&& slice) {
             return async::submit_cpu_task(WriteToSegmentTask(
                 frame,
@@ -384,7 +383,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                 slice.second,
                 frame->index,
                 sparsify_floats))
-                .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
+                .thenValue([store, de_dup_map, desc, norm_meta, user_meta](
                     std::tuple<stream::StreamSink::PartialKey,
                                SegmentInMemory,
                                pipelines::FrameSlice> &&ks) {
@@ -399,7 +398,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                         user_meta,
                         prev_key,
                         next_key,
-                        bucketize_dynamic
+                        false
                     );
                     seg.set_timeseries_descriptor(tsd);
 

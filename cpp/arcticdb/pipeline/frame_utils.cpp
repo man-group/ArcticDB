@@ -70,7 +70,7 @@ TimeseriesDescriptor index_descriptor_from_frame(
         std::move(frame->user_meta),
         std::move(prev_key),
         std::nullopt,
-        frame->bucketize_dynamic);
+        false);
 }
 
 void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {

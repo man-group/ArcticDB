@@ -126,7 +126,7 @@ TimeseriesDescriptor get_merged_tsd(
             std::move(new_frame->user_meta),
             std::nullopt,
             std::nullopt,
-            new_frame->bucketize_dynamic
+            false
     );
 }
 
