@@ -13,7 +13,7 @@
 namespace arcticdb::pipelines {
 
 std::pair<int64_t, int64_t> get_index_and_field_count(const arcticdb::pipelines::InputFrame& frame) {
-    return {frame.desc.index().field_count(), frame.desc.fields().size()};
+    return {frame.descriptor().index().field_count(), frame.descriptor().fields().size()};
 }
 
 SlicingPolicy get_slicing_policy(
@@ -32,9 +32,9 @@ SlicingPolicy get_slicing_policy(
 std::vector<FrameSlice> slice(InputFrame& frame, const SlicingPolicy& arg) {
     return util::variant_match(arg,
             [&frame](NoSlicing) -> std::vector<FrameSlice> {
-                return {FrameSlice{std::make_shared<StreamDescriptor>(frame.desc),
-                                   ColRange{frame.desc.index().field_count(), frame.desc.fields().size()},
-                                   RowRange{0, frame.num_rows}}};
+                return {FrameSlice{std::make_shared<StreamDescriptor>(frame.descriptor()),
+                                   ColRange{frame.descriptor().index().field_count(), frame.descriptor().fields().size()},
+                                   RowRange{0, frame.num_rows()}}};
             },
             [&frame](const auto& slicer) {
                 return slicer(frame);
@@ -42,24 +42,25 @@ std::vector<FrameSlice> slice(InputFrame& frame, const SlicingPolicy& arg) {
 }
 
 void add_index_fields(const arcticdb::pipelines::InputFrame& frame, FieldCollection& current_fields) {
-    for (auto i = 0u; i < frame.desc.index().field_count(); ++i) {
+    for (auto i = 0u; i < frame.descriptor().index().field_count(); ++i) {
         const auto& field = frame.desc.fields(0);
         current_fields.add({field.type(), field.name()});
     }
 }
 
 std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::InputFrame& frame) {
-    return {frame.offset, frame.num_rows + frame.offset};
+    return {frame.offset(), frame.num_rows() + frame.offset()};
 }
 
 std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::InputFrame& frame) const {
     const auto [index_count, total_field_count] = get_index_and_field_count(frame);
     auto field_count = total_field_count - index_count;
-    auto fields_pos = std::begin(frame.desc.fields());
+    auto fields_pos = std::begin(frame.descriptor().fields());
     std::advance(fields_pos, index_count);
 
-    auto id = frame.desc.id();
-    auto index = frame.desc.index();
+    auto id = frame.stream_id();
+    const auto desc = frame.descriptor();
+    auto index = desc.index();
 
     std::vector<FrameSlice> slices;
     slices.reserve((field_count + col_per_slice_ - 1) / col_per_slice_);
@@ -71,7 +72,7 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
     auto col = index_count;
     do {
         auto fields_next = fields_pos;
-        auto distance = std::min(size_t(std::distance(fields_pos, std::end(frame.desc.fields()))), col_per_slice_);
+        auto distance = std::min(size_t(std::distance(fields_pos, std::end(desc.fields()))), col_per_slice_);
         std::advance(fields_next, distance);
 
         // systematically writing the index in the column group
@@ -84,17 +85,17 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
         }
 
 
-        auto desc = std::make_shared<StreamDescriptor>(id, index, current_fields);
+        auto slice_desc = std::make_shared<StreamDescriptor>(id, index, current_fields);
         for (std::size_t r = first_row, end = last_row; r < end; r += row_per_slice_) {
             auto rdist = std::min(last_row-r, row_per_slice_);
-            slices.push_back(FrameSlice(desc,
+            slices.push_back(FrameSlice(slice_desc,
                                         ColRange{col, col+distance},
                                         RowRange{r, r+rdist}));
         }
 
         col += col_per_slice_;
         fields_pos = fields_next;
-    } while (fields_pos!=std::end(frame.desc.fields()));
+    } while (fields_pos!=std::end(desc.fields()));
     return slices;
 }
 
@@ -102,8 +103,9 @@ std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::Inpu
     std::vector<uint32_t> buckets;
     const auto [index_count, field_count] = get_index_and_field_count(frame);
 
+    const auto& desc = frame.descriptor();
     for(auto i = index_count; i < field_count; ++i)
-        buckets.push_back(bucketize(frame.desc.field(i).name(), num_buckets_));
+        buckets.push_back(bucketize(desc.field(i).name(), num_buckets_));
 
     std::vector<size_t> indices(buckets.size());
     std::iota(std::begin(indices), std::end(indices), index_count);
@@ -128,15 +130,15 @@ std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::Inpu
         add_index_fields(frame, *current_fields);
 
         for(auto field = start_pos; field < end_pos; ++field) {
-            const auto& f = frame.desc.field(*field);
+            const auto& f = desc.field(*field);
             current_fields->add({f.type(), f.name()});
         }
 
-        auto desc = std::make_shared<StreamDescriptor>(frame.desc.id(), frame.desc.index(), std::move(current_fields));
+        auto slice_desc = std::make_shared<StreamDescriptor>(frame.stream_id(), desc.index(), std::move(current_fields));
         
         for (std::size_t r = first_row, end = last_row; r < end; r += row_per_slice_) {
             auto rdist = std::min(last_row-r, row_per_slice_);
-            slices.emplace_back(FrameSlice(desc,
+            slices.emplace_back(FrameSlice(slice_desc,
                                         ColRange{col, col + distance},
                                         RowRange{r, r+rdist},
                                         current_bucket,

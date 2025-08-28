@@ -89,7 +89,7 @@ VersionedItem write_dataframe_impl(
     bool validate_index
     ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->stream_id(), version_id, frame->num_rows);
+    ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->stream_id(), version_id, frame->num_rows());
     auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
     return {std::move(atom_key_fut).get()};
 }

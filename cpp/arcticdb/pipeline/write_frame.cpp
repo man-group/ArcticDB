@@ -302,7 +302,7 @@ folly::Future<entity::AtomKey> append_frame(
     .thenValue([dynamic_schema, slices_to_write=std::move(existing_slices), frame=frame, index_segment_reader=std::move(index_segment_reader), key=std::move(key), store](auto&& slice_and_keys_to_append) mutable {
         slices_to_write.insert(std::end(slices_to_write), std::make_move_iterator(std::begin(slice_and_keys_to_append)), std::make_move_iterator(std::end(slice_and_keys_to_append)));
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-        auto tsd = index::get_merged_tsd(frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame);
+        auto tsd = index::get_merged_tsd(frame->num_rows() + frame->offset(), dynamic_schema, index_segment_reader.tsd(), frame);
         return index::write_index(stream::index_type_from_descriptor(tsd.as_stream_descriptor()), tsd, std::move(slices_to_write), key, store);
     });
 }

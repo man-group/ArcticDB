@@ -211,7 +211,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
     res->desc.set_id(stream_id);
-    res->num_rows = 0u;
+    res->num_rows_ = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
     if (!user_meta.is_none())
         python_util::pb_from_python(user_meta, res->user_meta);
@@ -234,7 +234,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             util::check(index_tensor.ndim() == 1, "Multi-dimensional indexes not handled");
             util::check(index_tensor.shape() != nullptr, "Index tensor expected to contain shapes");
             std::string index_column_name = !idx_names.empty() ? idx_names[0] : "index";
-            res->num_rows = static_cast<size_t>(index_tensor.shape(0));
+            res->num_rows_ = static_cast<size_t>(index_tensor.shape(0));
             // TODO handle string indexes
             if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
                 res->desc.set_index_field_count(1);
@@ -260,7 +260,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 
         for (auto i = 0u; i < col_vals.size(); ++i) {
             auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
-            res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
+            res->num_rows_ = std::max(res->num_rows_, static_cast<size_t>(tensor.shape(0)));
             if (tensor.expanded_dim() == 1) {
                 res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
             } else if (tensor.expanded_dim() == 2) {
@@ -277,7 +277,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
         }
 
-        if (empty_types && res->num_rows == 0) {
+        if (empty_types && res->num_rows_ == 0) {
             res->index = stream::EmptyIndex();
             res->desc.set_index_type(IndexDescriptor::Type::EMPTY);
         }
@@ -296,7 +296,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         res->seg = arrow_data_to_segment(sp_record_batches);
         res->record_batches = std::move(sp_record_batches);
         res->seg->descriptor().set_id(stream_id);
-        res->num_rows = res->seg->row_count();
+        res->num_rows_ = res->seg->row_count();
         res->desc = res->seg->descriptor();
         if (res->desc.index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
             res->index = TimeseriesIndex{std::string(res->desc.field(0).name())};
@@ -310,7 +310,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 std::shared_ptr<InputFrame> py_none_to_frame() {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
     auto res = std::make_shared<InputFrame>();
-    res->num_rows = 0u;
+    res->num_rows_ = 0u;
 
     arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;
     msg.set_size_bytes(1);
@@ -331,7 +331,7 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
     const shape_t shapes = 1;
     constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
-    res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
+    res->num_rows_ = std::max(res->num_rows_, static_cast<size_t>(tensor.shape(0)));
     res->desc.add_field(scalar_field(tensor.data_type(), col_name));
     res->field_tensors.push_back(std::move(tensor));
 
