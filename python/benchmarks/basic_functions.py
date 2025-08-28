@@ -42,7 +42,15 @@ class BasicFunctions:
     params = PARAMS
     param_names = PARAM_NAMES
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):        
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
         rows_values = BasicFunctions.params
 
@@ -167,7 +175,15 @@ class BatchBasicFunctions:
     params = BATCH_PARAMS
     param_names = BATCH_PARAM_NAMES
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+
+    def _setup_cache(self):        
         self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)
         rows_values, num_symbols_values = BatchBasicFunctions.params
 
@@ -317,7 +333,16 @@ class ModificationFunctions:
                 self.df_append_short_wide[rows] = lst_saw
             print("APPEND LARGE cache generation took (s) :", time.time() - start_time)
 
+    def __init__(self):
+        self.logger = get_logger()
+
     def setup_cache(self):
+        start = time.time()
+        lad = self._setup_cache()
+        self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
+        return lad
+
+    def _setup_cache(self):        
         self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)
         rows_values = ModificationFunctions.params
 
@@ -369,10 +394,8 @@ class ModificationFunctions:
             self.lib.write("sym_delete_multiple", pd.DataFrame(), prune_previous_versions=False)
 
     def teardown(self, lad: LargeAppendDataModify, rows):
-        # After the modification functions clean up the changes by replacing the modified ARCTIC_DIR with the original ARCTIC_DIR_ORIGINAL
-        # TODO: We can use dirs_exist_ok=True on copytree instead of removing first if we run with python version >=3.8
         rmtree(ModificationFunctions.ARCTIC_DIR)
-        copytree(ModificationFunctions.ARCTIC_DIR_ORIGINAL, ModificationFunctions.ARCTIC_DIR)
+        copytree(ModificationFunctions.ARCTIC_DIR_ORIGINAL, ModificationFunctions.ARCTIC_DIR, dirs_exist_ok=True)
 
         del self.ac
 

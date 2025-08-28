@@ -234,11 +234,17 @@ public:
             entry->validate();
     }
 
-    void write_version(std::shared_ptr<Store> store, const AtomKey &key, const std::optional<AtomKey>& previous_key) {
+    // prevent_non_increasing_version_id should be set false only:
+    // - testing purposes i.e. setting up a library with a broken version chain
+    // - in a background job in cases where we want to explicitly do this e.g. to replicate a divergent version chain
+    void write_version(std::shared_ptr<Store> store,
+        const AtomKey &key,
+        const std::optional<AtomKey>& previous_key,
+        const bool prevent_non_increasing_version_id = true) {
         LoadStrategy load_param{LoadType::LATEST, LoadObjective::INCLUDE_DELETED};
         auto entry = check_reload(store, key.id(), load_param,  __FUNCTION__);
 
-        do_write(store, key, entry);
+        do_write(store, key, entry, prevent_non_increasing_version_id);
         write_symbol_ref(store, key, previous_key, entry->head_.value());
         if (validate_)
             entry->validate();
@@ -531,8 +537,9 @@ public:
     std::optional<AtomKey> do_write(
         std::shared_ptr<Store> store,
         const AtomKey &key,
-        const std::shared_ptr<VersionMapEntry> &entry) {
-        return do_write(store, key.version_id(), key.id(), std::span{&key, 1}, entry);
+        const std::shared_ptr<VersionMapEntry> &entry,
+        const bool prevent_non_increasing_version_id = true) {
+        return do_write(store, key.version_id(), key.id(), std::span{&key, 1}, entry, prevent_non_increasing_version_id);
     }
 
     std::optional<AtomKey> do_write(
@@ -540,7 +547,8 @@ public:
         const VersionId& version_id,
         const StreamId& stream_id,
         const std::span<const AtomKey>& keys,
-        const std::shared_ptr<VersionMapEntry> &entry) {
+        const std::shared_ptr<VersionMapEntry> &entry,
+        const bool prevent_non_increasing_version_id = true) {
         if (validate_)
             entry->validate();
         
@@ -557,9 +565,19 @@ public:
             if (key.type() == KeyType::TABLE_INDEX) {
                 util::check(!has_index_key, "There should be at most one index key in the list of keys when trying to write an entry to the store, keys: {}", fmt::format("{}", keys));
                 has_index_key = true;
-                storage::check<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(!original_head.has_value() || key.version_id() > original_head->version_id(),
-                    "Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {}. This is most likely due to parallel writes to the same symbol, which is not supported.",
-                    key.version_id(), original_head ? original_head->version_id() : VariantId{""});
+                bool is_version_increasing = !original_head.has_value() || key.version_id() > original_head->version_id();
+
+                if (!is_version_increasing) {
+                    if (prevent_non_increasing_version_id) {
+                        storage::raise<ErrorCode::E_NON_INCREASING_INDEX_VERSION>(
+                            "Trying to write TABLE_INDEX key with a non-increasing version. New version: {}, Last version: {} This is most likely due to parallel writes to the same symbol, which is not supported.",
+                            key.version_id(), original_head ? original_head->version_id() : VariantId{""});
+                    } else {
+                        // This should happen only in tests and background jobs
+                        log::version().warn("Force writing TABLE_INDEX key with a non-increasing version (Reading with as_of version numbers and timestamps may no longer work as expected). New version: {}, Last version: {}",
+                            key.version_id(), original_head ? original_head->version_id() : VariantId{""});
+                    }
+                }
             }
 
             write_to_entry(entry, key, atom_journal_key);

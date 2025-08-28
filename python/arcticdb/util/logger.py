@@ -27,9 +27,15 @@ class GitHubSanitizingHandler(logging.StreamHandler):
     def sanitize_message(message: str) -> str:
         if (os.getenv("GITHUB_ACTIONS") == "true") and isinstance(message, str):
             # Use regex to find and replace sensitive access keys
-            sanitized_message = re.sub(r'(secret=)[^\s&]+', r'\1***', message)
-            sanitized_message = re.sub(r'(access=)[^\s&]+', r'\1***', sanitized_message)
-            sanitized_message = re.sub(r'AccountKey=([^;]+)', r'AccountKey=***', sanitized_message) 
+            sanitized_message = message
+            for regexp in [r'(secret=)[^\s&]+', 
+                           r'(access=)[^\s&]+', 
+                           r'(.*SECRET_KEY=).*$', 
+                           r'(.*ACCESS_KEY=).*$', 
+                           r'(.*AZURE_CONNECTION_STRING=).*$',
+                           r'(AccountKey=)([^;]+)']:
+                sanitized_message = re.sub(regexp, r'\1***', 
+                                    sanitized_message, flags=re.IGNORECASE)
             return sanitized_message
         return message
 
@@ -75,3 +81,8 @@ class GitHubSanitizingException(Exception):
         sanitized_message = GitHubSanitizingHandler.sanitize_message(message)
         super().__init__(sanitized_message)
 
+
+sanitized_message = " fgy 54654 ARCTICDB_REAL_S3_SECRET_KEY=AwsB1YWasZBtonDiBcsqtz36M3m4yPl9EsiTS57w"
+sanitized_message = re.sub(r'(.*SECRET_KEY=).*$', r'\1***', 
+                            sanitized_message, flags=re.IGNORECASE)
+print(sanitized_message)

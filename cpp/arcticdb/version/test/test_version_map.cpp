@@ -363,6 +363,40 @@ TEST(VersionMap, GetNextVersionInEntry) {
     ASSERT_EQ(get_next_version_in_entry(entry, 0).value(), 1);
 }
 
+TEST(VersionMap, ForceRewriteVersion) {
+    ScopedConfig sc("VersionMap.ReloadInterval", 0);
+    auto store = std::make_shared<InMemoryStore>();
+    StreamId id{"test_fix_ref"};
+
+    auto version_map = std::make_shared<VersionMap>();
+    auto key1 = atom_key_builder().version_id(1).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(3).start_index( \
+        4).end_index(5).build(id, KeyType::TABLE_INDEX);
+    version_map->write_version(store, key1, std::nullopt);
+
+    auto key2 = atom_key_builder().version_id(2).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(4).start_index(  \
+        5).end_index(6).build(id, KeyType::TABLE_INDEX);
+    version_map->write_version(store, key2, key1);
+
+    auto key3 = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(5).start_index(  \
+        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    version_map->write_version(store, key3, key2);
+    ASSERT_TRUE(version_map->check_ref_key(store, id));
+
+    auto key3_new = atom_key_builder().version_id(3).creation_ts(PilotedClock::nanos_since_epoch()).content_hash(6).start_index(  \
+        6).end_index(7).build(id, KeyType::TABLE_INDEX);
+    
+    const bool prevent_non_increasing_version_id = false;   
+    version_map->write_version(store, key3_new, key2, prevent_non_increasing_version_id);
+
+    std::vector<AtomKey> expected{key3_new, key3, key2, key1};
+    auto result = get_all_versions(store, version_map, id);
+    ASSERT_EQ(result, expected);
+
+    auto entry_ref = std::make_shared<VersionMapEntry>();
+    version_map->load_via_ref_key(store, id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, entry_ref);
+    ASSERT_EQ(get_prev_version_in_entry(entry_ref, 3).value(), 2);
+}
+
 TEST(VersionMap, FixRefKey) {
     auto store = std::make_shared<InMemoryStore>();
     StreamId id{"test_fix_ref"};
