@@ -8,6 +8,7 @@
 #include <arcticdb/util/key_utils.hpp>
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/util/test/generators.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 
 using namespace arcticdb;
 
