@@ -70,6 +70,18 @@ def test_basic_write_multiple_record_batches(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+def test_basic_write_multiple_record_batches_indexed(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_basic_write_multiple_record_batches_indexed"
+    rb0 = pa.RecordBatch.from_arrays([pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")), pa.array([0, 1], pa.int32())], names=["ts", "col"])
+    rb1 = pa.RecordBatch.from_arrays([pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-05")], pa.timestamp("ns")), pa.array([2, 3, 4], pa.int32())], names=["ts", "col"])
+    rb2 = pa.RecordBatch.from_arrays([pa.array([pd.Timestamp("2025-01-06"), pd.Timestamp("2025-01-07"), pd.Timestamp("2025-01-08"), pd.Timestamp("2025-01-09")], pa.timestamp("ns")), pa.array([5, 6, 7, 8], pa.int32())], names=["ts", "col"])
+    table = pa.Table.from_batches([rb0, rb1, rb2])
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
 @pytest.mark.parametrize(
     "data",
     [

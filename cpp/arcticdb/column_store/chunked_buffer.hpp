@@ -312,7 +312,8 @@ class ChunkedBufferImpl {
 
     uint8_t* bytes_at(size_t pos_bytes, size_t required) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        util::check(pos + required <= block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
+        if (!(pos + required <= block->bytes()))
+            util::check(pos + required <= block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
         return &(*block)[pos];
     }
 
@@ -327,7 +328,8 @@ class ChunkedBufferImpl {
 
     uint8_t &operator[](size_t pos_bytes) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        util::check(pos < block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
+        if (!(pos < block->bytes()))
+            util::check(pos < block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
         return (*block)[pos];
     }
 
