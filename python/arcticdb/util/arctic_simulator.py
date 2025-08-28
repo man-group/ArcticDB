@@ -29,14 +29,19 @@ def apply_dynamic_schema_changes(to_df: pd.DataFrame, from_df: pd.DataFrame):
     This is how arcticdb treats column combining with dynamic_schema=True on append/update
     """
     def empty_column_of_type(num_rows, dtype):
-        if np.issubdtype(dtype, np.integer):
-            return np.zeros(num_rows, dtype=dtype)
-        elif np.issubdtype(dtype, np.floating):
-            return np.full(num_rows, np.nan, dtype=dtype)
-        elif np.issubdtype(dtype, np.bool_):
-            return np.full(num_rows, False, dtype=dtype)
-        elif dtype == object or pd.api.types.is_string_dtype(dtype):
-            return [None] * num_rows
+        if pd.api.types.is_integer_dtype(dtype):
+            default_value = ARCTICDB_NA_VALUE_INT
+        elif pd.api.types.is_float_dtype(dtype):
+            default_value = ARCTICDB_NA_VALUE_FLOAT
+        elif pd.api.types.is_bool_dtype(dtype):
+            default_value = ARCTICDB_NA_VALUE_BOOL
+        elif pd.api.types.is_string_dtype(dtype) or pd.api.types.is_object_dtype(dtype):
+            default_value = ARCTICDB_NA_VALUE_STRING
+        elif pd.api.types.is_datetime64_any_dtype(dtype):
+            default_value = ARCTICDB_NA_VALUE_TIMESTAMP
+        else:
+            raise TypeError(f"Unhandled dtype default for: {dtype}")
+        return np.full(num_rows, default_value, dtype=dtype)
 
     def add_missing_columns_at_end(to_df, from_df):
         cols_to_df = set(to_df.columns)
