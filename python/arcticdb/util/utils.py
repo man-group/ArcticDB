@@ -31,7 +31,7 @@ supported_types_list = list(get_args(ArcticTypes))
 ARCTICDB_NA_VALUE_FLOAT = np.nan
 ARCTICDB_NA_VALUE_INT = 0
 ARCTICDB_NA_VALUE_STRING = None
-ARCTICDB_NA_VALUE_TIMESTAMP = pd.NaT
+ARCTICDB_NA_VALUE_TIMESTAMP = np.datetime64('NaT')
 ARCTICDB_NA_VALUE_BOOL = False
 
 
