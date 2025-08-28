@@ -9,7 +9,10 @@
 #include <arcticdb/log/log.hpp>
 
 #ifdef _WIN32
-#    include <Winsock.h> // for gethostname
+    #include <Winsock.h> // for gethostname
+#else
+    #include <sys/param.h>
+    #include <unistd.h>
 #endif
 
 using namespace prometheus;
