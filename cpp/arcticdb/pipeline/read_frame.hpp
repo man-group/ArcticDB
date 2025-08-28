@@ -11,14 +11,8 @@
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/util/bitset.hpp>
-
 #include <folly/futures/Future.h>
-
 #include <memory>
-
-namespace arcticdb {
-    struct BufferHolder;
-}
 
 namespace arcticdb::pipelines {
 

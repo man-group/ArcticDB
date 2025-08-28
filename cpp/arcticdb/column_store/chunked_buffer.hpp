@@ -10,7 +10,6 @@
 #pragma once
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/allocator.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <arcticdb/column_store/block.hpp>

@@ -16,6 +16,7 @@
 #include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
 #include <arcticdb/util/native_handler.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 
 #include <chrono>
 #include <thread>

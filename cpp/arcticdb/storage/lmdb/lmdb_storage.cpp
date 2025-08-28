@@ -22,7 +22,6 @@
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 
-#include <folly/gen/Base.h>
 #include <arcticdb/storage/storage_exceptions.hpp>
 
 namespace arcticdb::storage::lmdb {

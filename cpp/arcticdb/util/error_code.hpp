@@ -7,12 +7,11 @@
 
 #pragma once
 
-#include <fmt/format.h>
+#include <folly/Function.h>
 #include <cstdint>
 #include <stdexcept>
 #include <vector>
 #include <unordered_map>
-#include <folly/Function.h>
 #include <variant>
 
 namespace arcticdb {

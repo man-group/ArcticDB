@@ -8,14 +8,7 @@
 #pragma once
 
 #include <arcticdb/util/clock.hpp>
-
-
 #include <memory>
-
-// for malloc_trim on linux
-#if defined(__linux__) && defined(__GLIBC__)
-    #include <malloc.h>
-#endif
 
 #if USE_SLAB_ALLOCATOR
     #include <arcticdb/util/slab_allocator.hpp>
@@ -69,6 +62,7 @@ struct TracingData {
 
 private:
     struct Impl;
+
     std::unique_ptr<Impl> impl_;
     friend class InMemoryTracingPolicy;
 };

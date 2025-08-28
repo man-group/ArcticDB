@@ -10,7 +10,6 @@
 #endif
 
 #include <fmt/format.h>
-#include <fmt/ranges.h>
 #include <variant>
 
 namespace arcticdb::entity {

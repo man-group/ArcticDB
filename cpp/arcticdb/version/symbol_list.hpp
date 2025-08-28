@@ -9,18 +9,14 @@
 
 
 #include <arcticdb/entity/types.hpp>
-
 #include <arcticdb/async/base_task.hpp>
 #include <arcticdb/version/version_map.hpp>
-
 #include <folly/futures/Future.h>
-
 #include <set>
 
 namespace arcticdb {
 
 struct LoadResult;
-class Store;
 
 struct SymbolListData {
     StreamId type_holder_;

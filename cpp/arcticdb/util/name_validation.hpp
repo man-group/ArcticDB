@@ -7,10 +7,7 @@
 
 #pragma once
 
-#include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/util/error_code.hpp>
 

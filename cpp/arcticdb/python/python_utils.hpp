@@ -14,16 +14,11 @@
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
 #include <arcticdb/util/variant.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
+#include <arcticdb/column_store/row_ref.hpp>
 
 namespace py = pybind11;
-
-namespace arcticdb {
-    struct PythonHandlerData;
-}
 
 namespace arcticdb::python_util {
 
