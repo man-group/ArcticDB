@@ -29,6 +29,19 @@ if [ -z "$ARCTICDB_PYTEST_ARGS" ]; then
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
         $PYTEST_ADD_TO_COMMAND_LINE "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
+
+    exit_code=$?
+    # Retry with reduced parallelism if OOM‑killed
+    if [ "$exit_code" -eq 137 ]; then
+        echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
+        sleep 5
+        $catch python -m pytest --timeout=3600 -n 2 -v \
+            --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+            --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
+            --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
+            $PYTEST_ADD_TO_COMMAND_LINE "$@" 2>&1 | sed -r "s#^(tests/.*/([^/]+\.py))?#\2#"
+    fi
+
 else
     echo "Executing tests with additional pytest argiments:"
     echo "from user: $ARCTICDB_PYTEST_ARGS"
@@ -38,4 +51,16 @@ else
         --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
         --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
         $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS 2>&1
+
+    exit_code=$?
+    # Retry with reduced parallelism if OOM‑killed
+    if [ "$exit_code" -eq 137 ]; then
+        echo "⚠️  pytest OOM‑killed (137) — retrying with 2 workers..."
+        sleep 5
+        $catch python -m pytest --timeout=3600 -n 2 -v \
+            --log-file="$TEST_OUTPUT_DIR/pytest-logger.$group.log" \
+            --junitxml="$TEST_OUTPUT_DIR/pytest.$group.xml" \
+            --basetemp="$PARALLEL_TEST_ROOT/temp-pytest-output" \
+            $PYTEST_ADD_TO_COMMAND_LINE $ARCTICDB_PYTEST_ARGS 2>&1
+    fi
 fi
