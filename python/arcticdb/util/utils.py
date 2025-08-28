@@ -102,17 +102,17 @@ def generate_random_numpy_array(size: int, dtype, seed: Optional[int] = 8238) ->
     """
     set_seed(seed)
     arr = []
-    if 'int' in str(dtype):
+    if pd.api.types.is_integer_dtype(dtype):
         arr = random_integers(size, dtype)
-    elif 'float' in str(dtype):
+    elif pd.api.types.is_float_dtype(dtype):
         arr = generate_random_float_array(dtype=dtype, size=size)
-    elif 'bool' in str(dtype):
+    elif pd.api.types.is_bool_dtype(dtype):
         arr = np.random.randn(size) > 0
-    elif 'str' in str(dtype):
+    elif pd.api.types.is_string_dtype(dtype):
         length = 10
         arr = [random_string(length) for _ in range(size)]
         arr = np.array(arr, dtype=f"U{size}")
-    elif 'datetime' in str(dtype):
+    elif pd.api.types.is_datetime64_any_dtype(dtype):
         arr = generate_random_timestamp_array(size, seed=seed)
     else:
         raise TypeError("Unsupported type {dtype}")        
