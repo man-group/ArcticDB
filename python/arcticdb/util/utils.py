@@ -97,7 +97,7 @@ def generate_random_float_array(size: int, dtype:
     return result.astype(dtype)
 
 
-def generate_random_numpy_array(size: int, dtype, seed: int = 8238) -> npt.NDArray[Any]:
+def generate_random_numpy_array(size: int, dtype, seed: Optional[int] = 8238) -> npt.NDArray[Any]:
     """ Generates random numpy array of specified type
     """
     set_seed(seed)
@@ -120,13 +120,15 @@ def generate_random_numpy_array(size: int, dtype, seed: int = 8238) -> npt.NDArr
 
 
 def generate_random_series(type: ArcticTypes, length: int, name: str, 
-                    start_time: Optional[pd.Timestamp]=None, freq: str='s', seed=3247) -> pd.Series:
+                    start_time: Optional[pd.Timestamp ]= None, 
+                    freq: str = 's', 
+                    seed: Optional[int] = 3247) -> pd.Series:
     """Generates random series of specified type with or without index"""
     set_seed(seed)
     index = None
     if start_time:
         index = pd.date_range(start_time, periods=length, freq=freq)
-    return pd.Series(generate_random_numpy_array(length, type, seed), 
+    return pd.Series(generate_random_numpy_array(length, type, seed=None), 
                            index=index,
                            name=name)
 

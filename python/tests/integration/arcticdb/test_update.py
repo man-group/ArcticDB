@@ -499,8 +499,8 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     start_time = TimestampNumber.from_timestamp(timestamp=Timestamp("1/2/2017"))
     g = BasicDataFrameGenerator()
     ug = UpdatesGenerator(g)
-    original_num_cols = 5
-    original_number_rows = 5
+    original_num_cols = 30
+    original_number_rows = 30
     symbol_prefix = "different types of updates"
 
     symbol_names = []
