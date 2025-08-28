@@ -192,11 +192,11 @@ struct TestTensorFrame {
         segment_(std::move(desc), num_rows) {}
 
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::pipelines::InputTensorFrame> frame_ = std::make_shared<arcticdb::pipelines::InputTensorFrame>();
+    std::shared_ptr<arcticdb::pipelines::InputFrame> frame_ = std::make_shared<arcticdb::pipelines::InputFrame>();
 };
 
 template<class ContainerType, typename DTT>
-void fill_test_column(arcticdb::pipelines::InputTensorFrame &frame,
+void fill_test_column(arcticdb::pipelines::InputFrame&frame,
                       ContainerType &container,
                       DTT data_type_tag,
                       size_t num_rows,
@@ -218,7 +218,7 @@ void fill_test_column(arcticdb::pipelines::InputTensorFrame &frame,
 }
 
 inline void fill_test_frame(SegmentInMemory &segment,
-                            arcticdb::pipelines::InputTensorFrame &frame,
+                            arcticdb::pipelines::InputFrame&frame,
                             size_t num_rows,
                             size_t start_val,
                             size_t opt_row_offset) {

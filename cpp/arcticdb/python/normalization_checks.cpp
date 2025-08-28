@@ -184,7 +184,7 @@ bool check_ndarray_append(const NormalizationMetadata &old_norm, NormalizationMe
 void fix_normalization_or_throw(
     bool is_append,
     const pipelines::index::IndexSegmentReader &existing_isr,
-    const pipelines::InputTensorFrame &new_frame) {
+    const pipelines::InputFrame&new_frame) {
     auto &old_norm = existing_isr.tsd().proto().normalization();
     auto &new_norm = new_frame.norm_meta;
     normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(

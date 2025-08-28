@@ -202,14 +202,14 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     return {nbytes, arr->nd, strides.data(), shapes.data(), dt, elsize, data, ndim};
 }
 
-std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
+std::shared_ptr<InputFrame> py_ndf_to_frame(
     const StreamId& stream_name,
     const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
     const py::object &norm_meta,
     const py::object &user_meta,
     bool empty_types) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
-    auto res = std::make_shared<InputTensorFrame>();
+    auto res = std::make_shared<InputFrame>();
     res->desc.set_id(stream_name);
     res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
@@ -307,9 +307,9 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     return res;
 }
 
-std::shared_ptr<InputTensorFrame> py_none_to_frame() {
+std::shared_ptr<InputFrame> py_none_to_frame() {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
-    auto res = std::make_shared<InputTensorFrame>();
+    auto res = std::make_shared<InputFrame>();
     res->num_rows = 0u;
 
     arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;

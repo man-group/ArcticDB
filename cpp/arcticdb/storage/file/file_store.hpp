@@ -50,7 +50,7 @@ struct FileFooter {
 
 void write_dataframe_to_file_internal(
     const StreamId &stream_id,
-    const std::shared_ptr<pipelines::InputTensorFrame> &frame,
+    const std::shared_ptr<pipelines::InputFrame> &frame,
     const std::string& path,
     const WriteOptions &options,
     const arcticdb::proto::encoding::VariantCodec &codec_opts,

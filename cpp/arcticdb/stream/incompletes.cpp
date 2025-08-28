@@ -154,7 +154,7 @@ TimeseriesDescriptor pack_timeseries_descriptor(
 }
 
 SegmentInMemory incomplete_segment_from_frame(
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
+    const std::shared_ptr<pipelines::InputFrame>& frame,
     size_t existing_rows,
     std::optional<entity::AtomKey>&& prev_key,
     bool allow_sparse
@@ -238,7 +238,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 [[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame_with_sorting(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteIncompleteOptions& options) {
     ARCTICDB_SAMPLE(WriteIncompleteFrameWithSorting, 0)
     log::version().debug("Command: write_incomplete_frame_with_sorting {}", stream_id);
@@ -311,7 +311,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 [[nodiscard]] folly::Future<std::vector<arcticdb::entity::AtomKey>> write_incomplete_frame(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteIncompleteOptions& options) {
     ARCTICDB_SAMPLE(WriteIncompleteFrame, 0)
     log::version().debug("Command: write_incomplete_frame {}", stream_id);
@@ -423,7 +423,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 std::vector<AtomKey> write_parallel_impl(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteIncompleteOptions& options) {
     // Apply validation for new symbols, but don't interfere with pre-existing symbols that would fail our modern validation.
     CheckOutcome check_outcome = verify_symbol_key(stream_id);
@@ -536,7 +536,7 @@ std::pair<std::optional<AtomKey>, size_t> read_head(const std::shared_ptr<Stream
 void append_incomplete(
     const std::shared_ptr<Store>& store,
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     bool validate_index) {
     using namespace arcticdb::proto::descriptors;
     using namespace arcticdb::stream;

@@ -600,7 +600,7 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
 VersionedItem LocalVersionedEngine::update_internal(
     const StreamId& stream_id,
     const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     bool upsert,
     bool dynamic_schema,
     bool prune_previous_versions) {
@@ -718,7 +718,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 
 VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     bool prune_previous_versions,
     bool allow_sparse,
     bool validate_index
@@ -1058,7 +1058,7 @@ std::set<StreamId> LocalVersionedEngine::get_active_incomplete_refs() {
 
 void LocalVersionedEngine::append_incomplete_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     bool validate_index) const {
     arcticdb::append_incomplete(store_, stream_id, frame, validate_index);
 }
@@ -1071,7 +1071,7 @@ void LocalVersionedEngine::append_incomplete_segment(
 
 StageResult LocalVersionedEngine::write_parallel_frame(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     bool validate_index,
     bool sort_on_index,
     const std::optional<std::vector<std::string>>& sort_columns) const {
@@ -1366,7 +1366,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
 std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
     const std::vector<VersionId>& version_ids,
     const std::vector<StreamId>& stream_ids,
-    std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+    std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
     const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps,
     bool validate_index
 ) {
@@ -1400,7 +1400,7 @@ VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
     const std::vector<StreamId>& stream_ids,
-    std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+    std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
     bool prune_previous_versions,
     bool validate_index,
     bool throw_on_error
@@ -1497,7 +1497,7 @@ std::vector<std::variant<folly::Unit, DataError>> LocalVersionedEngine::batch_de
 
 VersionedItem LocalVersionedEngine::append_internal(
     const StreamId& stream_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     bool upsert,
     bool prune_previous_versions,
     bool validate_index) {
@@ -1547,7 +1547,7 @@ VersionedItem LocalVersionedEngine::append_internal(
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_append_internal(
     const std::vector<StreamId>& stream_ids,
-    std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+    std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
     bool prune_previous_versions,
     bool validate_index,
     bool upsert,
@@ -1595,7 +1595,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_update_internal(
     const std::vector<StreamId>& stream_ids,
-    std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+    std::vector<std::shared_ptr<InputFrame>>&& frames,
     const std::vector<UpdateQuery>& update_queries,
     bool prune_previous_versions,
     bool upsert

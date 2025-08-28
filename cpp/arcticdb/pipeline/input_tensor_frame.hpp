@@ -30,8 +30,8 @@ concept ValidIndex = util::any_of<
         stream::EmptyIndex>;
 
 
-struct InputTensorFrame {
-    InputTensorFrame() :
+struct InputFrame {
+    InputFrame() :
         index(stream::empty_index()) {}
 
     std::optional<SegmentInMemory> seg;

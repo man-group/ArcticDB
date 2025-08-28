@@ -14,7 +14,7 @@ namespace arcticdb {
 using NormalizationException = ArcticCategorizedException<ErrorCategory::NORMALIZATION>;
 
 namespace pipelines {
-struct InputTensorFrame;
+struct InputFrame;
 namespace index {
 struct IndexSegmentReader;
 } //namespace pipelines::index
@@ -26,5 +26,5 @@ struct IndexSegmentReader;
 void fix_normalization_or_throw(
     bool is_append,
     const pipelines::index::IndexSegmentReader &existing_isr,
-    const pipelines::InputTensorFrame &new_frame);
+    const pipelines::InputFrame&new_frame);
 } // namespace arcticdb

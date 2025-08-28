@@ -82,7 +82,7 @@ static void modify_descriptor(const std::shared_ptr<pipelines::PipelineContext>&
 VersionedItem write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
     bool sparsify_floats,
@@ -97,7 +97,7 @@ VersionedItem write_dataframe_impl(
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
     const std::shared_ptr<Store>& store,
     VersionId version_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteOptions& options,
     const std::shared_ptr<DeDupMap>& de_dup_map,
     bool sparsify_floats,
@@ -135,7 +135,7 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
 }
 }
 
-void sorted_data_check_append(const InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader){
+void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader& index_segment_reader){
     if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling append with validate_index enabled, input data must be sorted");
     }
@@ -148,7 +148,7 @@ void sorted_data_check_append(const InputTensorFrame& frame, index::IndexSegment
 folly::Future<AtomKey> async_append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteOptions& options,
     bool validate_index,
     bool empty_types) {
@@ -174,7 +174,7 @@ folly::Future<AtomKey> async_append_impl(
 VersionedItem append_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const WriteOptions& options,
     bool validate_index,
     bool empty_types) {
@@ -315,7 +315,7 @@ VersionedItem delete_range_impl(
     return versioned_item;
 }
 
-void check_update_data_is_sorted(const InputTensorFrame& frame, const index::IndexSegmentReader& index_segment_reader){
+void check_update_data_is_sorted(const InputFrame& frame, const index::IndexSegmentReader& index_segment_reader){
     bool is_time_series = std::holds_alternative<stream::TimeseriesIndex>(frame.index);
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
         is_time_series,
@@ -342,7 +342,7 @@ struct UpdateRanges {
 
 static UpdateRanges compute_update_ranges(
     const FilterRange& row_filter,
-    const InputTensorFrame& update_frame,
+    const InputFrame& update_frame,
     std::span<SliceAndKey> update_slice_and_keys
 ) {
     return util::variant_match(row_filter,
@@ -368,7 +368,7 @@ static UpdateRanges compute_update_ranges(
 }
 
 static void check_can_update(
-    const InputTensorFrame& frame,
+    const InputFrame& frame,
     const index::IndexSegmentReader& index_segment_reader,
     const UpdateInfo& update_info,
     bool dynamic_schema,
@@ -385,7 +385,7 @@ static void check_can_update(
 
 static std::shared_ptr<std::vector<SliceAndKey>> get_keys_affected_by_update(
     const index::IndexSegmentReader& index_segment_reader,
-    const InputTensorFrame& frame,
+    const InputFrame& frame,
     const UpdateQuery& query,
     bool dynamic_schema
 ) {
@@ -439,7 +439,7 @@ folly::Future<AtomKey> async_update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types) {
@@ -509,7 +509,7 @@ VersionedItem update_impl(
     const std::shared_ptr<Store>& store,
     const UpdateInfo& update_info,
     const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     WriteOptions&& options,
     bool dynamic_schema,
     bool empty_types) {

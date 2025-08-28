@@ -424,7 +424,7 @@ inline NativeTensor tensor_from_column(const Column &column) {
 
 struct SegmentToInputFrameAdapter {
     SegmentInMemory segment_;
-    std::shared_ptr<pipelines::InputTensorFrame> input_frame_ = std::make_shared<pipelines::InputTensorFrame>();
+    std::shared_ptr<pipelines::InputFrame> input_frame_ = std::make_shared<pipelines::InputFrame>();
 
     explicit SegmentToInputFrameAdapter(SegmentInMemory &&segment) :
         segment_(std::move(segment)) {

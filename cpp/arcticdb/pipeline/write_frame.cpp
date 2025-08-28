@@ -30,7 +30,7 @@ using namespace arcticdb::stream;
 namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
-    std::shared_ptr<InputTensorFrame> frame,
+    std::shared_ptr<InputFrame> frame,
     FrameSlice slice,
     const SlicingPolicy& slicing,
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
@@ -205,7 +205,7 @@ int64_t write_window_size() {
 }
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
-        const std::shared_ptr<InputTensorFrame> &frame,
+        const std::shared_ptr<InputFrame> &frame,
         std::vector<FrameSlice>&& slices,
         const SlicingPolicy &slicing,
         TypedStreamVersion&& key,
@@ -233,7 +233,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
 }
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
-        const std::shared_ptr<InputTensorFrame> &frame,
+        const std::shared_ptr<InputFrame> &frame,
         const SlicingPolicy &slicing,
         IndexPartialKey&& key,
         const std::shared_ptr<stream::StreamSink>& sink,
@@ -252,7 +252,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 folly::Future<entity::AtomKey>
 write_frame(
         IndexPartialKey&& key,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         const SlicingPolicy &slicing,
         const std::shared_ptr<Store>& store,
         const std::shared_ptr<DeDupMap>& de_dup_map,
@@ -268,7 +268,7 @@ write_frame(
 
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         const SlicingPolicy& slicing,
         index::IndexSegmentReader& index_segment_reader,
         const std::shared_ptr<Store>& store,

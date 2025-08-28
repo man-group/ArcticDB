@@ -31,7 +31,7 @@ public:
     explicit FixedSlicer(std::size_t col_per_slice = 127, std::size_t row_per_slice = 100'000) :
             col_per_slice_(col_per_slice), row_per_slice_(row_per_slice) { }
 
-    std::vector<FrameSlice> operator() (const InputTensorFrame &frame) const;
+    std::vector<FrameSlice> operator() (const InputFrame&frame) const;
 
     auto row_per_slice() const { return row_per_slice_; }
 
@@ -45,7 +45,7 @@ public:
     explicit HashedSlicer(std::size_t num_buckets, std::size_t row_per_slice) :
         num_buckets_(num_buckets), row_per_slice_(row_per_slice) { }
 
-    std::vector<FrameSlice> operator() (const InputTensorFrame &frame) const;
+    std::vector<FrameSlice> operator() (const InputFrame&frame) const;
 
     size_t num_buckets() const { return num_buckets_; }
 
@@ -63,15 +63,15 @@ using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, HashedSlicer>;
 
 SlicingPolicy get_slicing_policy(
     const WriteOptions& options,
-    const arcticdb::pipelines::InputTensorFrame& frame);
+    const arcticdb::pipelines::InputFrame& frame);
 
-std::vector<FrameSlice> slice(InputTensorFrame &frame, const SlicingPolicy& slicer);
+std::vector<FrameSlice> slice(InputFrame&frame, const SlicingPolicy& slicer);
 
-inline auto slice_begin_pos(const FrameSlice& slice, const InputTensorFrame& frame) {
+inline auto slice_begin_pos(const FrameSlice& slice, const InputFrame& frame) {
     return slice.row_range.first - frame.offset;
 }
 
-inline auto slice_end_pos(const FrameSlice& slice, const InputTensorFrame& frame) {
+inline auto slice_end_pos(const FrameSlice& slice, const InputFrame& frame) {
     return (slice.row_range.second-1) - frame.offset;
 }
 
@@ -95,7 +95,7 @@ inline auto end_index_generator(T end_index){//works for both rawtype and rawtyp
     }
 }
 
-inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, const TypedStreamVersion& key) {
+inline auto get_partial_key_gen(std::shared_ptr<InputFrame> frame, const TypedStreamVersion& key) {
     using PartialKey = stream::StreamSink::PartialKey;
 
     return [frame=std::move(frame), &key](const FrameSlice& s) {

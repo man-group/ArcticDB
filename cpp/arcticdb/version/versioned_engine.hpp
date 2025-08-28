@@ -46,14 +46,14 @@ public:
     virtual VersionedItem update_internal(
         const StreamId& stream_id,
         const UpdateQuery & query,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool upsert,
         bool dynamic_schema,
         bool prune_previous_versions) = 0;
 
     virtual VersionedItem append_internal(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool upsert,
         bool prune_previous_versions,
         bool validate_index) = 0;
@@ -70,7 +70,7 @@ public:
 
     virtual void append_incomplete_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool validate_index) const = 0;
 
     virtual void append_incomplete_segment(
@@ -83,7 +83,7 @@ public:
 
     virtual StageResult write_parallel_frame(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool validate_index,
         bool sort_on_index,
         const std::optional<std::vector<std::string>>& sort_columns) const = 0;
@@ -112,7 +112,7 @@ public:
 
     virtual VersionedItem write_versioned_dataframe_internal(
         const StreamId& stream_id,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         bool prune_previous_versions,
         bool allow_sparse,
         bool validate_index

@@ -25,7 +25,7 @@ using namespace arcticdb::stream;
 
 struct WriteToSegmentTask : public async::BaseTask {
 
-    std::shared_ptr<InputTensorFrame> frame_;
+    std::shared_ptr<InputFrame> frame_;
     const FrameSlice slice_;
     const SlicingPolicy slicing_;
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)> partial_key_gen_;
@@ -35,7 +35,7 @@ struct WriteToSegmentTask : public async::BaseTask {
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
-        std::shared_ptr<InputTensorFrame> frame,
+        std::shared_ptr<InputFrame> frame,
         FrameSlice slice,
         const SlicingPolicy& slicing,
         folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
@@ -47,7 +47,7 @@ struct WriteToSegmentTask : public async::BaseTask {
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
-        const std::shared_ptr<InputTensorFrame> &frame,
+        const std::shared_ptr<InputFrame> &frame,
         const SlicingPolicy &slicing,
         IndexPartialKey&& partial_key,
         const std::shared_ptr<stream::StreamSink> &sink,
@@ -58,7 +58,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 int64_t write_window_size();
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
-        const std::shared_ptr<InputTensorFrame> &frame,
+        const std::shared_ptr<InputFrame> &frame,
         std::vector<FrameSlice>&& slices,
         const SlicingPolicy &slicing,
         TypedStreamVersion&& partial_key,
@@ -68,7 +68,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
 
 folly::Future<entity::AtomKey> write_frame(
     IndexPartialKey &&key,
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     const SlicingPolicy &slicing,
     const std::shared_ptr<Store> &store,
     const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
@@ -77,7 +77,7 @@ folly::Future<entity::AtomKey> write_frame(
 
 folly::Future<entity::AtomKey> append_frame(
         IndexPartialKey&& key,
-        const std::shared_ptr<InputTensorFrame>& frame,
+        const std::shared_ptr<InputFrame>& frame,
         const SlicingPolicy& slicing,
         index::IndexSegmentReader &index_segment_reader,
         const std::shared_ptr<Store>& store,

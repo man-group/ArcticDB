@@ -69,13 +69,13 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
     return versioned_item;
 }
 
-std::vector<std::shared_ptr<InputTensorFrame>> create_input_tensor_frames(
+std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
     const std::vector<StreamId>& stream_ids,
     const std::vector<py::tuple> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool empty_types) {
-    std::vector<std::shared_ptr<InputTensorFrame>> output;
+    std::vector<std::shared_ptr<InputFrame>> output;
     output.reserve(stream_ids.size());
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         output.emplace_back(convert::py_ndf_to_frame(stream_ids[idx], items[idx], norms[idx], user_metas[idx], empty_types));

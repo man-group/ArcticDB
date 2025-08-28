@@ -12,13 +12,13 @@
 
 namespace arcticdb::pipelines {
 
-std::pair<int64_t, int64_t> get_index_and_field_count(const arcticdb::pipelines::InputTensorFrame& frame) {
+std::pair<int64_t, int64_t> get_index_and_field_count(const arcticdb::pipelines::InputFrame& frame) {
     return {frame.desc.index().field_count(), frame.desc.fields().size()};
 }
 
 SlicingPolicy get_slicing_policy(
     const WriteOptions& options,
-    const arcticdb::pipelines::InputTensorFrame& frame) {
+    const arcticdb::pipelines::InputFrame& frame) {
     if(frame.bucketize_dynamic) {
         const auto [index_count, field_count] = get_index_and_field_count(frame);
         const auto col_count = field_count - index_count;
@@ -29,7 +29,7 @@ SlicingPolicy get_slicing_policy(
     return FixedSlicer{options.column_group_size, options.segment_row_size};
 }
 
-std::vector<FrameSlice> slice(InputTensorFrame& frame, const SlicingPolicy& arg) {
+std::vector<FrameSlice> slice(InputFrame& frame, const SlicingPolicy& arg) {
     return util::variant_match(arg,
             [&frame](NoSlicing) -> std::vector<FrameSlice> {
                 return {FrameSlice{std::make_shared<StreamDescriptor>(frame.desc),
@@ -41,18 +41,18 @@ std::vector<FrameSlice> slice(InputTensorFrame& frame, const SlicingPolicy& arg)
             });
 }
 
-void add_index_fields(const arcticdb::pipelines::InputTensorFrame& frame, FieldCollection& current_fields) {
+void add_index_fields(const arcticdb::pipelines::InputFrame& frame, FieldCollection& current_fields) {
     for (auto i = 0u; i < frame.desc.index().field_count(); ++i) {
         const auto& field = frame.desc.fields(0);
         current_fields.add({field.type(), field.name()});
     }
 }
 
-std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::InputTensorFrame& frame) {
+std::pair<size_t, size_t> get_first_and_last_row(const arcticdb::pipelines::InputFrame& frame) {
     return {frame.offset, frame.num_rows + frame.offset};
 }
 
-std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::InputTensorFrame& frame) const {
+std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::InputFrame& frame) const {
     const auto [index_count, total_field_count] = get_index_and_field_count(frame);
     auto field_count = total_field_count - index_count;
     auto fields_pos = std::begin(frame.desc.fields());
@@ -98,7 +98,7 @@ std::vector<FrameSlice> FixedSlicer::operator()(const arcticdb::pipelines::Input
     return slices;
 }
 
-std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::InputTensorFrame& frame) const {
+std::vector<FrameSlice> HashedSlicer::operator()(const arcticdb::pipelines::InputFrame& frame) const {
     std::vector<uint32_t> buckets;
     const auto [index_count, field_count] = get_index_and_field_count(frame);
 

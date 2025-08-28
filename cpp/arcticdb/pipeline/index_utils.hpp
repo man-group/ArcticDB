@@ -22,7 +22,7 @@ struct StreamSink;
 }
 
 namespace pipelines {
-struct InputTensorFrame;
+struct InputFrame;
 }
 }
 
@@ -98,13 +98,13 @@ folly::Future<entity::AtomKey> write_index(
     const std::shared_ptr<stream::StreamSink> &sink);
 
 folly::Future<entity::AtomKey> write_index(
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     std::vector<folly::Future<SliceAndKey>> &&slice_and_keys,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink);
 
 folly::Future<entity::AtomKey> write_index(
-    const std::shared_ptr<InputTensorFrame>& frame,
+    const std::shared_ptr<InputFrame>& frame,
     std::vector<SliceAndKey> &&slice_and_keys,
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink);
@@ -136,7 +136,7 @@ TimeseriesDescriptor get_merged_tsd(
     size_t row_count,
     bool dynamic_schema,
     const TimeseriesDescriptor& existing_tsd,
-    const std::shared_ptr<pipelines::InputTensorFrame>& new_frame);
+    const std::shared_ptr<pipelines::InputFrame>& new_frame);
 
 [[nodiscard]] bool is_timeseries_index(const IndexDescriptorImpl& index_desc);
 
