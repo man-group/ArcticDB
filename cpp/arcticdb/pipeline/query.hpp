@@ -9,22 +9,17 @@
 
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/entity/index_range.hpp>
-#include <arcticdb/processing/expression_context.hpp>
-#include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
-#include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/simple_string_hash.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/read_query.hpp>
-
 #include <algorithm>
 #include <vector>
 #include <string>
 #include <variant>
-#include <ranges>
 #include <span>
 
 namespace arcticdb::pipelines {
@@ -220,14 +215,14 @@ inline FilterQuery<ContainerType> create_index_filter(const IndexRange &range, b
         const auto index_type = IndexDescriptor::Type(maybe_index_type.value());
         switch (index_type) {
         case IndexDescriptorImpl::Type::TIMESTAMP: {
-            return build_bitset_for_index<ContainerType, TimeseriesIndex>(container,
+            return build_bitset_for_index<ContainerType, stream::TimeseriesIndex>(container,
                                                                           rg,
                                                                           dynamic_schema,
                                                                           column_groups,
                                                                           std::move(input));
         }
         case IndexDescriptorImpl::Type::STRING: {
-            return build_bitset_for_index<ContainerType, TableIndex>(container, rg, dynamic_schema, column_groups, std::move(input));
+            return build_bitset_for_index<ContainerType, stream::TableIndex>(container, rg, dynamic_schema, column_groups, std::move(input));
         }
         default:util::raise_rte("Unknown index type {} in create_index_filter", uint32_t(index_type));
         }

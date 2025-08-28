@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/util/trace.hpp>
-#include <sstream>
 
 #ifndef  _WIN32
 #include <cxxabi.h>

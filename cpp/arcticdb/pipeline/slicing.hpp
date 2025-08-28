@@ -7,19 +7,12 @@
 
 #pragma once
 
-#include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
-#include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
-
-#include <folly/futures/Future.h>
-
 #include <optional>
 #include <vector>
 #include <cstddef>

@@ -15,6 +15,7 @@
 #include <memory>
 #include <string>
 #include <numeric>
+#include <ranges>
 
 namespace arcticdb::storage {
 

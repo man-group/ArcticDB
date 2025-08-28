@@ -12,7 +12,6 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
@@ -352,11 +351,6 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
         }
         return std::optional<convert::StringEncodingError>();
     });
-}
-
-namespace pipelines {
-struct SliceAndKey;
-struct PipelineContext;
 }
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);

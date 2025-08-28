@@ -13,9 +13,7 @@
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/stream/index_aggregator.hpp>
 #include <arcticdb/version/version_map_entry.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/entity/frame_and_descriptor.hpp>
-
 #include <utility>
 #include <memory>
 #include <optional>

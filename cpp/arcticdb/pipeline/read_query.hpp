@@ -1,12 +1,11 @@
-#include <cstdint>
-#include <cstddef>
-#include <optional>
-#include <variant>
-#include <numeric>
+#pragma once
 
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/clause.hpp>
+#include <cstdint>
+#include <optional>
+#include <variant>
 
 namespace arcticdb::pipelines {
 using FilterRange = std::variant<std::monostate, entity::IndexRange, pipelines::RowRange>;

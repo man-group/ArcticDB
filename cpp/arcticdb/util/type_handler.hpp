@@ -9,11 +9,9 @@
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/codec/segment_header.hpp>
 #include <arcticdb/entity/output_format.hpp>
-
+#include <arcticdb/codec/encoded_field.hpp>
 #include <folly/Poly.h>
-
 #include <memory>
 #include <mutex>
 #include <any>
@@ -75,7 +73,7 @@ struct ITypeHandler {
             return folly::poly_call<2>(*this);
         }
 
-        TypeDescriptor output_type(const TypeDescriptor& input_type) const {
+        entity::TypeDescriptor output_type(const entity::TypeDescriptor& input_type) const {
             return folly::poly_call<3>(*this, input_type);
         }
 
@@ -141,11 +139,11 @@ private:
     std::array<TypeHandlerMap, static_cast<size_t>(OutputFormat::COUNT)> handlers_;
 };
 
-inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, TypeDescriptor source) {
+inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, entity::TypeDescriptor source) {
     return TypeHandlerRegistry::instance()->get_handler(output_format, source);
 }
 
-inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, TypeDescriptor source, TypeDescriptor target) {
+inline std::shared_ptr<TypeHandler> get_type_handler(OutputFormat output_format, entity::TypeDescriptor source, entity::TypeDescriptor target) {
     auto handler = TypeHandlerRegistry::instance()->get_handler(output_format, source);
     if(handler)
         return handler;

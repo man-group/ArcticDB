@@ -5,7 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 #include <python/python_handlers.hpp>
-#include <arcticdb/codec/slice_data_sink.hpp>
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/decode_path_data.hpp>

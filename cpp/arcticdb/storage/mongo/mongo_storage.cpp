@@ -8,13 +8,9 @@
 
 #include <arcticdb/storage/mongo/mongo_storage.hpp>
 
-#include <google/protobuf/io/zero_copy_stream_impl_lite.h>
 #include <arcticdb/util/configs_map.hpp>
-#include <fmt/format.h>
 #include <folly/gen/Base.h>
 
-#include <arcticdb/storage/mongo/mongo_instance.hpp>
-#include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/storage/mongo/mongo_client.hpp>
 #include <arcticdb/storage/mock/mongo_mock_client.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>

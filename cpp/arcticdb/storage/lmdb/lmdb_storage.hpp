@@ -9,10 +9,8 @@
 
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <arcticdb/storage/lmdb/lmdb.hpp>
-#include <arcticdb/util/composite.hpp>
 #include <arcticdb/storage/lmdb/lmdb_client_interface.hpp>
-
+#include <arcticdb/storage/lmdb/lmdb.hpp>
 #include <filesystem>
 
 namespace fs = std::filesystem;

@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <arcticdb/storage/common.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/open_mode.hpp>

@@ -9,16 +9,11 @@
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/protobuf_mappings.hpp>
-#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/encoded_field_collection.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/codec/segment_identifier.hpp>
-
-#include <google/protobuf/io/zero_copy_stream_impl.h>
-#include <arcticdb/codec/encode_common.hpp>
-#include <string>
 
 namespace arcticdb {
 

@@ -8,24 +8,18 @@
 #pragma once
 
 #include <aws/sts/STSClient.h>
-
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
-#include <aws/core/Aws.h>
-#include <aws/s3/model/PutObjectRequest.h>
-#include <aws/core/auth/AWSCredentialsProvider.h>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_settings.hpp>
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
-#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/configs_map.hpp>
 #include <cstdlib>
 #include <sstream>
 #include <string>
 #include <vector>
+#include <aws/core/auth/AWSCredentials.h>
 
 namespace arcticdb::storage::s3 {
 

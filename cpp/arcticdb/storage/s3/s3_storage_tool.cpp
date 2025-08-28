@@ -6,12 +6,19 @@
  */
 
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
+#include <arcticdb/log/log.hpp>
+#include <arcticdb/storage/s3/s3_api.hpp>
+#include <arcticdb/storage/s3/s3_storage.hpp>
 
 #include <aws/s3/S3Client.h>
 #include <aws/s3/model/ListObjectsV2Request.h>
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
 #include <aws/s3/model/HeadObjectRequest.h>
+#include <aws/s3/model/PutObjectRequest.h>
+#include <arcticdb/storage/common.hpp>
+
+#include <arcticdb/util/preconditions.hpp>
 
 namespace arcticdb::storage::s3 {
 

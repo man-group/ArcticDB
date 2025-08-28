@@ -9,7 +9,6 @@
 #include <arcticdb/codec/python_bindings.hpp>
 #include <arcticdb/column_store/python_bindings.hpp>
 #include <arcticdb/storage/python_bindings.hpp>
-#include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/stream/python_bindings.hpp>
 #include <arcticdb/toolbox/python_bindings.hpp>
@@ -29,7 +28,6 @@
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
-#include <arcticdb/util/storage_lock.hpp>
 
 #include <pybind11/pybind11.h>
 #include <mongocxx/exception/logic_error.hpp>

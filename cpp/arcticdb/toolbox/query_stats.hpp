@@ -7,17 +7,14 @@
 
 #pragma once
 
+#include <folly/ThreadCachedInt.h>
+#include <arcticdb/entity/key.hpp>
+#include <arcticdb/util/constants.hpp>
 #include <atomic>
-#include <type_traits>
 #include <string>
 #include <chrono>
 #include <array>
 #include <memory>
-#include <folly/ThreadCachedInt.h>
-
-#include <arcticdb/entity/key.hpp>
-#include <arcticdb/util/constants.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb::query_stats{
 enum class TaskType : size_t {

@@ -9,14 +9,9 @@
 
 #include <arcticdb/storage/common.hpp>
 #include <arcticdb/codec/segment_header.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
 #include <arcticdb/entity/stream_descriptor.hpp>
 #include <arcticdb/util/variant.hpp>
-
-#include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/arena.h>
-
-#include <iostream>
 #include <variant>
 #include <any>
 

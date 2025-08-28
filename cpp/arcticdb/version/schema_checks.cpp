@@ -1,5 +1,6 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
 

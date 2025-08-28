@@ -11,11 +11,8 @@
 #include <aws/s3/S3Client.h>
 
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/log/log.hpp>
-#include <arcticdb/util/buffer_pool.hpp>
 
-#include <arcticdb/storage/storage_utils.hpp>
 
 #include <aws/s3/model/GetObjectRequest.h>
 #include <aws/s3/model/PutObjectRequest.h>

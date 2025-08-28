@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/codec/encoded_field.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/codec/segment.hpp>
 
 namespace arcticdb {

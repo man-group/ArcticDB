@@ -12,10 +12,6 @@
 
 namespace arcticdb {
 
-namespace entity {
-    struct TypeDescriptor;
-}
-
 /// Defines which static casts from int to float are permitted in is_valid_type_promotion_to_target
 enum class IntToFloatConversion {
     /// Avoids lossy casting from int to float and tries to make sure that the integer can be represented exactly using

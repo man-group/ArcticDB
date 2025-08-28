@@ -12,10 +12,6 @@
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <folly/futures/Future.h>
 
-namespace arcticdb {
-class Store;
-}
-
 namespace arcticdb::pipelines {
 struct ReadQuery;
 }

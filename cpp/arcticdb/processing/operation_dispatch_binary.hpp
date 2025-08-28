@@ -8,16 +8,9 @@
 
 #pragma once
 
-#include <variant>
-#include <memory>
-#include <type_traits>
-
-#include <folly/futures/Future.h>
-
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -25,6 +18,9 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/type_conversion.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <variant>
+#include <memory>
+#include <type_traits>
 
 namespace arcticdb {
 

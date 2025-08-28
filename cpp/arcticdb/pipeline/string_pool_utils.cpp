@@ -6,7 +6,7 @@
  */
 
 #include <arcticdb/pipeline/string_pool_utils.hpp>
-#include <arcticdb/pipeline/pipeline_context.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
 
 namespace arcticdb {
 size_t first_context_row(const pipelines::SliceAndKey& slice_and_key, size_t first_row_in_frame) {

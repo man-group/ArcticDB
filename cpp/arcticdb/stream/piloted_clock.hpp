@@ -1,5 +1,4 @@
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/util/preprocess.hpp>
 
 namespace arcticdb {
 

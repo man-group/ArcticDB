@@ -7,11 +7,7 @@
 
 #pragma once
 
-#include <unordered_map>
-#include <vector>
-
 #include <fmt/core.h>
-
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/component_manager.hpp>
@@ -19,9 +15,8 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/filter_segment.hpp>
-#include <arcticdb/util/composite.hpp>
-#include <arcticdb/util/string_utils.hpp>
-#include <arcticdb/util/variant.hpp>
+#include <unordered_map>
+#include <vector>
 
 namespace arcticdb {
     enum class PipelineOptimisation : uint8_t {

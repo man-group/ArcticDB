@@ -10,7 +10,6 @@
 #include <bsoncxx/string/to_string.hpp>
 #include <bsoncxx/builder/stream/document.hpp>
 #include <bsoncxx/types.hpp>
-#include <mongocxx/uri.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/mongo/mongo_instance.hpp>
 #include <mongocxx/client.hpp>

@@ -10,6 +10,7 @@
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
+#include <arcticdb/python/python_utils.hpp>
 
 
 

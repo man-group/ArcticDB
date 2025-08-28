@@ -18,7 +18,6 @@
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/codec/slice_data_sink.hpp>
-#include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/util/magic_num.hpp>

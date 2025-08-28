@@ -10,6 +10,7 @@
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/index_range.hpp>
+#include <arcticdb/util/hash.hpp>
 #include <variant>
 #include <optional>
 #include <fmt/format.h>

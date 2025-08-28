@@ -7,8 +7,6 @@
 
 #include <arcticdb/storage/python_bindings.hpp>
 #include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/entity/protobufs.hpp>
-#include <pybind11/stl.h>
 
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
@@ -18,7 +16,6 @@
 #include <arcticdb/storage/library_index.hpp>
 #include <arcticdb/storage/config_resolvers.hpp>
 #include <arcticdb/storage/constants.hpp>
-#include <arcticdb/storage/s3/s3_storage.hpp>
 #include <arcticdb/storage/s3/s3_settings.hpp>
 
 namespace py = pybind11;

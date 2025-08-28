@@ -7,15 +7,11 @@
 
 #pragma once
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/version/version_functions.hpp>
 #include <arcticdb/version/snapshot.hpp>
-
-#include <folly/futures/FutureSplitter.h>
 
 namespace arcticdb {
 

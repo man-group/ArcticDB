@@ -10,14 +10,9 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/entity/variant_key.hpp>
-#include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
-#include <arcticdb/stream/stream_writer.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/storage/key_segment_pair.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/util/variant.hpp>
 
 
 namespace arcticdb {

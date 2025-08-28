@@ -13,14 +13,11 @@
 #include <arcticdb/processing/expression_node.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/processing/clause_utils.hpp>
-#include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/processing/aggregation_interface.hpp>
 #include <arcticdb/processing/processing_unit.hpp>
 #include <arcticdb/processing/sorted_aggregation.hpp>
 #include <arcticdb/stream/aggregator.hpp>
-
 #include <folly/Poly.h>
-
 #include <vector>
 #include <string>
 #include <variant>

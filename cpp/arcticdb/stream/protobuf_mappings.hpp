@@ -11,8 +11,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/statistics.hpp>
 
-#include <string>
-
 namespace arcticdb {
 
 struct FrameDescriptorImpl;

@@ -6,6 +6,7 @@
  */
 
 #include <arcticdb/version/version_map_batch_methods.hpp>
+#include <arcticdb/version/version_functions.hpp>
 
 namespace arcticdb {
 

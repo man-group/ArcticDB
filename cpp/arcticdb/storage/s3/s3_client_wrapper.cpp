@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/storage/s3/s3_client_interface.hpp>
-#include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/s3/s3_client_wrapper.hpp>
 
 #include <aws/s3/S3Errors.h>

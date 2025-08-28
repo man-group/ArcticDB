@@ -6,6 +6,7 @@
  */
 
 #include <algorithm>
+#include <random>
 
 #include "gtest/gtest.h"
 #include <arcticdb/util/test/rapidcheck.hpp>

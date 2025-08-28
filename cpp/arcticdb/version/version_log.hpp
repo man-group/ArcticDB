@@ -9,12 +9,11 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/version/op_log.hpp>
 #include <arcticdb/version/version_constants.hpp>
+#include <arcticdb/util/exponential_backoff.hpp>
 
-#include <folly/futures/Future.h>
 
 namespace arcticdb {
     using namespace arcticdb::entity;

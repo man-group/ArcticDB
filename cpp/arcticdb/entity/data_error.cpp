@@ -7,7 +7,6 @@
 
 #include <arcticdb/entity/data_error.hpp>
 
-#include <fmt/format.h>
 
 namespace arcticdb::entity {
 

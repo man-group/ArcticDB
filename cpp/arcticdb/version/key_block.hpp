@@ -6,7 +6,6 @@
  */
 #pragma once
 
-#include <utility>
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/entity/key.hpp>
 

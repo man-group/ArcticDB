@@ -7,10 +7,9 @@
 
 #pragma once
 
+#include <mongocxx/instance.hpp>
 #include <mutex>
 #include <memory>
-#include <mongocxx/instance.hpp>
-#include <arcticdb/util/preprocess.hpp>
 
 namespace arcticdb::storage::mongo {
 

@@ -5,13 +5,12 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/util/variant.hpp>
-#include <arcticdb/python/python_utils.hpp>
-#include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
-#include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
-#include <arcticdb/pipeline/query.hpp>
+#include <arcticdb/entity/variant_key.hpp>
+#include <arcticdb/storage/store.hpp>
+#include <arcticdb/stream/stream_utils.hpp>
+#include <arcticdb/pipeline/read_query.hpp>
 
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;

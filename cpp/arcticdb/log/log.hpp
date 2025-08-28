@@ -7,9 +7,8 @@
 
 #pragma once
 
-#include <memory>
-
 #include <spdlog/spdlog.h>
+#include <memory>
 #ifdef DEBUG_BUILD
 #define ARCTICDB_DEBUG(logger, ...) logger.debug(__VA_ARGS__)
 #define ARCTICDB_TRACE(logger, ...) logger.trace(__VA_ARGS__)
@@ -22,8 +21,6 @@
 #define ARCTICDB_RUNTIME_DEBUG(logger, ...) logger.debug(__VA_ARGS__)
 
 namespace arcticc::pb2::logger_pb2 {
-    // to use these types where needed in user code: #include <logger.pb.h>
-    class LoggerConfig;
     class LoggersConfig;
 }
 
@@ -68,6 +65,7 @@ class Loggers {
 
 
     struct Impl;
+
     std::unique_ptr<Impl> impl_;
 
 };

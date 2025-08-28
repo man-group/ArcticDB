@@ -8,13 +8,9 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/column_store/statistics.hpp>
-
-#include <google/protobuf/text_format.h>
 #include <string>
 
 namespace arcticdb {
-
-struct FrameDescriptorImpl;
 
 arcticdb::proto::descriptors::NormalizationMetadata make_timeseries_norm_meta(const StreamId& stream_id) {
     using namespace arcticdb::proto::descriptors;

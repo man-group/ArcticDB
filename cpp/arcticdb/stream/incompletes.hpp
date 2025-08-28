@@ -15,20 +15,8 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
-#include <arcticdb/version/version_map.hpp>
-#include <arcticdb/entity/versioned_item.hpp>
-#include <arcticdb/pipeline/column_stats.hpp>
-#include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/async/task_scheduler.hpp>
-#include <arcticdb/stream/incompletes.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
-#include <arcticdb/stream/stream_reader.hpp>
-#include <arcticdb/stream/aggregator.hpp>
-#include <arcticdb/stream/segment_aggregator.hpp>
-#include <arcticdb/entity/frame_and_descriptor.hpp>
-#include <arcticdb/version/version_store_objects.hpp>
-#include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/pipeline/read_query.hpp>
 #include <string>
 
 namespace arcticdb {

@@ -9,7 +9,6 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 
 namespace arcticdb {

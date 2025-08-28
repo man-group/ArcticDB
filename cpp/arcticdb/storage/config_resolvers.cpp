@@ -6,16 +6,8 @@
  */
 
 #include <arcticdb/storage/config_resolvers.hpp>
-#include <arcticdb/async/async_store.hpp>
-#include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/storage/common.hpp>
-#include <arcticdb/storage/protobuf_mappings.hpp>
-#include <arcticdb/util/string_utils.hpp>
-#include <arcticdb/util/pb_util.hpp>
 
-#include <fstream>
-#include <string>
-#include <string_view>
 
 namespace arcticdb::storage::details {
 

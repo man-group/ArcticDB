@@ -1,19 +1,5 @@
 #pragma once
 
-#include <algorithm>
-#include <cstdlib>
-#include <iostream>
-#include <new>
-#include <string>
-#include <memory>
-#include <mutex>
-
-#include <arcticdb/util/trace.hpp>
-#include <arcticdb/util/constructors.hpp>
-
-#include <ankerl/unordered_dense.h>
-#include <iostream>
-
 #ifdef ARCTICDB_COUNT_ALLOCATIONS
 
 namespace arcticdb {

@@ -6,16 +6,12 @@
  */
 #pragma once
 
-#include <arcticdb/entity/versioned_item.hpp>
 #include <sparrow/record_batch.hpp>
-
 #include <vector>
 
 namespace arcticdb {
 
 class SegmentInMemory;
-struct FrameAndDescriptor;
-struct DecodePathData;
 class Column;
 
 std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::string_view name);

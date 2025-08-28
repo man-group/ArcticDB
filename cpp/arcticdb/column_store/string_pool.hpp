@@ -7,15 +7,14 @@
 
 #pragma once
 
-#include <string_view>
-#include <unordered_set>
-
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/buffer.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
+#include <string_view>
+#include <unordered_set>
 
 namespace pybind11 {
     struct buffer_info;
@@ -27,7 +26,6 @@ namespace py = pybind11;
 
 namespace arcticdb {
 
-class StringPool;
 class Column;
 
 

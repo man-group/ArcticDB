@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <arcticdb/codec/core.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/encode_common.hpp>
 #include <arcticdb/entity/protobufs.hpp>
@@ -15,9 +14,6 @@
 #include <arcticdb/codec/segment_header.hpp>
 
 namespace arcticdb {
-
-class Segment;
-class SegmentInMemory;
 
 using ShapesBlockTDT = entity::TypeDescriptorTag<entity::DataTypeTag<entity::DataType::INT64>, entity::DimensionTag<entity::Dimension::Dim0>>;
 

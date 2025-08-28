@@ -1,10 +1,12 @@
 #pragma once
 
 #include <atomic>
-#include <mutex>
 
-#include "arcticdb/util/clock.hpp"
-#include "arcticdb/util/constructors.hpp"
+#include <arcticdb/util/constructors.hpp>
+
+namespace arcticdb::entity {
+    using timestamp = int64_t;
+}
 
 namespace arcticdb::async {
 

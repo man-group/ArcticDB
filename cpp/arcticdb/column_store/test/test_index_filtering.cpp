@@ -14,6 +14,7 @@
 #include <arcticdb/storage/test/in_memory_store.hpp>
 #include <arcticdb/pipeline/index_writer.hpp>
 #include <arcticdb/codec/codec.hpp>
+#include <arcticdb/pipeline/read_pipeline.hpp>
 
 namespace arcticdb {
 using namespace arcticdb::pipelines;

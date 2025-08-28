@@ -7,10 +7,16 @@
 
 #pragma once
 
-#include <arcticdb/storage/s3/s3_storage.hpp>
 #include <aws/s3/S3Client.h>
+#include <s3_storage.pb.h>
+
+namespace arcticdb::proto {
+    namespace s3_storage = arcticc::pb2::s3_storage_pb2;
+}
 
 namespace arcticdb::storage::s3 {
+
+class S3ApiInstance;
 
 class S3StorageTool {
 public:

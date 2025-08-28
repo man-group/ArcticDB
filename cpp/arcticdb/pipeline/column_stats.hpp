@@ -1,9 +1,7 @@
 #pragma once
 
 #include <arcticdb/processing/clause.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <ankerl/unordered_dense.h>
-
 #include <map>
 #include <set>
 #include <string>

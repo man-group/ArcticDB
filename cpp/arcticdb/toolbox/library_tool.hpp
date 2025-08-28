@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <pybind11/pybind11.h>
-
 #include <arcticdb/entity/key.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/variant_key.hpp>
@@ -16,15 +14,7 @@
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <arcticdb/version/local_versioned_engine.hpp>
-#include <arcticdb/python/adapt_read_dataframe.hpp>
-
 #include <memory>
-
-namespace arcticdb::storage {
-class Library;
-
-class LibraryIndex;
-}
 
 namespace arcticdb::toolbox::apy {
 

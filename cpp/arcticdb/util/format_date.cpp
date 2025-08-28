@@ -1,6 +1,5 @@
 #define BOOST_DATE_TIME_POSIX_TIME_STD_CONFIG // Allows using nanoseconds in boost.
 #include <arcticdb/util/format_date.hpp>
-#include <boost/date_time/posix_time/time_formatters.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
 #include <boost/date_time/posix_time/conversion.hpp>
 #include <arcticdb/util/constants.hpp>

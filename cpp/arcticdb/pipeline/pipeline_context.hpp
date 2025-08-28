@@ -8,12 +8,8 @@
 #pragma once
 
 #include <arcticdb/column_store/string_pool.hpp>
-
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/util/bitset.hpp>
-
-#include <boost/iterator_adaptors.hpp>
-#include <ranges>
 #include <memory>
 
 namespace arcticdb::pipelines {

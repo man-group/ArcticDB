@@ -9,7 +9,6 @@
 
 #include <arcticdb/async/async_store.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/pipeline/pipeline_utils.hpp>
 #include <arcticdb/storage/library.hpp>

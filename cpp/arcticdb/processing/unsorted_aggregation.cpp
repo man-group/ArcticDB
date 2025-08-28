@@ -10,7 +10,6 @@
 #include <arcticdb/entity/types.hpp>
 
 #include <cmath>
-#include <ranges>
 
 namespace arcticdb {
 
