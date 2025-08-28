@@ -29,7 +29,8 @@ concept ValidIndex = util::any_of<
         stream::TableIndex,
         stream::EmptyIndex>;
 
-
+// This class originally wrapped numpy data, but with the addition of Arrow as an input format it is now a thin wrapper
+// around a variant representing either numpy or Arrow input data
 struct InputFrame {
     InputFrame() :
         index(stream::empty_index()) {}
