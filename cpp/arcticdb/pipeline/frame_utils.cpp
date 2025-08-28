@@ -188,8 +188,4 @@ std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::Pip
     return output;
 }
 
-bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputFrame& frame) {
-    return !std::holds_alternative<stream::TimeseriesIndex>(frame.index) || frame.desc.sorted() == SortedValue::ASCENDING;
-}
-
 }

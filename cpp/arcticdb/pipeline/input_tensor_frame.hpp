@@ -35,6 +35,8 @@ struct InputFrame {
     InputFrame() :
         index(stream::empty_index()) {}
 
+    StreamId stream_id_;
+
     std::optional<SegmentInMemory> seg;
     // TODO: Remove once a const view sparrow::record_batch is available
     // Until then, this is required to keep memory alive
@@ -92,6 +94,14 @@ struct InputFrame {
             index_range.start_ = IndexValue{ NumericIndex{0} };
             index_range.end_ = IndexValue{static_cast<timestamp>(num_rows) - 1};
         }
+    }
+
+    bool index_is_not_timeseries_or_is_sorted_ascending() const {
+        return !std::holds_alternative<stream::TimeseriesIndex>(index) || desc.sorted() == SortedValue::ASCENDING;
+    }
+
+    StreamId stream_id() const {
+        return desc.id();
     }
 };
 
