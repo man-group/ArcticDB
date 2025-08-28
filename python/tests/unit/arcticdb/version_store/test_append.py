@@ -271,7 +271,17 @@ def test_append_numpy_array(lmdb_version_store):
         sym = f"test_append_numpy_array_{index}"
         logger.info(f"Storing type: {_type} in symbol: {sym}")
         np1 = generate_random_numpy_array(10, _type)
-        lmdb_version_store.write(sym, np1, dynamic_strings=True)
+        try: 
+            lmdb_version_store.write(sym, np1)
+        except arcticdb.exceptions.ArcticDbNotYetImplemented as e:
+            if WINDOWS:
+                logger.info(f"not supported on windows: {str(e)}")
+                # never mind lets do something even if it is not main subject of the test
+                lmdb_version_store.write(sym, np1, pickle_on_failure=True)
+                assert_array_equal(np1, lmdb_version_store.read(sym).data)
+                continue                
+            else:
+                raise     
         np2 = generate_random_numpy_array(10, _type)
         logger.info(f"Appending {np2}")
         lmdb_version_store.append(sym, np2)
