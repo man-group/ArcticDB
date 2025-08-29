@@ -1523,11 +1523,23 @@ def clear_query_stats():
 ## At the end all the RETRIED tests will be written to a TEST_STATS library at AWS
 ## This allows the run to pass, while the failing tests could be examined at later stage
 
+logging = get_logger()
+def get_branch_name():
+    # Pull Request builds → GITHUB_HEAD_REF
+    # Direct push builds → GITHUB_REF
+    return (
+        os.environ.get("GITHUB_HEAD_REF")
+        or os.environ.get("GITHUB_REF", "").replace("refs/heads/", "")
+    )
+
+branch = get_branch_name()
+logging.warning(f"Running on branch name: {branch}")
+
 if RUNS_ON_GITHUB:
+
     # Config
     MAX_RETRIES = 3
     MAX_NUMBER_OF_TESTS_TO_RETRY = 5
-    logging = get_logger()
 
 
     # Tracking structures
@@ -1571,6 +1583,7 @@ if RUNS_ON_GITHUB:
                 # Schedule rerun immediately
                 item.session.items.insert(item.session.items.index(item) + 1, item)
                 rep.outcome = "skipped"  # Mark this attempt so pytest keeps going
+                rep.longrepr = (str(item.fspath), 0, "Retrying flaky test")
             else:
                 logging.error(f"[FAILED] {test_name} after {MAX_RETRIES + 1} attempts")
 
