@@ -369,4 +369,6 @@ std::pair<size_t, size_t> offset_and_row_count(const std::shared_ptr<pipelines::
 
 std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::PipelineContext>& context);
 
+bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputFrame& frame);
+
 } //namespace arcticdb

@@ -323,7 +323,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     using namespace arcticdb::pipelines;
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
-        !options.validate_index || options.sort_columns || options.sort_on_index || frame->index_is_not_timeseries_or_is_sorted_ascending(),
+        !options.validate_index || options.sort_columns || options.sort_on_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
         "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
@@ -543,7 +543,7 @@ void append_incomplete(
     ARCTICDB_DEBUG(log::version(), "Writing incomplete frame for stream {}", stream_id);
 
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
-        !validate_index || frame->index_is_not_timeseries_or_is_sorted_ascending(),
+        !validate_index || index_is_not_timeseries_or_is_sorted_ascending(*frame),
         "When appending staged data input data must be sorted.");
 
     auto [next_key, total_rows] = read_head(store, stream_id);

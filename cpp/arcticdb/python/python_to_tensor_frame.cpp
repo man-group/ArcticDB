@@ -203,14 +203,14 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
 }
 
 std::shared_ptr<InputFrame> py_ndf_to_frame(
-    const StreamId& stream_id,
+    const StreamId& stream_name,
     const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
     const py::object &norm_meta,
     const py::object &user_meta,
     bool empty_types) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
-    res->desc.set_id(stream_id);
+    res->desc.set_id(stream_name);
     res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
     if (!user_meta.is_none())
@@ -295,7 +295,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         }
         res->seg = arrow_data_to_segment(sp_record_batches);
         res->record_batches = std::move(sp_record_batches);
-        res->seg->descriptor().set_id(stream_id);
+        res->seg->descriptor().set_id(stream_name);
         res->num_rows = res->seg->row_count();
         res->desc = res->seg->descriptor();
         if (res->desc.index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {

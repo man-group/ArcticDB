@@ -89,7 +89,7 @@ VersionedItem write_dataframe_impl(
     bool validate_index
     ) {
     ARCTICDB_SUBSAMPLE_DEFAULT(WaitForWriteCompletion)
-    ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->stream_id(), version_id, frame->num_rows);
+    ARCTICDB_DEBUG(log::version(), "write_dataframe_impl stream_id: {} , version_id: {}, {} rows", frame->desc.id(), version_id, frame->num_rows);
     auto atom_key_fut = async_write_dataframe_impl(store, version_id, frame, options, de_dup_map, sparsify_floats, validate_index);
     return {std::move(atom_key_fut).get()};
 }
@@ -105,7 +105,7 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
     ) {
     ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame->stream_id());
+        auto check_outcome = verify_symbol_key(frame->desc.id());
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
@@ -113,8 +113,8 @@ folly::Future<entity::AtomKey> async_write_dataframe_impl(
 
     // Slice the frame according to the write options
     auto slicing_arg = get_slicing_policy(options, *frame);
-    auto partial_key = IndexPartialKey{frame->stream_id(), version_id};
-    if (validate_index && !frame->index_is_not_timeseries_or_is_sorted_ascending()) {
+    auto partial_key = IndexPartialKey{frame->desc.id(), version_id};
+    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling write with validate_index enabled, input data must be sorted");
     }
     return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
@@ -135,7 +135,7 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
 }
 
 void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader& index_segment_reader){
-    if (!frame.index_is_not_timeseries_or_is_sorted_ascending()) {
+    if (!index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>("When calling append with validate_index enabled, input data must be sorted");
     }
     sorting::check<ErrorCode::E_UNSORTED_DATA>(
@@ -153,7 +153,7 @@ folly::Future<AtomKey> async_append_impl(
     bool empty_types) {
 
     util::check(update_info.previous_index_key_.has_value(), "Cannot append as there is no previous index key to append to");
-    const StreamId stream_id = frame->stream_id();
+    const StreamId stream_id = frame->desc.id();
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
     util::check(options.bucketize_dynamic == index_segment_reader.bucketize_dynamic(), "Mismatch in bucketize_dynamic option");
@@ -451,8 +451,8 @@ folly::Future<AtomKey> async_update_impl(
         empty_types
         ](index::IndexSegmentReader&& index_segment_reader) {
         check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
-        ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->stream_id(), update_info.previous_index_key_->version_id());
-        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->stream_id(), update_info.next_version_id_} , store
+        ARCTICDB_DEBUG(log::version(), "Update versioned dataframe for stream_id: {} , version_id = {}", frame->desc.id(), update_info.previous_index_key_->version_id());
+        return slice_and_write(frame, get_slicing_policy(options, *frame), IndexPartialKey{frame->desc.id(), update_info.next_version_id_} , store
         ).via(&async::cpu_executor()).thenValue([
             store,
             update_info,
@@ -494,7 +494,7 @@ folly::Future<AtomKey> async_update_impl(
                     index_type_from_descriptor(tsd.as_stream_descriptor()),
                     std::move(tsd),
                     std::move(flattened_slice_and_keys),
-                    IndexPartialKey{frame->stream_id(), update_info.next_version_id_},
+                    IndexPartialKey{frame->desc.id(), update_info.next_version_id_},
                     store
                 );
             });
@@ -511,7 +511,7 @@ VersionedItem update_impl(
     bool dynamic_schema,
     bool empty_types) {
     auto versioned_item = VersionedItem(async_update_impl(store, update_info, query, frame, std::move(options), dynamic_schema, empty_types).get());
-    ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->stream_id(), update_info.next_version_id_);
+    ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", frame->desc.id(), update_info.next_version_id_);
     return versioned_item;
 }
 
