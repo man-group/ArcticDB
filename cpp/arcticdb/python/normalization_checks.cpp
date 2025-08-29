@@ -8,7 +8,6 @@
 #include <arcticdb/python/normalization_checks.hpp>
 #include <arcticdb/log/log.hpp>
 #include <arcticdb/util/preconditions.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>

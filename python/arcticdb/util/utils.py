@@ -27,6 +27,140 @@ supported_int_types_list = list(get_args(ArcticIntType))
 supported_float_types_list = list(get_args(ArcticFloatType))
 supported_types_list = list(get_args(ArcticTypes))
 
+# Default N/A (not a value) for arcticd types
+ARCTICDB_NA_VALUE_FLOAT = np.nan
+ARCTICDB_NA_VALUE_INT = 0
+ARCTICDB_NA_VALUE_STRING = None
+ARCTICDB_NA_VALUE_TIMESTAMP = np.datetime64('NaT')
+ARCTICDB_NA_VALUE_BOOL = False
+
+
+def list_installed_packages() -> List[str]:
+    """ Lists installed packaged along with thir versions.
+
+    Sample usage:
+        for package in list_installed_packages():
+            print(package)
+    """
+    try:
+        # Python >3.8
+        from importlib.metadata import distributions
+        return [f"{dist.metadata['Name']}=={dist.version}" for dist in distributions()]
+    except ImportError:
+        # Previous pythons (3.8)
+        try:
+            import pkg_resources
+            return [f"{dist.project_name}=={dist.version}" for dist in pkg_resources.working_set]
+        except ImportError:
+            raise RuntimeError("Neither importlib.metadata nor pkg_resources is available.")
+
+
+def set_seed(seed=None):
+    """Sets seed to random libraries if not None"""
+    if seed is not None:
+       np.random.seed(seed)
+       random.seed(seed)
+
+
+def generate_random_timestamp_array(size: int, 
+                               start: str = '2020-01-01', 
+                               end: str = '2030-01-01', 
+                               seed: int = 432432) -> npt.NDArray[np.datetime64]:
+    """ Generates an array of random timestamps"""
+    if seed: 
+        np.random.seed(seed)
+    start_ts = pd.Timestamp(start).value // 10**9
+    end_ts = pd.Timestamp(end).value // 10**9
+    random_seconds = np.random.randint(start_ts, end_ts, size=size)
+    return np.array(pd.to_datetime(random_seconds, unit='s'))
+
+def generate_random_float_array(size: int, dtype: 
+                                np.floating = np.float32 ) -> npt.NDArray[np.floating]:
+    """Pseudo random float algorithm supporting np.float* types"""
+    def power_sequence(max_power):
+        exponents = np.arange(max_power, -(max_power+1), -1)
+        sequence = np.power(10.0, exponents)
+        return sequence
+    
+    if dtype == np.float32:
+        power_arr = power_sequence(37)
+    elif dtype == np.float16:
+        power_arr = power_sequence(4)
+    elif np.issubdtype(dtype, np.floating):
+        power_arr = power_sequence(100)
+    else:
+        raise TypeError(f"Type not supported {dtype}")
+
+    random_part = np.random.random(size).astype(dtype)
+    scaling_part = np.random.choice(power_arr, size=size).astype(np.float64)
+    result = random_part * scaling_part
+    return result.astype(dtype)
+
+
+def generate_random_numpy_array(size: int, dtype, seed: Optional[int] = 8238) -> npt.NDArray[Any]:
+    """ Generates random numpy array of specified type
+    """
+    set_seed(seed)
+    arr = []
+    if pd.api.types.is_integer_dtype(dtype):
+        arr = random_integers(size, dtype)
+    elif pd.api.types.is_float_dtype(dtype):
+        arr = generate_random_float_array(dtype=dtype, size=size)
+    elif pd.api.types.is_bool_dtype(dtype):
+        arr = np.random.randn(size) > 0
+    elif pd.api.types.is_string_dtype(dtype):
+        length = 10
+        arr = [random_string(length) for _ in range(size)]
+        arr = np.array(arr, dtype=f"U{size}")
+    elif pd.api.types.is_datetime64_any_dtype(dtype):
+        arr = generate_random_timestamp_array(size, seed=seed)
+    else:
+        raise TypeError("Unsupported type {dtype}")        
+    return arr
+
+
+def generate_random_series(type: ArcticTypes, length: int, name: str, 
+                    start_time: Optional[pd.Timestamp ]= None, 
+                    freq: str = 's', 
+                    seed: Optional[int] = 3247) -> pd.Series:
+    """Generates random series of specified type with or without index"""
+    set_seed(seed)
+    index = None
+    if start_time:
+        index = pd.date_range(start_time, periods=length, freq=freq)
+    return pd.Series(generate_random_numpy_array(length, type, seed=None), 
+                           index=index,
+                           name=name)
+
+
+def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[int, pd.Timestamp],
+                                     new_columns_to_verify: Set[str]):
+    """ Verifies the value of dynamically added columns to dataframes 
+    after append/update operation with dataframe that is having additional new rows
+
+    row_index is either location of the row in dataframe or its index (timestamp)
+    """
+    updated_df_columns = set(updated_df.columns.to_list())
+    assert updated_df_columns.issuperset(new_columns_to_verify)
+    for col in new_columns_to_verify:
+            dtype = updated_df[col].dtype
+            if isinstance(row_index, pd.Timestamp):
+                value = updated_df[col].loc[row_index]
+            else:
+                value = updated_df[col].iloc[row_index]
+            if pd.api.types.is_integer_dtype(dtype):
+                assert 0 == value, f"column {col}:{dtype} -> 0 == {value}"
+            elif pd.api.types.is_float_dtype(dtype):
+                assert pd.isna(value), f"column {col}:{dtype} -> Nan == {value}"
+            elif pd.api.types.is_bool_dtype(dtype):
+                assert False == value, f"column {col}:{dtype} -> False == {value}"
+            elif pd.api.types.is_string_dtype(dtype):
+                assert value is None , f"column {col}:{dtype} -> None == {value}"
+            elif pd.api.types.is_datetime64_any_dtype(dtype):
+                assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
+            else:
+                raise TypeError(f"Unsupported dtype: {dtype}")
+            
 
 def list_installed_packages() -> List[str]:
     """ Lists installed packaged along with thir versions.

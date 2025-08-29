@@ -5,12 +5,10 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/python/python_strings.hpp>
-
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
-#include <arcticdb/python/python_handlers.hpp>
+#include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
 

@@ -7,16 +7,13 @@
 
 #pragma once
 
-#include <variant>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/pipeline/pandas_output_frame.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
-#include <arcticdb/pipeline/read_options.hpp>
 
 namespace arcticdb::pipelines {
 

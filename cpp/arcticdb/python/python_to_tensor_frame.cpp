@@ -7,7 +7,6 @@
 
 
 #include <arcticdb/python/python_to_tensor_frame.hpp>
-#include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/python/python_utils.hpp>

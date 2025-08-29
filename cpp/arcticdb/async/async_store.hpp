@@ -10,7 +10,6 @@
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/util/clock.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/async/tasks.hpp>
