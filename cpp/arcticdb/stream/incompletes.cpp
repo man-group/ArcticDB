@@ -163,7 +163,7 @@ SegmentInMemory incomplete_segment_from_frame(
 
     auto offset_in_frame = 0;
     auto slice_num_for_column = 0;
-    const auto num_rows = frame->num_rows();
+    const auto num_rows = frame->num_rows;
     auto index_tensor = std::move(frame->index_tensor);
     const bool has_index = frame->has_index();
     const auto index = std::move(frame->index);
@@ -276,7 +276,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
     auto stream_desc = frame->desc;
     auto norm_meta = timeseries_desc.proto().normalization();
-    auto tsd = pack_timeseries_descriptor(frame->desc, frame->num_rows(), std::nullopt, std::move(norm_meta));
+    auto tsd = pack_timeseries_descriptor(frame->desc, frame->num_rows, std::nullopt, std::move(norm_meta));
     segment.set_timeseries_descriptor(tsd);
 
     bool is_timestamp_index = std::holds_alternative<stream::TimeseriesIndex>(frame->index);
@@ -547,7 +547,7 @@ void append_incomplete(
         "When appending staged data input data must be sorted.");
 
     auto [next_key, total_rows] = read_head(store, stream_id);
-    const auto num_rows = frame->num_rows();
+    const auto num_rows = frame->num_rows;
     total_rows += num_rows;
     auto desc = frame->desc.clone();
 

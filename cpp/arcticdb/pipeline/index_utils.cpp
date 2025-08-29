@@ -48,7 +48,7 @@ folly::Future<entity::AtomKey> write_index(
     const IndexPartialKey &partial_key,
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
-    auto offset = frame->offset();
+    auto offset = frame->offset;
     auto index = stream::index_type_from_descriptor(frame->desc);
     auto timeseries_desc = index_descriptor_from_frame(frame, offset);
     return write_index(index, timeseries_desc, std::move(slice_and_keys), partial_key, sink);

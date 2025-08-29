@@ -64,7 +64,7 @@ TimeseriesDescriptor index_descriptor_from_frame(
         size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key) {
     return make_timeseries_descriptor(
-        frame->num_rows() + existing_rows,
+        frame->num_rows + existing_rows,
         frame->desc,
         std::move(frame->norm_meta),
         std::move(frame->user_meta),

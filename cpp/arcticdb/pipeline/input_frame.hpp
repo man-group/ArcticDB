@@ -49,11 +49,11 @@ struct InputFrame {
     std::optional<entity::NativeTensor> index_tensor;
     std::vector<entity::NativeTensor> field_tensors;
     IndexRange index_range;
-    size_t num_rows_ = 0;
-    mutable size_t offset_ = 0;
+    size_t num_rows = 0;
+    mutable size_t offset = 0;
 
     void set_offset(ssize_t off) const {
-        offset_ = off;
+        offset = off;
     }
 
     void set_sorted(SortedValue sorted) {
@@ -67,12 +67,12 @@ struct InputFrame {
 
     bool has_index() const { return desc.index().field_count() != 0ULL; }
 
-    bool empty() const { return num_rows() == 0; }
+    bool empty() const { return num_rows == 0; }
 
     void set_index_range() {
         // Fill index range
         // Note RowCountIndex will normally have an index field count of 0
-        if(num_rows() == 0) {
+        if(num_rows == 0) {
             index_range.start_ = IndexValue{ NumericIndex{0} };
             index_range.end_ = IndexValue{ NumericIndex{0} };
         } else if (desc.index().field_count() == 1) {
@@ -92,7 +92,7 @@ struct InputFrame {
                 });
         } else {
             index_range.start_ = IndexValue{ NumericIndex{0} };
-            index_range.end_ = IndexValue{static_cast<timestamp>(num_rows()) - 1};
+            index_range.end_ = IndexValue{static_cast<timestamp>(num_rows) - 1};
         }
     }
 
@@ -102,18 +102,6 @@ struct InputFrame {
 
     StreamId stream_id() const {
         return desc.id();
-    }
-
-    const StreamDescriptor& descriptor() const {
-        return desc;
-    }
-
-    size_t num_rows() const {
-        return num_rows_;
-    }
-
-    size_t offset() const {
-        return offset_;
     }
 };
 

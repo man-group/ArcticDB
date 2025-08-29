@@ -68,11 +68,11 @@ SlicingPolicy get_slicing_policy(
 std::vector<FrameSlice> slice(InputFrame&frame, const SlicingPolicy& slicer);
 
 inline auto slice_begin_pos(const FrameSlice& slice, const InputFrame& frame) {
-    return slice.row_range.first - frame.offset();
+    return slice.row_range.first - frame.offset;
 }
 
 inline auto slice_end_pos(const FrameSlice& slice, const InputFrame& frame) {
-    return (slice.row_range.second-1) - frame.offset();
+    return (slice.row_range.second-1) - frame.offset;
 }
 
 template <typename T>
