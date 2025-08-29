@@ -102,7 +102,6 @@ inline auto get_partial_key_gen(std::shared_ptr<InputFrame> frame, const TypedSt
         if (frame->has_index()) {
             if (frame->seg.has_value()) {
                 const auto& index_column = frame->seg->column(0);
-                // TODO: Doesn't look like scalar_at will work with non-contiguous buffers, and therefore with multiple record batches
                 auto start = *index_column.scalar_at<timestamp>(slice_begin_pos(s, *frame));
                 auto end = *index_column.scalar_at<timestamp>(slice_end_pos(s, *frame));
                 return PartialKey{
