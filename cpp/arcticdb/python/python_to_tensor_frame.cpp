@@ -210,7 +210,6 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
     bool empty_types) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
-    res->desc().set_id(stream_name);
     res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
     if (!user_meta.is_none())
@@ -297,13 +296,13 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         res->record_batches = std::move(sp_record_batches);
         res->seg->descriptor().set_id(stream_name);
         res->num_rows = res->seg->row_count();
-        res->desc() = res->seg->descriptor();
         if (res->desc().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
             res->index = TimeseriesIndex{std::string(res->desc().field(0).name())};
         } else {
             res->index = RowCountIndex{};
         }
     }
+    res->desc().set_id(stream_name);
     return res;
 }
 

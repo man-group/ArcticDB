@@ -52,11 +52,15 @@ struct InputFrame {
     mutable size_t offset = 0;
 
     StreamDescriptor& desc() {
-        return desc_;
+        if (seg.has_value()) {
+            return seg->descriptor();
+        } else {
+            return desc_;
+        }
     }
 
     const StreamDescriptor& desc() const {
-        return desc_;
+        return const_cast<InputFrame*>(this)->desc();
     }
 
     void set_offset(ssize_t off) const {
@@ -65,14 +69,14 @@ struct InputFrame {
 
     void set_sorted(SortedValue sorted) {
         switch (sorted) {
-            case SortedValue::UNSORTED:desc_.set_sorted(SortedValue::UNSORTED);break;
-            case SortedValue::DESCENDING:desc_.set_sorted(SortedValue::DESCENDING);break;
-            case SortedValue::ASCENDING:desc_.set_sorted(SortedValue::ASCENDING);break;
-            default:desc_.set_sorted(SortedValue::UNKNOWN);
+            case SortedValue::UNSORTED:desc().set_sorted(SortedValue::UNSORTED);break;
+            case SortedValue::DESCENDING:desc().set_sorted(SortedValue::DESCENDING);break;
+            case SortedValue::ASCENDING:desc().set_sorted(SortedValue::ASCENDING);break;
+            default:desc().set_sorted(SortedValue::UNKNOWN);
         }
     }
 
-    bool has_index() const { return desc_.index().field_count() != 0ULL; }
+    bool has_index() const { return desc().index().field_count() != 0ULL; }
 
     bool empty() const { return num_rows == 0; }
 
@@ -82,8 +86,8 @@ struct InputFrame {
         if(num_rows == 0) {
             index_range.start_ = IndexValue{ NumericIndex{0} };
             index_range.end_ = IndexValue{ NumericIndex{0} };
-        } else if (desc_.index().field_count() == 1) {
-            visit_field(desc_.field(0), [&](auto &&tag) {
+        } else if (desc().index().field_count() == 1) {
+            visit_field(desc().field(0), [&](auto &&tag) {
                 using DT = std::decay_t<decltype(tag)>;
                 using RawType = typename DT::DataTypeTag::raw_type;
                 if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>) {
