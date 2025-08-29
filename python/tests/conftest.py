@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import enum
+import traceback
 from typing import Callable, Generator, Union
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import NativeVersionStore
@@ -54,12 +55,14 @@ from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
 from arcticdb.util.test import create_df
 from arcticdb.arctic import Arctic
+from tests.util.stats_store import store_test_stats
 from .util.mark import (
     LMDB_TESTS_MARK,
     LOCAL_STORAGE_TESTS_ENABLED,
     MACOS_WHEEL_BUILD,
     MEM_TESTS_MARK,
     REAL_AZURE_TESTS_MARK,
+    RUNS_ON_GITHUB,
     SIM_GCP_TESTS_MARK,
     SIM_NFS_TESTS_MARK,
     SIM_S3_TESTS_MARK,
@@ -1505,3 +1508,101 @@ def clear_query_stats():
     yield
     query_stats.disable()
     query_stats.reset_stats()
+
+
+# region - Flaky Test Management - RETRY + FAILURE CAPTURE ----
+
+## Thus code runs only under Github.
+## Its purpose is to protect us against flaky tests
+## Flaky tests are such that will trigger failure sometimes
+## although no problem is present in the product.
+## The code forgives up to certain amount of failures, 
+## each on which will be retried and if success the test will be passed/
+## After the specified number of failures is reached for tests
+## each next will trigger immediate failure without attempt to retry
+## At the end all the RETRIED tests will be written to a TEST_STATS library at AWS
+## This allows the run to pass, while the failing tests could be examined at later stage
+
+if RUNS_ON_GITHUB:
+    # Config
+    MAX_RETRIES = 3
+    MAX_NUMBER_OF_TESTS_TO_RETRY = 5
+    logging = get_logger()
+
+
+    # Tracking structures
+    failures = {}          # test_name -> str(traceback of first failure)
+    flaky_recoveries = set()  # test_name
+    retry_counts = {}      # test_name -> number of retries done
+
+
+    @pytest.hookimpl(hookwrapper=True)
+    def pytest_runtest_makereport(item, call):
+        """
+        Intercept test results, retry failures, and record metadata.
+        """
+        outcome = yield
+        rep = outcome.get_result()
+
+        # Only care about the call phase
+        if rep.when != "call":
+            return
+
+        test_name = item.nodeid
+
+        # On failure
+        if rep.failed:
+            current_retry = retry_counts.get(test_name, 0)
+
+            # Store the very first failure output
+            if test_name not in failures:
+                try:
+                    failures[test_name] = rep.longreprtext
+                except AttributeError:
+                    # Fallback in rare cases where longreprtext is missing
+                    failures[test_name] = str(rep.longrepr)
+
+            if (len(failures) <= MAX_NUMBER_OF_TESTS_TO_RETRY
+                    and current_retry < MAX_RETRIES):
+                retry_counts[test_name] = current_retry + 1
+                logging.warning(f"[RETRY] {test_name} failed on attempt {current_retry + 1}")
+                time.sleep(1)
+
+                # Schedule rerun immediately
+                item.session.items.insert(item.session.items.index(item) + 1, item)
+                rep.outcome = "skipped"  # Mark this attempt so pytest keeps going
+            else:
+                logging.error(f"[FAILED] {test_name} after {MAX_RETRIES + 1} attempts")
+
+        # On pass after a failure
+        elif rep.passed:
+            if test_name in failures and test_name not in flaky_recoveries:
+                flaky_recoveries.add(test_name)
+                logging.info(f"[RECOVERED] {test_name} passed after retry")
+
+    def pytest_terminal_summary(terminalreporter, exitstatus, config):
+        """
+        Add flaky test summary to pytest's final output block.
+        """
+        if failures:
+            terminalreporter.section("Flaky Test Summary", sep="=")
+            for test in failures:
+                status = "RECOVERED" if test in flaky_recoveries else "FAILED"
+                terminalreporter.write_line(f"{test} -> {status}")
+        else:
+            terminalreporter.section("Flaky Test Summary", sep="=")
+            terminalreporter.write_line("No flaky tests detected")
+
+    def pytest_sessionfinish(session):
+        # This check ensures the code only runs on the main controller process
+        # and not on the parallel workers.
+        if hasattr(session.config, 'workerinput'):
+            return
+        
+        # Persist results to ArcticDB
+        try:
+            store_test_stats(failures, flaky_recoveries)
+        except Exception as e:
+            logging.error(f"STORING OF RESULTS DID NOT SUCCEED")
+
+# endregion
