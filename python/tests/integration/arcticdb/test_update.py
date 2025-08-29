@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 
 from abc import ABC, abstractmethod
+import datetime
 from enum import Enum
 import random
 import sys
@@ -20,8 +21,8 @@ import string
 
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
-from arcticdb.util.test import dataframe_simulate_arcticdb_update_static
-from arcticdb.util.utils import DFGenerator, TimestampNumber
+from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
+from arcticdb.util.utils import DFGenerator, TimestampNumber, set_seed
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.library import Library, UpdatePayload, WritePayload
@@ -142,11 +143,6 @@ def upgrade_dataframe_types(df: pd.DataFrame, upgrade_types_dict: Dict[type, typ
         upgrade_to = upgrade_types_dict.get(df[col].dtype.type, None)
         if upgrade_to:
             df[col] = df[col].astype(upgrade_to)
-
-
-def set_seed(_seed):
-    np.random.seed(_seed)
-    random.seed(_seed)
 
 
 class UpdatesGenerator:
@@ -277,7 +273,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df1_num_rows = ROWS_PER_SEGMENT*5
     df1 = g.get_dataframe(number_columns=df1_num_cols, number_rows=df1_num_rows, start_time=start_time)
     update1 = ug.generate_update(df1, UpdatePositionType.INSIDE, df1_num_cols, ROWS_PER_SEGMENT * 3)
-    expected_updated_df1 = dataframe_simulate_arcticdb_update_static(df1, update1) 
+    expected_updated_df1 = ArcticSymbolSimulator.simulate_arctic_update(df1, update1, dynamic_schema=False)
 
     # Update exactly at 'rows_per_segment'
     sym2 = '_s_2'
@@ -286,7 +282,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df2 = g.get_dataframe(number_columns=df2_num_cols, number_rows=df2_num_rows, start_time=start_time)
     update2 = ug.generate_update(df2, UpdatePositionType.AFTER, df2_num_cols, ROWS_PER_SEGMENT)
     metadata2 = {1, 2, 3, "something", UpdatesGenerator, ug}
-    expected_updated_df2 = dataframe_simulate_arcticdb_update_static(df2, update2) 
+    expected_updated_df2 = ArcticSymbolSimulator.simulate_arctic_update(df2, update2, dynamic_schema=False)
 
     # Update below 'rows_per_segment'
     sym3 = '_s_3'
@@ -295,7 +291,7 @@ def test_update_batch_all_supported_datatypes_over_several_segments(custom_libra
     df3 = g.get_dataframe(number_columns=df3_num_cols, number_rows=df3_num_rows, start_time=start_time)
     update3 = ug.generate_update(df3, UpdatePositionType.INSIDE_OVERLAP_END, df3_num_cols, ROWS_PER_SEGMENT - 2)
     metadata3 = random_metadata()
-    expected_updated_df3 = dataframe_simulate_arcticdb_update_static(df3, update3) 
+    expected_updated_df3 = ArcticSymbolSimulator.simulate_arctic_update(df3, update3, dynamic_schema=False)
 
     # Error update due to mismatch in columns
     sym4 = '_s_4'
@@ -386,7 +382,7 @@ def test_update_batch_types_upgrade(custom_library):
         original_dataframes[symbol_name] = df1
         # Calculate expected dataframe
         upgrade_dataframe_types(df1, upgrade)
-        expected_results[symbol_name] = dataframe_simulate_arcticdb_update_static(df1, df2)
+        expected_results[symbol_name] = ArcticSymbolSimulator.simulate_arctic_update(df1, df2, dynamic_schema=False)
         update_batch.append(UpdatePayload(symbol_name, df2))
         write_batch.append(WritePayload(symbol_name, df1))
 
@@ -487,34 +483,6 @@ def test_update_batch_error_scenario2(arctic_library):
     assert update_result[0].version == 0
 
 
-def dataframe_simulate_arcticdb_update_dynamic(expected_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
-    """ Simulates partially dynamic update, when update df has new columns.
-    The scenario where there are type promotions of existing columns is not covered yet
-    """
-    def add_missing_ending_columns(to_df: pd.DataFrame, from_df: pd.DataFrame):
-        """
-        Modifies `to_df` adding all missing columns at from `from_df` at the end.
-        Note that it checks first that first common column of both are same
-        """
-        assert len(from_df.columns) >= len(to_df.columns)
-        for index, col in enumerate(from_df.columns):
-            if index < len(to_df.columns):
-                message = f"Column [{index}] does not match from_df{from_df.columns[index]} != to_df{from_df.columns[index]}"
-                assert from_df.columns[index] == to_df.columns[index], message
-            else:
-                dtype = from_df[col].dtype
-                if np.issubdtype(dtype, np.integer):
-                    to_df[col] = np.zeros(len(to_df), dtype=dtype)
-                elif np.issubdtype(dtype, np.floating):
-                    to_df[col] = np.full(len(to_df), np.nan, dtype=dtype)
-                elif np.issubdtype(dtype, np.bool_):
-                    to_df[col] = np.full(len(to_df), False, dtype=dtype)
-                elif dtype == object or pd.api.types.is_string_dtype(dtype):
-                    to_df[col] = [None] * len(to_df)
-    add_missing_ending_columns(expected_df, update_df)
-    return dataframe_simulate_arcticdb_update_static(expected_df, update_df)
-
-
 @pytest.mark.storage
 @pytest.mark.parametrize("custom_library", [
             {'library_options': LibraryOptions(dynamic_schema=True)}
@@ -532,7 +500,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     g = BasicDataFrameGenerator()
     ug = UpdatesGenerator(g)
     original_num_cols = 30
-    original_number_rows = 50
+    original_number_rows = 30
     symbol_prefix = "different types of updates"
 
     symbol_names = []
@@ -551,7 +519,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
             symbol_names.append(symbol_name)
             # Calculate expected dataframe
             expected_df = original_dataframe.copy(deep=True)
-            expected_results[symbol_name] = dataframe_simulate_arcticdb_update_dynamic(expected_df, update)
+            expected_results[symbol_name] = ArcticSymbolSimulator.simulate_arctic_update(expected_df, update)
             update_batch.append(UpdatePayload(symbol_name, update))
             write_batch.append(WritePayload(symbol_name, original_dataframe))
     
@@ -567,5 +535,7 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
     logger.info(f"Verify expected results for updates with rows count: {number_rows}")
     for index, result in enumerate(update_result):
         assert result.version == 1 
-        assert_frame_equal(expected_results[result.symbol], read_data[result.symbol].data)
+        ArcticSymbolSimulator.assert_frame_equal_rebuild_index_first(expected_results[result.symbol], read_data[result.symbol].data)
           
+
+
