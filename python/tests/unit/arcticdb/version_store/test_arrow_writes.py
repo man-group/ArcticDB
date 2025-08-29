@@ -182,3 +182,12 @@ def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_
         pandas_df = lib_tool.read_to_dataframe(pandas_key)
         arrow_df = lib_tool.read_to_dataframe(arrow_key)
         assert_frame_equal(pandas_df, arrow_df)
+
+
+def test_write_zero_record_batches(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_zero_record_batches"
+    table = pa.Table.from_arrays([])
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)

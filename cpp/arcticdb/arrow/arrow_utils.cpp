@@ -64,6 +64,9 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
+    if (num_columns == 0) {
+        return std::make_shared<std::vector<sparrow::record_batch>>();
+    }
     const auto column_blocks = segment.column(0).num_blocks();
     util::check(total_blocks == column_blocks * num_columns, "Expected regular block size");
 
@@ -105,7 +108,11 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
 }
 
 SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches) {
-    util::check(!record_batches.empty(), "Zero record batches provided");
+    SegmentInMemory seg;
+    if (record_batches.empty()) {
+        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+        return seg;
+    }
     auto record_batch = record_batches.cbegin();
     auto num_columns = record_batch->nb_columns();
     auto column_names = record_batch->names();
@@ -162,7 +169,6 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
         }
         rows += *num_rows;
     }
-    SegmentInMemory seg;
     for (size_t idx = 0; idx < num_columns; ++idx) {
         // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
         seg.add_column(scalar_field(data_types.at(idx), column_names[idx]),

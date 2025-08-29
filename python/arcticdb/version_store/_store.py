@@ -2398,7 +2398,11 @@ class NativeVersionStore:
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            table = pa.Table.from_batches(record_batches)
+            if len(record_batches):
+                table = pa.Table.from_batches(record_batches)
+            else:
+                # Roundtrip empty tables correctly
+                table = pa.Table.from_arrays([])
             data = self._arrow_normalizer.denormalize(table, read_result.norm)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
