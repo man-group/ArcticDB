@@ -56,12 +56,12 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         auto key = partial_key_gen_(slice_);
         const auto& frame = *frame_->seg;
         SegmentInMemory seg;
-        if (frame_->desc().index().field_count() > 0) {
+        if (frame.descriptor().index().field_count() > 0) {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         } else {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         }
-        for (size_t col_idx = 0; col_idx < frame_->desc().index().field_count(); ++col_idx) {
+        for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
             const auto& source_column = frame.column(col_idx);
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
             const auto bytes =
