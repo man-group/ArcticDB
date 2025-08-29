@@ -15,7 +15,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 
 #include <folly/futures/Future.h>

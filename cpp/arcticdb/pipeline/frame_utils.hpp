@@ -11,7 +11,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/entity/atom_key.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/python/gil_lock.hpp>
 #include <arcticdb/python/python_types.hpp>

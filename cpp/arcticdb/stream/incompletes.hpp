@@ -13,7 +13,7 @@
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/stream/stream_source.hpp>
 #include <arcticdb/storage/store.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/version/version_map.hpp>
 #include <arcticdb/entity/versioned_item.hpp>

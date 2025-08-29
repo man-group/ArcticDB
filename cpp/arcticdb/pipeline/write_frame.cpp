@@ -5,7 +5,7 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/pipeline/slicing.hpp>

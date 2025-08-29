@@ -246,7 +246,7 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.hpp
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
-        pipeline/input_tensor_frame.hpp
+        pipeline/input_frame.hpp
         pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp

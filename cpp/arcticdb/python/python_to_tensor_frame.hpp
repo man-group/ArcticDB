@@ -10,7 +10,7 @@
 #include <pybind11/pybind11.h>
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/python/gil_lock.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <string>
 

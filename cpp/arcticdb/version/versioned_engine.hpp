@@ -16,7 +16,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/util/storage_lock.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/python/normalization_checks.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 

@@ -10,7 +10,7 @@
 #include <arcticdb/entity/index_range.hpp>
 
 
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/pipeline/frame_slice.hpp>

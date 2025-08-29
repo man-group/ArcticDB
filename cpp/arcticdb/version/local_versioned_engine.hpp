@@ -16,7 +16,7 @@
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>

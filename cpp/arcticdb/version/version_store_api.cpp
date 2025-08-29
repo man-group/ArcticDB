@@ -18,7 +18,7 @@
 #include <arcticdb/entity/versioned_item.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/pipeline/query.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
