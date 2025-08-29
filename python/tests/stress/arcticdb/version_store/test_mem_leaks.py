@@ -31,6 +31,7 @@ from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions
+from tests.conftest import Marks
 from tests.util.mark import (
     LINUX,
     MACOS,
@@ -41,6 +42,7 @@ from tests.util.mark import (
     MEMRAY_TESTS_MARK,
     SKIP_CONDA_MARK,
 )
+from tests.util.marking import marks
 
 
 logging.basicConfig(level=logging.INFO)
@@ -386,6 +388,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skip(reason = "Will become ASV tests")
+@marks([Marks.pipeline])
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
     """
     This test uses old approach with iterations.
@@ -662,6 +665,7 @@ if MEMRAY_SUPPORTED:
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8078461031
     # @pytest.mark.skip(reason = "read() memory leaks Monday#8078461031")
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -683,6 +687,7 @@ if MEMRAY_SUPPORTED:
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
     # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -704,6 +709,7 @@ if MEMRAY_SUPPORTED:
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
     # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -719,6 +725,7 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -873,6 +880,7 @@ if MEMRAY_SUPPORTED:
         ],
         indirect=True,
     )
+    @marks([Marks.pipeline])
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.
