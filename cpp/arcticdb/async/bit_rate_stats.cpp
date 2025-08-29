@@ -2,9 +2,10 @@
 
 #include <folly/Likely.h>
 
-#include "log/log.hpp"
-#include "util/format_bytes.hpp"
-#include "entity/performance_tracing.hpp"
+#include <arcticdb/log/log.hpp>
+#include <arcticdb/util/format_bytes.hpp>
+#include <arcticdb/entity/performance_tracing.hpp>
+#include <arcticdb/util/clock.hpp>
 
 constexpr uint64_t max_bytes{0xFFFFFFFFFF};
 constexpr uint64_t max_time_ms{0xFFFFFF};

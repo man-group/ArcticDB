@@ -8,7 +8,6 @@
 
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/codec/encoded_field_collection.hpp>
-#include <arcticdb/util/cursored_buffer.hpp>
 
 namespace arcticdb {
 

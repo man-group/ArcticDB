@@ -8,7 +8,6 @@ include(CTest)
 include(GoogleTest)
 
 include(GenerateExportHeader)
-
 # System and third-party libraries with built-in find_package Config
 cmake_policy(PUSH)
     if (EXISTS "/usr/local/lib64/aws-c-cal/cmake/modules/FindLibCrypto.cmake") # Workaround old AWS SDK bug

@@ -8,16 +8,11 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
 #include <arcticdb/storage/mongo/mongo_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
 #include <arcticdb/util/pb_util.hpp>
 
 namespace arcticdb::storage::mongo {
-
-class MongoInstance;
-class MongoClient;
 
 class MongoStorage final : public Storage {
   public:

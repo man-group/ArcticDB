@@ -7,14 +7,13 @@
 
 #pragma once
 
-#include <memory>
-
 #include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/string_wrapping_value.hpp>
 #include <arcticdb/util/regex_filter.hpp>
 #include <arcticdb/processing/operation_types.hpp>
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
+#include <memory>
 #include <utility>
 
 

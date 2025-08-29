@@ -10,29 +10,15 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/util/preconditions.hpp>
-
 #include <arcticdb/entity/timeseries_descriptor.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
-
 #include <boost/iterator/iterator_facade.hpp>
-
-
-namespace google::protobuf {
-    class Any;
-}
 
 namespace arcticdb {
 
 class ColumnMap;
-
-namespace entity {
-    struct StreamDescriptor;
-}
-
-
-class SegmentInMemoryImpl;
 
 class SegmentInMemoryImpl {
 public:

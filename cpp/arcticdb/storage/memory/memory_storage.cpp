@@ -6,10 +6,8 @@
  */
 #include <arcticdb/storage/memory/memory_storage.hpp>
 
-#include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
 #include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/codec/protobuf_mappings.hpp>
 #include <arcticdb/storage/storage_utils.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
 

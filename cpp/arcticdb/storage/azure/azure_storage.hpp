@@ -8,20 +8,10 @@
 #pragma once
 
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_factory.hpp>
-#include <arcticdb/storage/object_store_utils.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
-#include <arcticdb/log/log.hpp>
 #include <arcticdb/entity/protobufs.hpp>
-#include <arcticdb/util/composite.hpp>
-#include <arcticdb/util/configs_map.hpp>
 #include <arcticdb/util/pb_util.hpp>
-#include <azure/core.hpp>
-#include <azure/storage/blobs.hpp>
-#include <cstdlib>
-#include <sstream>
 #include <string>
-#include <vector>
 
 namespace arcticdb::storage::azure {
 
