@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import os
 import sys
 import pytest
+import platform
 from typing import Optional, Union
 from datetime import date
 from numpy import datetime64
@@ -20,6 +21,9 @@ from arcticdb.util.logger import get_logger
 MACOS = sys.platform.lower().startswith("darwin")
 LINUX = sys.platform.lower().startswith("linux")
 WINDOWS = sys.platform.lower().startswith("win32")
+
+# Architecture detection
+ARM64 = platform.machine().lower() in ("arm64", "aarch64")
 
 
 # Defined shorter logs on errors

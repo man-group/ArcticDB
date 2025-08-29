@@ -6,9 +6,7 @@
  */
 #pragma once
 
-#include <sparrow.hpp>
 #include <sparrow/record_batch.hpp>
-
 #include <vector>
 #include <memory>
 

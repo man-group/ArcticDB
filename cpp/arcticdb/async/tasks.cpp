@@ -6,7 +6,6 @@
  */
 
 #include <arcticdb/async/tasks.hpp>
-#include <arcticdb/pipeline/read_frame.hpp>
 
 namespace arcticdb::async {
 

@@ -4,6 +4,7 @@
  *
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
+#pragma once
 
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/codec/codec.hpp>
@@ -11,8 +12,6 @@
 #include <arcticdb/codec/default_codecs.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/storage/storage.hpp>
-#include <arcticdb/storage/storage_options.hpp>
-#include <arcticdb/util/optional_defaults.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/codec/segment.hpp>
 #include <arcticdb/log/log.hpp>
@@ -21,8 +20,8 @@
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/stream/piloted_clock.hpp>
-#include <arcticdb/version/version_core.hpp>
 #include <arcticdb/entity/serialized_key.hpp>
+#include <arcticdb/pipeline/write_frame.hpp>
 
 namespace arcticdb {
 

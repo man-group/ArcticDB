@@ -9,7 +9,6 @@
 #include <pybind11/pybind11.h>
 #include <pybind11/numpy.h>
 #include <pybind11/operators.h>
-#include <arcticdb/column_store/column_utils.hpp>
 #include <arcticdb/entity/data_error.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/python/python_utils.hpp>

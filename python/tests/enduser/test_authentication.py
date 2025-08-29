@@ -6,8 +6,7 @@ import pytest
 import logging
 import re
 
-from arcticdb.util.utils import GitHubSanitizingException
-from arcticdb.util.logger import get_logger
+from arcticdb.util.logger import get_logger, GitHubSanitizingException
 from tests.util.mark import REAL_GCP_TESTS_MARK, REAL_S3_TESTS_MARK
 from tests.util.storage_test import real_gcp_credentials, real_s3_credentials
 

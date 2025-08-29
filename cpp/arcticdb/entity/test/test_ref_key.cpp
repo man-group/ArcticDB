@@ -6,6 +6,7 @@
  */
 
 #include <gtest/gtest.h>
+#include <arcticdb/util/hash.hpp>
 #include <arcticdb/entity/ref_key.hpp>
 
 TEST(RefKey, Basic) {

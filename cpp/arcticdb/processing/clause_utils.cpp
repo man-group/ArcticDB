@@ -5,8 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
  */
 
-#include <ranges>
-
 #include <arcticdb/entity/type_utils.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/processing/clause_utils.hpp>

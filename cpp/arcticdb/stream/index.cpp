@@ -10,6 +10,7 @@
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/entity/type_utils.hpp>
+#include <ranges>
 
 namespace arcticdb::stream {
 
