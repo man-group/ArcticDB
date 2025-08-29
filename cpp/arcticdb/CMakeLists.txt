@@ -454,6 +454,7 @@ set(arcticdb_srcs
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
+        pipeline/input_frame.cpp
         pipeline/pipeline_context.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
