@@ -279,12 +279,8 @@ folly::Future<entity::AtomKey> append_frame(
     util::variant_match(frame->index,
                         [&index_segment_reader, &frame, ignore_sort_order](const TimeseriesIndex &) {
                             util::check(frame->has_index(), "Cannot append timeseries without index");
-                            util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in append_frame");
-                            auto& frame_index = frame->index_tensor.value();
-                            util::check(frame_index.data_type() == DataType::NANOSECONDS_UTC64,
-                                        "Expected timestamp index in append, got type {}", frame_index.data_type());
-                            if (index_segment_reader.tsd().total_rows() != 0 && frame_index.size() != 0) {
-                                auto first_index = NumericIndex{*frame_index.ptr_cast<timestamp>(0)};
+                            if (index_segment_reader.tsd().total_rows() != 0 && frame->num_rows != 0) {
+                                auto first_index = NumericIndex{frame->index_value_at(0)};
                                 auto prev = std::get<NumericIndex>(index_segment_reader.last()->key().end_index());
                                 util::check(ignore_sort_order || prev - 1 <= first_index,
                                             "Can't append dataframe with start index {} to existing sequence ending at {}",

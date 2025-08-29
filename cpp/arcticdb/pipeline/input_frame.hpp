@@ -88,9 +88,10 @@ struct InputFrame {
             const auto& index_column = seg->column(0);
             return *index_column.scalar_at<timestamp>(row);
         } else {
-            util::check(static_cast<bool>(index_tensor), "InputFrame::index_value_at call with null index tensor");
-            auto& idx = index_tensor.value();
-            return *idx.ptr_cast<timestamp>(row);
+            util::check(index_tensor.has_value(), "InputFrame::index_value_at call with null index tensor");
+            util::check(index_tensor->data_type() == DataType::NANOSECONDS_UTC64,
+                        "Expected timestamp index in append, got type {}", index_tensor->data_type());
+            return *index_tensor->ptr_cast<timestamp>(row);
         }
     }
 
