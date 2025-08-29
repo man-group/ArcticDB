@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import re
 import sys
 from typing import List
@@ -18,9 +19,11 @@ from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
 )
-from arcticdb.util.utils import DFGenerator, generate_random_series, set_seed, supported_types_list 
+from arcticdb.util.utils import DFGenerator, generate_random_series, generate_random_sparse_numpy_array, set_seed, supported_types_list 
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
+from arcticdb_ext.exceptions import InternalException
+
 
 from arcticdb.exceptions import (
     ArcticNativeException,
@@ -560,3 +563,113 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     # Complex structures can be staged by default
     lib.stage(symbol, get_metadata())
     check_incomplete_staged(symbol)
+
+
+def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_factory):
+    """
+    Test writing and reading a variety of sparse data types to a NativeVersionStore.
+
+    This test ensures that the store correctly handles multiple data formats,
+    index validation settings, and version pruning behavior. It parametrizes over:
+
+    Overall, this test provides broad coverage of the NativeVersionStore write/read
+    pipeline for heterogeneous, sparse, and non-tabular payloads under different
+    configuration flags.
+    """
+
+    max_length = 100
+    max_cols = 200
+    sym = "__qwerty124"
+
+    nvs: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
+        dynamic_schema=True, segment_row_size=(max_length // 2), 
+        column_group_size=(max_cols // 2))
+
+
+    # Data definitions to be written to symbol include different types
+    # of 
+    arr_float = generate_random_sparse_numpy_array(max_length, np.float64)
+    arr_str = generate_random_sparse_numpy_array(max_length, str)
+    arr_datetime = generate_random_sparse_numpy_array(max_length, np.datetime64)
+    arr_empty = np.empty((3))
+    arr_multi = np.random.rand(2, 3, 4, 5, 6)
+    ser_float = pd.Series(arr_float, name="float")
+    ser_str = pd.Series(arr_str, name="str")
+    ser_date = pd.Series(arr_datetime, name="date")
+    df_sparse = (DFGenerator(size=max_length, density=0.19)
+        .add_float_col("float")
+        .add_int_col("int")
+        .add_bool_col("bool")
+        .add_timestamp_col("ts")
+        .add_string_col("str", str_size=18)
+        .add_string_col("str2", num_unique_values=44, str_size=6)
+        .generate_dataframe())
+    df_wide = DFGenerator.generate_normal_dataframe(
+        num_rows=max_length, num_cols=max_cols, density=0.23,start_time=pd.Timestamp(3243243))
+    df_empty = pd.DataFrame()
+
+    for pickle_on_failure in [False, True]:
+        for validate_index in [True, False]:
+            nvs.write(sym, arr_str, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            np.testing.assert_array_equal(arr_str, nvs.read(sym).data)
+
+            meta = get_metadata()
+            nvs.write(sym, arr_datetime, pickle_on_failure=pickle_on_failure, validate_index=validate_index,
+                    metadata=meta)
+            np.testing.assert_array_equal(arr_datetime, nvs.read(sym).data)
+            assert 2 <= len(nvs.list_versions()) # Assert it grows
+            assert meta == nvs.read(sym).metadata # Metadata on arrays
+
+            nvs.write(sym, ser_float, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert_series_equal_pandas_1(ser_float, nvs.read(sym).data)
+
+            nvs.write(sym, None, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert nvs.read(sym).data is None
+
+            nvs.write(sym, ser_str, pickle_on_failure=pickle_on_failure, validate_index=validate_index,
+                    prune_previous_version=False)
+            assert_series_equal_pandas_1(ser_str, nvs.read(sym).data)
+            assert 2 < len(nvs.list_versions()) # Assert prune_previous_version false has no effect
+
+            nvs.write(sym, arr_float, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            np.testing.assert_array_equal(arr_float, nvs.read(sym).data)
+
+            nvs.write(sym, df_empty, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            # when we write empty dataframe it will have default RangeIndex
+            # But when we read it back - the index will be Timestamp
+            #    >       assert_class_equal(left, right, exact=exact, obj=obj)
+            #    E       AssertionError: DataFrame.index are different
+            #    E       
+            #    E       DataFrame.index classes are different
+            #    E       [left]:  RangeIndex(start=0, stop=0, step=1)
+            #    E       [right]: DatetimeIndex([], dtype='datetime64[ns]', freq=None)            
+            assert len(df_empty) == len(nvs.read(sym).data)
+            assert nvs.read(sym).data.columns.size == 0
+
+            meta = get_metadata()
+            nvs.write(sym, ser_date, pickle_on_failure=pickle_on_failure, validate_index=validate_index, 
+                    prune_previous_version=True, metadata=meta)
+            assert_series_equal_pandas_1(ser_date, nvs.read(sym).data)
+            assert meta == nvs.read(sym).metadata # Metadata on Series
+            assert 1 == len(nvs.list_versions())
+
+            nvs.write(sym, df_wide, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert_frame_equal(df_wide, nvs.read(sym).data)    
+
+            nvs.write(sym, os.urandom(128), pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            with pytest.raises(InternalException):
+                nvs.append(sym, os.urandom(128))
+
+            nvs.write(sym, arr_empty , pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            np.testing.assert_array_equal(arr_empty , nvs.read(sym).data)
+
+            nvs.write(sym, arr_multi, pickle_on_failure=pickle_on_failure, validate_index=validate_index,
+                    prune_previous_version=True)
+            np.testing.assert_array_equal(arr_multi, nvs.read(sym).data)
+            assert 1 == len(nvs.list_versions()) # Assert prune_previous_version have desired effect
+
+            nvs.write(sym, df_sparse, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert_frame_equal(df_sparse, nvs.read(sym).data)
+
+
+
