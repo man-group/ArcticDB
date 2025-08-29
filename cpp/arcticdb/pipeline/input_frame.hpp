@@ -80,6 +80,20 @@ struct InputFrame {
 
     bool empty() const { return num_rows == 0; }
 
+    timestamp index_value_at(size_t row) {
+        util::check(has_index(), "InputFrame::index_value_at should only be called on timeseries data");
+        if (seg.has_value()) {
+            util::check(row < seg->row_count(), "Out of range row {} requsted in InputFrame::index_value_at with segment of length",
+                        row, seg->row_count());
+            const auto& index_column = seg->column(0);
+            return *index_column.scalar_at<timestamp>(row);
+        } else {
+            util::check(static_cast<bool>(index_tensor), "InputFrame::index_value_at call with null index tensor");
+            auto& idx = index_tensor.value();
+            return *idx.ptr_cast<timestamp>(row);
+        }
+    }
+
     void set_index_range() {
         // Fill index range
         // Note RowCountIndex will normally have an index field count of 0
