@@ -914,6 +914,10 @@ class Library:
             Optional metadata to persist along with the symbol.
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
+        staged: bool, default=False
+            Deprecated. Use stage() instead.
+            Whether to write to a staging area rather than immediately to the library.
+            See documentation on `finalize_staged_data` for more information.
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.

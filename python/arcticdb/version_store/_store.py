@@ -833,6 +833,11 @@ class NativeVersionStore:
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
+                    warn(
+                        "Staging data with append() is deprecated. Use stage() instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
                     self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 else:
                     call_time = time.time_ns()
