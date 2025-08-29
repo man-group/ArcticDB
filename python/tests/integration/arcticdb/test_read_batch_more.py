@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 from arcticdb import DataError, ErrorCode
 from arcticdb.util._versions import IS_PANDAS_TWO
+from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.version_store.library import ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 import pytest
@@ -18,7 +19,6 @@ import re
 from typing import Any
 from arcticdb.util.test import (assert_frame_equal, 
                                 create_df_index_datetime, 
-                                dataframe_simulate_arcticdb_update_static, 
                                 get_sample_dataframe,
                                 assert_frame_equal_rebuild_index_first,
                                 dataframe_single_column_string,
@@ -61,9 +61,9 @@ def test_read_batch_2tables_7reads_different_slices(arctic_library):
     df1_1 = create_df_index_datetime(num_columns=7, start_hour=4, end_hour=6)
     df1_2 = create_df_index_datetime(num_columns=7, start_hour=6, end_hour=10)
     df1_3 = create_df_index_datetime(num_columns=7, start_hour=0, end_hour=10)
-    df1_till2 = dataframe_simulate_arcticdb_update_static(df1_0, df1_1)  # DF of state 0+1
+    df1_till2 = ArcticSymbolSimulator.simulate_arctic_update(df1_0, df1_1, dynamic_schema=False)  # DF of state 0+1
     df1_till3 = dataframe_concat_sort(df1_till2, df1_2) # DF of state 0+1+2
-    df1_all = dataframe_simulate_arcticdb_update_static(df1_till3, df1_3)
+    df1_all = ArcticSymbolSimulator.simulate_arctic_update(df1_till3, df1_3, dynamic_schema=False)
 
     symbol2 = "sym2"
     df2_0 = create_df_index_datetime(num_columns=200, start_hour=0, end_hour=100)  

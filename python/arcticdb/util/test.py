@@ -159,33 +159,6 @@ def dataframe_dump_to_log(label_for_df, df: pd.DataFrame):
         print("-" * 80)
 
 
-def dataframe_simulate_arcticdb_update_static(existing_df: pd.DataFrame, update_df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Does implement arctic logic of update() method functionality over pandas dataframes.
-    In other words the result, new data frame will have the content of 'existing_df' dataframe
-    updated with the content of "update_df" dataframe the same way that arctic is supposed to work.
-    Useful for prediction of result content of arctic database after update operation
-    NOTE: you have to pass indexed dataframe
-    """
-
-    assert existing_df.dtypes.to_list() == update_df.dtypes.to_list(), (
-        "Dataframe must have identical columns types in same order"
-    )
-    assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
-
-    start2 = update_df.first_valid_index()
-    end2 = update_df.last_valid_index()
-
-    chunks = []
-    df1 = existing_df[existing_df.index < start2]
-    chunks.append(df1)
-    chunks.append(update_df)
-    df2 = existing_df[existing_df.index > end2]
-    chunks.append(df2)
-    result_df = pd.concat(chunks)
-    return result_df
-
-
 def dataframe_single_column_string(length=1000, column_label="string_short", seed=0, string_len=1):
     """
     creates a dataframe with one column, which label can be changed, containing string
@@ -235,6 +208,21 @@ def maybe_not_check_freq(f):
 
 assert_frame_equal = maybe_not_check_freq(pd.testing.assert_frame_equal)
 assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
+
+
+def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
+    """For Pandas 1 type of empty series will be float64 when returned by arctic"""
+    if IS_PANDAS_ONE:
+        if (
+            (np.issubdtype(expected.dtype, np.object_) and np.issubdtype(actual.dtype, np.floating)) or
+            (np.issubdtype(expected.dtype, np.floating) and np.issubdtype(actual.dtype, np.object_))
+            ):
+            if (expected.size == 0) and (actual.size == 0):
+                assert expected.name == actual.name
+                # Compare the indexes as indexes without the frequency which can be None sometimes for some types (str)
+                assert pd.Index(expected.index).equals(pd.Index(actual.index)), f"Investigate why {expected.index} == {actual.index}"
+                return
+    assert_series_equal(expected, actual, **kwargs)
 
 
 def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.DataFrame) -> None:

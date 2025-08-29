@@ -764,7 +764,7 @@ class NativeVersionStore:
             Data to be appended.
         metadata : `Optional[Any]`, default=None
             Optional metadata to persist along with the new symbol version. Note that the metadata is
-            not combined in any way with the metadata stored in the previous version.
+            not combined in any way with the metadata stored in the previous version. Additionally, metadata is not stored when incomplete=True
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
         validate_index: bool, default=False
