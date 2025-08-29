@@ -210,7 +210,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
     bool empty_types) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
-    res->desc.set_id(stream_name);
+    res->desc().set_id(stream_name);
     res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
     if (!user_meta.is_none())
@@ -237,16 +237,16 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->num_rows = static_cast<size_t>(index_tensor.shape(0));
             // TODO handle string indexes
             if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
-                res->desc.set_index_field_count(1);
-                res->desc.set_index_type(IndexDescriptor::Type::TIMESTAMP);
+                res->desc().set_index_field_count(1);
+                res->desc().set_index_type(IndexDescriptor::Type::TIMESTAMP);
 
-                res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
+                res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
                 res->index = stream::TimeseriesIndex(index_column_name);
                 res->index_tensor = std::move(index_tensor);
             } else {
                 res->index = stream::RowCountIndex();
-                res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
-                res->desc.add_scalar_field(index_tensor.dt_, index_column_name);
+                res->desc().set_index_type(IndexDescriptor::Type::ROWCOUNT);
+                res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
                 res->field_tensors.push_back(std::move(index_tensor));
             }
         }
@@ -262,9 +262,9 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
             res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
             if (tensor.expanded_dim() == 1) {
-                res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
+                res->desc().add_field(scalar_field(tensor.data_type(), col_names[i]));
             } else if (tensor.expanded_dim() == 2) {
-                res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+                res->desc().add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
             }
             res->field_tensors.push_back(std::move(tensor));
         }
@@ -274,15 +274,15 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
         if (idx_names.empty()) {
             res->index = stream::RowCountIndex();
-            res->desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
+            res->desc().set_index_type(IndexDescriptor::Type::ROWCOUNT);
         }
 
         if (empty_types && res->num_rows == 0) {
             res->index = stream::EmptyIndex();
-            res->desc.set_index_type(IndexDescriptor::Type::EMPTY);
+            res->desc().set_index_type(IndexDescriptor::Type::EMPTY);
         }
 
-        ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
+        ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
         res->set_index_range();
     } else {
         const auto& record_batches = std::get<std::vector<RecordBatchData>>(item);
@@ -297,9 +297,9 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         res->record_batches = std::move(sp_record_batches);
         res->seg->descriptor().set_id(stream_name);
         res->num_rows = res->seg->row_count();
-        res->desc = res->seg->descriptor();
-        if (res->desc.index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
-            res->index = TimeseriesIndex{std::string(res->desc.field(0).name())};
+        res->desc() = res->seg->descriptor();
+        if (res->desc().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+            res->index = TimeseriesIndex{std::string(res->desc().field(0).name())};
         } else {
             res->index = RowCountIndex{};
         }
@@ -319,7 +319,7 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
 
     // Fill index
     res->index = stream::RowCountIndex();
-    res->desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
+    res->desc().set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
 
     // Fill tensors
     auto col_name = "bytes";
@@ -332,10 +332,10 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
     constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
     res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
-    res->desc.add_field(scalar_field(tensor.data_type(), col_name));
+    res->desc().add_field(scalar_field(tensor.data_type(), col_name));
     res->field_tensors.push_back(std::move(tensor));
 
-    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc);
+    ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     res->set_index_range();
     return res;
 }

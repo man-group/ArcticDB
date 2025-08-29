@@ -32,6 +32,7 @@ concept ValidIndex = util::any_of<
 // This class originally wrapped numpy data, but with the addition of Arrow as an input format it is now a thin wrapper
 // around a variant representing either numpy or Arrow input data
 struct InputFrame {
+  public:
     InputFrame() :
         index(stream::empty_index()) {}
 
@@ -40,7 +41,7 @@ struct InputFrame {
     // Until then, this is required to keep memory alive
     std::vector<sparrow::record_batch> record_batches;
 
-    StreamDescriptor desc;
+
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
     stream::Index index;
@@ -50,20 +51,28 @@ struct InputFrame {
     size_t num_rows = 0;
     mutable size_t offset = 0;
 
+    StreamDescriptor& desc() {
+        return desc_;
+    }
+
+    const StreamDescriptor& desc() const {
+        return desc_;
+    }
+
     void set_offset(ssize_t off) const {
         offset = off;
     }
 
     void set_sorted(SortedValue sorted) {
         switch (sorted) {
-            case SortedValue::UNSORTED:desc.set_sorted(SortedValue::UNSORTED);break;
-            case SortedValue::DESCENDING:desc.set_sorted(SortedValue::DESCENDING);break;
-            case SortedValue::ASCENDING:desc.set_sorted(SortedValue::ASCENDING);break;
-            default:desc.set_sorted(SortedValue::UNKNOWN);
+            case SortedValue::UNSORTED:desc_.set_sorted(SortedValue::UNSORTED);break;
+            case SortedValue::DESCENDING:desc_.set_sorted(SortedValue::DESCENDING);break;
+            case SortedValue::ASCENDING:desc_.set_sorted(SortedValue::ASCENDING);break;
+            default:desc_.set_sorted(SortedValue::UNKNOWN);
         }
     }
 
-    bool has_index() const { return desc.index().field_count() != 0ULL; }
+    bool has_index() const { return desc_.index().field_count() != 0ULL; }
 
     bool empty() const { return num_rows == 0; }
 
@@ -73,8 +82,8 @@ struct InputFrame {
         if(num_rows == 0) {
             index_range.start_ = IndexValue{ NumericIndex{0} };
             index_range.end_ = IndexValue{ NumericIndex{0} };
-        } else if (desc.index().field_count() == 1) {
-            visit_field(desc.field(0), [&](auto &&tag) {
+        } else if (desc_.index().field_count() == 1) {
+            visit_field(desc_.field(0), [&](auto &&tag) {
                 using DT = std::decay_t<decltype(tag)>;
                 using RawType = typename DT::DataTypeTag::raw_type;
                 if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>) {
@@ -93,6 +102,8 @@ struct InputFrame {
             index_range.end_ = IndexValue{static_cast<timestamp>(num_rows) - 1};
         }
     }
+  private:
+    StreamDescriptor desc_;
 };
 
 } //namespace arcticdb::pipelines

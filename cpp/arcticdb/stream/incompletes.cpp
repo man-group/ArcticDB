@@ -259,8 +259,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;
-        for (auto i = 0UL; i < frame->desc.index().field_count(); ++i) {
-            cols.emplace_back(frame->desc.fields(i).name());
+        for (auto i = 0UL; i < frame->desc().index().field_count(); ++i) {
+            cols.emplace_back(frame->desc().fields(i).name());
         }
         if (options.sort_columns) {
             for (auto& extra_sort_col : *options.sort_columns) {
@@ -274,9 +274,9 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     }
 
     auto timeseries_desc = index_descriptor_from_frame(frame, 0, std::nullopt);
-    auto stream_desc = frame->desc;
+    auto stream_desc = frame->desc();
     auto norm_meta = timeseries_desc.proto().normalization();
-    auto tsd = pack_timeseries_descriptor(frame->desc, frame->num_rows, std::nullopt, std::move(norm_meta));
+    auto tsd = pack_timeseries_descriptor(frame->desc(), frame->num_rows, std::nullopt, std::move(norm_meta));
     segment.set_timeseries_descriptor(tsd);
 
     bool is_timestamp_index = std::holds_alternative<stream::TimeseriesIndex>(frame->index);
@@ -364,7 +364,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     IndexPartialKey key{stream_id, VersionId(0)};
     auto de_dup_map = std::make_shared<DeDupMap>();
 
-    auto desc = frame->desc;
+    auto desc = frame->desc();
     arcticdb::proto::descriptors::NormalizationMetadata norm_meta = frame->norm_meta;
     auto user_meta = frame->user_meta;
     bool sparsify_floats{false};
@@ -549,7 +549,7 @@ void append_incomplete(
     auto [next_key, total_rows] = read_head(store, stream_id);
     const auto num_rows = frame->num_rows;
     total_rows += num_rows;
-    auto desc = frame->desc.clone();
+    auto desc = frame->desc().clone();
 
     auto index_range = frame->index_range;
     auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);

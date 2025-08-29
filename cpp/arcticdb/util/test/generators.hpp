@@ -428,7 +428,7 @@ struct SegmentToInputFrameAdapter {
 
     explicit SegmentToInputFrameAdapter(SegmentInMemory &&segment) :
         segment_(std::move(segment)) {
-        input_frame_->desc = segment_.descriptor();
+        input_frame_->desc() = segment_.descriptor();
         input_frame_->num_rows = segment_.row_count();
         size_t col{0};
         if (segment_.descriptor().index().type() != IndexDescriptorImpl::Type::ROWCOUNT) {

@@ -663,7 +663,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
         return VersionedItem{ std::move(index_key) };
     } else {
         auto frame = convert::py_none_to_frame();
-        frame->desc.set_id(stream_id);
+        frame->desc().set_id(stream_id);
         frame->user_meta = std::move(user_meta);
         auto versioned_item = write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, false, false);
         if(cfg_.symbol_list())
@@ -692,7 +692,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                     index_key_fut = async::submit_io_task(UpdateMetadataTask{store(), update_info, std::move(user_meta_proto)});
                 } else {
                     auto frame = convert::py_none_to_frame();
-                    frame->desc.set_id(stream_id);
+                    frame->desc().set_id(stream_id);
                     frame->user_meta = std::move(user_meta_proto);
                     auto version_id = 0;
                     auto write_options = get_write_options();

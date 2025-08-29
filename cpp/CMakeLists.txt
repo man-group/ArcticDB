@@ -29,6 +29,7 @@ option(ARCTICDB_LOG_PERFORMANCE "Whether to log performance timings." OFF)
 option(ARCTICDB_COUNT_ALLOCATION "Override new and delete to count allocations." OFF)
 
 set(ARCTICDB_SANITIZER_FLAGS)
+link_libraries(atomic)
 if(${ARCTICDB_USING_ADDRESS_SANITIZER})
     list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=address;-shared-libasan")
     link_libraries(atomic)

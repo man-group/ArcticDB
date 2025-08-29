@@ -22,7 +22,7 @@ TEST(Append, Simple) {
     StreamId stream_id{"test_append"};
     auto wrapper = get_test_simple_frame(stream_id, 10, 0);
     auto& frame = wrapper.frame_;
-    auto desc = frame->desc.clone();
+    auto desc = frame->desc().clone();
     bool validate_index{true};
     append_incomplete(store, stream_id, frame, validate_index);
     pipelines::FilterRange range;

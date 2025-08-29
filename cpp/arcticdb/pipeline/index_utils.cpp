@@ -49,7 +49,7 @@ folly::Future<entity::AtomKey> write_index(
     const std::shared_ptr<stream::StreamSink> &sink
     ) {
     auto offset = frame->offset;
-    auto index = stream::index_type_from_descriptor(frame->desc);
+    auto index = stream::index_type_from_descriptor(frame->desc());
     auto timeseries_desc = index_descriptor_from_frame(frame, offset);
     return write_index(index, timeseries_desc, std::move(slice_and_keys), partial_key, sink);
 }
@@ -88,11 +88,11 @@ TimeseriesDescriptor get_merged_tsd(
     auto merged_descriptor = existing_descriptor;
     if (existing_tsd.total_rows() == 0){
         // If the existing dataframe is empty, we use the descriptor of the new_frame
-        merged_descriptor = new_frame->desc;
+        merged_descriptor = new_frame->desc();
     }
     else if (dynamic_schema) {
         // In case of dynamic schema
-        const std::array fields_ptr = {new_frame->desc.fields_ptr()};
+        const std::array fields_ptr = {new_frame->desc().fields_ptr()};
         merged_descriptor = merge_descriptors(
                 existing_descriptor,
                 fields_ptr,
@@ -100,7 +100,7 @@ TimeseriesDescriptor get_merged_tsd(
         );
     } else {
         // In case of static schema, we only promote empty types and fixed->dynamic strings
-        const auto &new_fields = new_frame->desc.fields();
+        const auto &new_fields = new_frame->desc().fields();
         for (size_t i = 0; i < new_fields.size(); ++i) {
             const auto &new_type = new_fields.at(i).type();
             TypeDescriptor &result_type = merged_descriptor.mutable_field(i).mutable_type();
@@ -118,7 +118,7 @@ TimeseriesDescriptor get_merged_tsd(
             }
         }
     }
-    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame->desc.sorted()));
+    merged_descriptor.set_sorted(deduce_sorted(existing_descriptor.sorted(), new_frame->desc().sorted()));
     return make_timeseries_descriptor(
             row_count,
             std::move(merged_descriptor),

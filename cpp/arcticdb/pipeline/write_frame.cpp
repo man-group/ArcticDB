@@ -56,12 +56,12 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         auto key = partial_key_gen_(slice_);
         const auto& frame = *frame_->seg;
         SegmentInMemory seg;
-        if (frame_->desc.index().field_count() > 0) {
+        if (frame_->desc().index().field_count() > 0) {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         } else {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         }
-        for (size_t col_idx = 0; col_idx < frame_->desc.index().field_count(); ++col_idx) {
+        for (size_t col_idx = 0; col_idx < frame_->desc().index().field_count(); ++col_idx) {
             const auto& source_column = frame.column(col_idx);
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
             const auto bytes =
@@ -133,10 +133,10 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             agg.set_offset(offset_in_frame);
 
             auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
-            if (frame_->desc.index().field_count() > 0) {
+            if (frame_->desc().index().field_count() > 0) {
                 util::check(static_cast<bool>(frame_->index_tensor), "Got null index tensor in WriteToSegmentTask");
                 auto opt_error = aggregator_set_data(
-                        frame_->desc.fields(0).type(),
+                        frame_->desc().fields(0).type(),
                         frame_->index_tensor.value(),
                         agg,
                         0,
@@ -147,12 +147,12 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                         false
                 );
                 if (opt_error.has_value()) {
-                    opt_error->raise(frame_->desc.fields(0).name(), offset_in_frame);
+                    opt_error->raise(frame_->desc().fields(0).name(), offset_in_frame);
                 }
             }
 
             for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
-                auto abs_col = col + frame_->desc.index().field_count();
+                auto abs_col = col + frame_->desc().index().field_count();
                 auto& fd = slice_.non_index_field(col);
                 auto& tensor = frame_->field_tensors[slice_.absolute_field_col(col)];
                 auto opt_error = aggregator_set_data(
