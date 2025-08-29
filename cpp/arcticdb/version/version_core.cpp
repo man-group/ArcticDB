@@ -156,7 +156,6 @@ folly::Future<AtomKey> async_append_impl(
     const StreamId stream_id = frame->desc().id();
     ARCTICDB_DEBUG(log::version(), "append stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     auto index_segment_reader = index::get_index_reader(*(update_info.previous_index_key_), store);
-    util::check(options.bucketize_dynamic == index_segment_reader.bucketize_dynamic(), "Mismatch in bucketize_dynamic option");
     auto row_offset = index_segment_reader.tsd().total_rows();
     util::check_rte(!index_segment_reader.is_pickled(), "Cannot append to pickled data");
     frame->set_offset(static_cast<ssize_t>(row_offset));

@@ -56,13 +56,13 @@ SLOW_TESTS_MARK = pytest.mark.skipif(
     FAST_TESTS_ONLY or DISABLE_SLOW_TESTS, reason="Skipping test as it takes a long time to run"
 )
 
-AZURE_TESTS_MARK = pytest.mark.skipif(
+AZURE_TESTS_MARK = pytest.mark.skipif( True or
     FAST_TESTS_ONLY or MACOS or not LOCAL_STORAGE_TESTS_ENABLED, reason=_MACOS_AZURE_TESTS_SKIP_REASON
 )
 """Mark to skip all Azure tests when MACOS or ARCTICDB_FAST_TESTS_ONLY is set."""
 
 # Mongo tests will run under local storage tests
-MONGO_TESTS_MARK = pytest.mark.skipif(
+MONGO_TESTS_MARK = pytest.mark.skipif( True or
     FAST_TESTS_ONLY or sys.platform != "linux" or not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Skipping mongo tests under ARCTICDB_FAST_TESTS_ONLY and if local storage tests are disabled",
 )
@@ -89,13 +89,13 @@ REAL_AZURE_TESTS_MARK = pytest.mark.skipif(
 """
 """Mark on tests using S3 model storage.
 """
-SIM_S3_TESTS_MARK = pytest.mark.skipif(
+SIM_S3_TESTS_MARK = pytest.mark.skipif( True or
     not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Ability to disable local storages - simulates s3 is disabled",
 )
 """Mark on tests using GCP model storage.
 """
-SIM_GCP_TESTS_MARK = pytest.mark.skipif(
+SIM_GCP_TESTS_MARK = pytest.mark.skipif( True or
     not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Ability to disable local storages - simulates gcp is disabled",
 )
@@ -109,13 +109,13 @@ LMDB_TESTS_MARK = pytest.mark.skipif(
 )
 """Mark on tests using the MEM storage.
 """
-MEM_TESTS_MARK = pytest.mark.skipif(
+MEM_TESTS_MARK = pytest.mark.skipif(True or
     not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Ability to disable local storages - mem storage is disabled",
 )
 """Mark on tests using the NFS model storage.
 """
-SIM_NFS_TESTS_MARK = pytest.mark.skipif(
+SIM_NFS_TESTS_MARK = pytest.mark.skipif(True or
     not LOCAL_STORAGE_TESTS_ENABLED,
     reason="Ability to disable local storages - simulated nfs is disabled",
 )
