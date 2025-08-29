@@ -22,7 +22,7 @@ from arcticdb.util.test import (
 from arcticdb.util.utils import DFGenerator, generate_random_series, generate_random_sparse_numpy_array, set_seed, supported_types_list 
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
-from arcticdb_ext.exceptions import InternalException
+from arcticdb_ext.exceptions import InternalException, UnsortedDataException
 
 
 from arcticdb.exceptions import (
@@ -577,9 +577,9 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
     configuration flags.
     """
 
-    max_length = 100
-    max_cols = 200
-    sym = "__qwerty124"
+    max_length: int = 100
+    max_cols: int = 200
+    sym: str = "__qwerty124"
 
     nvs: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
         dynamic_schema=True, segment_row_size=(max_length // 2), 
@@ -608,6 +608,11 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
         num_rows=max_length, num_cols=max_cols, density=0.23,start_time=pd.Timestamp(3243243))
     df_empty = pd.DataFrame()
 
+    df_not_sorted = pd.DataFrame({
+        'value': [100, 200, 300]
+    }, index=[pd.Timestamp(1),pd.Timestamp(3),pd.Timestamp(2)])
+
+
     for pickle_on_failure in [False, True]:
         for validate_index in [True, False]:
             nvs.write(sym, arr_str, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
@@ -619,6 +624,14 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
             np.testing.assert_array_equal(arr_datetime, nvs.read(sym).data)
             assert 2 <= len(nvs.list_versions()) # Assert it grows
             assert meta == nvs.read(sym).metadata # Metadata on arrays
+
+            if validate_index:
+                with pytest.raises(UnsortedDataException):
+                    nvs.write(sym, df_not_sorted, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            else: 
+                nvs.write(sym, df_not_sorted, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+                # There is unexpected result that if we store unsorted dataframe it will be read sorted
+                assert_frame_equal(df_not_sorted.sort_index(), nvs.read(sym).data)
 
             nvs.write(sym, ser_float, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
             assert_series_equal_pandas_1(ser_float, nvs.read(sym).data)
@@ -670,6 +683,4 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
 
             nvs.write(sym, df_sparse, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
             assert_frame_equal(df_sparse, nvs.read(sym).data)
-
-
 
