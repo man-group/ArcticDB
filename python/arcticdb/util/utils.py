@@ -74,6 +74,7 @@ def generate_random_timestamp_array(size: int,
     random_seconds = np.random.randint(start_ts, end_ts, size=size)
     return np.array(pd.to_datetime(random_seconds, unit='s'))
 
+
 def generate_random_float_array(size: int, dtype: 
                                 np.floating = np.float32 ) -> npt.NDArray[np.floating]:
     """Pseudo random float algorithm supporting np.float* types"""
@@ -162,68 +163,6 @@ def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[
                 raise TypeError(f"Unsupported dtype: {dtype}")
             
 
-def list_installed_packages() -> List[str]:
-    """ Lists installed packaged along with thir versions.
-
-    Sample usage:
-        for package in list_installed_packages():
-            print(package)
-    """
-    try:
-        # Python 3.8+
-        from importlib.metadata import distributions
-        return [f"{dist.metadata['Name']}=={dist.version}" for dist in distributions()]
-    except ImportError:
-        # Previous pythons
-        try:
-            import pkg_resources
-            return [f"{dist.project_name}=={dist.version}" for dist in pkg_resources.working_set]
-        except ImportError:
-            raise RuntimeError("Neither importlib.metadata nor pkg_resources is available.")
-
-
-def set_seed(seed=None):
-    """Sets seed to random libraries if not None"""
-    if seed is not None:
-       np.random.seed(seed)
-       random.seed(seed)
-
-
-def generate_random_timestamp_array(size: int, 
-                               start: str = '2020-01-01', 
-                               end: str = '2030-01-01', 
-                               seed: int = 432432) -> npt.NDArray[np.datetime64]:
-    """ Generates an array of random timestamps"""
-    if seed: 
-        np.random.seed(seed)
-    start_ts = pd.Timestamp(start).value // 10**9
-    end_ts = pd.Timestamp(end).value // 10**9
-    random_seconds = np.random.randint(start_ts, end_ts, size=size)
-    return np.array(pd.to_datetime(random_seconds, unit='s'))
-
-
-def generate_random_numpy_array(size: int, dtype, seed: Optional[int] = 8238) -> npt.NDArray[Any]:
-    """ Generates random numpy array of specified type
-    """
-    set_seed(seed)
-    arr = []
-    if pd.api.types.is_integer_dtype(dtype):
-        arr = random_integers(size, dtype)
-    elif pd.api.types.is_float_dtype(dtype):
-        arr = np.arange(size, dtype=dtype)
-    elif pd.api.types.is_bool_dtype(dtype):
-        arr = np.random.randn(size) > 0
-    elif pd.api.types.is_string_dtype(dtype):
-        length = 10
-        arr = [random_string(length) for _ in range(size)]
-        arr = np.array(arr, dtype=f"U{size}")
-    elif pd.api.types.is_datetime64_any_dtype(dtype):
-        arr = generate_random_timestamp_array(size, seed=seed)
-    else:
-        raise TypeError("Unsupported type {dtype}")        
-    return arr
-
-
 def generate_sparse_numpy_array_from_array(size: int, 
                                            array: npt.NDArray[Any], seed: int = 3243253) -> npt.NDArray[Any]:
     """ Creates a sparse array with specified size, with supplied values from the array scattered there.
@@ -238,22 +177,21 @@ def generate_sparse_numpy_array_from_array(size: int,
     set_seed(seed)
     assert hasattr(array, "dtype"), f"Supplied array is not np.array : {array}"
     dtype = array.dtype
-    is_string = dtype.kind in {'U', 'S'}
     arr = np.array([], dtype=dtype)
     num_values = len(array)
 
-    if 'float' in str(dtype):
+    if pd.api.types.is_float_dtype(dtype):
         arr = np.full(size, np.nan, dtype=dtype)
         if num_values > 0:
             indices = np.random.choice(size, size=num_values, replace=False)
             arr[indices] = array
-    elif is_string:
+    elif pd.api.types.is_string_dtype(dtype):
         arr = np.full(size, None)
         if num_values > 0:
             indices = np.random.choice(size, size=num_values, replace=False)
             arr[indices] = array
         arr = np.array(arr, dtype=dtype)
-    elif 'datetime' in str(dtype):
+    elif pd.api.types.is_datetime64_any_dtype(dtype):
         arr = np.array([np.datetime64(None)] * size, dtype='datetime64[ns]')
         if num_values > 0:
             indices = np.random.choice(size, size=num_values, replace=False)
@@ -268,17 +206,16 @@ def generate_random_sparse_numpy_array(size: int, dtype,
     """ Generates random sparse numpy array of specified type with specified density.
     Supported types are floats, str and timestamp
     """
-    arr = np.array([])
     num_values = int(size * density)
 
-    if 'float' in str(dtype):
+    if pd.api.types.is_float_dtype(dtype):
         values = ListGenerators.generate_random_floats(dtype, num_values, seed=seed)
-    elif 'str' in str(dtype):
+    elif pd.api.types.is_string_dtype(dtype):
         values = np.array(ListGenerators.generate_random_strings(str_size=str_length,
                                                         length=num_values,
                                                         include_unicode=True,
                                                         seed=seed), dtype=np.str_)
-    elif 'datetime' in str(dtype):
+    elif pd.api.types.is_datetime64_any_dtype(dtype):
         values = generate_random_timestamp_array(num_values, seed=seed)    
     else:
         raise TypeError(f"Unsupported type {dtype} for sparse array")        
@@ -312,15 +249,15 @@ def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[
                 value = updated_df[col].loc[row_index]
             else:
                 value = updated_df[col].iloc[row_index]
-            if 'int' in str(dtype):
+            if pd.api.types.is_integer_dtype(dtype):
                 assert 0 == value, f"column {col}:{dtype} -> 0 == {value}"
-            elif 'float' in str(dtype):
+            elif pd.api.types.is_float_dtype(dtype):
                 assert pd.isna(value), f"column {col}:{dtype} -> Nan == {value}"
-            elif 'bool' in str(dtype):
+            elif pd.api.types.is_bool_dtype(dtype):
                 assert False == value, f"column {col}:{dtype} -> False == {value}"
             elif 'object' in str(dtype):
                 assert value is None , f"column {col}:{dtype} -> None == {value}"
-            elif 'datetime' in str(dtype):
+            elif pd.api.types.is_datetime64_any_dtype(dtype):
                 assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
             else:
                 raise TypeError(f"Unsupported dtype: {dtype}")

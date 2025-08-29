@@ -38,7 +38,7 @@ from arcticdb_ext.exceptions import (
 )
 
 from benchmarks.bi_benchmarks import assert_frame_equal
-from tests.util.mark import LINUX, SLOW_TESTS_MARK
+from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 
 
 
@@ -615,8 +615,14 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
 
     for pickle_on_failure in [False, True]:
         for validate_index in [True, False]:
-            nvs.write(sym, arr_str, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
-            np.testing.assert_array_equal(arr_str, nvs.read(sym).data)
+            # Avoiding
+            #   arcticdb.exceptions.ArcticDbNotYetImplemented: Not supported: normalizing, symbol: __qwerty124, 
+            #   Reason: Numpy strings are not yet implemented on Windows, Setting the pickle_on_failure parameter 
+            #   to True will allow the object to be written. However, many operations 
+            #   (such as date_range filtering and column selection) will not work on pickled data.            
+            arr_to_write = arr_str.tolist() if WINDOWS else arr_str 
+            nvs.write(sym, arr_to_write, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            np.testing.assert_array_equal(arr_to_write, nvs.read(sym).data)
 
             meta = get_metadata()
             nvs.write(sym, arr_datetime, pickle_on_failure=pickle_on_failure, validate_index=validate_index,
