@@ -29,8 +29,13 @@ class IndexWriter {
 public:
     ARCTICDB_MOVE_ONLY_DEFAULT(IndexWriter)
 
-    IndexWriter(std::shared_ptr<stream::StreamSink> sink, IndexPartialKey partial_key, const TimeseriesDescriptor &tsd, const std::optional<KeyType>& key_type = std::nullopt) :
+    IndexWriter(std::shared_ptr<stream::StreamSink> sink, 
+                IndexPartialKey partial_key, 
+                const TimeseriesDescriptor &tsd, 
+                const std::optional<KeyType>& key_type = std::nullopt,
+                bool sync = false) :
             bucketize_columns_(tsd.column_groups()),
+            sync_(sync),
             partial_key_(std::move(partial_key)),
             slice_descriptor_(partial_key_.id, bucketize_columns_),
             agg_(Desc::schema(slice_descriptor_),
@@ -105,8 +110,16 @@ public:
     }
 
     folly::Future<arcticdb::entity::AtomKey> commit() {
+        util::check_arg(!sync_, "commit() called on a IndexWriter that was not created with sync = false");
         agg_.finalize();
         return std::move(key_being_committed_);
+    }
+
+    arcticdb::entity::AtomKey commit_sync() {
+        util::check_arg(sync_, "commit_sync() called on a IndexWriter that was not created with sync = true");
+        agg_.finalize();
+        util::check(committed_key_.has_value(), "The index writer was not able to commit a key");
+        return committed_key_.value();
     }
 
 private:
@@ -121,19 +134,36 @@ private:
     void on_segment(SegmentInMemory &&s) {
         auto seg = std::move(s);
         auto key_type = key_type_.value_or(get_key_type_for_index_stream(partial_key_.id));
-        key_being_committed_ = sink_->write(
+
+        if (sync_) {
+            committed_key_ = std::make_optional(
+                to_atom(sink_->write_sync(
+                key_type, 
+                partial_key_.version_id, 
+                partial_key_.id,
+                segment_start(seg), 
+                segment_end(seg), 
+                std::move(seg))));
+        } else {
+
+            key_being_committed_ = sink_->write(
             key_type, partial_key_.version_id, partial_key_.id,
-                segment_start(seg), segment_end(seg), std::move(seg)).thenValue([] (auto&& variant_key) {
+                segment_start(seg), 
+                segment_end(seg), 
+                std::move(seg)).thenValue([] (auto&& variant_key) {
                     return to_atom(variant_key);
                 });
+        }
     }
 
     bool bucketize_columns_ = false;
+    bool sync_ = false;
     IndexPartialKey partial_key_;
     stream::IndexSliceDescriptor<AggregatorIndexType> slice_descriptor_;
     SliceAggregator agg_;
     std::shared_ptr<stream::StreamSink> sink_;
     folly::Future<arcticdb::entity::AtomKey> key_being_committed_;
+    std::optional<arcticdb::entity::AtomKey> committed_key_ = std::nullopt;
     std::optional<std::size_t> current_col_ = std::nullopt;
     std::optional<std::size_t> current_row_ = std::nullopt;
     std::optional<KeyType> key_type_ = std::nullopt;
