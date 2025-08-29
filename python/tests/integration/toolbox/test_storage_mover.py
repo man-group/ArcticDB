@@ -86,7 +86,7 @@ def compare_two_libs(lib1, lib2):
 
 
 @pytest.fixture(
-    params=[True],
+    params=[True, False],
 )
 def check_single_threaded(request):
     if request.param:
