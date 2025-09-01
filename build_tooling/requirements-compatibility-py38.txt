@@ -1,9 +1,9 @@
 # The second oldest tested deps, for Python 3.8
-pandas~=1.0
-numpy~=1.18
-protobuf~=3.20
-attrs~=21.3
-msgpack~=1.0
-prometheus_client~=0.14
-pyyaml~=3.13
-packaging~=21.3
+pandas==1.0.5
+numpy==1.18.5
+protobuf==3.20.2
+attrs==21.3.0
+msgpack==1.0.5
+prometheus_client==0.14.1
+pyyaml==3.13
+packaging==21.3
