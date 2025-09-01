@@ -11,7 +11,6 @@ import sys
 from typing import Dict, Optional, Set 
 from typing import Literal, Any, List, Tuple, Union, get_args
 import numpy as np
-import numpy.typing as npt
 import pandas as pd
 
 from arcticdb.util.logger import GitHubSanitizingHandler
@@ -65,7 +64,7 @@ def set_seed(seed=None):
 def generate_random_timestamp_array(size: int, 
                                start: str = '2020-01-01', 
                                end: str = '2030-01-01', 
-                               seed: int = 432432) -> npt.NDArray[np.datetime64]:
+                               seed: int = 432432):
     """ Generates an array of random timestamps"""
     if seed: 
         np.random.seed(seed)
@@ -75,7 +74,7 @@ def generate_random_timestamp_array(size: int,
     return np.array(pd.to_datetime(random_seconds, unit='s'))
 
 def generate_random_float_array(size: int, dtype: 
-                                np.floating = np.float32 ) -> npt.NDArray[np.floating]:
+                                np.floating = np.float32 ):
     """Pseudo random float algorithm supporting np.float* types"""
     def power_sequence(max_power):
         exponents = np.arange(max_power, -(max_power+1), -1)
@@ -97,7 +96,7 @@ def generate_random_float_array(size: int, dtype:
     return result.astype(dtype)
 
 
-def generate_random_numpy_array(size: int, dtype, seed: Optional[int] = 8238) -> npt.NDArray[Any]:
+def generate_random_numpy_array(size: int, dtype, seed: Optional[int] = 8238):
     """ Generates random numpy array of specified type
     """
     set_seed(seed)
