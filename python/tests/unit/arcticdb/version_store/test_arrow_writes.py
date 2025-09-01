@@ -191,3 +191,33 @@ def test_write_zero_record_batches(lmdb_version_store_arrow):
     lib.write(sym, table)
     received = lib.read(sym).data
     assert table.equals(received)
+
+
+@pytest.mark.xfail(reason="Not implemented yet, issue number 9929831600")
+def test_write_with_timezone(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_with_timezone"
+    table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp("ns", tz="America/New_York")),
+            "col": pa.array([pd.Timestamp("1970-01-04"), pd.Timestamp("1970-01-03")], pa.timestamp("ns", tz="Europe/Amsterdam")),
+        }
+    )
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
+@pytest.mark.parametrize("unit", ["us", "ms", "s"])
+def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, unit):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_with_timezone"
+    table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp(unit)),
+            "col": pa.array([pd.Timestamp("1970-01-04"), pd.Timestamp("1970-01-03")], pa.timestamp(unit)),
+        }
+    )
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)

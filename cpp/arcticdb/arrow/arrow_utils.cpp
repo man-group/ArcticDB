@@ -102,7 +102,11 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
     case sparrow::data_type::INT64: return DataType::INT64;
     case sparrow::data_type::FLOAT: return DataType::FLOAT32;
     case sparrow::data_type::DOUBLE: return DataType::FLOAT64;
-    case sparrow::data_type::TIMESTAMP_NANOSECONDS: return DataType::NANOSECONDS_UTC64;
+    case sparrow::data_type::TIMESTAMP_SECONDS:
+    case sparrow::data_type::TIMESTAMP_MILLISECONDS:
+    case sparrow::data_type::TIMESTAMP_MICROSECONDS:
+    case sparrow::data_type::TIMESTAMP_NANOSECONDS:
+        return DataType::NANOSECONDS_UTC64;
     default: schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Unsupported Arrow data type provided");
     }
 }

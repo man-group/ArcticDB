@@ -96,6 +96,12 @@ enum class ValueType : uint8_t {
     EMPTY = 13,
     /// Nullable booleans
     BOOL_OBJECT = 14,
+
+    // Only used on input with Arrow data, we never store data with these types
+    SECONDS_UTC = 15,
+    MILLISECONDS_UTC = 16,
+    MICROSECONDS_UTC = 17,
+
     COUNT // Not a real value type, should not be added to proto descriptor. Used to count the number of items in the enum
 };
 
