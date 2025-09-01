@@ -16,9 +16,11 @@ import uuid
 from typing import TYPE_CHECKING, Optional, Union
 from tempfile import mkdtemp
 
+import pytest
+
 from arcticdb.util.logger import get_logger
 from arcticdb_ext.storage import NativeVariantStorage
-from azure.core.exceptions import ResourceNotFoundError
+from azure.core.exceptions import ResourceNotFoundError, ServiceRequestError
 
 from .api import *
 from .utils import _LINUX, get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
@@ -193,6 +195,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             self.client_cert_dir = ""
         if self.http_protocol == "https":
             args += f" --key {self.key_file} --cert {self.cert_file}"
+        get_logger().info(f"Azurite startup args {args}")
         self._p = GracefulProcessUtils.start_with_retry(url=self.endpoint_root, 
                                                         service_name="azurite", num_retries=2, timeout=240,
                                                         process_start_cmd=args,
@@ -320,7 +323,18 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         return url
 
     def create_fixture(self) -> AzureContainer:
-        return AzureContainer(self)
+        try:
+            azurite = AzureContainer(self)
+        except ServiceRequestError as e:
+            error_text = str(e)
+            if "[SSL: WRONG_VERSION_NUMBER]" in error_text:
+                # This is only if Azurite is built and not installed
+                # handling for now until we find solution (affects one tests currently with ssl verification)
+                pytest.skip(reason = "Skipped due to problem with built Azurite:"
+                            + "https://github.com/man-group/ArcticDB/actions/runs/17265006786/job/48995386363?pr=2616")
+            else:
+                raise
+        return azurite
 
     def cleanup_container(self, b: AzureContainer):
         b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")     
