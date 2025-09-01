@@ -1381,6 +1381,7 @@ void copy_frame_data_to_buffer(
         const ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
         handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
+        // TODO: For arrow we want to set validity bitmaps instead of `initialize`ing
         dst_column.type().visit_tag([&](auto dst_desc_tag) {
             util::initialize<decltype(dst_desc_tag)>(dst_ptr, total_size, default_value);
         });
@@ -1389,6 +1390,7 @@ void copy_frame_data_to_buffer(
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
             typename dst_type_info::RawType* typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
+            // TODO: For arrow we want to set validity bitmaps instead of `initialize`ing
             util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
             details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
@@ -1408,6 +1410,7 @@ void copy_frame_data_to_buffer(
                     dst_ptr += row_count * sizeof(SourceType);
                 }
             } else {
+                // TODO: For arrow we want to set validity bitmaps instead of `initialize`ing
                 util::initialize<SourceTDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
                 SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
                 Column::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
