@@ -129,6 +129,7 @@ constexpr bool is_sequence_type(ValueType v) {
 
 constexpr bool is_numeric_type(ValueType v) {
     return v == ValueType::NANOSECONDS_UTC ||
+           v == ValueType::SECONDS_UTC || v == ValueType::MILLISECONDS_UTC || v == ValueType::MICROSECONDS_UTC ||
         (uint8_t(v) >= uint8_t(ValueType::UINT) &&
             uint8_t(v) <= uint8_t(ValueType::FLOAT));
 }
@@ -138,7 +139,10 @@ constexpr bool is_floating_point_type(ValueType v) {
 }
 
 constexpr bool is_time_type(ValueType v) {
-    return uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC);
+    return uint8_t(v) == uint8_t(ValueType::SECONDS_UTC) ||
+           uint8_t(v) == uint8_t(ValueType::MILLISECONDS_UTC) ||
+           uint8_t(v) == uint8_t(ValueType::MICROSECONDS_UTC) ||
+           uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC);
 }
 
 constexpr bool is_integer_type(ValueType v) {
@@ -210,6 +214,9 @@ enum class DataType : uint8_t {
     FLOAT32 = detail::combine_val_bits(ValueType::FLOAT, SizeBits::S32),
     FLOAT64 = detail::combine_val_bits(ValueType::FLOAT, SizeBits::S64),
     BOOL8 = detail::combine_val_bits(ValueType::BOOL, SizeBits::S8),
+    SECONDS_UTC64 = detail::combine_val_bits(ValueType::SECONDS_UTC, SizeBits::S64),
+    MILLISECONDS_UTC64 = detail::combine_val_bits(ValueType::MILLISECONDS_UTC, SizeBits::S64),
+    MICROSECONDS_UTC64 = detail::combine_val_bits(ValueType::MICROSECONDS_UTC, SizeBits::S64),
     NANOSECONDS_UTC64 = detail::combine_val_bits(ValueType::NANOSECONDS_UTC, SizeBits::S64),
     ASCII_FIXED64 = detail::combine_val_bits(ValueType::ASCII_FIXED, SizeBits::S64),
     ASCII_DYNAMIC64 = detail::combine_val_bits(ValueType::ASCII_DYNAMIC, SizeBits::S64),
@@ -400,6 +407,9 @@ DATA_TYPE_TAG(INT64, std::int64_t)
 DATA_TYPE_TAG(FLOAT32, float)
 DATA_TYPE_TAG(FLOAT64, double)
 DATA_TYPE_TAG(BOOL8, bool)
+DATA_TYPE_TAG(SECONDS_UTC64, timestamp)
+DATA_TYPE_TAG(MILLISECONDS_UTC64, timestamp)
+DATA_TYPE_TAG(MICROSECONDS_UTC64, timestamp)
 DATA_TYPE_TAG(NANOSECONDS_UTC64, timestamp)
 DATA_TYPE_TAG(ASCII_FIXED64, std::uint64_t)
 DATA_TYPE_TAG(ASCII_DYNAMIC64, std::uint64_t)

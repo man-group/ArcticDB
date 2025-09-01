@@ -64,42 +64,83 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
             const auto& source_column = frame.column(col_idx);
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
-            const auto bytes =
-                    (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
-            ChunkedBuffer chunked_buffer;
-            if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-                chunked_buffer.add_external_block(
-                        source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0
+            const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
+            if (is_time_type(source_column.type().data_type()) && source_column.type().data_type() != DataType::NANOSECONDS_UTC64) {
+                ChunkedBuffer chunked_buffer;
+                if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
+                    chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
+                } else {
+                    chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+                }
+                seg.add_column(
+                        frame.field(col_idx),
+                        std::make_shared<Column>(source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer))
                 );
-            } else {
-                chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+            } else if (is_time_type(source_column.type().data_type())) {
+                auto chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+                Column col(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::NOT_PERMITTED, std::move(chunked_buffer));
+                details::visit_type(source_column.type().data_type(), [&col](auto source_tag) {
+                    using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
+                    timestamp factor;
+                    if constexpr (source_type_info::data_type == DataType::SECONDS_UTC64) {
+                        factor = 1'000'000'000;
+                    } else if constexpr (source_type_info::data_type == DataType::MILLISECONDS_UTC64) {
+                        factor = 1'000'000;
+                    } else if constexpr (source_type_info::data_type == DataType::MICROSECONDS_UTC64) {
+                        factor = 1'000;
+                    } else {
+                        util::raise_rte("Unexpected time type {}", source_type_info::data_type);
+                    }
+                    Column::transform<typename source_type_info::TDT, typename source_type_info::TDT>(
+                            col,
+                            col,
+                            [factor](auto ts) {
+                                return factor * ts;
+                            });
+                });
+                seg.add_column(frame.field(col_idx), std::make_shared<Column>(std::move(col)));
             }
-            seg.add_column(
-                    frame.field(col_idx),
-                    std::make_shared<Column>(
-                            source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)
-                    )
-            );
         }
         for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
             const auto& source_column = frame.column(col_idx);
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
-            const auto bytes =
-                    (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
-            ChunkedBuffer chunked_buffer;
-            if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-                chunked_buffer.add_external_block(
-                        source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0
+            const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
+            if (is_time_type(source_column.type().data_type()) && source_column.type().data_type() != DataType::NANOSECONDS_UTC64) {
+                ChunkedBuffer chunked_buffer;
+                if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
+                    chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
+                } else {
+                    chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+                }
+                seg.add_column(
+                        frame.field(col_idx),
+                        std::make_shared<Column>(source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer))
                 );
-            } else {
-                chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+            } else if (is_time_type(source_column.type().data_type())) {
+                auto chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+                Column col(
+                        make_scalar_type(DataType::NANOSECONDS_UTC64),
+                        Sparsity::NOT_PERMITTED,
+                        std::move(chunked_buffer)
+                );
+                details::visit_type(source_column.type().data_type(), [&col](auto source_tag) {
+                    using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
+                    timestamp factor;
+                    if constexpr (source_type_info::data_type == DataType::SECONDS_UTC64) {
+                        factor = 1'000'000'000;
+                    } else if constexpr (source_type_info::data_type == DataType::MILLISECONDS_UTC64) {
+                        factor = 1'000'000;
+                    } else if constexpr (source_type_info::data_type == DataType::MICROSECONDS_UTC64) {
+                        factor = 1'000;
+                    } else {
+                        util::raise_rte("Unexpected time type {}", source_type_info::data_type);
+                    }
+                    Column::transform<typename source_type_info::TDT, typename source_type_info::TDT>(
+                            col, col, [factor](auto ts) { return factor * ts; }
+                    );
+                });
+                seg.add_column(frame.field(col_idx), std::make_shared<Column>(std::move(col)));
             }
-            seg.add_column(
-                    frame.field(col_idx),
-                    std::make_shared<Column>(
-                            source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)
-                    )
-            );
         }
         seg.descriptor().set_id(key.stream_id);
         seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);

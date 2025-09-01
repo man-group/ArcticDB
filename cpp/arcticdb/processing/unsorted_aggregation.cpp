@@ -89,6 +89,21 @@ struct OutputType<DataTypeTag<DataType::BOOL8>, void> {
 };
 
 template<>
+struct OutputType<DataTypeTag<DataType::SECONDS_UTC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::SECONDS_UTC64>>;
+};
+
+template<>
+struct OutputType<DataTypeTag<DataType::MILLISECONDS_UTC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::MILLISECONDS_UTC64>>;
+};
+
+template<>
+struct OutputType<DataTypeTag<DataType::MICROSECONDS_UTC64>, void> {
+    using type = ScalarTagType<DataTypeTag<DataType::MICROSECONDS_UTC64>>;
+};
+
+template<>
 struct OutputType<DataTypeTag<DataType::NANOSECONDS_UTC64>, void> {
     using type = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
 };
