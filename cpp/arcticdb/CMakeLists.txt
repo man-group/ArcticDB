@@ -395,6 +395,11 @@ set(arcticdb_srcs
         util/lazy.hpp
         util/type_traits.hpp
         util/variant.hpp
+        util/min_max_integer.hpp
+        util/mean.hpp
+        util/min_max_float.hpp
+        util/sum.hpp
+        util/vector_common.hpp
         version/de_dup_map.hpp
         version/op_log.hpp
         version/schema_checks.hpp
@@ -779,8 +784,8 @@ if (SSL_LINK)
     find_package(OpenSSL REQUIRED)
     list(APPEND arcticdb_core_libraries OpenSSL::SSL)
     if (NOT WIN32)
-        list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
-        list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
+        #list(APPEND arcticdb_core_libraries ${KERBEROS_LIBRARY})
+        #list(APPEND arcticdb_core_includes  ${KERBEROS_INCLUDE_DIR})
     endif()
 endif ()
 target_link_libraries(arcticdb_core_object PUBLIC ${arcticdb_core_libraries})
@@ -1009,6 +1014,10 @@ if(${TEST})
             util/test/test_storage_lock.cpp
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
+            util/test/test_min_max_float.cpp
+            util/test/test_min_max_integer.cpp
+            util/test/test_sum.cpp
+            util/test/test_mean.cpp
             util/test/test_tracing_allocator.cpp
             version/test/test_append.cpp
             version/test/test_key_block.cpp
@@ -1021,8 +1030,7 @@ if(${TEST})
             version/test/test_version_map_batch.cpp
             version/test/test_version_store.cpp
             version/test/version_map_model.hpp
-            python/python_handlers.cpp
-)
+            python/python_handlers.cpp)
 
     set(EXECUTABLE_PERMS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE) # 755
 
@@ -1130,7 +1138,7 @@ if(${TEST})
             util/test/rapidcheck_string_pool.cpp
             util/test/rapidcheck_main.cpp
             util/test/rapidcheck_lru_cache.cpp
-            version/test/rapidcheck_version_map.cpp)
+            version/test/rapidcheck_version_map.cpp util/test/test_min_max_integer.cpp)
 
     add_executable(arcticdb_rapidcheck_tests ${rapidcheck_srcs})
 
