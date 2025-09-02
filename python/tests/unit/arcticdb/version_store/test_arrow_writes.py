@@ -167,8 +167,7 @@ def test_append_with_index(lmdb_version_store_arrow, existing_data):
     assert expected.equals(received)
 
 
-# @pytest.mark.parametrize("existing_data", [True, False])
-@pytest.mark.parametrize("existing_data", [True])
+@pytest.mark.parametrize("existing_data", [True, False])
 def test_update(lmdb_version_store_arrow, existing_data):
     lib = lmdb_version_store_arrow
     sym = "test_update"

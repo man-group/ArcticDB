@@ -282,7 +282,6 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         }
 
         ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
-        res->set_index_range();
     } else {
         const auto& record_batches = std::get<std::vector<RecordBatchData>>(item);
         std::vector<sparrow::record_batch> sp_record_batches;
@@ -302,6 +301,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->index = RowCountIndex{};
         }
     }
+    res->set_index_range();
     res->desc().set_id(stream_name);
     return res;
 }
