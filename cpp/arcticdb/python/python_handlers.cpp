@@ -195,7 +195,7 @@ void PythonStringHandler::handle_type(
             return Column(m.source_type_desc_, bytes / get_type_size(m.source_type_desc_.data_type()), AllocationType::DYNAMIC, Sparsity::PERMITTED);
         } else {
             Column column(m.source_type_desc_, Sparsity::NOT_PERMITTED);
-            column.buffer().add_external_block(dest_column.bytes_at(m.offset_bytes_, m.num_rows_ * sizeof(PyObject*)), bytes, 0UL);
+            column.buffer().add_external_block(dest_column.bytes_at(m.offset_bytes_, m.num_rows_ * sizeof(PyObject*)), bytes);
             return column;
         }
     }();

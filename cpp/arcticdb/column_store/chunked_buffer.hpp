@@ -416,19 +416,16 @@ class ChunkedBufferImpl {
         blocks_.emplace_back(create_regular_block(capacity, offset));
     }
 
-    void add_external_block(const uint8_t* data, size_t size, size_t offset) {
+    void add_external_block(const uint8_t* data, size_t size) {
         if (!no_blocks() && last_block().empty())
             free_last_block();
 
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        new(ptr) MemBlock(data, size, offset, ts, false);
+        new(ptr) MemBlock(data, size, last_offset(), ts, false);
         blocks_.emplace_back(reinterpret_cast<BlockType*>(ptr));
         bytes_ += size;
-        // TODO: Check if this change is correct for other uses of this method
-        // Also check if offset really needs to be a parameter or can always be inferred from block_offsets_
         if(block_offsets_.empty())
             block_offsets_.emplace_back(0);
-
         block_offsets_.emplace_back(last_offset() + size);
     }
 
@@ -473,7 +470,7 @@ class ChunkedBufferImpl {
     }
 
     [[nodiscard]] size_t last_offset() const {
-        return block_offsets_.empty() ? 0 : *block_offsets_.rbegin();
+        return block_offsets_.empty() ? 0 : block_offsets_.back();
     }
 
     inline void assert_size(size_t bytes) const {

@@ -68,7 +68,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
                 ChunkedBuffer chunked_buffer;
                 if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-                    chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
+                    chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes);
                 } else {
                     chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
                 }
@@ -113,7 +113,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
                 ChunkedBuffer chunked_buffer;
                 if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-                    chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
+                    chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes);
                 } else {
                     chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
                 }

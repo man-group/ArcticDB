@@ -165,9 +165,7 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
                 packed_bits_to_buffer(data, *num_rows, chunked_buffers.at(idx).bytes_at(rows, *num_rows));
             } else {
                 const auto bytes = *num_rows * get_type_size(data_types.at(idx));
-                const auto& block_offsets = chunked_buffers.at(idx).block_offsets();
-                const auto offset = block_offsets.empty() ? 0 : block_offsets.back();
-                chunked_buffers.at(idx).add_external_block(data, bytes, offset);
+                chunked_buffers.at(idx).add_external_block(data, bytes);
             }
         }
         rows += *num_rows;
