@@ -767,6 +767,7 @@ public:
         // Fills up all validity bitmaps with zeros from `column_block_idx_` until reaching `up_to_block_offset`.
         // If `up_to_block_offset` is `std::nullopt` then fills up until the end of the column.
         const auto& block_offsets = column_.block_offsets();
+        util::check(!up_to_block_offset.has_value() || up_to_block_offset.value() <= block_offsets.back(), "up_to_block_offset outside of range");
         for (; column_block_idx_ < block_offsets.size() - 1; ++column_block_idx_) {
             if (up_to_block_offset.has_value() && block_offsets.at(column_block_idx_) >= up_to_block_offset.value()) {
                 break;
