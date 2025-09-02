@@ -50,6 +50,22 @@ def test_basic_write(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+# @pytest.mark.parametrize("existing_data", [True, False])
+@pytest.mark.parametrize("existing_data", [True])
+def test_append(lmdb_version_store_arrow, existing_data):
+    lib = lmdb_version_store_arrow
+    sym = "test_append"
+    if existing_data:
+        write_table = pa.table({"col": pa.array([0, 1], pa.int64())})
+        lib.write(sym, write_table)
+    append_table = pa.table({"col": pa.array([3, 4], pa.int64())})
+    lib.append(sym, append_table)
+
+    received = lib.read(sym).data
+    expected = pa.concat_tables([write_table, append_table]) if existing_data else append_table
+    assert expected.equals(received)
+
+
 def test_write_unsupported_type(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_unsupported_type"

@@ -636,7 +636,7 @@ VersionedItem PythonVersionStore::test_write_versioned_segment(
 
 VersionedItem PythonVersionStore::append(
     const StreamId& stream_id,
-    const py::tuple &item,
+    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
     const py::object &norm,
     const py::object & user_meta,
     bool upsert,

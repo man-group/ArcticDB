@@ -830,7 +830,7 @@ class NativeVersionStore:
 
         write_if_missing = kwargs.get("write_if_missing", True)
 
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
                     self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
