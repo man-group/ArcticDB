@@ -244,6 +244,11 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
 
 def convert_arrow_to_pandas_and_remove_categoricals(table):
     new_table = stringify_dictionary_encoded_columns(table)
+    for i, name in enumerate(new_table.column_names):
+        if pa.types.is_integer(new_table.column(i).type):
+            new_col = new_table.column(i).fill_null(0)
+            print(new_col)
+            new_table = new_table.set_column(i, name, new_col)
     return new_table.to_pandas()
 
 def assert_frame_equal_with_arrow(left, right, **kwargs):
