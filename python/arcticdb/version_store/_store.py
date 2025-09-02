@@ -529,6 +529,10 @@ class NativeVersionStore:
                 )
 
     @staticmethod
+    def _valid_item_type(item):
+        return isinstance(item, NPDDataFrame) or (isinstance(item, list) and all(isinstance(el, RecordBatchData) for el in item))
+
+    @staticmethod
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
         return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, **kwargs)
 
@@ -692,7 +696,7 @@ class NativeVersionStore:
             coerce_columns,
             norm_failure_options_msg,
         )
-        if isinstance(item, NPDDataFrame) or (isinstance(item, list) and all(isinstance(el, RecordBatchData) for el in item)):
+        if self._valid_item_type(item):
             if parallel or incomplete:
                 is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
                 if is_new_stage_api_enabled:
