@@ -11,7 +11,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from arcticdb.exceptions import UserInputException
+from arcticdb.exceptions import SchemaException, UserInputException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
@@ -48,6 +48,15 @@ def test_basic_write(lmdb_version_store_arrow):
     lib.write(sym, table)
     received = lib.read(sym).data
     assert table.equals(received)
+
+
+def test_write_unsupported_type(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_unsupported_type"
+    table = pa.table({"col": pa.array([0, 1], pa.float16())})
+    with pytest.raises(SchemaException) as e:
+        lib.write(sym, table)
+    assert "float16" in str(e.value)
 
 
 def test_basic_write_bools(lmdb_version_store_arrow):

@@ -106,7 +106,7 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
     case sparrow::data_type::TIMESTAMP_MILLISECONDS: return DataType::MILLISECONDS_UTC64;
     case sparrow::data_type::TIMESTAMP_MICROSECONDS: return DataType::MICROSECONDS_UTC64;
     case sparrow::data_type::TIMESTAMP_NANOSECONDS: return DataType::NANOSECONDS_UTC64;
-    default: schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Unsupported Arrow data type provided");
+    default: schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>("Unsupported Arrow data type provided `{}`", std::format("{}", arrow_type));
     }
 }
 
