@@ -63,8 +63,8 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         }
         for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
             const auto& source_column = frame.column(col_idx);
-            const auto first_byte = (slice_.rows().first -  - frame_->offset) * get_type_size(source_column.type().data_type());
-            const auto bytes = ((slice_.rows().second -  - frame_->offset) * get_type_size(source_column.type().data_type())) - first_byte;
+            const auto first_byte = (slice_.rows().first - frame_->offset) * get_type_size(source_column.type().data_type());
+            const auto bytes = ((slice_.rows().second - frame_->offset) * get_type_size(source_column.type().data_type())) - first_byte;
             if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
                 ChunkedBuffer chunked_buffer;
                 if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
