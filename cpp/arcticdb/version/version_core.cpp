@@ -1148,7 +1148,7 @@ static void read_indexed_keys_to_pipeline(
     pipeline_context->norm_meta_ = std::make_unique<arcticdb::proto::descriptors::NormalizationMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_normalization()));
     pipeline_context->user_meta_ = std::make_unique<arcticdb::proto::descriptors::UserDefinedMetadata>(std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta()));
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
-    ARCTICDB_DEBUG(log::version(), "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows", pipeline_context->slice_and_keys_.size(), pipeline_context->total_rows_, version_info.symbol());
+    ARCTICDB_DEBUG(log::version(), "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows", version_info.symbol(), pipeline_context->slice_and_keys_.size(), pipeline_context->total_rows_);
 }
 
 // Returns true if there are staged segments

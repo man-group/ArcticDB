@@ -102,7 +102,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         const auto range_start = std::get<timestamp>(rg.start_);
         const auto range_end = std::get<timestamp>(rg.end_);
         for(auto i = 0u; i < container.size(); ++i) {
-            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos - 1);
+            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos);
             (*res)[i] = intersects;
             if(intersects)
                 ARCTICDB_DEBUG(log::version(), "range intersects at {}", i);
