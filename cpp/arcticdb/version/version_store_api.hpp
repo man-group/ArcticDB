@@ -74,7 +74,7 @@ class PythonVersionStore : public LocalVersionedEngine {
         const StreamId& stream_id,
         const py::object &metastruct,
         const std::vector<StreamId> &sub_keys,
-        const std::vector<py::tuple> &items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
         const std::vector<py::object> &norm_metas,
         const py::object &user_meta,
         bool prune_previous_versions);
@@ -281,7 +281,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     // Batch methods
     std::vector<VersionedItemOrError> batch_write(
         const std::vector<StreamId> &stream_ids,
-        const std::vector<py::tuple> &items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
@@ -296,7 +296,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<VersionedItemOrError> batch_append(
         const std::vector<StreamId> &stream_ids,
-        const std::vector<py::tuple> &items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
         const std::vector<py::object> &norms,
         const std::vector<py::object> &user_metas,
         bool prune_previous_versions,
@@ -317,7 +317,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<VersionedItemOrError> batch_update(
         const std::vector<StreamId>& stream_ids,
-        const std::vector<py::tuple>& items,
+        const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>>& items,
         const std::vector<py::object>& norms,
         const std::vector<py::object>& user_metas,
         const std::vector<UpdateQuery>& update_qeries,

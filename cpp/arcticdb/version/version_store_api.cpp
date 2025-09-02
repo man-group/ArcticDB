@@ -71,7 +71,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
 
 std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
     const std::vector<StreamId>& stream_ids,
-    const std::vector<py::tuple> &items,
+    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool empty_types) {
@@ -85,7 +85,7 @@ std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write(
     const std::vector<StreamId>& stream_ids,
-    const std::vector<py::tuple> &items,
+    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool prune_previous_versions,
@@ -98,7 +98,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
     const std::vector<StreamId> &stream_ids,
-    const std::vector<py::tuple> &items,
+    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool prune_previous_versions,
@@ -565,7 +565,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     const StreamId& stream_id,
     const py::object &metastruct,
     const std::vector<StreamId> &sub_keys,
-    const std::vector<py::tuple> &items,
+    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
     const std::vector<py::object> &norm_metas,
     const py::object &user_meta,
     bool prune_previous_versions
@@ -845,7 +845,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_update(
     const std::vector<StreamId>& stream_ids,
-    const std::vector<py::tuple>& items,
+    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>>& items,
     const std::vector<py::object>& norms,
     const std::vector<py::object>& user_metas,
     const std::vector<UpdateQuery>& update_qeries,

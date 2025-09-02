@@ -50,6 +50,20 @@ def test_basic_write(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+def test_batch_write(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    table_0 = pa.table({"col0": pa.array([0, 1], pa.int16())})
+    df_1 = pd.DataFrame({"col1": np.arange(2, 5, dtype=np.int32)})
+    table_2 = pa.table({"col2": pa.array([5, 6, 7], pa.int64())})
+    lib.batch_write(["sym0", "sym1", "sym2"], [table_0, df_1, table_2])
+    received_0 = lib.read("sym0").data
+    assert table_0.equals(received_0)
+    received_1 = lib.read("sym1", output_format="pandas").data
+    assert_frame_equal(df_1, received_1)
+    received_2 = lib.read("sym2").data
+    assert table_2.equals(received_2)
+
+
 def test_write_unsupported_type(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_unsupported_type"
