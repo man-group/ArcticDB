@@ -940,7 +940,7 @@ class NativeVersionStore:
             self.norm_failure_options_msg_update,
         )
 
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 call_time = time.time_ns()
                 vit = self.version_store.update(

@@ -167,13 +167,38 @@ def test_append_with_index(lmdb_version_store_arrow, existing_data):
     assert expected.equals(received)
 
 
-# def test_update(lmdb_version_store_arrow):
-#     lib = lmdb_version_store_arrow
-#     sym = "test_update"
-#     table = pa.table({"ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")), "col": pa.array([0, 1], pa.int64())})
-#     lib.write(sym, table)
-#     received = lib.read(sym).data
-#     assert table.equals(received)
+# @pytest.mark.parametrize("existing_data", [True, False])
+@pytest.mark.parametrize("existing_data", [True])
+def test_update(lmdb_version_store_arrow, existing_data):
+    lib = lmdb_version_store_arrow
+    sym = "test_update"
+    if existing_data:
+        write_table = pa.table(
+            {
+                "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+                "col": pa.array([0, 1, 2, 3], pa.int64())
+            }
+        )
+        lib.write(sym, write_table)
+    update_table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
+            "col": pa.array([4, 5], pa.int64())
+        }
+    )
+    lib.update(sym, update_table, upsert=not existing_data)
+
+    received = lib.read(sym).data
+    if existing_data:
+        expected = pa.table(
+            {
+                "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+                "col": pa.array([0, 4, 5, 3], pa.int64())
+            }
+        )
+    else:
+        expected = update_table
+    assert expected.equals(received)
 
 
 @pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])

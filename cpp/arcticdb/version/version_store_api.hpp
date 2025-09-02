@@ -102,7 +102,7 @@ class PythonVersionStore : public LocalVersionedEngine {
     VersionedItem update(
         const StreamId& stream_id,
         const UpdateQuery & query,
-        const py::tuple &item,
+        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
         const py::object &norm,
         const py::object & user_meta,
         bool upsert,
