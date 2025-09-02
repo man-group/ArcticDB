@@ -65,7 +65,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             const auto& source_column = frame.column(col_idx);
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
             const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
-            if (is_time_type(source_column.type().data_type()) && source_column.type().data_type() != DataType::NANOSECONDS_UTC64) {
+            if (is_time_type(source_column.type().data_type()) && source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
                 ChunkedBuffer chunked_buffer;
                 if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
                     chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
@@ -94,7 +94,12 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                     Column::transform<typename source_type_info::TDT, typename source_type_info::TDT>(
                             col,
                             col,
-                            [factor](auto ts) {
+                            [factor](timestamp ts) {
+                                // TODO: Microbenchmark with and without bounds checking
+                                // TODO: Include provided timestamp and our supported range in error message
+                                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                        ts < std::numeric_limits<timestamp>::max() / factor && ts > std::numeric_limits<timestamp>::min() / factor,
+                                        "Timestamp provided outside of ArcticDB's supported range");
                                 return factor * ts;
                             });
                 });
@@ -105,7 +110,7 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
             const auto& source_column = frame.column(col_idx);
             const auto first_byte = slice_.rows().first * get_type_size(source_column.type().data_type());
             const auto bytes = (slice_.rows().second * get_type_size(source_column.type().data_type())) - first_byte;
-            if (is_time_type(source_column.type().data_type()) && source_column.type().data_type() != DataType::NANOSECONDS_UTC64) {
+            if (is_time_type(source_column.type().data_type()) && source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
                 ChunkedBuffer chunked_buffer;
                 if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
                     chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes, 0);
@@ -136,7 +141,15 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                         util::raise_rte("Unexpected time type {}", source_type_info::data_type);
                     }
                     Column::transform<typename source_type_info::TDT, typename source_type_info::TDT>(
-                            col, col, [factor](auto ts) { return factor * ts; }
+                            col,
+                            col,
+                            [factor](timestamp ts)
+                            {
+                                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                        ts < std::numeric_limits<timestamp>::max() / factor && ts > std::numeric_limits<timestamp>::min() / factor,
+                                        "Timestamp provided outside of ArcticDB's supported range");
+                                return factor * ts;
+                            }
                     );
                 });
                 seg.add_column(frame.field(col_idx), std::make_shared<Column>(std::move(col)));

@@ -11,6 +11,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from arcticdb.exceptions import UserInputException
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
@@ -211,7 +212,7 @@ def test_write_with_timezone(lmdb_version_store_arrow):
 @pytest.mark.parametrize("unit", ["us", "ms", "s"])
 def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, unit):
     lib = lmdb_version_store_arrow
-    sym = "test_write_with_timezone"
+    sym = "test_write_with_non_nanosecond_time_types"
     table = pa.table(
         {
             "ts": pa.array([pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp(unit)),
@@ -220,4 +221,19 @@ def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, unit):
     )
     lib.write(sym, table)
     received = lib.read(sym).data
+    for (i, name) in enumerate(received.column_names):
+        received = received.set_column(i, name, received.column(name).cast(pa.timestamp(unit)))
     assert table.equals(received)
+
+
+def test_write_with_out_of_range_timestamps(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_with_out_of_range_timestamps"
+    table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp("s")),
+            "col": pa.array([pd.Timestamp("1970-01-04"), pd.Timestamp("2300-01-01")], pa.timestamp("s")),
+        }
+    )
+    with pytest.raises(UserInputException):
+        lib.write(sym, table)
