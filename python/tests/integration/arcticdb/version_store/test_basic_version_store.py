@@ -40,6 +40,7 @@ from arcticdb.util.test import (
     sample_dataframe_only_strings,
     get_sample_dataframe,
     assert_frame_equal,
+    assert_frame_equal_with_arrow,
     assert_series_equal,
     config_context,
     distinct_timestamps,
@@ -58,11 +59,11 @@ def symbol():
 def assert_equal_value(data, expected):
     received = data.reindex(sorted(data.columns), axis=1)
     expected = expected.reindex(sorted(expected.columns), axis=1)
-    assert_frame_equal(received, expected)
+    assert_frame_equal_with_arrow(received, expected)
 
 
 def assert_equal(received, expected):
-    assert_frame_equal(received, expected)
+    assert_frame_equal_with_arrow(received, expected)
     assert received.equals(expected)
 
 
@@ -170,7 +171,7 @@ def test_snapshot_names(object_version_store, snap):
     object_version_store.delete("sym")
     assert not object_version_store.has_symbol("sym")
     assert object_version_store.list_snapshots() == {snap: None}
-    assert_frame_equal(object_version_store.read("sym", as_of=snap).data, df)
+    assert_frame_equal_with_arrow(object_version_store.read("sym", as_of=snap).data, df)
 
 
 def test_empty_snapshot_name_not_allowed(object_version_store):
@@ -226,7 +227,7 @@ def test_unhandled_chars_already_present_write(object_version_store, three_col_d
     object_version_store.write(sym, staged_data, parallel=True)
     object_version_store.compact_incomplete(sym, append=False, convert_int_to_float=False)
 
-    assert_frame_equal(object_version_store.read(sym).data, staged_data)
+    assert_frame_equal_with_arrow(object_version_store.read(sym).data, staged_data)
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
@@ -253,7 +254,7 @@ def test_unhandled_chars_already_present_on_deleted_symbol(object_version_store,
     else:
         object_version_store.write(sym, data)
 
-    assert_frame_equal(object_version_store.read(sym).data, data)
+    assert_frame_equal_with_arrow(object_version_store.read(sym).data, data)
 
 
 @pytest.mark.parametrize("unhandled_char", [chr(127), chr(128)])
@@ -825,7 +826,7 @@ def test_range_index(basic_store, sym):
 @pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
-def test_date_range(basic_store, use_date_range_clause):
+def test_date_range(basic_store, use_date_range_clause, any_output_format):
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
     sym = "date_test"
@@ -875,6 +876,8 @@ def test_date_range(basic_store, use_date_range_clause):
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
 def test_date_range_none(basic_store, use_date_range_clause):
+    basic_store.set_output_format(any_output_format)
+def test_date_range_none(basic_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -894,7 +897,7 @@ def test_date_range_none(basic_store, use_date_range_clause):
 @pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
-def test_date_range_start_equals_end(basic_store, use_date_range_clause):
+def test_date_range_start_equals_end(basic_store, use_date_range_clause, any_output_format):
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -917,6 +920,8 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause):
 @pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
+def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
+    basic_store.set_output_format(any_output_format)
 def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
     lib = basic_store_tiny_segment
     sym = "test_date_range_row_sliced"
@@ -2722,7 +2727,9 @@ def test_batch_append_with_throw_exception(basic_store, three_col_df):
 @pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @pytest.mark.storage
-def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause):
+def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause, any_output_format):
+    lmdb_version_store = basic_store_tombstone_and_sync_passive
+    lmdb_version_store.set_output_format(any_output_format)
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     symbols = []
     for i in range(5):
@@ -2978,7 +2985,7 @@ def test_dynamic_schema_read_columns(version_store_factory, lib_name, bucketize_
             expected = pd.DataFrame({c: [column_data[c][0] if c in to_write else np.nan, append_column_data[c][0] if c in to_append else np.nan] for c in read_columns})
             data.sort_index(inplace=True, axis=1)
             expected.sort_index(inplace=True, axis=1)
-            assert_frame_equal(data, expected)
+            assert_frame_equal_with_arrow(data, expected)
         lmdb_lib.delete("test")
 
 
@@ -3228,7 +3235,7 @@ def test_version_chain_cache(basic_store, use_caching):
                 with pytest.raises(NoSuchVersionException):
                     lib.read(symbol, as_of=timestamp)
             else:
-                assert_frame_equal(lib.read(symbol, as_of=timestamp).data, dataframes[expected_version_to_find])
+                assert_frame_equal_with_arrow(lib.read(symbol, as_of=timestamp).data, dataframes[expected_version_to_find])
 
     with config_context("VersionMap.ReloadInterval", timeout):
         # Write versions and keep track of time before and after writing
