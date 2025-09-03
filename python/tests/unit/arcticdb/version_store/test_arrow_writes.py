@@ -343,11 +343,12 @@ def test_write_with_out_of_range_timestamps(lmdb_version_store_arrow):
         lib.write(sym, table)
 
 
-def test_write_parallel(lmdb_version_store_tiny_segment):
-    lib = lmdb_version_store_tiny_segment
+@pytest.mark.parametrize("method", ["write_parallel", "write_incomplete", "append", "stage"])
+def test_staging_without_sorting(version_store_factory, method):
+    lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
     lib.set_output_format("experimental_arrow")
-    sym = "test_write_parallel"
+    sym = "test_staging"
     table_0 = pa.table(
         {
             "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
@@ -364,11 +365,23 @@ def test_write_parallel(lmdb_version_store_tiny_segment):
             "col2": pa.array([23, 24, 25], pa.uint32()),
         }
     )
-    lib.write(sym, table_0, incomplete=True)
-    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 2
-    lib.write(sym, table_1, incomplete=True)
+    if method == "write_parallel":
+        lib.write(sym, table_0, parallel=True)
+        lib.write(sym, table_1, parallel=True)
+    elif method == "write_incomplete":
+        lib.write(sym, table_0, incomplete=True)
+        lib.write(sym, table_1, incomplete=True)
+    elif method == "append":
+        lib.append(sym, table_0, incomplete=True)
+        lib.append(sym, table_1, incomplete=True)
+    elif method == "stage":
+        lib.stage(sym, table_0)
+        lib.stage(sym, table_1)
+
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1])
     received = lib.read(sym).data
+    # TODO: Remove this when timeseries indexes with norm metadata implemented for Arrow
+    received = received.rename_columns({"time": "ts"})
     assert expected.equals(received)

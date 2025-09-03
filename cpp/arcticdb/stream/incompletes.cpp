@@ -327,7 +327,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
-    const auto index = std::move(frame->index);
+//    const auto index = std::move(frame->index);
+    const auto index = frame->index;
 
     WriteOptions write_options = options.write_options;
     write_options.column_group_size = std::numeric_limits<size_t>::max(); // column slicing not supported yet (makes it hard
