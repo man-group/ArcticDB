@@ -255,7 +255,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     bool sparsify_floats{false};
 
     auto next_key = std::nullopt;
-    auto segment = incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
+    // This clone is unnecessarily expensive. We should have a sort method that produces a new segment (current one is in-place)
+    auto segment = frame->seg.has_value() ? frame->seg->clone() : incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;
@@ -327,7 +328,6 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
         "When writing/appending staged data in parallel, with no sort columns supplied, input data must be sorted.");
 
     auto index_range = frame->index_range;
-//    const auto index = std::move(frame->index);
     const auto index = frame->index;
 
     WriteOptions write_options = options.write_options;

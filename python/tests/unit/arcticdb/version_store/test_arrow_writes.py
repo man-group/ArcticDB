@@ -348,7 +348,7 @@ def test_staging_without_sorting(version_store_factory, method):
     lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
     lib.set_output_format("experimental_arrow")
-    sym = "test_staging"
+    sym = "test_staging_without_sorting"
     table_0 = pa.table(
         {
             "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
@@ -381,6 +381,39 @@ def test_staging_without_sorting(version_store_factory, method):
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1])
+    received = lib.read(sym).data
+    # TODO: Remove this when timeseries indexes with norm metadata implemented for Arrow
+    received = received.rename_columns({"time": "ts"})
+    assert expected.equals(received)
+
+
+def test_staging_with_sorting(version_store_factory):
+    lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
+    lib_tool = lib.library_tool()
+    lib.set_output_format("experimental_arrow")
+    sym = "test_staging_with_sorting"
+    table_0 = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            "col0": pa.array([0, 1, 2], pa.uint16()),
+            "col1": pa.array([10, 11, 12], pa.uint8()),
+            "col2": pa.array([20, 21, 22], pa.uint32()),
+        }
+    )
+    table_1 = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-06"), pd.Timestamp("2025-01-05")], pa.timestamp("ns")),
+            "col0": pa.array([3, 4, 5], pa.uint16()),
+            "col1": pa.array([13, 14, 15], pa.uint8()),
+            "col2": pa.array([23, 24, 25], pa.uint32()),
+        }
+    )
+    lib.stage(sym, table_0, sort_on_index=True)
+    lib.stage(sym, table_1, sort_on_index=True)
+
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
+    lib.compact_incomplete(sym, False, False)
+    expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
     received = lib.read(sym).data
     # TODO: Remove this when timeseries indexes with norm metadata implemented for Arrow
     received = received.rename_columns({"time": "ts"})
