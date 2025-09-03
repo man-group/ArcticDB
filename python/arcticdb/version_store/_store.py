@@ -562,7 +562,7 @@ class NativeVersionStore:
             coerce_columns=None,
             norm_failure_options_msg=norm_failure_options_msg,
         )
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
             result = self.version_store.write_parallel(
                 symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
