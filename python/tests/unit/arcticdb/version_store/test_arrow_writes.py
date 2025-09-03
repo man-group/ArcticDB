@@ -418,3 +418,18 @@ def test_staging_with_sorting(version_store_factory):
     # TODO: Remove this when timeseries indexes with norm metadata implemented for Arrow
     received = received.rename_columns({"time": "ts"})
     assert expected.equals(received)
+
+
+def test_recursive_normalizers(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_recursive_normalizers"
+    table_0 = pa.table({"col0": pa.array([0, 1], pa.int8())})
+    df_1 = pd.DataFrame({"col1": [2, 3, 4]})
+    table_2 = pa.table({"col2": pa.array([5, 6, 7, 8], pa.int32())})
+    list_data = [table_0, df_1, table_2]
+    lib.write(sym, list_data, recursive_normalizers=True)
+    received = lib.read(sym).data
+    assert len(received) == 3
+    assert table_0.equals(received[0])
+    assert_frame_equal(df_1, received[1])
+    assert table_2.equals(received[2])
