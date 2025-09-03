@@ -136,7 +136,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     StageResult write_parallel(
         const StreamId& stream_id,
-        const py::tuple& item,
+        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
         const py::object& norm,
         bool validate_index,
         bool sort_on_index,

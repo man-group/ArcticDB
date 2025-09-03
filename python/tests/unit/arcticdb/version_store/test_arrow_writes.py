@@ -341,3 +341,34 @@ def test_write_with_out_of_range_timestamps(lmdb_version_store_arrow):
     )
     with pytest.raises(UserInputException):
         lib.write(sym, table)
+
+
+def test_write_parallel(lmdb_version_store_tiny_segment):
+    lib = lmdb_version_store_tiny_segment
+    lib_tool = lib.library_tool()
+    lib.set_output_format("experimental_arrow")
+    sym = "test_write_parallel"
+    table_0 = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
+            "col0": pa.array([0, 1, 2], pa.uint16()),
+            "col1": pa.array([10, 11, 12], pa.uint8()),
+            "col2": pa.array([20, 21, 22], pa.uint32()),
+        }
+    )
+    table_1 = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-05"), pd.Timestamp("2025-01-06")], pa.timestamp("ns")),
+            "col0": pa.array([3, 4, 5], pa.uint16()),
+            "col1": pa.array([13, 14, 15], pa.uint8()),
+            "col2": pa.array([23, 24, 25], pa.uint32()),
+        }
+    )
+    lib.write(sym, table_0, incomplete=True)
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 2
+    lib.write(sym, table_1, incomplete=True)
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
+    lib.compact_incomplete(sym, False, False)
+    expected = pa.concat_tables([table_0, table_1])
+    received = lib.read(sym).data
+    assert expected.equals(received)

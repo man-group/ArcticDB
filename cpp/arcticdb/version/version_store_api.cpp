@@ -805,7 +805,7 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
 
 StageResult PythonVersionStore::write_parallel(
     const StreamId& stream_id,
-    const py::tuple& item,
+    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
     const py::object& norm,
     bool validate_index,
     bool sort_on_index,
