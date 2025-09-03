@@ -924,9 +924,9 @@ void register_bindings(py::module &version, py::exception<arcticdb::ArcticExcept
              },
              py::call_guard<SingleThreadMutexHolder>(), "Join multiple symbols from the store")
         .def("batch_read_keys",
-             [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys) {
-                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(OutputFormat::PANDAS);
-                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, handler_data)), &handler_data);
+             [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys, const ReadOptions& read_options) {
+                 auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                 return python_util::adapt_read_dfs(frame_to_read_result(v.batch_read_keys(atom_keys, read_options, handler_data), read_options), &handler_data);
              },
              py::call_guard<SingleThreadMutexHolder>(), "Read a specific version of a dataframe from the store")
         .def("batch_write",

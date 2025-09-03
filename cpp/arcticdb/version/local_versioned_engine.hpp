@@ -289,7 +289,7 @@ public:
         bool prune_previous_versions,
         bool upsert);
 
-    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys, std::any& handler_data);
+    std::vector<ReadVersionOutput> batch_read_keys(const std::vector<AtomKey> &keys, const ReadOptions& read_options, std::any& handler_data);
 
     std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
         const std::vector<StreamId>& stream_ids,

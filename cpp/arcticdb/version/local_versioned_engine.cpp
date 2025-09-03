@@ -1161,12 +1161,12 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(const StreamId& strea
     return versioned_item;
 }
 
-std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys, std::any& handler_data) {
+std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(const std::vector<AtomKey> &keys, const ReadOptions& read_options, std::any& handler_data) {
     std::vector<folly::Future<ReadVersionOutput>> res;
     res.reserve(keys.size());
     py::gil_scoped_release release_gil;
     for (const auto& index_key: keys) {
-        res.emplace_back(read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data));
+        res.emplace_back(read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), read_options, handler_data));
     }
     Allocator::instance()->trim();
     return folly::collect(res).get();

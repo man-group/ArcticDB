@@ -12,7 +12,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb.exceptions import SchemaException, UserInputException
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
 
@@ -428,8 +428,30 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
     table_2 = pa.table({"col2": pa.array([5, 6, 7, 8], pa.int32())})
     list_data = [table_0, df_1, table_2]
     lib.write(sym, list_data, recursive_normalizers=True)
+
+    assert not lib.is_symbol_pickled(sym)
     received = lib.read(sym).data
     assert len(received) == 3
     assert table_0.equals(received[0])
-    assert_frame_equal(df_1, received[1])
+    assert_frame_equal_with_arrow(df_1, received[1])
     assert table_2.equals(received[2])
+
+    dict_data = {
+        "a": table_0,
+        "b": {
+            "c": [df_1],
+            "d": table_2,
+        }
+    }
+    lib.write(sym, dict_data, recursive_normalizers=True)
+    assert not lib.is_symbol_pickled(sym)
+
+    received = lib.read(sym).data
+    assert isinstance(received, dict)
+    assert "a" in received.keys() and "b" in received.keys()
+    assert table_0.equals(received["a"])
+    assert "c" in received["b"].keys() and "d" in received["b"].keys()
+    assert isinstance(received["b"]["c"], list) and len(received["b"]["c"]) == 1
+    assert_frame_equal_with_arrow(df_1, received["b"]["c"][0])
+    assert table_2.equals(received["b"]["d"])
+    # TODO: Test reading back as Pandas when this works generally
