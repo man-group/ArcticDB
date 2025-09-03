@@ -45,9 +45,11 @@ def test_basic_write(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_basic_write"
     table = pa.table({"col": pa.array([0, 1], pa.int64())})
-    lib.write(sym, table)
-    received = lib.read(sym).data
-    assert table.equals(received)
+    metadata = {"hello", "there"}
+    lib.write(sym, table, metadata=metadata)
+    received = lib.read(sym)
+    assert table.equals(received.data)
+    assert received.metadata == metadata
 
 
 def test_batch_write(lmdb_version_store_arrow):
