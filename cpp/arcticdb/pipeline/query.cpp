@@ -32,8 +32,10 @@ template<typename ContainerType, typename IdxType>
 std::unique_ptr<util::BitSet> build_bitset_for_index(
         const ContainerType& container,
         IndexRange rg, // IndexRange is expected to be inclusive on both ends
-        bool dynamic_schema, bool column_groups, std::unique_ptr<util::BitSet>&& input
-) {
+        bool dynamic_schema,
+        bool column_groups,
+        bool is_read_operation,
+        std::unique_ptr<util::BitSet>&& input) {
     auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(container.size()));
     if (container.empty())
         return res;
@@ -51,9 +53,14 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         const auto range_start = std::get<timestamp>(rg.start_);
         const auto range_end = std::get<timestamp>(rg.end_);
 
-        // End index column is exclusive. We want to find the last position where `range_start` is < end_index at
-        // position. This is equivalent to finding the first position where range_start + 1 >= end_index at position.
-        auto start_pos = std::lower_bound(end_index_col_begin, end_index_col_end, range_start + 1);
+        // End index column is exclusive. We want to find the last position where `range_start` is < end_index at position.
+        // This is equivalent to finding the first position where range_start + 1 >= end_index at position.
+        const auto adjusted_range_start = is_read_operation ? range_start : range_start + 1;
+        auto start_pos = std::lower_bound(
+            end_index_col_begin,
+            end_index_col_end,
+            adjusted_range_start
+        );
 
         if (start_pos == end_idx_col.template end<IndexTagType>()) {
             ARCTICDB_DEBUG(log::version(), "Returning as start pos is at end");
@@ -91,8 +98,9 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         using RawType = typename IndexTagType::DataTypeTag::raw_type;
         const auto range_start = std::get<timestamp>(rg.start_);
         const auto range_end = std::get<timestamp>(rg.end_);
-        for (auto i = 0u; i < container.size(); ++i) {
-            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, *end_idx_pos - 1);
+        for(auto i = 0u; i < container.size(); ++i) {
+            const auto adjusted_end_idx_pos = is_read_operation ? *end_idx_pos : *end_idx_pos - 1;
+            const auto intersects = range_intersects<RawType>(range_start, range_end, *start_idx_pos, adjusted_end_idx_pos);
             (*res)[i] = intersects;
             if (intersects)
                 ARCTICDB_DEBUG(log::version(), "range intersects at {}", i);
@@ -111,12 +119,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
     return res;
 }
 
-template std::unique_ptr<util::BitSet> build_bitset_for_index<
-        IndexSegmentReader,
-        TimeseriesIndex>(const index::IndexSegmentReader&, IndexRange, bool, bool, std::unique_ptr<util::BitSet>&&);
-template std::unique_ptr<util::BitSet> build_bitset_for_index<
-        IndexSegmentReader,
-        TableIndex>(const index::IndexSegmentReader&, IndexRange, bool, bool, std::unique_ptr<util::BitSet>&&);
-template std::unique_ptr<util::BitSet> build_bitset_for_index<
-        TestContainer, TimeseriesIndex>(const TestContainer&, IndexRange, bool, bool, std::unique_ptr<util::BitSet>&&);
-} // namespace arcticdb::pipelines
+template std::unique_ptr<util::BitSet> build_bitset_for_index<IndexSegmentReader, TimeseriesIndex>(const index::IndexSegmentReader&,  IndexRange, bool, bool, bool, std::unique_ptr<util::BitSet>&&);
+template std::unique_ptr<util::BitSet> build_bitset_for_index<IndexSegmentReader, TableIndex>(const index::IndexSegmentReader&,  IndexRange, bool, bool, bool, std::unique_ptr<util::BitSet>&&);
+template std::unique_ptr<util::BitSet> build_bitset_for_index<TestContainer, TimeseriesIndex>(const TestContainer&,  IndexRange, bool, bool, bool, std::unique_ptr<util::BitSet>&&);
+} //namespace arcticdb

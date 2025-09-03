@@ -100,7 +100,7 @@ struct IndexRange {
     friend bool overlaps(const IndexRange& left, const IndexRange& right) {
         if (!left.specified_ || !right.specified_)
             return true;
-
+        
         return left.start_ == right.start_ && left.end_ == right.end_;
     }
 
