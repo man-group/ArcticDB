@@ -667,3 +667,47 @@ def test_project_dynamic_schema_complex(lmdb_version_store_dynamic_schema_v1):
     table = lib.read(sym, query_builder=q).data
     expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
+
+
+def test_aggregation_empty_slices(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    df_1 = pd.DataFrame({
+        "group_col": [chr(ord("a")+i) for i in range(5)],
+        "mean_col": np.arange(0, 5, dtype=np.float64),
+        "sum_col": np.arange(0, 5, dtype=np.float64),
+        "min_col": np.arange(0, 5, dtype=np.float64),
+        "max_col": np.arange(0, 5, dtype=np.float64),
+        "count_col": np.arange(0, 5, dtype=np.float64),
+    })
+    df_2 = pd.DataFrame({
+        "group_col": [chr(ord("a")+i+10) for i in range(5)],
+    })
+    lib.write(sym, df_1, dynamic_strings=True)
+    lib.append(sym, df_2, dynamic_strings=True)
+
+    q = QueryBuilder()
+    q.groupby("group_col").agg({
+        "mean_col": "mean",
+        "sum_col": "sum",
+        "min_col": "min",
+        "max_col": "max",
+        "count_col": "count",
+    })
+
+    table = lib.read(sym, query_builder=q).data
+    print(table.to_pandas().sort_index())
+    import polars as pl
+    print(pl.from_arrow(table.column("mean_col")))
+    # sum_col is correctly filled with 0s instead of nulls
+    assert pc.count(table.column("sum_col"), mode="only_null") == 0
+    # TODO: Fix the TODOs in `CopyToBufferTask` to make num_nulls=5 as expected
+    # For this test it so happens that one present and one missing value end up in the same bucket.
+    # Copying then default initializes the missing values instead of setting the validity bitmap.
+    assert pc.count(table.column("mean_col"), mode="only_null") == 4
+    assert pc.count(table.column("min_col"), mode="only_null") == 4
+    assert pc.count(table.column("max_col"), mode="only_null") == 4
+    assert pc.count(table.column("count_col"), mode="only_null") == 4
+    expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
