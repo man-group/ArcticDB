@@ -366,15 +366,17 @@ class ChunkedBufferImpl {
         }
     }
 
-    std::vector<std::pair<uint8_t*, size_t>> byte_blocks_at(size_t offset, size_t bytes) {
-        check_bytes(offset, bytes);
+    // Returns a vector of continuous buffers, each designated by a pointer and size
+    // Similar to `bytes_at` but will work if the requested range spans multiple continuous blocks.
+    std::vector<std::pair<uint8_t*, size_t>> byte_blocks_at(size_t pos_bytes, size_t required_bytes) {
+        check_bytes(pos_bytes, required_bytes);
         std::vector<std::pair<uint8_t*, size_t>> result;
-        auto [block, pos, block_index] = block_and_offset(offset);
-        while(bytes > 0) {
+        auto [block, pos, block_index] = block_and_offset(pos_bytes);
+        while(required_bytes > 0) {
             block = blocks_[block_index];
-            const auto size_to_write = std::min(bytes, block->bytes() - pos);
+            const auto size_to_write = std::min(required_bytes, block->bytes() - pos);
             result.push_back({block->data() + pos, size_to_write});
-            bytes -= size_to_write;
+            required_bytes -= size_to_write;
             ++block_index;
             pos = 0;
         }
