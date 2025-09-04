@@ -10,6 +10,7 @@ from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.options import OutputFormat
 import pyarrow as pa
+import pyarrow.compute as pc
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     ENDIANNESS,
@@ -17,7 +18,7 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
-from arcticdb.util.test import get_sample_dataframe
+from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
 
@@ -625,3 +626,44 @@ def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_
     q = q[q["col"] < 5]
     received = stringify_dictionary_encoded_columns(lib.read(sym, query_builder=q).data)
     assert expected.equals(received)
+
+
+def test_project_dynamic_schema(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    table_1 = pa.table({"a": pa.array([1, 2])})
+    table_2 = pa.table({"a": pa.array([3, 4]), "b": pa.array([1, 2])})
+    table_3 = pa.table({"b": pa.array([3, 4])})
+    lib.write(sym, table_1.to_pandas())
+    lib.append(sym, table_2.to_pandas())
+    lib.append(sym, table_3.to_pandas())
+    q = QueryBuilder()
+    q = q.apply("c", q["a"] * q["b"] + 10)
+    received = lib.read(sym, query_builder=q).data
+    expected = pa.concat_tables([table_1, table_2, table_3], promote_options="permissive")
+    expected_new_col = pc.add(pc.multiply(expected.column("a"), expected.column("b")), 10)
+    expected = expected.append_column("c", expected_new_col)
+    assert expected.equals(received)
+
+
+def test_project_dynamic_schema_complex(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    df = pd.DataFrame({
+        "int_col_1": np.arange(0, 10, dtype=np.int16),
+        "int_col_2": np.arange(10, 20, dtype=np.int32),
+        "float_col": np.arange(20, 30, dtype=np.float64),
+    })
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(sym, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.apply("new_float_1", q["int_col_1"] / q["float_col"] + 1)
+    q = q.apply("new_float_2", q["int_col_2"] * q["new_float_1"])
+
+    table = lib.read(sym, query_builder=q).data
+    expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
