@@ -311,7 +311,7 @@ class ChunkedBufferImpl {
 
     uint8_t* bytes_at(size_t pos_bytes, size_t required) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        util::check(pos + required <= block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
+        util::check(pos + required <= block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos + required, block->bytes());
         return &(*block)[pos];
     }
 
@@ -366,21 +366,21 @@ class ChunkedBufferImpl {
         }
     }
 
-    void memset_buffer(size_t offset, size_t bytes, char value) {
-        auto [block, pos, block_index] = block_and_offset(offset);
-        while(bytes > 0) {
-            const auto size_to_write = block->bytes() - pos;
-            memset(block->data() + pos, size_to_write, value);
-            bytes -= size_to_write;
-            if(bytes > 0) {
-                ++block_index;
-                if(block_index == blocks_.size())
-                    return;
-
-                block = blocks_[block_index];
-                pos = 0;
-            }
+    // Returns a vector of continuous buffers, each designated by a pointer and size
+    // Similar to `bytes_at` but will work if the requested range spans multiple continuous blocks.
+    std::vector<std::pair<uint8_t*, size_t>> byte_blocks_at(size_t pos_bytes, size_t required_bytes) {
+        check_bytes(pos_bytes, required_bytes);
+        std::vector<std::pair<uint8_t*, size_t>> result;
+        auto [block, pos, block_index] = block_and_offset(pos_bytes);
+        while(required_bytes > 0) {
+            block = blocks_[block_index];
+            const auto size_to_write = std::min(required_bytes, block->bytes() - pos);
+            result.push_back({block->data() + pos, size_to_write});
+            required_bytes -= size_to_write;
+            ++block_index;
+            pos = 0;
         }
+        return result;
     }
 
     template<typename T>
