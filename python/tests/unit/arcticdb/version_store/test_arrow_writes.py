@@ -233,6 +233,41 @@ def test_update(lmdb_version_store_arrow, existing_data):
     assert expected.equals(received)
 
 
+@pytest.mark.xfail(reason="SDKLJFCSDLIHSDF")
+@pytest.mark.parametrize(
+    "date_range",
+    [
+        # (pd.Timestamp("2025-01-01 12:00:00"), pd.Timestamp("2025-01-05 12:00:00")),
+        (pd.Timestamp("2025-01-02 12:00:00"), pd.Timestamp("2025-01-03 12:00:00")),
+        # (pd.Timestamp("2025-01-01 12:00:00"), None),
+        # (None, pd.Timestamp("2025-01-03 12:00:00")),
+    ]
+)
+def test_update_with_date_range(lmdb_version_store_arrow, date_range):
+    lib = lmdb_version_store_arrow
+    sym = "test_update_with_date_range"
+    reference_sym = "reference"
+    write_table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-05"), pd.Timestamp("2025-01-06")], pa.timestamp("ns")),
+            "col": pa.array([0, 1, 2, 3, 4, 5], pa.int64())
+        }
+    )
+    lib.write(reference_sym, write_table.to_pandas().set_index("ts"))
+    lib.write(sym, write_table)
+    update_table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "col": pa.array([6, 7], pa.int64())
+        }
+    )
+    lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
+    # lib.update(sym, update_table, date_range=date_range)
+    expected = lib.read(reference_sym, output_format="pandas").data
+    print("fin")
+
+
+
 @pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])
 @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
 def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
