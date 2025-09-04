@@ -60,7 +60,7 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         auto start_pos = std::lower_bound(
             end_index_col_begin,
             end_index_col_end,
-            range_start + 1
+            range_start
         );
 
         if(start_pos == end_idx_col.template end<IndexTagType>()) {
