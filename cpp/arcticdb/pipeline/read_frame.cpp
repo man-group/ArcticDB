@@ -763,13 +763,12 @@ public:
         return context_row.slice_and_key().slice_.row_range.first;
     }
 
-    void backfill_all_zero_validity_bitmaps_up_to(std::optional<size_t> up_to_block_offset) {
+    void backfill_all_zero_validity_bitmaps_up_to(size_t up_to_block_offset) {
         // Fills up all validity bitmaps with zeros from `column_block_idx_` until reaching `up_to_block_offset`.
-        // If `up_to_block_offset` is `std::nullopt` then fills up until the end of the column.
         const auto& block_offsets = column_.block_offsets();
-        util::check(!up_to_block_offset.has_value() || up_to_block_offset.value() <= block_offsets.back(), "up_to_block_offset outside of range");
-        for (; column_block_idx_ < block_offsets.size() - 1; ++column_block_idx_) {
-            if (up_to_block_offset.has_value() && block_offsets.at(column_block_idx_) >= up_to_block_offset.value()) {
+        util::check(up_to_block_offset <= block_offsets.back(), "up_to_block_offset {} outside of range {}", up_to_block_offset, block_offsets.back());
+        for (; column_block_idx_ < block_offsets.size() - 1 && block_offsets.at(column_block_idx_) < up_to_block_offset; ++column_block_idx_) {
+            if (block_offsets.at(column_block_idx_) >= up_to_block_offset) {
                 break;
             }
             auto rows = (block_offsets.at(column_block_idx_ + 1) - block_offsets.at(column_block_idx_)) / type_bytes_;
@@ -777,24 +776,28 @@ public:
         }
     }
 
+    void backfill_up_to_frame_offset(size_t up_to) {
+        if (pos_ != up_to) {
+            const auto num_rows = up_to - pos_;
+            const auto start_row = pos_ - frame_.offset();
+            const auto end_row = up_to - frame_.offset();
+            if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
+                handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
+            } else if (output_format_ != OutputFormat::ARROW || default_value_.has_value()) {
+                // Arrow does not care what values are in the main buffer where the validity bitmap is zero
+                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
+            }
+            if (output_format_ == OutputFormat::ARROW && !default_value_.has_value()) {
+                backfill_all_zero_validity_bitmaps_up_to(end_row * type_bytes_);
+            }
+        }
+    }
+
     void reduce(PipelineContextRow &context_row){
         auto &slice_and_key = context_row.slice_and_key();
         auto sz_to_advance = slice_and_key.slice_.row_range.diff();
         auto current_pos = context_row.slice_and_key().slice_.row_range.first;
-        if (current_pos != pos_) {
-            const auto num_rows = current_pos - pos_;
-            const auto start_row = pos_ - frame_.offset();
-            const auto end_row = current_pos - frame_.offset();
-            if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
-                handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
-            } else if (output_format_ != OutputFormat::ARROW) {
-                // Arrow does not care what values are in the main buffer where the validity bitmap is zero
-                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
-            }
-            if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps_up_to(end_row * type_bytes_);
-            }
-        }
+        backfill_up_to_frame_offset(current_pos);
         pos_ = current_pos + sz_to_advance;
         if (output_format_ == OutputFormat::ARROW) {
             ++column_block_idx_;
@@ -804,20 +807,8 @@ public:
     void finalize() {
         const auto total_rows = frame_.row_count();
         const auto end =  frame_.offset() + total_rows;
-        if(pos_ != end) {
-            util::check(pos_ < end, "Overflow in finalize {} > {}", pos_, end);
-            const auto num_rows = end - pos_;
-            const auto start_row = pos_ - frame_.offset();
-            if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
-                handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
-            } else if (output_format_ != OutputFormat::ARROW) {
-                // Arrow does not care what values are in the main buffer where the validity bitmap is zero
-                column_.default_initialize_rows(start_row, num_rows, false, default_value_);
-            }
-            if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps_up_to(std::nullopt);
-            }
-        }
+        util::check(pos_ <= end, "Overflow in finalize {} > {}", pos_, end);
+        backfill_up_to_frame_offset(end);
     }
 };
 

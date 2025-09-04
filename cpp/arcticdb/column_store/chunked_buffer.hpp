@@ -311,7 +311,7 @@ class ChunkedBufferImpl {
 
     uint8_t* bytes_at(size_t pos_bytes, size_t required) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
-        util::check(pos + required <= block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos, block->bytes());
+        util::check(pos + required <= block->bytes(), "Block overflow, position {} is greater than block capacity {}", pos + required, block->bytes());
         return &(*block)[pos];
     }
 
@@ -366,21 +366,19 @@ class ChunkedBufferImpl {
         }
     }
 
-    void memset_buffer(size_t offset, size_t bytes, char value) {
+    std::vector<std::pair<uint8_t*, size_t>> byte_blocks_at(size_t offset, size_t bytes) {
+        check_bytes(offset, bytes);
+        std::vector<std::pair<uint8_t*, size_t>> result;
         auto [block, pos, block_index] = block_and_offset(offset);
         while(bytes > 0) {
-            const auto size_to_write = block->bytes() - pos;
-            memset(block->data() + pos, size_to_write, value);
+            block = blocks_[block_index];
+            const auto size_to_write = std::min(bytes, block->bytes() - pos);
+            result.push_back({block->data() + pos, size_to_write});
             bytes -= size_to_write;
-            if(bytes > 0) {
-                ++block_index;
-                if(block_index == blocks_.size())
-                    return;
-
-                block = blocks_[block_index];
-                pos = 0;
-            }
+            ++block_index;
+            pos = 0;
         }
+        return result;
     }
 
     template<typename T>
