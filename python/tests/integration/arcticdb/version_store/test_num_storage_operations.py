@@ -292,7 +292,7 @@ def get_num_data_keys_intersecting_date_range(index, start, end, exclude_fully_i
     count = 0
     for _, row in index.reset_index().iterrows():
         # end is inclusive when doing date_range but end_index in the column is exclusive
-        if (start is None or start < row["end_index"]) and (end is None or end >= row["start_index"]):
+        if (start is None or start <= row["end_index"]) and (end is None or end >= row["start_index"]):
             if exclude_fully_included:
                 # When reading during an update we should only read the slices which include both elements within the
                 # range and elements outside the range.
@@ -363,7 +363,9 @@ def test_date_range_num_reads(s3_store_factory, clear_query_stats, dynamic_schem
         qs.reset_stats()
         assert_frame_equal(result_df, expected_df)
 
-        expected_data_keys = get_num_data_keys_intersecting_date_range(index, date_range_start, date_range_end)
+        expected_data_keys = get_num_data_keys_intersecting_date_range(
+            index, date_range_start, date_range_end, exclude_fully_included=True
+        )
         assert sum_operations_by_type(stats, "S3_GetObject") == expected_data_keys + 2
 
 
@@ -400,12 +402,12 @@ def test_update_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, u
         expected_data_keys = get_num_data_keys_intersecting_date_range(
             index, update_range_start, update_range_end, exclude_fully_included=True
         )
-        if update_range_start == pd.Timestamp(12) and update_range_end == pd.Timestamp(12):
-            # Currently if we're updating a range completely within a single slice (as the case for 12-12) we read each
-            # of these slices twice:
-            # - Once to construct the new slice before the updated range
-            # - Second time to construct the new slice after the updated range
-            expected_data_keys *= 2
+        # if update_range_start == pd.Timestamp(12) and update_range_end == pd.Timestamp(12):
+        # Currently if we're updating a range completely within a single slice (as the case for 12-12) we read each
+        # of these slices twice:
+        # - Once to construct the new slice before the updated range
+        # - Second time to construct the new slice after the updated range
+        # expected_data_keys *= 2
 
         # Update does 4 extra reads to the data keys:
         # - 2 reads of VERSION_REF
