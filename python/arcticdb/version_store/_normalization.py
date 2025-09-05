@@ -705,6 +705,7 @@ class ArrowTableNormalizer(Normalizer):
             new_columns,
             schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
         )
+
     def normalize(self, table, **kwargs):
         pa_record_batches = table.to_batches()
         arcticdb_record_batches = []

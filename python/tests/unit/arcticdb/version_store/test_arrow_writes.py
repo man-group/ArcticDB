@@ -237,10 +237,10 @@ def test_update(lmdb_version_store_arrow, existing_data):
 @pytest.mark.parametrize(
     "date_range",
     [
-        # (pd.Timestamp("2025-01-01 12:00:00"), pd.Timestamp("2025-01-05 12:00:00")),
+        (pd.Timestamp("2025-01-01 12:00:00"), pd.Timestamp("2025-01-05 12:00:00")),
         (pd.Timestamp("2025-01-02 12:00:00"), pd.Timestamp("2025-01-03 12:00:00")),
-        # (pd.Timestamp("2025-01-01 12:00:00"), None),
-        # (None, pd.Timestamp("2025-01-03 12:00:00")),
+        (pd.Timestamp("2025-01-01 12:00:00"), None),
+        (None, pd.Timestamp("2025-01-03 12:00:00")),
     ]
 )
 def test_update_with_date_range(lmdb_version_store_arrow, date_range):
