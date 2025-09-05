@@ -112,7 +112,6 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
 SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches) {
     SegmentInMemory seg;
     if (record_batches.empty()) {
-        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         return seg;
     }
     auto record_batch = record_batches.cbegin();
