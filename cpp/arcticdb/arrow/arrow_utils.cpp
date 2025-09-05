@@ -109,10 +109,11 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
     }
 }
 
-SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches) {
+std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches,
+                                                                        const std::optional<std::string>& index_name) {
     SegmentInMemory seg;
     if (record_batches.empty()) {
-        return seg;
+        return {seg, std::nullopt};
     }
     auto record_batch = record_batches.cbegin();
     auto num_columns = record_batch->nb_columns();
@@ -120,11 +121,19 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
     std::vector<DataType> data_types;
     std::vector<ChunkedBuffer> chunked_buffers(num_columns);
     data_types.reserve(num_columns);
+    std::optional<size_t> index_column_position;
     for (size_t idx = 0; idx < num_columns; ++idx) {
         const auto& array = record_batch->get_column(idx);
+        if (index_name.has_value() && array.name().has_value() && *array.name() == *index_name) {
+            index_column_position = idx;
+        }
         const auto arrow_data_type = array.data_type();
         const auto arcticdb_data_type = arcticdb_type_from_arrow_type(arrow_data_type);
         data_types.emplace_back(arcticdb_data_type);
+    }
+    if (index_name.has_value()) {
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(index_column_position.has_value(),
+                                                        "Specified index column name {} not present in data", *index_name);
     }
     uint64_t total_rows = std::accumulate(record_batches.cbegin(), record_batches.cend(), uint64_t(0),[](const uint64_t& accum, const sparrow::record_batch& record_batch) {
         return accum + record_batch.nb_rows();
@@ -168,16 +177,22 @@ SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& 
         }
         rows += *num_rows;
     }
-    for (size_t idx = 0; idx < num_columns; ++idx) {
-        // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
+    if (index_column_position.has_value()) {
+        auto idx = *index_column_position;
         seg.add_column(scalar_field(data_types.at(idx), column_names[idx]),
                        std::make_shared<Column>(make_scalar_type(data_types.at(idx)), Sparsity::NOT_PERMITTED, std::move(chunked_buffers.at(idx))));
-        // Cannot just use seg.set_row_data, as bool columns are still in a packed bitset representation, and so would
-        // be marked as sparse
-        seg.column(idx).set_row_data(seg.column(idx).row_count() - 1);
     }
-    seg.set_row_id(static_cast<ssize_t>(total_rows) - 1);
-    return seg;
+    for (size_t idx = 0; idx < num_columns; ++idx) {
+        if (!index_column_position.has_value() || idx != *index_column_position) {
+            // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
+            seg.add_column(scalar_field(data_types.at(idx), column_names[idx]),
+                           std::make_shared<Column>(make_scalar_type(data_types.at(idx)), Sparsity::NOT_PERMITTED, std::move(chunked_buffers.at(idx))));
+        }
+    }
+    // Cannot just use seg.set_row_data if bool columns are still in a packed bitset representation, as they would
+    // be marked as sparse. In that case, use seg.column(idx).set_row_data(seg.column(idx).row_count() - 1);
+    seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
+    return {seg, index_column_position};
 }
 
 } // namespace arcticdb

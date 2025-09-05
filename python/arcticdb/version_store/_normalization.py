@@ -722,8 +722,6 @@ class ArrowTableNormalizer(Normalizer):
             check(isinstance(index_column, str), "Arrow index column specifier must be a string")
             norm_metadata.arrow_table.has_index = True
             norm_metadata.arrow_table.index_column_name = index_column
-            norm_metadata.arrow_table.index_column_position = table.column_names.index(index_column)
-            check (norm_metadata.arrow_table.index_column_position == 0, "Non-first Arrow index column not yet supported")
         return arcticdb_record_batches, norm_metadata
 
     def denormalize(self, item, norm_meta):
@@ -738,6 +736,12 @@ class ArrowTableNormalizer(Normalizer):
             # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
         elif input_type == "arrow_table":
+            if norm_meta.arrow_table.has_index:
+                index_column_position = norm_meta.arrow_table.index_column_position
+                # TODO: Handle column selection
+                if index_column_position != 0 and index_column_position < item.num_columns:
+                    # TODO: Is this zero-copy? Will need to handle in the C++ layer if not
+                    item = item.select(list(range(1, index_column_position + 1)) + [0] + list(range(index_column_position + 1, item.num_columns)))
             return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")

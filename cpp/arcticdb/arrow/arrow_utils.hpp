@@ -18,6 +18,7 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
 
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment);
 
-SegmentInMemory arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches);
+std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches,
+                                                                        const std::optional<std::string>& index_name = std::nullopt);
 
 } // namespace arcticdb

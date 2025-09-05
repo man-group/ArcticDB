@@ -170,6 +170,15 @@ def test_write_with_index(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+def test_write_with_index_not_first_column(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_with_index_not_first_column"
+    table = pa.table({"col": pa.array([0, 1], pa.int64()), "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns"))})
+    lib.write(sym, table, index_column="ts")
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
 @pytest.mark.parametrize("existing_data", [True, False])
 def test_append(lmdb_version_store_arrow, existing_data):
     lib = lmdb_version_store_arrow
@@ -211,14 +220,14 @@ def test_update(lmdb_version_store_arrow, existing_data):
                 "col": pa.array([0, 1, 2, 3], pa.int64())
             }
         )
-        lib.write(sym, write_table)
+        lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
             "ts": pa.array([pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
             "col": pa.array([4, 5], pa.int64())
         }
     )
-    lib.update(sym, update_table, upsert=not existing_data)
+    lib.update(sym, update_table, upsert=not existing_data, index_column="ts")
 
     received = lib.read(sym).data
     if existing_data:
@@ -305,7 +314,7 @@ def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_
     table = pa.Table.from_pandas(df)
     # from_pandas puts index columns on the end, put it back at the front
     table = table.select(["ts"] + [f"col{idx}" for idx in range(num_cols)])
-    lib.write(sym, table)
+    lib.write(sym, table, index="ts")
     received_written_as_arrow = lib.read(sym).data
     index_written_as_arrow = lib_tool.read_index(sym)
 
@@ -403,14 +412,14 @@ def test_staging_without_sorting(version_store_factory, method):
         }
     )
     if method == "write_parallel":
-        lib.write(sym, table_0, parallel=True)
-        lib.write(sym, table_1, parallel=True)
+        lib.write(sym, table_0, parallel=True, index_column="ts")
+        lib.write(sym, table_1, parallel=True, index_column="ts")
     elif method == "write_incomplete":
-        lib.write(sym, table_0, incomplete=True)
-        lib.write(sym, table_1, incomplete=True)
+        lib.write(sym, table_0, incomplete=True, index_column="ts")
+        lib.write(sym, table_1, incomplete=True, index_column="ts")
     elif method == "append":
-        lib.append(sym, table_0, incomplete=True)
-        lib.append(sym, table_1, incomplete=True)
+        lib.append(sym, table_0, incomplete=True, index_column="ts")
+        lib.append(sym, table_1, incomplete=True, index_column="ts")
     elif method == "stage":
         lib.stage(sym, table_0)
         lib.stage(sym, table_1)
@@ -445,8 +454,8 @@ def test_staging_with_sorting(version_store_factory):
             "col2": pa.array([23, 24, 25], pa.uint32()),
         }
     )
-    lib.stage(sym, table_0, sort_on_index=True)
-    lib.stage(sym, table_1, sort_on_index=True)
+    lib.stage(sym, table_0, sort_on_index=True, index_column="ts")
+    lib.stage(sym, table_1, sort_on_index=True, index_column="ts")
 
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)

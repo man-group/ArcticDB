@@ -285,16 +285,20 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     } else {
         util::check(res->norm_meta.has_arrow_table(), "Unexpected non-Arrow norm metadata provided with Arrow data");
+        const auto& arrow_norm_metadata = res->norm_meta.arrow_table();
         const auto& record_batches = std::get<std::vector<RecordBatchData>>(item);
         std::vector<sparrow::record_batch> sp_record_batches;
         sp_record_batches.reserve(record_batches.size());
         for (const auto& record_batch: record_batches) {
             sp_record_batches.emplace_back(&record_batch.array_, &record_batch.schema_);
         }
-        res->seg = arrow_data_to_segment(sp_record_batches);
-        res->seg->descriptor().set_id(stream_name);
-        res->num_rows = res->seg->row_count();
-        const auto& arrow_norm_metadata = res->norm_meta.arrow_table();
+        if (arrow_norm_metadata.has_index()) {
+            auto [seg, index_column_position] = arrow_data_to_segment(sp_record_batches, arrow_norm_metadata.index_column_name());
+            res->seg = seg;
+            res->norm_meta.mutable_arrow_table()->set_index_column_position(*index_column_position);
+        } else {
+            res->seg = arrow_data_to_segment(sp_record_batches).first;
+        }
         if (arrow_norm_metadata.has_index()) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     !res->seg->columns().empty(),
@@ -309,6 +313,8 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->seg->descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
             res->index = RowCountIndex{};
         }
+        res->seg->descriptor().set_id(stream_name);
+        res->num_rows = res->seg->row_count();
     }
     res->set_index_range();
     res->desc().set_id(stream_name);
