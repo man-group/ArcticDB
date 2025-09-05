@@ -112,7 +112,7 @@ struct IndexRange {
         log::version().debug("Overlaps Left: {} {}", left.start_, left.end_);
         log::version().debug("Overlaps Right: {} {}", right.start_, right.end_);
 
-        return left.start_ == right.start_ || left.end_ == right.end_;
+        return left.start_ == right.start_ && left.end_ == right.end_;
     }
 
     void adjust_open_closed_interval() {

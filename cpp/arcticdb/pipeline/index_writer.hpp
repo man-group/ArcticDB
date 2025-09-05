@@ -99,14 +99,14 @@ public:
         }
 
         bool new_col_group = !current_col_.has_value() || *current_col_ < slice.col_range.first;
-        auto has_val = !current_row_.has_value();
-        auto is_valid_col = *current_col_ == slice.col_range.first;
-        auto is_valid_row = *current_row_ < slice.row_range.first;
-        auto is_valid = (is_valid_col && is_valid_row);
+        bool has_val = !current_row_.has_value();
+        bool is_valid_col = *current_col_ == slice.col_range.first;
+        bool is_valid_row = *current_row_ < slice.row_range.first;
+        bool is_valid = (is_valid_col && is_valid_row);
         try {
             util::check_arg(has_val || new_col_group || is_valid,
-                            "expected increasing row group, last col range left value {}, arg {}",
-                            current_col_.value_or(-1), slice.col_range
+                            "expected increasing row group, last col range left value {}, col arg {}, row left value {}, row arg {}",
+                            current_col_.value_or(-1), slice.col_range, current_row_.value_or(-1), slice.row_range
             );
         } catch (const std::exception &e) {
             log::version().error("Error checking row group: {}", e.what());
