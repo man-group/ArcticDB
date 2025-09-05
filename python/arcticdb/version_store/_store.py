@@ -561,6 +561,7 @@ class NativeVersionStore:
         validate_index: bool = False,
         sort_on_index: bool = False,
         sort_columns: List[str] = None,
+        index_column: Optional[str] = None,
         **kwargs,
     ):
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
@@ -573,6 +574,7 @@ class NativeVersionStore:
             dynamic_strings=True,
             coerce_columns=None,
             norm_failure_options_msg=norm_failure_options_msg,
+            index_column=index_column,
         )
         if self._valid_item_type(item):
             return self.version_store.write_parallel(
@@ -747,6 +749,7 @@ class NativeVersionStore:
         incomplete: bool = False,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
+        index_column: Optional[str] = None,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -834,6 +837,7 @@ class NativeVersionStore:
             dynamic_strings,
             coerce_columns,
             self.norm_failure_options_msg_append,
+            index_column=index_column,
         )
 
         write_if_missing = kwargs.get("write_if_missing", True)
@@ -870,6 +874,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
         prune_previous_version: Optional[bool] = None,
+        index_column: Optional[str] = None,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -951,6 +956,7 @@ class NativeVersionStore:
             dynamic_strings,
             coerce_columns,
             self.norm_failure_options_msg_update,
+            index_column=index_column,
         )
 
         if self._valid_item_type(item):

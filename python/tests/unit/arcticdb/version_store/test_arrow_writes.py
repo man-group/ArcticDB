@@ -314,7 +314,7 @@ def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_
     table = pa.Table.from_pandas(df)
     # from_pandas puts index columns on the end, put it back at the front
     table = table.select(["ts"] + [f"col{idx}" for idx in range(num_cols)])
-    lib.write(sym, table, index="ts")
+    lib.write(sym, table, index_column="ts")
     received_written_as_arrow = lib.read(sym).data
     index_written_as_arrow = lib_tool.read_index(sym)
 
@@ -421,15 +421,15 @@ def test_staging_without_sorting(version_store_factory, method):
         lib.append(sym, table_0, incomplete=True, index_column="ts")
         lib.append(sym, table_1, incomplete=True, index_column="ts")
     elif method == "stage":
-        lib.stage(sym, table_0)
-        lib.stage(sym, table_1)
+        lib.stage(sym, table_0, index_column="ts")
+        lib.stage(sym, table_1, index_column="ts")
 
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1])
     received = lib.read(sym).data
     # TODO: Remove this when timeseries indexes with norm metadata implemented for Arrow
-    received = received.rename_columns({"time": "ts"})
+    # received = received.rename_columns({"time": "ts"})
     assert expected.equals(received)
 
 
@@ -461,8 +461,6 @@ def test_staging_with_sorting(version_store_factory):
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
     received = lib.read(sym).data
-    # TODO: Remove this when timeseries indexes with norm metadata implemented for Arrow
-    received = received.rename_columns({"time": "ts"})
     assert expected.equals(received)
 
 

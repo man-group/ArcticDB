@@ -313,7 +313,6 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->seg->descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
             res->index = RowCountIndex{};
         }
-        res->seg->descriptor().set_id(stream_name);
         res->num_rows = res->seg->row_count();
     }
     res->set_index_range();
