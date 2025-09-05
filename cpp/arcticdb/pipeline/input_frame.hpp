@@ -7,8 +7,6 @@
 
 #pragma once
 
-#include <sparrow/record_batch.hpp>
-
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
 #include <arcticdb/stream/index.hpp>
