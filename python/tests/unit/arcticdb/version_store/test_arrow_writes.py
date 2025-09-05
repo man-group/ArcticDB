@@ -165,7 +165,7 @@ def test_write_with_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_index"
     table = pa.table({"ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")), "col": pa.array([0, 1], pa.int64())})
-    lib.write(sym, table)
+    lib.write(sym, table, index_column="ts")
     received = lib.read(sym).data
     assert table.equals(received)
 

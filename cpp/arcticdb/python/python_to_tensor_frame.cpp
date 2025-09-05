@@ -284,6 +284,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 
         ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     } else {
+        util::check(res->norm_meta.has_arrow_table(), "Unexpected non-Arrow norm metadata provided with Arrow data");
         const auto& record_batches = std::get<std::vector<RecordBatchData>>(item);
         std::vector<sparrow::record_batch> sp_record_batches;
         sp_record_batches.reserve(record_batches.size());
@@ -293,9 +294,19 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         res->seg = arrow_data_to_segment(sp_record_batches);
         res->seg->descriptor().set_id(stream_name);
         res->num_rows = res->seg->row_count();
-        if (res->desc().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
+        const auto& arrow_norm_metadata = res->norm_meta.arrow_table();
+        if (arrow_norm_metadata.has_index()) {
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    !res->seg->columns().empty(),
+                    "Arrow index column specified but there are zero columns");
+            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                    is_time_type(res->seg->column(0).type().data_type()),
+                    "Specified Arrow index column has non-time type {}", res->seg->column(0).type().data_type());
+            res->seg->descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+            res->seg->descriptor().set_sorted(SortedValue::ASCENDING); // Maybe UNKNOWN?
             res->index = TimeseriesIndex{std::string(res->desc().field(0).name())};
         } else {
+            res->seg->descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
             res->index = RowCountIndex{};
         }
     }

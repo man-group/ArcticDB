@@ -456,6 +456,7 @@ class NativeVersionStore:
         dynamic_strings,
         coerce_columns,
         norm_failure_options_msg="",
+        index_column=None,
         **kwargs,
     ):
         dynamic_schema = resolve_defaults(
@@ -478,6 +479,7 @@ class NativeVersionStore:
                     coerce_columns=coerce_columns,
                     dynamic_schema=dynamic_schema,
                     empty_types=empty_types,
+                    index_column=index_column,
                     **kwargs,
                 )
         except ArcticDbNotYetImplemented as ex:
@@ -588,6 +590,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         pickle_on_failure: Optional[bool] = None,
         validate_index: bool = False,
+        index_column: Optional[str] = None,
         **kwargs,
     ) -> Optional[VersionedItem]:
         """
@@ -701,6 +704,7 @@ class NativeVersionStore:
             dynamic_strings,
             coerce_columns,
             norm_failure_options_msg,
+            index_column,
         )
         if self._valid_item_type(item):
             if parallel or incomplete:

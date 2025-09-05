@@ -24,6 +24,7 @@ import pickle
 from abc import ABCMeta, abstractmethod
 
 from arcticdb.dependencies import pyarrow as pa
+from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
@@ -713,7 +714,17 @@ class ArrowTableNormalizer(Normalizer):
             arcticdb_record_batch = RecordBatchData()
             pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
             arcticdb_record_batches.append(arcticdb_record_batch)
-        return arcticdb_record_batches, NormalizationMetadata()
+        norm_metadata = NormalizationMetadata()
+        index_column = kwargs.get("index_column", None)
+        if index_column is None:
+            norm_metadata.arrow_table.has_index = False
+        else:
+            check(isinstance(index_column, str), "Arrow index column specifier must be a string")
+            norm_metadata.arrow_table.has_index = True
+            norm_metadata.arrow_table.index_column_name = index_column
+            norm_metadata.arrow_table.index_column_position = table.column_names.index(index_column)
+            check (norm_metadata.arrow_table.index_column_position == 0, "Non-first Arrow index column not yet supported")
+        return arcticdb_record_batches, norm_metadata
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
@@ -726,7 +737,7 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
-        elif input_type is None:
+        elif input_type == "arrow_table":
             return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
@@ -1406,7 +1417,7 @@ class CompositeNormalizer(Normalizer):
         self.df.set_skip_df_consolidation()
 
     def _normalize(
-        self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
+        self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, index_column=None, **kwargs
     ):
         normalizer = self.get_normalizer_for_type(item)
 
@@ -1420,6 +1431,7 @@ class CompositeNormalizer(Normalizer):
             dynamic_strings=dynamic_strings,
             coerce_columns=coerce_columns,
             empty_types=empty_types,
+            index_column=index_column,
             **kwargs,
         )
 
