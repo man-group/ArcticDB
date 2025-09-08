@@ -375,7 +375,7 @@ jobs:
         if: matrix.os == 'linux' || matrix.os == 'macos'
         uses: actions/setup-node@v3.3.0
         with:
-          node-version: '16'
+          node-version: '20'
 
       - name: Install Azurite
         uses: nick-fields/retry@v3
