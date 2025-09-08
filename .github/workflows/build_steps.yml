@@ -437,8 +437,6 @@ jobs:
         run: |
           # find ssl directory where cacerts are (for Azure)
           openssl version -d 
-          # For node.js + azurite ssl compatibility
-          export NODE_OPTIONS="--openssl-legacy-provider"
           # list file descriptors and other limits of the runner
           ulimit -a
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
