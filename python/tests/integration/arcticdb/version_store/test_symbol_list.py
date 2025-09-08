@@ -126,8 +126,8 @@ def test_symbol_list_regex(basic_store):
 @pytest.mark.storage
 def test_symbol_list_read_only_compaction_needed(small_max_delta, object_version_store, compact_first):
     lib_write = object_version_store
-    if MACOS and ("azure" in lib_write.get_backing_store().lower()):
-        pytest.xfail(reason="MacOS problem with Azure (9713365654)")
+    # if MACOS and ("azure" in lib_write.get_backing_store().lower()):
+    #     pytest.xfail(reason="MacOS problem with Azure (9713365654)")
 
     lib_read = make_read_only(lib_write)
 
@@ -207,8 +207,8 @@ def test_deleted_symbol_with_tombstones(basic_store_tombstones_no_symbol_list):
 @pytest.mark.storage
 def test_empty_lib(basic_store):
     lib = basic_store
-    if MACOS and ("azure" in lib.get_backing_store().lower()):
-        pytest.xfail(reason="MacOS problem with Azure (9713365654)")
+    # if MACOS and ("azure" in lib.get_backing_store().lower()):
+    #     pytest.xfail(reason="MacOS problem with Azure (9713365654)")
     assert lib.list_symbols() == []
     lt = lib.library_tool()
     assert len(lt.find_keys(KeyType.SYMBOL_LIST)) == 1
@@ -217,8 +217,8 @@ def test_empty_lib(basic_store):
 @pytest.mark.storage
 def test_no_active_symbols(basic_store_prune_previous):
     lib = basic_store_prune_previous
-    if MACOS and ("azure" in lib.get_backing_store().lower()):
-        pytest.xfail(reason="MacOS problem with Azure (9713365654)")
+    # if MACOS and ("azure" in lib.get_backing_store().lower()):
+    #     pytest.xfail(reason="MacOS problem with Azure (9713365654)")
     for idx in range(20):
         lib.write(str(idx), idx)
     for idx in range(20):
@@ -233,8 +233,8 @@ def test_no_active_symbols(basic_store_prune_previous):
 @pytest.mark.storage
 def test_only_latest_compaction_key_is_used(basic_store):
     lib: NativeVersionStore = basic_store
-    if MACOS and ("azure" in lib.get_backing_store().lower()):
-        pytest.xfail(reason="MacOS problem with Azure (9713365654)")
+    # if MACOS and ("azure" in lib.get_backing_store().lower()):
+    #     pytest.xfail(reason="MacOS problem with Azure (9713365654)")
     lt = lib.library_tool()
 
     # Preserve an old compacted segment
@@ -265,8 +265,8 @@ def test_only_latest_compaction_key_is_used(basic_store):
 def test_turning_on_symbol_list_after_a_symbol_written(object_store_factory, write_another):
     # The if(!maybe_last_compaction) case
     lib: NativeVersionStore = object_store_factory(symbol_list=False)
-    if MACOS and ("azure" in lib.get_backing_store().lower()):
-        pytest.xfail(reason="MacOS problem with Azure (9713365654)")
+    # if MACOS and ("azure" in lib.get_backing_store().lower()):
+    #     pytest.xfail(reason="MacOS problem with Azure (9713365654)")
 
     lib.write("a", 1)
     assert not lib.library_tool().find_keys(KeyType.SYMBOL_LIST)
