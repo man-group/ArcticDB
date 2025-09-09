@@ -21,7 +21,14 @@ from arcticdb_ext.storage import NativeVariantStorage
 from azure.core.exceptions import ResourceNotFoundError
 
 from .api import *
-from .utils import _LINUX, get_ephemeral_port, GracefulProcessUtils, wait_for_server_to_come_up, safer_rmtree, get_ca_cert_for_testing
+from .utils import (
+    _LINUX,
+    get_ephemeral_port,
+    GracefulProcessUtils,
+    wait_for_server_to_come_up,
+    safer_rmtree,
+    get_ca_cert_for_testing,
+)
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 from arcticdb.version_store.helper import add_azure_library_to_env
 
@@ -46,12 +53,14 @@ class AzureContainer(StorageFixture):
 
     def _get_policy(self) -> str:
         from azure.storage.blob import LinearRetry
+
         # The retry_policy instance will be modified by the pipeline, so cannot be constant
         return {
-            "connection_timeout": 1, 
-            "read_timeout": 2, 
-            "retry_policy": LinearRetry(retry_total=3, backoff=1), 
-            "connection_verify": self.factory.client_cert_file}
+            "connection_timeout": 1,
+            "read_timeout": 2,
+            "retry_policy": LinearRetry(retry_total=3, backoff=1),
+            "connection_verify": self.factory.client_cert_file,
+        }
 
     def _set_uri_and_client_azurite(self, auth: str):
         from azure.storage.blob import ContainerClient
@@ -65,7 +74,6 @@ class AzureContainer(StorageFixture):
 
         self.client = ContainerClient.from_connection_string(self.arctic_uri, self.container, **self._get_policy())
         # add connection_verify=False to bypass ssl checking
-
 
     def __init__(self, factory: Union["AzuriteStorageFixtureFactory", "AzureStorageFixtureFactory"]) -> None:
         from azure.storage.blob import ContainerClient
@@ -170,7 +178,9 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
 
     default_prefix: str = None
 
-    def __init__(self, port=0, working_dir: Optional[str] = None, use_ssl: bool = True, ssl_test_support: bool = True):
+    def __init__(
+        self, port=None, working_dir: Optional[str] = None, use_ssl: bool = True, ssl_test_support: bool = True
+    ):
         self.http_protocol = "https" if use_ssl else "http"
         self.port = port or get_ephemeral_port(1)
         self.endpoint_root = f"{self.http_protocol}://{self.host}:{self.port}"
@@ -184,7 +194,9 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         args = f"{shutil.which('azurite')} --blobPort {self.port} --blobHost {self.host} --queuePort 0 --tablePort 0 --skipApiVersionCheck --silent"
         if self.ssl_test_support:
             self.client_cert_dir = self.working_dir
-            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(self.client_cert_dir)
+            self.ca, self.key_file, self.cert_file, self.client_cert_file = get_ca_cert_for_testing(
+                self.client_cert_dir
+            )
         else:
             self.ca = ""
             self.key_file = ""
@@ -193,10 +205,14 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             self.client_cert_dir = ""
         if self.http_protocol == "https":
             args += f" --key {self.key_file} --cert {self.cert_file}"
-        self._p = GracefulProcessUtils.start_with_retry(url=self.endpoint_root, 
-                                                        service_name="azurite", num_retries=2, timeout=240,
-                                                        process_start_cmd=args,
-                                                        cwd=self.working_dir)            
+        self._p = GracefulProcessUtils.start_with_retry(
+            url=self.endpoint_root,
+            service_name="azurite",
+            num_retries=2,
+            timeout=240,
+            process_start_cmd=args,
+            cwd=self.working_dir,
+        )
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -208,7 +224,6 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         return AzureContainer(self)
 
     def cleanup_container(self, b: AzureContainer):
-
         def delete_container_safely(client, timeout):
             try:
                 client.delete_container(timeout=timeout)
@@ -224,19 +239,19 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
                     b._admin_client.close()
                 else:
                     delete_container_safely(b.client, timeout=3)
-                    
+
 
 def find_ca_certs():
     # Common CA certificates locations
     default_paths = ssl.get_default_verify_paths()
-    possible_paths =  [
+    possible_paths = [
         default_paths.cafile,
         default_paths.openssl_cafile_env,
         default_paths.openssl_cafile,
-        '/etc/ssl/certs/ca-certificates.crt',
-        '/usr/lib/ssl/certs/ca-certificates.crt',
-        '/etc/pki/tls/certs/ca-bundle.crt',
-        '/etc/ssl/cert.pem'
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/usr/lib/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/cert.pem",
     ]
     for path in possible_paths:
         if path and os.path.isfile(path):
@@ -253,21 +268,18 @@ def copy_ca_certs(source_path: str, new_filename: str) -> str:
     temp_dir = tempfile.gettempdir()
     destination_path = os.path.join(temp_dir, new_filename)
     shutil.copy2(source_path, destination_path)
-    os.chmod(destination_path, stat.S_IRUSR | stat.S_IWUSR | 
-                         stat.S_IRGRP | stat.S_IWGRP |  
-                         stat.S_IROTH | stat.S_IWOTH) 
+    os.chmod(destination_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP | stat.S_IROTH | stat.S_IWOTH)
     return destination_path
 
 
 class AzureStorageFixtureFactory(StorageFixtureFactory):
-
     endpoint: str
-    account_name : str
-    account_key : str
-    connection_string : str = None
+    account_name: str
+    account_key: str
+    connection_string: str = None
     default_container: str = None
     default_prefix: Optional[str] = None
-    client_cert_file : str = None
+    client_cert_file: str = None
     protocol: str = None
     clean_bucket_on_fixture_exit = True
 
@@ -291,19 +303,25 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
     def __str__(self):
         return f"[{type(self)}=Container:{self.default_container}], ConnectionString:{self.connection_string}"
 
-    def initialize_from_connection_sting(self, constr: str, container: str, prefix: str = None) -> "AzureStorageFixtureFactory":
+    def initialize_from_connection_sting(
+        self, constr: str, container: str, prefix: str = None
+    ) -> "AzureStorageFixtureFactory":
         def extract_from_regex(re_expr: str, constr: str) -> str:
             match = re.search(re_expr, constr)
             return match.group(1) if match else ""
 
-        if constr is None: get_logger().error(f"Azure connection string not available: {constr}") 
-        if container is None: get_logger().error(f"Azure container not available: {container}") 
+        if constr is None:
+            get_logger().error(f"Azure connection string not available: {constr}")
+        if container is None:
+            get_logger().error(f"Azure container not available: {container}")
         AzureStorageFixtureFactory.connection_string = constr
-        AzureStorageFixtureFactory.account_name = extract_from_regex(r'AccountName=([^;]+)', constr)
-        AzureStorageFixtureFactory.account_key = extract_from_regex(r'AccountKey=([^;]+)', constr)
-        AzureStorageFixtureFactory.protocol = extract_from_regex(r'DefaultEndpointsProtocol=([^;]+)', constr)
-        endpoint_suffix = extract_from_regex(r'EndpointSuffix=([^;]+)', constr)
-        AzureStorageFixtureFactory.endpoint = f"{AzureStorageFixtureFactory.protocol}://{AzureStorageFixtureFactory.account_name}.blob.{endpoint_suffix}"
+        AzureStorageFixtureFactory.account_name = extract_from_regex(r"AccountName=([^;]+)", constr)
+        AzureStorageFixtureFactory.account_key = extract_from_regex(r"AccountKey=([^;]+)", constr)
+        AzureStorageFixtureFactory.protocol = extract_from_regex(r"DefaultEndpointsProtocol=([^;]+)", constr)
+        endpoint_suffix = extract_from_regex(r"EndpointSuffix=([^;]+)", constr)
+        AzureStorageFixtureFactory.endpoint = (
+            f"{AzureStorageFixtureFactory.protocol}://{AzureStorageFixtureFactory.account_name}.blob.{endpoint_suffix}"
+        )
         AzureStorageFixtureFactory.default_container = container
         if prefix:
             AzureStorageFixtureFactory.default_prefix = prefix
@@ -312,7 +330,7 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
     def get_arctic_uri(self):
         url = f"azure://Container={self.default_container};Path_prefix={self.default_prefix}"
         if self.client_cert_file:
-           url += f";CA_cert_path={self.client_cert_file}"
+            url += f";CA_cert_path={self.client_cert_file}"
         if self.connection_string:
             url += f";{self.connection_string}"
         else:
@@ -323,10 +341,10 @@ class AzureStorageFixtureFactory(StorageFixtureFactory):
         return AzureContainer(self)
 
     def cleanup_container(self, b: AzureContainer):
-        b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")     
+        b.slow_cleanup(failure_consequence="The following delete bucket call will also fail. ")
         if len(b.libs_from_factory) > 0:
-                    get_logger().warning(f"Libraries not cleared remaining {b.libs_from_factory.keys()}")      
-                     
+            get_logger().warning(f"Libraries not cleared remaining {b.libs_from_factory.keys()}")
+
 
 def real_azure_from_environment_variables(
     shared_path: bool, native_config: Optional[NativeVariantStorage] = None, additional_suffix: str = ""
@@ -338,6 +356,7 @@ def real_azure_from_environment_variables(
         prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "") + additional_suffix
     out.initialize_from_connection_sting(
         constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
-        container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
-        prefix=prefix)
+        container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"),
+        prefix=prefix,
+    )
     return out
