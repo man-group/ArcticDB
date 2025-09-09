@@ -334,18 +334,18 @@ jobs:
           name: wheel-${{needs.compile.outputs.cibw_build}}
           path: ${{runner.temp}}
 
-      - name: Select Python (Linux)
-        if: matrix.os == 'linux'
-        run: |
-          #there are cp313 and cp313t
-          if [[ "${{env.python_impl_name}}" == "cp313" ]]; then
-            echo /opt/python/cp313-cp313/bin >> $GITHUB_PATH;
-          else
-            echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH;
-          fi
+      # - name: Select Python (Linux)
+      #   if: matrix.os == 'linux'
+      #   run: |
+      #     #there are cp313 and cp313t
+      #     if [[ "${{env.python_impl_name}}" == "cp313" ]]; then
+      #       echo /opt/python/cp313-cp313/bin >> $GITHUB_PATH;
+      #     else
+      #       echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH;
+      #     fi
 
       - name: Select Python (Windows and macOS)
-        if: matrix.os == 'windows' || matrix.os == 'macos'
+        # if: matrix.os == 'windows' || matrix.os == 'macos'
         uses: actions/setup-python@v4.7.1
         with:
           python-version: "3.${{inputs.python3}}"
