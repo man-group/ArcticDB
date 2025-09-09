@@ -396,7 +396,6 @@ jobs:
           fi
           python -m pip uninstall -y pytest-cpp || true # No longer works on 3.6
           # Downgrade to urllib3 1.23 to avoid breaking changes that affect azurite
-          python -m pip install urllib3==1.23
           python -m pip list
           echo -e "${{matrix.envs || ''}}" | tee -a $GITHUB_ENV
           if [[ -n "$MSYSTEM" ]] ; then
