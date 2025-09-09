@@ -314,7 +314,7 @@ jobs:
           ${{fromJSON(inputs.matrix)}}
     name: ${{matrix.type}}${{matrix.python_deps_id}}-${{matrix.version_cache_timeout}}
     runs-on: ${{matrix.distro}}
-    container: ${{matrix.os == 'linux' &&  matrix.container || null}}
+    # container: ${{matrix.os == 'linux' &&  matrix.container || null}}
     defaults:
       run: {shell: bash}
     services: ${{matrix.test_services}}
