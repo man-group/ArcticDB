@@ -18,6 +18,9 @@ from tempfile import mkdtemp
 
 from arcticdb.util.logger import get_logger
 from arcticdb_ext.storage import NativeVariantStorage
+import logging
+logger = logging.getLogger("azure")
+logger.setLevel(logging.DEBUG)
 from azure.core.exceptions import ResourceNotFoundError
 
 from .api import *
@@ -198,8 +201,7 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
         self._p = GracefulProcessUtils.start_with_retry(url=self.endpoint_root, 
                                                         service_name="azurite", num_retries=2, timeout=240,
                                                         process_start_cmd=args,
-                                                        cwd=self.working_dir,
-                                                        env=env)            
+                                                        cwd=self.working_dir)            
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
