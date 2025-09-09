@@ -39,7 +39,9 @@ def get_ephemeral_port(seed=0):
     while port < 65535:
         try:
             with socketserver.TCPServer(("localhost", port), None):
-                time.sleep(30 if ARCTICDB_USING_CONDA else 20)  # Hold the port open for a while to improve the chance of collision detection
+                time.sleep(
+                    30 if ARCTICDB_USING_CONDA else 20
+                )  # Hold the port open for a while to improve the chance of collision detection
                 return port
         except OSError as e:
             print(repr(e), file=sys.stderr)
@@ -61,19 +63,19 @@ class GracefulProcessUtils:
         print("About to run:", cmd)
         creation_flags = subprocess.CREATE_NEW_PROCESS_GROUP if _WINDOWS else 0
         return subprocess.Popen(cmd, creationflags=creation_flags, **kwargs)
-    
+
     @staticmethod
-    def start_with_retry(url: str, service_name: str, num_retries: int, timeout: int, 
-                         process_start_cmd: str, **kwargs):
+    def start_with_retry(url: str, service_name: str, num_retries: int, timeout: int, process_start_cmd: str, **kwargs):
         """Attempts to start the process up to specified times.
-        
+
         Each time will wait for service to be avil at specified url up to the specified timeout"""
-        for i in range(num_retries): # retry in case of connection problems
+        for i in range(num_retries):  # retry in case of connection problems
             try:
                 p = GracefulProcessUtils.start(process_start_cmd, **kwargs)
                 wait_for_server_to_come_up(url, service_name, p, timeout=timeout)
                 return p
-            except AssertionError:
+            except AssertionError as ex:
+                print(repr(ex))
                 try:
                     p.terminate()
                 except:
@@ -177,4 +179,4 @@ def get_ca_cert_for_testing(working_dir):
         cwd=working_dir,
         shell=True,
     )
-    return ca, key_file, cert_file, client_cert_file # Need to keep ca alive to authenticate the cert
+    return ca, key_file, cert_file, client_cert_file  # Need to keep ca alive to authenticate the cert
