@@ -193,8 +193,8 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             self.client_cert_dir = ""
         if self.http_protocol == "https":
             args += f" --key {self.key_file} --cert {self.cert_file}"
-        env = os.environ.copy()
-        env["NODE_OPTIONS"] = "--openssl-legacy-provider"
+        # env = os.environ.copy()
+        # env["NODE_OPTIONS"] = "--openssl-legacy-provider"
         self._p = GracefulProcessUtils.start_with_retry(url=self.endpoint_root, 
                                                         service_name="azurite", num_retries=2, timeout=240,
                                                         process_start_cmd=args,
