@@ -457,7 +457,8 @@ jobs:
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
-          VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1}}
+          VERSION_MAP_RELOAD_INTERVAL: ${{matrix.version_cache_timeout == 'NoCache' && 0 || -1
+          NODE_OPTIONS: --openssl-legacy-provider
 
       - name: Collect crash dumps (Windows)
         if: matrix.os == 'windows' && failure()
