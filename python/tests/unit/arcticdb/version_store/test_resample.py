@@ -15,6 +15,7 @@ from arcticdb import QueryBuilder
 from arcticdb.exceptions import ArcticDbNotYetImplemented, SchemaException, UserInputException
 from arcticdb.util.test import (
     assert_frame_equal,
+    assert_frame_equal_with_arrow,
     generic_resample_test,
     largest_numeric_type,
     common_sum_aggregation_dtype,
@@ -28,18 +29,6 @@ import itertools
 
 pytestmark = pytest.mark.pipeline
 
-
-ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
-
-def all_aggregations_dict(col):
-    return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
-
-# Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
-# See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
-def round(t, freq):
-    freq = pd.tseries.frequencies.to_offset(freq)
-    td = pd.Timedelta(freq)
-    return pd.Timestamp((t.value // td.value) * td.value)
 
 def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_range=None):
     """
@@ -61,15 +50,87 @@ def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_
     received = lib.read(sym, date_range=date_range, query_builder=q).data
     received = received.reindex(columns=sorted(received.columns))
 
-    assert_frame_equal(expected, received, check_dtype=False)
+    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+
+
+def generic_resample_test_with_arrow_support(
+        lib,
+        sym,
+        rule,
+        aggregations,
+        data,
+        date_range=None,
+        closed=None,
+        label=None,
+        offset=None,
+        origin=None,
+        drop_empty_buckets_for=None,
+        expected_types=None,
+):
+    """Wrapper around generic_resample_test that uses assert_frame_equal_with_arrow."""
+    from arcticdb.util.test import generic_resample_test
+    
+    # Store the original assert_frame_equal
+    import arcticdb.util.test as test_module
+    original_assert = test_module.assert_frame_equal
+    
+    # Temporarily replace it with our arrow-compatible version
+    test_module.assert_frame_equal = assert_frame_equal_with_arrow
+    
+    try:
+        result = generic_resample_test_with_arrow_support(
+            lib, sym, rule, aggregations, data, date_range, closed, label, offset, origin,
+            drop_empty_buckets_for, expected_types
+        )
+    finally:
+        # Restore the original function
+        test_module.assert_frame_equal = original_assert
+    
+    return result
+
+
+ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
+
+def all_aggregations_dict(col):
+    return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
+
+# Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
+# See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
+def round(t, freq):
+    freq = pd.tseries.frequencies.to_offset(freq)
+    td = pd.Timedelta(freq)
+    return pd.Timestamp((t.value // td.value) * td.value)
+
+def resample_test_with_any_output_format(lib, sym, rule, aggregations, date_range=None):
+    """
+    Perform a resampling in ArcticDB and compare it against the same query in Pandas.
+
+    This will remove all empty buckets mirroring ArcticDB's behavior. It cannot take additional parameters such as
+    orign and offset. In case such parameters are needed arcticdb.util.test.generic_resample_test can be used.
+
+    This can drop buckets even all columns are of float type while generic_resample_test needs at least one non-float
+    column.
+    """
+    # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
+    expected = lib.read(sym, date_range=date_range).data
+    # Pandas 1.X needs None as the first argument to agg with named aggregators
+    expected = expected.groupby(partial(round, freq=rule)).agg(None, **aggregations)
+    expected = expected.reindex(columns=sorted(expected.columns))
+    q = QueryBuilder()
+    q = q.resample(rule).agg(aggregations)
+    received = lib.read(sym, date_range=date_range, query_builder=q).data
+    received = received.reindex(columns=sorted(received.columns))
+
+    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
 
 
 @pytest.mark.parametrize("freq", ("min", "h", "D", "1h30min"))
 @pytest.mark.parametrize("date_range", (None, (pd.Timestamp("2024-01-02T12:00:00"), pd.Timestamp("2024-01-03T12:00:00"))))
 @pytest.mark.parametrize("closed", ("left", "right"))
 @pytest.mark.parametrize("label", ("left", "right"))
-def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
+def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym = "test_resampling"
     # Want an index with data every minute for 2 days, with additional data points 1 nanosecond before and after each
     # minute to catch off-by-one errors
@@ -84,7 +145,7 @@ def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
     df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
     lib.write(sym, df)
 
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         freq,
@@ -105,8 +166,9 @@ def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
 
 
 @pytest.mark.parametrize("closed", ("left", "right"))
-def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_store_v1, closed):
+def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_store_v1, closed, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym = "test_resampling_duplicated_index_value_on_segment_boundary"
     # Will group on microseconds
     df_0 = pd.DataFrame({"col": np.arange(4)}, index=np.array([0, 1, 2, 1000], dtype="datetime64[ns]"))
@@ -116,7 +178,7 @@ def test_resampling_duplicated_index_value_on_segment_boundary(lmdb_version_stor
     lib.append(sym, df_1)
     lib.append(sym, df_2)
 
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         "us",
@@ -137,7 +199,7 @@ class TestResamplingBucketInsideSegment:
         lib.write(sym, df)
     
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 52))
-        generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
+        resample_test_with_any_output_format(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
 
     @pytest.mark.parametrize("closed", ("left", "right"))
     def test_first_bucket_is_empy(self, lmdb_version_store_v1, closed):
@@ -155,7 +217,7 @@ class TestResamplingBucketInsideSegment:
         lib.write(sym, df)
     
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 49), dt.datetime(2023, 12, 7, 23, 59, 50))
-        generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
+        generic_resample_test_with_arrow_support(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
 
     @pytest.mark.parametrize("closed", ("left", "right"))
     def test_last_bucket_is_empty(self, lmdb_version_store_v1, closed):
@@ -174,7 +236,7 @@ class TestResamplingBucketInsideSegment:
         lib.write(sym, df)
     
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 49, 500000))
-        generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
+        generic_resample_test_with_arrow_support(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
     
     def test_inner_buckets_are_empty(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
@@ -191,18 +253,19 @@ class TestResamplingBucketInsideSegment:
         lib.write(sym, df)
     
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 55))
-        generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
+        resample_test_with_any_output_format(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
         
 
 
-def test_resampling_timezones(lmdb_version_store_v1):
+def test_resampling_timezones(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym = "test_resampling_timezones"
     # UK clocks go forward at 1am on March 31st in 2024
     index = pd.date_range("2024-03-31T00:00:00", freq="min", periods=240, tz="Europe/London")
     df = pd.DataFrame({"col": np.arange(len(index))}, index=index)
     lib.write(sym, df)
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         "h",
@@ -214,7 +277,7 @@ def test_resampling_timezones(lmdb_version_store_v1):
     index = pd.date_range("2024-10-27T00:00:00", freq="min", periods=240, tz="Europe/London")
     df = pd.DataFrame({"col": np.arange(len(index))}, index=index)
     lib.write(sym, df)
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         "h",
@@ -223,8 +286,9 @@ def test_resampling_timezones(lmdb_version_store_v1):
     )
 
 
-def test_resampling_nan_correctness(version_store_factory):
+def test_resampling_nan_correctness(version_store_factory, any_output_format):
     lib = version_store_factory(
+    lib.set_output_format(any_output_format)
         column_group_size=2,
         segment_row_size=2,
         dynamic_strings=True,
@@ -278,11 +342,12 @@ def test_resampling_nan_correctness(version_store_factory):
             }
         )
 
-    generic_resample_test(lib, sym, "us", agg_dict, df)
+    generic_resample_test_with_arrow_support(lib, sym, "us", agg_dict, df)
 
 
-def test_resampling_bool_columns(lmdb_version_store_tiny_segment):
+def test_resampling_bool_columns(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(any_output_format)
     sym = "test_resampling_bool_columns"
 
     idx = [0, 1, 1000, 1001, 2000, 2001, 3000, 3001]
@@ -293,7 +358,7 @@ def test_resampling_bool_columns(lmdb_version_store_tiny_segment):
     df = pd.DataFrame({"col": col}, index=idx)
     lib.write(sym, df)
 
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         "us",
@@ -310,8 +375,9 @@ def test_resampling_bool_columns(lmdb_version_store_tiny_segment):
     )
 
 
-def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_schema_v1):
+def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(any_output_format)
     sym = "test_resampling_dynamic_schema_types_changing"
     # Will group on microseconds
     idx_0 = [0, 1, 2, 1000]
@@ -326,7 +392,7 @@ def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_sch
     df_1 = pd.DataFrame({"col": col_1}, index=idx_1)
     lib.append(sym, df_1)
 
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         "us",
@@ -343,8 +409,9 @@ def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_sch
     )
 
 
-def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
+def test_resampling_empty_bucket_in_range(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym = "test_resampling_empty_bucket_in_range"
     # Group on microseconds, so bucket 1000-1999 will be empty
     idx = [0, 1, 2000, 2001]
@@ -367,7 +434,7 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
     )
     lib.write(sym, df)
 
-    generic_resample_test_with_empty_buckets(
+    resample_test_with_any_output_format(
         lib,
         sym,
         "us",
@@ -383,7 +450,7 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
     )
 
 
-def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_segment):
+def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_segment, any_output_format):
     # Covers a corner case where the date_range argument specifies that a row-slice is needed, but the bucket boundaries
     # mean that all of the index values required fall into a bucket being handled by the previous row-slice, and so
     # the call to ResampleClause::process produces a segment with no rows
@@ -394,6 +461,7 @@ def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny
     # Therefore the only index value from the second row slice remaining to be processed is 3000ns. But this is outside
     # the specified date range, and so this call to ResampleClause::process produces a segment with no rows
     lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(any_output_format)
     sym = "test_resampling_row_slice_responsible_for_no_buckets"
     df = pd.DataFrame(
         {
@@ -402,7 +470,7 @@ def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny
         index=[pd.Timestamp(0), pd.Timestamp(100), pd.Timestamp(200), pd.Timestamp(3000)],
     )
     lib.write(sym, df)
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         "us",
@@ -547,8 +615,9 @@ def test_resampling_sparse_data(lmdb_version_store_v1):
         lib.read(sym, query_builder=q)
 
 
-def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
+def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1, any_output_format):
     lib = lmdb_version_store_empty_types_v1
+    lib.set_output_format(any_output_format)
     sym = "test_resampling_empty_type_column"
 
     lib.write(sym, pd.DataFrame({"col": ["hello"]}, index=[pd.Timestamp(0)]))
@@ -577,7 +646,7 @@ class TestResamplingOffset:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -595,7 +664,7 @@ class TestResamplingOffset:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -618,7 +687,7 @@ class TestResamplingOffset:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -646,7 +715,7 @@ class TestResamplingOffset:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -688,7 +757,7 @@ class TestResamplingOrigin:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -717,7 +786,7 @@ class TestResamplingOrigin:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -744,7 +813,7 @@ class TestResamplingOrigin:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -774,7 +843,7 @@ class TestResamplingOrigin:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -814,7 +883,7 @@ class TestResamplingOrigin:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             "2min",
@@ -839,8 +908,9 @@ class TestResamplingOrigin:
     pd.Timestamp("2025-01-03 15:00:00")
 ])
 @pytest.mark.parametrize("offset", ['10s', '13s', '2min'])
-def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, offset):
+def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, offset, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym = "test_origin_special_values"
     # Start and end are picked so that #bins * rule + start != end on purpose to test
     # the bin generation in case of end and end_day
@@ -849,7 +919,7 @@ def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, of
     idx = pd.date_range(start, end, freq='10s')
     df = pd.DataFrame({"col": range(len(idx))}, index=idx)
     lib.write(sym, df)
-    generic_resample_test(
+    generic_resample_test_with_arrow_support(
         lib,
         sym,
         "2min",
@@ -881,8 +951,9 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
     assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
 
 
-def test_date_range_outside_symbol_timerange(lmdb_version_store_v1):
+def test_date_range_outside_symbol_timerange(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib.set_output_format(any_output_format)
     sym = "test_date_range_outside_symbol_timerange"
     df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2025-01-01", periods=10))
     lib.write(sym, df)
@@ -918,7 +989,7 @@ class TestResampleDynamicSchema:
             "aggregated_last": dtype,
             "aggregated_count": np.uint64,
         }
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             rule,
@@ -955,7 +1026,7 @@ class TestResampleDynamicSchema:
             "col_0_last": dtype,
             "col_0_count": np.uint64,
         }
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             rule,
@@ -992,7 +1063,7 @@ class TestResampleDynamicSchema:
             "col_0_count": np.uint64,
         }
         agg = {f"{name}_{op}": (name, op) for name in ["col_0"] for op in ALL_AGGREGATIONS}
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             rule,
@@ -1046,7 +1117,7 @@ class TestResampleDynamicSchema:
             "col_1_count": np.uint64,
         }
         agg = {f"{name}_{op}": (name, op) for name in ["col_0", "col_1"] for op in ALL_AGGREGATIONS}
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             rule,
@@ -1101,7 +1172,7 @@ class TestResampleDynamicSchema:
             "col_1_count": np.uint64,
         }
         agg = {f"{name}_{op}": (name, op) for name in ["col_0", "col_1"] for op in ALL_AGGREGATIONS}
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             rule,
@@ -1185,7 +1256,7 @@ class TestResampleDynamicSchema:
         columns_to_resample = ["to_resample"]
         agg = {f"{name}_{op}": (name, op) for name in columns_to_resample for op in ALL_AGGREGATIONS}
         expected_types = {f"{name}_{op}": expected_aggregation_type(op, df_list, name) for name in columns_to_resample for op in ALL_AGGREGATIONS}
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             rule,
@@ -1220,7 +1291,7 @@ class TestResampleDynamicSchema:
             lib.append(sym, df)
         agg = {"to_resample_first": ("to_resample", "first")}
         expected_types = {"to_resample_first": np.float32}
-        generic_resample_test(
+        generic_resample_test_with_arrow_support(
             lib,
             sym,
             rule,
