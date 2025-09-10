@@ -29,6 +29,10 @@ _MACOS = sys.platform.lower().startswith("darwin")
 _LINUX = sys.platform.lower().startswith("linux")
 _DEBUG = os.getenv("ACTIONS_RUNNER_DEBUG", default=None) in (1, "True")
 
+import logging
+
+logger = logging.getLogger("Utils")
+
 
 def get_ephemeral_port(seed=0):
     # Some OS has a tendency to reuse a port number that has just been closed, so if we use the trick from
@@ -75,7 +79,7 @@ class GracefulProcessUtils:
                 wait_for_server_to_come_up(url, service_name, p, timeout=timeout)
                 return p
             except AssertionError as ex:
-                print(repr(ex))
+                logger.error(ex)
                 try:
                     p.terminate()
                 except:
