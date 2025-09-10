@@ -180,7 +180,7 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
-          NODE_OPTIONS: '--openssl-legacy-provider'
+          NODE_OPTIONS: --openssl-legacy-provider
 
 
   macos:
@@ -287,5 +287,5 @@ jobs:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{ inputs.run_commandline }}
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
-          NODE_OPTIONS: '--openssl-legacy-provider'
+          NODE_OPTIONS: --openssl-legacy-provider
 
