@@ -122,7 +122,7 @@ jobs:
       - name: Install npm # Linux github runner image does not come with npm
         uses: actions/setup-node@v3.3.0
         with:
-          node-version: '16'
+          node-version: '24'
 
       - name: Install Azurite
         uses: nick-fields/retry@v3
@@ -180,6 +180,7 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          NODE_OPTIONS: --openssl-legacy-provider
 
 
   macos:
@@ -236,7 +237,7 @@ jobs:
       - name: Install npm
         uses: actions/setup-node@v3.3.0
         with:
-          node-version: '16'
+          node-version: '24'
 
       - name: Install Azurite
         uses: nick-fields/retry@v3
@@ -275,7 +276,7 @@ jobs:
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             echo "Run custom pytest command: $command"
-            python -m pip  install --retries 3 --timeout 180 pytest-repeat
+            python -m pip  install --retries 3 --timeout 240 pytest-repeat
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$command"
           else
@@ -286,4 +287,5 @@ jobs:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{ inputs.run_commandline }}
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          NODE_OPTIONS: --openssl-legacy-provider
 
