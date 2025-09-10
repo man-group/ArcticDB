@@ -14,7 +14,6 @@
 #include <pipeline/frame_slice.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <folly/futures/FutureSplitter.h>
-#include <folly/PolyException.h>
 #include <arcticdb/pipeline/write_options.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/pipeline/query.hpp>
@@ -1210,20 +1209,6 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
             !read_query.columns || (!pipeline_context.only_index_columns_selected() && !read_query.columns->empty()),
             "Reading the index column is not supported when recursive or custom normalizers are used."
     );
-}
-
-void check_if_tail_head(const ReadQuery& read_query) {
-    for (const auto& clause : read_query.clauses_) {
-        try {
-            auto& row_range_clause = folly::poly_cast<RowRangeClause>(*clause);
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                row_range_clause.row_range_type_ == RowRangeClause::RowRangeType::RANGE,
-                "head() and tail() are not supported when data is recursively normalized"
-            );
-        } catch (const folly::BadPolyCast& e) {
-            // Not a RowRangeClause
-        }
-    }
 }
 
 static void read_indexed_keys_to_pipeline(
@@ -2587,7 +2572,16 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
     auto res_versioned_item = generate_result_versioned_item(version_info);
     if (pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, *read_query);
-        check_if_tail_head(*read_query);
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            !read_query || 
+            ( // Passing a empty QueryBuilder object is a valid read but will make ready_query not null
+                !read_query->columns &&
+                !read_query->row_range &&
+                std::holds_alternative<std::monostate>(read_query->row_filter) &&
+                read_query->clauses_.empty()
+            ), 
+            "Filtering is not supported when data is recursively normalized"
+        );
         return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
     }
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
