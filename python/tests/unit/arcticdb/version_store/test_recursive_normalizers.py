@@ -278,21 +278,20 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
     assert "recursive" in str(e.value).lower()
 
 
-@pytest.mark.parametrize("head", (True, False))
-def test_head_tail_with_qb_recursive_normalized_data(lmdb_version_store_v1, head):
+@pytest.mark.parametrize("empty", (True, False))
+def test_qb_recursive_normalized_data(lmdb_version_store_v1, empty):
     lib = lmdb_version_store_v1
     sym = "sym"
     data = {"a": pd.DataFrame({"col": [0]})}
     lib.write(sym, data, recursive_normalizers=True)
 
     q = QueryBuilder()
-    q = q[q["col"] == 0]
-    if head:
-        q = q.head(10)
-    else:
-        q = q.tail(10)
-    with pytest.raises(UserInputException):
+    if empty:
         lib.read(sym, query_builder=q)
+    else:
+        q = q[q["col"] == 0]
+        with pytest.raises(UserInputException):
+            lib.read(sym, query_builder=q)
 
 
 @pytest.mark.parametrize("head", (True, False))
