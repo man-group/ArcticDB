@@ -12,7 +12,7 @@ from arcticdb.util.test import equals
 from arcticdb.flattener import Flattener
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
-from arcticdb.exceptions import ArcticDbNotYetImplemented
+from arcticdb.exceptions import ArcticDbNotYetImplemented, UserInputException
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import (
@@ -276,6 +276,37 @@ def test_too_much_recursive_metastruct_data(monkeypatch, lmdb_version_store_v1):
             m.setattr(arcticdb.version_store._normalization, "_MAX_RECURSIVE_METASTRUCT", 1)
             lib.write(sym, data, recursive_normalizers=True)
     assert "recursive" in str(e.value).lower()
+
+
+@pytest.mark.parametrize("head", (True, False))
+def test_head_tail_with_qb_recursive_normalized_data(lmdb_version_store_v1, head):
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    data = {"a": pd.DataFrame({"col": [0]})}
+    lib.write(sym, data, recursive_normalizers=True)
+
+    q = QueryBuilder()
+    q = q[q["col"] == 0]
+    if head:
+        q = q.head(10)
+    else:
+        q = q.tail(10)
+    with pytest.raises(UserInputException):
+        lib.read(sym, query_builder=q)
+
+
+@pytest.mark.parametrize("head", (True, False))
+def test_head_tail_recursive_normalized_data(lmdb_version_store_v1, head):
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    data = {"a": pd.DataFrame({"col": [0]})}
+    lib.write(sym, data, recursive_normalizers=True)
+
+    with pytest.raises(UserInputException):
+        if head:
+            lib.head(sym)
+        else:
+            lib.tail(sym)
 
 
 def test_nesting(lmdb_version_store_v1):
