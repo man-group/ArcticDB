@@ -453,8 +453,9 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     """ 
     See comment in previous test
     """
-    max_mem_bytes = 1_240_192_384 if MACOS_WHEEL_BUILD else 608_662_528  # On macOs ARM the memory required is more
-    # see https://github.com/man-group/ArcticDB/actions/runs/16048431365/job/45285477028
+    # macOS ARM64 builds empirically have shown to require more memory than the x86_64 builds.
+    # See: https://github.com/man-group/ArcticDB/actions/runs/17648315790/job/50153297343?pr=2645
+    max_mem_bytes = 3_000_000_000 if MACOS_WHEEL_BUILD else 608_662_528
 
     check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
