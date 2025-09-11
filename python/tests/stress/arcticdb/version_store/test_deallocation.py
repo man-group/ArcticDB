@@ -39,7 +39,6 @@ def killed_worker(lib, io_threads, cpu_threads):
 
 @pytest.mark.parametrize("io_threads_spawned_in_child", [True, False])
 @pytest.mark.parametrize("cpu_threads_spawned_in_child", [True, False])
-@pytest.mark.xfail(reason="Intermittent failure 9917390284", strict=False)
 def test_os_exit_exits_within_timeout(lmdb_storage, lib_name, io_threads_spawned_in_child, cpu_threads_spawned_in_child):
     lib = lmdb_storage.create_arctic().create_library(lib_name)
     df = pd.DataFrame()
@@ -53,4 +52,4 @@ def test_os_exit_exits_within_timeout(lmdb_storage, lib_name, io_threads_spawned
         proc.terminate()
         pytest.fail("os._exit did not exit within 15 seconds")
 
-    assert proc.exitcode == 0
+   assert proc.exitcode == 0, f"Process exited with exitcode [{proc.exitcode}].\n Details: {proc}"
