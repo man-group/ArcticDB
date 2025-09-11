@@ -565,7 +565,8 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     check_incomplete_staged(symbol)
 
 
-def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_factory):
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_factory, dynamic_schema):
     """
     Test writing and reading a variety of sparse data types to a NativeVersionStore.
 
@@ -582,7 +583,7 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
     sym: str = "__qwerty124"
 
     nvs: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
-        dynamic_schema=True, segment_row_size=(max_length // 2), 
+        dynamic_schema=dynamic_schema, segment_row_size=(max_length // 2), 
         column_group_size=(max_cols // 2))
 
 
