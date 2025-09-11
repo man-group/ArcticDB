@@ -757,12 +757,9 @@ def test_aggregation_empty_slices(lmdb_version_store_dynamic_schema_v1):
     table = lib.read(sym, query_builder=q).data
     # sum_col is correctly filled with 0s instead of nulls
     assert pc.count(table.column("sum_col"), mode="only_null").as_py() == 0
-    # TODO: Fix the TODOs in `CopyToBufferTask` to make num_nulls=5 as expected
-    # For this test it so happens that one present and one missing value end up in the same bucket.
-    # Copying then default initializes the missing values instead of setting the validity bitmap.
-    # assert pc.count(table.column("mean_col"), mode="only_null").as_py() == 5
-    # assert pc.count(table.column("min_col"), mode="only_null").as_py() == 5
-    # assert pc.count(table.column("max_col"), mode="only_null").as_py() == 5
-    # assert pc.count(table.column("count_col"), mode="only_null").as_py() == 5
+    assert pc.count(table.column("mean_col"), mode="only_null").as_py() == 5
+    assert pc.count(table.column("min_col"), mode="only_null").as_py() == 5
+    assert pc.count(table.column("max_col"), mode="only_null").as_py() == 5
+    assert pc.count(table.column("count_col"), mode="only_null").as_py() == 5
     expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
