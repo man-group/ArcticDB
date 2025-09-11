@@ -462,7 +462,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{ !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11]') }}
+        python3: ${{ fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11]' ) }}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
