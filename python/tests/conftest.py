@@ -1668,7 +1668,7 @@ FIXTURES_TO_MARK = {
         )],
 }
 
-ALL_FIXTUR_NAMES = set()
+ALL_FIXTURE_NAMES = set()
 
 def pytest_collection_modifyitems(config, items):
     """ This hook is useful for filtering in out tests and modifying tests
@@ -1704,7 +1704,7 @@ def pytest_collection_modifyitems(config, items):
 
         # --- Auto‑mark by fixtures ---
         fixtures = set(item.fixturenames)
-        ALL_FIXTUR_NAMES.update(fixtures)
+        ALL_FIXTURE_NAMES.update(fixtures)
         apply_hybrid_marks(item, fixtures, FIXTURES_TO_MARK)
 
     get_logger().info(f"Extended marks applied for: {time.time() - start_time} sec.")

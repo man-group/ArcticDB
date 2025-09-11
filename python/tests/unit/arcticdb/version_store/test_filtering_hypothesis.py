@@ -329,7 +329,6 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
     ),
     val=numeric_type_strategies(),
 )
-@reproduce_failure('6.72.4', b'AXicY2RmYGZmYGBQYGBnZGJgZISzmBiQACOCZIQKAQARdwBn')
 def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
