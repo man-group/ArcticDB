@@ -301,7 +301,7 @@ jobs:
       fail-fast: false
       matrix:
         # For storage runs that are not full matrix will have only one Python version
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || (inputs.run_full_matrix_of_persistent_tests == 'false') && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11, 12, 13]')}}
+        python3: ${{fromJson( ((inputs.run_full_matrix_of_persistent_tests == 'false') && (needs.storage_type.outputs.storage != 'no') && '[11]') || '[8, 9, 10, 11, 12, 13]')}}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
@@ -369,7 +369,7 @@ jobs:
       fail-fast: false
       matrix:
         # For storage runs that are not full matrix will have only one Python version
-        python3: ${{fromJson(vars.LINUX_PYTHON_VERSIONS || (inputs.run_full_matrix_of_persistent_tests == 'false') && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11, 12, 13]')}}
+        python3: ${{fromJson( ((inputs.run_full_matrix_of_persistent_tests == 'false') && (needs.storage_type.outputs.storage != 'no') && '[11]') || '[8, 9, 10, 11, 12, 13]')}}
         include:
           - matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: 3.${{matrix.python3}} Windows
