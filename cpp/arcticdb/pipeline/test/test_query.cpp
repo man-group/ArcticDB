@@ -74,3 +74,9 @@ TEST_P(BitsetForIndex, DynamicSchemaOverlapEnd) {
     ASSERT_EQ((*bitset)[1], true);
     ASSERT_EQ(bitset->count(), 1);
 }
+
+INSTANTIATE_TEST_SUITE_P(
+    BitsetForIndexTests,
+    BitsetForIndex,
+    testing::Values(true, false)
+);
