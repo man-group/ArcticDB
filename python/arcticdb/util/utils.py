@@ -163,7 +163,7 @@ def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[
             
 
 def generate_sparse_numpy_array_from_array(size: int, 
-                                           array: npt.NDArray[Any], seed: int = 3243253) -> npt.NDArray[Any]:
+                                           array: np.ndarray, seed: int = 3243253) -> np.ndarray:
     """ Creates a sparse array with specified size, with supplied values from the array scattered there.
 
     Usage: 
@@ -201,7 +201,7 @@ def generate_sparse_numpy_array_from_array(size: int,
 
 
 def generate_random_sparse_numpy_array(size: int, dtype, 
-                                       density: float = 0.01, str_length: int = 10, seed: int = 8238) -> npt.NDArray[Any]:
+                                       density: float = 0.01, str_length: int = 10, seed: int = 8238) -> np.ndarray:
     """ Generates random sparse numpy array of specified type with specified density.
     Supported types are floats, str and timestamp
     """
