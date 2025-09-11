@@ -70,6 +70,7 @@ jobs:
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      NODE_OPTIONS: --openssl-legacy-provider
     defaults:
       run: {shell: bash}
     steps:
@@ -375,7 +376,7 @@ jobs:
         if: matrix.os == 'linux' || matrix.os == 'macos'
         uses: actions/setup-node@v3.3.0
         with:
-          node-version: '16'
+          node-version: '24'
 
       - name: Install Azurite
         uses: nick-fields/retry@v3
