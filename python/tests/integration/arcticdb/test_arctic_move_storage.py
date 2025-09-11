@@ -54,7 +54,6 @@ def test_move_storage(storage_type, host_attr, request):
         assert dest_host in lib.read("sym").host
 
 
-@pytest.mark.skipif(sys.platform == "darwin", reason="Test doesn't raise an exception on MacOS ARM")
 def test_move_lmdb_library_map_size_reduction(tmp_path: Path):
     # Given - any LMDB library
     original = tmp_path / "original"
