@@ -132,6 +132,7 @@ private:
     };
     std::vector<Fraction> fractions_;
     std::optional<DataType> data_type_;
+    util::BitMagic sparse_map_;
 };
 
 class CountAggregatorData : private AggregatorDataBase
@@ -149,6 +150,7 @@ public:
 private:
 
     std::vector<uint64_t> aggregated_;
+    util::BitMagic sparse_map_;
 };
 
 class FirstAggregatorData : private AggregatorDataBase
@@ -168,6 +170,7 @@ private:
     std::optional<DataType> data_type_;
 
     std::unordered_set<size_t> groups_cache_;
+    util::BitMagic sparse_map_;
 };
 
 class LastAggregatorData : private AggregatorDataBase
@@ -187,6 +190,7 @@ private:
     std::optional<DataType> data_type_;
 
     std::unordered_set<size_t> groups_cache_;
+    util::BitMagic sparse_map_;
 };
 
 template <class AggregatorData>

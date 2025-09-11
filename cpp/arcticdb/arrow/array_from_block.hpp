@@ -16,6 +16,10 @@ namespace arcticdb {
 inline std::optional<sparrow::validity_bitmap> create_validity_bitmap(size_t offset, const Column& column, size_t bitmap_size) {
     if(column.has_extra_buffer(offset, ExtraBufferType::BITMAP)) {
         auto &bitmap_buffer = column.get_extra_buffer(offset, ExtraBufferType::BITMAP);
+        util::check(
+            bitmap_buffer.blocks().size() == 1,
+            "Expected a single block bitmap extra buffer but got {} blocks",
+            bitmap_buffer.blocks().size());
         return sparrow::validity_bitmap{reinterpret_cast<uint8_t *>(bitmap_buffer.block(0)->release()), bitmap_size};
     } else {
         return std::nullopt;

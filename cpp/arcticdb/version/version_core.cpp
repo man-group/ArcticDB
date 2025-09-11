@@ -1381,17 +1381,24 @@ void copy_frame_data_to_buffer(
         const ColumnMapping mapping{src_column.type(), dst_column.type(), destination.field(target_index), type_size, num_rows, row_range.first, offset, total_size, target_index};
         handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
     } else if (is_empty_type(src_column.type().data_type())) {
-        // TODO: For arrow we want to set validity bitmaps instead of `initialize`ing
-        dst_column.type().visit_tag([&](auto dst_desc_tag) {
-            util::initialize<decltype(dst_desc_tag)>(dst_ptr, total_size, default_value);
-        });
+        if (output_format != OutputFormat::ARROW || default_value.has_value()) {
+            dst_column.type().visit_tag([&](auto dst_desc_tag) {
+                util::initialize<decltype(dst_desc_tag)>(dst_ptr, total_size, default_value);
+            });
+        } else {
+            create_dense_bitmap_all_zeros(offset, num_rows, dst_column, AllocationType::DETACHABLE);
+        }
     // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows values
     } else if (src_column.opt_sparse_map().has_value() && is_valid_type_promotion_to_target(src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE)) {
         details::visit_type(dst_column.type().data_type(), [&](auto dst_tag) {
             using dst_type_info = ScalarTypeInfo<decltype(dst_tag)>;
             typename dst_type_info::RawType* typed_dst_ptr = reinterpret_cast<typename dst_type_info::RawType*>(dst_ptr);
-            // TODO: For arrow we want to set validity bitmaps instead of `initialize`ing
-            util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+            // TODO: Extract this as common method to be used both in null value reducer and here
+            if (output_format != OutputFormat::ARROW || default_value.has_value()) {
+                util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+            } else {
+                create_dense_bitmap(offset, src_column.sparse_map(), dst_column, AllocationType::DETACHABLE);
+            }
             details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
                 Column::for_each_enumerated<typename src_type_info::TDT>(src_column, [typed_dst_ptr](auto enumerating_it) {
@@ -1410,8 +1417,11 @@ void copy_frame_data_to_buffer(
                     dst_ptr += row_count * sizeof(SourceType);
                 }
             } else {
-                // TODO: For arrow we want to set validity bitmaps instead of `initialize`ing
-                util::initialize<SourceTDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                if (output_format != OutputFormat::ARROW || default_value.has_value()) {
+                    util::initialize<SourceTDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                } else {
+                    create_dense_bitmap(offset, src_column.sparse_map(), dst_column, AllocationType::DETACHABLE);
+                }
                 SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
                 Column::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
                     typed_dst_ptr[row.idx()] = row.value();
@@ -1446,7 +1456,11 @@ void copy_frame_data_to_buffer(
                 using source_type_info = ScalarTypeInfo<decltype(src_desc_tag)>;
                 if constexpr(std::is_arithmetic_v<typename source_type_info::RawType> && std::is_arithmetic_v<DestinationRawType>) {
                     if (src_column.is_sparse()) {
-                        util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                        if (output_format != OutputFormat::ARROW || default_value.has_value()) {
+                            util::initialize<typename dst_type_info::TDT>(dst_ptr, num_rows * dst_rawtype_size, default_value);
+                        } else {
+                            create_dense_bitmap(offset, src_column.sparse_map(), dst_column, AllocationType::DETACHABLE);
+                        }
                         Column::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
                             typed_dst_ptr[row.idx()] = row.value();
                         });
