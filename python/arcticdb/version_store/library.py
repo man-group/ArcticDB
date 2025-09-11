@@ -832,8 +832,10 @@ class Library:
         sort_columns: List[str] = None,
     ) -> None:
         """
-        Write a staged data chunk to storage, that will not be visible until finalize_staged_data is called on
-        the symbol. Equivalent to write() with staged=True.
+        Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they
+        are finalized. This enables multiple writers to a single symbol - all writing staged data at the same time -
+        with one process able to later finalize all staged data rendering the data readable by clients.
+        To finalize staged data see ``finalize_staged_data`` or ``sort_and_finalize_staged_data``.
 
         Parameters
         ----------
@@ -849,6 +851,13 @@ class Library:
             index will be used as the primary sort column, and the others as secondaries.
         sort_columns:
             Sort the data by specific columns prior to writing.
+
+        Returns
+        -------
+        StageResult
+            Structure describing the segments that were staged and which can later be passed to ``finalize_staged_data``
+            or ``sort_and_finalize_staged_data`` to specify which data to finalize.
+
         """
         return self._nvs.stage(
             symbol,
@@ -884,11 +893,8 @@ class Library:
         of ``data`` with respect to previously written versions may significantly reduce the effectiveness of
         deduplication.
 
-        Note that `write` is not designed for multiple concurrent writers over a single symbol *unless the staged
-        keyword argument is set to True*. If ``staged`` is True, written segments will be staged and left in an
-        "incomplete" stage, unable to be read until they are finalized. This enables multiple
-        writers to a single symbol - all writing staged data at the same time - with one process able to later finalize
-        all staged data rendering the data readable by clients. To finalize staged data, see `finalize_staged_data`.
+        Note that `write` is not designed for multiple concurrent writers over a single symbol.
+        For that case see ``stage()``.
 
         Note: ArcticDB will use the 0-th level index of the Pandas DataFrame for its on-disk index.
 
@@ -908,7 +914,8 @@ class Library:
             Optional metadata to persist along with the symbol.
         prune_previous_versions : bool, default=False
             Removes previous (non-snapshotted) versions from the database.
-        staged : bool, default=False
+        staged: bool, default=False
+            Deprecated. Use stage() instead.
             Whether to write to a staging area rather than immediately to the library.
             See documentation on `finalize_staged_data` for more information.
         validate_index: bool, default=True
@@ -937,17 +944,6 @@ class Library:
         0       5
         1       6
         2       7
-
-        Staging data for later finalisation (enables concurrent writes):
-
-        >>> df = pd.DataFrame({'column': [5,6,7]}, index=pd.date_range(start='1/1/2000', periods=3))
-        >>> lib.write("staged", df, staged=True)  # Multiple staged writes can occur in parallel
-        >>> lib.finalize_staged_data("staged", StagedDataFinalizeMethod.WRITE)  # Must be run after all staged writes have completed
-        >>> lib.read("staged").data  # Would return error if run before finalization
-                    column
-        2000-01-01       5
-        2000-01-02       6
-        2000-01-03       7
 
         WritePayload objects can be unpacked and used as parameters:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
@@ -1513,7 +1509,7 @@ class Library:
         metadata: Any = None,
         validate_index=True,
         delete_staged_data_on_failure: bool = False,
-        _stage_results: Optional[List[StageResult]] = None,
+        stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Finalizes staged data, making it available for reads. All staged segments must be ordered and non-overlapping.
@@ -1562,6 +1558,9 @@ class Library:
               ``finalize_staged_data``.
 
             To manually delete staged data, use the ``delete_staged_data`` function.
+        stage_results: Optional[List[StageResult]], default=None
+            If specified, only the data corresponding to the provided ``StageResult``s will be finalized. See ``stage``.
+
         Returns
         -------
         VersionedItem
@@ -1599,13 +1598,14 @@ class Library:
 
         See Also
         --------
-        write
-            Documentation on the ``staged`` parameter explains the concept of staged data in more detail.
+        stage
+            Documentation on the ``stage`` method explains the concept of staged data in more detail.
 
         Examples
         --------
-        >>> lib.write("sym", pd.DataFrame({"col": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])), staged=True)
-        >>> lib.write("sym", pd.DataFrame({"col": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)])), staged=True)
+        Finalizing all of the staged data
+        >>> result1 = lib.stage("sym", pd.DataFrame({"col": [3, 4]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 3), pd.Timestamp(2024, 1, 4)])))
+        >>> result2 = lib.stage("sym", pd.DataFrame({"col": [1, 2]}, index=pd.DatetimeIndex([pd.Timestamp(2024, 1, 1), pd.Timestamp(2024, 1, 2)])))
         >>> lib.finalize_staged_data("sym")
         >>> lib.read("sym").data
                     col
@@ -1613,6 +1613,13 @@ class Library:
         2024-01-02    2
         2024-01-03    3
         2024-01-04    4
+
+        Finalizing only some of the staged data
+        >>> lib.finalize_staged_data("staged", StagedDataFinalizeMethod.WRITE, stage_results=[result1])
+        >>> lib.read("staged").data
+                    col
+        2000-01-03    3
+        2000-01-04    4
         """
         mode = Library._normalize_staged_data_mode(mode)
 
@@ -1624,7 +1631,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             validate_index=validate_index,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
-            _stage_results=_stage_results,
+            stage_results=stage_results,
         )
 
     def sort_and_finalize_staged_data(
@@ -1634,12 +1641,12 @@ class Library:
         prune_previous_versions: bool = False,
         metadata: Any = None,
         delete_staged_data_on_failure: bool = False,
-        _stage_results: Optional[List[StageResult]] = None,
+        stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Sorts and merges all staged data, making it available for reads. This differs from `finalize_staged_data` in that it
         can support staged segments with interleaved time periods and staged segments which are not internally sorted. The
-        end result will be sorted. This requires performing a full sort in memory so can be time consuming.
+        end result will be sorted. This requires performing a full sort in memory so can be time-consuming.
 
         If ``mode`` is ``StagedDataFinalizeMethod.APPEND`` the index of the first row of the sorted block must be equal to or greater
         than the index of the last row in the existing data.
@@ -1682,8 +1689,8 @@ class Library:
 
             To manually delete staged data, use the ``delete_staged_data`` function.
 
-        _stage_results : Optional[List['StageResult']], default=None
-            Unused.
+        stage_results: Optional[List[StageResult]], default=None
+            If specified, only the data corresponding to the provided ``StageResult``s will be finalized. See ``stage``.
         Returns
         -------
         VersionedItem
@@ -1741,7 +1748,7 @@ class Library:
             append=mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
-            stage_results=_stage_results
+            stage_results=stage_results
         )
         if isinstance(compaction_result, _ae.version_store.VersionedItem):
             return self._nvs._convert_thin_cxx_item_to_python(compaction_result, metadata)
@@ -1752,7 +1759,6 @@ class Library:
             raise MissingKeysInStageResultsError("Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result)
         else:
             raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
-
 
     def get_staged_symbols(self) -> List[str]:
         """

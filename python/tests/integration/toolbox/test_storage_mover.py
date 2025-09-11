@@ -14,6 +14,12 @@ from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap
 import hypothesis
 import sys
 
+from arcticdb_ext import (
+    set_config_int,
+    unset_config_int,
+)
+from arcticdb_ext.cpp_async import reinit_task_scheduler
+
 # configure_test_logger("DEBUG")
 
 
@@ -79,7 +85,24 @@ def compare_two_libs(lib1, lib2):
     assert lib1.read("rec_norm", as_of="mysnap2").data.keys() == lib2.read("rec_norm", as_of="mysnap2").data.keys()
 
 
-def test_storage_mover_single_go(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
+@pytest.fixture(
+    params=[True, False],
+)
+def check_single_threaded(request):
+    if request.param:
+        set_config_int("VersionStore.NumIOThreads", 1)
+        set_config_int("VersionStore.NumCPUThreads", 1)
+        reinit_task_scheduler()
+
+    yield request.param
+
+    if request.param:
+        unset_config_int("VersionStore.NumIOThreads")
+        unset_config_int("VersionStore.NumCPUThreads")
+        reinit_task_scheduler()
+
+
+def test_storage_mover_single_go(check_single_threaded, lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
     add_data(lmdb_version_store_v1)
     arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
     lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
@@ -92,7 +115,7 @@ def test_storage_mover_single_go(lmdb_version_store_v1, arctidb_native_local_lib
     compare_two_libs(lmdb_version_store_v1, dst_lib)
 
 
-def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
+def test_storage_mover_key_by_key(check_single_threaded, lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
     add_data(lmdb_version_store_v1)
     arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
     lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
@@ -110,7 +133,11 @@ def test_storage_mover_key_by_key(lmdb_version_store_v1, arctidb_native_local_li
 @pytest.mark.xfail(sys.platform == "win32", reason="Numpy strings are not implemented for Windows")
 @pytest.mark.parametrize("versions_to_delete", [0, [0, 1]])
 def test_storage_mover_symbol_tree(
-    arctidb_native_local_lib_cfg_extra, arctidb_native_local_lib_cfg, lib_name, versions_to_delete
+    check_single_threaded,
+    arctidb_native_local_lib_cfg_extra,
+    arctidb_native_local_lib_cfg,
+    lib_name,
+    versions_to_delete,
 ):
     col_per_group = 5
     row_per_segment = 10
@@ -223,7 +250,9 @@ def test_storage_mover_symbol_tree(
     assert dst_lib.read("new_symbol", 3).data == 3
 
 
-def test_storage_mover_and_key_checker(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
+def test_storage_mover_and_key_checker(
+    check_single_threaded, lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra
+):
     add_data(lmdb_version_store_v1)
     arctic = ArcticMemoryConfig(arctidb_native_local_lib_cfg_extra(), env=Defaults.ENV)
     lib_cfg = get_lib_cfg(arctic, Defaults.ENV, "local.extra")
@@ -237,7 +266,9 @@ def test_storage_mover_and_key_checker(lmdb_version_store_v1, arctidb_native_loc
     assert len(keys) == 0
 
 
-def test_storage_mover_clone_keys_for_symbol(lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra):
+def test_storage_mover_clone_keys_for_symbol(
+    check_single_threaded, lmdb_version_store_v1, arctidb_native_local_lib_cfg_extra
+):
     add_data(lmdb_version_store_v1)
     lmdb_version_store_v1.write("a", 1)
     lmdb_version_store_v1.write("a", 2)
@@ -270,7 +301,9 @@ def lib_with_gaps_and_reused_keys(version_store_factory):
 
 
 @pytest.mark.parametrize("mode", ("check assumptions", "go", "no force"))
-def test_correct_versions_in_destination(mode, lib_with_gaps_and_reused_keys, lmdb_version_store_v1):
+def test_correct_versions_in_destination(
+    mode, check_single_threaded, lib_with_gaps_and_reused_keys, lmdb_version_store_v1
+):
     s = StorageMover(lib_with_gaps_and_reused_keys._library, lmdb_version_store_v1._library)
     if mode == "check assumptions":
         check = lib_with_gaps_and_reused_keys
@@ -290,7 +323,9 @@ def test_correct_versions_in_destination(mode, lib_with_gaps_and_reused_keys, lm
 
 @settings(deadline=None, suppress_health_check=(hypothesis.HealthCheck.function_scoped_fixture,))
 @given(to_copy=st.permutations(["s2", 4, 6]), existing=st.booleans())
-def test_correct_versions_in_destination_force(to_copy, existing, lib_with_gaps_and_reused_keys, version_store_factory):
+def test_correct_versions_in_destination_force(
+    to_copy, existing, check_single_threaded, lib_with_gaps_and_reused_keys, version_store_factory
+):
     try:
         _tmp_test_body(to_copy, existing, lib_with_gaps_and_reused_keys, version_store_factory)
     except:
