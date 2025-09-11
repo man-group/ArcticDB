@@ -337,7 +337,6 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @pytest.mark.skip(reason = "Will become ASV tests")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     lib: adb.Library = arctic_library_lmdb_100gb
@@ -383,7 +382,6 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skip(reason = "Will become ASV tests")
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
@@ -735,7 +733,6 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
-    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we
@@ -750,7 +747,6 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
-    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we
