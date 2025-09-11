@@ -51,5 +51,5 @@ def test_os_exit_exits_within_timeout(lmdb_storage, lib_name, io_threads_spawned
     if proc.is_alive():
         proc.terminate()
         pytest.fail("os._exit did not exit within 15 seconds")
-
-   assert proc.exitcode == 0, f"Process exited with exitcode [{proc.exitcode}].\n Details: {proc}"
+    
+    assert proc.exitcode == 0, f"Process exited with exitcode [{proc.exitcode}].\n Details: {proc}"
