@@ -768,9 +768,6 @@ public:
         const auto& block_offsets = column_.block_offsets();
         util::check(up_to_block_offset <= block_offsets.back(), "up_to_block_offset {} outside of range {}", up_to_block_offset, block_offsets.back());
         for (; column_block_idx_ < block_offsets.size() - 1 && block_offsets.at(column_block_idx_) < up_to_block_offset; ++column_block_idx_) {
-            if (block_offsets.at(column_block_idx_) >= up_to_block_offset) {
-                break;
-            }
             auto rows = (block_offsets.at(column_block_idx_ + 1) - block_offsets.at(column_block_idx_)) / type_bytes_;
             create_dense_bitmap_all_zeros(block_offsets.at(column_block_idx_), rows, column_, AllocationType::DETACHABLE);
         }
