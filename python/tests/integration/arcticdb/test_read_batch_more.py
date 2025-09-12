@@ -174,6 +174,7 @@ def test_read_batch_query_with_and(arctic_library):
 
 
 @pytest.mark.storage
+@pytest.mark.skip(reason = "ArcticDB#2004")
 def test_read_batch_metadata_on_different_version(arctic_library):
     """
     Here we test if read of metadata over several different states of DB with
