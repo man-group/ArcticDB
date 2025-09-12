@@ -160,28 +160,15 @@ inline FilterQuery<index::IndexSegmentReader> create_dynamic_col_filter(
     };
 }
 
-inline std::size_t start_row(const index::IndexSegmentReader& isr, std::size_t row) {
-    return isr.column(index::Fields::start_row).scalar_at<std::size_t>(row).value();
-}
-
-inline std::size_t start_row(const std::vector<SliceAndKey>& sk, std::size_t row) {
-    return sk[row].slice_.row_range.first;
-}
-
-inline std::size_t end_row(const index::IndexSegmentReader& isr, std::size_t row) {
-    return isr.column(index::Fields::end_row).scalar_at<std::size_t>(row).value();
-}
-
-inline std::size_t end_row(const std::vector<SliceAndKey>& sk, std::size_t row) {
-    return sk[row].slice_.row_range.second;
-}
+RowRange slice_row_range_at(const std::vector<SliceAndKey>& sk, std::size_t row);
+RowRange slice_row_range_at(const index::IndexSegmentReader& isr, std::size_t row);
 
 template<typename ContainerType>
 inline FilterQuery<ContainerType> create_row_filter(RowRange&& range) {
     return [rg = std::move(range)](const ContainerType& container, std::unique_ptr<util::BitSet>&& input) mutable {
         auto res = std::make_unique<util::BitSet>(static_cast<util::BitSetSizeType>(container.size()));
         for (std::size_t r = 0, end = container.size(); r < end; ++r) {
-            bool included = start_row(container, r) < rg.second && end_row(container, r) > rg.first;
+            bool included = is_slice_in_row_range(slice_row_range_at(container, r), rg);
             ARCTICDB_DEBUG(log::version(), "Row {} is {} range {}", r, included ? "inside" : "outside", rg);
             (*res)[r] = included;
         }
@@ -194,18 +181,8 @@ inline FilterQuery<ContainerType> create_row_filter(RowRange&& range) {
     };
 }
 
-IndexValue start_index(const std::vector<SliceAndKey>& sk, std::size_t row);
-
-IndexValue start_index(const index::IndexSegmentReader& isr, std::size_t row);
-
-IndexValue end_index(const index::IndexSegmentReader& isr, std::size_t row);
-
-IndexValue end_index(const std::vector<SliceAndKey>& sk, std::size_t row);
-
-template<typename RawType>
-bool range_intersects(RawType a_start, RawType a_end, RawType b_start, RawType b_end) {
-    return a_start <= b_end && a_end >= b_start;
-}
+bool is_slice_in_row_range(const RowRange& slice_row_range, const RowRange& row_filter);
+bool is_slice_in_index_range(IndexRange slice_index_range, const IndexRange& index_filter, bool is_read_operation);
 
 template<typename ContainerType, typename IdxType>
 std::unique_ptr<util::BitSet> build_bitset_for_index(
