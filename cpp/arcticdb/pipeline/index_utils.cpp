@@ -22,9 +22,15 @@ folly::Future<entity::AtomKey> write_index(
 ) {
     auto slice_and_keys = std::move(sk);
     IndexWriter<IndexType> writer(sink, partial_key, metadata);
-    for (const auto& slice_and_key : slice_and_keys) {
+    uint64_t total = 0;
+    for (const auto &slice_and_key : slice_and_keys) {
+        total += slice_and_key.slice_.row_range.diff();
         writer.add(slice_and_key.key(), slice_and_key.slice_);
     }
+    util::check(metadata.total_rows() == total,
+     "The row count of the metadata is not the same as the row count of the slice and keys: {} != {}",
+     metadata.total_rows(), total);
+
     return writer.commit();
 }
 

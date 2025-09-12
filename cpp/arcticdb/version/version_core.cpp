@@ -323,18 +323,12 @@ VersionedItem delete_range_impl(
     auto flattened_slice_and_keys = flatten_and_fix_rows(groups, row_count);
 
     std::sort(std::begin(flattened_slice_and_keys), std::end(flattened_slice_and_keys));
-    auto version_key_fut = util::variant_match(
-            index,
-            [&index_segment_reader, &flattened_slice_and_keys, &stream_id, &update_info, &store](auto idx) {
-                using IndexType = decltype(idx);
-                return pipelines::index::write_index<IndexType>(
-                        index_segment_reader.tsd(),
-                        std::move(flattened_slice_and_keys),
-                        IndexPartialKey{stream_id, update_info.next_version_id_},
-                        store
-                );
-            }
-    );
+    auto version_key_fut = util::variant_match(index, [&index_segment_reader, &flattened_slice_and_keys, &stream_id, &update_info, &store, &row_count] (auto idx) {
+        using IndexType = decltype(idx);
+        auto tsd = std::make_shared<TimeseriesDescriptor>(index_segment_reader.tsd().clone());
+        tsd->set_total_rows(row_count);
+        return pipelines::index::write_index<IndexType>(*tsd, std::move(flattened_slice_and_keys), IndexPartialKey{stream_id, update_info.next_version_id_}, store);
+    });
     auto versioned_item = VersionedItem(std::move(version_key_fut).get());
     ARCTICDB_DEBUG(log::version(), "updated stream_id: {} , version_id: {}", stream_id, update_info.next_version_id_);
     return versioned_item;
