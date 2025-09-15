@@ -42,6 +42,9 @@ jobs:
           ls -al
           ls -al utils
 
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+
       - name: Cleanup buckets
         run: PYTHONPATH=. python -v -m utils.cleanup_test_buckets 
 
