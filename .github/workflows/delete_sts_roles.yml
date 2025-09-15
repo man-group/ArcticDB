@@ -43,7 +43,7 @@ jobs:
           ls -al utils
 
       - name: Cleanup buckets
-        run: PYTHONPATH=. python -m utils.cleanup_test_buckets 
+        run: PYTHONPATH=. python -v -m utils.cleanup_test_buckets 
 
       - name: Delete STS Roles
         run: PYTHONPATH=. python -m utils.s3_roles_delete
