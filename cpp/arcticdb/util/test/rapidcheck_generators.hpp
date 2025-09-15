@@ -33,8 +33,8 @@ inline rc::Gen<arcticdb::entity::DataType> gen_numeric_datatype() {
 inline rc::Gen<arcticdb::entity::Dimension> gen_dimension() {
     return rc::gen::element<arcticdb::entity::Dimension>(
             arcticdb::entity::Dimension::Dim0 // Just test scalars for the moment
-            //      arcticdb::entity::Dimension::Dim1,
-            //      arcticdb::entity::Dimension::Dim2
+                                              //      arcticdb::entity::Dimension::Dim1,
+                                              //      arcticdb::entity::Dimension::Dim2
     );
 }
 
