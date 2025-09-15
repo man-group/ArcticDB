@@ -38,10 +38,12 @@ jobs:
         run: |
           pwd
           ls -al
+          cd python
+          ls -al
 
       - name: Delete STS Roles
-        run: python -m utils.s3_roles_delete python/utils/s3_roles_delete.py
+        run: python -m utils.s3_roles_delete
 
       - name: Cleanup buckets
-        run: python -m utils.cleanup_test_buckets python/utils/cleanup_test_buckets.py        
+        run: python -m utils.cleanup_test_buckets 
 
