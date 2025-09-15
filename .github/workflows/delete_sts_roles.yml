@@ -22,7 +22,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Dependencies
-        run: pip install boto3 azure arcticdb
+        run: pip install boto3 arcticdb azure-storage-blob azure-identity
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
