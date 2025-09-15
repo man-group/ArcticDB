@@ -1,179 +1,179 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/aws/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/aws/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/aws_permissions/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/aws_permissions/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/azure/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/azure/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/error_messages/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/error_messages/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/faq/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/faq/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/history/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/history/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/lib_config/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/lib_config/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/licensing/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/licensing/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/runtime_config/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/runtime_config/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/admin_tools/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/admin_tools/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/arctic/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/arctic/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/arctic_uri/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/arctic_uri/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/config/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/config/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/exceptions/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/exceptions/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/library/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/library/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/library_types/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/library_types/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/processing/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/processing/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/api/query_stats/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/api/query_stats/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_aws_public_blockchain/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_aws_public_blockchain/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_billion_row_challenge/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_billion_row_challenge/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_concat/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_concat/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_equity_analytics/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_equity_analytics/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_equity_options/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_equity_options/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_lazydataframe/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_lazydataframe/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_lmdb/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_lmdb/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_querybuilder/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_querybuilder/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_resample/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_resample/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_demo_snapshots/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_demo_snapshots/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/notebooks/ArcticDB_pythagorean_won_loss_formula_notebook/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/notebooks/ArcticDB_pythagorean_won_loss_formula_notebook/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/technical/architecture/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/technical/architecture/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/technical/contributing/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/technical/contributing/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/technical/migration/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/technical/migration/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/technical/on_disk_storage/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/technical/on_disk_storage/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/technical/upgrade_storage/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/technical/upgrade_storage/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/data_organisation/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/data_organisation/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/fundamentals/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/fundamentals/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/library_sizes/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/library_sizes/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/lmdb_and_in_memory/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/lmdb_and_in_memory/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/metadata/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/metadata/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/parallel_writes/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/parallel_writes/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/query_stats/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/query_stats/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
     <url>
-         <loc>https://docs.arcticdb.io/6.2.0/tutorials/snapshots/</loc>
-         <lastmod>2025-09-08</lastmod>
+         <loc>https://docs.arcticdb.io/6.2.1/tutorials/snapshots/</loc>
+         <lastmod>2025-09-15</lastmod>
     </url>
 </urlset>
