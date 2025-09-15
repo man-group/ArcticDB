@@ -17,6 +17,7 @@ from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb_ext.exceptions import UserInputException
 from arcticdb.util.test import CustomThing, TestCustomNormalizer
 from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
+from arcticdb.options import LibraryOptions
 from arcticdb import ReadRequest
 from arcticdb.util.test import assert_frame_equal
 
@@ -39,35 +40,35 @@ def index(request):
 
 
 class TestBasicReadIndex:
-    def test_read_index_columns(self, lmdb_library_static_and_dynamic_v1, index):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_read_index_columns(self, lmdb_library_static_dynamic, index):
+        lib = lmdb_library_static_dynamic
         df = pd.DataFrame({"col": range(0, len(index))}, index=index)
         lib.write("sym", df)
         result = lib.read("sym", columns=[])
         assert result.data.index.equals(index)
         assert result.data.empty
 
-    def test_read_index_column_and_row_slice(self, lmdb_library_static_and_dynamic_v1, index):
+    def test_read_index_column_and_row_slice(self, lmdb_library_static_dynamic, index):
         col1 = list(range(0, len(index)))
         col2 = [2 * i for i in range(0, len(index))]
         df = pd.DataFrame({"col": col1, "col2": col2, "col3": col1}, index=index)
-        lib = lmdb_library_static_and_dynamic_v1
+        lib = lmdb_library_static_dynamic
         lib.write("sym", df)
         result = lib.read("sym", columns=[])
         assert result.data.index.equals(index)
         assert result.data.empty
 
     @pytest.mark.parametrize("n", [3, -3])
-    def test_read_index_columns_head(self, lmdb_library_static_and_dynamic_v1, index, n):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_read_index_columns_head(self, lmdb_library_static_dynamic, index, n):
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
         result = lib.head("sym", columns=[], n=n)
         assert result.data.index.equals(index[:n])
         assert result.data.empty
 
     @pytest.mark.parametrize("n", [3, -3])
-    def test_read_index_columns_tail(self, lmdb_library_static_and_dynamic_v1, index, n):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_read_index_columns_tail(self, lmdb_library_static_dynamic, index, n):
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
         result = lib.tail("sym", columns=[], n=n)
         assert result.data.index.equals(index[-n:])
@@ -75,8 +76,8 @@ class TestBasicReadIndex:
 
 
 class TestReadEmptyIndex:
-    def test_empty_range_index(self, lmdb_library_static_and_dynamic_v1):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_empty_range_index(self, lmdb_library_static_dynamic):
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": []}, index=pd.RangeIndex(start=5, stop=5)))
         result = lib.read("sym", columns=[])
         if PANDAS_VERSION < Version("2.0.0"):
@@ -86,8 +87,8 @@ class TestReadEmptyIndex:
         assert result.data.empty
         assert result.data.index.equals(lib.read("sym").data.index)
 
-    def test_empty_datetime_index(self, lmdb_library_static_and_dynamic_v1):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_empty_datetime_index(self, lmdb_library_static_dynamic):
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": []}, index=pd.DatetimeIndex([])))
         result = lib.read("sym", columns=[])
         assert result.data.index.equals(pd.DatetimeIndex([]))
@@ -127,8 +128,8 @@ class TestReadEmptyIndex:
             ),
         ],
     )
-    def test_empty_multiindex(self, lmdb_library_static_and_dynamic_v1, input_index, expected_index):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_empty_multiindex(self, lmdb_library_static_dynamic, input_index, expected_index):
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col_0": [], "col_1": []}, index=input_index))
         result = lib.read("sym", columns=[])
         assert result.data.index.equals(expected_index)
@@ -157,9 +158,9 @@ class TestReadIndexAsOf:
             ],
         ],
     )
-    def test_as_of_version(self, lmdb_library_static_and_dynamic_v1, indexes):
+    def test_as_of_version(self, lmdb_library_static_dynamic, indexes):
         data = [list(range(0, len(index))) for index in indexes]
-        lib = lmdb_library_static_and_dynamic_v1
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": data[0]}, index=indexes[0]))
         for i in range(1, len(indexes)):
             lib.append("sym", pd.DataFrame({"col": data[i]}, index=indexes[i]))
@@ -181,9 +182,9 @@ class TestReadIndexAsOf:
             ),
         ],
     )
-    def test_as_of_snapshot(self, lmdb_library_static_and_dynamic_v1, index):
+    def test_as_of_snapshot(self, lmdb_library_static_dynamic, index):
         data = list(range(0, len(index)))
-        lib = lmdb_library_static_and_dynamic_v1
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": data}, index=index))
         lib.snapshot("snap")
         lib.write("sym", pd.DataFrame({"col": [1]}, index=pd.RangeIndex(start=100, stop=101)))
@@ -193,40 +194,40 @@ class TestReadIndexAsOf:
 
 
 class TestReadIndexRange:
-    def test_row_range(self, lmdb_library_static_and_dynamic_v1, index):
+    def test_row_range(self, lmdb_library_static_dynamic, index):
         row_range = (1, 3)
-        lib = lmdb_library_static_and_dynamic_v1
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", row_range=row_range, columns=[])
         assert result.data.index.equals(index[row_range[0] : row_range[1]])
         assert result.data.empty
 
-    def test_date_range(self, lmdb_library_static_and_dynamic_v1):
+    def test_date_range(self, lmdb_library_static_dynamic):
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
-        lib = lmdb_library_static_and_dynamic_v1
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", date_range=(datetime(2024, 1, 4), datetime(2024, 1, 8)), columns=[])
         assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/08/2024"))
         assert result.data.empty
 
-    def test_date_range_left_open(self, lmdb_library_static_and_dynamic_v1):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_date_range_left_open(self, lmdb_library_static_dynamic):
+        lib = lmdb_library_static_dynamic
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", date_range=(None, datetime(2024, 1, 8)), columns=[])
         assert result.data.index.equals(pd.date_range(start="01/01/2024", end="01/08/2024"))
         assert result.data.empty
 
-    def test_date_range_right_open(self, lmdb_library_static_and_dynamic_v1):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_date_range_right_open(self, lmdb_library_static_dynamic):
+        lib = lmdb_library_static_dynamic
         index = pd.date_range(start="01/01/2024", end="01/10/2024")
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", date_range=(datetime(2024, 1, 4), None), columns=[])
         assert result.data.index.equals(pd.date_range(start="01/04/2024", end="01/10/2024"))
         assert result.data.empty
 
-    def test_row_range_across_row_slices(self, lmdb_library_static_and_dynamic_v1, index):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_row_range_across_row_slices(self, lmdb_library_static_dynamic, index):
+        lib = lmdb_library_static_dynamic
         row_range = (3, 8)
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
         result = lib.read("sym", row_range=row_range, columns=[])
@@ -243,26 +244,27 @@ class TestReadIndexRange:
             ),
         ],
     )
-    def test_date_range_throws(self, lmdb_library_static_and_dynamic_v1, non_datetime_index):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_date_range_throws(self, lmdb_library_static_dynamic, non_datetime_index):
+        lib = lmdb_library_static_dynamic
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(non_datetime_index)))}, index=non_datetime_index))
         with pytest.raises(Exception):
             lib.read("sym", date_range=(datetime(2024, 1, 4), datetime(2024, 1, 10)), columns=[])
 
 
 class TestWithNormalizers:
-    def test_recursive_throws(self, lmdb_library_static_and_dynamic_v1):
+    def test_recursive_throws(self, lmdb_library_static_dynamic):
         data = {"a": np.arange(5), "b": np.arange(8)}
-        lib = lmdb_library_static_and_dynamic_v1
+        lib = lmdb_library_static_dynamic
         lib._nvs.write("sym_recursive", data, recursive_normalizers=True)
         with pytest.raises(UserInputException) as exception_info:
             lib.read("sym_recursive", columns=[])
-        # TODO
-        # assert "normalizers" in str(exception_info.value)
+        assert "normalizers" in str(exception_info.value)
 
-    def test_custom_throws(self, lmdb_library_static_and_dynamic_v1):
+    @pytest.mark.parametrize("dynamic_schema", [False, True])
+    def test_custom_throws(self, lmdb_storage, lib_name, dynamic_schema):
         register_normalizer(TestCustomNormalizer())
-        lib = lmdb_library_static_and_dynamic_v1
+        ac = lmdb_storage.create_arctic()
+        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         data = CustomThing(custom_columns=["a", "b"], custom_index=[12, 13], custom_values=[[2.0, 4.0], [3.0, 5.0]])
         lib._nvs.write("sym_custom", data)
 
@@ -272,8 +274,8 @@ class TestWithNormalizers:
 
 
 class TestReadBatch:
-    def test_read_batch(self, lmdb_library_static_and_dynamic_v1, index):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_read_batch(self, lmdb_library_static_dynamic, index):
+        lib = lmdb_library_static_dynamic
         df1 = pd.DataFrame({"a": range(0, len(index))}, index=index)
         df2 = pd.DataFrame({"b": range(0, len(index))})
         df3 = pd.DataFrame({"c": range(0, len(index))}, index=index)
@@ -287,8 +289,8 @@ class TestReadBatch:
         assert res[1].data.empty
         assert_frame_equal(res[2].data, df3)
 
-    def test_read_batch_row_range(self, lmdb_library_static_and_dynamic_v1, index):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_read_batch_row_range(self, lmdb_library_static_dynamic, index):
+        lib = lmdb_library_static_dynamic
         df1 = pd.DataFrame({"a": range(0, len(index))}, index=index)
         df2 = pd.DataFrame({"b": range(0, len(index))})
         df3 = pd.DataFrame({"c": range(0, len(index))}, index=index)
@@ -309,8 +311,8 @@ class Dummy:
 
 
 class TestPickled:
-    def test_throws(self, lmdb_library_static_and_dynamic_v1):
-        lib = lmdb_library_static_and_dynamic_v1
+    def test_throws(self, lmdb_library_static_dynamic):
+        lib = lmdb_library_static_dynamic
         lib.write_pickle("sym_recursive", pd.DataFrame({"col": [Dummy(), Dummy()]}))
         with pytest.raises(UserInputException) as exception_info:
             lib.read("sym_recursive", columns=[])
