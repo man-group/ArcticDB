@@ -242,15 +242,25 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     assert_frame_equal(left=expected, right=actual)
 
 
-def convert_arrow_to_pandas_and_remove_categoricals(table):
+def convert_arrow_to_pandas_for_tests(table):
+    """
+    Converts pa.Table outputted via `output_format=OutputFormat.EXPERIMENTAL_ARROW` to a pd.DataFrame so it would be
+    identical to the one outputted via `output_format=OutputFormat.PANDAS`. This requires two changes:
+    - Replaces dictionary encoded string columns with regular string columns.
+    - Fills null values in int colums with zeros.
+    """
     new_table = stringify_dictionary_encoded_columns(table)
+    for i, name in enumerate(new_table.column_names):
+        if pa.types.is_integer(new_table.column(i).type):
+            new_col = new_table.column(i).fill_null(0)
+            new_table = new_table.set_column(i, name, new_col)
     return new_table.to_pandas()
 
 def assert_frame_equal_with_arrow(left, right, **kwargs):
     if isinstance(left, pa.Table):
-        left = convert_arrow_to_pandas_and_remove_categoricals(left)
+        left = convert_arrow_to_pandas_for_tests(left)
     if isinstance(right, pa.Table):
-        right = convert_arrow_to_pandas_and_remove_categoricals(right)
+        right = convert_arrow_to_pandas_for_tests(right)
     assert_frame_equal(left, right, **kwargs)
 
 
