@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -139,8 +140,8 @@ TEST(HasValidTypePromotion, EmptyToEverything) {
     using namespace arcticdb;
     using namespace arcticdb::entity;
     TypeDescriptor source(ValueType::EMPTY, SizeBits::S64, Dimension::Dim0);
-    for(int value_type = int(ValueType::UNKNOWN_VALUE_TYPE); value_type < int(ValueType::COUNT); ++value_type) {
-        for(int size_bits = int(SizeBits::UNKNOWN_SIZE_BITS); size_bits < int(SizeBits::COUNT); ++size_bits) {
+    for (int value_type = int(ValueType::UNKNOWN_VALUE_TYPE); value_type < int(ValueType::COUNT); ++value_type) {
+        for (int size_bits = int(SizeBits::UNKNOWN_SIZE_BITS); size_bits < int(SizeBits::COUNT); ++size_bits) {
             const TypeDescriptor target(ValueType(value_type), SizeBits(size_bits), Dimension::Dim0);
             ASSERT_TRUE(is_valid_type_promotion_to_target(source, target));
             ASSERT_EQ(has_valid_common_type(source, target), target);
@@ -152,10 +153,10 @@ TEST(HasValidTypePromotion, EverythingToEmpty) {
     using namespace arcticdb;
     using namespace arcticdb::entity;
     const TypeDescriptor target(ValueType::EMPTY, SizeBits::S64, Dimension::Dim0);
-    for(int value_type = int(ValueType::UNKNOWN_VALUE_TYPE); value_type < int(ValueType::COUNT); ++value_type) {
-        for(int size_bits = int(SizeBits::UNKNOWN_SIZE_BITS); size_bits < int(SizeBits::COUNT); ++size_bits) {
+    for (int value_type = int(ValueType::UNKNOWN_VALUE_TYPE); value_type < int(ValueType::COUNT); ++value_type) {
+        for (int size_bits = int(SizeBits::UNKNOWN_SIZE_BITS); size_bits < int(SizeBits::COUNT); ++size_bits) {
             const TypeDescriptor source(ValueType(value_type), SizeBits(size_bits), Dimension::Dim0);
-            if(!is_empty_type(source.data_type())) {
+            if (!is_empty_type(source.data_type())) {
                 ASSERT_FALSE(is_valid_type_promotion_to_target(source, target));
             } else {
                 ASSERT_TRUE(is_valid_type_promotion_to_target(source, target));

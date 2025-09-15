@@ -5,11 +5,13 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import sys
 
 import numpy as np
 import pandas as pd
 import datetime
+
 if sys.version_info >= (3, 9):
     import zoneinfo
 import pytz
@@ -65,6 +67,7 @@ def test_rt_df_with_custom_meta(object_and_mem_and_lmdb_version_store):
 @pytest.mark.parametrize("log_level", ("error", "warn", "debug", "info", "ERROR", "eRror", "", None))
 def test_pickled_metadata_warning(lmdb_version_store_v1, log_level):
     import arcticdb.version_store._normalization as norm
+
     norm._PICKLED_METADATA_LOGLEVEL = None
     if log_level is not None:
         set_config_string("PickledMetadata.LogLevel", log_level)
@@ -81,6 +84,7 @@ def test_pickled_metadata_warning(lmdb_version_store_v1, log_level):
 def test_pickled_metadata_warning_bad_config(lmdb_version_store_v1):
     """Don't block writes just because they set this wrong."""
     import arcticdb.version_store._normalization as norm
+
     norm._PICKLED_METADATA_LOGLEVEL = None
     set_config_string("PickledMetadata.LogLevel", "cat")
     lib = lmdb_version_store_v1
@@ -287,7 +291,9 @@ def test_rv_contains_metadata_batch_append(lmdb_version_store_v1):
     assert all(vit.metadata is None for vit in vits)
     metadata_0 = {"some": "metadata_0"}
     metadata_2 = {"some": "metadata_2"}
-    vits = lib.batch_append([sym_0, sym_1, sym_2], 3 * [timestamp_indexed_df()], [metadata_0, None, metadata_2], write_if_missing=True)
+    vits = lib.batch_append(
+        [sym_0, sym_1, sym_2], 3 * [timestamp_indexed_df()], [metadata_0, None, metadata_2], write_if_missing=True
+    )
     assert vits[0].metadata == metadata_0
     assert vits[1].metadata is None
     assert vits[2].metadata == metadata_2
@@ -306,7 +312,9 @@ def test_rv_contains_metadata_batch_write_metadata(lmdb_version_store_v1):
 
 @ZONE_INFO_MARK
 @pytest.mark.parametrize("zone_type", ["pytz", "zoneinfo"])
-@pytest.mark.parametrize("zone_name", ["UTC", "America/Los_Angeles", "Europe/London", "Asia/Tokyo", "Pacific/Kiritimati"])
+@pytest.mark.parametrize(
+    "zone_name", ["UTC", "America/Los_Angeles", "Europe/London", "Asia/Tokyo", "Pacific/Kiritimati"]
+)
 def test_metadata_timestamp_with_tz(lmdb_version_store_v1, zone_type, zone_name):
     lib = lmdb_version_store_v1
     sym = "sym"

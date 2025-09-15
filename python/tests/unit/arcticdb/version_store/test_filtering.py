@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from datetime import datetime
 from itertools import cycle
 import math
@@ -278,15 +279,24 @@ def test_filter_datetime_timezone_aware(lmdb_version_store_v1):
 def test_df_query_wrong_type(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
 
-    df1 = pd.DataFrame({"col1": [1, 2, 3], "col2": [2, 3, 4], "col3": [4, 5, 6],
-                        "col_str": ["1", "2", "3"], "col_bool": [True, False, True]})
+    df1 = pd.DataFrame(
+        {
+            "col1": [1, 2, 3],
+            "col2": [2, 3, 4],
+            "col3": [4, 5, 6],
+            "col_str": ["1", "2", "3"],
+            "col_bool": [True, False, True],
+        }
+    )
     sym = "symbol"
     lib.write(sym, df1)
 
     str_vals = np.array(["2", "3", "4", "5"])
     q = QueryBuilder()
     q = q[q["col1"].isin(str_vals)]
-    with pytest.raises(UserInputException, match="Cannot check membership 'IS IN' of col1.*type=INT.*in set of.*type=STRING"):
+    with pytest.raises(
+        UserInputException, match="Cannot check membership 'IS IN' of col1.*type=INT.*in set of.*type=STRING"
+    ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
@@ -296,12 +306,17 @@ def test_df_query_wrong_type(lmdb_version_store_v1):
 
     q = QueryBuilder()
     q = q[q["col1"] / q["col_str"] == 3]
-    with pytest.raises(UserInputException, match="Non-numeric column provided to binary operation: col1.*type=INT.*/.*col_str.*type=STRING"):
+    with pytest.raises(
+        UserInputException,
+        match="Non-numeric column provided to binary operation: col1.*type=INT.*/.*col_str.*type=STRING",
+    ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[q["col1"] + "1" == 3]
-    with pytest.raises(UserInputException, match="Non-numeric type provided to binary operation: col1.*type=INT.*\+ \"1\".*type=STRING"):
+    with pytest.raises(
+        UserInputException, match='Non-numeric type provided to binary operation: col1.*type=INT.*\+ "1".*type=STRING'
+    ):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
@@ -311,13 +326,16 @@ def test_df_query_wrong_type(lmdb_version_store_v1):
 
     q = QueryBuilder()
     q = q[q["col1"] - 1 >= "1"]
-    with pytest.raises(UserInputException, match="Invalid comparison.*col1 - 1.*type=INT.*>=.*\"1\".*type=STRING"):
+    with pytest.raises(UserInputException, match='Invalid comparison.*col1 - 1.*type=INT.*>=.*"1".*type=STRING'):
         lib.read(sym, query_builder=q)
 
     q = QueryBuilder()
     q = q[1 + q["col1"] * q["col2"] - q["col3"] == q["col_str"]]
     # check that ((1 + (col1 * col2)) + col3) is generated as a column name and shown in the error message
-    with pytest.raises(UserInputException, match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING"):
+    with pytest.raises(
+        UserInputException,
+        match="Invalid comparison.*\(1 \+ \(col1 \* col2\)\) - col3.*type=INT.*==.*col_str .*type=STRING",
+    ):
         lib.read(sym, query_builder=q)
 
 
@@ -854,7 +872,9 @@ def test_filter_null_filtering(lmdb_version_store_v1, method, dtype):
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
-        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        data = np.arange(
+            np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")
+        ).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
     else:  # str
         data = [str(idx) for idx in range(num_rows)]
@@ -1084,7 +1104,18 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
     )
     lib.write(symbol, df)
     for op in ["<", "<=", ">", ">=", "==", "!="]:
-        for other_col in ["uint8", "uint16", "uint32", "uint64", "int8", "int16", "int32", "int64", "float32", "float64"]:
+        for other_col in [
+            "uint8",
+            "uint16",
+            "uint32",
+            "uint64",
+            "int8",
+            "int16",
+            "int32",
+            "int64",
+            "float32",
+            "float64",
+        ]:
             q = QueryBuilder()
             qb_lhs = q["float32"]
             qb_rhs = q[other_col]
@@ -1114,6 +1145,7 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
 ################################
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
+
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
 def test_filter_pickled_symbol(request, lib_type):
@@ -1183,6 +1215,7 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1)
     with pytest.raises(SchemaException):
         vit = lib.read(symbol, query_builder=q)
 
+
 def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
     symbol = "test_filter_column_not_present_dynamic"
@@ -1197,6 +1230,7 @@ def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schem
 
     result = lib.read(symbol, query_builder=q).data
     assert_frame_equal(result, pd.DataFrame({"a": [0], "b": [1]}))
+
 
 def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
@@ -1248,9 +1282,11 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, met
         data = np.arange(num_rows, dtype=dtype)
         null_values = cycle([np.nan])
     elif dtype is np.datetime64:
-        data = np.arange(np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")).astype("datetime64[ns]")
+        data = np.arange(
+            np.datetime64("2024-01-01"), np.datetime64(f"2024-01-0{num_rows + 1}"), np.timedelta64(1, "D")
+        ).astype("datetime64[ns]")
         null_values = cycle([np.datetime64("nat")])
-    else: # str
+    else:  # str
         data = [str(idx) for idx in range(num_rows)]
         null_values = cycle([None, np.nan])
     for idx in range(num_rows):
@@ -1322,16 +1358,16 @@ def test_filter_unsupported_boolean_operators():
 def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
-        )
+        index=pd.date_range(pd.Timestamp(0), periods=3),
+        data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]},
+    )
     lib.write(sym, df, dynamic_strings=dynamic_strings)
 
     pattern_a = "^abc"
     q_a = QueryBuilder()
     q_a = q_a[q_a["a"].regex_match(pattern_a)]
     assert_frame_equal(lib.read(sym, query_builder=q_a).data, df[df.a.str.contains(pattern_a)])
-    
+
     pattern_c = r"\d\d[a-zA-Z]"
     q_c = QueryBuilder()
     q_c = q_c[q_c["c"].regex_match(pattern_c)]
@@ -1362,9 +1398,9 @@ def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
 def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]}
-        )
+        index=pd.date_range(pd.Timestamp(0), periods=3),
+        data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]},
+    )
     lib.write(sym, df, dynamic_strings=dynamic_strings)
 
     pattern_a = r"^xyz"  # No matches
@@ -1380,14 +1416,14 @@ def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_stri
     q2 = QueryBuilder()
     q2 = q2[q2["a"].regex_match(pattern_a) & q2["b"].isin([0])]
     assert lib.read(sym, query_builder=q2).data.empty
-    
+
 
 def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=4),
-            data={"a": ["abc", None, "aabc", np.nan], "b": [1, 2, 3, 4], "c": [np.nan, "q34c", None, "567f"]}
-        )
+        index=pd.date_range(pd.Timestamp(0), periods=4),
+        data={"a": ["abc", None, "aabc", np.nan], "b": [1, 2, 3, 4], "c": [np.nan, "q34c", None, "567f"]},
+    )
     lib.write(sym, df)
 
     pattern_a = "^abc"
@@ -1404,7 +1440,7 @@ def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
 
 
 def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
-    with pytest.raises(InternalException): # Pending changing exception type to UserInputException in v6.0.0 release 
+    with pytest.raises(InternalException):  # Pending changing exception type to UserInputException in v6.0.0 release
         q = QueryBuilder()
         q = q[q["a"].regex_match("[")]
 
@@ -1416,24 +1452,23 @@ def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
 def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
-        )
+        index=pd.date_range(pd.Timestamp(0), periods=3), data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
+    )
     lib.write(sym, df)
 
     with pytest.raises(UserInputException):
         q = QueryBuilder()
         q = q[q["b"].regex_match(r"\d+")]
         lib.read(sym, query_builder=q)
-    
+
 
 @pytest.mark.parametrize("dynamic_strings", [True, False])
 def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": [f"{unicode_symbols}abc", f"abc{unicode_symbols}", "abc"], "b": [1, 2, 3]}
-        )
+        index=pd.date_range(pd.Timestamp(0), periods=3),
+        data={"a": [f"{unicode_symbols}abc", f"abc{unicode_symbols}", "abc"], "b": [1, 2, 3]},
+    )
     lib.write(sym, df, dynamic_strings=dynamic_strings)
 
     pattern = "^" + unicode_symbols + "abc$"
@@ -1449,9 +1484,8 @@ def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings)
 def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynamic_strings):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": ["a-1,d-1", "g-i,3-l", "d-2,-hi"], "b": [1, 2, 3]}
-        )
+        index=pd.date_range(pd.Timestamp(0), periods=3), data={"a": ["a-1,d-1", "g-i,3-l", "d-2,-hi"], "b": [1, 2, 3]}
+    )
     lib.write(sym, df, dynamic_strings=dynamic_strings)
 
     pattern = r"\w-\d"
@@ -1461,4 +1495,3 @@ def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynami
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     assert not expected.empty
-

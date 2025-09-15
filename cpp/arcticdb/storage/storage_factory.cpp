@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/storage/storage_factory.hpp>
@@ -16,25 +17,23 @@
 #include <arcticdb/util/pb_util.hpp>
 
 namespace arcticdb::storage {
-    
+
 std::shared_ptr<Storage> create_storage(
-    const LibraryPath &library_path,
-    OpenMode mode,
-    const s3::S3Settings& storage_config) {
+        const LibraryPath& library_path, OpenMode mode, const s3::S3Settings& storage_config
+) {
     return std::make_shared<s3::S3Storage>(library_path, mode, storage_config);
 }
 
 std::shared_ptr<Storage> create_storage(
-    const LibraryPath &library_path,
-    OpenMode mode,
-    const s3::GCPXMLSettings& storage_config) {
+        const LibraryPath& library_path, OpenMode mode, const s3::GCPXMLSettings& storage_config
+) {
     return std::make_shared<s3::GCPXMLStorage>(library_path, mode, storage_config);
 }
 
 std::shared_ptr<Storage> create_storage(
-    const LibraryPath &library_path,
-    OpenMode mode,
-    const arcticdb::proto::storage::VariantStorage &storage_descriptor) {
+        const LibraryPath& library_path, OpenMode mode,
+        const arcticdb::proto::storage::VariantStorage& storage_descriptor
+) {
 
     std::shared_ptr<Storage> storage;
     auto type_name = util::get_arcticdb_pb_type_name(storage_descriptor.config());
@@ -68,11 +67,11 @@ std::shared_ptr<Storage> create_storage(
     } else if (type_name == azure::AzureStorage::Config::descriptor()->full_name()) {
         azure::AzureStorage::Config azure_config;
         storage_descriptor.config().UnpackTo(&azure_config);
-        storage = std::make_shared<azure::AzureStorage >(library_path, mode, azure_config);
+        storage = std::make_shared<azure::AzureStorage>(library_path, mode, azure_config);
     } else if (type_name == file::MappedFileStorage::Config::descriptor()->full_name()) {
         file::MappedFileStorage::Config mapped_config;
         storage_descriptor.config().UnpackTo(&mapped_config);
-        storage = std::make_shared<file::MappedFileStorage >(library_path, mode, mapped_config);
+        storage = std::make_shared<file::MappedFileStorage>(library_path, mode, mapped_config);
     } else
         throw std::runtime_error(fmt::format("Unknown config type {}", type_name));
 

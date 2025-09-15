@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #include <shared_mutex>
 #include <memory>
@@ -13,7 +14,7 @@
 
 namespace arcticdb {
 
-template <typename KeyType, typename ValueType>
+template<typename KeyType, typename ValueType>
 class LRUCache {
     struct Node {
         KeyType key;
@@ -26,14 +27,12 @@ class LRUCache {
     mutable std::shared_mutex mutex_;
     ankerl::unordered_dense::map<KeyType, typename std::list<Node>::iterator> cache_;
 
-public:
+  public:
     explicit LRUCache(size_t capacity) noexcept : capacity_(capacity) {}
 
     ARCTICDB_NO_MOVE_OR_COPY(LRUCache)
 
-    [[nodiscard]] size_t capacity() const noexcept {
-        return capacity_;
-    }
+    [[nodiscard]] size_t capacity() const noexcept { return capacity_; }
 
     [[nodiscard]] std::optional<ValueType> get(const KeyType& key) const {
         std::shared_lock lock(mutex_);
@@ -79,4 +78,4 @@ public:
     }
 };
 
-}
+} // namespace arcticdb

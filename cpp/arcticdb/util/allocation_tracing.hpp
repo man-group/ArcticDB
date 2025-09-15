@@ -15,35 +15,29 @@ class AllocationTracker {
     std::recursive_mutex mutex_;
     constexpr static int num_levels_ = 3;
 
-public:
+  public:
     static std::shared_ptr<AllocationTracker> instance();
     static void destroy_instance();
 
     AllocationTracker() = default;
-    ~AllocationTracker() {
-        print();
-    }
+    ~AllocationTracker() { print(); }
 
     ARCTICDB_NO_MOVE_OR_COPY(AllocationTracker)
 
     void trace();
 
-    static void start() {
-        started_ = true;
-    }
+    static void start() { started_ = true; }
 
-    static bool started() {
-        return started_;
-    }
+    static bool started() { return started_; }
 
     void print() {
-        for(const auto& [key, value] : data_)
-            if(value > 100)
+        for (const auto& [key, value] : data_)
+            if (value > 100)
                 std::cout << value << ": " << key << std::endl;
     }
 };
 
-}
+} // namespace arcticdb
 
 void* operator new(std::size_t sz);
 

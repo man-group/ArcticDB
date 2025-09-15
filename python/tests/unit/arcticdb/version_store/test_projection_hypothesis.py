@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from hypothesis import assume, given, settings
 import numpy as np
 import pandas as pd
@@ -116,7 +117,7 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     df=dataframe_strategy(
         [
             column_strategy("a", supported_floating_dtypes(), restrict_range=True),
-            column_strategy("b", supported_floating_dtypes(), restrict_range=True)
+            column_strategy("b", supported_floating_dtypes(), restrict_range=True),
         ],
     ),
     val=numeric_type_strategies(),
@@ -127,9 +128,9 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
     symbol = "test_project_numeric_binary_operation_dynamic"
     lib.delete(symbol)
     slices = [
-        df[:len(df) // 3],
-        df[len(df) // 3: 2 * len(df) // 3].drop(columns=["a"]),
-        df[2 * len(df) // 3:].drop(columns=["b"]),
+        df[: len(df) // 3],
+        df[len(df) // 3 : 2 * len(df) // 3].drop(columns=["a"]),
+        df[2 * len(df) // 3 :].drop(columns=["b"]),
     ]
     for slice in slices:
         lib.append(symbol, slice)
@@ -177,8 +178,8 @@ def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_sche
     symbol = "test_project_numeric_unary_operation_dynamic"
     lib.delete(symbol)
     slices = [
-        df[:len(df) // 2],
-        df[len(df) // 2:].rename(columns={"a": "b"}),
+        df[: len(df) // 2],
+        df[len(df) // 2 :].rename(columns={"a": "b"}),
     ]
     for slice in slices:
         lib.append(symbol, slice)

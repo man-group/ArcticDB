@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -133,6 +134,7 @@ def test_write_non_timestamp_index(lmdb_version_store, index_type, sorted, valid
     lib.write(symbol, df, validate_index=validate_index)
     info = lib.get_info(symbol)
     assert info["sorted"] == "UNKNOWN"
+
 
 class TestMissingStringPlaceholders:
     @pytest.mark.parametrize("dtype", [None, object, np.float32, np.double])

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -19,7 +20,7 @@ namespace arcticdb {
 namespace detail {
 using BaseType = std::uint32_t;
 constexpr BaseType error_category_scale = 1000u;
-}
+} // namespace detail
 
 enum class ErrorCategory : detail::BaseType {
     INTERNAL = 1,
@@ -38,74 +39,74 @@ enum class ErrorCategory : detail::BaseType {
 // FUTURE(GCC9): use magic_enum
 inline std::unordered_map<ErrorCategory, const char*> get_error_category_names() {
     return {
-        {ErrorCategory::INTERNAL, "INTERNAL"},
-        {ErrorCategory::NORMALIZATION, "NORMALIZATION"},
-        {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
-        {ErrorCategory::SCHEMA, "SCHEMA"},
-        {ErrorCategory::STORAGE, "STORAGE"},
-        {ErrorCategory::SORTING, "SORTING"},
-        {ErrorCategory::USER_INPUT, "USER_INPUT"},
-        {ErrorCategory::COMPATIBILITY, "COMPATIBILITY"},
-        {ErrorCategory::CODEC, "CODEC"},
+            {ErrorCategory::INTERNAL, "INTERNAL"},
+            {ErrorCategory::NORMALIZATION, "NORMALIZATION"},
+            {ErrorCategory::MISSING_DATA, "MISSING_DATA"},
+            {ErrorCategory::SCHEMA, "SCHEMA"},
+            {ErrorCategory::STORAGE, "STORAGE"},
+            {ErrorCategory::SORTING, "SORTING"},
+            {ErrorCategory::USER_INPUT, "USER_INPUT"},
+            {ErrorCategory::COMPATIBILITY, "COMPATIBILITY"},
+            {ErrorCategory::CODEC, "CODEC"},
     };
 }
 
 // A macro that will be expanded in different ways by redefining ERROR_CODE():
 // FUTURE(GCC9): use magic_enum
-#define ARCTIC_ERROR_CODES \
-    ERROR_CODE(1000, E_INVALID_RANGE) \
-    ERROR_CODE(1001, E_INVALID_ARGUMENT) \
-    ERROR_CODE(1002, E_ASSERTION_FAILURE) \
-    ERROR_CODE(1003, E_RUNTIME_ERROR) \
-    ERROR_CODE(1004, E_STORED_CONFIG_ERROR) \
-    ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS)\
-    ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE) \
-    ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED) \
-    ERROR_CODE(2003, E_INCOMPATIBLE_INDEX)  \
-    ERROR_CODE(2004, E_WRONG_SHAPE) \
-    ERROR_CODE(2005, E_COLUMN_SECONDARY_TYPE_MISMATCH) \
-    ERROR_CODE(2006, E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE) \
-    ERROR_CODE(3000, E_NO_SUCH_VERSION)  \
-    ERROR_CODE(3001, E_NO_SYMBOL_DATA)  \
-    ERROR_CODE(3010, E_UNREADABLE_SYMBOL_LIST)  \
-    ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)  \
-    ERROR_CODE(4001, E_COLUMN_DOESNT_EXIST)  \
-    ERROR_CODE(4002, E_UNSUPPORTED_COLUMN_TYPE)  \
-    ERROR_CODE(4003, E_UNSUPPORTED_INDEX_TYPE)   \
-    ERROR_CODE(4004, E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA) \
-    ERROR_CODE(5000, E_KEY_NOT_FOUND) \
-    ERROR_CODE(5001, E_DUPLICATE_KEY) \
-    ERROR_CODE(5002, E_SYMBOL_NOT_FOUND) \
-    ERROR_CODE(5003, E_PERMISSION)    \
-    ERROR_CODE(5004, E_RESOURCE_NOT_FOUND) \
-    ERROR_CODE(5005, E_UNSUPPORTED_ATOMIC_OPERATION)   \
-    ERROR_CODE(5010, E_LMDB_MAP_FULL) \
-    ERROR_CODE(5011, E_UNEXPECTED_LMDB_ERROR) \
-    ERROR_CODE(5020, E_UNEXPECTED_S3_ERROR) \
-    ERROR_CODE(5021, E_S3_RETRYABLE) \
-    ERROR_CODE(5022, E_ATOMIC_OPERATION_FAILED) \
-    ERROR_CODE(5023, E_NOT_IMPLEMENTED_BY_STORAGE) \
-    ERROR_CODE(5024, E_BAD_REQUEST) \
-    ERROR_CODE(5030, E_UNEXPECTED_AZURE_ERROR) \
-    ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY) \
-    ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR) \
-    ERROR_CODE(5090, E_NON_INCREASING_INDEX_VERSION) \
-    ERROR_CODE(6000, E_UNSORTED_DATA) \
-    ERROR_CODE(7000, E_INVALID_USER_ARGUMENT) \
-    ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)   \
-    ERROR_CODE(7002, E_INVALID_CHAR_IN_NAME) \
-    ERROR_CODE(7003, E_NAME_TOO_LONG) \
-    ERROR_CODE(7004, E_NO_STAGED_SEGMENTS)\
-    ERROR_CODE(7005, E_COLUMN_NOT_FOUND) \
-    ERROR_CODE(7006, E_SORT_ON_SPARSE) \
-    ERROR_CODE(7007, E_EMPTY_NAME)    \
-    ERROR_CODE(7008, E_STAGE_RESULT_WITH_INCORRECT_SYMBOL) \
-    ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION)   \
-    ERROR_CODE(9000, E_DECODE_ERROR) \
-    ERROR_CODE(9001, E_UNKNOWN_CODEC) \
-    ERROR_CODE(9002, E_ZSDT_ENCODING) \
-    ERROR_CODE(9003, E_LZ4_ENCODING)  \
-    ERROR_CODE(9004, E_INPUT_TOO_LARGE) \
+#define ARCTIC_ERROR_CODES                                                                                             \
+    ERROR_CODE(1000, E_INVALID_RANGE)                                                                                  \
+    ERROR_CODE(1001, E_INVALID_ARGUMENT)                                                                               \
+    ERROR_CODE(1002, E_ASSERTION_FAILURE)                                                                              \
+    ERROR_CODE(1003, E_RUNTIME_ERROR)                                                                                  \
+    ERROR_CODE(1004, E_STORED_CONFIG_ERROR)                                                                            \
+    ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS)                                                                           \
+    ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE)                                                                       \
+    ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED)                                                                           \
+    ERROR_CODE(2003, E_INCOMPATIBLE_INDEX)                                                                             \
+    ERROR_CODE(2004, E_WRONG_SHAPE)                                                                                    \
+    ERROR_CODE(2005, E_COLUMN_SECONDARY_TYPE_MISMATCH)                                                                 \
+    ERROR_CODE(2006, E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE)                                                            \
+    ERROR_CODE(3000, E_NO_SUCH_VERSION)                                                                                \
+    ERROR_CODE(3001, E_NO_SYMBOL_DATA)                                                                                 \
+    ERROR_CODE(3010, E_UNREADABLE_SYMBOL_LIST)                                                                         \
+    ERROR_CODE(4000, E_DESCRIPTOR_MISMATCH)                                                                            \
+    ERROR_CODE(4001, E_COLUMN_DOESNT_EXIST)                                                                            \
+    ERROR_CODE(4002, E_UNSUPPORTED_COLUMN_TYPE)                                                                        \
+    ERROR_CODE(4003, E_UNSUPPORTED_INDEX_TYPE)                                                                         \
+    ERROR_CODE(4004, E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA)                                                      \
+    ERROR_CODE(5000, E_KEY_NOT_FOUND)                                                                                  \
+    ERROR_CODE(5001, E_DUPLICATE_KEY)                                                                                  \
+    ERROR_CODE(5002, E_SYMBOL_NOT_FOUND)                                                                               \
+    ERROR_CODE(5003, E_PERMISSION)                                                                                     \
+    ERROR_CODE(5004, E_RESOURCE_NOT_FOUND)                                                                             \
+    ERROR_CODE(5005, E_UNSUPPORTED_ATOMIC_OPERATION)                                                                   \
+    ERROR_CODE(5010, E_LMDB_MAP_FULL)                                                                                  \
+    ERROR_CODE(5011, E_UNEXPECTED_LMDB_ERROR)                                                                          \
+    ERROR_CODE(5020, E_UNEXPECTED_S3_ERROR)                                                                            \
+    ERROR_CODE(5021, E_S3_RETRYABLE)                                                                                   \
+    ERROR_CODE(5022, E_ATOMIC_OPERATION_FAILED)                                                                        \
+    ERROR_CODE(5023, E_NOT_IMPLEMENTED_BY_STORAGE)                                                                     \
+    ERROR_CODE(5024, E_BAD_REQUEST)                                                                                    \
+    ERROR_CODE(5030, E_UNEXPECTED_AZURE_ERROR)                                                                         \
+    ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY)                                                                         \
+    ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR)                                                                         \
+    ERROR_CODE(5090, E_NON_INCREASING_INDEX_VERSION)                                                                   \
+    ERROR_CODE(6000, E_UNSORTED_DATA)                                                                                  \
+    ERROR_CODE(7000, E_INVALID_USER_ARGUMENT)                                                                          \
+    ERROR_CODE(7001, E_INVALID_DECIMAL_STRING)                                                                         \
+    ERROR_CODE(7002, E_INVALID_CHAR_IN_NAME)                                                                           \
+    ERROR_CODE(7003, E_NAME_TOO_LONG)                                                                                  \
+    ERROR_CODE(7004, E_NO_STAGED_SEGMENTS)                                                                             \
+    ERROR_CODE(7005, E_COLUMN_NOT_FOUND)                                                                               \
+    ERROR_CODE(7006, E_SORT_ON_SPARSE)                                                                                 \
+    ERROR_CODE(7007, E_EMPTY_NAME)                                                                                     \
+    ERROR_CODE(7008, E_STAGE_RESULT_WITH_INCORRECT_SYMBOL)                                                             \
+    ERROR_CODE(8000, E_UNRECOGNISED_COLUMN_STATS_VERSION)                                                              \
+    ERROR_CODE(9000, E_DECODE_ERROR)                                                                                   \
+    ERROR_CODE(9001, E_UNKNOWN_CODEC)                                                                                  \
+    ERROR_CODE(9002, E_ZSDT_ENCODING)                                                                                  \
+    ERROR_CODE(9003, E_LZ4_ENCODING)                                                                                   \
+    ERROR_CODE(9004, E_INPUT_TOO_LARGE)                                                                                \
     ERROR_CODE(9005, E_ENCODING_VERSION_MISMATCH)
 
 enum class ErrorCode : detail::BaseType {
@@ -122,15 +123,16 @@ struct ErrorCodeData {
 template<ErrorCode code>
 inline constexpr ErrorCodeData error_code_data{};
 
-#define ERROR_CODE(code, Name, ...) template<> inline constexpr ErrorCodeData error_code_data<ErrorCode::Name> \
-    { #Name, "E" #code };
+#define ERROR_CODE(code, Name, ...)                                                                                    \
+    template<>                                                                                                         \
+    inline constexpr ErrorCodeData error_code_data<ErrorCode::Name>{#Name, "E" #code};
 ARCTIC_ERROR_CODES
 #undef ERROR_CODE
 
 inline std::vector<ErrorCode> get_error_codes() {
     static std::vector<ErrorCode> error_codes{
 #define ERROR_CODE(code, Name) ErrorCode::Name,
-        ARCTIC_ERROR_CODES
+            ARCTIC_ERROR_CODES
 #undef ERROR_CODE
     };
     return error_codes;
@@ -143,9 +145,7 @@ constexpr ErrorCategory get_error_category(ErrorCode code) {
 }
 
 struct ArcticException : public std::runtime_error {
-    explicit ArcticException(const std::string& msg_with_error_code):
-            std::runtime_error(msg_with_error_code) {
-    }
+    explicit ArcticException(const std::string& msg_with_error_code) : std::runtime_error(msg_with_error_code) {}
 };
 
 template<ErrorCategory error_category>
@@ -158,7 +158,7 @@ struct ArcticSpecificException : public ArcticCategorizedException<get_error_cat
     static constexpr ErrorCategory category = get_error_category(specific_code);
 
     explicit ArcticSpecificException(const std::string& msg_with_error_code) :
-            ArcticCategorizedException<category>(msg_with_error_code) {
+        ArcticCategorizedException<category>(msg_with_error_code) {
         static_assert(get_error_category(specific_code) == category);
     }
 };
@@ -274,19 +274,21 @@ template<>
     throw ArcticSpecificException<ErrorCode::E_NOT_IMPLEMENTED_BY_STORAGE>(msg);
 }
 
-}
+} // namespace arcticdb
 
 namespace fmt {
 template<>
 struct formatter<arcticdb::ErrorCode> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(arcticdb::ErrorCode code, FormatContext &ctx) const {
+    auto format(arcticdb::ErrorCode code, FormatContext& ctx) const {
         std::string_view str = arcticdb::get_error_code_data(code).as_string_;
         std::copy(str.begin(), str.end(), ctx.out());
         return ctx.out();
     }
 };
-}
+} // namespace fmt

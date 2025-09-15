@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -11,11 +12,11 @@
 #include <memory>
 
 #if USE_SLAB_ALLOCATOR
-    #include <arcticdb/util/slab_allocator.hpp>
+#include <arcticdb/util/slab_allocator.hpp>
 #endif
 
-//#define ARCTICDB_TRACK_ALLOCS
-//#define USE_SLAB_ALLOCATOR
+// #define ARCTICDB_TRACK_ALLOCS
+// #define USE_SLAB_ALLOCATOR
 
 namespace arcticdb {
 
@@ -36,7 +37,6 @@ static constexpr uint64_t GIGABYTES = 1024 * MEGABYTES;
 static constexpr uint64_t TERABYTES = 1024 * GIGABYTES;
 static constexpr uint64_t page_size = 4096; // 4KB
 bool use_slab_allocator();
-
 
 static constexpr uint64_t ArcticNativeShmemSize = 30 * GIGABYTES;
 
@@ -60,7 +60,7 @@ struct TracingData {
 
     void clear();
 
-private:
+  private:
     struct Impl;
 
     std::unique_ptr<Impl> impl_;
@@ -68,11 +68,9 @@ private:
 };
 
 class InMemoryTracingPolicy {
-    static TracingData &data() {
-        return *TracingData::instance();
-    }
+    static TracingData& data() { return *TracingData::instance(); }
 
-public:
+  public:
     static void track_alloc(AddrIdentifier addr, size_t size);
     static void track_free(AddrIdentifier addr);
     static void track_realloc(AddrIdentifier old_addr, AddrIdentifier new_addr, size_t size);
@@ -85,7 +83,7 @@ public:
 };
 
 class NullTracingPolicy {
-public:
+  public:
     static void track_alloc(AddrIdentifier, size_t) {}
 
     static void track_free(AddrIdentifier) {}
@@ -102,9 +100,9 @@ public:
 constexpr size_t alignment = 64;
 
 constexpr size_t round_to_alignment(size_t size) {
-    constexpr size_t mask = ~(alignment-1);
+    constexpr size_t mask = ~(alignment - 1);
     auto new_size = size & mask;
-    if(new_size != size)
+    if (new_size != size)
         new_size += alignment;
 
     return new_size;
@@ -112,11 +110,9 @@ constexpr size_t round_to_alignment(size_t size) {
 
 constexpr size_t ArcticNativeMassiveAllocSize = 1000 * 1024 * 1024;
 
-
 template<class TracingPolicy = NullTracingPolicy, class ClockType = util::LinearClock>
 class AllocatorImpl {
-private:
-
+  private:
     static uint8_t* get_alignment(size_t size);
     static entity::timestamp current_timestamp();
 
@@ -129,7 +125,8 @@ private:
     inline static std::once_flag slab_init_flag_;
 
     static void init_slab() {
-        static const size_t page_slab_capacity = ConfigsMap::instance()->get_int("Allocator.PageSlabCapacity", 1000 * 1000); // 4GB
+        static const size_t page_slab_capacity =
+                ConfigsMap::instance()->get_int("Allocator.PageSlabCapacity", 1000 * 1000); // 4GB
         if (use_slab_allocator()) {
             page_size_slab_allocator_ = std::make_shared<SlabAllocatorType>(page_slab_capacity);
         }
@@ -140,7 +137,7 @@ private:
     static void internal_free(uint8_t* p);
     static uint8_t* internal_realloc(uint8_t* p, std::size_t size);
 
-public:
+  public:
     static std::shared_ptr<AllocatorImpl> instance_;
     static std::once_flag init_flag_;
 
@@ -165,9 +162,7 @@ public:
         page_size_slab_allocator_->remove_cb_when_full(id);
     }
 
-    static size_t get_slab_approx_free_blocks() {
-        return page_size_slab_allocator_->get_approx_free_blocks();
-    }
+    static size_t get_slab_approx_free_blocks() { return page_size_slab_allocator_->get_approx_free_blocks(); }
 #endif
 
     static size_t allocated_bytes();
@@ -175,18 +170,15 @@ public:
     static void clear();
 };
 
-
 #ifdef ARCTICDB_TRACK_ALLOCS
 using Allocator = AllocatorImpl<InMemoryTracingPolicy>;
 #else
 using Allocator = AllocatorImpl<NullTracingPolicy>;
 #endif
 
-
 extern template class AllocatorImpl<InMemoryTracingPolicy, util::LinearClock>;
 extern template class AllocatorImpl<InMemoryTracingPolicy, util::SysClock>;
 extern template class AllocatorImpl<NullTracingPolicy, util::LinearClock>;
 extern template class AllocatorImpl<NullTracingPolicy, util::SysClock>;
 
-
-} //namespace arcticdb
+} // namespace arcticdb
