@@ -1,4 +1,4 @@
-name: Scheduled Deletion of STS Roles
+name: Scheduled Cleanup
 
 on:
   schedule:
@@ -29,6 +29,14 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"        
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
 
-      - name: Run Python Script
+      - name: Delete STS Roles
         run: python python/utils/s3_roles_delete.py
+
+      - name: Cleanup buckets
+        run: python python/utils/cleanup_test_buckets.py        
+

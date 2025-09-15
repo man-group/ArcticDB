@@ -1,14 +1,8 @@
 from datetime import datetime
 import boto3
 import os
+from utils.bucket_management import s3_client
 
-
-def boto_client():
-    return boto3.client(
-        "iam",
-        aws_access_key_id=os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY"),
-        aws_secret_access_key=os.getenv("ARCTICDB_REAL_S3_SECRET_KEY"),
-    )
 
 def list_roles_by_prefix(client, prefix):
     roles = []
@@ -18,6 +12,7 @@ def list_roles_by_prefix(client, prefix):
             if role['RoleName'].startswith(prefix):
                 roles.append(role['RoleName'])
     return roles
+
 
 def list_users_by_prefix(client, prefix):
     paginator = client.get_paginator('list_users')
@@ -29,6 +24,7 @@ def list_users_by_prefix(client, prefix):
                 filtered_users.append(user['UserName'])
     
     return filtered_users
+
 
 def delete_role(iam_client, role_name):
     print("Starting cleanup process...")
@@ -55,6 +51,7 @@ def delete_role(iam_client, role_name):
         print("Error deleting role")  
         print(repr(e))
 
+
 def delete_user(iam_client, user_name):
     attached_policies = iam_client.list_attached_user_policies(UserName=user_name)['AttachedPolicies']
     for policy in attached_policies:
@@ -80,10 +77,11 @@ def delete_user(iam_client, user_name):
     except Exception as e:
         print("Error deleting user")  
         print(repr(e))
+        
 
 PREFIX = os.getenv("ARCTICDB_REAL_S3_STS_PREFIX", "gh_sts_test")
 
-client = boto_client()
+client = s3_client()
 roles = list_roles_by_prefix(client, PREFIX)
 print(f"Found {len(roles)} roles")
 users = list_users_by_prefix(client, PREFIX)     
