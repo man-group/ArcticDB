@@ -7,6 +7,8 @@ import sys
 from numpy.testing import assert_array_equal
 
 from pandas import MultiIndex
+from pandas._libs.tslibs.offsets import BDay
+
 import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
@@ -764,22 +766,10 @@ def test_append_no_columns(lmdb_version_store_dynamic_schema_v1):
     assert_frame_equal(result, expected)
 
 
-from pandas._libs.tslibs.offsets import BDay
-
-from datetime import datetime
-
-
 def get_next_business_date(d: datetime) -> datetime:
     """Returns next business date from datetime 'd' (uses pandas BDay)."""
 
     return (d + BDay(1)).to_pydatetime()
-
-
-def create_or_append(arctic_lib: NativeVersionStore, symbol: str, data: pd.DataFrame) -> None:
-    if symbol not in arctic_lib.list_symbols():
-        arctic_lib.write(symbol, data)
-    else:
-        arctic_lib.append(symbol, data)
 
 
 def create_random_data(at_date: datetime, num_cols: int = 5) -> pd.DataFrame:
@@ -803,14 +793,11 @@ def test_append_after_delete_range(sym, lmdb_version_store):
     # create data
     while cur_date <= end_date:
         df = create_random_data(at_date=cur_date)
-        create_or_append(lib, "sym", df)
+        lib.append("sym", df)
         cur_date = get_next_business_date(cur_date)
 
     # remove date
     lib.delete("sym", date_range=(datetime(2025, 9, 2), datetime(2025, 9, 3)))
-
-    data = lib.read("sym", date_range=(datetime(2025, 9, 2), datetime(2025, 9, 2))).data
-    print(data.head())
 
     # re-insert data
     start_date = datetime(2025, 9, 2)
@@ -822,7 +809,7 @@ def test_append_after_delete_range(sym, lmdb_version_store):
     while cur_date <= end_date:
         df = create_random_data(at_date=cur_date)
         expected_data = pd.concat([expected_data, df])
-        create_or_append(lib, "sym", df)
+        lib.append("sym", df)
         cur_date = get_next_business_date(cur_date)
 
     assert_frame_equal(lib.read("sym").data, expected_data)

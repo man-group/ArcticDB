@@ -1396,7 +1396,8 @@ def lmdb_version_store_static_and_dynamic(request) -> Generator[NativeVersionSto
 )
 def lmdb_version_store_static_and_dynamic_v1(request) -> Generator[NativeVersionStore, None, None]:
     """
-    Designed to test V1 combinations between schema and encoding version for LMDB
+    Designed to test the Native version store with API both static and dynamic schema
+    Uses only lmdb with encoding V1.
     """
     yield request.getfixturevalue(request.param)
 
