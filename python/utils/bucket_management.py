@@ -22,10 +22,10 @@ from arcticdb.util.logger import get_logger
 logger = get_logger()
 
 
-def s3_client() -> BaseClient:
+def s3_client(client_type: str = "s3") -> BaseClient:
     """Create a boto S3 client to Amazon AWS S3 store"""
     return boto3.client(
-        "s3",
+        client_type,
         aws_access_key_id=os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY"),
         aws_secret_access_key=os.getenv("ARCTICDB_REAL_S3_SECRET_KEY"),
     )

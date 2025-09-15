@@ -81,7 +81,7 @@ def delete_user(iam_client, user_name):
 
 PREFIX = os.getenv("ARCTICDB_REAL_S3_STS_PREFIX", "gh_sts_test")
 
-client = s3_client()
+client = s3_client("iam")
 roles = list_roles_by_prefix(client, PREFIX)
 print(f"Found {len(roles)} roles")
 users = list_users_by_prefix(client, PREFIX)     
