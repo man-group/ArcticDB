@@ -22,7 +22,7 @@ jobs:
           python-version: "3.11"
 
       - name: Install Dependencies
-        run: pip install boto3 arcticdb
+        run: pip install boto3 azure arcticdb
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
@@ -34,21 +34,15 @@ jobs:
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
 
-      - name: Additional info
+      - name: Delete STS Roles
         run: |
-          pwd
-          ls -al
           cd python
-          ls -al
-          ls -al utils
-
-      - name: Setup tmate session
-        uses: mxschmitt/action-tmate@v3
+          PYTHONPATH=. python -m utils.s3_roles_delete
 
       - name: Cleanup buckets
-        run: PYTHONPATH=. python -v -m utils.cleanup_test_buckets 
+        run: |
+          cd python
+          PYTHONPATH=. python -v -m utils.cleanup_test_buckets 
 
-      - name: Delete STS Roles
-        run: PYTHONPATH=. python -m utils.s3_roles_delete
 
 
