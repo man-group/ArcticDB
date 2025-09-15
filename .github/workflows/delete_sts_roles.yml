@@ -34,6 +34,11 @@ jobs:
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
 
+      - name: Additional info
+        run: |
+          pwd
+          ls -al
+
       - name: Delete STS Roles
         run: python -m utils.s3_roles_delete python/utils/s3_roles_delete.py
 
