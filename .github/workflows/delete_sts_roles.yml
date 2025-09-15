@@ -22,7 +22,7 @@ jobs:
           python-version: "3.x"
 
       - name: Install Dependencies
-        run: pip install boto3
+        run: pip install boto3 arcticdb
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
