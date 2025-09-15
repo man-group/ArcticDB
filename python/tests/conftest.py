@@ -1390,6 +1390,20 @@ def lmdb_version_store_static_and_dynamic(request) -> Generator[NativeVersionSto
 @pytest.fixture(
     scope="function",
     params=(
+        "lmdb_version_store_empty_types_v1",
+        "lmdb_version_store_empty_types_dynamic_schema_v1",
+    ),
+)
+def lmdb_version_store_static_and_dynamic_v1(request) -> Generator[NativeVersionStore, None, None]:
+    """
+    Designed to test V1 combinations between schema and encoding version for LMDB
+    """
+    yield request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    scope="function",
+    params=(
         pytest.param("lmdb_version_store_v1", marks=LMDB_TESTS_MARK),
         pytest.param("lmdb_version_store_v2", marks=LMDB_TESTS_MARK),
         pytest.param("s3_version_store_v1", marks=SIM_S3_TESTS_MARK),
