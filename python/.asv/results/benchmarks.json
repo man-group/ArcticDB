@@ -1324,7 +1324,7 @@
         "timeout": 600,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "78d99e44cce890e09c89b0a8e4c1420cd237ac7eec4bb678c96618827baef718"
+        "version": "d5455e784a299c90ae432d9871ef498f6a227a5fba2fd0657fbd3ee095170560"
     },
     "finalize_staged_data.FinalizeStagedDataWiderDataframeX3.time_finalize_staged_data": {
         "code": "class FinalizeStagedDataWiderDataframeX3:\n    def time_finalize_staged_data(self, param: int):\n        if not SLOW_TESTS:\n            raise SkipNotImplemented(\"Slow tests are skipped\")\n        super().time_finalize_staged_data(param)\n\n    def setup(self, param: int):\n        if not SLOW_TESTS:\n            raise SkipNotImplemented(\"Slow tests are skipped\")\n        super().setup(param)\n\n    def setup_cache(self):\n        # Generating dataframe with all kind of supported data type\n        if not SLOW_TESTS:\n            return  # Avoid setup when skipping\n        cachedDF = CachedDFGenerator(350000, [5, 25, 50])  # 3 times wider DF with bigger string columns\n        start = time.time()\n        self._setup_cache(cachedDF)\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -1346,7 +1346,7 @@
         "timeout": 600,
         "type": "time",
         "unit": "seconds",
-        "version": "6c8fcb770b3ba6cd93b63b830a169dd3afd65e5cf007496395938a6f8e10cf82",
+        "version": "d9b33220bbcc9d5d991bb7a81142342743f0a04cbf0612ec3c22896feb296974",
         "warmup_time": 0
     },
     "list_functions.ListFunctions.peakmem_list_symbols": {
@@ -1904,7 +1904,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "12247b929d34d209286ab85918d78e86cc91561bd9a4cc7db06beaa001d21e0d"
+        "version": "5f940b32e17b1e08e0e79df3ddb81fd60d6217ec6274ee308a3cccf5a90cc72f"
     },
     "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch_with_columns": {
         "code": "class AWSBatchBasicFunctions:\n    def peakmem_read_batch_with_columns(self, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs_with_cols)\n        # Quick check all is ok (will not affect bemchmarks)\n        assert read_batch_result[0].data.shape[0] == num_rows\n        assert read_batch_result[-1].data.shape[0] == num_rows\n\n    def setup(self, num_symbols, num_rows):\n        self.manager = self.get_library_manager()\n        self.population_policy = self.get_population_policy()\n        # We use the same generator as the policy\n    \n        self.lib: Library = self.manager.get_library(LibraryType.PERSISTENT, num_symbols)\n        self.write_lib: Library = self.manager.get_library(LibraryType.MODIFIABLE, num_symbols)\n        self.get_logger().info(f\"Library {self.lib}\")\n        self.get_logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            # the name is constructed of 2 parts index + number of rows\n            sym_name = self.population_policy.get_symbol_name(num_symb_idx, num_rows)\n            if not self.lib.has_symbol(sym_name):\n                self.get_logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        # Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        # Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df = self.population_policy.df_generator.get_dataframe(num_rows, AWSBatchBasicFunctions.number_columns)\n    \n        # Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.df.columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        # Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        logger = self.get_logger()\n        number_symbols_list, number_rows_list = AWSBatchBasicFunctions.params\n        for number_symbols in number_symbols_list:\n            lib_suffix = number_symbols\n            if not manager.has_library(LibraryType.PERSISTENT, lib_suffix):\n                start = time.time()\n                for number_rows in number_rows_list:\n                    policy.set_parameters([number_rows] * lib_suffix, AWSBatchBasicFunctions.number_columns)\n                    # the name of symbols during generation will have now 2 parameters:\n                    # the index of symbol + number of rows\n                    # that allows generating more than one symbol in a library\n                    policy.set_symbol_fixed_str(number_rows)\n                    populate_library(manager, policy, LibraryType.PERSISTENT, lib_suffix)\n                    logger.info(f\"Generated {number_symbols} with {number_rows} each for {time.time()- start}\")\n        manager.log_info()  # Always log the ArcticURIs",
@@ -1927,7 +1927,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "d8eeb21aa5b74f3f935a4b92c92f09f31d1f089b892b6ac712a476f33e854a4c"
+        "version": "e5f752bdf60df192471e9f0a0bb7ee74f3582679fd461247cda321614ecfc952"
     },
     "real_batch_functions.AWSBatchBasicFunctions.peakmem_read_batch_with_date_ranges": {
         "code": "class AWSBatchBasicFunctions:\n    def peakmem_read_batch_with_date_ranges(self, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs_date_range)\n        # Quick check all is ok (will not affect bemchmarks)\n        assert read_batch_result[0].data.shape[0] > 2\n        assert read_batch_result[-1].data.shape[0] > 2\n\n    def setup(self, num_symbols, num_rows):\n        self.manager = self.get_library_manager()\n        self.population_policy = self.get_population_policy()\n        # We use the same generator as the policy\n    \n        self.lib: Library = self.manager.get_library(LibraryType.PERSISTENT, num_symbols)\n        self.write_lib: Library = self.manager.get_library(LibraryType.MODIFIABLE, num_symbols)\n        self.get_logger().info(f\"Library {self.lib}\")\n        self.get_logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            # the name is constructed of 2 parts index + number of rows\n            sym_name = self.population_policy.get_symbol_name(num_symb_idx, num_rows)\n            if not self.lib.has_symbol(sym_name):\n                self.get_logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        # Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        # Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df = self.population_policy.df_generator.get_dataframe(num_rows, AWSBatchBasicFunctions.number_columns)\n    \n        # Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.df.columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        # Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        logger = self.get_logger()\n        number_symbols_list, number_rows_list = AWSBatchBasicFunctions.params\n        for number_symbols in number_symbols_list:\n            lib_suffix = number_symbols\n            if not manager.has_library(LibraryType.PERSISTENT, lib_suffix):\n                start = time.time()\n                for number_rows in number_rows_list:\n                    policy.set_parameters([number_rows] * lib_suffix, AWSBatchBasicFunctions.number_columns)\n                    # the name of symbols during generation will have now 2 parameters:\n                    # the index of symbol + number of rows\n                    # that allows generating more than one symbol in a library\n                    policy.set_symbol_fixed_str(number_rows)\n                    populate_library(manager, policy, LibraryType.PERSISTENT, lib_suffix)\n                    logger.info(f\"Generated {number_symbols} with {number_rows} each for {time.time()- start}\")\n        manager.log_info()  # Always log the ArcticURIs",
@@ -1950,7 +1950,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "aebe4be8cf7590f95c29a5f5e71088dc833e85dba49c4d159ccb6aced1f7ce90"
+        "version": "0bc60840654ec805851574b1f8ef76987cbd0ac99806d08abf47e7a5c415fd4c"
     },
     "real_batch_functions.AWSBatchBasicFunctions.peakmem_write_batch": {
         "code": "class AWSBatchBasicFunctions:\n    def peakmem_write_batch(self, num_symbols, num_rows):\n        payloads = [WritePayload(symbol, self.df) for symbol in self.symbols]\n        write_batch_result = self.write_lib.write_batch(payloads)\n        # Quick check all is ok (will not affect bemchmarks)\n        assert write_batch_result[0].symbol in self.symbols\n        assert write_batch_result[-1].symbol in self.symbols\n\n    def setup(self, num_symbols, num_rows):\n        self.manager = self.get_library_manager()\n        self.population_policy = self.get_population_policy()\n        # We use the same generator as the policy\n    \n        self.lib: Library = self.manager.get_library(LibraryType.PERSISTENT, num_symbols)\n        self.write_lib: Library = self.manager.get_library(LibraryType.MODIFIABLE, num_symbols)\n        self.get_logger().info(f\"Library {self.lib}\")\n        self.get_logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            # the name is constructed of 2 parts index + number of rows\n            sym_name = self.population_policy.get_symbol_name(num_symb_idx, num_rows)\n            if not self.lib.has_symbol(sym_name):\n                self.get_logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        # Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        # Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df = self.population_policy.df_generator.get_dataframe(num_rows, AWSBatchBasicFunctions.number_columns)\n    \n        # Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.df.columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        # Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        logger = self.get_logger()\n        number_symbols_list, number_rows_list = AWSBatchBasicFunctions.params\n        for number_symbols in number_symbols_list:\n            lib_suffix = number_symbols\n            if not manager.has_library(LibraryType.PERSISTENT, lib_suffix):\n                start = time.time()\n                for number_rows in number_rows_list:\n                    policy.set_parameters([number_rows] * lib_suffix, AWSBatchBasicFunctions.number_columns)\n                    # the name of symbols during generation will have now 2 parameters:\n                    # the index of symbol + number of rows\n                    # that allows generating more than one symbol in a library\n                    policy.set_symbol_fixed_str(number_rows)\n                    populate_library(manager, policy, LibraryType.PERSISTENT, lib_suffix)\n                    logger.info(f\"Generated {number_symbols} with {number_rows} each for {time.time()- start}\")\n        manager.log_info()  # Always log the ArcticURIs",
@@ -1973,7 +1973,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "b58eb8a420862c585bcfbdfe92d70ba068310e4c34c7846292f47dd7363cae27"
+        "version": "e3de99f1307e75a7b5fddd8d7f3e4fba1975fda0f0f196603caa638b4cb3569f"
     },
     "real_batch_functions.AWSBatchBasicFunctions.time_read_batch": {
         "code": "class AWSBatchBasicFunctions:\n    def time_read_batch(self, num_symbols, num_rows):\n        read_batch_result = self.lib.read_batch(self.read_reqs)\n\n    def setup(self, num_symbols, num_rows):\n        self.manager = self.get_library_manager()\n        self.population_policy = self.get_population_policy()\n        # We use the same generator as the policy\n    \n        self.lib: Library = self.manager.get_library(LibraryType.PERSISTENT, num_symbols)\n        self.write_lib: Library = self.manager.get_library(LibraryType.MODIFIABLE, num_symbols)\n        self.get_logger().info(f\"Library {self.lib}\")\n        self.get_logger().debug(f\"Symbols {self.lib.list_symbols()}\")\n    \n        # Get generated symbol names\n        self.symbols = []\n        for num_symb_idx in range(num_symbols):\n            # the name is constructed of 2 parts index + number of rows\n            sym_name = self.population_policy.get_symbol_name(num_symb_idx, num_rows)\n            if not self.lib.has_symbol(sym_name):\n                self.get_logger().error(f\"symbol not found {sym_name}\")\n            self.symbols.append(sym_name)\n    \n        # Construct read requests (will equal to number of symbols)\n        self.read_reqs = [ReadRequest(symbol) for symbol in self.symbols]\n    \n        # Construct dataframe that will be used for write requests, not whole DF (will equal to number of symbols)\n        self.df = self.population_policy.df_generator.get_dataframe(num_rows, AWSBatchBasicFunctions.number_columns)\n    \n        # Construct read requests based on 2 colmns, not whole DF (will equal to number of symbols)\n        COLS = self.df.columns[2:4]\n        self.read_reqs_with_cols = [ReadRequest(symbol, columns=COLS) for symbol in self.symbols]\n    \n        # Construct read request with date_range\n        self.date_range = self.get_last_x_percent_date_range(num_rows, 0.05)\n        self.read_reqs_date_range = [ReadRequest(symbol, date_range=self.date_range) for symbol in self.symbols]\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        logger = self.get_logger()\n        number_symbols_list, number_rows_list = AWSBatchBasicFunctions.params\n        for number_symbols in number_symbols_list:\n            lib_suffix = number_symbols\n            if not manager.has_library(LibraryType.PERSISTENT, lib_suffix):\n                start = time.time()\n                for number_rows in number_rows_list:\n                    policy.set_parameters([number_rows] * lib_suffix, AWSBatchBasicFunctions.number_columns)\n                    # the name of symbols during generation will have now 2 parameters:\n                    # the index of symbol + number of rows\n                    # that allows generating more than one symbol in a library\n                    policy.set_symbol_fixed_str(number_rows)\n                    populate_library(manager, policy, LibraryType.PERSISTENT, lib_suffix)\n                    logger.info(f\"Generated {number_symbols} with {number_rows} each for {time.time()- start}\")\n        manager.log_info()  # Always log the ArcticURIs",
@@ -2001,7 +2001,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "501017573a8a25827024b656a55df9ed1a621d3cdaac24c830c183d9b691463a",
+        "version": "919b109aa3f63f22826be5a5f1255dcd06e284fac7035d1d2b8446ef182d4f3f",
         "warmup_time": 0
     },
     "real_batch_functions.AWSBatchBasicFunctions.time_read_batch_with_columns": {
@@ -2030,7 +2030,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "8e28fd869de381aec95ddab625b7d4e17bd262a6238f21b980a1ded0903ef3c1",
+        "version": "c4f2b10ea3bae71c069942dc0b9ed61b161076d0c9ed9e9a3eabdd56aa720675",
         "warmup_time": 0
     },
     "real_batch_functions.AWSBatchBasicFunctions.time_read_batch_with_date_ranges": {
@@ -2059,7 +2059,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "97ac25e33d8fb8d99080e1a9177918dc6bf503d3fc8bc429ae06dc746537f950",
+        "version": "21629b37558919e369c6b23aab6179b57f09fc95247b5819b07cac4a46ce608c",
         "warmup_time": 0
     },
     "real_batch_functions.AWSBatchBasicFunctions.time_write_batch": {
@@ -2088,7 +2088,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "79c5307f83e8be6020c49ce96f9b943180776220a624f8853cb50c7d10db11bc",
+        "version": "7dc9bf11079cd6affdcf109a9d3f2ea057c2f52f63593fd9260004930ac7a6e6",
         "warmup_time": 0
     },
     "real_comparison_benchmarks.RealComparisonBenchmarks.peakmem_create_then_write_dataframe": {
@@ -2110,7 +2110,7 @@
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7b1c447a499ef7f7a8377e3797c6260d331ae11ca1a2f4cea0425b3ba64ba4b9"
+        "version": "6d29e295671e2ea22e0d30278ef69d9d7740a8e9c7dd806efa5d6144cc3647da"
     },
     "real_comparison_benchmarks.RealComparisonBenchmarks.peakmem_read_dataframe": {
         "code": "class RealComparisonBenchmarks:\n    def peakmem_read_dataframe(self, tpl, btype):\n        df, dict = tpl\n        if btype == BASE_MEMORY:\n            # measures base memory which need to be deducted from\n            # any measurements with actual operations\n            # see discussion above\n            return\n        if btype == CREATE_DATAFRAME:\n            df = pd.DataFrame(dict)\n        elif btype == PANDAS_PARQUET:\n            pd.read_parquet(self.parquet_to_read)\n        elif btype == ARCTICDB_LMDB:\n            self.lib.read(self.SYMBOL)\n        elif btype == ARCTICDB_AMAZON_S3:\n            self.s3_lib_read.read(self.s3_symbol)\n        else:\n            raise Exception(f\"Unsupported type: {btype}\")\n\n    def setup(self, tpl, btype):\n        df: pd.DataFrame\n        dict: Dict[str, Any]\n        df, dict = tpl\n        self.manager = self.get_library_manager()\n        self.logger = self.get_logger()\n        self.logger.info(f\"Setup started\")\n        # LMDB Setup\n        self.ac = Arctic(RealComparisonBenchmarks.URL)\n        self.lib = self.ac[RealComparisonBenchmarks.LIB_NAME]\n        self.parquet_to_write = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.parquet_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.parquet_to_write)\n        df.to_parquet(self.parquet_to_read, index=True)\n    \n        # With shared storage we create different libs for each process\n        self.s3_lib_write = self.manager.get_library(LibraryType.MODIFIABLE)\n        self.s3_lib_read = self.manager.get_library(LibraryType.PERSISTENT)\n        self.s3_symbol = RealComparisonBenchmarks.SYMBOL\n        self.logger.info(f\"Setup ended\")\n\n    def setup_cache(self):\n        logger = self.get_logger()\n        logger.info(f\"Setup CACHE start\")\n        manager = self.get_library_manager()\n        symbol = RealComparisonBenchmarks.SYMBOL\n        num_rows = RealComparisonBenchmarks.NUMBER_ROWS\n    \n        st = time.time()\n        dict = self.create_dict(num_rows)\n        df = pd.DataFrame(dict)\n        logger.info(f\"DF with {num_rows} rows generated for {time.time() - st}\")\n    \n        # Prepare local LMDB lib\n        ac = Arctic(RealComparisonBenchmarks.URL)\n        ac.delete_library(RealComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(RealComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=symbol, data=df)\n    \n        # Prepare persistent library if does not exist\n        manager.clear_all_benchmark_libs()\n        if not manager.has_library(LibraryType.PERSISTENT):\n            s3_lib = manager.get_library(LibraryType.PERSISTENT)\n            s3_lib.write(symbol, df)\n        return (df, dict)",
@@ -2131,7 +2131,7 @@
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "74e842504a929b308054e279b84e4d85168663dea924431ab926322c614cbc3c"
+        "version": "659f77bdc21378d3f9210e0f791c2cea56ca30f7a06644ec82d3d8cad9964efe"
     },
     "real_comparison_benchmarks.RealComparisonBenchmarks.peakmem_write_dataframe": {
         "code": "class RealComparisonBenchmarks:\n    def peakmem_write_dataframe(self, tpl, btype):\n        df, dict = tpl\n        if btype == BASE_MEMORY:\n            # What is the tool mem load?\n            return\n        if btype == CREATE_DATAFRAME:\n            df = pd.DataFrame(dict)\n        elif btype == PANDAS_PARQUET:\n            df.to_parquet(self.parquet_to_write, index=True)\n        elif btype == ARCTICDB_LMDB:\n            self.lib.write(\"symbol\", df)\n        elif btype == ARCTICDB_AMAZON_S3:\n            self.s3_lib_write.write(self.s3_symbol, df)\n        else:\n            raise Exception(f\"Unsupported type: {btype}\")\n\n    def setup(self, tpl, btype):\n        df: pd.DataFrame\n        dict: Dict[str, Any]\n        df, dict = tpl\n        self.manager = self.get_library_manager()\n        self.logger = self.get_logger()\n        self.logger.info(f\"Setup started\")\n        # LMDB Setup\n        self.ac = Arctic(RealComparisonBenchmarks.URL)\n        self.lib = self.ac[RealComparisonBenchmarks.LIB_NAME]\n        self.parquet_to_write = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.parquet_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.parquet_to_write)\n        df.to_parquet(self.parquet_to_read, index=True)\n    \n        # With shared storage we create different libs for each process\n        self.s3_lib_write = self.manager.get_library(LibraryType.MODIFIABLE)\n        self.s3_lib_read = self.manager.get_library(LibraryType.PERSISTENT)\n        self.s3_symbol = RealComparisonBenchmarks.SYMBOL\n        self.logger.info(f\"Setup ended\")\n\n    def setup_cache(self):\n        logger = self.get_logger()\n        logger.info(f\"Setup CACHE start\")\n        manager = self.get_library_manager()\n        symbol = RealComparisonBenchmarks.SYMBOL\n        num_rows = RealComparisonBenchmarks.NUMBER_ROWS\n    \n        st = time.time()\n        dict = self.create_dict(num_rows)\n        df = pd.DataFrame(dict)\n        logger.info(f\"DF with {num_rows} rows generated for {time.time() - st}\")\n    \n        # Prepare local LMDB lib\n        ac = Arctic(RealComparisonBenchmarks.URL)\n        ac.delete_library(RealComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(RealComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=symbol, data=df)\n    \n        # Prepare persistent library if does not exist\n        manager.clear_all_benchmark_libs()\n        if not manager.has_library(LibraryType.PERSISTENT):\n            s3_lib = manager.get_library(LibraryType.PERSISTENT)\n            s3_lib.write(symbol, df)\n        return (df, dict)",
@@ -2152,7 +2152,7 @@
         "timeout": 60000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "376aa64074dfc1b8e319065605bc8e26898c54cf8e2d0472a317453ebf7b4915"
+        "version": "6e7f2fc17ff2e3550a927ac3659eae946384ea1f88bfb66049eae9f7969b6f02"
     },
     "real_comparison_benchmarks.RealComparisonBenchmarks.time_create_then_write_dataframe": {
         "code": "class RealComparisonBenchmarks:\n    def time_create_then_write_dataframe(self, tpl, btype):\n        self.create_then_write_dataframe(tpl, btype)\n\n    def setup(self, tpl, btype):\n        df: pd.DataFrame\n        dict: Dict[str, Any]\n        df, dict = tpl\n        self.manager = self.get_library_manager()\n        self.logger = self.get_logger()\n        self.logger.info(f\"Setup started\")\n        # LMDB Setup\n        self.ac = Arctic(RealComparisonBenchmarks.URL)\n        self.lib = self.ac[RealComparisonBenchmarks.LIB_NAME]\n        self.parquet_to_write = f\"{tempfile.gettempdir()}/df.parquet\"\n        self.parquet_to_read = f\"{tempfile.gettempdir()}/df_to_read.parquet\"\n        self.delete_if_exists(self.parquet_to_write)\n        df.to_parquet(self.parquet_to_read, index=True)\n    \n        # With shared storage we create different libs for each process\n        self.s3_lib_write = self.manager.get_library(LibraryType.MODIFIABLE)\n        self.s3_lib_read = self.manager.get_library(LibraryType.PERSISTENT)\n        self.s3_symbol = RealComparisonBenchmarks.SYMBOL\n        self.logger.info(f\"Setup ended\")\n\n    def setup_cache(self):\n        logger = self.get_logger()\n        logger.info(f\"Setup CACHE start\")\n        manager = self.get_library_manager()\n        symbol = RealComparisonBenchmarks.SYMBOL\n        num_rows = RealComparisonBenchmarks.NUMBER_ROWS\n    \n        st = time.time()\n        dict = self.create_dict(num_rows)\n        df = pd.DataFrame(dict)\n        logger.info(f\"DF with {num_rows} rows generated for {time.time() - st}\")\n    \n        # Prepare local LMDB lib\n        ac = Arctic(RealComparisonBenchmarks.URL)\n        ac.delete_library(RealComparisonBenchmarks.LIB_NAME)\n        lib = ac.create_library(RealComparisonBenchmarks.LIB_NAME)\n        lib.write(symbol=symbol, data=df)\n    \n        # Prepare persistent library if does not exist\n        manager.clear_all_benchmark_libs()\n        if not manager.has_library(LibraryType.PERSISTENT):\n            s3_lib = manager.get_library(LibraryType.PERSISTENT)\n            s3_lib.write(symbol, df)\n        return (df, dict)",
@@ -2178,7 +2178,7 @@
         "timeout": 60000,
         "type": "time",
         "unit": "seconds",
-        "version": "9b06683aaf9b2112fce975aaad4ccdf9ad266b297384fb73f01948a23ed9c622",
+        "version": "f775e01172180c26b5d2a21e04b658cb3389adb8256920c58a20a2798f39131c",
         "warmup_time": 0
     },
     "real_finalize_staged_data.AWSFinalizeStagedData.peakmem_finalize_staged_data": {
@@ -2197,7 +2197,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e3f95aa7923f7837767aaec1073645b8bd6bec4cfcf71d0e819232af51829284"
+        "version": "807052d5c2c0c054cc0b91e1255cb54af1e074c1e216974289db9fa905eff800"
     },
     "real_finalize_staged_data.AWSFinalizeStagedData.time_finalize_staged_data": {
         "code": "class AWSFinalizeStagedData:\n    def time_finalize_staged_data(self, cache: CachedDFGenerator, param: int):\n        self.logger.info(f\"Library: {self.lib}\")\n        self.logger.info(f\"Symbol: {self.symbol}\")\n        assert self.symbol in self.lib.get_staged_symbols()\n        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)\n\n    def setup(self, cache, num_chunks: int):\n        self.df_cache: CachedDFGenerator = cache\n        self.logger = self.get_logger()\n    \n        self.lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n    \n        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, self.df_cache.TIME_UNIT)  # Synchronize index frequency\n    \n        df = self.df_cache.generate_dataframe_timestamp_indexed(200, 0, self.df_cache.TIME_UNIT)\n        list_of_chunks = [10000] * num_chunks\n        self.symbol = f\"symbol_{os.getpid()}\"\n    \n        self.lib.write(self.symbol, data=df, prune_previous_versions=True)\n        stage_chunks(self.lib, self.symbol, self.df_cache, INITIAL_TIMESTAMP, list_of_chunks)\n\n    def setup_cache(self):\n        # Preconditions for this test\n        assert AWSFinalizeStagedData.number == 1\n        assert AWSFinalizeStagedData.repeat == 1\n        assert AWSFinalizeStagedData.rounds == 1\n        assert AWSFinalizeStagedData.warmup_time == 0\n    \n        manager = self.get_library_manager()\n        manager.clear_all_benchmark_libs()\n        manager.log_info()\n    \n        df_cache = CachedDFGenerator(500000, [5])\n        return df_cache",
@@ -2220,7 +2220,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "2cc8f1598f371894726ad98c50ef3fc5547a760f45d25e8a80bb2d563fda964e",
+        "version": "e637474610e2fa47bd54a3077f46e8b35f94f808c4aadccbd01e8ff63d51dc06",
         "warmup_time": 0
     },
     "real_list_operations.AWSListSymbols.peakmem_list_symbols": {
@@ -2239,7 +2239,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "3a9437f6e472e3d916bef3fc9e15da3e5153d99f515ddd3cce9ef7ce8bb411c2"
+        "version": "fd9a84c3b5ca3f9971e5460376018e832367ebcb746eb52aff37606f622eff17"
     },
     "real_list_operations.AWSListSymbols.time_has_symbol_nonexisting": {
         "code": "class AWSListSymbols:\n    def time_has_symbol_nonexisting(self, num_syms):\n        assert self.test_counter == 1, \"Test executed only once in setup-teardown cycle\"\n        self.lib.has_symbol(\"250_sym\")\n        self.test_counter += 1\n\n    def setup(self, num_syms):\n        self.setup_library()\n        self.lib = self.get_library_manager().get_library(AWSListSymbols.library_type, num_syms)\n        self.test_counter = 1\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        self.lib._nvs.version_store._clear_symbol_list_keys()  # clear cache\n\n    def setup_cache(self):\n        assert AWSListSymbols.number == 1, \"There must be always one test between setup and tear down\"\n        self.get_library_manager().log_info()  # Always log the ArcticURIs",
@@ -2262,7 +2262,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d26278f69868af7bfde10e3af74abadb2aa8221e8445da75b25a788447907739",
+        "version": "e61b7963339a5c66c99a44b8a5ed4246ce52e18c56de05ad969ccfe36e1007df",
         "warmup_time": 0
     },
     "real_list_operations.AWSListSymbols.time_list_symbols": {
@@ -2286,7 +2286,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "de9dca891016036c2c90b5a76df8ea8470d84eaad532a0c951af7eee9ee28215",
+        "version": "740a4dee3a32d8cb9246934e1860041a0a4d07cf870f17a851c804c95797d293",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots": {
@@ -2305,7 +2305,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "81af200a443e9dad37310396d1e94b23d81d81270d7884be7841f02e92a5b9a0"
+        "version": "fbbf510c321854b58ec444401f123c69f5740b256525334c302218a2ae6d0066"
     },
     "real_list_operations.AWSVersionSymbols.peakmem_list_snapshots_without_metadata": {
         "code": "class AWSVersionSymbols:\n    def peakmem_list_snapshots_without_metadata(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots(load_metadata=False)\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
@@ -2323,7 +2323,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "6959e1346e7402271c3233e74a4ae19545c58e7852dd8d47ceb3aba03d7aef29"
+        "version": "34c30a2205a1449369b92853def2c677da806e1fd0c092f8ff90a06fec22e7eb"
     },
     "real_list_operations.AWSVersionSymbols.peakmem_list_versions": {
         "code": "class AWSVersionSymbols:\n    def peakmem_list_versions(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_versions()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
@@ -2341,7 +2341,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "56c7e4326a6a5a2b9a71b8fd78003501c0a1d26fa6f1873509fdc6c91cae90af"
+        "version": "68626a85492c785d254c3253ac781ae868deafb7d32980f62984e011ac0c5f07"
     },
     "real_list_operations.AWSVersionSymbols.time_list_snapshots": {
         "code": "class AWSVersionSymbols:\n    def time_list_snapshots(self, last_snapshot_names_dict, num_syms):\n        self.lib.list_snapshots()\n\n    def setup(self, last_snapshot_names_dict, num_syms):\n        self.population_policy = self.get_population_policy()\n        self.lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, num_syms)\n        self.test_counter = 1\n        expected_num_versions = AWSVersionSymbols.mean_number_versions_per_symbol * num_syms\n        self.get_logger().info(f\"Library {str(self.lib)}\")\n        symbols_list = self.lib.list_symbols()\n        assert num_syms == len(symbols_list), f\"The library contains expected number of symbols {symbols_list}\"\n        mes = f\"There are sufficient versions (at least {expected_num_versions - 1}, num symbols {len(symbols_list)})\"\n        assert (expected_num_versions - 1) >= len(symbols_list), mes\n        assert last_snapshot_names_dict[num_syms] is not None\n\n    def setup_cache(self):\n        num_rows = AWSListSymbols.number_rows\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        last_snapshot_names_dict = {}\n        for number_symbols in AWSVersionSymbols.params:\n            start = time.time()\n            policy.set_parameters([num_rows] * number_symbols, AWSVersionSymbols.number_columns)\n            if not manager.has_library(AWSListSymbols.library_type, number_symbols):\n                populate_library(manager, policy, AWSVersionSymbols.library_type, number_symbols)\n                self.get_logger().info(f\"Generated {number_symbols} with {num_rows} each for {time.time()- start}\")\n            else:\n                self.get_logger().info(f\"Library already exists, population skipped\")\n            # Getting one snapshot - the last\n            lib = self.get_library_manager().get_library(AWSVersionSymbols.library_type, number_symbols)\n            snapshot_name = lib.list_snapshots(load_metadata=False)[-1]\n            last_snapshot_names_dict[number_symbols] = snapshot_name\n        manager.log_info()  # Always log the ArcticURIs\n        return last_snapshot_names_dict",
@@ -2364,7 +2364,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "e7523038fd41e53befe4bc74859e59c6226cef74ec40f7d4642b337d582e8332",
+        "version": "0a97c0c02ba988159c2ba09b8e7f02ca34474bf249980aaea55c37d440d7721d",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_snapshots_without_metadata": {
@@ -2388,7 +2388,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d606b05b0bafb3aeb519be7e19b7734b50fa29b03d35930a61771ee689ed9bae",
+        "version": "6221253e0b62c144c7223b4969b58a430a1717462bd939900b602a5481d24bc2",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions": {
@@ -2412,7 +2412,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "bc1f9261fd04e65738f0494a3823d3670528f33f6d125dab804871c3e0d574a4",
+        "version": "2f3663667131b7a0be1abbf0400dafceb3af124a460735034097a907a3f9bcb9",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only": {
@@ -2436,7 +2436,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "08f98136e4ed27c413ae42c38c3f6066c085fae581d54b4bd02716f3374c8347",
+        "version": "193b11a4617959d826ba0c91617e552bdffd44feb3b78ced90c5300c0c0450ec",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_latest_only_and_skip_snapshots": {
@@ -2460,7 +2460,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "549aa0723764402ae84a33d17ba8408505357bbd2b337ba126cf68b019f5bedc",
+        "version": "d16cac6fad1d99375dbec55fcb0890d7444f076796e6952dab891f2d79b4b70c",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_skip_snapshots": {
@@ -2484,7 +2484,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "92b243f11776f97959ea3c3902133131c571477249705cc709b1568e687ec0d4",
+        "version": "3493206fe0748c6626346d9cb1573b137114e32a4a30dc7aa082ba90ccb3c57a",
         "warmup_time": 0
     },
     "real_list_operations.AWSVersionSymbols.time_list_versions_snapshot": {
@@ -2508,7 +2508,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d074a8a33a65568b0815861b17e7e9fb230f2aae19a78cc56decd8df791e7527",
+        "version": "2aff065897965f79c4a26f9107a7acda0fa16d88dbfb3ffc50cf98ca90570155",
         "warmup_time": 0
     },
     "real_modification_functions.AWS30kColsWideDFLargeAppendTests.time_append_large": {
@@ -2863,7 +2863,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "66587c7cad65fa03050a1e2d2cbdd37b215e36464be2dbca6667b52ada07b398"
+        "version": "9e0bfdbf626113f82fdfd1ffcd6e02ac70422c95277dc9b2b71b9eff44dd5844"
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_string_isin": {
         "code": "class AWSQueryBuilderFunctions:\n    def peakmem_filtering_string_isin(self, num_rows):\n        # Selects about 1% of the rows\n        k = num_rows // 1000\n        string_set = [f\"id{str(i).zfill(3)}\" for i in range(1, k + 1)]\n        q = QueryBuilder()\n        q = q[q[\"id1\"].isin(string_set)]\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -2881,7 +2881,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7a402ec7e4f09ccc8191abff900aee941fe5b983d3a54c1128332802b3aeacb8"
+        "version": "ded8cd45317d8b9ef7d267bbe014125a0cb892b87d4f249a7b113c7fa8d09df0"
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_projection": {
         "code": "class AWSQueryBuilderFunctions:\n    def peakmem_projection(self, num_rows):\n        q = QueryBuilder()\n        q = q.apply(\"new_col\", q[\"v2\"] * q[\"v3\"])\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"new_col\"], query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -2899,7 +2899,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "41f3abfee7b61aaf01d6a7c097f50c82a3cd5aa520735e8e56d1433980423e81"
+        "version": "1e538c9cadf80b7110caa89fd8da6c930281e5f0d8f0f77b874ff590cd359fcb"
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_1": {
         "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_1(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id1\").agg({\"v1\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -2917,7 +2917,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "1e238f958363598bb77ea0b61b18e872f9f2d45ace953b66286f6590b855138f"
+        "version": "4a5c834b77a9e0290a0acc55ea4aad637b747af99e048bd0f7a953f8b5fc763f"
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_3": {
         "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_3(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"sum\", \"v3\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -2935,7 +2935,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "3f46b68395cb394e790f846e8bb368416fa13d20e8963afe38202e0afb2a8012"
+        "version": "9fcfddabe4a1ac18529dc03b6cc3aaad336249b652774a16aaba62e2132702b5"
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_4": {
         "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_4(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id6\").agg({\"v1\": \"sum\", \"v2\": \"sum\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -2953,7 +2953,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "0b4095f9e4d0594d25e5334be3c0c9d41135b0460577f58f20ef358d83e58dd3"
+        "version": "6f7f2edde2507709dc18b41fa471455f6689bc62c76f009646bcfa9337ca8485"
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_query_adv_query_2": {
         "code": "class AWSQueryBuilderFunctions:\n    def peakmem_query_adv_query_2(self, num_rows):\n        q = QueryBuilder()\n        q = q.groupby(\"id3\").agg({\"v1\": \"max\", \"v2\": \"min\"})\n        data: pd.DataFrame = self.lib.read(self.symbol, query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -2971,7 +2971,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "3d94e6e1d0c466cf98b0c7673d3e695b231110e5e0aff293d7a7f75f878f49cc"
+        "version": "56097ba0e08cd9b953d9731b60fc7c04ecba690f615098d26be69fc8cf6f105f"
     },
     "real_query_builder.AWSQueryBuilderFunctions.time_filtering_numeric": {
         "code": "class AWSQueryBuilderFunctions:\n    def time_filtering_numeric(self, num_rows):\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 1.0]\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q).data\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -2994,7 +2994,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d8f0751dfa443b7fe80c43d18b9e89bebfb248d8fd2456719e5bd712c2f54905",
+        "version": "5051b70ae6f5cbc9493af6ec64ea7f644db64a60d0a58f5de1930870d44c02a4",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.time_filtering_string_isin": {
@@ -3018,7 +3018,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "3fbe4bd3d18d1756b709637b51e6181d1753379ec47d30de348e3d82e8069750",
+        "version": "ef199c9d78fc43c44984acaf08e9867a6efa89ab5b0012e51ecd4e5fd1fedce4",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.time_projection": {
@@ -3042,7 +3042,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "3e7e763b14722ab6c81c7835c4bbee8fb086672ad73366beefd3c6bc7781172f",
+        "version": "df07f61fb088929ad901e2fea6f172430f060daaadd6457d9eea51bad1129a8d",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.time_query_1": {
@@ -3066,7 +3066,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "76a7f4b0952f07784150df2b7a382356a4be815385c5258323ffc27e1d385767",
+        "version": "9720f704e40e9de6ae39cdab8db71d34c19b46fc05f4151e49ecebd50f01fd0d",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.time_query_3": {
@@ -3090,7 +3090,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "685f6a5908e27c6198503b4bc2330769d4c764d4e16beebf4e0355b5b2c6b627",
+        "version": "b0ebeed0c3c098fafd4f9f1f1b4031dcddfeec4eb44ec0789a60f9b9ff3df04b",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.time_query_4": {
@@ -3114,7 +3114,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "de79858cd635f67551cee7c9c1439573bf926264dc8e11de497d7062c5589641",
+        "version": "da26f9fa31e449bf2696324ee811ee3a949836935c265a28d8728bce3ca03579",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.time_query_adv_query_2": {
@@ -3138,7 +3138,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "977b46a22c5f742940aa1d126fec2fccea49721ce34ed2ad73026225387a0a0b",
+        "version": "7542c6a85b7d4791481f3106886009ee800f6fdfb132008b9f6fa60c6ed93848",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.peakmem_read": {
@@ -3157,7 +3157,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c9472d2ab25d1a30beb1146a9c649036af89bea84f2119d9cb184408139276f3"
+        "version": "0689b459c6c7bb49e10edc6df8a37976cdefa6017472521a35896aeddf267ae0"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_column_float": {
         "code": "class AWSReadWrite:\n    def peakmem_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -3175,7 +3175,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "cc3955cfed7c5684809c86a04041374c674f26e8721128acbcd80af06012128c"
+        "version": "61215cb103adee49fa6f3f56e1f611dcd697f9b44e8f2be23d35b3c6b997883b"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_columns_all_types": {
         "code": "class AWSReadWrite:\n    def peakmem_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\", \"string10\", \"bool\", \"int64\", \"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -3193,7 +3193,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "fdc284437037f6f245607caf113a0e5f0a6c6dccc8e6ad9f471611574253c50b"
+        "version": "285c5f2f9ba3da391ed62f3dfcf5e754258744e6ee152ccf26bf8a2ca571c972"
     },
     "real_read_write.AWSReadWrite.peakmem_read_with_date_ranges_last20_percent_rows": {
         "code": "class AWSReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -3211,7 +3211,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "a09cc022e09a57064fca48fc68fed42d6b9593fbefddc51f8be856afb7ac710b"
+        "version": "67423f3bf528cd9f5242633d93b484b558436e5c843c939d5071217f435ef906"
     },
     "real_read_write.AWSReadWrite.peakmem_write": {
         "code": "class AWSReadWrite:\n    def peakmem_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -3229,7 +3229,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "7876413187267e0867f03f798f317eaa3e3960ac2375ff5df6f2095520bb1ca5"
+        "version": "0625aa02db843284e2bd88936c72d6ed89e4f8399179c6230fffb4e15096e141"
     },
     "real_read_write.AWSReadWrite.peakmem_write_staged": {
         "code": "class AWSReadWrite:\n    def peakmem_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -3247,7 +3247,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "d211408aa7db06df36befacdd5fd39b9422eb968773a6e2bd19f8d16745541ac"
+        "version": "7ba6fea1dcf0c0e751683e095293ce820525ee930e234bbd516af15b7636d80f"
     },
     "real_read_write.AWSReadWrite.time_read": {
         "code": "class AWSReadWrite:\n    def time_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
@@ -3270,7 +3270,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "a2b8548a163367ba007992cefa84d7a83d4f60672b14b8a90bd4b2600b4d8131",
+        "version": "612120fc41c174f1a09dadd9b53367c87432990752569e4fbfccc84a8d0094b6",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_column_float": {
@@ -3294,7 +3294,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "470178c2a5f27c30784904befff88ed0b75125c5ad1a4d508ee2c6d79e1f3f99",
+        "version": "f2264b620c766af4a90a0eb7e2e06b5fbb47f300449e8ed6a8e3a265e695b9ff",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_columns_all_types": {
@@ -3318,7 +3318,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "2d8f9e98f36bf378b003b44866c8d3c39864f8160798e8b2cc7b475b074bdd38",
+        "version": "8c7fb09e61e2d7bd0f229b2ca10e61cde1f54eadb187d6f9f8136eddf32d7b1b",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_read_with_date_ranges_last20_percent_rows": {
@@ -3342,7 +3342,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "8aec0888e02948dc708cc304400857ce54ab1f5b91fda2bc167bce90ea4c7299",
+        "version": "84f2f904f9ca0aa633bec423ac9385f780529edd8cf618e13690b07781a90b23",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_write": {
@@ -3366,7 +3366,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "f77b10516f456c860eb05ec818f8242a43aa9adc54b34ef30eafd4098299322e",
+        "version": "2e85d7bf669c8aab495b34003fc9d5f536e37ee77b0154c98debb39612a1898e",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWrite.time_write_staged": {
@@ -3390,7 +3390,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "e0cd4c4a06cec3813214e5ed2e32ea0a22bf2f55e6d9cebc4f16894b16710e36",
+        "version": "aa2c3915c2cc65992b8d64669e2bc74ccfbd4d83469b0eb253739b11211b46be",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read": {
@@ -3409,7 +3409,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "1cac6c9cf15d5fbf892a777498296d8d098711272b405b1c8e243e3e767e599b"
+        "version": "bcdfc7aa551bc9ae43c6bf8dbb5ea2b9b92e03e7e6da8487ac110b302443beb4"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_column_float": {
         "code": "class AWSReadWrite:\n    def peakmem_read_with_column_float(self, num_rows):\n        COLS = [\"float2\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n        super().setup_cache()",
@@ -3427,7 +3427,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "4ff1a56334201630187cbd2ad88a520d04067e282d5a163c1d4a34230b997ab5"
+        "version": "d8263d005135750e39a3e13bd7de6702642ec7991a7dfde787b4bdba7a47125c"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_columns_all_types": {
         "code": "class AWSReadWrite:\n    def peakmem_read_with_columns_all_types(self, num_rows):\n        COLS = [\"float2\", \"string10\", \"bool\", \"int64\", \"uint64\"]\n        self.read_lib.read(symbol=self.symbol, columns=COLS).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n        super().setup_cache()",
@@ -3445,7 +3445,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "44fbc536228fe2270c8038e451223ded4f7941c9226bf95190a46b7b28f228b0"
+        "version": "febc2581d6ee0495f21fe39fd5b9e139ee3784074ebef2305ea52a167d60a449"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_read_with_date_ranges_last20_percent_rows": {
         "code": "class AWSReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n        super().setup_cache()",
@@ -3463,7 +3463,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "307ae3fb4ac3c92c44fb9c578b21907867846318087564daae4c61f32fd996fa"
+        "version": "ac2ade0b551d6e6eca41a7b098855fc013f95c1ad95a97d15fcb716a99784bca"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_write": {
         "code": "class AWSReadWrite:\n    def peakmem_write(self, num_rows):\n        self.write_lib.write(self.symbol, self.to_write_df)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n        super().setup_cache()",
@@ -3481,7 +3481,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "3b402f9a631ceeb544fa7ee7b860e13ab870c7e61da809ba11d14c5973c97cda"
+        "version": "ebfae974146eb06e3015c78f663185f041fecba4f2d21265a95a0f8e0b3ed114"
     },
     "real_read_write.AWSReadWriteWithQueryStats.peakmem_write_staged": {
         "code": "class AWSReadWrite:\n    def peakmem_write_staged(self, num_rows):\n        lib = self.write_lib\n        lib.write(self.symbol, self.to_write_df, staged=True)\n        lib._nvs.compact_incomplete(self.symbol, False, False)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n        super().setup_cache()",
@@ -3499,7 +3499,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c1fdbb5013c30dd4c7a6461a1b9193097a831af4f6e639e8c3261c3817e6181f"
+        "version": "8e0b84e936c8b20c9ab1100d19b36f06abe0690a3d42f1a121d487556d98fa66"
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read": {
         "code": "class AWSReadWrite:\n    def time_read(self, num_rows):\n        self.read_lib.read(self.symbol)\n\nclass AWSReadWriteWithQueryStats:\n    def setup(self, num_rows):\n        super().setup(num_rows)\n        qs.enable()\n\n    def setup_cache(self):\n        super().setup_cache()",
@@ -3522,7 +3522,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "f7a86808b4972336b56bbe425b35ce39d7db682c525504edc5912736af82398e",
+        "version": "02de728e3f80213fda1fc979b4aaf61786cd350dc31f266000478ce15d5c04e0",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read_with_column_float": {
@@ -3546,7 +3546,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "b0a5713c3639a1d5084ba6933abf2bcb14df3db143f5bfe713fbb7e448068db9",
+        "version": "e730587e51a99d028e7438d4874d1e0b1f098b49ec2773dbabf9b06d7c562315",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read_with_columns_all_types": {
@@ -3570,7 +3570,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "748e8cf9fad63c651326e462f4021c28a2c128a1d7c4783fc2886a2451b19d99",
+        "version": "69b8202ed5e2e62aefd161b99db3b55667643789c66fc99599abf2649c144ab7",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_read_with_date_ranges_last20_percent_rows": {
@@ -3594,7 +3594,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "d77a903a22862f45799bed1ae703c285e21602d82da264bf013ceba202c63cf8",
+        "version": "35c60f81beba373aaf062739dc364a9835f7f7bcccd9ac4ae7187f2f97a6a0c5",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_write": {
@@ -3618,7 +3618,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "48483b15cbd6e2738ddf3f615179a9bafde8596faac8e1b331ad03df4b4c21d8",
+        "version": "dc443b21285eae3a4009ce860f6d4be6cb0164245da60aad1b63ec6fecd5d4f8",
         "warmup_time": 0
     },
     "real_read_write.AWSReadWriteWithQueryStats.time_write_staged": {
@@ -3642,7 +3642,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "9805c7597bb79b23de9a89830bdaca81c17868b485d9ecd9ede6d0621460cf56",
+        "version": "ed3fedef28f86763035af2a64963966bf6724343de519001c9ac1a4a72d84928",
         "warmup_time": 0
     },
     "real_read_write.AWSWideDataFrameTests.peakmem_read": {
@@ -3697,7 +3697,7 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "c27180c5137daf6611cffdd96923d000f03bdc4f4c12b00435502b40d5abd4da"
+        "version": "6b035607aea2f64b0266d23fd98a15543efda0abc94c68902099d2525db7050d"
     },
     "real_read_write.AWSWideDataFrameTests.peakmem_read_with_date_ranges_last20_percent_rows": {
         "code": "class AWSReadWrite:\n    def peakmem_read_with_date_ranges_last20_percent_rows(self, num_rows):\n        self.read_lib.read(symbol=self.symbol, date_range=self.last_20).data\n\n    def setup(self, num_rows):\n        self.population_policy = self.get_population_policy()\n        self.symbol = self.population_policy.get_symbol_name(num_rows)\n        # We use the same generator as the policy\n        self.to_write_df = self.population_policy.df_generator.get_dataframe(num_rows, 0)\n    \n        # Functions operating on differetent date ranges to be moved in some shared utils\n        self.last_20 = self.get_last_x_percent_date_range(num_rows, 20)\n    \n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.write_lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)\n        # We could also populate the library like so (we don't need )\n        # populate_library(self.write_lib, )\n\nclass AWSWideDataFrameTests:\n    def setup_cache(self):\n        # Each class that has specific setup and inherits from another class,\n        # must implement setup_cache\n        super().setup_cache()",
@@ -3822,7 +3822,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "3ab9782a626f87b77d5fe64ffa7e83ae14ce2274f047d15f0c1af2c9bb8da30d",
+        "version": "7f4881ccccbe07a5dc1f77fcf1e75aaa331f0f76a590eda75c876742eb30c613",
         "warmup_time": 0
     },
     "real_read_write.AWSWideDataFrameTests.time_read_with_date_ranges_last20_percent_rows": {
