@@ -37,7 +37,7 @@ def marks(marks_list: List[Mark]):
     
     Usage:
     ------
-        @pmark([Marks.abc, Marks.cde])
+        @mark([Marks.abc, Marks.cde])
         def test_first():
             ....
     """

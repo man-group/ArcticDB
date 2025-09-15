@@ -1526,7 +1526,7 @@ def pytest_terminal_summary(terminalreporter, exitstatus):
 class Marks:
     """Central Marks Registry
     Usage:
-        @pmark([Marks.abc, Marks.cde])
+        @mark([Marks.abc, Marks.cde])
         def test_first():
             ....
         @Marks.abc.mark
@@ -1588,15 +1588,19 @@ def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
         if item.get_closest_marker(mark_name):
             continue
             
+        marked = False
         for pattern in patterns:
+            if marked: break
             for value in source_values:
                 value_lower = value.lower()
                 if isinstance(pattern, str):
                     if pattern.lower() in value_lower:
                         item.add_marker(mark_name)
+                        marked = True
                         break
                 elif pattern.search(value):
                     item.add_marker(mark_name)
+                    marked = True
                     break
 
 
@@ -1617,7 +1621,7 @@ FIXTURES_TO_MARK = {
     Marks.lmdb.name: [re.compile(r"^lmdb_.*", re.I)] 
         + ALL_FIXTURES_AND_LMDB + VERSION_STORE_AND_REAL_FIXTURES + BASIC_STORE_FIXTURES,
     Marks.mem.name: [re.compile(r"^(mem_.*|in_memory_.*)", re.I)] + ALL_FIXTURES + BASIC_STORE_FIXTURES,
-    Marks.s3.name: [re.compile(r"^s3_.*", re.I)] 
+    Marks.s3.name: [re.compile(r"^(s3_.*|mock_s3.*)", re.I)] 
         + ALL_FIXTURES + BASIC_STORE_FIXTURES + LOCAL_OBJECT_STORE_FIXTURES + OBJECT_STORE_FIXTURES,
     Marks.nfs.name: [re.compile(r"^nfs_.*", re.I)] + ALL_FIXTURES + OBJECT_STORE_FIXTURES,
     Marks.gcp.name: [re.compile(r"^gcp_.*", re.I)] + ALL_FIXTURES,
