@@ -40,10 +40,12 @@ jobs:
           ls -al
           cd python
           ls -al
+          ls -al utils
+
+      - name: Cleanup buckets
+        run: PYTHONPATH=. python -m utils.cleanup_test_buckets 
 
       - name: Delete STS Roles
         run: PYTHONPATH=. python -m utils.s3_roles_delete
 
-      - name: Cleanup buckets
-        run: PYTHONPATH=. python -m utils.cleanup_test_buckets 
 
