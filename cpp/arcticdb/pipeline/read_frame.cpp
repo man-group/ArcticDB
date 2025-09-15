@@ -732,6 +732,7 @@ class NullValueReducer {
     std::shared_ptr<PipelineContext> context_;
     SegmentInMemory frame_;
     size_t pos_;
+    size_t column_block_idx_;
     DecodePathData shared_data_;
     std::any& handler_data_;
     const OutputFormat output_format_;
@@ -751,6 +752,7 @@ public:
             context_(context),
             frame_(std::move(frame)),
             pos_(frame_.offset()),
+            column_block_idx_(0),
             shared_data_(std::move(shared_data)),
             handler_data_(handler_data),
             output_format_(output_format),
@@ -761,18 +763,17 @@ public:
         return context_row.slice_and_key().slice_.row_range.first;
     }
 
-    void backfill_all_zero_validity_bitmaps(size_t offset_bytes_start, size_t offset_bytes_end_idx) {
-        // Explanation: offset_bytes_start and offset_bytes_end should both be elements of block_offsets by
-        // construction. We must add an all zeros validity bitmap for each row-slice read from storage where this
-        // column was missing, in order to correctly populate the Arrow record-batches for the output
+    void backfill_all_zero_validity_bitmaps_up_to(std::optional<size_t> up_to_block_offset) {
+        // Fills up all validity bitmaps with zeros from `column_block_idx_` until reaching `up_to_block_offset`.
+        // If `up_to_block_offset` is `std::nullopt` then fills up until the end of the column.
         const auto& block_offsets = column_.block_offsets();
-        auto start_it = std::ranges::lower_bound(block_offsets, offset_bytes_start);
-        util::check(start_it != block_offsets.cend() && *start_it == offset_bytes_start,
-                    "NullValueReducer: Failed to find offset_bytes_start {} in block_offsets {}",
-                    offset_bytes_start, block_offsets);
-        for (auto idx = static_cast<size_t>(std::distance(block_offsets.begin(), start_it)); idx < offset_bytes_end_idx; ++idx) {
-            auto rows = (block_offsets.at(idx + 1) - block_offsets.at(idx)) / type_bytes_;
-            create_dense_bitmap_all_zeros(block_offsets.at(idx), rows, column_, AllocationType::DETACHABLE);
+        util::check(!up_to_block_offset.has_value() || up_to_block_offset.value() <= block_offsets.back(), "up_to_block_offset outside of range");
+        for (; column_block_idx_ < block_offsets.size() - 1; ++column_block_idx_) {
+            if (up_to_block_offset.has_value() && block_offsets.at(column_block_idx_) >= up_to_block_offset.value()) {
+                break;
+            }
+            auto rows = (block_offsets.at(column_block_idx_ + 1) - block_offsets.at(column_block_idx_)) / type_bytes_;
+            create_dense_bitmap_all_zeros(block_offsets.at(column_block_idx_), rows, column_, AllocationType::DETACHABLE);
         }
     }
 
@@ -783,6 +784,7 @@ public:
         if (current_pos != pos_) {
             const auto num_rows = current_pos - pos_;
             const auto start_row = pos_ - frame_.offset();
+            const auto end_row = current_pos - frame_.offset();
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type()); handler) {
                 handler->default_initialize(column_.buffer(), start_row * handler->type_size(), num_rows * handler->type_size(), shared_data_, handler_data_);
             } else if (output_format_ != OutputFormat::ARROW) {
@@ -790,11 +792,12 @@ public:
                 column_.default_initialize_rows(start_row, num_rows, false, default_value_);
             }
             if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, context_row.index());
+                backfill_all_zero_validity_bitmaps_up_to(end_row * type_bytes_);
             }
-            pos_ = current_pos + sz_to_advance;
-        } else {
-            pos_ += sz_to_advance;
+        }
+        pos_ = current_pos + sz_to_advance;
+        if (output_format_ == OutputFormat::ARROW) {
+            ++column_block_idx_;
         }
     }
 
@@ -812,7 +815,7 @@ public:
                 column_.default_initialize_rows(start_row, num_rows, false, default_value_);
             }
             if (output_format_ == OutputFormat::ARROW) {
-                backfill_all_zero_validity_bitmaps(start_row * type_bytes_, column_.block_offsets().size() - 1);
+                backfill_all_zero_validity_bitmaps_up_to(std::nullopt);
             }
         }
     }
