@@ -37,6 +37,7 @@ jobs:
       - name: Delete STS Roles
         run: |
           cd python
+          rm -rf arcticc
           PYTHONPATH=. python -m utils.s3_roles_delete
 
       - name: Cleanup buckets
