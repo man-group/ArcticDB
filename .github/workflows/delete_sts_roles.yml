@@ -35,8 +35,8 @@ jobs:
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
 
       - name: Delete STS Roles
-        run: python python/utils/s3_roles_delete.py
+        run: python -m utils.s3_roles_delete python/utils/s3_roles_delete.py
 
       - name: Cleanup buckets
-        run: python python/utils/cleanup_test_buckets.py        
+        run: python -m utils.cleanup_test_buckets python/utils/cleanup_test_buckets.py        
 

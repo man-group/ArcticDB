@@ -1,7 +1,7 @@
 from datetime import datetime
 import boto3
 import os
-from utils.bucket_management import s3_client
+from .bucket_management import s3_client
 
 
 def list_roles_by_prefix(client, prefix):
@@ -77,7 +77,7 @@ def delete_user(iam_client, user_name):
     except Exception as e:
         print("Error deleting user")  
         print(repr(e))
-        
+
 
 PREFIX = os.getenv("ARCTICDB_REAL_S3_STS_PREFIX", "gh_sts_test")
 
