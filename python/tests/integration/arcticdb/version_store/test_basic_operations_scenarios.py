@@ -18,6 +18,7 @@ from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
+    assert_frame_equal,
 )
 from arcticdb.util.utils import DFGenerator, generate_random_series, generate_random_sparse_numpy_array, set_seed, supported_types_list 
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
@@ -37,9 +38,7 @@ from arcticdb_ext.exceptions import (
     NormalizationException,
 )
 
-from benchmarks.bi_benchmarks import assert_frame_equal
 from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
-
 
 
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
@@ -637,8 +636,7 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
                     nvs.write(sym, df_not_sorted, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
             else: 
                 nvs.write(sym, df_not_sorted, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
-                # There is unexpected result that if we store unsorted dataframe it will be read sorted
-                assert_frame_equal(df_not_sorted.sort_index(), nvs.read(sym).data)
+                assert_frame_equal(df_not_sorted, nvs.read(sym).data)
 
             nvs.write(sym, ser_float, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
             assert_series_equal_pandas_1(ser_float, nvs.read(sym).data)
@@ -690,4 +688,3 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
 
             nvs.write(sym, df_sparse, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
             assert_frame_equal(df_sparse, nvs.read(sym).data)
-
