@@ -337,7 +337,6 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @pytest.mark.skip(reason = "Will become ASV tests")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     lib: adb.Library = arctic_library_lmdb_100gb
@@ -383,7 +382,6 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skip(reason = "Will become ASV tests")
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
@@ -450,8 +448,9 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     """ 
     See comment in previous test
     """
-    max_mem_bytes = 1_240_192_384 if MACOS_WHEEL_BUILD else 608_662_528  # On macOs ARM the memory required is more
-    # see https://github.com/man-group/ArcticDB/actions/runs/16048431365/job/45285477028
+    # macOS ARM64 builds empirically have shown to require more memory than the x86_64 builds.
+    # See: https://github.com/man-group/ArcticDB/actions/runs/17648315790/job/50153297343?pr=2645
+    max_mem_bytes = 3_000_000_000 if MACOS_WHEEL_BUILD else 608_662_528
 
     check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
@@ -734,7 +733,6 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
-    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we
@@ -749,7 +747,6 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
-    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we
