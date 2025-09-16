@@ -43,7 +43,7 @@ jobs:
       - name: Cleanup buckets
         run: |
           cd python
-          PYTHONPATH=. python -v -m utils.cleanup_test_buckets 
+          PYTHONPATH=. python -m utils.cleanup_test_buckets 
 
 
 
