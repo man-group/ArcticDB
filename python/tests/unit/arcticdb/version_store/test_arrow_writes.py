@@ -56,8 +56,8 @@ def test_batch_write(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     table_0 = pa.table({"col0": pa.array([0, 1], pa.int16())})
     df_1 = pd.DataFrame({"col1": np.arange(2, 5, dtype=np.int32)})
-    table_2 = pa.table({"col2": pa.array([5, 6, 7], pa.int64())})
-    lib.batch_write(["sym0", "sym1", "sym2"], [table_0, df_1, table_2])
+    table_2 = pa.table({"ts": pa.array([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], pa.timestamp("ns")), "col2": pa.array([5, 6, 7], pa.int64())})
+    lib.batch_write(["sym0", "sym1", "sym2"], [table_0, df_1, table_2], index_column_vector=[None, None, "ts"])
     received_0 = lib.read("sym0").data
     assert table_0.equals(received_0)
     received_1 = lib.read("sym1", output_format="pandas").data
@@ -70,9 +70,10 @@ def test_batch_append(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     table_0 = pa.table({"col0": pa.array([0, 1], pa.int16())})
     df_1 = pd.DataFrame({"col1": np.arange(2, 5, dtype=np.int32)})
-    table_2 = pa.table({"col2": pa.array([5, 6, 7], pa.int64())})
-    lib.batch_write(["sym0", "sym1"], [table_0, df_1])
-    lib.batch_append(["sym0", "sym1", "sym2"], [table_0, df_1, table_2])
+    table_2 = pa.table({"ts": pa.array([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], pa.timestamp("ns")), "col2": pa.array([5, 6, 7], pa.int64())})
+    lib.batch_write(["sym0", "sym1"], [table_0, df_1], index_column_vector=[None, None, "ts"])
+    table_2 = pa.table({"ts": pa.array([pd.Timestamp(3), pd.Timestamp(4), pd.Timestamp(5)], pa.timestamp("ns")), "col2": pa.array([5, 6, 7], pa.int64())})
+    lib.batch_append(["sym0", "sym1", "sym2"], [table_0, df_1, table_2], index_column_vector=[None, None, "ts"])
     received_0 = lib.read("sym0").data
     assert pa.concat_tables([table_0, table_0]).equals(received_0)
     received_1 = lib.read("sym1", output_format="pandas").data

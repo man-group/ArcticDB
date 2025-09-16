@@ -1501,6 +1501,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         pickle_on_failure=None,
         validate_index: bool = False,
+        index_column_vector: Optional[List[str]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1560,6 +1561,7 @@ class NativeVersionStore:
             pickle_on_failure,
             validate_index,
             throw_on_error,
+            index_column_vector,
             **kwargs,
         )
 
@@ -1572,12 +1574,16 @@ class NativeVersionStore:
         pickle_on_failure: bool,
         norm_failure_msg: str,
         operation_supports_categoricals: bool = False,
+        index_column_vector: Optional[List[str]] = None,
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
             metadata_vector = len(symbols) * [None]
         else:
             metadata_vector = list(metadata_vector)
+
+        if index_column_vector is None:
+            index_column_vector = len(symbols) * [None]
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(
@@ -1596,6 +1602,7 @@ class NativeVersionStore:
                 dynamic_strings,
                 None,
                 norm_failure_msg,
+                index_column_vector[idx],
             )
             udms.append(udm)
             items.append(item)
@@ -1611,6 +1618,7 @@ class NativeVersionStore:
         pickle_on_failure=None,
         validate_index: bool = False,
         throw_on_error: bool = True,
+        index_column_vector: Optional[List[str]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1631,6 +1639,7 @@ class NativeVersionStore:
             pickle_on_failure,
             norm_failure_options_msg,
             operation_supports_categoricals=True,
+            index_column_vector=index_column_vector,
         )
         for idx, dataframe in enumerate(data_vector):
             _log_warning_on_writing_empty_dataframe(dataframe, symbols[idx])
@@ -1698,6 +1707,7 @@ class NativeVersionStore:
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
         validate_index: bool = False,
+        index_column_vector: Optional[List[str]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1746,6 +1756,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             throw_on_error,
+            index_column_vector,
             **kwargs,
         )
 
@@ -1757,6 +1768,7 @@ class NativeVersionStore:
         prune_previous_version,
         validate_index,
         throw_on_error,
+        index_column_vector,
         **kwargs,
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1765,7 +1777,7 @@ class NativeVersionStore:
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
-            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append
+            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append, index_column_vector=index_column_vector
         )
         write_if_missing = kwargs.get("write_if_missing", True)
         call_time = time.time_ns()
