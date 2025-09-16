@@ -297,26 +297,3 @@ def delete_s3_bucket_batch(
         except Exception as e:
             logger.error(f"Final batch delete failed: {e}")
 
-
-"""
-gcp = gcp_client()
-gcp_bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
-logger.info(f"GCP TOTAL SIZE: {get_gcp_bucket_size(gcp, gcp_bucket)}")
-delete_gcp_bucket(gcp, gcp_bucket)
-
-azure = azure_client()
-azure_container = os.getenv("ARCTICDB_REAL_AZURE_CONTAINER")
-logger.info(f"AZURE TOTAL SIZE: {get_azure_container_size(azure, azure_container)}")
-delete_azure_container(azure, azure_container)
-
-s3 = s3_client()
-s3_bucket = os.getenv("ARCTICDB_REAL_S3_BUCKET")
-cutoff = datetime(2025, 3, 1, tzinfo=timezone.utc)
-one_week_later = cutoff + timedelta(days=7)
-delete_s3_bucket_batch(s3, s3_bucket)
-logger.info(f"AWS S3 TOTAL SIZE: {get_s3_bucket_size(s3, s3_bucket)}")
-
-"""
-
-
-
