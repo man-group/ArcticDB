@@ -26,7 +26,7 @@ from arcticdb.exceptions import (
     ArcticNativeException,
     SortingException
 )
-from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
 
 from arcticdb_ext.exceptions import (
     UnsortedDataException,
@@ -560,3 +560,70 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     # Complex structures can be staged by default
     lib.stage(symbol, get_metadata())
     check_incomplete_staged(symbol)
+
+def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
+    lib: NativeVersionStore = basic_store
+    lib.write("s1", 100)
+    lib.write("s2", 200)
+
+    lib.snapshot("snap")
+    lib.write("s3", 300)
+    lib.write("s1", 101)
+    lib.write("s1", 102)
+    lib.write("s1", 103)
+    lib.write("s2", 201)
+    lib.write("s4", 400)
+
+    # We can add empty list of symbols without error
+    lib.add_to_snapshot("snap", []) 
+    # We can remove nothing without error
+    lib.remove_from_snapshot("snap", [], []) 
+
+    # add to snapshot operation succeeds even symbol does not exist
+    lib.add_to_snapshot("snap", ["ss"])  
+    # remove from snapshot operation succeeds even symbol does not exist
+    lib.remove_from_snapshot("snap", ["FDFGEREG"], [213]) 
+
+    # remove from snapshot operation succeeds even symbol exists but version does not exist
+    lib.remove_from_snapshot("snap", ["s2"], [2]) 
+    lib.add_to_snapshot("snap", ["s2","s1"], [4343, 45949345])
+
+    # Verify the snapshot state is not changed
+    assert 100 == lib.read("s1", as_of="snap").data
+    assert 200 == lib.read("s2", as_of="snap").data
+    with pytest.raises(NoSuchVersionException):
+        lib.read("s3", as_of="snap")
+
+    # Verify mixing of existing and non-existing symbols result
+    # in proper versions of existing symbols added to the snapshot
+    lib.add_to_snapshot("snap", [" ", 5443, "ss", "s1", "s4"])  
+    assert 103 == lib.read("s1", as_of="snap").data
+    assert 400 == lib.read("s4", as_of="snap").data
+    assert 200 == lib.read("s2", as_of="snap").data
+    with pytest.raises(NoSuchVersionException):
+        lib.read("s3", as_of="snap")
+
+    # Verify mixing of existing and non-existing symbols and versions result
+    # in proper versions of existing symbols added to the snapshot
+    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2", "s2"], [1,1,1,1,4])  
+    assert 101 == lib.read("s1", as_of="snap").data
+    assert 400 == lib.read("s4", as_of="snap").data
+    assert 201 == lib.read("s2", as_of="snap").data
+    with pytest.raises(NoSuchVersionException):
+        lib.read("s3", as_of="snap")
+
+
+@pytest.mark.xfail("Negative version numbers does not work, issue 10060901137")
+def test_add_to_snapshot_with_negative_numbers(basic_store):
+    lib: NativeVersionStore = basic_store
+    lib.write("s1", 100)
+    lib.snapshot("snap")
+    lib.write("s1", 101)
+    lib.write("s1", 102)
+    lib.write("s1", 103)
+
+    # Lets check negative number version handling
+    lib.add_to_snapshot("snap", ["s1"], [-1]) 
+    assert 102 == lib.read("s1", as_of="snap").data
+    lib.add_to_snapshot("snap", ["s1"], [-2]) 
+    assert 101 == lib.read("s1", as_of="snap").data
