@@ -281,6 +281,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->index = stream::EmptyIndex();
             res->desc().set_index_type(IndexDescriptor::Type::EMPTY);
         }
+        res->input_data = InputFrame::InputTensors{res->index_tensor, res->field_tensors, res->desc()};
 
         ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     } else {
@@ -292,28 +293,30 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         for (const auto& record_batch: record_batches) {
             sp_record_batches.emplace_back(&record_batch.array_, &record_batch.schema_);
         }
+        SegmentInMemory seg;
         if (arrow_norm_metadata.has_index()) {
-            auto [seg, index_column_position] = arrow_data_to_segment(sp_record_batches, arrow_norm_metadata.index_column_name());
-            res->seg = seg;
+            auto [tmp, index_column_position] = arrow_data_to_segment(sp_record_batches, arrow_norm_metadata.index_column_name());
+            seg = std::move(tmp);
             res->norm_meta.mutable_arrow_table()->set_index_column_position(*index_column_position);
         } else {
-            res->seg = arrow_data_to_segment(sp_record_batches).first;
+            seg = arrow_data_to_segment(sp_record_batches).first;
         }
         if (arrow_norm_metadata.has_index()) {
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    !res->seg->columns().empty(),
+                    !seg.columns().empty(),
                     "Arrow index column specified but there are zero columns");
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    is_time_type(res->seg->column(0).type().data_type()),
-                    "Specified Arrow index column has non-time type {}", res->seg->column(0).type().data_type());
-            res->seg->descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-            res->seg->descriptor().set_sorted(SortedValue::ASCENDING); // Maybe UNKNOWN?
-            res->index = TimeseriesIndex{std::string(res->desc().field(0).name())};
+                    is_time_type(seg.column(0).type().data_type()),
+                    "Specified Arrow index column has non-time type {}", seg.column(0).type().data_type());
+            seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+            seg.descriptor().set_sorted(SortedValue::ASCENDING); // Maybe UNKNOWN?
+            res->index = TimeseriesIndex{std::string(seg.descriptor().field(0).name())};
         } else {
-            res->seg->descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+            seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
             res->index = RowCountIndex{};
         }
-        res->num_rows = res->seg->row_count();
+        res->num_rows = seg.row_count();
+        res->input_data = std::move(seg);
     }
     res->set_index_range();
     res->desc().set_id(stream_name);

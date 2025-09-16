@@ -49,10 +49,12 @@ WriteToSegmentTask::WriteToSegmentTask(
 std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator() () {
     slice_.check_magic();
     magic_.check();
-    if (frame_->seg.has_value()) {
+    if (std::holds_alternative<SegmentInMemory>(frame_->input_data)) {
+//    if (frame_->seg.has_value()) {
         ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
         auto key = partial_key_gen_(slice_);
-        const auto& frame = *frame_->seg;
+//        const auto& frame = *frame_->seg;
+        const auto& frame = std::get<SegmentInMemory>(frame_->input_data);
         SegmentInMemory seg;
         if (frame.descriptor().index().field_count() > 0) {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});

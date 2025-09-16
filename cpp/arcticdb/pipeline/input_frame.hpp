@@ -50,7 +50,13 @@ struct InputFrame {
 
     std::optional<entity::NativeTensor> index_tensor;
     std::vector<entity::NativeTensor> field_tensors;
-    std::optional<SegmentInMemory> seg;
+
+    struct InputTensors {
+        std::optional<entity::NativeTensor> index_tensor;
+        std::vector<entity::NativeTensor> field_tensors;
+        StreamDescriptor desc;
+    };
+    std::variant<SegmentInMemory, InputTensors> input_data;
   private:
     StreamDescriptor desc_;
 };
