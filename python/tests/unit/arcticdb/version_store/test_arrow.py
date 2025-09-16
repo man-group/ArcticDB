@@ -769,40 +769,43 @@ def test_resample_empty_slices(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "sym"
+
     def gen_df(start, num_rows, with_columns=True):
         data = {}
         if with_columns:
             data = {
-                "mean_col": np.arange(start, start+num_rows, dtype=np.float64),
-                "sum_col": np.arange(start, start+num_rows, dtype=np.float64),
-                "min_col": np.arange(start, start+num_rows, dtype=np.float64),
-                "max_col": np.arange(start, start+num_rows, dtype=np.float64),
-                "count_col": np.arange(start, start+num_rows, dtype=np.float64),
+                "mean_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "sum_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "min_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "max_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "count_col": np.arange(start, start + num_rows, dtype=np.float64),
             }
         index = pd.date_range(pd.Timestamp(2025, 1, start), periods=num_rows)
         return pd.DataFrame(data, index=index)
 
     slices = [
         gen_df(1, 3),
-        gen_df(4, 2, False), # We expect an entirely missing slice 4th-5th
+        gen_df(4, 2, False),  # We expect an entirely missing slice 4th-5th
         gen_df(6, 3),
-        gen_df(9, 5, False), # We expect two missing slices 10th-11th and 12th-13th
+        gen_df(9, 5, False),  # We expect two missing slices 10th-11th and 12th-13th
         gen_df(14, 2),
-        gen_df(16, 2, False), # We expect one missing slice 16th-17th
+        gen_df(16, 2, False),  # We expect one missing slice 16th-17th
         # TODO: If we don't finish with an append with columns our normalization metadata will be broken
-        gen_df(18, 1)
+        gen_df(18, 1),
     ]
     for df_slice in slices:
         lib.append(sym, df_slice, write_if_missing=True)
 
     q = QueryBuilder()
-    q.resample("2d").agg({
-        "mean_col": "mean",
-        "sum_col": "sum",
-        "min_col": "min",
-        "max_col": "max",
-        "count_col": "count",
-    })
+    q.resample("2d").agg(
+        {
+            "mean_col": "mean",
+            "sum_col": "sum",
+            "min_col": "min",
+            "max_col": "max",
+            "count_col": "count",
+        }
+    )
 
     table = lib.read(sym, query_builder=q).data
     # sum_col is correctly filled with 0s instead of nulls

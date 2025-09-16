@@ -430,31 +430,36 @@ void MeanAggregatorData::aggregate(
 ) {
     fractions_.resize(unique_values);
     sparse_map_.resize(unique_values);
-    details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, this](auto col_tag) {
-        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        if constexpr (is_sequence_type(col_type_info::data_type)) {
-            util::raise_rte("String aggregations not currently supported");
-        } else if constexpr (is_empty_type(col_type_info::data_type)) {
-            return;
-        }
-        Column::for_each_enumerated<typename col_type_info::TDT>(
-                *input_column.column_,
-                [&groups, this](auto enumerating_it) {
-                    auto& fraction = fractions_[groups[enumerating_it.idx()]];
-                    if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
-                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                            fraction.numerator_ += static_cast<double>(enumerating_it.value());
-                            ++fraction.denominator_;
-                            sparse_map_.set(groups[enumerating_it.idx()]);
-                        }
-                    } else {
-                        fraction.numerator_ += static_cast<double>(enumerating_it.value());
-                        ++fraction.denominator_;
-                        sparse_map_.set(groups[enumerating_it.idx()]);
-                    }
+    util::BitSet::bulk_insert_iterator inserter(sparse_map_);
+    details::visit_type(
+            input_column.column_->type().data_type(),
+            [&input_column, &groups, &inserter, this](auto col_tag) {
+                using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+                if constexpr (is_sequence_type(col_type_info::data_type)) {
+                    util::raise_rte("String aggregations not currently supported");
+                } else if constexpr (is_empty_type(col_type_info::data_type)) {
+                    return;
                 }
-        );
-    });
+                Column::for_each_enumerated<typename col_type_info::TDT>(
+                        *input_column.column_,
+                        [&groups, &inserter, this](auto enumerating_it) {
+                            auto& fraction = fractions_[groups[enumerating_it.idx()]];
+                            if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
+                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                    fraction.numerator_ += static_cast<double>(enumerating_it.value());
+                                    ++fraction.denominator_;
+                                    inserter = groups[enumerating_it.idx()];
+                                }
+                            } else {
+                                fraction.numerator_ += static_cast<double>(enumerating_it.value());
+                                ++fraction.denominator_;
+                                inserter = groups[enumerating_it.idx()];
+                            }
+                        }
+                );
+            }
+    );
+    inserter.flush();
 }
 
 SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
@@ -500,25 +505,30 @@ void CountAggregatorData::aggregate(
 ) {
     aggregated_.resize(unique_values);
     sparse_map_.resize(unique_values);
-    details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, this](auto col_tag) {
-        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        Column::for_each_enumerated<typename col_type_info::TDT>(
-                *input_column.column_,
-                [&groups, this](auto enumerating_it) {
-                    if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                            auto& val = aggregated_[groups[enumerating_it.idx()]];
-                            ++val;
-                            sparse_map_.set(groups[enumerating_it.idx()]);
+    util::BitSet::bulk_insert_iterator inserter(sparse_map_);
+    details::visit_type(
+            input_column.column_->type().data_type(),
+            [&input_column, &groups, &inserter, this](auto col_tag) {
+                using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+                Column::for_each_enumerated<typename col_type_info::TDT>(
+                        *input_column.column_,
+                        [&groups, &inserter, this](auto enumerating_it) {
+                            if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                    auto& val = aggregated_[groups[enumerating_it.idx()]];
+                                    ++val;
+                                    inserter = groups[enumerating_it.idx()];
+                                }
+                            } else {
+                                auto& val = aggregated_[groups[enumerating_it.idx()]];
+                                ++val;
+                                inserter = groups[enumerating_it.idx()];
+                            }
                         }
-                    } else {
-                        auto& val = aggregated_[groups[enumerating_it.idx()]];
-                        ++val;
-                        sparse_map_.set(groups[enumerating_it.idx()]);
-                    }
-                }
-        );
-    });
+                );
+            }
+    );
+    inserter.flush();
 }
 
 SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
@@ -561,11 +571,12 @@ void FirstAggregatorData::aggregate(
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
             aggregated_.resize(sizeof(GlobalRawType) * unique_values);
             sparse_map_.resize(unique_values);
+            util::BitSet::bulk_insert_iterator inserter(sparse_map_);
             auto col_data = input_column.column_->data();
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
             details::visit_type(
                     input_column.column_->type().data_type(),
-                    [this, &groups, &out_ptr, &col_data](auto col_tag) {
+                    [this, &groups, &out_ptr, &col_data, &inserter](auto col_tag) {
                         using ColumnTagType = std::decay_t<decltype(col_tag)>;
                         using ColumnType = typename ColumnTagType::raw_type;
                         auto groups_pos = 0;
@@ -580,19 +591,20 @@ void FirstAggregatorData::aggregate(
                                     if (is_first_group_el || std::isnan(static_cast<ColumnType>(val))) {
                                         groups_cache_.insert(groups[groups_pos]);
                                         val = GlobalRawType(*ptr);
-                                        sparse_map_.set(groups[groups_pos]);
+                                        inserter = groups[groups_pos];
                                     }
                                 } else {
                                     if (is_first_group_el) {
                                         groups_cache_.insert(groups[groups_pos]);
                                         val = GlobalRawType(*ptr);
-                                        sparse_map_.set(groups[groups_pos]);
+                                        inserter = groups[groups_pos];
                                     }
                                 }
                             }
                         }
                     }
             );
+            inserter.flush();
         });
     }
 }
@@ -641,11 +653,12 @@ void LastAggregatorData::aggregate(
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
             aggregated_.resize(sizeof(GlobalRawType) * unique_values);
             sparse_map_.resize(unique_values);
+            util::BitSet::bulk_insert_iterator inserter(sparse_map_);
             auto col_data = input_column.column_->data();
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
             details::visit_type(
                     input_column.column_->type().data_type(),
-                    [&groups, &out_ptr, &col_data, this](auto col_tag) {
+                    [&groups, &out_ptr, &col_data, &inserter, this](auto col_tag) {
                         using ColumnTagType = std::decay_t<decltype(col_tag)>;
                         using ColumnType = typename ColumnTagType::raw_type;
                         auto groups_pos = 0;
@@ -662,16 +675,17 @@ void LastAggregatorData::aggregate(
                                     if (is_first_group_el || !std::isnan(static_cast<ColumnType>(curr))) {
                                         groups_cache_.insert(groups[groups_pos]);
                                         val = curr;
-                                        sparse_map_.set(groups[groups_pos]);
+                                        inserter = groups[groups_pos];
                                     }
                                 } else {
                                     val = GlobalRawType(*ptr);
-                                    sparse_map_.set(groups[groups_pos]);
+                                    inserter = groups[groups_pos];
                                 }
                             }
                         }
                     }
             );
+            inserter.flush();
         });
     }
 }
