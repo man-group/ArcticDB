@@ -188,10 +188,11 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
 
             auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
             if (frame_->desc().index().field_count() > 0) {
-                util::check(static_cast<bool>(frame_->index_tensor), "Got null index tensor in WriteToSegmentTask");
+                const auto& opt_index_tensor = frame_->opt_index_tensor();
+                util::check(opt_index_tensor.has_value(), "Got null index tensor in WriteToSegmentTask");
                 auto opt_error = aggregator_set_data(
                         frame_->desc().fields(0).type(),
-                        frame_->index_tensor.value(),
+                        *opt_index_tensor,
                         agg,
                         0,
                         rows_to_write,
@@ -205,10 +206,11 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
                 }
             }
 
+            const auto& field_tensors = frame_->field_tensors();
             for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
                 auto abs_col = col + frame_->desc().index().field_count();
                 auto& fd = slice_.non_index_field(col);
-                auto& tensor = frame_->field_tensors[slice_.absolute_field_col(col)];
+                auto& tensor = field_tensors[slice_.absolute_field_col(col)];
                 auto opt_error = aggregator_set_data(
                         fd.type(),
                         tensor,

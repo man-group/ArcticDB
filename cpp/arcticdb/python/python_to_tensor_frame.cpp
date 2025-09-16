@@ -228,6 +228,8 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
                 idx_vals.size()
         );
 
+        std::optional<entity::NativeTensor> opt_index_tensor;
+        std::vector<entity::NativeTensor> field_tensors;
         if (!idx_names.empty()) {
             util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
             auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
@@ -242,13 +244,13 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 
                 res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
                 res->index = stream::TimeseriesIndex(index_column_name);
-                res->index_tensor = std::move(index_tensor);
             } else {
                 res->index = stream::RowCountIndex();
                 res->desc().set_index_type(IndexDescriptor::Type::ROWCOUNT);
                 res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
-                res->field_tensors.push_back(std::move(index_tensor));
+                field_tensors.push_back(std::move(index_tensor));
             }
+            opt_index_tensor = std::move(index_tensor);
         }
 
         // Fill tensors
@@ -266,7 +268,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             } else if (tensor.expanded_dim() == 2) {
                 res->desc().add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
             }
-            res->field_tensors.push_back(std::move(tensor));
+            field_tensors.push_back(std::move(tensor));
         }
 
         // idx_names are passed by the python layer. They are empty in case row count index is used see:
@@ -281,7 +283,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->index = stream::EmptyIndex();
             res->desc().set_index_type(IndexDescriptor::Type::EMPTY);
         }
-        res->input_data = InputFrame::InputTensors{res->index_tensor, res->field_tensors, res->desc()};
+        res->input_data = InputFrame::InputTensors{std::move(opt_index_tensor), std::move(field_tensors), res->desc()};
 
         ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     } else {
@@ -326,6 +328,7 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
 std::shared_ptr<InputFrame> py_none_to_frame() {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
     auto res = std::make_shared<InputFrame>();
+    InputFrame::InputTensors input_tensors;
     res->num_rows = 0u;
 
     arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;
@@ -335,7 +338,7 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
 
     // Fill index
     res->index = stream::RowCountIndex();
-    res->desc().set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
+    input_tensors.desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
 
     // Fill tensors
     auto col_name = "bytes";
@@ -348,8 +351,10 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
     constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
     res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
-    res->desc().add_field(scalar_field(tensor.data_type(), col_name));
-    res->field_tensors.push_back(std::move(tensor));
+    input_tensors.desc.add_field(scalar_field(tensor.data_type(), col_name));
+
+    input_tensors.field_tensors.push_back(std::move(tensor));
+    res->input_data = std::move(input_tensors);
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     res->set_index_range();

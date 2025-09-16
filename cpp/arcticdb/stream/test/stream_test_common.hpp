@@ -204,14 +204,20 @@ void fill_test_column(arcticdb::pipelines::InputFrame&frame,
                       bool is_index) {
     using RawType = typename decltype(data_type_tag)::raw_type;
     if (!is_index) {
+        InputFrame::InputTensors input_tensors;
         if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>)
-            frame.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
+            input_tensors.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
         else
-            frame.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
+            input_tensors.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
+        frame.input_data = std::move(input_tensors);
     } else {
-        if constexpr (std::is_integral_v<RawType>)
-            frame.index_tensor =
-                std::make_optional<NativeTensor>(test_column(container, data_type_tag, num_rows, start_val, is_index));
+        if constexpr (std::is_integral_v<RawType>) {
+            InputFrame::InputTensors input_tensors;
+            input_tensors.index_tensor = std::make_optional<NativeTensor>(
+                    test_column(container, data_type_tag, num_rows, start_val, is_index)
+            );
+            frame.input_data = std::move(input_tensors);
+        }
         else
             util::raise_rte("Unexpected type in index column");
     }

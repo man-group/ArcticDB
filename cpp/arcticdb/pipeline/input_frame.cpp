@@ -135,4 +135,14 @@ void InputFrame::set_index_range() {
     }
 }
 
+const std::optional<entity::NativeTensor>& InputFrame::opt_index_tensor() const {
+    util::check(std::holds_alternative<InputTensors>(input_data), "InputFrame index_tensor requested but holds SegmentInMemory");
+    return std::get<InputTensors>(input_data).index_tensor;
+}
+
+const std::vector<entity::NativeTensor>& InputFrame::field_tensors() const {
+    util::check(std::holds_alternative<InputTensors>(input_data), "InputFrame field_tensors requested but holds SegmentInMemory");
+    return std::get<InputTensors>(input_data).field_tensors;
+}
+
 } //namespace arcticdb::pipelines

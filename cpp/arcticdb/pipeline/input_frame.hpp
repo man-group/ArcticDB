@@ -40,6 +40,8 @@ struct InputFrame {
     bool empty() const;
     timestamp index_value_at(size_t row);
     void set_index_range();
+    const std::optional<entity::NativeTensor>& opt_index_tensor() const;
+    const std::vector<entity::NativeTensor>& field_tensors() const;
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
@@ -47,9 +49,6 @@ struct InputFrame {
     IndexRange index_range;
     size_t num_rows = 0;
     mutable size_t offset = 0;
-
-    std::optional<entity::NativeTensor> index_tensor;
-    std::vector<entity::NativeTensor> field_tensors;
 
     struct InputTensors {
         std::optional<entity::NativeTensor> index_tensor;
