@@ -560,6 +560,7 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     # Complex structures can be staged by default
     lib.stage(symbol, get_metadata())
     check_incomplete_staged(symbol)
+    
 
 def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
     lib: NativeVersionStore = basic_store
@@ -611,6 +612,13 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
     assert 201 == lib.read("s2", as_of="snap").data
     with pytest.raises(NoSuchVersionException):
         lib.read("s3", as_of="snap")
+
+    # Mix of valid and invalid symbols and versions does not affect removal from snapshot
+    lib.remove_from_snapshot("snap", ["s11", "s1", "s2", "s1", "s2"], [33,222,123,1,1])  
+    assert 400 == lib.read("s4", as_of="snap").data
+    for symbol in ["s1", "s2", "s3"]:
+        with pytest.raises(NoSuchVersionException):
+            lib.read(symbol, as_of="snap")
 
 
 @pytest.mark.xfail("Negative version numbers does not work, issue 10060901137")
