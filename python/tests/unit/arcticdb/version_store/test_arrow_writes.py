@@ -243,20 +243,17 @@ def test_update(lmdb_version_store_arrow, existing_data):
     assert expected.equals(received)
 
 
-@pytest.mark.xfail(reason="SDKLJFCSDLIHSDF")
 @pytest.mark.parametrize(
     "date_range",
     [
         (pd.Timestamp("2025-01-01 12:00:00"), pd.Timestamp("2025-01-05 12:00:00")),
-        (pd.Timestamp("2025-01-02 12:00:00"), pd.Timestamp("2025-01-03 12:00:00")),
-        (pd.Timestamp("2025-01-01 12:00:00"), None),
-        (None, pd.Timestamp("2025-01-03 12:00:00")),
+        (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")),
     ]
 )
-def test_update_with_date_range(lmdb_version_store_arrow, date_range):
+def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_range):
     lib = lmdb_version_store_arrow
-    sym = "test_update_with_date_range"
-    reference_sym = "reference"
+    sym = "test_update_with_date_range_wider_than_data"
+    reference_sym = "test_update_with_date_range_wider_than_data_reference"
     write_table = pa.table(
         {
             "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-05"), pd.Timestamp("2025-01-06")], pa.timestamp("ns")),
@@ -264,7 +261,7 @@ def test_update_with_date_range(lmdb_version_store_arrow, date_range):
         }
     )
     lib.write(reference_sym, write_table.to_pandas().set_index("ts"))
-    lib.write(sym, write_table)
+    lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
             "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
@@ -272,10 +269,10 @@ def test_update_with_date_range(lmdb_version_store_arrow, date_range):
         }
     )
     lib.update(reference_sym, update_table.to_pandas().set_index("ts"), date_range=date_range)
-    # lib.update(sym, update_table, date_range=date_range)
+    lib.update(sym, update_table, date_range=date_range, index_column="ts")
     expected = lib.read(reference_sym, output_format="pandas").data
-    print("fin")
-
+    received = lib.read(sym).data.to_pandas().set_index("ts")
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])

@@ -1621,7 +1621,7 @@ def normalize_dataframe(df, **kwargs):
 T = TypeVar("T", bound=Union[pd.DataFrame, pd.Series])
 
 
-def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestamp) -> T:
+def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestamp, index_column: Optional[str] = None) -> T:
     """Return a copy of `data` filtered so that its contents lie between `start` and `end` (inclusive).
 
     `data` must be time-indexed.
@@ -1645,6 +1645,11 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
             # of duplicating exception messages.
             raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
+    elif isinstance(data, pa.Table):
+        check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")
+        col = data.column(index_column)
+        start, end = _strip_tz(start, end)
+        check (start <= col[0].as_py().tz_localize(None) and end >= col[-1].as_py().tz_localize(None), "update with date_range and pyarrow Tbale not yet supported with date_range overlapping the data")
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)

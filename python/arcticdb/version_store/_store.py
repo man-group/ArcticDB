@@ -945,7 +945,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
-        data = self._apply_date_range_to_update_query(data, date_range, update_query)
+        data = self._apply_date_range_to_update_query(data, date_range, update_query, index_column)
         _handle_categorical_columns(symbol, data)
 
         udm, item, norm_meta = self._try_normalize(
@@ -975,7 +975,11 @@ class NativeVersionStore:
             return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _apply_date_range_to_update_query(
-        self, data: TimeSeriesType, date_range: Optional[DateRangeInput], update_query: _PythonVersionStoreUpdateQuery
+        self,
+        data: TimeSeriesType,
+        date_range: Optional[DateRangeInput],
+        update_query: _PythonVersionStoreUpdateQuery,
+        index_column: Optional[str] = None,
     ) -> TimeSeriesType:
         """
         Parameters
@@ -994,7 +998,7 @@ class NativeVersionStore:
         if date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
             update_query.row_filter = _IndexRange(start.value, end.value)
-            return restrict_data_to_date_range_only(data, start=start, end=end)
+            return restrict_data_to_date_range_only(data, start=start, end=end, index_column=index_column)
         return data
 
     def _batch_update_internal(
