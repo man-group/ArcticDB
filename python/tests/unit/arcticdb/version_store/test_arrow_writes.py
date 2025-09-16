@@ -11,7 +11,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from arcticdb.exceptions import SchemaException, UserInputException
+from arcticdb.exceptions import ArcticException, SchemaException, UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
@@ -273,6 +273,35 @@ def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_r
     expected = lib.read(reference_sym, output_format="pandas").data
     received = lib.read(sym).data.to_pandas().set_index("ts")
     assert_frame_equal(expected, received)
+
+
+@pytest.mark.parametrize(
+    "date_range",
+    [
+        (pd.Timestamp("2025-01-03 12:00:00"), pd.Timestamp("2025-01-04 12:00:00")),
+        (pd.Timestamp("2025-01-03 00:00:00.00000001"), pd.Timestamp("2025-01-04")),
+        (pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-03 23:59:59.999999999")),
+    ]
+)
+def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, date_range):
+    lib = lmdb_version_store_arrow
+    sym = "test_update_with_date_range_narrower_than_data"
+    write_table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-05"), pd.Timestamp("2025-01-06")], pa.timestamp("ns")),
+            "col": pa.array([0, 1, 2, 3, 4, 5], pa.int64())
+        }
+    )
+    lib.write(sym, write_table, index_column="ts")
+    update_table = pa.table(
+        {
+            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "col": pa.array([6, 7], pa.int64())
+        }
+    )
+    # TODO: Fold these parametrizations into above test when working
+    with pytest.raises(ArcticException):
+        lib.update(sym, update_table, date_range=date_range, index_column="ts")
 
 
 @pytest.mark.parametrize("num_rows", [1, 2, 3, 4, 5])
