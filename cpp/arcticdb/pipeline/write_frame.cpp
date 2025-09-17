@@ -49,7 +49,7 @@ WriteToSegmentTask::WriteToSegmentTask(
 std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator() () {
     slice_.check_magic();
     magic_.check();
-    if (!frame_->has_tensors()) {
+    if (frame_->has_segment()) {
         ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
         auto key = partial_key_gen_(slice_);
         const auto& frame = frame_->segment();

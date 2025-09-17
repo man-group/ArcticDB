@@ -211,10 +211,13 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
     bool empty_types) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputFrame>();
-    res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
+    if (!user_meta.is_none()) {
+        python_util::pb_from_python(user_meta, res->user_meta);
+    }
 
     if (std::holds_alternative<py::tuple>(item)) {
+        res->num_rows = 0u;
         // Fill index
         const auto& tuple = std::get<py::tuple>(item);
         auto idx_names = tuple[0].cast<std::vector<std::string>>();
@@ -226,8 +229,9 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
                 idx_vals.size()
         );
 
-        std::optional<entity::NativeTensor> opt_index_tensor;
+        StreamDescriptor desc;
         std::vector<entity::NativeTensor> field_tensors;
+        std::optional<entity::NativeTensor> opt_index_tensor;
         if (!idx_names.empty()) {
             util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
             auto index_tensor = obj_to_tensor(idx_vals[0].ptr(), empty_types);
@@ -237,15 +241,15 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
             res->num_rows = static_cast<size_t>(index_tensor.shape(0));
             // TODO handle string indexes
             if (index_tensor.data_type() == DataType::NANOSECONDS_UTC64) {
-                res->desc().set_index_field_count(1);
-                res->desc().set_index_type(IndexDescriptor::Type::TIMESTAMP);
+                desc.set_index_field_count(1);
+                desc.set_index_type(IndexDescriptor::Type::TIMESTAMP);
 
-                res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
+                desc.add_scalar_field(index_tensor.dt_, index_column_name);
                 res->index = stream::TimeseriesIndex(index_column_name);
             } else {
                 res->index = stream::RowCountIndex();
-                res->desc().set_index_type(IndexDescriptor::Type::ROWCOUNT);
-                res->desc().add_scalar_field(index_tensor.dt_, index_column_name);
+                desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
+                desc.add_scalar_field(index_tensor.dt_, index_column_name);
                 field_tensors.push_back(std::move(index_tensor));
             }
             opt_index_tensor = std::move(index_tensor);
@@ -256,15 +260,13 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         auto col_vals = tuple[3].cast<std::vector<py::object>>();
         auto sorted = tuple[4].cast<SortedValue>();
 
-        res->set_sorted(sorted);
-
         for (auto i = 0u; i < col_vals.size(); ++i) {
             auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
             res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
             if (tensor.expanded_dim() == 1) {
-                res->desc().add_field(scalar_field(tensor.data_type(), col_names[i]));
+                desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
             } else if (tensor.expanded_dim() == 2) {
-                res->desc().add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
+                desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
             }
             field_tensors.push_back(std::move(tensor));
         }
@@ -274,14 +276,15 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         // Currently the python layers assign RowRange index to both empty dataframes and dataframes which do not specify index explicitly. Thus we handle this case after all columns are read so that we know how many rows are there.
         if (idx_names.empty()) {
             res->index = stream::RowCountIndex();
-            res->desc().set_index_type(IndexDescriptor::Type::ROWCOUNT);
+            desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
         }
 
         if (empty_types && res->num_rows == 0) {
             res->index = stream::EmptyIndex();
-            res->desc().set_index_type(IndexDescriptor::Type::EMPTY);
+            desc.set_index_type(IndexDescriptor::Type::EMPTY);
         }
-        res->input_data = InputFrame::InputTensors{std::move(opt_index_tensor), std::move(field_tensors), res->desc()};
+        res->set_from_tensors(std::move(desc), std::move(field_tensors), std::move(opt_index_tensor));
+        res->set_sorted(sorted);
 
         ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     } else {
@@ -303,16 +306,12 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
     }
     res->set_index_range();
     res->desc().set_id(stream_name);
-    if (!user_meta.is_none()) {
-        python_util::pb_from_python(user_meta, res->user_meta);
-    }
     return res;
 }
 
 std::shared_ptr<InputFrame> py_none_to_frame() {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeNoneFrame)
     auto res = std::make_shared<InputFrame>();
-    InputFrame::InputTensors input_tensors;
     res->num_rows = 0u;
 
     arcticdb::proto::descriptors::NormalizationMetadata::MsgPackFrame msg;
@@ -322,7 +321,8 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
 
     // Fill index
     res->index = stream::RowCountIndex();
-    input_tensors.desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
+    StreamDescriptor desc;
+    desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
 
     // Fill tensors
     auto col_name = "bytes";
@@ -335,10 +335,9 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
     constexpr int ndim = 1;
     auto tensor = NativeTensor{8, ndim, &strides, &shapes, DataType::UINT64, 8, none_char, ndim};
     res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
-    input_tensors.desc.add_field(scalar_field(tensor.data_type(), col_name));
+    desc.add_field(scalar_field(tensor.data_type(), col_name));
 
-    input_tensors.field_tensors.push_back(std::move(tensor));
-    res->input_data = std::move(input_tensors);
+    res->set_from_tensors(std::move(desc), {tensor}, std::nullopt);
 
     ARCTICDB_DEBUG(log::version(), "Received frame with descriptor {}", res->desc());
     res->set_index_range();

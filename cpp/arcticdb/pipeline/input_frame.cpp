@@ -30,13 +30,19 @@ void InputFrame::set_segment(SegmentInMemory&& seg) {
                 is_time_type(seg.column(0).type().data_type()),
                 "Specified Arrow index column has non-time type {}", seg.column(0).type().data_type());
         seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-        seg.descriptor().set_sorted(SortedValue::ASCENDING); // Maybe UNKNOWN?
         index = stream::TimeseriesIndex{std::string(seg.descriptor().field(0).name())};
     } else {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         index = stream::RowCountIndex{};
     }
     input_data = std::move(seg);
+    set_sorted(SortedValue::ASCENDING);
+}
+
+void InputFrame::set_from_tensors(StreamDescriptor&& desc,
+                                  std::vector<entity::NativeTensor>&& field_tensors,
+                                  std::optional<entity::NativeTensor>&& index_tensor) {
+    input_data = InputTensors{std::move(index_tensor), std::move(field_tensors), std::move(desc)};
 }
 
 StreamDescriptor& InputFrame::desc() {
@@ -125,6 +131,10 @@ void InputFrame::set_index_range() {
     }
 }
 
+bool InputFrame::has_segment() const {
+    return std::holds_alternative<SegmentInMemory>(input_data);
+}
+
 bool InputFrame::has_tensors() const {
     return std::holds_alternative<InputTensors>(input_data);
 }
@@ -140,7 +150,7 @@ const std::vector<entity::NativeTensor>& InputFrame::field_tensors() const {
 }
 
 const SegmentInMemory& InputFrame::segment() const {
-    util::check(!has_tensors(), "InputFrame segment requested but holds InputTensors");
+    util::check(has_segment(), "InputFrame segment requested but holds InputTensors");
     return std::get<SegmentInMemory>(input_data);
 }
 

@@ -32,6 +32,9 @@ struct InputFrame {
   public:
     InputFrame();
     void set_segment(SegmentInMemory&& seg);
+    void set_from_tensors(StreamDescriptor&& desc,
+                          std::vector<entity::NativeTensor>&& field_tensors,
+                          std::optional<entity::NativeTensor>&& index_tensor);
 
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
@@ -41,6 +44,7 @@ struct InputFrame {
     bool empty() const;
     timestamp index_value_at(size_t row);
     void set_index_range();
+    bool has_segment() const;
     bool has_tensors() const;
     const std::optional<entity::NativeTensor>& opt_index_tensor() const;
     const std::vector<entity::NativeTensor>& field_tensors() const;
@@ -53,14 +57,13 @@ struct InputFrame {
     size_t num_rows = 0;
     mutable size_t offset = 0;
 
+  private:
     struct InputTensors {
         std::optional<entity::NativeTensor> index_tensor;
         std::vector<entity::NativeTensor> field_tensors;
         StreamDescriptor desc;
     };
-    std::variant<SegmentInMemory, InputTensors> input_data;
-  private:
-//    StreamDescriptor desc_;
+    std::variant<InputTensors, SegmentInMemory> input_data;
 };
 
 } //namespace arcticdb::pipelines

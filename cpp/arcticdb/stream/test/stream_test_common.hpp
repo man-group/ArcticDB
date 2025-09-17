@@ -196,7 +196,7 @@ struct TestTensorFrame {
 };
 
 template<class ContainerType, typename DTT>
-void fill_test_column(arcticdb::pipelines::InputFrame&frame,
+NativeTensor fill_test_column(
                       ContainerType &container,
                       DTT data_type_tag,
                       size_t num_rows,
@@ -204,19 +204,13 @@ void fill_test_column(arcticdb::pipelines::InputFrame&frame,
                       bool is_index) {
     using RawType = typename decltype(data_type_tag)::raw_type;
     if (!is_index) {
-        InputFrame::InputTensors input_tensors;
         if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>)
-            input_tensors.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
+            return test_column(container, data_type_tag, num_rows, start_val, is_index);
         else
-            input_tensors.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index));
-        frame.input_data = std::move(input_tensors);
+            return test_string_column(container, data_type_tag, num_rows, start_val, is_index);
     } else {
         if constexpr (std::is_integral_v<RawType>) {
-            InputFrame::InputTensors input_tensors;
-            input_tensors.index_tensor = std::make_optional<NativeTensor>(
-                    test_column(container, data_type_tag, num_rows, start_val, is_index)
-            );
-            frame.input_data = std::move(input_tensors);
+            return test_column(container, data_type_tag, num_rows, start_val, is_index);
         }
         else
             util::raise_rte("Unexpected type in index column");
@@ -224,17 +218,21 @@ void fill_test_column(arcticdb::pipelines::InputFrame&frame,
 }
 
 inline void fill_test_frame(SegmentInMemory &segment,
-                            arcticdb::pipelines::InputFrame&frame,
+                            arcticdb::pipelines::InputFrame& frame,
                             size_t num_rows,
                             size_t start_val,
                             size_t opt_row_offset) {
     util::check(!segment.descriptor().empty(), "Can't construct test frame with empty descriptor");
 
     auto field = segment.descriptor().begin();
+    auto desc = frame.desc().clone();
+    std::vector<entity::NativeTensor> field_tensors;
+    std::optional<entity::NativeTensor> index_tensor;
+
     if (frame.has_index()) {
         visit_field(*field, [&](auto type_desc_tag) {
             using DTT = typename decltype(type_desc_tag)::DataTypeTag;
-            fill_test_column(frame, segment.column(0), DTT{}, num_rows, start_val, true);
+            index_tensor = fill_test_column(segment.column(0), DTT{}, num_rows, start_val, true);
         });
         std::advance(field, 1);
     }
@@ -242,14 +240,15 @@ inline void fill_test_frame(SegmentInMemory &segment,
     for (; field != segment.descriptor().end(); ++field) {
         visit_field(*field, [&](auto type_desc_tag) {
             using DTT = typename decltype(type_desc_tag)::DataTypeTag;
-            fill_test_column(frame,
+            field_tensors.emplace_back(fill_test_column(
                              segment.column(std::distance(segment.descriptor().begin(), field)),
                              DTT{},
                              num_rows,
                              start_val + opt_row_offset,
-                             false);
+                             false));
         });
     }
+    frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(index_tensor));
     segment.set_row_data(num_rows - 1);
 }
 
