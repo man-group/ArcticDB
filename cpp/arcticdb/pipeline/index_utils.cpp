@@ -25,6 +25,7 @@ folly::Future<entity::AtomKey> write_index(
     for (const auto& slice_and_key : slice_and_keys) {
         writer.add(slice_and_key.key(), slice_and_key.slice_);
     }
+
     return writer.commit();
 }
 
