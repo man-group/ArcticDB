@@ -582,7 +582,7 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     # Complex structures can be staged by default
     lib.stage(symbol, get_metadata())
     check_incomplete_staged(symbol)
-    
+
 
 def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
     lib: NativeVersionStore = basic_store
@@ -598,18 +598,18 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
     lib.write("s4", 400)
 
     # We can add empty list of symbols without error
-    lib.add_to_snapshot("snap", []) 
+    lib.add_to_snapshot("snap", [])
     # We can remove nothing without error
-    lib.remove_from_snapshot("snap", [], []) 
+    lib.remove_from_snapshot("snap", [], [])
 
     # add to snapshot operation succeeds even symbol does not exist
-    lib.add_to_snapshot("snap", ["ss"])  
+    lib.add_to_snapshot("snap", ["ss"])
     # remove from snapshot operation succeeds even symbol does not exist
-    lib.remove_from_snapshot("snap", ["FDFGEREG"], [213]) 
+    lib.remove_from_snapshot("snap", ["FDFGEREG"], [213])
 
     # remove from snapshot operation succeeds even symbol exists but version does not exist
-    lib.remove_from_snapshot("snap", ["s2"], [2]) 
-    lib.add_to_snapshot("snap", ["s2","s1"], [4343, 45949345])
+    lib.remove_from_snapshot("snap", ["s2"], [2])
+    lib.add_to_snapshot("snap", ["s2", "s1"], [4343, 45949345])
 
     # Verify the snapshot state is not changed
     assert 100 == lib.read("s1", as_of="snap").data
@@ -619,7 +619,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
 
     # Verify mixing of existing and non-existing symbols result
     # in proper versions of existing symbols added to the snapshot
-    lib.add_to_snapshot("snap", [" ", 5443, "ss", "s1", "s4"])  
+    lib.add_to_snapshot("snap", [" ", 5443, "ss", "s1", "s4"])
     assert 103 == lib.read("s1", as_of="snap").data
     assert 400 == lib.read("s4", as_of="snap").data
     assert 200 == lib.read("s2", as_of="snap").data
@@ -628,7 +628,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
 
     # Verify mixing of existing and non-existing symbols and versions result
     # in proper versions of existing symbols added to the snapshot
-    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2", "s2"], [1,1,1,1,4])  
+    lib.add_to_snapshot("snap", ["Go home ...", "WELCOME!", "s1", "s2", "s2"], [1, 1, 1, 1, 4])
     assert 101 == lib.read("s1", as_of="snap").data
     assert 400 == lib.read("s4", as_of="snap").data
     assert 201 == lib.read("s2", as_of="snap").data
@@ -636,7 +636,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
         lib.read("s3", as_of="snap")
 
     # Mix of valid and invalid symbols and versions does not affect removal from snapshot
-    lib.remove_from_snapshot("snap", ["s11", "s1", "s2", "s1", "s2"], [33,222,123,1,1])  
+    lib.remove_from_snapshot("snap", ["s11", "s1", "s2", "s1", "s2"], [33, 222, 123, 1, 1])
     assert 400 == lib.read("s4", as_of="snap").data
     for symbol in ["s1", "s2", "s3"]:
         with pytest.raises(NoSuchVersionException):
@@ -653,21 +653,22 @@ def test_add_to_snapshot_with_negative_numbers(basic_store):
     lib.write("s1", 103)
 
     # Lets check negative number version handling
-    lib.add_to_snapshot("snap", ["s1"], [-1]) 
+    lib.add_to_snapshot("snap", ["s1"], [-1])
     assert 102 == lib.read("s1", as_of="snap").data
-    lib.add_to_snapshot("snap", ["s1"], [-2]) 
+    lib.add_to_snapshot("snap", ["s1"], [-2])
     assert 101 == lib.read("s1", as_of="snap").data
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_remove_incomplete_for_v1_API(version_store_and_real_s3_basic_store_factory, dynamic_schema):
     """Testing staging and removing incomplete series for v1 API"""
-    
+
     lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
-        dynamic_schema=dynamic_schema, segment_row_size=10)   
-    sym = "any symbol will do until don't" 
+        dynamic_schema=dynamic_schema, segment_row_size=10
+    )
+    sym = "any symbol will do until don't"
     name = "series_name"
-    length_of_series =  np.random.randint(5, 26, size=10)
+    length_of_series = np.random.randint(5, 26, size=10)
 
     for iter, length in enumerate(length_of_series):
         timestamp = pd.Timestamp(f"{1990 + iter}-1-1")
@@ -675,11 +676,11 @@ def test_remove_incomplete_for_v1_API(version_store_and_real_s3_basic_store_fact
         if iter == 0:
             lib.write(sym, series)
         else:
-            lib.stage(sym, series, validate_index=False, sort_on_index=False) 
-        
+            lib.stage(sym, series, validate_index=False, sort_on_index=False)
+
     assert lib.list_symbols_with_incomplete_data() == [sym]
-    lib.remove_incomplete("") # non-existing symbol
-    lib.remove_incomplete("any name will do") # non-existing symbol
+    lib.remove_incomplete("")  # non-existing symbol
+    lib.remove_incomplete("any name will do")  # non-existing symbol
     assert lib.list_symbols_with_incomplete_data() == [sym]
     lib.remove_incomplete(sym)
     assert lib.list_symbols_with_incomplete_data() == []
