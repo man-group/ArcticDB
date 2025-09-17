@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -18,12 +19,9 @@ struct MongoDocumentKey {
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MongoDocumentKey)
 
-    explicit MongoDocumentKey(VariantKey&& key) : key_(std::move(key)) {
-    }
+    explicit MongoDocumentKey(VariantKey&& key) : key_(std::move(key)) {}
 
-    [[nodiscard]] std::string id_string() const {
-        return fmt::format("{}", variant_key_id(key_));
-    }
+    [[nodiscard]] std::string id_string() const { return fmt::format("{}", variant_key_id(key_)); }
 };
 
 struct MongoKey {
@@ -34,9 +32,9 @@ struct MongoKey {
     ARCTICDB_MOVE_ONLY_DEFAULT(MongoKey)
 
     MongoKey(std::string database_name, std::string collection_name, VariantKey key) :
-            database_name_(std::move(database_name)),
-            collection_name_(std::move(collection_name)),
-            doc_key_(std::move(key)) { }
+        database_name_(std::move(database_name)),
+        collection_name_(std::move(collection_name)),
+        doc_key_(std::move(key)) {}
 
     bool operator<(const MongoKey& other) const {
         std::string id_string = doc_key_.id_string();
@@ -54,9 +52,7 @@ struct MongoFailure {
     // the mongo apis don't throw an exception
     std::variant<mongocxx::operation_exception, no_ack_failure> failure;
 
-    [[nodiscard]] bool is_no_ack_failure() const {
-        return std::holds_alternative<no_ack_failure>(failure);
-    }
+    [[nodiscard]] bool is_no_ack_failure() const { return std::holds_alternative<no_ack_failure>(failure); }
 
     [[nodiscard]] mongocxx::operation_exception get_exception() const {
         return std::get<mongocxx::operation_exception>(failure);
@@ -64,59 +60,48 @@ struct MongoFailure {
 };
 
 class MockMongoClient : public MongoClientWrapper {
-public:
+  public:
     MockMongoClient() = default;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MockMongoClient)
 
     static std::string get_failure_trigger(
-            const std::string& key,
-            StorageOperation operation_to_fail,
-            MongoError error_code);
+            const std::string& key, StorageOperation operation_to_fail, MongoError error_code
+    );
 
     bool write_segment(
-            const std::string& database_name,
-            const std::string& collection_name,
-            storage::KeySegmentPair& key_seg) override;
+            const std::string& database_name, const std::string& collection_name, storage::KeySegmentPair& key_seg
+    ) override;
 
     UpdateResult update_segment(
-            const std::string& database_name,
-            const std::string& collection_name,
-            storage::KeySegmentPair& key_seg,
-            bool upsert) override;
+            const std::string& database_name, const std::string& collection_name, storage::KeySegmentPair& key_seg,
+            bool upsert
+    ) override;
 
     std::optional<KeySegmentPair> read_segment(
-            const std::string& database_name,
-            const std::string& collection_name,
-            const entity::VariantKey& key) override;
+            const std::string& database_name, const std::string& collection_name, const entity::VariantKey& key
+    ) override;
 
     DeleteResult remove_keyvalue(
-            const std::string& database_name,
-            const std::string& collection_name,
-            const entity::VariantKey& key) override;
+            const std::string& database_name, const std::string& collection_name, const entity::VariantKey& key
+    ) override;
 
     std::vector<VariantKey> list_keys(
-            const std::string& database_name,
-            const std::string& collection_name,
-            KeyType key_type,
-            const std::optional<std::string>& prefix) override;
+            const std::string& database_name, const std::string& collection_name, KeyType key_type,
+            const std::optional<std::string>& prefix
+    ) override;
 
-    bool key_exists(
-            const std::string& database_name,
-            const std::string& collection_name,
-            const  entity::VariantKey& key) override;
+    bool key_exists(const std::string& database_name, const std::string& collection_name, const entity::VariantKey& key)
+            override;
 
-    void ensure_collection(
-            std::string_view database_name,
-            std::string_view collection_name) override;
+    void ensure_collection(std::string_view database_name, std::string_view collection_name) override;
 
-    void drop_collection(
-            std::string database_name,
-            std::string collection_name) override;
-private:
+    void drop_collection(std::string database_name, std::string collection_name) override;
+
+  private:
     std::map<MongoKey, Segment> mongo_contents;
 
     bool has_key(const MongoKey& key);
 };
 
-}
+} // namespace arcticdb::storage::mongo

@@ -7,7 +7,13 @@ from hypothesis.stateful import RuleBasedStateMachine, rule, initialize, run_sta
 from collections import namedtuple
 from pandas.testing import assert_frame_equal
 from arcticdb.version_store.library import StagedDataFinalizeMethod
-from arcticdb.exceptions import UserInputException, StreamDescriptorMismatch, UnsortedDataException, NoSuchVersionException, SchemaException
+from arcticdb.exceptions import (
+    UserInputException,
+    StreamDescriptorMismatch,
+    UnsortedDataException,
+    NoSuchVersionException,
+    SchemaException,
+)
 import numpy as np
 import string
 from arcticdb.util._versions import IS_PANDAS_TWO
@@ -15,11 +21,12 @@ from pandas.api.types import is_numeric_dtype, is_integer_dtype, is_float_dtype
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.toolbox.library_tool import KeyType
 
-ColumnInfo = namedtuple('ColumnInfo', ['name', 'dtype'])
+ColumnInfo = namedtuple("ColumnInfo", ["name", "dtype"])
 
 COLUMNS = [f"col_{i}" for i in range(0, 5)]
 DTYPES = ["int16", "int64", "float", "object", "datetime64[ns]"]
 COLUMN_DESCRIPTIONS = [ColumnInfo(name, dtype) for name in COLUMNS for dtype in DTYPES]
+
 
 def are_dtypes_compatible(left, right):
     if left == right:
@@ -28,26 +35,37 @@ def are_dtypes_compatible(left, right):
         return True
     return False
 
+
 def string_column_strategy(name):
     return hs_pd.column(name=name, elements=st.text(alphabet=string.ascii_letters))
+
 
 @st.composite
 def generate_single_dataframe(draw, column_list, min_size=0, allow_nat_in_index=True):
     column_infos = draw(st.lists(st.sampled_from(column_list), unique_by=lambda x: x.name, min_size=1))
-    columns = [hs_pd.column(name=ci.name, dtype=ci.dtype) if ci.dtype != 'object' else string_column_strategy(ci.name) for ci in column_infos]
+    columns = [
+        hs_pd.column(name=ci.name, dtype=ci.dtype) if ci.dtype != "object" else string_column_strategy(ci.name)
+        for ci in column_infos
+    ]
     if not IS_PANDAS_TWO:
         # Due to https://github.com/man-group/ArcticDB/blob/7479c0b0caa8121bc2ca71a73e29769bbc41c66a/python/arcticdb/version_store/_normalization.py#L184
         # we change the dtype of empty float columns. This makes hypothesis tests extremely hard to write as we must
         # keep additional state about is there a mix of empty/non-empty float columns in the staging area, did we write
         # empty float column (if so it's type would be object). These edge cases are covered in the unit tests.
-        index = hs_pd.indexes(dtype="datetime64[ns]", min_size=1 if min_size <= 0 else min_size).filter(lambda x: allow_nat_in_index or not pd.NaT in x)
+        index = hs_pd.indexes(dtype="datetime64[ns]", min_size=1 if min_size <= 0 else min_size).filter(
+            lambda x: allow_nat_in_index or not pd.NaT in x
+        )
     else:
-        index = hs_pd.indexes(dtype="datetime64[ns]", min_size=min_size).filter(lambda x: allow_nat_in_index or not pd.NaT in x)
+        index = hs_pd.indexes(dtype="datetime64[ns]", min_size=min_size).filter(
+            lambda x: allow_nat_in_index or not pd.NaT in x
+        )
     return draw(hs_pd.data_frames(columns, index=index))
+
 
 @st.composite
 def generate_dataframes(draw, column_list):
     return draw(st.lists(generate_single_dataframe(COLUMN_DESCRIPTIONS)))
+
 
 def assert_equal(left, right, dynamic=False):
     """
@@ -57,7 +75,9 @@ def assert_equal(left, right, dynamic=False):
     """
     if any(left.index.duplicated()):
         assert left.index.equals(right.index), f"Indexes are different {left.index} != {right.index}"
-        assert set(left.columns) == set(right.columns), f"Column sets are different {set(left.columns)} != {set(right.columns)}"
+        assert set(left.columns) == set(
+            right.columns
+        ), f"Column sets are different {set(left.columns)} != {set(right.columns)}"
         assert left.shape == right.shape, f"Shapes are different {left.shape} != {right.shape}"
         left_groups = left.groupby(left.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
         right_groups = right.groupby(right.index, sort=False).apply(lambda x: x.sort_values(list(left.columns)))
@@ -65,12 +85,14 @@ def assert_equal(left, right, dynamic=False):
     else:
         assert_frame_equal(left, right, check_like=True, check_dtype=False)
 
+
 def assert_cannot_finalize_without_staged_data(lib, symbol, mode):
     with pytest.raises(UserInputException) as exception_info:
         lib.sort_and_finalize_staged_data(symbol, mode=mode, delete_staged_data_on_failure=True)
     assert "E_NO_STAGED_SEGMENTS" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0
-  
+
+
 def assert_nat_is_not_supported(lib, symbol, mode):
     with pytest.raises(UnsortedDataException) as exception_info:
         lib.sort_and_finalize_staged_data(symbol, mode=mode, delete_staged_data_on_failure=True)
@@ -84,8 +106,10 @@ def assert_staged_columns_are_incompatible(lib, symbol, mode):
     assert "E_DESCRIPTOR_MISMATCH" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0
 
+
 def has_nat_in_index(segment_list):
     return any(pd.NaT in segment.index for segment in segment_list)
+
 
 def merge_and_sort_segment_list(segment_list, int_columns_in_df=None):
     merged = pd.concat(segment_list)
@@ -97,12 +121,14 @@ def merge_and_sort_segment_list(segment_list, int_columns_in_df=None):
     merged.sort_index(inplace=True)
     return merged
 
+
 def assert_appended_data_does_not_overlap_with_storage(lib, symbol):
     with pytest.raises(UnsortedDataException) as exception_info:
         lib.sort_and_finalize_staged_data(symbol, mode="aPpend", delete_staged_data_on_failure=True)
     assert "E_UNSORTED_DATA" in str(exception_info.value)
     assert "append" in str(exception_info.value)
     assert len(get_append_keys(lib, symbol)) == 0
+
 
 def segments_have_compatible_schema(segment_list):
     """
@@ -117,10 +143,12 @@ def segments_have_compatible_schema(segment_list):
                 return False
     return True
 
+
 def get_append_keys(lib, sym):
     lib_tool = lib._nvs.library_tool()
     keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)
     return keys
+
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
@@ -146,9 +174,13 @@ def test_sort_merge_static_schema_write(lmdb_library, df_list):
     data = lib.read(sym).data
     assert_equal(expected, data)
 
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS), initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS, min_size=1, allow_nat_in_index=False))
+@given(
+    df_list=generate_dataframes(COLUMN_DESCRIPTIONS),
+    initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS, min_size=1, allow_nat_in_index=False),
+)
 def test_sort_merge_static_schema_append(lmdb_library, df_list, initial_df):
     lib = lmdb_library
     lib._nvs.version_store.clear()
@@ -176,6 +208,7 @@ def test_sort_merge_static_schema_append(lmdb_library, df_list, initial_df):
     data = lib.read(sym).data
     assert_equal(expected, data)
 
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS))
@@ -201,10 +234,14 @@ def test_sort_merge_dynamic_schema_write(lmdb_library_dynamic_schema, df_list):
     expected = merge_and_sort_segment_list(df_list, int_columns_in_df=int_columns_in_df)
     assert_equal(expected, data)
 
+
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-@given(df_list=generate_dataframes(COLUMN_DESCRIPTIONS), initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS, min_size=1, allow_nat_in_index=False))
-def test_sort_merge_dynamic_schema_append(lmdb_library_dynamic_schema, df_list, initial_df):    
+@given(
+    df_list=generate_dataframes(COLUMN_DESCRIPTIONS),
+    initial_df=generate_single_dataframe(COLUMN_DESCRIPTIONS, min_size=1, allow_nat_in_index=False),
+)
+def test_sort_merge_dynamic_schema_append(lmdb_library_dynamic_schema, df_list, initial_df):
     lib = lmdb_library_dynamic_schema
     lib._nvs.version_store.clear()
     sym = "test_sort_merge_dynamic_schema_append"

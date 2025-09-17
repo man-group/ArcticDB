@@ -2,11 +2,12 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
-#include<optional>
+#include <optional>
 #include <fmt/format.h>
 #include <arcticdb/entity/types.hpp>
 
@@ -27,40 +28,42 @@ enum class IntToFloatConversion {
 [[nodiscard]] bool trivially_compatible_types(const entity::TypeDescriptor& left, const entity::TypeDescriptor& right);
 
 [[nodiscard]] bool is_valid_type_promotion_to_target(
-    const entity::TypeDescriptor& source,
-    const entity::TypeDescriptor& target,
-    const IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
+        const entity::TypeDescriptor& source, const entity::TypeDescriptor& target,
+        const IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
 );
 
 [[nodiscard]] std::optional<entity::TypeDescriptor> has_valid_common_type(
-    const entity::TypeDescriptor& left,
-    const entity::TypeDescriptor& right,
-    IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
+        const entity::TypeDescriptor& left, const entity::TypeDescriptor& right,
+        IntToFloatConversion int_to_to_float_conversion = IntToFloatConversion::STRICT
 );
 
 [[nodiscard]] std::optional<entity::TypeDescriptor> promotable_type(
-        const entity::TypeDescriptor& left,
-        const entity::TypeDescriptor& right
+        const entity::TypeDescriptor& left, const entity::TypeDescriptor& right
 );
 
 inline std::string get_user_friendly_type_string(const entity::TypeDescriptor& type) {
-    return is_sequence_type(type.data_type()) ? fmt::format("TD<type=STRING, dim={}>", type.dimension_) : fmt::format("{}", type);
+    return is_sequence_type(type.data_type()) ? fmt::format("TD<type=STRING, dim={}>", type.dimension_)
+                                              : fmt::format("{}", type);
 }
 
-}
+} // namespace arcticdb
 
 template<>
 struct fmt::formatter<arcticdb::IntToFloatConversion> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(const arcticdb::IntToFloatConversion conversion, FormatContext &ctx) const {
+    auto format(const arcticdb::IntToFloatConversion conversion, FormatContext& ctx) const {
         switch (conversion) {
-            case arcticdb::IntToFloatConversion::PERMISSIVE: return fmt::format_to(ctx.out(), "PERMISSIVE");
-            case arcticdb::IntToFloatConversion::STRICT: return fmt::format_to(ctx.out(), "STRICT");
-            default:
-                arcticdb::util::raise_rte("Unrecognized int to float conversion type {}", int(conversion));
+        case arcticdb::IntToFloatConversion::PERMISSIVE:
+            return fmt::format_to(ctx.out(), "PERMISSIVE");
+        case arcticdb::IntToFloatConversion::STRICT:
+            return fmt::format_to(ctx.out(), "STRICT");
+        default:
+            arcticdb::util::raise_rte("Unrecognized int to float conversion type {}", int(conversion));
         }
     }
 };

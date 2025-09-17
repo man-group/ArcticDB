@@ -1,4 +1,3 @@
-
 # Defined shorter logs on errors
 import os
 

@@ -144,14 +144,12 @@ jobs:
       - name: Lint Python
         if: always()
         run: |
-          python3 build_tooling/format.py --check --type python \
-            || true # formatting not enforced yet
+          python3 build_tooling/format.py --check --type python
 
       - name: Lint C++
         if: always()
         run: |
-          python3 build_tooling/format.py --check --type cpp \
-            || true # formatting not enforced yet
+          python3 build_tooling/format.py --check --type cpp
 
   common_config:
     needs: [cibw_docker_image]

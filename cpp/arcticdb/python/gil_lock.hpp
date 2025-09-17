@@ -5,17 +5,13 @@ namespace arcticdb {
 struct GILLock {
     PyGILState_STATE gstate;
 
-    void lock() {
-        gstate = PyGILState_Ensure();
-    }
+    void lock() { gstate = PyGILState_Ensure(); }
 
-    void unlock() {
-        PyGILState_Release(gstate);
-    }
+    void unlock() { PyGILState_Release(gstate); }
 };
 
 class ScopedGILLock {
-public:
+  public:
     ScopedGILLock() : acquired_gil_(false) { acquire(); }
 
     ~ScopedGILLock() { release(); }
@@ -34,9 +30,9 @@ public:
         }
     }
 
-private:
+  private:
     bool acquired_gil_;
     PyGILState_STATE state_ = PyGILState_UNLOCKED;
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

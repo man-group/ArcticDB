@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -21,38 +22,37 @@ struct DefaultAtomKeyFormat {
     static constexpr char format[] = "{}:{}:{:d}:0x{:x}@{:d}[{},{}]";
 };
 
-template<class T, class FormattingTag=DefaultAtomKeyFormat>
+template<class T, class FormattingTag = DefaultAtomKeyFormat>
 struct FormattableRef {
-    const T &ref;
+    const T& ref;
 
-    explicit FormattableRef(const T &k) : ref(k) {}
+    explicit FormattableRef(const T& k) : ref(k) {}
 
-    FormattableRef(const FormattableRef &) = delete;
+    FormattableRef(const FormattableRef&) = delete;
 
-    FormattableRef(FormattableRef &&) = delete;
-
+    FormattableRef(FormattableRef&&) = delete;
 };
 
 template<class T, class FormattingTag = DefaultAtomKeyFormat>
-auto formattable(const T &ref) {
+auto formattable(const T& ref) {
     return FormattableRef<T, FormattingTag>(ref);
 }
 
 using ContentHash = std::uint64_t;
 
- enum class KeyClass : int {
-     /*
-      * ATOM_KEY is a KeyType containing a segment with either data or other keys in it and the client needs to
-      * have the entire key in memory with all fields populated to read it out.
-      */
-     ATOM_KEY,
-     /*
-      * REF_KEY is the KeyType containing other keys in it, and can be easily read by the client using just the
-      * id() field in the key as it is unique for a given (id, KeyType) combination
-      */
-     REF_KEY,
-     UNKNOWN_CLASS
- };
+enum class KeyClass : int {
+    /*
+     * ATOM_KEY is a KeyType containing a segment with either data or other keys in it and the client needs to
+     * have the entire key in memory with all fields populated to read it out.
+     */
+    ATOM_KEY,
+    /*
+     * REF_KEY is the KeyType containing other keys in it, and can be easily read by the client using just the
+     * id() field in the key as it is unique for a given (id, KeyType) combination
+     */
+    REF_KEY,
+    UNKNOWN_CLASS
+};
 
 enum class KeyType : int {
     /*
@@ -194,22 +194,22 @@ enum class KeyType : int {
 consteval auto key_types_write_precedence() {
     // TOMBSTONE[_ALL] keys are not included because they're not written to the storage,
     // they just exist inside version keys
-    return std::array {
-        KeyType::LIBRARY_CONFIG,
-        KeyType::TABLE_DATA,
-        KeyType::TABLE_INDEX,
-        KeyType::MULTI_KEY,
-        KeyType::VERSION,
-        KeyType::VERSION_JOURNAL,
-        KeyType::VERSION_REF,
-        KeyType::SYMBOL_LIST,
-        KeyType::SNAPSHOT,
-        KeyType::SNAPSHOT_REF,
-        KeyType::SNAPSHOT_TOMBSTONE,
-        KeyType::APPEND_REF,
-        KeyType::APPEND_DATA,
-        KeyType::PARTITION,
-        KeyType::OFFSET
+    return std::array{
+            KeyType::LIBRARY_CONFIG,
+            KeyType::TABLE_DATA,
+            KeyType::TABLE_INDEX,
+            KeyType::MULTI_KEY,
+            KeyType::VERSION,
+            KeyType::VERSION_JOURNAL,
+            KeyType::VERSION_REF,
+            KeyType::SYMBOL_LIST,
+            KeyType::SNAPSHOT,
+            KeyType::SNAPSHOT_REF,
+            KeyType::SNAPSHOT_TOMBSTONE,
+            KeyType::APPEND_REF,
+            KeyType::APPEND_DATA,
+            KeyType::PARTITION,
+            KeyType::OFFSET
     };
 }
 
@@ -219,15 +219,14 @@ consteval auto key_types_read_precedence() {
     return output;
 }
 
-} //namespace arcticdb::entity
+} // namespace arcticdb::entity
 
 namespace std {
-    template <> struct hash<arcticdb::entity::KeyType> {
-        size_t operator()(arcticdb::entity::KeyType kt) const {
-            return std::hash<int>{}(static_cast<int>(kt));
-        }
-    };
-}
+template<>
+struct hash<arcticdb::entity::KeyType> {
+    size_t operator()(arcticdb::entity::KeyType kt) const { return std::hash<int>{}(static_cast<int>(kt)); }
+};
+} // namespace std
 
 namespace arcticdb::entity {
 
@@ -237,11 +236,7 @@ const char* key_type_long_name(KeyType key_type);
 
 char key_type_short_name(KeyType key_type);
 
-enum class VariantType : char {
-    STRING_TYPE = 's',
-    NUMERIC_TYPE = 'd',
-    UNKNOWN_TYPE = 'u'
-};
+enum class VariantType : char { STRING_TYPE = 's', NUMERIC_TYPE = 'd', UNKNOWN_TYPE = 'u' };
 
 VariantType variant_type_from_key_type(KeyType key_type);
 
@@ -256,22 +251,18 @@ bool is_ref_key_class(KeyType k);
 
 bool is_block_ref_key_class(KeyType k);
 
-constexpr KeyType get_key_type_for_data_stream(const StreamId &) {
-    return KeyType::TABLE_DATA;
-}
+constexpr KeyType get_key_type_for_data_stream(const StreamId&) { return KeyType::TABLE_DATA; }
 
-constexpr KeyType get_key_type_for_index_stream(const StreamId &) {
-    return KeyType::TABLE_INDEX;
-}
+constexpr KeyType get_key_type_for_index_stream(const StreamId&) { return KeyType::TABLE_INDEX; }
 
 const char* get_key_description(KeyType type);
 
-template <typename Function>
+template<typename Function>
 constexpr auto foreach_key_type_read_precedence(Function&& func) {
     rng::for_each(key_types_read_precedence(), func);
 }
 
-template <typename Function>
+template<typename Function>
 constexpr auto foreach_key_type_write_precedence(Function&& func) {
     rng::for_each(key_types_write_precedence(), func);
 }
@@ -281,27 +272,26 @@ inline KeyType key_type_from_int(int type_num) {
     return KeyType(type_num);
 }
 
-template <typename Function>
+template<typename Function>
 auto foreach_key_type(Function&& func) {
-    for(int k = 1; k < int(KeyType::UNDEFINED); ++k) {
+    for (int k = 1; k < int(KeyType::UNDEFINED); ++k) {
         func(key_type_from_int(k));
     }
 }
 
 } // namespace arcticdb::entity
 
-
 template<>
 struct fmt::formatter<arcticdb::entity::KeyType> {
 
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(const arcticdb::entity::KeyType k, FormatContext &ctx) const {
+    auto format(const arcticdb::entity::KeyType k, FormatContext& ctx) const {
         using namespace arcticdb::entity;
-        return  fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
+        return fmt::format_to(ctx.out(), "{}", key_type_short_name(k));
     }
 };
-
-

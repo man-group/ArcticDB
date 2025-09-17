@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import time
 import numpy as np
 import pandas as pd
@@ -27,11 +28,12 @@ def retry_get_sizes(admin_tools: AdminTools, retries=3, base_delay=1):
             return result
         except arcticdb_ext.exceptions.StorageException as e:
             if ("E_UNEXPECTED_AZURE_ERROR" in str(e)) and (attempt < retries):
-                wait_time = base_delay * (2 ** attempt) 
+                wait_time = base_delay * (2**attempt)
                 logger.info(f"Attempt {attempt + 1} failed: {e}. Retrying in {wait_time} seconds...")
                 time.sleep(wait_time)
             else:
                 raise
+
 
 def test_get_sizes(arctic_client, lib_name):
     lib_opts = EnterpriseLibraryOptions(replication=True)
@@ -110,8 +112,14 @@ def test_get_sizes_by_symbol(arctic_client, lib_name):
     assert len(sizes) == 2
     assert len(sizes["sym_1"]) == 6
     assert len(sizes["sym_2"]) == 6
-    assert sizes["sym_1"].keys() == {KeyType.VERSION_REF, KeyType.VERSION, KeyType.TABLE_INDEX, KeyType.TABLE_DATA,
-                                     KeyType.APPEND_DATA, KeyType.MULTI_KEY}
+    assert sizes["sym_1"].keys() == {
+        KeyType.VERSION_REF,
+        KeyType.VERSION,
+        KeyType.TABLE_INDEX,
+        KeyType.TABLE_DATA,
+        KeyType.APPEND_DATA,
+        KeyType.MULTI_KEY,
+    }
 
     assert sizes["sym_1"][KeyType.VERSION_REF].count == 1
     assert sizes["sym_2"][KeyType.VERSION_REF].count == 1
@@ -163,7 +171,14 @@ def test_get_sizes_for_symbol(arctic_client, lib_name):
 
     non_existent_sizes = arctic_library.admin_tools().get_sizes_for_symbol("non-existent")
 
-    expected_key_types = {KeyType.VERSION_REF, KeyType.VERSION, KeyType.TABLE_INDEX, KeyType.TABLE_DATA, KeyType.APPEND_DATA, KeyType.MULTI_KEY}
+    expected_key_types = {
+        KeyType.VERSION_REF,
+        KeyType.VERSION,
+        KeyType.TABLE_INDEX,
+        KeyType.TABLE_DATA,
+        KeyType.APPEND_DATA,
+        KeyType.MULTI_KEY,
+    }
     assert non_existent_sizes.keys() == expected_key_types
     for size in non_existent_sizes.values():
         assert size == Size(0, 0)

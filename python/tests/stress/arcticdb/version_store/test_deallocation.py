@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import os
 from multiprocessing import Process
 
@@ -37,10 +38,13 @@ def killed_worker(lib, io_threads, cpu_threads):
         lib.read("sym")
     os._exit(0)
 
+
 @pytest.mark.parametrize("io_threads_spawned_in_child", [True, False])
 @pytest.mark.parametrize("cpu_threads_spawned_in_child", [True, False])
 @pytest.mark.xfail(reason="Intermittent failure 9917390284", strict=False)
-def test_os_exit_exits_within_timeout(lmdb_storage, lib_name, io_threads_spawned_in_child, cpu_threads_spawned_in_child):
+def test_os_exit_exits_within_timeout(
+    lmdb_storage, lib_name, io_threads_spawned_in_child, cpu_threads_spawned_in_child
+):
     lib = lmdb_storage.create_arctic().create_library(lib_name)
     df = pd.DataFrame()
     lib.write("sym", df)

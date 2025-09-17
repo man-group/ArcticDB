@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -18,7 +19,7 @@ constexpr size_t MAX_SYMBOL_LENGTH = std::numeric_limits<uint8_t>::max() - 1;
 
 // Verifies whether a symbol_key is valid and raises UserInputException exceptions on invalid symbol names.
 // Should be used only when writing new symbols to allow for backwards compatibility with old symbols.
-[[nodiscard]] CheckOutcome verify_symbol_key(const StreamId &symbol_key);
+[[nodiscard]] CheckOutcome verify_symbol_key(const StreamId& symbol_key);
 
 // Similar to verify_symbol_key above.
 [[nodiscard]] CheckOutcome verify_snapshot_id(const SnapshotId& snapshot_id);
@@ -35,4 +36,4 @@ void verify_library_path(const StringId& library_path, char delim);
 
 void verify_library_path_part(const std::string& library_part, char delim);
 
-}
+} // namespace arcticdb

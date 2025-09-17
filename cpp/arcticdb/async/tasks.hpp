@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -41,47 +42,34 @@ struct EncodeAtomTask : BaseTask {
     EncodingVersion encoding_version_;
 
     EncodeAtomTask(
-        PartialKey &&pk,
-        timestamp creation_ts,
-        SegmentInMemory &&segment,
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-        EncodingVersion encoding_version) :
-            partial_key_(std::move(pk)),
-            creation_ts_(creation_ts),
-            segment_(std::move(segment)),
-            codec_meta_(std::move(codec_meta)),
-            encoding_version_(encoding_version) {
-    }
+            PartialKey&& pk, timestamp creation_ts, SegmentInMemory&& segment,
+            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+    ) :
+        partial_key_(std::move(pk)),
+        creation_ts_(creation_ts),
+        segment_(std::move(segment)),
+        codec_meta_(std::move(codec_meta)),
+        encoding_version_(encoding_version) {}
 
     EncodeAtomTask(
-        std::pair<PartialKey, SegmentInMemory>&& pk_seg,
-        timestamp creation_ts,
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-        EncodingVersion encoding_version) :
-            partial_key_(std::move(pk_seg.first)),
-            creation_ts_(creation_ts),
-            segment_(std::move(pk_seg.second)),
-            codec_meta_(std::move(codec_meta)),
-            encoding_version_(encoding_version) {
-    }
+            std::pair<PartialKey, SegmentInMemory>&& pk_seg, timestamp creation_ts,
+            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+    ) :
+        partial_key_(std::move(pk_seg.first)),
+        creation_ts_(creation_ts),
+        segment_(std::move(pk_seg.second)),
+        codec_meta_(std::move(codec_meta)),
+        encoding_version_(encoding_version) {}
 
     EncodeAtomTask(
-        KeyType key_type,
-        GenerationId gen_id,
-        StreamId stream_id,
-        IndexValue start_index,
-        IndexValue end_index,
-        timestamp creation_ts,
-        SegmentInMemory &&segment,
-        const std::shared_ptr<arcticdb::proto::encoding::VariantCodec> &codec_meta,
-        EncodingVersion encoding_version) :
-            EncodeAtomTask(
+            KeyType key_type, GenerationId gen_id, StreamId stream_id, IndexValue start_index, IndexValue end_index,
+            timestamp creation_ts, SegmentInMemory&& segment,
+            const std::shared_ptr<arcticdb::proto::encoding::VariantCodec>& codec_meta, EncodingVersion encoding_version
+    ) :
+        EncodeAtomTask(
                 PartialKey{key_type, gen_id, std::move(stream_id), std::move(start_index), std::move(end_index)},
-                creation_ts,
-                std::move(segment),
-                codec_meta,
-                encoding_version) {
-    }
+                creation_ts, std::move(segment), codec_meta, encoding_version
+        ) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeAtomTask)
 
@@ -107,15 +95,14 @@ struct EncodeSegmentTask : BaseTask {
     std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta_;
     EncodingVersion encoding_version_;
 
-    EncodeSegmentTask(entity::VariantKey key,
-                      SegmentInMemory &&segment,
-                      std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-                      EncodingVersion encoding_version)
-            : key_(std::move(key)),
-              segment_(std::move(segment)),
-              codec_meta_(std::move(codec_meta)),
-              encoding_version_(encoding_version){}
-
+    EncodeSegmentTask(
+            entity::VariantKey key, SegmentInMemory&& segment,
+            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+    ) :
+        key_(std::move(key)),
+        segment_(std::move(segment)),
+        codec_meta_(std::move(codec_meta)),
+        encoding_version_(encoding_version) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeSegmentTask)
 
@@ -139,18 +126,14 @@ struct EncodeRefTask : BaseTask {
     EncodingVersion encoding_version_;
 
     EncodeRefTask(
-        KeyType key_type,
-        StreamId stream_id,
-        SegmentInMemory &&segment,
-        std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta,
-        EncodingVersion encoding_version
-    )
-        : key_type_(key_type),
-          id_(std::move(stream_id)),
-          segment_(std::move(segment)),
-          codec_meta_(std::move(codec_meta)),
-          encoding_version_(encoding_version){
-    }
+            KeyType key_type, StreamId stream_id, SegmentInMemory&& segment,
+            std::shared_ptr<arcticdb::proto::encoding::VariantCodec> codec_meta, EncodingVersion encoding_version
+    ) :
+        key_type_(key_type),
+        id_(std::move(stream_id)),
+        segment_(std::move(segment)),
+        codec_meta_(std::move(codec_meta)),
+        encoding_version_(encoding_version) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(EncodeRefTask)
 
@@ -169,13 +152,11 @@ struct EncodeRefTask : BaseTask {
 struct WriteSegmentTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
 
-    explicit WriteSegmentTask(std::shared_ptr<storage::Library> lib) :
-        lib_(std::move(lib)) {
-    }
+    explicit WriteSegmentTask(std::shared_ptr<storage::Library> lib) : lib_(std::move(lib)) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteSegmentTask)
 
-    VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
+    VariantKey operator()(storage::KeySegmentPair&& key_seg) const {
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
         auto k = key_seg.variant_key();
         lib_->write(key_seg);
@@ -186,13 +167,11 @@ struct WriteSegmentTask : BaseTask {
 struct WriteIfNoneTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
 
-    explicit WriteIfNoneTask(std::shared_ptr<storage::Library> lib) :
-    lib_(std::move(lib)) {
-    }
+    explicit WriteIfNoneTask(std::shared_ptr<storage::Library> lib) : lib_(std::move(lib)) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteIfNoneTask)
 
-    VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
+    VariantKey operator()(storage::KeySegmentPair&& key_seg) const {
         ARCTICDB_SAMPLE(WriteSegmentTask, 0)
         auto k = key_seg.variant_key();
         lib_->write_if_none(key_seg);
@@ -206,12 +185,11 @@ struct UpdateSegmentTask : BaseTask {
 
     explicit UpdateSegmentTask(std::shared_ptr<storage::Library> lib, storage::UpdateOpts opts) :
         lib_(std::move(lib)),
-        opts_(opts) {
-    }
+        opts_(opts) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(UpdateSegmentTask)
 
-    VariantKey operator()(storage::KeySegmentPair &&key_seg) const {
+    VariantKey operator()(storage::KeySegmentPair&& key_seg) const {
         ARCTICDB_SAMPLE(UpdateSegmentTask, 0)
         auto k = key_seg.variant_key();
         lib_->update(key_seg, opts_);
@@ -219,25 +197,25 @@ struct UpdateSegmentTask : BaseTask {
     }
 };
 
-template <typename Callable>
+template<typename Callable>
 struct KeySegmentContinuation {
     folly::Future<storage::KeySegmentPair> key_seg_;
     Callable continuation_;
 };
 
-inline folly::Future<storage::KeySegmentPair> read_dispatch(entity::VariantKey&& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts) {
-    return util::variant_match(variant_key, [&lib, &opts](auto&& key) {
-        return lib->read(key, opts);
-    });
+inline folly::Future<storage::KeySegmentPair> read_dispatch(
+        entity::VariantKey&& variant_key, const std::shared_ptr<storage::Library>& lib, const storage::ReadKeyOpts& opts
+) {
+    return util::variant_match(variant_key, [&lib, &opts](auto&& key) { return lib->read(key, opts); });
 }
 
-inline storage::KeySegmentPair read_sync_dispatch(const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, storage::ReadKeyOpts opts) {
-    return util::variant_match(variant_key, [&lib, opts](const auto &key) {
-        return lib->read_sync(key, opts);
-    });
+inline storage::KeySegmentPair read_sync_dispatch(
+        const entity::VariantKey& variant_key, const std::shared_ptr<storage::Library>& lib, storage::ReadKeyOpts opts
+) {
+    return util::variant_match(variant_key, [&lib, opts](const auto& key) { return lib->read_sync(key, opts); });
 }
 
-template <typename Callable>
+template<typename Callable>
 struct ReadCompressedTask : BaseTask {
     entity::VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
@@ -246,33 +224,39 @@ struct ReadCompressedTask : BaseTask {
 
     using ContinuationType = Callable;
 
-    ReadCompressedTask(entity::VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts, Callable&& continuation)
-        : key_(std::move(key)),
+    ReadCompressedTask(
+            entity::VariantKey key, std::shared_ptr<storage::Library> lib, storage::ReadKeyOpts opts,
+            Callable&& continuation
+    ) :
+        key_(std::move(key)),
         lib_(std::move(lib)),
         opts_(opts),
-        continuation_(std::move(continuation)){
-        ARCTICDB_DEBUG(log::storage(), "Creating read compressed task for key {}: {}",
-                             variant_key_type(key_),
-                             variant_key_view(key_));
+        continuation_(std::move(continuation)) {
+        ARCTICDB_DEBUG(
+                log::storage(),
+                "Creating read compressed task for key {}: {}",
+                variant_key_type(key_),
+                variant_key_view(key_)
+        );
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadCompressedTask)
 
     KeySegmentContinuation<ContinuationType> operator()() {
         ARCTICDB_SAMPLE(ReadCompressed, 0)
-        return KeySegmentContinuation<decltype(continuation_)>{read_dispatch(std::move(key_), lib_, opts_), std::move(continuation_)};
+        return KeySegmentContinuation<decltype(continuation_)>{
+                read_dispatch(std::move(key_), lib_, opts_), std::move(continuation_)
+        };
     }
 };
 
 struct PassThroughTask : BaseTask {
     PassThroughTask() = default;
 
-   storage::KeySegmentPair operator()(storage::KeySegmentPair &&ks) const {
-        return ks;
-    }
+    storage::KeySegmentPair operator()(storage::KeySegmentPair&& ks) const { return ks; }
 };
 
-template <typename ClockType>
+template<typename ClockType>
 struct CopyCompressedTask : BaseTask {
     entity::VariantKey source_key_;
     KeyType key_type_;
@@ -280,31 +264,40 @@ struct CopyCompressedTask : BaseTask {
     VersionId version_id_;
     std::shared_ptr<storage::Library> lib_;
 
-    CopyCompressedTask(entity::VariantKey source_key,
-                       KeyType key_type,
-                       StreamId stream_id,
-                       VersionId version_id,
-                       std::shared_ptr<storage::Library> lib) :
+    CopyCompressedTask(
+            entity::VariantKey source_key, KeyType key_type, StreamId stream_id, VersionId version_id,
+            std::shared_ptr<storage::Library> lib
+    ) :
         source_key_(std::move(source_key)),
         key_type_(key_type),
         stream_id_(std::move(stream_id)),
         version_id_(version_id),
         lib_(std::move(lib)) {
-        ARCTICDB_DEBUG(log::storage(), "Creating copy compressed task for key {} -> {} {} {}",
-                             variant_key_view(source_key_),
-                             key_type_, stream_id_, version_id_);
+        ARCTICDB_DEBUG(
+                log::storage(),
+                "Creating copy compressed task for key {} -> {} {} {}",
+                variant_key_view(source_key_),
+                key_type_,
+                stream_id_,
+                version_id_
+        );
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(CopyCompressedTask)
 
     VariantKey copy() {
-        return std::visit([this](const auto &source_key) {
-            auto key_seg = lib_->read_sync(source_key);
-            auto target_key_seg = stream::make_target_key<ClockType>(key_type_, stream_id_, version_id_, source_key, std::move(*key_seg.segment_ptr()));
-            auto return_key = target_key_seg.variant_key();
-            lib_->write(target_key_seg);
-            return return_key;
-        }, source_key_);
+        return std::visit(
+                [this](const auto& source_key) {
+                    auto key_seg = lib_->read_sync(source_key);
+                    auto target_key_seg = stream::make_target_key<ClockType>(
+                            key_type_, stream_id_, version_id_, source_key, std::move(*key_seg.segment_ptr())
+                    );
+                    auto return_key = target_key_seg.variant_key();
+                    lib_->write(target_key_seg);
+                    return return_key;
+                },
+                source_key_
+        );
     }
 
     VariantKey operator()() {
@@ -320,25 +313,26 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
     using FailedTargets = std::unordered_set<std::string>;
     using ProcessingResult = std::variant<AllOk, FailedTargets>;
 
-    CopyCompressedInterStoreTask(entity::VariantKey key_to_read,
-                                 std::optional<entity::AtomKey> key_to_write,
-                                 bool check_key_exists_on_targets,
-                                 bool retry_on_failure,
-                                 std::shared_ptr<Store> source_store,
-                                 std::vector<std::shared_ptr<Store>> target_stores,
-                                 std::shared_ptr<BitRateStats> bit_rate_stats=nullptr)
-        : key_to_read_(std::move(key_to_read)),
-          key_to_write_(std::move(key_to_write)),
-          check_key_exists_on_targets_(check_key_exists_on_targets),
-          retry_on_failure_(retry_on_failure),
-          source_store_(std::move(source_store)),
-          target_stores_(std::move(target_stores)),
-          bit_rate_stats_(std::move(bit_rate_stats)){
-        ARCTICDB_DEBUG(log::storage(), "Creating copy compressed inter-store task from key {}: {} -> {}: {}",
-                       variant_key_type(key_to_read_),
-                       variant_key_view(key_to_read_),
-                       key_to_write_.has_value() ? variant_key_type(key_to_write_.value()) : variant_key_type(key_to_read_),
-                       key_to_write_.has_value() ? variant_key_view(key_to_write_.value()) : variant_key_view(key_to_read_));
+    CopyCompressedInterStoreTask(
+            entity::VariantKey key_to_read, std::optional<entity::AtomKey> key_to_write,
+            bool check_key_exists_on_targets, bool retry_on_failure, std::shared_ptr<Store> source_store,
+            std::vector<std::shared_ptr<Store>> target_stores, std::shared_ptr<BitRateStats> bit_rate_stats = nullptr
+    ) :
+        key_to_read_(std::move(key_to_read)),
+        key_to_write_(std::move(key_to_write)),
+        check_key_exists_on_targets_(check_key_exists_on_targets),
+        retry_on_failure_(retry_on_failure),
+        source_store_(std::move(source_store)),
+        target_stores_(std::move(target_stores)),
+        bit_rate_stats_(std::move(bit_rate_stats)) {
+        ARCTICDB_DEBUG(
+                log::storage(),
+                "Creating copy compressed inter-store task from key {}: {} -> {}: {}",
+                variant_key_type(key_to_read_),
+                variant_key_view(key_to_read_),
+                key_to_write_.has_value() ? variant_key_type(key_to_write_.value()) : variant_key_type(key_to_read_),
+                key_to_write_.has_value() ? variant_key_view(key_to_write_.value()) : variant_key_view(key_to_read_)
+        );
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(CopyCompressedInterStoreTask)
@@ -357,7 +351,7 @@ struct CopyCompressedInterStoreTask : async::BaseTask {
         return AllOk{};
     }
 
-private:
+  private:
     entity::VariantKey key_to_read_;
     std::optional<entity::AtomKey> key_to_write_;
     bool check_key_exists_on_targets_;
@@ -373,10 +367,16 @@ private:
         interval timer;
         timer.start();
         if (check_key_exists_on_targets_) {
-            target_stores_.erase(std::remove_if(target_stores_.begin(), target_stores_.end(),
-                                                [that=this](const std::shared_ptr<Store>& target_store) {
-                                                    return target_store->key_exists_sync(that->key_to_read_);
-                                                }), target_stores_.end());
+            target_stores_.erase(
+                    std::remove_if(
+                            target_stores_.begin(),
+                            target_stores_.end(),
+                            [that = this](const std::shared_ptr<Store>& target_store) {
+                                return target_store->key_exists_sync(that->key_to_read_);
+                            }
+                    ),
+                    target_stores_.end()
+            );
         }
         std::unordered_set<std::string> failed_targets;
         if (!target_stores_.empty()) {
@@ -396,10 +396,14 @@ private:
                 try {
                     target_store->write_compressed_sync(key_segment_pair);
                 } catch (const storage::DuplicateKeyException& e) {
-                    log::storage().debug("Key {} already exists on the target: {}", variant_key_view(key_to_read_), e.what());
+                    log::storage().debug(
+                            "Key {} already exists on the target: {}", variant_key_view(key_to_read_), e.what()
+                    );
                 } catch (const std::exception& e) {
                     auto name = target_store->name();
-                    log::storage().error("Failed to write key {} to store {}: {}", variant_key_view(key_to_read_), name, e.what());
+                    log::storage().error(
+                            "Failed to write key {} to store {}: {}", variant_key_view(key_to_read_), name, e.what()
+                    );
                     failed_targets.insert(name);
                 }
             }
@@ -419,12 +423,15 @@ struct DecodeSegmentTask : BaseTask {
 
     DecodeSegmentTask() = default;
 
-    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair &&ks) const {
+    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair&& ks) const {
         ARCTICDB_SAMPLE(DecodeAtomTask, 0)
 
         auto key_seg = std::move(ks);
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeAtomTask decoding segment with key {}",
-                             variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(
+                log::storage(),
+                "ReadAndDecodeAtomTask decoding segment with key {}",
+                variant_key_view(key_seg.variant_key())
+        );
 
         return {key_seg.variant_key(), decode_segment(*key_seg.segment_ptr())};
     }
@@ -437,11 +444,10 @@ struct DecodeSliceTask : BaseTask {
     std::shared_ptr<std::unordered_set<std::string>> columns_to_decode_;
 
     explicit DecodeSliceTask(
-            pipelines::RangesAndKey&& ranges_and_key,
-            std::shared_ptr<std::unordered_set<std::string>> columns_to_decode):
-            ranges_and_key_(std::move(ranges_and_key)),
-            columns_to_decode_(std::move(columns_to_decode)) {
-    }
+            pipelines::RangesAndKey&& ranges_and_key, std::shared_ptr<std::unordered_set<std::string>> columns_to_decode
+    ) :
+        ranges_and_key_(std::move(ranges_and_key)),
+        columns_to_decode_(std::move(columns_to_decode)) {}
 
     pipelines::SegmentAndSlice operator()(storage::KeySegmentPair&& key_segment_pair) {
         ARCTICDB_SAMPLE(DecodeSliceTask, 0)
@@ -449,21 +455,18 @@ struct DecodeSliceTask : BaseTask {
         return decode_into_slice(std::move(key_segment_pair));
     }
 
-private:
+  private:
     pipelines::SegmentAndSlice decode_into_slice(storage::KeySegmentPair&& key_segment_pair);
 };
 
 struct SegmentFunctionTask : BaseTask {
     stream::StreamSource::ReadContinuation func_;
 
-    explicit SegmentFunctionTask(
-        stream::StreamSource::ReadContinuation func) :
-        func_(std::move(func)) {
-    }
+    explicit SegmentFunctionTask(stream::StreamSource::ReadContinuation func) : func_(std::move(func)) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(SegmentFunctionTask)
 
-     entity::VariantKey operator()(storage::KeySegmentPair &&key_seg) {
+    entity::VariantKey operator()(storage::KeySegmentPair&& key_seg) {
         ARCTICDB_SAMPLE(SegmentFunctionTask, 0)
         return func_(std::move(key_seg));
     }
@@ -475,12 +478,11 @@ struct MemSegmentProcessingTask : BaseTask {
     timestamp creation_time_;
 
     explicit MemSegmentProcessingTask(
-           std::vector<std::shared_ptr<Clause>> clauses,
-           std::vector<EntityId>&& entity_ids) :
+            std::vector<std::shared_ptr<Clause>> clauses, std::vector<EntityId>&& entity_ids
+    ) :
         clauses_(std::move(clauses)),
         entity_ids_(std::move(entity_ids)),
-        creation_time_(util::SysClock::coarse_nanos_since_epoch()){
-    }
+        creation_time_(util::SysClock::coarse_nanos_since_epoch()) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MemSegmentProcessingTask)
 
@@ -493,7 +495,8 @@ struct MemSegmentProcessingTask : BaseTask {
             entity_ids_ = (*it)->process(std::move(entity_ids_));
 
             auto next_it = std::next(it);
-            if(next_it != clauses_.cend() && (*it)->clause_info().output_structure_ != (*next_it)->clause_info().input_structure_)
+            if (next_it != clauses_.cend() &&
+                (*it)->clause_info().output_structure_ != (*next_it)->clause_info().input_structure_)
                 break;
         }
         const auto nanos_end = util::SysClock::coarse_nanos_since_epoch();
@@ -501,7 +504,6 @@ struct MemSegmentProcessingTask : BaseTask {
         ARCTICDB_RUNTIME_DEBUG(log::inmem(), "Segment processing task completed after {}s run time", time_taken);
         return std::move(entity_ids_);
     }
-
 };
 
 struct DecodeMetadataTask : BaseTask {
@@ -509,9 +511,15 @@ struct DecodeMetadataTask : BaseTask {
 
     DecodeMetadataTask() = default;
 
-    std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(storage::KeySegmentPair &&key_seg) const {
+    std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> operator()(
+            storage::KeySegmentPair&& key_seg
+    ) const {
         ARCTICDB_SAMPLE(ReadMetadataTask, 0)
-        ARCTICDB_DEBUG(log::storage(), "ReadAndDecodeMetadataTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(
+                log::storage(),
+                "ReadAndDecodeMetadataTask decoding segment with key {}",
+                variant_key_view(key_seg.variant_key())
+        );
         return std::make_pair<>(key_seg.variant_key(), decode_metadata_from_segment(key_seg.segment()));
     }
 };
@@ -521,17 +529,18 @@ struct DecodeTimeseriesDescriptorTask : BaseTask {
 
     DecodeTimeseriesDescriptorTask() = default;
 
-    std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair &&key_seg) const {
+    std::pair<VariantKey, TimeseriesDescriptor> operator()(storage::KeySegmentPair&& key_seg) const {
         ARCTICDB_SAMPLE(DecodeTimeseriesDescriptorTask, 0)
-        ARCTICDB_DEBUG(log::storage(), "DecodeTimeseriesDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(
+                log::storage(),
+                "DecodeTimeseriesDescriptorTask decoding segment with key {}",
+                variant_key_view(key_seg.variant_key())
+        );
 
         auto maybe_desc = decode_timeseries_descriptor(*key_seg.segment_ptr());
 
         util::check(static_cast<bool>(maybe_desc), "Failed to decode timeseries descriptor");
-        return std::make_pair(
-            key_seg.variant_key(),
-            std::move(*maybe_desc));
-
+        return std::make_pair(key_seg.variant_key(), std::move(*maybe_desc));
     }
 };
 
@@ -540,25 +549,29 @@ struct DecodeMetadataAndDescriptorTask : BaseTask {
 
     DecodeMetadataAndDescriptorTask() = default;
 
-    std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(storage::KeySegmentPair &&key_seg) const {
+    std::tuple<VariantKey, std::optional<google::protobuf::Any>, StreamDescriptor> operator()(
+            storage::KeySegmentPair&& key_seg
+    ) const {
         ARCTICDB_SAMPLE(ReadMetadataAndDescriptorTask, 0)
         ARCTICDB_DEBUG_THROW(5)
-        ARCTICDB_DEBUG(log::storage(), "DecodeMetadataAndDescriptorTask decoding segment with key {}", variant_key_view(key_seg.variant_key()));
+        ARCTICDB_DEBUG(
+                log::storage(),
+                "DecodeMetadataAndDescriptorTask decoding segment with key {}",
+                variant_key_view(key_seg.variant_key())
+        );
 
         auto [any, descriptor] = decode_metadata_and_descriptor_fields(*key_seg.segment_ptr());
-        return std::make_tuple(
-            key_seg.variant_key(),
-            std::move(any),
-            std::move(descriptor)
-            );
+        return std::make_tuple(key_seg.variant_key(), std::move(any), std::move(descriptor));
     }
 };
 struct KeyExistsTask : BaseTask {
     const VariantKey key_;
     std::shared_ptr<storage::Library> lib_;
 
-    KeyExistsTask(auto &&key, std::shared_ptr<storage::Library> lib): key_(std::forward<decltype(key)>(key)), lib_(std::move(lib)) {
-        ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}",key_);
+    KeyExistsTask(auto&& key, std::shared_ptr<storage::Library> lib) :
+        key_(std::forward<decltype(key)>(key)),
+        lib_(std::move(lib)) {
+        ARCTICDB_DEBUG(log::storage(), "Creating key exists task for key {}", key_);
     }
 
     bool operator()() {
@@ -572,8 +585,8 @@ struct WriteCompressedTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
 
     WriteCompressedTask(storage::KeySegmentPair&& key_seg, std::shared_ptr<storage::Library> lib) :
-            kv_(std::move(key_seg)),
-            lib_(std::move(lib)) {
+        kv_(std::move(key_seg)),
+        lib_(std::move(lib)) {
         ARCTICDB_DEBUG(log::storage(), "Creating write compressed task");
     }
 
@@ -594,8 +607,9 @@ struct WriteCompressedBatchTask : BaseTask {
     std::vector<storage::KeySegmentPair> kvs_;
     std::shared_ptr<storage::Library> lib_;
 
-    WriteCompressedBatchTask(std::vector<storage::KeySegmentPair> &&kvs, std::shared_ptr<storage::Library> lib) : kvs_(
-        std::move(kvs)), lib_(std::move(lib)) {
+    WriteCompressedBatchTask(std::vector<storage::KeySegmentPair>&& kvs, std::shared_ptr<storage::Library> lib) :
+        kvs_(std::move(kvs)),
+        lib_(std::move(lib)) {
         util::check(!kvs_.empty(), "WriteCompressedBatch task created with no data");
 
         ARCTICDB_DEBUG(log::storage(), "Creating read and decode task for {} keys", kvs_.size());
@@ -604,7 +618,7 @@ struct WriteCompressedBatchTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(WriteCompressedBatchTask)
 
     folly::Future<folly::Unit> write() {
-        for(auto&& kv : kvs_)
+        for (auto&& kv : kvs_)
             lib_->write(kv);
 
         return folly::makeFuture();
@@ -621,11 +635,13 @@ struct RemoveTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
     storage::RemoveOpts opts_;
 
-    RemoveTask(const VariantKey &key_, std::shared_ptr<storage::Library> lib_, storage::RemoveOpts opts) :
-            key_(key_),
-            lib_(std::move(lib_)),
-            opts_(opts){
-        ARCTICDB_DEBUG(log::storage(), "Creating remove task for key {}: {}", variant_key_type(key_), variant_key_view(key_));
+    RemoveTask(const VariantKey& key_, std::shared_ptr<storage::Library> lib_, storage::RemoveOpts opts) :
+        key_(key_),
+        lib_(std::move(lib_)),
+        opts_(opts) {
+        ARCTICDB_DEBUG(
+                log::storage(), "Creating remove task for key {}: {}", variant_key_type(key_), variant_key_view(key_)
+        );
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(RemoveTask)
@@ -641,18 +657,14 @@ struct RemoveBatchTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
     storage::RemoveOpts opts_;
 
-    RemoveBatchTask(
-        std::vector<VariantKey> key_,
-        std::shared_ptr<storage::Library> lib_,
-        storage::RemoveOpts opts) :
+    RemoveBatchTask(std::vector<VariantKey> key_, std::shared_ptr<storage::Library> lib_, storage::RemoveOpts opts) :
         keys_(std::move(key_)),
         lib_(std::move(lib_)),
-        opts_(opts){
+        opts_(opts) {
         ARCTICDB_DEBUG(log::storage(), "Creating remove task for {} keys", keys_.size());
     }
 
     ARCTICDB_MOVE_ONLY_DEFAULT(RemoveBatchTask)
-
 
     std::vector<stream::StreamSink::RemoveKeyResultType> operator()() {
         lib_->remove(std::span(keys_), opts_);
@@ -667,11 +679,8 @@ struct VisitObjectSizesTask : BaseTask {
     std::shared_ptr<storage::Library> lib_;
 
     VisitObjectSizesTask(
-        KeyType type,
-        std::string prefix,
-        storage::ObjectSizesVisitor visitor,
-        std::shared_ptr<storage::Library> lib
-        ) :
+            KeyType type, std::string prefix, storage::ObjectSizesVisitor visitor, std::shared_ptr<storage::Library> lib
+    ) :
         type_(type),
         prefix_(std::move(prefix)),
         visitor_(std::move(visitor)),
@@ -682,9 +691,12 @@ struct VisitObjectSizesTask : BaseTask {
     ARCTICDB_MOVE_ONLY_DEFAULT(VisitObjectSizesTask)
 
     void operator()() {
-        util::check(lib_->supports_object_size_calculation(), "ObjectSizesBytesTask should only be used with storages"
-                                                              " that natively support size calculation");
+        util::check(
+                lib_->supports_object_size_calculation(),
+                "ObjectSizesBytesTask should only be used with storages"
+                " that natively support size calculation"
+        );
         lib_->visit_object_sizes(type_, prefix_, visitor_);
     }
 };
-}
+} // namespace arcticdb::async

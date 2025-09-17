@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/util/global_lifetimes.hpp>
@@ -44,9 +45,7 @@ std::shared_ptr<ModuleData> ModuleData::instance() {
     return instance_;
 }
 
-void ModuleData::destroy_instance() {
-    ModuleData::instance_.reset();
-}
+void ModuleData::destroy_instance() { ModuleData::instance_.reset(); }
 
 void ModuleData::init() {
     ModuleData::instance_ = std::make_shared<ModuleData>();
@@ -69,4 +68,4 @@ void shutdown_globals() {
     ModuleData::destroy_instance();
 }
 
-} //namespace arcticdb
+} // namespace arcticdb

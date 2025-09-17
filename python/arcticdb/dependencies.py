@@ -10,8 +10,8 @@ class MissingModule(ModuleType):
     """
 
     def __init__(
-            self,
-            module_name: str,
+        self,
+        module_name: str,
     ) -> None:
         self._module_name = module_name
         super().__init__(module_name)

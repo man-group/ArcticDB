@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import time
 
 from pandas import Timestamp
@@ -101,7 +102,7 @@ def test_get_num_rows_pickled(lmdb_version_store):
         (None, False),
         (StagedDataFinalizeMethod.APPEND, True),
         (StagedDataFinalizeMethod.WRITE, False),
-    ]
+    ],
 )
 def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
     symbol = "sym"
@@ -115,7 +116,7 @@ def test_finalize_staged_data(arctic_library_lmdb, input_mode, expected_append):
         "prune_previous_version": False,
         "validate_index": True,
         "delete_staged_data_on_failure": False,
-        "stage_results": None
+        "stage_results": None,
     }
 
     arctic_library_lmdb._nvs.compact_incomplete.assert_called_once_with(symbol, append=expected_append, **default_args)

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -16,24 +17,23 @@
 #include <memory>
 #include <utility>
 
-
 namespace arcticdb {
 
 struct ExpressionContext;
 
-struct ColumnNameTag{};
+struct ColumnNameTag {};
 using ColumnName = util::StringWrappingValue<ColumnNameTag>;
 
-struct ValueNameTag{};
+struct ValueNameTag {};
 using ValueName = util::StringWrappingValue<ValueNameTag>;
 
-struct ValueSetNameTag{};
+struct ValueSetNameTag {};
 using ValueSetName = util::StringWrappingValue<ValueSetNameTag>;
 
-struct ExpressionNameTag{};
+struct ExpressionNameTag {};
 using ExpressionName = util::StringWrappingValue<ExpressionNameTag>;
 
-struct RegexNameTag{};
+struct RegexNameTag {};
 using RegexName = util::StringWrappingValue<RegexNameTag>;
 
 using VariantNode = std::variant<std::monostate, ColumnName, ValueName, ValueSetName, ExpressionName, RegexName>;
@@ -52,28 +52,30 @@ struct ColumnWithStrings {
 
     ColumnWithStrings(std::unique_ptr<Column>&& col, std::string_view col_name) :
         column_(std::move(col)),
-        column_name_(col_name) {
-    }
+        column_name_(col_name) {}
 
-    ColumnWithStrings(std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
-            column_(std::move(column)),
-            string_pool_(std::move(string_pool)),
-            column_name_(col_name) {
-    }
+    ColumnWithStrings(
+            std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name
+    ) :
+        column_(std::move(column)),
+        string_pool_(std::move(string_pool)),
+        column_name_(col_name) {}
 
     ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
         column_(std::make_shared<Column>(std::move(col))),
         string_pool_(std::move(string_pool)),
-        column_name_(col_name) {
-    }
+        column_name_(col_name) {}
 
-    ColumnWithStrings(std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name) :
+    ColumnWithStrings(
+            std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name
+    ) :
         column_(std::move(column)),
         string_pool_(string_pool),
-        column_name_(col_name) {
-    }
+        column_name_(col_name) {}
 
-    [[nodiscard]] std::optional<std::string_view> string_at_offset(entity::position_t offset, bool strip_fixed_width_trailing_nulls=false) const;
+    [[nodiscard]] std::optional<std::string_view> string_at_offset(
+            entity::position_t offset, bool strip_fixed_width_trailing_nulls = false
+    ) const;
 
     [[nodiscard]] std::optional<size_t> get_fixed_width_string_size() const;
 };
@@ -82,10 +84,12 @@ struct FullResult {};
 
 struct EmptyResult {};
 
-using VariantData = std::variant<FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet, std::shared_ptr<util::RegexGeneric>>;
+using VariantData = std::variant<
+        FullResult, EmptyResult, std::shared_ptr<Value>, std::shared_ptr<ValueSet>, ColumnWithStrings, util::BitSet,
+        std::shared_ptr<util::RegexGeneric>>;
 
 // Used to represent that an ExpressionNode returns a bitset
-struct BitSetTag{};
+struct BitSetTag {};
 
 /*
  * Basic AST node.
@@ -106,20 +110,16 @@ struct ExpressionNode {
 
     std::variant<BitSetTag, DataType> compute(
             const ExpressionContext& expression_context,
-            const ankerl::unordered_dense::map<std::string, DataType>& column_types) const;
+            const ankerl::unordered_dense::map<std::string, DataType>& column_types
+    ) const;
 
-private:
-    enum class ValueSetState {
-        NOT_A_SET,
-        EMPTY_SET,
-        NON_EMPTY_SET
-    };
+  private:
+    enum class ValueSetState { NOT_A_SET, EMPTY_SET, NON_EMPTY_SET };
 
     std::variant<BitSetTag, DataType> child_return_type(
-            const VariantNode& child,
-            const ExpressionContext& expression_context,
-            const ankerl::unordered_dense::map<std::string, DataType>& column_types,
-            ValueSetState& value_set_state) const;
+            const VariantNode& child, const ExpressionContext& expression_context,
+            const ankerl::unordered_dense::map<std::string, DataType>& column_types, ValueSetState& value_set_state
+    ) const;
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

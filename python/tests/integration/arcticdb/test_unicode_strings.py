@@ -13,20 +13,17 @@ def read_strings():
     script_directory = os.path.dirname(os.path.abspath(__file__))
     file_path = "{}/blns.txt".format(script_directory)
 
-    with open(file_path, 'r', errors="ignore") as file:
+    with open(file_path, "r", errors="ignore") as file:
         lines = file.readlines()
 
-    filtered_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith('#')]
+    filtered_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
     return filtered_lines
 
 
 def create_dataframe(strings):
-    start_date = '2023-01-01'
-    data = {
-        'strings': strings,
-        'ints': np.random.randint(1, 100, size=len(strings))
-    }
-    date_range = pd.date_range(start=start_date, periods=len(strings), freq='D')
+    start_date = "2023-01-01"
+    data = {"strings": strings, "ints": np.random.randint(1, 100, size=len(strings))}
+    date_range = pd.date_range(start=start_date, periods=len(strings), freq="D")
     date_range.freq = None
     df = pd.DataFrame(data, index=date_range)
     return df
@@ -95,17 +92,13 @@ def assert_dicts_of_dfs_equal(dict1, dict2):
     for key in dict1:
         pd.testing.assert_frame_equal(dict1[key], dict2[key], obj=f"DataFrame at key '{key}'")
 
+
 def test_recursive_normalizers_blns(lmdb_version_store):
     lib = lmdb_version_store
     strings = read_strings()
     symbol = "blnd_recursive"
     df = create_dataframe(strings)
-    keys = [
-        "a",
-        "b",
-        "c",
-        "d"
-    ]
+    keys = ["a", "b", "c", "d"]
     dict = {s: df for s in keys}
     lib.write(symbol, dict, recursive_normalizers=True)
     vit = lib.read(symbol)

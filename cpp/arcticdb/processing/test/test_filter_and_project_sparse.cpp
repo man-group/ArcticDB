@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -12,7 +13,7 @@
 using namespace arcticdb;
 
 class FilterProjectSparse : public testing::Test {
-protected:
+  protected:
     void SetUp() override {
         auto input_segment = generate_filter_and_project_testing_sparse_segment();
         sparse_floats_1 = input_segment.column_ptr(input_segment.column_index("sparse_floats_1").value());
@@ -44,47 +45,64 @@ protected:
         return std::get<util::BitSet>(variant_data);
     }
 
-    util::BitSet binary_filter(std::string_view left_column_name,
-                               const std::variant<std::string_view, double, std::unordered_set<double>>& right_input,
-                               OperationType op) {
+    util::BitSet binary_filter(
+            std::string_view left_column_name,
+            const std::variant<std::string_view, double, std::unordered_set<double>>& right_input, OperationType op
+    ) {
         const std::string root_node_name("binary filter");
         const std::string value_name("value");
         const std::string value_set_name("value set");
         expression_context->root_node_name_ = ExpressionName(root_node_name);
         std::shared_ptr<ExpressionNode> expression_node;
-        util::variant_match(right_input,
-            [&](std::string_view right_column_name) {
-                expression_node = std::make_shared<ExpressionNode>(ColumnName(left_column_name), ColumnName(right_column_name), op);
-            },
-            [&](double value) {
-                expression_node = std::make_shared<ExpressionNode>(ColumnName(left_column_name), ValueName(value_name), op);
-                expression_context->add_value(value_name, std::make_shared<Value>(value, DataType::FLOAT64));
-            },
-            [&](std::unordered_set<double> value_set) {
-                expression_node = std::make_shared<ExpressionNode>(ColumnName(left_column_name), ValueSetName(value_set_name), op);
-                expression_context->add_value_set(value_set_name, std::make_shared<ValueSet>(std::make_shared<std::unordered_set<double>>(value_set)));
-            });
+        util::variant_match(
+                right_input,
+                [&](std::string_view right_column_name) {
+                    expression_node = std::make_shared<ExpressionNode>(
+                            ColumnName(left_column_name), ColumnName(right_column_name), op
+                    );
+                },
+                [&](double value) {
+                    expression_node =
+                            std::make_shared<ExpressionNode>(ColumnName(left_column_name), ValueName(value_name), op);
+                    expression_context->add_value(value_name, std::make_shared<Value>(value, DataType::FLOAT64));
+                },
+                [&](std::unordered_set<double> value_set) {
+                    expression_node = std::make_shared<ExpressionNode>(
+                            ColumnName(left_column_name), ValueSetName(value_set_name), op
+                    );
+                    expression_context->add_value_set(
+                            value_set_name,
+                            std::make_shared<ValueSet>(std::make_shared<std::unordered_set<double>>(value_set))
+                    );
+                }
+        );
         expression_context->add_expression_node(root_node_name, expression_node);
 
         auto variant_data = proc_unit.get(expression_context->root_node_name_);
         return std::get<util::BitSet>(variant_data);
     }
 
-    std::shared_ptr<Column> binary_projection(std::string_view left_column_name,
-                                              const std::variant<std::string_view, double>& right_input,
-                                              OperationType op) {
+    std::shared_ptr<Column> binary_projection(
+            std::string_view left_column_name, const std::variant<std::string_view, double>& right_input,
+            OperationType op
+    ) {
         const std::string output_column("binary filter");
         const std::string value_name("value");
         expression_context->root_node_name_ = ExpressionName(output_column);
         std::shared_ptr<ExpressionNode> expression_node;
-        util::variant_match(right_input,
-                            [&](std::string_view right_column_name) {
-                                expression_node = std::make_shared<ExpressionNode>(ColumnName(left_column_name), ColumnName(right_column_name), op);
-                            },
-                            [&](double value) {
-                                expression_node = std::make_shared<ExpressionNode>(ColumnName(left_column_name), ValueName(value_name), op);
-                                expression_context->add_value(value_name, std::make_shared<Value>(value, DataType::FLOAT64));
-                            });
+        util::variant_match(
+                right_input,
+                [&](std::string_view right_column_name) {
+                    expression_node = std::make_shared<ExpressionNode>(
+                            ColumnName(left_column_name), ColumnName(right_column_name), op
+                    );
+                },
+                [&](double value) {
+                    expression_node =
+                            std::make_shared<ExpressionNode>(ColumnName(left_column_name), ValueName(value_name), op);
+                    expression_context->add_value(value_name, std::make_shared<Value>(value, DataType::FLOAT64));
+                }
+        );
         expression_context->add_expression_node(output_column, expression_node);
 
         auto variant_data = proc_unit.get(expression_context->root_node_name_);
@@ -107,7 +125,7 @@ TEST_F(FilterProjectSparse, UnaryProjection) {
     ASSERT_EQ(sparse_floats_1->row_count(), projected_column->row_count());
     ASSERT_EQ(sparse_floats_1->opt_sparse_map(), projected_column->opt_sparse_map());
 
-    for (auto idx=0; idx< sparse_floats_1->row_count(); idx++) {
+    for (auto idx = 0; idx < sparse_floats_1->row_count(); idx++) {
         ASSERT_FLOAT_EQ(sparse_floats_1->reference_at<double>(idx), -projected_column->reference_at<double>(idx));
     }
 }
@@ -312,13 +330,14 @@ TEST_F(FilterProjectSparse, BinaryArithmeticColVal) {
     ASSERT_EQ(sparse_floats_1->last_row(), projected_column->last_row());
     ASSERT_EQ(sparse_floats_1->row_count(), projected_column->row_count());
     ASSERT_EQ(sparse_floats_1->opt_sparse_map(), projected_column->opt_sparse_map());
-    for (auto idx=0; idx< sparse_floats_1->row_count(); idx++) {
+    for (auto idx = 0; idx < sparse_floats_1->row_count(); idx++) {
         ASSERT_FLOAT_EQ(10.0 * sparse_floats_1->reference_at<double>(idx), projected_column->reference_at<double>(idx));
     }
 }
 
 TEST_F(FilterProjectSparse, BinaryArithmeticSparseColSparseCol) {
-    auto projected_column = binary_projection("sparse_floats_1", std::string_view{"sparse_floats_2"}, OperationType::MUL);
+    auto projected_column =
+            binary_projection("sparse_floats_1", std::string_view{"sparse_floats_2"}, OperationType::MUL);
     ASSERT_TRUE(projected_column->opt_sparse_map().has_value());
     ASSERT_EQ(sparse_floats_1->sparse_map() & sparse_floats_2->sparse_map(), projected_column->sparse_map());
     ASSERT_EQ(projected_column->row_count(), projected_column->sparse_map().count());
@@ -347,14 +366,17 @@ TEST_F(FilterProjectSparse, BinaryArithmeticDenseColDenseCol) {
     ASSERT_EQ(dense_floats_1->row_count(), projected_column->row_count());
     ASSERT_FALSE(projected_column->opt_sparse_map().has_value());
 
-    for (auto idx=0; idx< dense_floats_1->last_row(); idx++) {
-        ASSERT_FLOAT_EQ(dense_floats_1->reference_at<double>(idx) * dense_floats_2->reference_at<double>(idx),
-                        projected_column->reference_at<double>(idx));
+    for (auto idx = 0; idx < dense_floats_1->last_row(); idx++) {
+        ASSERT_FLOAT_EQ(
+                dense_floats_1->reference_at<double>(idx) * dense_floats_2->reference_at<double>(idx),
+                projected_column->reference_at<double>(idx)
+        );
     }
 }
 
 TEST_F(FilterProjectSparse, BinaryArithmeticSparseColShorterThanDenseCol) {
-    auto projected_column = binary_projection("sparse_floats_1", std::string_view{"dense_floats_1"}, OperationType::MUL);
+    auto projected_column =
+            binary_projection("sparse_floats_1", std::string_view{"dense_floats_1"}, OperationType::MUL);
     ASSERT_TRUE(projected_column->opt_sparse_map().has_value());
     ASSERT_EQ(*sparse_floats_1->opt_sparse_map(), *projected_column->opt_sparse_map());
     ASSERT_EQ(projected_column->row_count(), projected_column->sparse_map().count());

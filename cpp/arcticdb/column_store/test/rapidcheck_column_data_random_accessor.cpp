@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -13,7 +14,7 @@
 
 // Tricky to construct columns using a ChunkedBuffer with the testing size of 64 bytes, so only use rapidcheck for
 // single block tests, and test regualr and irregular accessors in test_column_data_random_accessor.cpp
-RC_GTEST_PROP(ColumnDataRandomAccessor, DenseSingleBlock, (const std::vector<int64_t> &input)) {
+RC_GTEST_PROP(ColumnDataRandomAccessor, DenseSingleBlock, (const std::vector<int64_t>& input)) {
     using namespace arcticdb;
     RC_PRE(input.size() > 0u);
     auto n = input.size();
@@ -29,7 +30,7 @@ RC_GTEST_PROP(ColumnDataRandomAccessor, DenseSingleBlock, (const std::vector<int
     }
 }
 
-RC_GTEST_PROP(ColumnDataRandomAccessor, SparseSingleBlock, (const std::vector<int64_t> &input)) {
+RC_GTEST_PROP(ColumnDataRandomAccessor, SparseSingleBlock, (const std::vector<int64_t>& input)) {
     using namespace arcticdb;
     RC_PRE(input.size() > 0u);
     auto n = input.size();

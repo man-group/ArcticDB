@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -20,70 +21,68 @@
 namespace arcticdb::pipelines {
 
 class FixedSlicer {
-public:
+  public:
     explicit FixedSlicer(std::size_t col_per_slice = 127, std::size_t row_per_slice = 100'000) :
-            col_per_slice_(col_per_slice), row_per_slice_(row_per_slice) { }
+        col_per_slice_(col_per_slice),
+        row_per_slice_(row_per_slice) {}
 
-    std::vector<FrameSlice> operator() (const InputTensorFrame &frame) const;
+    std::vector<FrameSlice> operator()(const InputTensorFrame& frame) const;
 
     auto row_per_slice() const { return row_per_slice_; }
 
-private:
+  private:
     size_t col_per_slice_;
     size_t row_per_slice_;
 };
 
 class HashedSlicer {
-public:
+  public:
     explicit HashedSlicer(std::size_t num_buckets, std::size_t row_per_slice) :
-        num_buckets_(num_buckets), row_per_slice_(row_per_slice) { }
+        num_buckets_(num_buckets),
+        row_per_slice_(row_per_slice) {}
 
-    std::vector<FrameSlice> operator() (const InputTensorFrame &frame) const;
+    std::vector<FrameSlice> operator()(const InputTensorFrame& frame) const;
 
     size_t num_buckets() const { return num_buckets_; }
 
     auto row_per_slice() const { return row_per_slice_; }
 
-private:
+  private:
     size_t num_buckets_;
     size_t row_per_slice_;
 };
 
-class NoSlicing {
-};
+class NoSlicing {};
 
 using SlicingPolicy = std::variant<NoSlicing, FixedSlicer, HashedSlicer>;
 
-SlicingPolicy get_slicing_policy(
-    const WriteOptions& options,
-    const arcticdb::pipelines::InputTensorFrame& frame);
+SlicingPolicy get_slicing_policy(const WriteOptions& options, const arcticdb::pipelines::InputTensorFrame& frame);
 
-std::vector<FrameSlice> slice(InputTensorFrame &frame, const SlicingPolicy& slicer);
+std::vector<FrameSlice> slice(InputTensorFrame& frame, const SlicingPolicy& slicer);
 
 inline auto slice_begin_pos(const FrameSlice& slice, const InputTensorFrame& frame) {
     return slice.row_range.first - frame.offset;
 }
 
 inline auto slice_end_pos(const FrameSlice& slice, const InputTensorFrame& frame) {
-    return (slice.row_range.second-1) - frame.offset;
+    return (slice.row_range.second - 1) - frame.offset;
 }
 
-template <typename T>
-inline auto end_index_generator(T end_index){//works for both rawtype and rawtype encapsulated in variant
-    if constexpr(std::is_same_v<T, stream::IndexValue>){
+template<typename T>
+inline auto end_index_generator(T end_index) { // works for both rawtype and rawtype encapsulated in variant
+    if constexpr (std::is_same_v<T, stream::IndexValue>) {
         std::visit(
-            [](auto &index){
-                if constexpr(std::is_same_v<std::remove_reference_t<decltype(index)>, entity::NumericIndex>){
-                    index += timestamp(1);
-                }
-            }
-            , end_index);
+                [](auto& index) {
+                    if constexpr (std::is_same_v<std::remove_reference_t<decltype(index)>, entity::NumericIndex>) {
+                        index += timestamp(1);
+                    }
+                },
+                end_index
+        );
         return end_index;
-    }
-    else if constexpr(std::is_same_v<T, timestamp>){
+    } else if constexpr (std::is_same_v<T, timestamp>) {
         return end_index + timestamp(1);
-    }
-    else{
+    } else {
         return end_index;
     }
 }
@@ -91,39 +90,48 @@ inline auto end_index_generator(T end_index){//works for both rawtype and rawtyp
 inline auto get_partial_key_gen(std::shared_ptr<InputTensorFrame> frame, const TypedStreamVersion& key) {
     using PartialKey = stream::StreamSink::PartialKey;
 
-    return [frame=std::move(frame), &key](const FrameSlice& s) {
+    return [frame = std::move(frame), &key](const FrameSlice& s) {
         if (frame->has_index()) {
             util::check(static_cast<bool>(frame->index_tensor), "Got null index tensor in get_partial_key_gen");
             auto& idx = frame->index_tensor.value();
             auto start = *idx.ptr_cast<timestamp>(slice_begin_pos(s, *frame));
             auto end = *idx.ptr_cast<timestamp>(slice_end_pos(s, *frame));
+            return PartialKey{key.type, key.version_id, key.id, start, end_index_generator(end)};
+        } else {
             return PartialKey{
-                    key.type, key.version_id, key.id, start, end_index_generator(end)};
-        }
-        else {
-            return PartialKey{
-                    key.type, key.version_id, key.id,
+                    key.type,
+                    key.version_id,
+                    key.id,
                     entity::safe_convert_to_numeric_index(s.row_range.first, "Rows"),
-                    entity::safe_convert_to_numeric_index(s.row_range.second, "Rows")};
+                    entity::safe_convert_to_numeric_index(s.row_range.second, "Rows")
+            };
         }
     };
 }
 
-inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(const IndexDescriptorImpl& index, const TypedStreamVersion& key, const SegmentInMemory& slice) {
+inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(
+        const IndexDescriptorImpl& index, const TypedStreamVersion& key, const SegmentInMemory& slice
+) {
     using PartialKey = stream::StreamSink::PartialKey;
 
     if (index.field_count() != 0) {
-        util::check(static_cast<bool>(index.type() == IndexDescriptor::Type::TIMESTAMP), "Got unexpected index type in get_partial_key_for_segment_slice");
+        util::check(
+                static_cast<bool>(index.type() == IndexDescriptor::Type::TIMESTAMP),
+                "Got unexpected index type in get_partial_key_for_segment_slice"
+        );
         auto& idx = slice.column(0);
-        util::check(idx.scalar_at<timestamp>(0).has_value(), "First element of index column of slice does not contain a value");
-        util::check(idx.scalar_at<timestamp>(slice.row_count()-1).has_value(), "Last element of index column of slice does not contain a value");
+        util::check(
+                idx.scalar_at<timestamp>(0).has_value(),
+                "First element of index column of slice does not contain a value"
+        );
+        util::check(
+                idx.scalar_at<timestamp>(slice.row_count() - 1).has_value(),
+                "Last element of index column of slice does not contain a value"
+        );
         auto start = idx.scalar_at<timestamp>(0).value();
-        auto end = idx.scalar_at<timestamp>(slice.row_count()-1).value();
-        return PartialKey{
-                key.type, key.version_id, key.id, start, end_index_generator(end)
-        };
-    }
-    else {
+        auto end = idx.scalar_at<timestamp>(slice.row_count() - 1).value();
+        return PartialKey{key.type, key.version_id, key.id, start, end_index_generator(end)};
+    } else {
         return PartialKey{
                 key.type,
                 key.version_id,
@@ -134,5 +142,4 @@ inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(const In
     }
 }
 
-} //arcticdb::pipelines
-
+} // namespace arcticdb::pipelines

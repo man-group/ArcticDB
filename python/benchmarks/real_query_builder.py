@@ -8,16 +8,24 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 from logging import Logger
 import pandas as pd
-from arcticdb.util.environment_setup import DataFrameGenerator, TestLibraryManager, LibraryPopulationPolicy, LibraryType, Storage, populate_library_if_missing
+from arcticdb.util.environment_setup import (
+    DataFrameGenerator,
+    TestLibraryManager,
+    LibraryPopulationPolicy,
+    LibraryType,
+    Storage,
+    populate_library_if_missing,
+)
 from arcticdb.util.logger import get_logger as _get_logger
 from arcticdb.version_store.library import Library
 from arcticdb.version_store.processing import QueryBuilder
 
-from benchmarks.common import  AsvBase, generate_benchmark_df
+from benchmarks.common import AsvBase, generate_benchmark_df
 from benchmarks.local_query_builder import PARAMS_QUERY_BUILDER
 
 
-#region Setup classes
+# region Setup classes
+
 
 class QueryBuilderGenerator(DataFrameGenerator):
 
@@ -26,24 +34,26 @@ class QueryBuilderGenerator(DataFrameGenerator):
         Dataframe that will be used in read and write tests
         """
         return generate_benchmark_df(number_rows)
-    
-#endregion
+
+
+# endregion
+
 
 class AWSQueryBuilderFunctions(AsvBase):
     """
     This is same test as :LocalQueryBuilderFunctions:`LocalQueryBuilderFunctions`
 
     """
-    
+
     rounds = 1
-    number = 3 # invokes 3 times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    number = 3  # invokes 3 times the test runs between each setup-teardown
+    repeat = 1  # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
     timeout = 1200
 
-    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition 
+    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition
     #       may already exist. This means that symbols there will be having having different number
     #       of rows than what you defined in the test. To resolve this problem check with documentation:
     #           https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Real-storage-tests
@@ -57,20 +67,20 @@ class AWSQueryBuilderFunctions(AsvBase):
 
     def get_library_manager(self) -> TestLibraryManager:
         return AWSQueryBuilderFunctions.library_manager
-    
+
     def get_population_policy(self) -> LibraryPopulationPolicy:
         lpp = LibraryPopulationPolicy(self.get_logger(), QueryBuilderGenerator())
         lpp.set_parameters(AWSQueryBuilderFunctions.params)
         return lpp
-    
+
     def setup_cache(self):
-        '''
+        """
         In setup_cache we only populate the persistent libraries if they are missing.
-        '''
+        """
         manager = self.get_library_manager()
         policy = self.get_population_policy()
         populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)
-        manager.log_info() # Logs info about ArcticURI - do always use last
+        manager.log_info()  # Logs info about ArcticURI - do always use last
 
     def teardown(self, num_rows):
         pass
@@ -79,7 +89,7 @@ class AWSQueryBuilderFunctions(AsvBase):
         ## Construct back from arctic url the object
         self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)
         self.policy = self.get_population_policy()
-        self.symbol =  self.policy.get_symbol_name(num_rows)
+        self.symbol = self.policy.get_symbol_name(num_rows)
 
     # Omit string columns in filtering/projection benchmarks to avoid time/memory being dominated by Python string
     # allocation

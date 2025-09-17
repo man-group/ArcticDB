@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -20,12 +21,12 @@ TEST(BitMagic, Basic) {
     bv[0] = true;
     bv[3] = true;
 
-    auto count = bv.count_range(0,0);
+    auto count = bv.count_range(0, 0);
     ASSERT_EQ(count, 1);
-    count = bv.count_range(0,3);
+    count = bv.count_range(0, 3);
     ASSERT_EQ(count, 2);
     auto num = bv.get_first();
-    while(num) {
+    while (num) {
         num = bv.get_next(num);
     }
 }
@@ -47,9 +48,9 @@ TEST(BitMagic, DensifyAndExpand) {
         }
     }
     auto dense_buffer = ChunkedBuffer::presized(sizeof(float) * n_dense);
-    auto *ptr = reinterpret_cast<uint8_t *>(&sample_data[0]);
+    auto* ptr = reinterpret_cast<uint8_t*>(&sample_data[0]);
     arcticdb::util::densify_buffer_using_bitmap<float>(bv, dense_buffer, ptr);
-    auto *dense_array = reinterpret_cast<float *>(dense_buffer.data());
+    auto* dense_array = reinterpret_cast<float*>(dense_buffer.data());
 
     GTEST_ASSERT_EQ(*dense_array, sample_data[1]);
     ++dense_array;
@@ -60,9 +61,9 @@ TEST(BitMagic, DensifyAndExpand) {
 
     // Now expand it back
     arcticdb::util::expand_dense_buffer_using_bitmap<float>(bv, dense_buffer.data(), sparse_buffer.data());
-    auto *sparse_array = reinterpret_cast<float *>(sparse_buffer.data());
+    auto* sparse_array = reinterpret_cast<float*>(sparse_buffer.data());
 
-    for (auto &data: sample_data) {
+    for (auto& data : sample_data) {
         GTEST_ASSERT_EQ(data, *sparse_array);
         ++sparse_array;
     }

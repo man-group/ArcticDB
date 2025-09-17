@@ -5,14 +5,12 @@
 namespace arcticdb::python_util {
 
 void prefill_with_none(
-    PyObject** ptr_dest,
-    size_t num_rows,
-    size_t sparse_count,
-    PythonHandlerData& python_handler_data,
-    IncrementRefCount inc_ref_count) {
+        PyObject** ptr_dest, size_t num_rows, size_t sparse_count, PythonHandlerData& python_handler_data,
+        IncrementRefCount inc_ref_count
+) {
     std::fill_n(ptr_dest, num_rows, Py_None);
 
-    if(inc_ref_count == IncrementRefCount::ON) {
+    if (inc_ref_count == IncrementRefCount::ON) {
         const auto none_count = num_rows - sparse_count;
         python_handler_data.increment_none_refcount(none_count);
     }
@@ -42,7 +40,9 @@ py::tuple extract_numpy_arrays(PandasOutputFrame& pandas_output_frame) {
             column_names.emplace_back(frame.field(c).name());
         }
     }
-    return py::make_tuple(std::move(arrays), std::move(column_names), std::move(index_column_names), frame.row_count(), frame.offset());
+    return py::make_tuple(
+            std::move(arrays), std::move(column_names), std::move(index_column_names), frame.row_count(), frame.offset()
+    );
 }
 
-}
+} // namespace arcticdb::python_util

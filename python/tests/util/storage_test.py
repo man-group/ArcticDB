@@ -11,6 +11,7 @@ from datetime import datetime
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
+
 try:
     # from pytest this way will work
     from tests.util.mark import PERSISTENT_STORAGE_TESTS_ENABLED
@@ -21,7 +22,6 @@ except ModuleNotFoundError:
     except ImportError:
         # patch until arcticdb.util.marks.py becomes part of release
         PERSISTENT_STORAGE_TESTS_ENABLED = os.getenv("ARCTICDB_PERSISTENT_STORAGE_TESTS") == "1"
-    
 
 
 # TODO: Remove this when the latest version that we support
@@ -81,7 +81,7 @@ def real_s3_credentials(shared_path: bool = True):
 def real_gcp_credentials(shared_path: bool = True):
     endpoint = os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
     if endpoint is not None and "://" in endpoint:
-       endpoint = endpoint.split("://")[1] 
+        endpoint = endpoint.split("://")[1]
     bucket = os.getenv("ARCTICDB_REAL_GCP_BUCKET")
     region = os.getenv("ARCTICDB_REAL_GCP_REGION")
     access_key = os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY")
@@ -101,8 +101,8 @@ def real_azure_credentials(shared_path: bool = True):
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_SHARED_PATH_PREFIX")
     else:
         path_prefix = os.getenv("ARCTICDB_PERSISTENT_STORAGE_UNIQUE_PATH_PREFIX", "")
-    constr=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),
-    container=os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"), 
+    constr = (os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING"),)
+    container = (os.getenv("ARCTICDB_REAL_AZURE_CONTAINER"),)
 
     clear = str(os.getenv("ARCTICDB_REALL_AZURE_CLEAR")).lower() in ("true", "1")
 
@@ -141,32 +141,32 @@ def get_real_gcp_uri(shared_path: bool = True):
         path_prefix,
         _,
     ) = real_gcp_credentials(shared_path)
-    aws_uri = (
-        f"gcpxml://{endpoint}:{bucket}?access={acs_key}&secret={sec_key}&path_prefix={path_prefix}"
-    )
+    aws_uri = f"gcpxml://{endpoint}:{bucket}?access={acs_key}&secret={sec_key}&path_prefix={path_prefix}"
     return aws_uri
+
 
 def find_ca_certs():
     # Common CA certificates locations
     default_paths = ssl.get_default_verify_paths()
-    possible_paths =  [
+    possible_paths = [
         default_paths.cafile,
         default_paths.openssl_cafile_env,
         default_paths.openssl_cafile,
-        '/etc/ssl/certs/ca-certificates.crt',
-        '/usr/lib/ssl/certs/ca-certificates.crt',
-        '/etc/pki/tls/certs/ca-bundle.crt',
-        '/etc/ssl/cert.pem'
+        "/etc/ssl/certs/ca-certificates.crt",
+        "/usr/lib/ssl/certs/ca-certificates.crt",
+        "/etc/pki/tls/certs/ca-bundle.crt",
+        "/etc/ssl/cert.pem",
     ]
     for path in possible_paths:
         if path and os.path.isfile(path):
             return path
     return None
 
+
 ### IMPORTANT: When adding new STORAGE we must implement
 ###  the whole connection logic here even if this does mean effectively duplicating the code
-###   
-### REASON: We run this file from command line on arcticdb version 3.0. 
+###
+### REASON: We run this file from command line on arcticdb version 3.0.
 ###  there is no way how arcticdb 3.0 could have had the functions that we are going to implement
 ###  and support from now on
 def get_real_azure_uri(shared_path: bool = True):
@@ -181,14 +181,14 @@ def get_real_azure_uri(shared_path: bool = True):
 
 
 class PersistentTestType(Enum):
-    AWS_S3 = 1,
-    GCP = 2,
-    AZURE = 3,
+    AWS_S3 = (1,)
+    GCP = (2,)
+    AZURE = (3,)
 
 
 def persistent_test_type() -> PersistentTestType:
     """Check which persistent storage type is selected
-    
+
     If persistent storage tests are not selected for execution
     will raise error
     """
@@ -200,15 +200,17 @@ def persistent_test_type() -> PersistentTestType:
             return PersistentTestType.AZURE
         return PersistentTestType.AWS_S3
     else:
-        raise Exception("Persistence storage tests are not enabled or not configured properly."
-                        + "ARCTICDB_PERSISTENT_STORAGE_TESTS_ENABLED environment variable is not set")
+        raise Exception(
+            "Persistence storage tests are not enabled or not configured properly."
+            + "ARCTICDB_PERSISTENT_STORAGE_TESTS_ENABLED environment variable is not set"
+        )
 
 
 def get_real_uri(shared_path: bool = True):
     if persistent_test_type() == PersistentTestType.GCP:
-       return get_real_gcp_uri(shared_path)
+        return get_real_gcp_uri(shared_path)
     if persistent_test_type() == PersistentTestType.AZURE:
-       return get_real_azure_uri(shared_path)
+        return get_real_azure_uri(shared_path)
     return get_real_s3_uri(shared_path)
 
 

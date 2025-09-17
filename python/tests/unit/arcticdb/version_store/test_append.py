@@ -10,12 +10,7 @@ from pandas import MultiIndex
 import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import (
-    InternalException,
-    NormalizationException,
-    SortingException,
-    SchemaException
-)
+from arcticdb_ext.exceptions import InternalException, NormalizationException, SortingException, SchemaException
 from arcticdb_ext import set_config_int
 from arcticdb.util.test import random_integers, assert_frame_equal
 from arcticdb.config import set_log_level
@@ -265,13 +260,13 @@ def test_upsert_with_delete(lmdb_version_store_big_map):
 
 
 def test_append_numpy_array(lmdb_version_store):
-    '''Tests append with all supported by arctic data types'''
+    """Tests append with all supported by arctic data types"""
     logger = get_logger()
     for index, _type in enumerate(supported_types_list):
         sym = f"test_append_numpy_array_{index}"
         logger.info(f"Storing type: {_type} in symbol: {sym}")
         np1 = generate_random_numpy_array(10, _type)
-        try: 
+        try:
             lmdb_version_store.write(sym, np1)
         except arcticdb.exceptions.ArcticDbNotYetImplemented as e:
             if WINDOWS:
@@ -279,9 +274,9 @@ def test_append_numpy_array(lmdb_version_store):
                 # never mind lets do something even if it is not main subject of the test
                 lmdb_version_store.write(sym, np1, pickle_on_failure=True)
                 assert_array_equal(np1, lmdb_version_store.read(sym).data)
-                continue                
+                continue
             else:
-                raise     
+                raise
         np2 = generate_random_numpy_array(10, _type)
         logger.info(f"Appending {np2}")
         lmdb_version_store.append(sym, np2)
@@ -695,18 +690,22 @@ def test_defragment_no_work_to_do(sym, lmdb_version_store):
     with pytest.raises(InternalException):
         lmdb_version_store.defragment_symbol_data(sym)
 
-@pytest.mark.parametrize("to_write, to_append", [
-    (pd.DataFrame({"a": [1]}), pd.Series([2])),
-    (pd.DataFrame({"a": [1]}), np.array([2])),
-    (pd.Series([1]), pd.DataFrame({"a": [2]})),
-    (pd.Series([1]), np.array([2])),
-    (np.array([1]), pd.DataFrame({"a": [2]})),
-    (np.array([1]), pd.Series([2])),
-    (pd.DataFrame({"a": [1], "b": [2]}), pd.Series([2])),
-    (pd.DataFrame({"a": [1], "b": [2]}), np.array([2])),
-    (pd.Series([1]), pd.DataFrame({"a": [2], "b": [2]})),
-    (np.array([1]), pd.DataFrame({"a": [2], "b": [2]}))
-])
+
+@pytest.mark.parametrize(
+    "to_write, to_append",
+    [
+        (pd.DataFrame({"a": [1]}), pd.Series([2])),
+        (pd.DataFrame({"a": [1]}), np.array([2])),
+        (pd.Series([1]), pd.DataFrame({"a": [2]})),
+        (pd.Series([1]), np.array([2])),
+        (np.array([1]), pd.DataFrame({"a": [2]})),
+        (np.array([1]), pd.Series([2])),
+        (pd.DataFrame({"a": [1], "b": [2]}), pd.Series([2])),
+        (pd.DataFrame({"a": [1], "b": [2]}), np.array([2])),
+        (pd.Series([1]), pd.DataFrame({"a": [2], "b": [2]})),
+        (np.array([1]), pd.DataFrame({"a": [2], "b": [2]})),
+    ],
+)
 def test_append_mismatched_object_kind(to_write, to_append, lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
     lib.write("sym", to_write)
@@ -714,13 +713,21 @@ def test_append_mismatched_object_kind(to_write, to_append, lmdb_version_store_d
         lib.append("sym", to_append)
     assert "Append" in str(e.value)
 
-@pytest.mark.parametrize("to_write, to_append", [
-    (pd.Series([1, 2, 3], name="name_1"), pd.Series([4, 5, 6], name="name_2")),
-    (
-            pd.Series([1, 2, 3], name="name_1", index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)])),
-            pd.Series([4, 5, 6], name="name_2", index=pd.DatetimeIndex([pd.Timestamp(3), pd.Timestamp(4), pd.Timestamp(5)]))
-    )
-])
+
+@pytest.mark.parametrize(
+    "to_write, to_append",
+    [
+        (pd.Series([1, 2, 3], name="name_1"), pd.Series([4, 5, 6], name="name_2")),
+        (
+            pd.Series(
+                [1, 2, 3], name="name_1", index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)])
+            ),
+            pd.Series(
+                [4, 5, 6], name="name_2", index=pd.DatetimeIndex([pd.Timestamp(3), pd.Timestamp(4), pd.Timestamp(5)])
+            ),
+        ),
+    ],
+)
 def test_append_series_with_different_column_name_throws(lmdb_version_store_dynamic_schema_v1, to_write, to_append):
     # It makes sense to create a new column and turn the whole thing into a dataframe. This would require changes in the
     # logic for storing normalization metadata which is tricky. Noone has requested this, so we just throw.
@@ -729,6 +736,7 @@ def test_append_series_with_different_column_name_throws(lmdb_version_store_dyna
     with pytest.raises(SchemaException) as e:
         lib.append("sym", to_append)
     assert "name_1" in str(e.value) and "name_2" in str(e.value)
+
 
 def test_append_series_with_different_row_range_index_name(lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1

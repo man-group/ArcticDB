@@ -47,7 +47,7 @@ class Resample:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         ac = Arctic(self.CONNECTION_STRING)
         ac.delete_library(self.LIB_NAME)
         lib = ac.create_library(self.LIB_NAME)

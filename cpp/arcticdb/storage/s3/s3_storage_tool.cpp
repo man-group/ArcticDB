@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/storage/s3/s3_storage_tool.hpp>
@@ -43,13 +44,14 @@ void S3StorageTool::iterate_bucket(Visitor&& visitor, const std::string& prefix)
             if (more)
                 objects_request.SetContinuationToken(list_objects_outcome.GetResult().GetNextContinuationToken());
 
-        }
-        else {
+        } else {
             const auto& error = list_objects_outcome.GetError();
-            log::storage().error("Failed to iterate bucket '{}' {}:{}",
-                                 bucket_name_,
-                                 error.GetExceptionName().c_str(),
-                                 error.GetMessage().c_str());
+            log::storage().error(
+                    "Failed to iterate bucket '{}' {}:{}",
+                    bucket_name_,
+                    error.GetExceptionName().c_str(),
+                    error.GetMessage().c_str()
+            );
             return;
         }
     } while (more);
@@ -68,14 +70,14 @@ void S3StorageTool::set_object(const std::string& key, const std::string& data) 
     auto put_object_outcome = s3_client_.PutObject(object_request);
     if (!put_object_outcome.IsSuccess()) {
         auto& error = put_object_outcome.GetError();
-        util::raise_rte("Failed to write s3 with key '{}' {}: {}",
-                        key,
-                        error.GetExceptionName().c_str(),
-                        error.GetMessage().c_str());
+        util::raise_rte(
+                "Failed to write s3 with key '{}' {}: {}",
+                key,
+                error.GetExceptionName().c_str(),
+                error.GetMessage().c_str()
+        );
     }
-    ARCTICDB_DEBUG(log::storage(), "Wrote key {} with {} bytes of data",
-                         key,
-                         data.size());
+    ARCTICDB_DEBUG(log::storage(), "Wrote key {} with {} bytes of data", key, data.size());
 }
 
 std::string S3StorageTool::get_object(const std::string& key) {
@@ -89,13 +91,14 @@ std::string S3StorageTool::get_object(const std::string& key) {
         auto& retrieved = get_object_outcome.GetResult().GetBody();
         auto vec = storage::stream_to_vector(retrieved);
         return std::string(vec.data(), vec.size());
-    }
-    else {
+    } else {
         auto& error = get_object_outcome.GetError();
-        log::storage().warn("Failed to find data for key '{}' {}: {}",
-                            key,
-                            error.GetExceptionName().c_str(),
-                            error.GetMessage().c_str());
+        log::storage().warn(
+                "Failed to find data for key '{}' {}: {}",
+                key,
+                error.GetExceptionName().c_str(),
+                error.GetMessage().c_str()
+        );
         return std::string();
     }
 }
@@ -109,10 +112,12 @@ void S3StorageTool::delete_object(const std::string& key) {
         ARCTICDB_DEBUG(log::storage(), "Deleted object with key '{}'", key);
     else {
         const auto& error = delete_object_outcome.GetError();
-        log::storage().warn("Failed to delete segment with key '{}': {}",
-                            key,
-                            error.GetExceptionName().c_str(),
-                            error.GetMessage().c_str());
+        log::storage().warn(
+                "Failed to delete segment with key '{}': {}",
+                key,
+                error.GetExceptionName().c_str(),
+                error.GetMessage().c_str()
+        );
     }
 }
 
@@ -144,13 +149,14 @@ std::pair<size_t, size_t> S3StorageTool::get_prefix_info(const std::string& pref
             if (more)
                 objects_request.SetContinuationToken(list_objects_outcome.GetResult().GetNextContinuationToken());
 
-        }
-        else {
+        } else {
             const auto& error = list_objects_outcome.GetError();
-            log::storage().error("Failed to iterate bucket to get sizes'{}' {}:{}",
-                                 bucket_name_,
-                                 error.GetExceptionName().c_str(),
-                                 error.GetMessage().c_str());
+            log::storage().error(
+                    "Failed to iterate bucket to get sizes'{}' {}:{}",
+                    bucket_name_,
+                    error.GetExceptionName().c_str(),
+                    error.GetMessage().c_str()
+            );
             return {0, 0};
         }
     } while (more);
@@ -163,48 +169,51 @@ size_t S3StorageTool::get_file_size(const std::string& key) {
     head_request.SetKey(key.c_str());
 
     auto object = s3_client_.HeadObject(head_request);
-    if (object.IsSuccess())
-    {
+    if (object.IsSuccess()) {
         auto file_sz = object.GetResultWithOwnership().GetContentLength();
         ARCTICDB_TRACE(log::storage(), "Size of {}: {}", key, file_sz);
         return file_sz;
-    }
-    else
-    {
-        log::storage().error("Head Object error:  {} - {}", object .GetError().GetExceptionName(),
-                             object .GetError().GetMessage());
+    } else {
+        log::storage().error(
+                "Head Object error:  {} - {}", object.GetError().GetExceptionName(), object.GetError().GetMessage()
+        );
         return 0;
     }
 }
 
-
 void S3StorageTool::delete_bucket(const std::string& prefix) {
-    iterate_bucket([&](const std::string& key) {
-                       Aws::S3::Model::DeleteObjectRequest object_request;
-                       object_request.WithBucket(bucket_name_.c_str()).WithKey(key.c_str());
+    iterate_bucket(
+            [&](const std::string& key) {
+                Aws::S3::Model::DeleteObjectRequest object_request;
+                object_request.WithBucket(bucket_name_.c_str()).WithKey(key.c_str());
 
-                       auto delete_object_outcome = s3_client_.DeleteObject(object_request);
-                       if (delete_object_outcome.IsSuccess())
-                           ARCTICDB_DEBUG(log::storage(), "Deleted object with key '{}'", key);
-                       else {
-                           const auto& error = delete_object_outcome.GetError();
-                           log::storage().warn("Failed to delete object with key '{}' {}:{}",
-                                               key,
-                                               error.GetExceptionName().c_str(),
-                                               error.GetMessage().c_str());
-                       }
-                   },
-                   prefix);
+                auto delete_object_outcome = s3_client_.DeleteObject(object_request);
+                if (delete_object_outcome.IsSuccess())
+                    ARCTICDB_DEBUG(log::storage(), "Deleted object with key '{}'", key);
+                else {
+                    const auto& error = delete_object_outcome.GetError();
+                    log::storage().warn(
+                            "Failed to delete object with key '{}' {}:{}",
+                            key,
+                            error.GetExceptionName().c_str(),
+                            error.GetMessage().c_str()
+                    );
+                }
+            },
+            prefix
+    );
 }
 
-
-S3StorageTool::S3StorageTool(const Config &conf) :
+S3StorageTool::S3StorageTool(const Config& conf) :
     s3_api_(S3ApiInstance::instance()),
-    s3_client_(get_aws_credentials(conf), get_s3_config_and_set_env_var(conf), Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false),
+    s3_client_(
+            get_aws_credentials(conf), get_s3_config_and_set_env_var(conf),
+            Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false
+    ),
     bucket_name_(conf.bucket_name()) {
-    std::locale locale{ std::locale::classic(), new std::num_put<char>()};
+    std::locale locale{std::locale::classic(), new std::num_put<char>()};
     (void)std::locale::global(locale);
     ARCTICDB_DEBUG(log::storage(), "Created S3 storage tool for bucket {}", bucket_name_);
 }
 
-}  //namespace arcticdb::storage::s3
+} // namespace arcticdb::storage::s3

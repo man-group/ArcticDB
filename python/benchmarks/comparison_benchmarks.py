@@ -47,7 +47,7 @@ class ComparisonBenchmarks:
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
         return (df, dict)
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         st = time.time()
         dict = self.create_dict(ComparisonBenchmarks.NUMBER_ROWS)
         df = pd.DataFrame(dict)

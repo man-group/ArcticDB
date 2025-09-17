@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -40,11 +41,13 @@ struct PreDeleteChecks {
      * For example, certain callers to delete_tree() already performed some of the checks above, so can disable the
      * corresponding flags and put the results here.
      */
-    std::unordered_set<IndexTypeKey> could_share_data {};
+    std::unordered_set<IndexTypeKey> could_share_data{};
 
     LoadType calc_load_type() const {
-        if (prev_version) return LoadType::ALL;
-        if (version_visible | next_version) return LoadType::DOWNTO;
+        if (prev_version)
+            return LoadType::ALL;
+        if (version_visible | next_version)
+            return LoadType::DOWNTO;
         return LoadType::NOT_LOADED;
     }
 };
@@ -70,7 +73,7 @@ struct TombstoneVersionResult : PreDeleteChecks {
     /**
      * The most recent version written to the version list
      */
-     VersionId latest_version_ = 0;
+    VersionId latest_version_ = 0;
 
     /**
      * The symbol that was tombstoned
@@ -98,4 +101,4 @@ struct UpdateInfo {
     VersionId next_version_id_;
 };
 
-} // namespace
+} // namespace arcticdb::version_store

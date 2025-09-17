@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -25,13 +26,16 @@ namespace arcticdb::stream {
 template<class SegmentIt, class RowType>
 class RowsFromSegIterator : public IndexRangeFilter {
   public:
-    RowsFromSegIterator(const IndexRange &index_range, SegmentIt &&seg_it) :
-        IndexRangeFilter(index_range), seg_it_(std::move(seg_it)), seg_(std::nullopt), row_id(0) {}
+    RowsFromSegIterator(const IndexRange& index_range, SegmentIt&& seg_it) :
+        IndexRangeFilter(index_range),
+        seg_it_(std::move(seg_it)),
+        seg_(std::nullopt),
+        row_id(0) {}
 
-    RowsFromSegIterator &operator=(RowsFromSegIterator &&that) = default;
-    RowsFromSegIterator(RowsFromSegIterator &&that) = default;
-    RowsFromSegIterator &operator=(const RowsFromSegIterator &that) = delete;
-    RowsFromSegIterator(const RowsFromSegIterator &that) = delete;
+    RowsFromSegIterator& operator=(RowsFromSegIterator&& that) = default;
+    RowsFromSegIterator(RowsFromSegIterator&& that) = default;
+    RowsFromSegIterator& operator=(const RowsFromSegIterator& that) = delete;
+    RowsFromSegIterator(const RowsFromSegIterator& that) = delete;
 
     std::optional<RowType> next(folly::Duration timeout = util::timeout::get_default()) {
         prev_seg_ = std::nullopt;
@@ -53,9 +57,10 @@ class RowsFromSegIterator : public IndexRangeFilter {
             auto index_type = seg_->descriptor().index().type();
             auto res = std::make_optional<RowType>(seg_->template make_row_ref<RowType>(row_id));
 
-            // Not filtering rows where we have a rowcount index - the assumption is that it's essentially an un-indexed blob
-            // that we need to segment somehow.
-            auto accept = index_type == IndexDescriptorImpl::Type::ROWCOUNT || accept_index(pipelines::index::index_start_from_row(res.value(), index_type).value());
+            // Not filtering rows where we have a rowcount index - the assumption is that it's essentially an un-indexed
+            // blob that we need to segment somehow.
+            auto accept = index_type == IndexDescriptorImpl::Type::ROWCOUNT ||
+                          accept_index(pipelines::index::index_start_from_row(res.value(), index_type).value());
             if (++row_id == seg_->row_count()) {
                 prev_seg_ = seg_;
                 seg_ = std::nullopt;
@@ -85,7 +90,11 @@ class StreamReader {
     using DataSegmentIteratorType = SegmentIterator<KeysFromSegIteratorType, DATA_PREFETCH_WINDOW>;
     using RowsIteratorType = RowsFromSegIterator<DataSegmentIteratorType, RowType>;
 
-    StreamReader(KeySupplierType &&gen, std::shared_ptr<StreamSource> store, const storage::ReadKeyOpts& opts = storage::ReadKeyOpts{},  const IndexRange &index_range = unspecified_range()) :
+    StreamReader(
+            KeySupplierType&& gen, std::shared_ptr<StreamSource> store,
+            const storage::ReadKeyOpts& opts = storage::ReadKeyOpts{},
+            const IndexRange& index_range = unspecified_range()
+    ) :
         key_gen_(std::move(gen)),
         index_range_(index_range),
         store_(store),
@@ -116,33 +125,30 @@ class StreamReader {
     }
 
     auto generate_rows() {
-        return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)
-            | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX)
-            | generate_segments_from_keys(*store_, DATA_PREFETCH_WINDOW, opts_)
-            | generate_rows_from_data_segments();
+        return folly::gen::from(key_gen_()) | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_) |
+               generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX) |
+               generate_segments_from_keys(*store_, DATA_PREFETCH_WINDOW, opts_) | generate_rows_from_data_segments();
     }
 
     auto generate_data_keys() {
-        return folly::gen::from(key_gen_())
-            | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_)
-            | generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX);
+        return folly::gen::from(key_gen_()) | generate_segments_from_keys(*store_, IDX_PREFETCH_WINDOW, opts_) |
+               generate_keys_from_segments(*store_, entity::KeyType::TABLE_DATA, entity::KeyType::TABLE_INDEX);
     }
 
-    auto &&generate_rows_from_data_segments() {
-        return folly::gen::map([](auto &&key_seg) {
-            return folly::gen::detail::GeneratorBuilder<RowRef>() + [&](auto &&yield) {
-                auto[key, seg] = std::move(key_seg);
-                for (std::size_t i = 0; i < seg.row_count(); ++i) {
-                    yield(RowRef{i, seg});
-                }
-            };
-        })
-        | folly::gen::concat;
+    auto&& generate_rows_from_data_segments() {
+        return folly::gen::map([](auto&& key_seg) {
+                   return folly::gen::detail::GeneratorBuilder<RowRef>() + [&](auto&& yield) {
+                       auto [key, seg] = std::move(key_seg);
+                       for (std::size_t i = 0; i < seg.row_count(); ++i) {
+                           yield(RowRef{i, seg});
+                       }
+                   };
+               }) |
+               folly::gen::concat;
     }
 
     template<class Visitor>
-    void foreach_row(Visitor &&visitor) {
+    void foreach_row(Visitor&& visitor) {
         auto it = iterator_rows();
         for (auto opt_val = it.next(); opt_val; opt_val = it.next()) {
             visitor(*opt_val);
@@ -157,4 +163,4 @@ class StreamReader {
     folly::Duration read_timeout_;
 };
 
-}
+} // namespace arcticdb::stream

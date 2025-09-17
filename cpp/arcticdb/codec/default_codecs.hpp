@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -25,7 +26,5 @@ inline arcticdb::proto::encoding::VariantCodec default_passthrough_codec() {
     return codec;
 }
 
-inline arcticdb::proto::encoding::VariantCodec default_shapes_codec() {
-    return codec::default_lz4_codec();
-}
-}
+inline arcticdb::proto::encoding::VariantCodec default_shapes_codec() { return codec::default_lz4_codec(); }
+} // namespace arcticdb::codec

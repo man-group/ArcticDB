@@ -28,12 +28,12 @@ struct LMDBStore {
 
         arcticdb::storage::LibraryPath library_path(TEST_LIB_NAME, '/');
 
-        storage = std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(library_path, arcticdb::storage::OpenMode::DELETE, cfg);
+        storage = std::make_unique<arcticdb::storage::lmdb::LmdbStorage>(
+                library_path, arcticdb::storage::OpenMode::DELETE, cfg
+        );
     }
 
-    ~LMDBStore() {
-        clear();
-    }
+    ~LMDBStore() { clear(); }
 
     void setup() {
         if (!fs::exists(TEST_DATABASES_PATH)) {

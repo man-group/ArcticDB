@@ -4,20 +4,25 @@ from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.read_result import ReadResult
 from arcticdb_ext.version_store import read_dataframe_from_file, write_dataframe_to_file
 
-from arcticdb.version_store._normalization import CompositeNormalizer, normalize_metadata, FrameData, denormalize_user_metadata
+from arcticdb.version_store._normalization import (
+    CompositeNormalizer,
+    normalize_metadata,
+    FrameData,
+    denormalize_user_metadata,
+)
 
 
 def _normalize_stateless(
-        dataframe: Any,
-        metadata: Any = None,
-        *,
-        pickle_on_failure: bool = False,
-        dynamic_strings: bool = True,
-        coerce_columns: Optional[Any] = None,
-        dynamic_schema: bool = False,
-        empty_types: bool = False,
-        normalizer: Any,
-        **kwargs,
+    dataframe: Any,
+    metadata: Any = None,
+    *,
+    pickle_on_failure: bool = False,
+    dynamic_strings: bool = True,
+    coerce_columns: Optional[Any] = None,
+    dynamic_schema: bool = False,
+    empty_types: bool = False,
+    normalizer: Any,
+    **kwargs,
 ) -> Tuple[Any, Any, Any]:
     udm = normalize_metadata(metadata)
     item, norm_meta = normalizer.normalize(
@@ -80,8 +85,9 @@ def _to_file(symbol: str, data: Any, file_path: str, metadata: Optional[Any] = N
     )
 
 
-def _from_file(symbol: str, file_path: str, read_query: Optional[Any] = None, read_options: Optional[Any] = None,
-              **kwargs) -> VersionedItem:
+def _from_file(
+    symbol: str, file_path: str, read_query: Optional[Any] = None, read_options: Optional[Any] = None, **kwargs
+) -> VersionedItem:
     """
     Read a dataframe from a file using the new C++ method.
 
@@ -100,10 +106,12 @@ def _from_file(symbol: str, file_path: str, read_query: Optional[Any] = None, re
     """
     if read_options is None:
         from arcticdb_ext.version_store import PythonVersionStoreReadOptions
+
         read_options = PythonVersionStoreReadOptions()
 
     if read_query is None:
         from arcticdb_ext.version_store import PythonVersionStoreReadQuery
+
         read_query = PythonVersionStoreReadQuery()
 
     read_result = ReadResult(*read_dataframe_from_file(symbol, file_path, read_query, read_options))

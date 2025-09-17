@@ -32,6 +32,7 @@ logger = get_logger()
 
 RUNS_ON_GITHUB = os.getenv("GITHUB_ACTIONS") == "true"
 
+
 def getenv_strip(env_var_name: str, default_value: Optional[str] = None) -> Optional[str]:
     """
     Get environment variable and strip whitespace safely.
@@ -55,40 +56,48 @@ FAST_TESTS_ONLY = getenv_strip("ARCTICDB_FAST_TESTS_ONLY") == "1"
 DISABLE_SLOW_TESTS = getenv_strip("ARCTICDB_DISABLE_SLOW_TESTS") == "1"
 if PERSISTENT_STORAGE_TESTS_ENABLED:
     # This is for legacy reasons AWS has different treatment because of persistent storages test workflow at github
-    STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3", "1") == "1" 
+    STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3", "1") == "1"
 else:
-    STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3") == "1" 
+    STORAGE_AWS_S3 = getenv_strip("ARCTICDB_STORAGE_AWS_S3") == "1"
 STORAGE_GCP = getenv_strip("ARCTICDB_STORAGE_GCP") == "1"
 STORAGE_AZURE = getenv_strip("ARCTICDB_STORAGE_AZURE") == "1"
 # Local storage tests are all LMDB, simulated and a real mongo process/service
 LOCAL_STORAGE_TESTS_ENABLED = getenv_strip("ARCTICDB_LOCAL_STORAGE_TESTS_ENABLED", "1") == "1"
 # Each storage can be controlled individually
-STORAGE_LMDB = getenv_strip("ARCTICDB_STORAGE_LMDB") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
-                                                                and getenv_strip("ARCTICDB_STORAGE_LMDB") != "0")
-STORAGE_AZURITE = getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
-                                                                      and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0")
-STORAGE_MONGO = getenv_strip("ARCTICDB_STORAGE_MONGO") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
-                                                                  and getenv_strip("ARCTICDB_STORAGE_MONGO") != "0")
-STORAGE_MEM = getenv_strip("ARCTICDB_STORAGE_MEM") == "1" or (LOCAL_STORAGE_TESTS_ENABLED
-                                                              and getenv_strip("ARCTICDB_STORAGE_MEM") != "0")
-STORAGE_NFS = getenv_strip("ARCTICDB_STORAGE_NFS") == "1" or (LOCAL_STORAGE_TESTS_ENABLED 
-                                                              and getenv_strip("ARCTICDB_STORAGE_NFS") != "0")
+STORAGE_LMDB = getenv_strip("ARCTICDB_STORAGE_LMDB") == "1" or (
+    LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_LMDB") != "0"
+)
+STORAGE_AZURITE = getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" or (
+    LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0"
+)
+STORAGE_MONGO = getenv_strip("ARCTICDB_STORAGE_MONGO") == "1" or (
+    LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_MONGO") != "0"
+)
+STORAGE_MEM = getenv_strip("ARCTICDB_STORAGE_MEM") == "1" or (
+    LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_MEM") != "0"
+)
+STORAGE_NFS = getenv_strip("ARCTICDB_STORAGE_NFS") == "1" or (
+    LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_NFS") != "0"
+)
 # When a real storage is turned on the simulated storage is turned off
 if STORAGE_AWS_S3:
-    STORAGE_SIM_S3 = False 
+    STORAGE_SIM_S3 = False
 else:
-    STORAGE_SIM_S3 = (getenv_strip("ARCTICDB_STORAGE_SIM_S3") == "1" 
-                      or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_SIM_S3") != "0"))
+    STORAGE_SIM_S3 = getenv_strip("ARCTICDB_STORAGE_SIM_S3") == "1" or (
+        LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_SIM_S3") != "0"
+    )
 if STORAGE_GCP:
     STORAGE_SIM_GCP = False
 else:
-    STORAGE_SIM_GCP = (getenv_strip("ARCTICDB_STORAGE_SIM_GCP") == "1" 
-                       or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_SIM_GCP") != "0"))
+    STORAGE_SIM_GCP = getenv_strip("ARCTICDB_STORAGE_SIM_GCP") == "1" or (
+        LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_SIM_GCP") != "0"
+    )
 if STORAGE_AZURE:
     STORAGE_AZURITE = False
 else:
-    STORAGE_AZURITE = (getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" 
-                       or (LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0"))
+    STORAGE_AZURITE = getenv_strip("ARCTICDB_STORAGE_AZURITE") == "1" or (
+        LOCAL_STORAGE_TESTS_ENABLED and getenv_strip("ARCTICDB_STORAGE_AZURITE") != "0"
+    )
 TEST_ENCODING_V1 = getenv_strip("ARCTICDB_TEST_ENCODING_V1", "1") == "1"
 TEST_ENCODING_V2 = getenv_strip("ARCTICDB_TEST_ENCODING_V2", "1") == "1"
 
@@ -275,9 +284,7 @@ def param_dict(fields, cases=None):
 def xfail_azure_chars(nvs, symbol_name):
 
     def contains_problem_chars(text: str) -> list:
-        target_chars = [chr(c) for c in range(0, 32)] + [
-            chr(126), chr(127), chr(140), chr(142), chr(143), chr(156)
-        ]
+        target_chars = [chr(c) for c in range(0, 32)] + [chr(126), chr(127), chr(140), chr(142), chr(143), chr(156)]
         found = [(ord(char), repr(char)) for char in text if char in target_chars]
         return found
 

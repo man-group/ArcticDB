@@ -34,7 +34,7 @@ def test_padded_packb_list():
 
 
 def test_padded_packb_string():
-    aas = 'A' * 1_000_005 # not divisible by 8
+    aas = "A" * 1_000_005  # not divisible by 8
     packed, nbytes = padded_packb(aas)
     assert len(packed) % 8 == 0
     assert len(packed) >= nbytes
@@ -46,7 +46,7 @@ def test_padded_packb_padding():
     # padded_packb behaviour relies on 1 byte for None assumption from msgpack spec
     packed, nbytes = padded_packb(None)
     assert nbytes == 1  # 1 byte of content
-    assert packed == b'\xc0\xc0\xc0\xc0\xc0\xc0\xc0\xc0' # 7 bytes of padding, 8 total
+    assert packed == b"\xc0\xc0\xc0\xc0\xc0\xc0\xc0\xc0"  # 7 bytes of padding, 8 total
 
 
 def test_unpackb():
@@ -54,4 +54,3 @@ def test_unpackb():
     packed = msgpack.packb({(1, 2): "a"})
     with pytest.raises(TypeError):
         assert unpackb(packed)
-

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -36,21 +37,23 @@ static const char* failure_names[] = {
         "DELETE",
 };
 
-}
+} // namespace arcticdb
 
 // Formatters are defined here since they are used in implementations bellow.
 namespace fmt {
 template<>
 struct formatter<arcticdb::FailureType> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(const arcticdb::FailureType failure_type, FormatContext &ctx) const {
+    auto format(const arcticdb::FailureType failure_type, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), fmt::runtime(arcticdb::failure_names[int(failure_type)]));
     }
 };
-}
+} // namespace fmt
 
 namespace arcticdb {
 
@@ -63,15 +66,14 @@ struct FailureAction {
     FunctionWrapper::SharedProxy proxy_;
 
     FailureAction(Description description, FunctionWrapper::SharedProxy proxy) :
-            description_(std::move(description)), proxy_(std::move(proxy)) {}
+        description_(std::move(description)),
+        proxy_(std::move(proxy)) {}
 
     template<typename Func>
-    FailureAction(Description description, Func&& func):
-            FailureAction(std::move(description), FunctionWrapper{std::forward<Func>(func)}.asSharedProxy()) {}
+    FailureAction(Description description, Func&& func) :
+        FailureAction(std::move(description), FunctionWrapper{std::forward<Func>(func)}.asSharedProxy()) {}
 
-    inline void operator()(FailureType type) const {
-        proxy_(type);
-    }
+    inline void operator()(FailureType type) const { proxy_(type); }
 };
 
 inline std::ostream& operator<<(std::ostream& out, const FailureAction& action) {
@@ -81,7 +83,7 @@ inline std::ostream& operator<<(std::ostream& out, const FailureAction& action) 
 
 namespace action_factories {
 // To allow `using namespace`
-static inline const FailureAction no_op("no_op", [](FailureType){});
+static inline const FailureAction no_op("no_op", [](FailureType) {});
 
 static FailureAction::FunctionWrapper maybe_execute(double probability, FailureAction::FunctionWrapper func) {
     util::check_arg(probability >= 0 && probability <= 1.0, "Bad probability: {}", probability);
@@ -111,47 +113,44 @@ template<class Exception = StorageException>
 static FailureAction fault(double probability = 1.0) {
     return {fmt::format("fault({})", probability), maybe_execute(probability, [](FailureType failure_type) {
                 throw Exception(fmt::format("Simulating {} storage failure", failure_type));
-    })};
+            })};
 }
 
 static FailureAction slow_action(double probability, int slow_down_ms_min, int slow_down_ms_max) {
-    return {fmt::format("slow_down({})", probability), maybe_execute(probability, [slow_down_ms_min, slow_down_ms_max](FailureType) {
-        thread_local std::uniform_int_distribution<size_t> dist(slow_down_ms_min, slow_down_ms_max);
-        thread_local std::mt19937 gen(std::random_device{}());
-        int sleep_ms = dist(gen);
-        ARCTICDB_INFO(log::storage(), "Testing: Sleeping for {} ms", sleep_ms);
-        std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
-    })};
+    return {fmt::format("slow_down({})", probability),
+            maybe_execute(probability, [slow_down_ms_min, slow_down_ms_max](FailureType) {
+                thread_local std::uniform_int_distribution<size_t> dist(slow_down_ms_min, slow_down_ms_max);
+                thread_local std::mt19937 gen(std::random_device{}());
+                int sleep_ms = dist(gen);
+                ARCTICDB_INFO(log::storage(), "Testing: Sleeping for {} ms", sleep_ms);
+                std::this_thread::sleep_for(std::chrono::milliseconds(sleep_ms));
+            })};
 }
 
 /** Simulate storage delays - sleep, but then respond normally. **/
-template< class Rep, class Period>
+template<class Rep, class Period>
 static inline FailureAction sleep_for(const std::chrono::duration<Rep, Period>& sleep_duration) {
-    return {
-        fmt::format("sleep_for({}ms)", std::chrono::milliseconds(sleep_duration).count()),
-        [dur=sleep_duration](FailureType) {
-            std::this_thread::sleep_for(dur);
-        }
-    };
+    return {fmt::format("sleep_for({}ms)", std::chrono::milliseconds(sleep_duration).count()),
+            [dur = sleep_duration](FailureType) { std::this_thread::sleep_for(dur); }};
 }
 
-}
+} // namespace action_factories
 
 /** Independent state for each FailureType. Thread-safe except for the c'tors. */
 class FailureTypeState {
-public:
+  public:
     using ActionSequence = std::vector<FailureAction>;
     static_assert(std::is_copy_assignable_v<ActionSequence>);
 
-private:
+  private:
     friend class StorageFailureSimulator;
 
     const ActionSequence sequence_;
-    std::atomic<size_t> cursor_ {0}; // Index into sequence
+    std::atomic<size_t> cursor_{0}; // Index into sequence
 
-public:
+  public:
     explicit FailureTypeState(ActionSequence sequence) :
-            sequence_(sequence.empty() ? ActionSequence{action_factories::no_op} : std::move(sequence)) {}
+        sequence_(sequence.empty() ? ActionSequence{action_factories::no_op} : std::move(sequence)) {}
 
     const ActionSequence::value_type& pick_action() {
         if (cursor_ < sequence_.size()) {
@@ -167,7 +166,7 @@ public:
 // - Mongo storage
 // - InMemoryStore (only in cpp tests)
 class StorageFailureSimulator {
-public:
+  public:
     using ParamActionSequence = FailureTypeState::ActionSequence;
     /**
      * Easy-to-copy parameters that can be used to configure this class. Useful in parameterized tests.
@@ -180,12 +179,8 @@ public:
         static auto instance_ = std::make_shared<StorageFailureSimulator>();
         return instance_;
     }
-    static void reset() {
-        instance() = std::make_shared<StorageFailureSimulator>();
-    }
-    static void destroy_instance() {
-        instance().reset();
-    }
+    static void reset() { instance() = std::make_shared<StorageFailureSimulator>(); }
+    static void destroy_instance() { instance().reset(); }
 
     StorageFailureSimulator() : configured_(false) {}
 
@@ -198,31 +193,33 @@ public:
         }
         if (cfg.write_failure_prob() > 0) {
             categories_.try_emplace(WRITE, ParamActionSequence{action_factories::fault(cfg.write_failure_prob())});
-        }
-        else if (cfg.write_slowdown_prob() > 0) {
-            categories_.try_emplace(WRITE_LOCK, ParamActionSequence{action_factories::slow_action(
-                cfg.write_slowdown_prob(), cfg.slow_down_min_ms(), cfg.slow_down_max_ms())});
+        } else if (cfg.write_slowdown_prob() > 0) {
+            categories_.try_emplace(
+                    WRITE_LOCK,
+                    ParamActionSequence{action_factories::slow_action(
+                            cfg.write_slowdown_prob(), cfg.slow_down_min_ms(), cfg.slow_down_max_ms()
+                    )}
+            );
         }
         configured_ = true;
     };
 
     void configure(const Params& params) {
         log::storage().info("Initializing storage failure simulator");
-        for (const auto& [type, sequence]: params) {
+        for (const auto& [type, sequence] : params) {
             // Due to the atomic in FailureTypeState, it cannot be moved, so has to be constructed in-place:
             categories_.try_emplace(type, sequence);
         }
         configured_ = true;
     }
 
-    bool configured() const {
-        return configured_;
-    }
+    bool configured() const { return configured_; }
 
     ARCTICDB_NO_MOVE_OR_COPY(StorageFailureSimulator)
 
     void go(FailureType failure_type) {
-        if (ARCTICDB_LIKELY(!configured_)) return;
+        if (ARCTICDB_LIKELY(!configured_))
+            return;
         util::check(configured_, "Attempted failure simulation in unconfigured class");
         if (auto itr = categories_.find(failure_type); itr != categories_.end()) {
             auto& state = itr->second;
@@ -231,10 +228,9 @@ public:
         }
     }
 
-private:
+  private:
     std::unordered_map<FailureType, FailureTypeState> categories_;
     bool configured_;
 };
 
-} //namespace arcticdb
-
+} // namespace arcticdb

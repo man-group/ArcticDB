@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -21,9 +22,10 @@ TEST(SortIndex, Basic) {
     std::vector<SliceAndKey> keys_and_slices;
     StreamId stream_id{"sort_index"};
 
-    for(auto i = 0; i < 20; ++i) {
-        auto key = atom_key_builder().start_index(i).end_index(i+1).creation_ts(i).build<KeyType::TABLE_DATA>(stream_id);
-        FrameSlice slice{ColRange{0, 5}, RowRange{i, i+1}};
+    for (auto i = 0; i < 20; ++i) {
+        auto key =
+                atom_key_builder().start_index(i).end_index(i + 1).creation_ts(i).build<KeyType::TABLE_DATA>(stream_id);
+        FrameSlice slice{ColRange{0, 5}, RowRange{i, i + 1}};
         keys_and_slices.emplace_back(SliceAndKey{slice, key});
     }
 
@@ -39,7 +41,7 @@ TEST(SortIndex, Basic) {
     TimeseriesDescriptor timeseries_desc;
     timeseries_desc.set_stream_descriptor(desc);
     index::IndexWriter<stream::RowCountIndex> index_writer(mock_store, partial_key, std::move(timeseries_desc));
-    for(const auto& [maybe_seg, slice, key] : keys_and_slices)
+    for (const auto& [maybe_seg, slice, key] : keys_and_slices)
         index_writer.add_unchecked(*key, slice);
 
     auto key_fut = index_writer.commit();
@@ -65,9 +67,10 @@ TEST(SortIndex, Nonzero) {
     std::vector<SliceAndKey> keys_and_slices;
     StreamId stream_id{"sort_index_non_zero"};
 
-    for(auto i = 0; i < 20; ++i) {
-        auto key = atom_key_builder().start_index(i).end_index(i+1).creation_ts(i).build<KeyType::TABLE_DATA>(stream_id);
-        FrameSlice slice{ColRange{0, 5}, RowRange{i+5, i+6}};
+    for (auto i = 0; i < 20; ++i) {
+        auto key =
+                atom_key_builder().start_index(i).end_index(i + 1).creation_ts(i).build<KeyType::TABLE_DATA>(stream_id);
+        FrameSlice slice{ColRange{0, 5}, RowRange{i + 5, i + 6}};
         keys_and_slices.emplace_back(SliceAndKey{slice, key});
     }
 
@@ -82,7 +85,7 @@ TEST(SortIndex, Nonzero) {
     TimeseriesDescriptor timeseries_desc;
     timeseries_desc.set_stream_descriptor(desc);
     index::IndexWriter<stream::RowCountIndex> index_writer(mock_store, partial_key, std::move(timeseries_desc));
-    for(const auto& [maybe_seg, slice, key] : keys_and_slices)
+    for (const auto& [maybe_seg, slice, key] : keys_and_slices)
         index_writer.add_unchecked(*key, slice);
 
     auto key_fut = index_writer.commit();
@@ -99,9 +102,10 @@ TEST(SortIndex, Nonzero) {
 
     std::vector<SliceAndKey> expected;
 
-    for(auto i = 0; i < 20; ++i) {
-        auto key = atom_key_builder().start_index(i).end_index(i+1).creation_ts(i).build<KeyType::TABLE_DATA>(stream_id);
-        FrameSlice slice{ColRange{0, 5}, RowRange{i, i+1}};
+    for (auto i = 0; i < 20; ++i) {
+        auto key =
+                atom_key_builder().start_index(i).end_index(i + 1).creation_ts(i).build<KeyType::TABLE_DATA>(stream_id);
+        FrameSlice slice{ColRange{0, 5}, RowRange{i, i + 1}};
         expected.emplace_back(SliceAndKey{slice, key});
     }
 

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/storage/test/in_memory_store.hpp>
@@ -50,14 +51,13 @@ TEST(StorageLock, Timeout) {
 struct LockData {
     std::string lock_name_ = "stress_test_lock";
     std::shared_ptr<InMemoryStore> store_ = std::make_shared<InMemoryStore>();
-    volatile uint64_t vol_ { 0 };
-    std::atomic<uint64_t> atomic_ = { 0 };
-    std::atomic<bool> contended_ { false };
-    std::atomic<bool> timedout_ { false };
+    volatile uint64_t vol_{0};
+    std::atomic<uint64_t> atomic_ = {0};
+    std::atomic<bool> contended_{false};
+    std::atomic<bool> timedout_{false};
     const size_t num_tests_;
 
-    explicit LockData(size_t num_tests) :
-    num_tests_(num_tests){}
+    explicit LockData(size_t num_tests) : num_tests_(num_tests) {}
 
     void increment_counters_under_lock() {
         // This is done in order to test whether any racing has occurred by checking if vol_ and atomic_ have diverged
@@ -69,17 +69,13 @@ struct LockData {
         ++atomic_;
     }
 
-    bool no_race_happened() {
-        return atomic_ == vol_;
-    }
+    bool no_race_happened() { return atomic_ == vol_; }
 };
 
 struct LockTaskWithoutRetry {
     std::shared_ptr<LockData> data_;
 
-    explicit LockTaskWithoutRetry(std::shared_ptr<LockData> data) :
-        data_(std::move(data)) {
-    }
+    explicit LockTaskWithoutRetry(std::shared_ptr<LockData> data) : data_(std::move(data)) {}
 
     folly::Future<folly::Unit> operator()() {
         StorageLock<> lock{data_->lock_name_};
@@ -87,8 +83,7 @@ struct LockTaskWithoutRetry {
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             if (!lock.try_lock(data_->store_)) {
                 data_->contended_ = true;
-            }
-            else {
+            } else {
                 data_->increment_counters_under_lock();
                 lock.unlock(data_->store_);
             }
@@ -96,7 +91,6 @@ struct LockTaskWithoutRetry {
         return makeFuture(Unit{});
     }
 };
-
 
 TEST(StorageLock, Contention) {
     SKIP_MAC("StorageLock is not supported");
@@ -106,7 +100,7 @@ TEST(StorageLock, Contention) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(LockTaskWithoutRetry{lock_data}));
     }
     collect(futures).get();
@@ -121,23 +115,21 @@ struct LockTaskWithRetry {
 
     explicit LockTaskWithRetry(std::shared_ptr<LockData> data, std::optional<size_t> timeout_ms = std::nullopt) :
         data_(std::move(data)),
-        timeout_ms_(timeout_ms){
-    }
+        timeout_ms_(timeout_ms) {}
 
     folly::Future<folly::Unit> operator()() {
         StorageLock<> lock{data_->lock_name_};
 
         for (auto i = size_t(0); i < data_->num_tests_; ++i) {
             try {
-                if(timeout_ms_)
+                if (timeout_ms_)
                     lock.lock_timeout(data_->store_, *timeout_ms_);
                 else
                     lock.lock(data_->store_);
 
                 data_->increment_counters_under_lock();
                 lock.unlock(data_->store_);
-            }
-            catch(const StorageLockTimeout&) {
+            } catch (const StorageLockTimeout&) {
                 data_->timedout_ = true;
             }
         }
@@ -151,9 +143,7 @@ struct ForceReleaseLockTask {
 
     ForceReleaseLockTask(std::shared_ptr<LockData> data, size_t timeout_ms) :
         data_(std::move(data)),
-        timeout_ms_(timeout_ms)
-        {
-    }
+        timeout_ms_(timeout_ms) {}
 
     folly::Future<folly::Unit> operator()() const {
         StorageLock<> lock{data_->lock_name_};
@@ -163,8 +153,7 @@ struct ForceReleaseLockTask {
             // As of C++20, '++' expression of 'volatile'-qualified type is deprecated.
             data_->increment_counters_under_lock();
             // Dont unlock
-        }
-        catch(const StorageLockTimeout&) {
+        } catch (const StorageLockTimeout&) {
             data_->timedout_ = true;
         }
 
@@ -180,11 +169,9 @@ struct OptimisticForceReleaseLockTask {
     size_t retry_ms_;
 
     OptimisticForceReleaseLockTask(std::shared_ptr<LockData> data, size_t timeout_ms, size_t retry_ms) :
-            data_(std::move(data)),
-            timeout_ms_(timeout_ms),
-            retry_ms_(retry_ms)
-    {
-    }
+        data_(std::move(data)),
+        timeout_ms_(timeout_ms),
+        retry_ms_(retry_ms) {}
 
     folly::Future<folly::Unit> operator()() const {
         StorageLock<> lock{data_->lock_name_};
@@ -216,7 +203,7 @@ TEST(StorageLock, Wait) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(LockTaskWithRetry{lock_data}));
     }
     collect(futures).get();
@@ -233,7 +220,7 @@ TEST(StorageLock, Timeouts) {
     folly::FutureExecutor<folly::CPUThreadPoolExecutor> exec{4};
 
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(LockTaskWithRetry{lock_data, 20}));
     }
     collect(futures).get();
@@ -241,7 +228,8 @@ TEST(StorageLock, Timeouts) {
 }
 
 int count_occurrences(std::string search, std::string pattern) {
-    if (search.size() < pattern.size()) return false;
+    if (search.size() < pattern.size())
+        return false;
     int count = 0;
     for (size_t pos = 0; pos <= search.size() - pattern.size(); pos++) {
         if (search.substr(pos, pattern.size()) == pattern)
@@ -264,7 +252,6 @@ TEST(StorageLock, ForceReleaseLock) {
     // WaitMs is set in milliseconds => 50ms for the preempting check; TTL is set in nanoseconds => 200ms for the TTL
     ScopedConfig scoped_config({{"StorageLock.WaitMs", 50}, {"StorageLock.TTL", 200 * 1000 * 1000}});
 
-
     // Create a first lock that the others will have to force release
     auto first_lock = StorageLock<>(lock_data->lock_name_);
     first_lock.lock(lock_data->store_);
@@ -272,7 +259,7 @@ TEST(StorageLock, ForceReleaseLock) {
     testing::internal::CaptureStderr();
     testing::internal::CaptureStdout();
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(ForceReleaseLockTask{lock_data, 10 * 1000}));
     }
 
@@ -281,7 +268,7 @@ TEST(StorageLock, ForceReleaseLock) {
     ASSERT_EQ(4u, lock_data->atomic_);
     ASSERT_EQ(4u, lock_data->vol_);
 
-    std::string stdout_str  = testing::internal::GetCapturedStdout();
+    std::string stdout_str = testing::internal::GetCapturedStdout();
     std::string stderr_str = testing::internal::GetCapturedStderr();
     std::string expected = "more than TTL";
 
@@ -291,10 +278,7 @@ TEST(StorageLock, ForceReleaseLock) {
     // number of log messages.
     // Skip on Windows as capturing logs doesn't work. TODO: Configure the logger with the file output
 #ifndef _WIN32
-    ASSERT_TRUE(
-            count_occurrences(stdout_str, expected) >= 4 ||
-            count_occurrences(stderr_str, expected) >= 4
-    );
+    ASSERT_TRUE(count_occurrences(stdout_str, expected) >= 4 || count_occurrences(stderr_str, expected) >= 4);
 #endif
 
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
@@ -324,7 +308,7 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     testing::internal::CaptureStderr();
     testing::internal::CaptureStdout();
     std::vector<Future<Unit>> futures;
-    for(auto i = size_t{0}; i < 4; ++i) {
+    for (auto i = size_t{0}; i < 4; ++i) {
         futures.emplace_back(exec.addFuture(OptimisticForceReleaseLockTask{lock_data, 10 * 1000, 100}));
     }
 
@@ -334,7 +318,7 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     ASSERT_EQ(4u, lock_data->atomic_);
     ASSERT_EQ(4u, lock_data->vol_);
 
-    std::string stdout_str  = testing::internal::GetCapturedStdout();
+    std::string stdout_str = testing::internal::GetCapturedStdout();
     std::string stderr_str = testing::internal::GetCapturedStderr();
     std::string expected = "more than TTL";
 
@@ -347,19 +331,15 @@ TEST(StorageLock, OptimisticForceReleaseLock) {
     // number of log messages.
     // Skip on Windows as capturing logs doesn't work. TODO: Configure the logger with the file output
 #ifndef _WIN32
-    ASSERT_TRUE(
-        count_occurrences(stdout_str, expected) >= 4 ||
-        count_occurrences(stderr_str, expected) >= 4
-    );
+    ASSERT_TRUE(count_occurrences(stdout_str, expected) >= 4 || count_occurrences(stderr_str, expected) >= 4);
 #endif
 
     // Clean up locks to avoid "mutex destroyed while active" errors on Windows debug build
     first_lock._test_release_local_lock();
 }
 
-
 class StorageLockWithSlowWrites : public ::testing::TestWithParam<std::tuple<int, int, int>> {
-protected:
+  protected:
     void SetUp() override {
         log::lock().set_level(spdlog::level::debug);
         StorageFailureSimulator::reset();
@@ -367,10 +347,8 @@ protected:
 };
 
 class StorageLockWithAndWithoutRetry : public ::testing::TestWithParam<bool> {
-    protected:
-    void SetUp() override {
-        StorageFailureSimulator::reset();
-    }
+  protected:
+    void SetUp() override { StorageFailureSimulator::reset(); }
 };
 
 TEST(StorageLock, ConcurrentWritesWithRetrying) {
@@ -380,7 +358,7 @@ TEST(StorageLock, ConcurrentWritesWithRetrying) {
     lock_data->store_ = std::make_shared<InMemoryStore>();
     FutureExecutor<CPUThreadPoolExecutor> exec{num_writers};
     std::vector<Future<Unit>> futures;
-    for(size_t i = 0; i < num_writers; ++i) {
+    for (size_t i = 0; i < num_writers; ++i) {
         futures.emplace_back(exec.addFuture(LockTaskWithRetry(lock_data, 3000)));
     }
     collect(futures).get();
@@ -390,7 +368,7 @@ TEST(StorageLock, ConcurrentWritesWithRetrying) {
 
 TEST_P(StorageLockWithAndWithoutRetry, StressManyWriters) {
     const StorageFailureSimulator::ParamActionSequence SLOW_ACTIONS = {
-        action_factories::slow_action(0.3, 600, 1100),
+            action_factories::slow_action(0.3, 600, 1100),
     };
 
     constexpr size_t num_writers = 50;
@@ -403,7 +381,8 @@ TEST_P(StorageLockWithAndWithoutRetry, StressManyWriters) {
     lock_data->store_ = std::make_shared<InMemoryStore>();
     const bool with_retry = GetParam();
     for (size_t i = 0; i < num_writers; ++i) {
-        auto future = with_retry ? exec.addFuture(LockTaskWithRetry(lock_data, 10000)) : exec.addFuture(LockTaskWithoutRetry(lock_data));
+        auto future = with_retry ? exec.addFuture(LockTaskWithRetry(lock_data, 10000))
+                                 : exec.addFuture(LockTaskWithoutRetry(lock_data));
         futures.emplace_back(std::move(future));
     }
     collect(futures).get();
@@ -411,7 +390,4 @@ TEST_P(StorageLockWithAndWithoutRetry, StressManyWriters) {
     ASSERT_TRUE(lock_data->no_race_happened());
 }
 
-
-INSTANTIATE_TEST_SUITE_P(, StorageLockWithAndWithoutRetry,
-        ::testing::Bool()
-        );
+INSTANTIATE_TEST_SUITE_P(, StorageLockWithAndWithoutRetry, ::testing::Bool());

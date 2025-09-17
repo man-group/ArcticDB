@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -16,11 +17,10 @@ struct NumpyBufferHolder {
     uint8_t* ptr_{nullptr};
     size_t row_count_{0};
 
-    NumpyBufferHolder(TypeDescriptor type, uint8_t* ptr, size_t row_count):
-    type_(type),
-    ptr_(ptr),
-    row_count_(row_count){
-    }
+    NumpyBufferHolder(TypeDescriptor type, uint8_t* ptr, size_t row_count) :
+        type_(type),
+        ptr_(ptr),
+        row_count_(row_count) {}
 
     explicit NumpyBufferHolder(NumpyBufferHolder&& other) {
         type_ = other.type_;
@@ -54,4 +54,4 @@ struct NumpyBufferHolder {
     }
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

@@ -21,20 +21,23 @@ TEST(OutputFrame, AllocateChunked) {
     FrameSlice slice6{{46, 70}, {500, 720}};
     context->slice_and_keys_.emplace_back(SliceAndKey{slice6, AtomKey{}});
 
-    for(auto i = 0; i < 6; ++i) {
+    for (auto i = 0; i < 6; ++i) {
         if (!(i & 1))
             context->fetch_index_.set_bit(i);
     }
 
     auto index = stream::TimeseriesIndex::default_index();
-    auto desc = index.create_stream_descriptor(NumericId{123}, {
-        scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
-        scalar_field(DataType::ASCII_DYNAMIC64, "col_2"),
-        scalar_field(DataType::ASCII_DYNAMIC64, "col_3"),
-        scalar_field(DataType::ASCII_DYNAMIC64, "col_4"),
-        scalar_field(DataType::ASCII_DYNAMIC64, "col_5"),
-        scalar_field(DataType::ASCII_DYNAMIC64, "col_6"),
-    });
+    auto desc = index.create_stream_descriptor(
+            NumericId{123},
+            {
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_1"),
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_2"),
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_3"),
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_4"),
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_5"),
+                    scalar_field(DataType::ASCII_DYNAMIC64, "col_6"),
+            }
+    );
 
     context->set_descriptor(desc);
     auto frame = allocate_frame(context, OutputFormat::ARROW);

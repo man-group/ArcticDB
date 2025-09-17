@@ -5,10 +5,17 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import logging
 from typing import List, Optional, Any, Union
 
-from arcticdb.options import DEFAULT_ENCODING_VERSION, LibraryOptions, EnterpriseLibraryOptions, RuntimeOptions, OutputFormat
+from arcticdb.options import (
+    DEFAULT_ENCODING_VERSION,
+    LibraryOptions,
+    EnterpriseLibraryOptions,
+    RuntimeOptions,
+    OutputFormat,
+)
 from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
@@ -46,7 +53,12 @@ class Arctic:
     # It is set by the LmdbStorageFixture
     _accessed_libs: Optional[List[NativeVersionStore]] = None
 
-    def __init__(self, uri: str, encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION, output_format: Union[OutputFormat, str] = OutputFormat.PANDAS):
+    def __init__(
+        self,
+        uri: str,
+        encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION,
+        output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
+    ):
         """
         Initializes a top-level Arctic library management instance.
 
@@ -113,11 +125,13 @@ class Arctic:
             runtime_options = self._runtime_options
 
         lib = NativeVersionStore(
-            self._library_manager.get_library(lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()),
+            self._library_manager.get_library(
+                lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()
+            ),
             repr(self._library_adapter),
             lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
             native_cfg=self._library_adapter.native_config(),
-            runtime_options=runtime_options
+            runtime_options=runtime_options,
         )
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
@@ -194,11 +208,13 @@ class Arctic:
             else:
                 raise e
 
-    def create_library(self,
-                       name: str,
-                       library_options: Optional[LibraryOptions] = None,
-                       enterprise_library_options: Optional[EnterpriseLibraryOptions] = None,
-                       output_format: Optional[Union[OutputFormat, str]] = None) -> Library:
+    def create_library(
+        self,
+        name: str,
+        library_options: Optional[LibraryOptions] = None,
+        enterprise_library_options: Optional[EnterpriseLibraryOptions] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+    ) -> Library:
         """
         Creates the library named ``name``.
 
@@ -272,7 +288,6 @@ class Arctic:
         self._library_manager.cleanup_library_if_open(lib_mgr_name)
         self._library_manager.remove_library_config(lib_mgr_name)
 
-
     def has_library(self, name: str) -> bool:
         """
         Query if the given library exists
@@ -320,10 +335,12 @@ class Arctic:
         """
         return self._uri
 
-    def modify_library_option(self,
-                              library: Library,
-                              option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
-                              option_value: Any):
+    def modify_library_option(
+        self,
+        library: Library,
+        option: Union[ModifiableLibraryOption, ModifiableEnterpriseLibraryOption],
+        option_value: Any,
+    ):
         """
         Modify an option for a library.
 
@@ -350,11 +367,16 @@ class Arctic:
         storage_override = self._library_adapter.get_storage_override()
         new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
         library._nvs._initialize(
-            self._library_manager.get_library(lib_mgr_name, storage_override, ignore_cache=True, native_storage_config=self._library_adapter.native_config()),
+            self._library_manager.get_library(
+                lib_mgr_name,
+                storage_override,
+                ignore_cache=True,
+                native_storage_config=self._library_adapter.native_config(),
+            ),
             library._nvs.env,
             new_cfg,
             library._nvs._custom_normalizer,
-            library._nvs._open_mode
+            library._nvs._open_mode,
         )
 
         logger.info(f"Set option=[{option}] to value=[{option_value}] for Arctic=[{self}] Library=[{library}]")

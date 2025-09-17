@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -36,12 +37,18 @@ def test_project_string_binary_arithmetic(lmdb_version_store_v1):
     operands = ["col_a", "col_b", "col_c", "0", 0]
     for lhs in operands:
         for rhs in operands:
-            if ((lhs == "col_a" and rhs in ["col_a", 0]) or
-                (rhs == "col_a" and lhs in ["col_a", 0]) or
-                (lhs in ["0", 0] and rhs in ["0", 0])):
+            if (
+                (lhs == "col_a" and rhs in ["col_a", 0])
+                or (rhs == "col_a" and lhs in ["col_a", 0])
+                or (lhs in ["0", 0] and rhs in ["0", 0])
+            ):
                 continue
             q = QueryBuilder()
-            q = q.apply("d", (q[lhs] if isinstance(lhs, str) and lhs.startswith("col_") else lhs) + (q[rhs] if isinstance(rhs, str) and rhs.startswith("col_") else rhs))
+            q = q.apply(
+                "d",
+                (q[lhs] if isinstance(lhs, str) and lhs.startswith("col_") else lhs)
+                + (q[rhs] if isinstance(rhs, str) and rhs.startswith("col_") else rhs),
+            )
             with pytest.raises(UserInputException):
                 lib.read(symbol, query_builder=q)
 
@@ -164,8 +171,13 @@ def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_sc
 def test_project_fixed_value_dynamic(lmdb_version_store_dynamic_schema_v1, index, value):
     lib = lmdb_version_store_dynamic_schema_v1
     sym = "test_project_fixed_value_dynamic"
-    df0 = pd.DataFrame({"col1": [0, 0.1, 0.2], "col2": [0.3, 0.4, 0.5]}, index=pd.date_range("2025-01-01", periods=3) if index == "timeseries" else None)
-    df1 = pd.DataFrame({"col2": [0.6, 0.7, 0.8]}, index=pd.date_range("2025-01-04", periods=3) if index == "timeseries" else None)
+    df0 = pd.DataFrame(
+        {"col1": [0, 0.1, 0.2], "col2": [0.3, 0.4, 0.5]},
+        index=pd.date_range("2025-01-01", periods=3) if index == "timeseries" else None,
+    )
+    df1 = pd.DataFrame(
+        {"col2": [0.6, 0.7, 0.8]}, index=pd.date_range("2025-01-04", periods=3) if index == "timeseries" else None
+    )
     lib.write(sym, df0)
     lib.append(sym, df1)
     expected = pd.concat([df0, df1])

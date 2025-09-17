@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/pipeline/pipeline_context.hpp>
@@ -12,8 +13,7 @@
 
 namespace arcticdb::pipelines {
 
-PipelineContext::PipelineContext(SegmentInMemory& frame, const AtomKey& key) :
-    desc_(frame.descriptor()){
+PipelineContext::PipelineContext(SegmentInMemory& frame, const AtomKey& key) : desc_(frame.descriptor()) {
     SliceAndKey sk{FrameSlice{frame}, key};
     slice_and_keys_.emplace_back(std::move(sk));
     util::BitSet bitset(1);
@@ -36,54 +36,35 @@ void PipelineContext::set_selected_columns(const std::optional<std::vector<std::
 }
 
 bool PipelineContext::only_index_columns_selected() const {
-    return overall_column_bitset_ &&
-        ((overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0]) || overall_column_bitset_->count() == 0);
+    return overall_column_bitset_ && ((overall_column_bitset_->count() == 1 && (*overall_column_bitset_)[0]) ||
+                                      overall_column_bitset_->count() == 0);
 }
 
 const std::optional<util::BitSet>& PipelineContextRow::get_selected_columns() const {
     return parent_->selected_columns_;
 }
 
-const StringPool &PipelineContextRow::string_pool() const {
-    return *parent_->string_pools_[index_];
-}
+const StringPool& PipelineContextRow::string_pool() const { return *parent_->string_pools_[index_]; }
 
-StringPool &PipelineContextRow::string_pool() {
-    return *parent_->string_pools_[index_];
-}
+StringPool& PipelineContextRow::string_pool() { return *parent_->string_pools_[index_]; }
 
-const std::shared_ptr<StringPool>& PipelineContextRow::string_pool_ptr() {
-    return parent_->string_pools_[index_];
-}
+const std::shared_ptr<StringPool>& PipelineContextRow::string_pool_ptr() { return parent_->string_pools_[index_]; }
 
-void PipelineContextRow::allocate_string_pool() {
-    parent_->string_pools_[index_] = std::make_shared<StringPool>();
-}
-
+void PipelineContextRow::allocate_string_pool() { parent_->string_pools_[index_] = std::make_shared<StringPool>(); }
 
 void PipelineContextRow::set_string_pool(const std::shared_ptr<StringPool>& pool) {
     parent_->string_pools_[index_] = pool;
 }
 
-const SliceAndKey &PipelineContextRow::slice_and_key() const {
-    return parent_->slice_and_keys_[index_];
-}
+const SliceAndKey& PipelineContextRow::slice_and_key() const { return parent_->slice_and_keys_[index_]; }
 
-SliceAndKey &PipelineContextRow::slice_and_key()  {
-    return parent_->slice_and_keys_[index_];
-}
+SliceAndKey& PipelineContextRow::slice_and_key() { return parent_->slice_and_keys_[index_]; }
 
-bool PipelineContextRow::fetch_index() const {
-    return parent_->fetch_index_[index_];
-}
+bool PipelineContextRow::fetch_index() const { return parent_->fetch_index_[index_]; }
 
-size_t PipelineContextRow::index() const {
-    return index_;
-}
+size_t PipelineContextRow::index() const { return index_; }
 
-bool PipelineContextRow::has_string_pool() const {
-    return static_cast<bool>(parent_->string_pools_[index_]);
-}
+bool PipelineContextRow::has_string_pool() const { return static_cast<bool>(parent_->string_pools_[index_]); }
 const StreamDescriptor& PipelineContextRow::descriptor() const {
     util::check(index_ < parent_->segment_descriptors_.size(), "Descriptor out of bounds for index {}", index_);
     util::check(static_cast<bool>(parent_->segment_descriptors_[index_]), "Null descriptor at index {}", index_);
@@ -102,17 +83,13 @@ void PipelineContextRow::set_descriptor(const std::shared_ptr<StreamDescriptor>&
     parent_->segment_descriptors_[index_] = desc;
 }
 
-void PipelineContextRow::set_compacted(bool val) {
-    parent_->compacted_[index_] = val;
-}
+void PipelineContextRow::set_compacted(bool val) { parent_->compacted_[index_] = val; }
 
-bool PipelineContextRow::compacted() const {
-    return parent_->compacted_[index_];
-}
+bool PipelineContextRow::compacted() const { return parent_->compacted_[index_]; }
 
 void PipelineContextRow::set_descriptor(StreamDescriptor&& desc) {
     auto shared_desc = std::make_shared<StreamDescriptor>(std::move(desc));
     set_descriptor(std::move(shared_desc));
 }
 
-} //namespace arcticdb::pipelines
+} // namespace arcticdb::pipelines

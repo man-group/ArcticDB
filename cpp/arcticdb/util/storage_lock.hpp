@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -22,14 +23,13 @@
 namespace arcticdb {
 
 namespace {
-inline StreamDescriptor lock_stream_descriptor(const StreamId &stream_id) {
-    return StreamDescriptor{stream_descriptor(
-            stream_id,
-            stream::RowCountIndex(),
-            {scalar_field(DataType::UINT64, "version")})};
+inline StreamDescriptor lock_stream_descriptor(const StreamId& stream_id) {
+    return StreamDescriptor{
+            stream_descriptor(stream_id, stream::RowCountIndex(), {scalar_field(DataType::UINT64, "version")})
+    };
 }
 
-SegmentInMemory lock_segment(const StreamId &name, uint64_t timestamp) {
+SegmentInMemory lock_segment(const StreamId& name, uint64_t timestamp) {
     SegmentInMemory output{lock_stream_descriptor(name)};
     output.set_scalar(0, timestamp);
     output.end_row();
@@ -44,11 +44,10 @@ struct OnExit {
 
     ARCTICDB_NO_MOVE_OR_COPY(OnExit);
 
-    explicit OnExit(folly::Func&& func) :
-        func_(std::move(func)) {}
+    explicit OnExit(folly::Func&& func) : func_(std::move(func)) {}
 
     ~OnExit() {
-        if(!released_) {
+        if (!released_) {
             // Must not throw in destructor to avoid crashes
             try {
                 func_();
@@ -58,18 +57,17 @@ struct OnExit {
         }
     }
 
-    void release() {
-        released_ = true;
-    }
+    void release() { released_ = true; }
 };
 
 struct StorageLockTimeout : public std::runtime_error {
     using std::runtime_error::runtime_error;
 };
 
-// This StorageLock is inherently unreliable. It does not use atomic operations and it is possible for two processes to acquire if the timing is right.
-// If you want a reliable alternative which is slower but uses atomic primitives you can look at the `ReliableStorageLock`.
-template <class ClockType = util::SysClock>
+// This StorageLock is inherently unreliable. It does not use atomic operations and it is possible for two processes to
+// acquire if the timing is right. If you want a reliable alternative which is slower but uses atomic primitives you can
+// look at the `ReliableStorageLock`.
+template<class ClockType = util::SysClock>
 class StorageLock {
     std::mutex mutex_;
     const StreamId name_;
@@ -77,28 +75,24 @@ class StorageLock {
 
   public:
     static constexpr int64_t DEFAULT_TTL_INTERVAL = ONE_MINUTE * 60 * 24; // 1 Day
-    static constexpr int64_t DEFAULT_WAIT_MS = 1000; // After writing the lock, waiting this time before checking if the written lock is still ours.
+    static constexpr int64_t DEFAULT_WAIT_MS =
+            1000; // After writing the lock, waiting this time before checking if the written lock is still ours.
     static constexpr int64_t DEFAULT_INITIAL_WAIT_MS = 10;
 
     static void force_release_lock(const StreamId& name, const std::shared_ptr<Store>& store) {
         do_remove_ref_key(store, name);
     }
 
-    explicit StorageLock(StreamId name) :
-        name_(std::move(name)) {}
+    explicit StorageLock(StreamId name) : name_(std::move(name)) {}
 
     ARCTICDB_NO_MOVE_OR_COPY(StorageLock)
 
-    void lock(const std::shared_ptr<Store>& store) {
-        do_lock(store);
-    }
+    void lock(const std::shared_ptr<Store>& store) { do_lock(store); }
 
-    void lock_timeout(const std::shared_ptr<Store>& store, size_t timeout_ms) {
-        do_lock(store, timeout_ms);
-    }
+    void lock_timeout(const std::shared_ptr<Store>& store, size_t timeout_ms) { do_lock(store, timeout_ms); }
 
     void unlock(const std::shared_ptr<Store>& store) {
-        if(auto read_ts = read_timestamp(store); !read_ts || *read_ts != ts_) {
+        if (auto read_ts = read_timestamp(store); !read_ts || *read_ts != ts_) {
             log::version().warn("Unexpected lock timestamp, {} != {}", read_ts ? *read_ts : 0, ts_);
             mutex_.unlock();
             return;
@@ -109,14 +103,12 @@ class StorageLock {
 
     bool try_lock(const std::shared_ptr<Store>& store) {
         ARCTICDB_DEBUG(log::lock(), "Storage lock: try lock");
-        if(!mutex_.try_lock()) {
+        if (!mutex_.try_lock()) {
             ARCTICDB_DEBUG(log::lock(), "Storage lock: failed local lock");
             return false;
         }
 
-        OnExit x{[that=this] () {
-            that->mutex_.unlock();
-        }};
+        OnExit x{[that = this]() { that->mutex_.unlock(); }};
 
         const bool try_lock = try_acquire_lock(store);
         if (try_lock) {
@@ -126,9 +118,7 @@ class StorageLock {
         return try_lock;
     }
 
-    void _test_release_local_lock() {
-        mutex_.unlock();
-    }
+    void _test_release_local_lock() { mutex_.unlock(); }
 
   private:
     void do_lock(const std::shared_ptr<Store>& store, std::optional<size_t> timeout_ms = std::nullopt) {
@@ -161,11 +151,18 @@ class StorageLock {
             std::this_thread::sleep_for(std::chrono::milliseconds(lock_sleep_ms));
             ARCTICDB_DEBUG(log::lock(), "Waited for {} ms", lock_sleep_ms);
             auto read_ts = read_timestamp(store);
-            if(read_ts && *read_ts == ts_) {
-                ARCTICDB_DEBUG(log::lock(), "Storage lock: succeeded, written_timestamp: {} current_timestamp: {}", ts_, read_ts);
+            if (read_ts && *read_ts == ts_) {
+                ARCTICDB_DEBUG(
+                        log::lock(),
+                        "Storage lock: succeeded, written_timestamp: {} current_timestamp: {}",
+                        ts_,
+                        read_ts
+                );
                 return true;
             }
-            ARCTICDB_DEBUG(log::lock(), "Storage lock: pre-empted, written_timestamp: {} current_timestamp: {}", ts_, read_ts);
+            ARCTICDB_DEBUG(
+                    log::lock(), "Storage lock: pre-empted, written_timestamp: {} current_timestamp: {}", ts_, read_ts
+            );
             ts_ = 0;
             return false;
         }
@@ -173,9 +170,7 @@ class StorageLock {
         return false;
     }
 
-    void sleep_ms(size_t ms) const {
-        std::this_thread::sleep_for(std::chrono::milliseconds(ms));
-    }
+    void sleep_ms(size_t ms) const { std::this_thread::sleep_for(std::chrono::milliseconds(ms)); }
 
     timestamp create_ref_key(const std::shared_ptr<Store>& store) {
         auto ts = ClockType::nanos_since_epoch();
@@ -185,13 +180,9 @@ class StorageLock {
         return ts;
     }
 
-    static RefKey get_ref_key(const StreamId& name) {
-        return RefKey{name, KeyType::LOCK};
-    }
+    static RefKey get_ref_key(const StreamId& name) { return RefKey{name, KeyType::LOCK}; }
 
-    RefKey ref_key() const {
-        return get_ref_key(name_);
-    }
+    RefKey ref_key() const { return get_ref_key(name_); }
 
     static void do_remove_ref_key(const std::shared_ptr<Store>& store, const StreamId& name) {
         ARCTICDB_DEBUG(log::lock(), "Removing ref key");
@@ -202,9 +193,7 @@ class StorageLock {
         }
     }
 
-    void remove_ref_key(const std::shared_ptr<Store>& store) const {
-        do_remove_ref_key(store, name_);
-    }
+    void remove_ref_key(const std::shared_ptr<Store>& store) const { do_remove_ref_key(store, name_); }
 
     std::optional<timestamp> read_timestamp(const std::shared_ptr<Store>& store) const {
         try {
@@ -224,7 +213,11 @@ class StorageLock {
             if (ClockType::coarse_nanos_since_epoch() - *read_ts < ttl) {
                 return true;
             }
-            log::lock().warn("StorageLock {} taken since {}, which is more than TTL (default 1 day). Ignoring it.", name_, *read_ts);
+            log::lock().warn(
+                    "StorageLock {} taken since {}, which is more than TTL (default 1 day). Ignoring it.",
+                    name_,
+                    *read_ts
+            );
         }
         return false;
     }
@@ -234,27 +227,18 @@ class StorageLockWrapper {
     std::shared_ptr<Store> store_;
     std::shared_ptr<StorageLock<>> lock_;
 
-public:
+  public:
     StorageLockWrapper(const StreamId& stream_id, std::shared_ptr<Store> store) :
         store_(std::move(store)),
-        lock_(std::make_shared<StorageLock<>>(stream_id)){
-    }
+        lock_(std::make_shared<StorageLock<>>(stream_id)) {}
 
-    void lock() {
-        lock_->lock(store_);
-    }
+    void lock() { lock_->lock(store_); }
 
-    void lock_timeout(size_t timeout_ms) {
-        lock_->lock_timeout(store_, timeout_ms);
-    }
+    void lock_timeout(size_t timeout_ms) { lock_->lock_timeout(store_, timeout_ms); }
 
-    void unlock() {
-        lock_->unlock(store_);
-    }
+    void unlock() { lock_->unlock(store_); }
 
-    bool try_lock() {
-        return lock_->try_lock(store_);
-    }
+    bool try_lock() { return lock_->try_lock(store_); }
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

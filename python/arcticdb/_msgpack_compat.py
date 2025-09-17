@@ -4,6 +4,7 @@ NO WARRANTY, EXPRESSED OR IMPLIED.
 
 This module implements a backwards compatible version of msgpack functions.
 """
+
 import msgpack
 from arcticdb.preconditions import check
 from arcticdb.exceptions import ArcticNativeException
@@ -28,6 +29,7 @@ def packb(obj, **kwargs):
     # use_bin_type supported from msgpack==0.4.0 but became true later
     return msgpack.packb(obj, use_bin_type=True, strict_types=True, **kwargs)
 
+
 packb.__doc__ = msgpack.packb.__doc__
 packb.__name__ = msgpack.packb.__name__
 
@@ -41,9 +43,13 @@ def padded_packb(obj, **kwargs):
     packer = msgpack.Packer(autoreset=False, use_bin_type=True, strict_types=True, **kwargs)
     packer.pack(obj)
     nbytes = packer.getbuffer().nbytes
-    pad = -nbytes % 8 # next multiple of 8 bytes
-    [packer.pack(None) for _ in range(pad)] # None is packed as single byte b`\xc0`
-    check(packer.getbuffer().nbytes % 8 == 0, 'Error in ArcticDB padded_packb. Padding failed. nbytes={}', packer.getbuffer().nbytes)
+    pad = -nbytes % 8  # next multiple of 8 bytes
+    [packer.pack(None) for _ in range(pad)]  # None is packed as single byte b`\xc0`
+    check(
+        packer.getbuffer().nbytes % 8 == 0,
+        "Error in ArcticDB padded_packb. Padding failed. nbytes={}",
+        packer.getbuffer().nbytes,
+    )
     return packer.bytes(), nbytes
 
 
@@ -51,6 +57,7 @@ def unpackb(packed, **kwargs):
     if msgpack.version >= (0, 6, 0):
         kwargs.setdefault("strict_map_key", False)
     return msgpack.unpackb(packed, **kwargs)
+
 
 unpackb.__doc__ = msgpack.unpackb.__doc__
 unpackb.__name__ = msgpack.unpackb.__name__

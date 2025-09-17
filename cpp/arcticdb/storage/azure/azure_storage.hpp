@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -20,7 +21,7 @@ class AzureStorage final : public Storage {
     // friend class AzureTestClientAccessor<AzureStorage>;
     using Config = arcticdb::proto::azure_storage::Config;
 
-    AzureStorage(const LibraryPath &lib, OpenMode mode, const Config &conf);
+    AzureStorage(const LibraryPath& lib, OpenMode mode, const Config& conf);
 
     std::string name() const final;
 
@@ -28,7 +29,8 @@ class AzureStorage final : public Storage {
     void do_write(KeySegmentPair& key_seg) final;
 
     void do_write_if_none(KeySegmentPair& kv [[maybe_unused]]) final {
-        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend");
+        storage::raise<ErrorCode::E_UNSUPPORTED_ATOMIC_OPERATION>("Atomic operations are only supported for s3 backend"
+        );
     };
 
     void do_update(KeySegmentPair& key_seg, UpdateOpts opts) final;
@@ -41,21 +43,16 @@ class AzureStorage final : public Storage {
 
     void do_remove(std::span<VariantKey> variant_keys, RemoveOpts opts) final;
 
-    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string &prefix) final;
+    bool do_iterate_type_until_match(KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix)
+            final;
 
     bool do_key_exists(const VariantKey& key) final;
 
-    bool do_supports_prefix_matching() const final {
-        return true;
-    }
+    bool do_supports_prefix_matching() const final { return true; }
 
-    SupportsAtomicWrites do_supports_atomic_writes() const final {
-        return SupportsAtomicWrites::NO;
-    }
+    SupportsAtomicWrites do_supports_atomic_writes() const final { return SupportsAtomicWrites::NO; }
 
-    bool do_fast_delete() final {
-        return false;
-    }
+    bool do_fast_delete() final { return false; }
 
     std::string do_key_path(const VariantKey&) const final;
 
@@ -69,7 +66,7 @@ class AzureStorage final : public Storage {
     Azure::Storage::Blobs::DownloadBlobToOptions download_option_;
 };
 
-inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &container_name) {
+inline arcticdb::proto::storage::VariantStorage pack_config(const std::string& container_name) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::azure_storage::Config cfg;
     cfg.set_container_name(container_name);
@@ -78,9 +75,8 @@ inline arcticdb::proto::storage::VariantStorage pack_config(const std::string &c
 }
 
 inline arcticdb::proto::storage::VariantStorage pack_config(
-        const std::string &container_name,
-        const std::string &endpoint
-        ) {
+        const std::string& container_name, const std::string& endpoint
+) {
     arcticdb::proto::storage::VariantStorage output;
     arcticdb::proto::azure_storage::Config cfg;
     cfg.set_container_name(container_name);
@@ -94,4 +90,4 @@ std::shared_ptr<Azure::Storage::StorageSharedKeyCredential> get_azure_credential
     return std::make_shared<Azure::Storage::StorageSharedKeyCredential>(conf.credential_name(), conf.credential_key());
 }
 
-} //namespace arcticdb::azure
+} // namespace arcticdb::storage::azure

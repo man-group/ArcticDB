@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -11,9 +12,7 @@
 #include <arcticdb/util/constants.hpp>
 #include <limits>
 
-TEST(FormatDate, ZeroTs) {
-    ASSERT_EQ("1970-01-01 00:00:00.000000000", arcticdb::util::format_timestamp(0));
-}
+TEST(FormatDate, ZeroTs) { ASSERT_EQ("1970-01-01 00:00:00.000000000", arcticdb::util::format_timestamp(0)); }
 
 TEST(FormatDate, PrependZero) {
     ASSERT_EQ("2025-06-09 08:06:09.000000000", arcticdb::util::format_timestamp(1749456369000000000));
@@ -34,6 +33,4 @@ TEST(FormatDate, LargestInt64ns) {
     ASSERT_EQ("2262-04-11 23:47:16.854775807", arcticdb::util::format_timestamp(std::numeric_limits<int64_t>::max()));
 }
 
-TEST(FormatDate, NaT) {
-    ASSERT_EQ("NaT", arcticdb::util::format_timestamp(arcticdb::NaT));
-}
+TEST(FormatDate, NaT) { ASSERT_EQ("NaT", arcticdb::util::format_timestamp(arcticdb::NaT)); }

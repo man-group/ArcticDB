@@ -143,30 +143,38 @@ class EncodingVersion(enum.IntEnum):
     V1 = 0
     V2 = 1
 
+
 # The current default encoding of ArcticDB release
 DEFAULT_ENCODING = EncodingVersion.V1
 
 # endregion
 # region =================================== Encoding Fixtures ====================================
 
-@pytest.fixture(scope="session", 
-                params=[pytest.param(DEFAULT_ENCODING, marks=TEST_ENCODING_V1_MARK)])
+
+@pytest.fixture(scope="session", params=[pytest.param(DEFAULT_ENCODING, marks=TEST_ENCODING_V1_MARK)])
 def only_test_encoding_version_v1(request):
     return request.param
 
 
-@pytest.fixture(scope="session",
-                params=[pytest.param(EncodingVersion.V1, marks=TEST_ENCODING_V1_MARK), 
-                        pytest.param(EncodingVersion.V2, marks=TEST_ENCODING_V2_MARK)],)
+@pytest.fixture(
+    scope="session",
+    params=[
+        pytest.param(EncodingVersion.V1, marks=TEST_ENCODING_V1_MARK),
+        pytest.param(EncodingVersion.V2, marks=TEST_ENCODING_V2_MARK),
+    ],
+)
 def encoding_version(request):
     return request.param
 
+
 def check_local_storage_enabled():
-    if not LOCAL_STORAGE_TESTS_ENABLED: pytest.skip("Local storage not enabled")
+    if not LOCAL_STORAGE_TESTS_ENABLED:
+        pytest.skip("Local storage not enabled")
 
 
 # endregion
 # region ======================================= Storage Fixtures =======================================
+
 
 @pytest.fixture(scope="session")
 def lmdb_shared_storage(tmp_path_factory) -> Generator[LmdbStorageFixture, None, None]:
@@ -267,7 +275,7 @@ def test_prefix():
 @pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
 def s3_and_nfs_storage_bucket(test_prefix, request):
     with request.param(
-            use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
     ) as factory:
         with factory.create_fixture() as bucket:
             yield bucket
@@ -380,13 +388,14 @@ def real_azure_storage_factory() -> AzureStorageFixtureFactory:
 @pytest.fixture(
     scope="session",
     params=[
-        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK), 
+        pytest.param("real_s3", marks=REAL_S3_TESTS_MARK),
         pytest.param("real_gcp", marks=REAL_GCP_TESTS_MARK),
         pytest.param("real_azure", marks=REAL_AZURE_TESTS_MARK),
-        ],
+    ],
 )
-def real_storage_factory(request) -> Union[BaseS3StorageFixtureFactory, 
-                                           BaseGCPStorageFixtureFactory, AzureStorageFixtureFactory]:
+def real_storage_factory(
+    request,
+) -> Union[BaseS3StorageFixtureFactory, BaseGCPStorageFixtureFactory, AzureStorageFixtureFactory]:
     storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage_factory")
     return storage_fixture
 
@@ -405,6 +414,7 @@ def real_gcp_shared_path_storage_factory() -> BaseGCPStorageFixtureFactory:
         shared_path=True,
         additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
     )
+
 
 @pytest.fixture(scope="session")
 def real_azure_shared_path_storage_factory() -> AzureStorageFixtureFactory:
@@ -694,9 +704,9 @@ def basic_arctic_library(basic_arctic_client, lib_name) -> Library:
 
 # endregion
 # region ============================ `NativeVersionStore` Fixture Factories ============================
-def _store_factory(lib_name, bucket, delete_bucket = True) -> Generator[Callable[..., NativeVersionStore], None, None]:
+def _store_factory(lib_name, bucket, delete_bucket=True) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield bucket.create_version_store_factory(lib_name)
-    if delete_bucket: 
+    if delete_bucket:
         try:
             bucket.slow_cleanup()
         except Exception as e:
@@ -709,7 +719,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
     # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))     
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))
 
 
 @pytest.fixture
@@ -734,10 +744,11 @@ def s3_store_factory(lib_name, s3_storage) -> Generator[Callable[..., NativeVers
 def s3_no_ssl_store_factory(lib_name, s3_no_ssl_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, s3_no_ssl_storage)
 
+
 @pytest.fixture
 def mock_s3_store_with_error_simulation_factory(
     lib_name, mock_s3_storage_with_error_simulation
-)  -> Callable[..., NativeVersionStore]:
+) -> Callable[..., NativeVersionStore]:
     # NOTE: this store simulates errors, therefore there is no way to delete it
     return mock_s3_storage_with_error_simulation.create_version_store_factory(lib_name)
 
@@ -748,7 +759,9 @@ def real_s3_store_factory(lib_name, real_s3_storage) -> Generator[Callable[..., 
 
 
 @pytest.fixture
-def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
+def nfs_backed_s3_store_factory(
+    lib_name, nfs_backed_s3_storage
+) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, nfs_backed_s3_storage)
 
 
@@ -756,13 +769,16 @@ def nfs_backed_s3_store_factory(lib_name, nfs_backed_s3_storage) -> Generator[Ca
 def real_gcp_store_factory(lib_name, real_gcp_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, real_gcp_storage)
 
+
 @pytest.fixture
 def real_azure_store_factory(lib_name, real_azure_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, real_azure_storage)
 
 
 @pytest.fixture
-def real_s3_sts_store_factory(lib_name, real_s3_sts_storage) -> Generator[Callable[..., NativeVersionStore], None, None]:
+def real_s3_sts_store_factory(
+    lib_name, real_s3_sts_storage
+) -> Generator[Callable[..., NativeVersionStore], None, None]:
     yield from _store_factory(lib_name, real_s3_sts_storage)
 
 
@@ -889,7 +905,9 @@ def nfs_backed_s3_version_store_dynamic_schema_v2(nfs_backed_s3_store_factory, l
 
 
 @pytest.fixture
-def nfs_backed_s3_version_store(nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version) -> NativeVersionStore:
+def nfs_backed_s3_version_store(
+    nfs_backed_s3_version_store_v1, nfs_backed_s3_version_store_v2, encoding_version
+) -> NativeVersionStore:
     if encoding_version == EncodingVersion.V1:
         return nfs_backed_s3_version_store_v1
     elif encoding_version == EncodingVersion.V2:
@@ -1046,6 +1064,7 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     return store
 
+
 @pytest.fixture(params=list(OutputFormat))
 def any_output_format(request) -> OutputFormat:
     return request.param
@@ -1199,7 +1218,9 @@ def lmdb_version_store_tiny_segment(version_store_factory) -> NativeVersionStore
 
 @pytest.fixture
 def lmdb_version_store_tiny_segment_dynamic_strings(version_store_factory) -> NativeVersionStore:
-    return version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True, lmdb_config={"map_size": 2**30})
+    return version_store_factory(
+        column_group_size=2, segment_row_size=2, dynamic_strings=True, lmdb_config={"map_size": 2**30}
+    )
 
 
 @pytest.fixture

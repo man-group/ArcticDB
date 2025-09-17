@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -31,25 +32,20 @@ struct ExpressionContext {
 
     ARCTICDB_MOVE_COPY_DEFAULT(ExpressionContext)
 
-    template <class T>
+    template<class T>
     class ConstantMap {
         std::unordered_map<std::string, std::shared_ptr<T>> map_;
-    public:
-        void set_value(std::string name, std::shared_ptr<T> val) {
-            map_.try_emplace(name, val);
-        }
-        std::shared_ptr<T> get_value(std::string name) const {
-            return map_.at(name);
-        }
+
+      public:
+        void set_value(std::string name, std::shared_ptr<T> val) { map_.try_emplace(name, val); }
+        std::shared_ptr<T> get_value(std::string name) const { return map_.at(name); }
     };
 
     void add_expression_node(const std::string& name, std::shared_ptr<ExpressionNode> expression_node) {
         expression_nodes_.set_value(name, std::move(expression_node));
     }
 
-    void add_value(const std::string& name, std::shared_ptr<Value> value) {
-        values_.set_value(name, std::move(value));
-    }
+    void add_value(const std::string& name, std::shared_ptr<Value> value) { values_.set_value(name, std::move(value)); }
 
     void add_value_set(const std::string& name, std::shared_ptr<ValueSet> value_set) {
         value_sets_.set_value(name, std::move(value_set));
@@ -67,4 +63,4 @@ struct ExpressionContext {
     bool dynamic_schema_{false};
 };
 
-}//namespace arcticdb
+} // namespace arcticdb

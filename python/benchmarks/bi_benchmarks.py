@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-
 import os
 from typing import Union
 from arcticdb.util.logger import get_logger
@@ -18,53 +17,48 @@ from arcticdb import Arctic
 from arcticdb.version_store.processing import QueryBuilder
 from benchmarks.common import download_and_process_city_to_parquet
 
-def get_query_groupby_city_count_all(
-        q:Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
+
+def get_query_groupby_city_count_all(q: Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
     return q.groupby("City").agg({"Keyword": "count"})
 
 
-def get_query_groupby_city_count_isin_filter(
-        q:Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
+def get_query_groupby_city_count_isin_filter(q: Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
     return q[q["Keyword"].isin(["kimbo", "tato", "maggot"])].groupby("City").agg({"Keyword": "count"})
 
 
 def get_query_groupby_city_count_filter_two_aggregations(
-        q:Union[QueryBuilder, pd.DataFrame]) -> Union[QueryBuilder, pd.DataFrame]:
-    return q[q["Keyword"] == "maggot" ].groupby("City").agg({"Keyword": "count", "Number of Records" : "sum"})  
+    q: Union[QueryBuilder, pd.DataFrame],
+) -> Union[QueryBuilder, pd.DataFrame]:
+    return q[q["Keyword"] == "maggot"].groupby("City").agg({"Keyword": "count", "Number of Records": "sum"})
 
 
-def assert_frame_equal(pandas_df:pd.DataFrame, arctic_df:pd.DataFrame):
+def assert_frame_equal(pandas_df: pd.DataFrame, arctic_df: pd.DataFrame):
     arctic_df.sort_index(inplace=True)
-    test.assert_frame_equal(pandas_df,
-                                arctic_df, 
-                                check_column_type=False, 
-                                check_dtype=False)
+    test.assert_frame_equal(pandas_df, arctic_df, check_column_type=False, check_dtype=False)
 
 
 class BIBenchmarks:
-    '''
-        Sample test benchmark for using one opensource BI CSV source.
-        The logic of a test is 
-            - download if parquet file does not exists source in .bz2 format
-            - convert it to parquet format
-            - prepare library with it containing  several symbols that are constructed based on this DF
-            - for each query we want to benchmark do a pre-check that this query produces 
-              SAME result on Pandas and arcticDB
-            - run the benchmark tests
-    '''
-
+    """
+    Sample test benchmark for using one opensource BI CSV source.
+    The logic of a test is
+        - download if parquet file does not exists source in .bz2 format
+        - convert it to parquet format
+        - prepare library with it containing  several symbols that are constructed based on this DF
+        - for each query we want to benchmark do a pre-check that this query produces
+          SAME result on Pandas and arcticDB
+        - run the benchmark tests
+    """
 
     number = 2
     timeout = 6000
-    warmup_time = 0    
+    warmup_time = 0
     LIB_NAME = "BI_benchmark_lib"
     # We use dataframe in this file
     CITY_BI_FILE = "data/CityMaxCapita_1.csv.bz2"
     CITY_BI_FILE2 = "data/CityMaxCapita_1.parquet.gzip"
 
-    #Defines how many times bigger the database is
+    # Defines how many times bigger the database is
     params = [1, 10]
-
 
     def __init__(self):
         self.lib_name = BIBenchmarks.LIB_NAME
@@ -76,14 +70,14 @@ class BIBenchmarks:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         start_time = time.time()
 
         file = os.path.join(Path(__file__).resolve().parent.parent, BIBenchmarks.CITY_BI_FILE2)
-        if (not os.path.exists(file)) :
+        if not os.path.exists(file):
             dfo = download_and_process_city_to_parquet(file)
             dff = pd.read_parquet(file)
-            pd.testing.assert_frame_equal(dfo,dff)
+            pd.testing.assert_frame_equal(dfo, dff)
         else:
             print("Parquet file exists!")
 
@@ -91,7 +85,7 @@ class BIBenchmarks:
         # abs_path = os.path.join(Path(__file__).resolve().parent.parent,BIBenchmarks.CITY_BI_FILE)
         # self.df : pd.DataFrame = process_city(abs_path)
 
-        self.df : pd.DataFrame = pd.read_parquet(file)
+        self.df: pd.DataFrame = pd.read_parquet(file)
 
         self.ac = Arctic(f"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB")
         self.ac.delete_library(self.lib_name)
@@ -135,65 +129,52 @@ class BIBenchmarks:
         print("All pre-checks completed SUCCESSFULLY. Time: ", time.time() - start_time)
 
         del self.ac
-    
 
     def setup(self, num_rows):
         self.ac = Arctic(f"lmdb://opensource_datasets_{self.lib_name}?map_size=20GB")
         self.lib = self.ac.get_library(self.lib_name)
 
-
     def teardown(self, num_rows):
         del self.ac
 
-
     def time_query_readall(self, times_bigger):
         self.lib.read(f"{self.symbol}{times_bigger}")
-    
 
     def peakmem_query_readall(self, times_bigger):
         self.lib.read(f"{self.symbol}{times_bigger}")
 
-
     def query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:
         q = QueryBuilder()
-        q = get_query_groupby_city_count_all( q)
+        q = get_query_groupby_city_count_all(q)
         df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
         return df.data
-
 
     def time_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:
         return self.query_groupby_city_count_all(times_bigger)
 
-
     def peakmem_query_groupby_city_count_all(self, times_bigger) -> pd.DataFrame:
         return self.query_groupby_city_count_all(times_bigger)
-    
 
     def query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:
         q = QueryBuilder()
-        q = get_query_groupby_city_count_isin_filter(q)   
+        q = get_query_groupby_city_count_isin_filter(q)
         df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
         return df.data
-
 
     def time_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:
         return self.query_groupby_city_count_isin_filter(times_bigger)
 
-
     def peakmem_query_groupby_city_count_isin_filter(self, times_bigger) -> pd.DataFrame:
         return self.query_groupby_city_count_isin_filter(times_bigger)
 
-
     def query_groupby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:
         q = QueryBuilder()
-        q = get_query_groupby_city_count_filter_two_aggregations(q) 
+        q = get_query_groupby_city_count_filter_two_aggregations(q)
         df = self.lib.read(f"{self.symbol}{times_bigger}", query_builder=q)
         return df.data
 
-
     def time_query_groupby_city_count_filter_two_aggregations(self, times_bigger) -> pd.DataFrame:
         return self.query_groupby_city_count_filter_two_aggregations(times_bigger)
-
 
     def peakmem_query_groupby_city_count_filter_two_aggregations(self, times_bigger):
         return self.query_groupby_city_count_filter_two_aggregations(times_bigger)

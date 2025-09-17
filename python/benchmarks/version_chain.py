@@ -44,7 +44,7 @@ class IterateVersionChain:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         self.ac = Arctic(IterateVersionChain.CONNECTION_STRING)
 
         num_versions_list, caching_list, deleted_list = IterateVersionChain.params

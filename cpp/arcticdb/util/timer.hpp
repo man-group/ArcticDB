@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -25,7 +26,7 @@ namespace arcticdb {
 
 struct interval;
 
-typedef interval *interval_ptr;
+typedef interval* interval_ptr;
 typedef std::basic_string<char> name_type;
 typedef std::basic_string<char> result_type;
 typedef std::map<name_type, interval_ptr> interval_map;
@@ -42,15 +43,14 @@ struct interval_results {
 };
 
 struct interval {
-private:
+  private:
     double total_;
     int64_t count_;
     timespec timer_;
     bool running_;
 
-public:
-    interval() : total_(0), count_(0), timer_{0, 0}, running_(false) {
-    }
+  public:
+    interval() : total_(0), count_(0), timer_{0, 0}, running_(false) {}
 
     void start() {
         if (!running_) {
@@ -70,7 +70,7 @@ public:
         running_ = false;
     }
 
-    void get_results(interval_results &results) const {
+    void get_results(interval_results& results) const {
         results.count = count_;
         results.total = total_;
         results.mean = total_ / count_;
@@ -84,12 +84,10 @@ public:
         return results;
     }
 
-    double get_results_total() const {
-        return total_;
-    }
+    double get_results_total() const { return total_; }
 
-private:
-    void get_time(timespec &tm) {
+  private:
+    void get_time(timespec& tm) {
 #ifdef _WIN32
         int rc = clock_gettime(CLOCK_REALTIME, &tm);
 #else
@@ -100,8 +98,8 @@ private:
         }
     }
 
-#define BILLION  1000000000LL
-    static double time_diff(timespec &start, timespec &stop) {
+#define BILLION 1000000000LL
+    static double time_diff(timespec& start, timespec& stop) {
         double secs = stop.tv_sec - start.tv_sec;
         double nsecs = double(stop.tv_nsec - start.tv_nsec) / BILLION;
         return secs + nsecs;
@@ -110,20 +108,18 @@ private:
 
 class interval_timer {
 
-public:
+  public:
     interval_timer() = default;
 
-    explicit interval_timer(const name_type &name) {
-        start_timer(name);
-    }
+    explicit interval_timer(const name_type& name) { start_timer(name); }
 
     ~interval_timer() {
-        for (const auto &current : intervals_) {
+        for (const auto& current : intervals_) {
             delete (current.second);
         }
     }
 
-    void start_timer(const name_type &name = "default") {
+    void start_timer(const name_type& name = "default") {
         auto it = intervals_.find(name);
         if (it == intervals_.end()) {
             auto created = new interval();
@@ -133,13 +129,13 @@ public:
             (*it).second->start();
     }
 
-    void stop_timer(const name_type &name = "default") {
+    void stop_timer(const name_type& name = "default") {
         auto it = intervals_.find(name);
         if (it != intervals_.end())
             (*it).second->end();
     }
 
-    result_type display_timer(const name_type &name  = "default") {
+    result_type display_timer(const name_type& name = "default") {
         result_type ret;
         auto it = intervals_.find(name);
         if (it == intervals_.end())
@@ -148,12 +144,17 @@ public:
         it->second->end();
         interval_results results{};
         (*it).second->get_results(results);
-        if(results.count > 1) {
-            auto buffer =  fmt::format("{}:\truns: {}\ttotal time: {:.6f}\tmean: {:.6f}",
-                (*it).first.c_str(), results.count, results.total,  results.mean);
+        if (results.count > 1) {
+            auto buffer = fmt::format(
+                    "{}:\truns: {}\ttotal time: {:.6f}\tmean: {:.6f}",
+                    (*it).first.c_str(),
+                    results.count,
+                    results.total,
+                    results.mean
+            );
             ret.assign(buffer);
         } else {
-            auto buffer =  fmt::format("{}\t{:.6f}", (*it).first.c_str(), results.total);
+            auto buffer = fmt::format("{}\t{:.6f}", (*it).first.c_str(), results.total);
             ret.assign(buffer);
         }
         return ret;
@@ -161,7 +162,7 @@ public:
 
     result_type display_all() {
         result_type ret;
-        for (auto &current : intervals_) {
+        for (auto& current : intervals_) {
             ret.append(display_timer(current.first) + "\n");
         }
         return ret;
@@ -169,7 +170,7 @@ public:
 
     total_list get_total_all() {
         total_list ret;
-        for (auto &current : intervals_) {
+        for (auto& current : intervals_) {
             current.second->end();
             interval_results results{};
             current.second->get_results(results);
@@ -187,13 +188,13 @@ public:
         return ret;
     }
 
-    const interval& get_timer(const name_type &name  = "default") {
+    const interval& get_timer(const name_type& name = "default") {
         auto it = intervals_.find(name);
         util::check(it != intervals_.end(), "Timer {} not found, name");
         return *it->second;
     }
 
-private:
+  private:
     interval_map intervals_;
 };
 
@@ -206,25 +207,21 @@ private:
 class ScopedTimer {
     std::string name_;
     interval_timer timer_;
-    using FuncType =  folly::Function<void(std::string)>;
+    using FuncType = folly::Function<void(std::string)>;
     FuncType func_;
     bool started_ = false;
 
-public:
+  public:
     ScopedTimer() = default;
 
-    ScopedTimer(const std::string &name, FuncType &&func) :
-        name_(name),
-        func_(std::move(func)) {
+    ScopedTimer(const std::string& name, FuncType&& func) : name_(name), func_(std::move(func)) {
         timer_.start_timer(name_);
         started_ = true;
     }
 
     ScopedTimer(arcticdb::ScopedTimer& other) = delete; // Folly Functions are non-copyable
 
-    ScopedTimer(arcticdb::ScopedTimer&& other) : name_(std::move(other.name_)),
-        func_(std::move(other.func_))
-    {
+    ScopedTimer(arcticdb::ScopedTimer&& other) : name_(std::move(other.name_)), func_(std::move(other.func_)) {
         if (other.started_) {
             timer_.start_timer(name_);
             started_ = true;
@@ -254,7 +251,6 @@ public:
             func_(timer_.display_all());
         }
     }
-
 };
 
 /* Timer helper, use like so:
@@ -266,13 +262,11 @@ public:
 class ScopedTimerTotal {
     std::string name_;
     interval_timer timer_;
-    using FuncType =  folly::Function<void(std::vector<double>)>;
+    using FuncType = folly::Function<void(std::vector<double>)>;
     FuncType func_;
 
-public:
-    ScopedTimerTotal(const std::string &name, FuncType &&func) :
-            name_(name),
-            func_(std::move(func)) {
+  public:
+    ScopedTimerTotal(const std::string& name, FuncType&& func) : name_(name), func_(std::move(func)) {
         timer_.start_timer(name_);
     }
 
@@ -280,16 +274,15 @@ public:
         timer_.stop_timer(name_);
         func_(timer_.get_total_all());
     }
-
 };
 
-#define SCOPED_TIMER(name, data) \
-arcticdb::ScopedTimerTotal timer1{#name, [&data](auto totals) { \
-    std::copy(std::begin(totals), std::end(totals), std::back_inserter(data)); \
-}};
-#define SUBSCOPED_TIMER(name, data) \
-arcticdb::ScopedTimerTotal timer2{#name, [&data](auto totals) { \
-    std::copy(std::begin(totals), std::end(totals), std::back_inserter(data)); \
-}};
+#define SCOPED_TIMER(name, data)                                                                                       \
+    arcticdb::ScopedTimerTotal timer1{#name, [&data](auto totals) {                                                    \
+                                          std::copy(std::begin(totals), std::end(totals), std::back_inserter(data));   \
+                                      }};
+#define SUBSCOPED_TIMER(name, data)                                                                                    \
+    arcticdb::ScopedTimerTotal timer2{#name, [&data](auto totals) {                                                    \
+                                          std::copy(std::begin(totals), std::end(totals), std::back_inserter(data));   \
+                                      }};
 
-} //namespace arcticdb
+} // namespace arcticdb

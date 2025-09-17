@@ -31,9 +31,9 @@ from arcticdb.util.test import assert_frame_equal
         pd.date_range(start="01/01/2024", end="01/10/2024"),
         pd.MultiIndex.from_arrays(
             [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-            names=["datetime", "level"]
-        )
-    )
+            names=["datetime", "level"],
+        ),
+    ),
 )
 def index(request):
     yield request.param
@@ -57,8 +57,9 @@ class TestBasicReadIndex:
         col2 = [2 * i for i in range(0, len(index))]
         df = pd.DataFrame({"col": col1, "col2": col2, "col3": col1}, index=index)
         ac = lmdb_storage.create_arctic()
-        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=5,
-                                                         columns_per_segment=2))
+        lib = ac.create_library(
+            lib_name, LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=5, columns_per_segment=2)
+        )
         lib.write("sym", df)
         result = lib.read("sym", columns=[])
         assert result.data.index.equals(index)
@@ -114,27 +115,33 @@ class TestReadEmptyIndex:
         [
             pytest.param(
                 pd.MultiIndex.from_arrays([[], np.array([], dtype="int"), np.array([], dtype="float"), []]),
-                pd.MultiIndex.from_arrays([
-                    np.array([], dtype="datetime64[ns]"),
-                    np.array([], dtype="int"),
-                    np.array([], dtype="float"),
-                    np.array([], dtype="object")
-                ]),
-                marks=pytest.mark.skipif(PANDAS_VERSION < Version("2.0.0"),
-                                         reason="This tests behavior of Pandas 2 and grater.")
+                pd.MultiIndex.from_arrays(
+                    [
+                        np.array([], dtype="datetime64[ns]"),
+                        np.array([], dtype="int"),
+                        np.array([], dtype="float"),
+                        np.array([], dtype="object"),
+                    ]
+                ),
+                marks=pytest.mark.skipif(
+                    PANDAS_VERSION < Version("2.0.0"), reason="This tests behavior of Pandas 2 and grater."
+                ),
             ),
             pytest.param(
                 pd.MultiIndex.from_arrays([[], np.array([], dtype="int"), np.array([], dtype="float"), []]),
-                pd.MultiIndex.from_arrays([
-                    np.array([], dtype="datetime64[ns]"),
-                    np.array([], dtype="int"),
-                    np.array([], dtype="float"),
-                    np.array([], dtype="float")
-                ]),
-                marks=pytest.mark.skipif(PANDAS_VERSION >= Version("2.0.0"),
-                                         reason="This tests only the behavior with Pandas <= 2")
-            )
-        ]
+                pd.MultiIndex.from_arrays(
+                    [
+                        np.array([], dtype="datetime64[ns]"),
+                        np.array([], dtype="int"),
+                        np.array([], dtype="float"),
+                        np.array([], dtype="float"),
+                    ]
+                ),
+                marks=pytest.mark.skipif(
+                    PANDAS_VERSION >= Version("2.0.0"), reason="This tests only the behavior with Pandas <= 2"
+                ),
+            ),
+        ],
     )
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_empty_multiindex(self, lmdb_storage, lib_name, dynamic_schema, input_index, expected_index):
@@ -147,28 +154,27 @@ class TestReadEmptyIndex:
 
 
 class TestReadIndexAsOf:
-    @pytest.mark.parametrize("indexes", [
+    @pytest.mark.parametrize(
+        "indexes",
         [
-            pd.date_range(start="01/01/2024", end="01/10/2024"),
-            pd.date_range(start="01/11/2024", end="01/15/2024"),
-            pd.date_range(start="01/22/2024", end="01/30/2024")
+            [
+                pd.date_range(start="01/01/2024", end="01/10/2024"),
+                pd.date_range(start="01/11/2024", end="01/15/2024"),
+                pd.date_range(start="01/22/2024", end="01/30/2024"),
+            ],
+            [pd.RangeIndex(start=0, stop=10), pd.RangeIndex(start=10, stop=15), pd.RangeIndex(start=15, stop=22)],
+            [
+                pd.MultiIndex.from_arrays(
+                    [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
+                    names=["datetime", "level"],
+                ),
+                pd.MultiIndex.from_arrays(
+                    [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
+                    names=["datetime", "level"],
+                ),
+            ],
         ],
-        [
-            pd.RangeIndex(start=0, stop=10),
-            pd.RangeIndex(start=10, stop=15),
-            pd.RangeIndex(start=15, stop=22)
-        ],
-        [
-            pd.MultiIndex.from_arrays(
-                [pd.date_range(start="01/01/2024", end="01/10/2024"), pd.RangeIndex(start=0, stop=10)],
-                names=["datetime", "level"]
-            ),
-            pd.MultiIndex.from_arrays(
-                [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
-                names=["datetime", "level"]
-            )
-        ]
-    ])
+    )
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_as_of_version(self, lmdb_storage, lib_name, dynamic_schema, indexes):
         data = [list(range(0, len(index))) for index in indexes]
@@ -179,17 +185,22 @@ class TestReadIndexAsOf:
             lib.append("sym", pd.DataFrame({"col": data[i]}, index=indexes[i]))
         for i in range(0, len(indexes)):
             read_index_result = lib.read("sym", columns=[], as_of=i)
-            assert read_index_result.data.index.equals(reduce(lambda current, new: current.append(new), indexes[:i+1]))
+            assert read_index_result.data.index.equals(
+                reduce(lambda current, new: current.append(new), indexes[: i + 1])
+            )
             assert read_index_result.data.empty
 
-    @pytest.mark.parametrize("index", [
-        pd.RangeIndex(start=0, stop=5),
-        pd.date_range(start="01/01/2024", end="01/5/2024"),
-        pd.MultiIndex.from_arrays(
-            [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
-            names=["datetime", "level"]
-        )
-    ])
+    @pytest.mark.parametrize(
+        "index",
+        [
+            pd.RangeIndex(start=0, stop=5),
+            pd.date_range(start="01/01/2024", end="01/5/2024"),
+            pd.MultiIndex.from_arrays(
+                [pd.date_range(start="01/11/2024", end="01/21/2024"), pd.RangeIndex(start=10, stop=21)],
+                names=["datetime", "level"],
+            ),
+        ],
+    )
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_as_of_snapshot(self, lmdb_storage, lib_name, dynamic_schema, index):
         data = list(range(0, len(index)))
@@ -211,7 +222,7 @@ class TestReadIndexRange:
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
         lib.write("sym", pd.DataFrame({"col": list(range(0, len(index)))}, index=index))
         result = lib.read("sym", row_range=row_range, columns=[])
-        assert result.data.index.equals(index[row_range[0]:row_range[1]])
+        assert result.data.index.equals(index[row_range[0] : row_range[1]])
         assert result.data.empty
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
@@ -247,21 +258,25 @@ class TestReadIndexRange:
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_row_range_across_row_slices(self, lmdb_storage, lib_name, dynamic_schema, index):
         ac = lmdb_storage.create_arctic()
-        lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=5,
-                                                         columns_per_segment=2))
+        lib = ac.create_library(
+            lib_name, LibraryOptions(dynamic_schema=dynamic_schema, rows_per_segment=5, columns_per_segment=2)
+        )
         row_range = (3, 8)
         lib.write("sym", pd.DataFrame({"col": range(0, len(index))}, index=index))
         result = lib.read("sym", row_range=row_range, columns=[])
-        assert result.data.index.equals(index[row_range[0]:row_range[1]])
+        assert result.data.index.equals(index[row_range[0] : row_range[1]])
         assert result.data.empty
 
-    @pytest.mark.parametrize("non_datetime_index", [
-        pd.RangeIndex(start=0, stop=5),
-        pd.MultiIndex.from_arrays(
-            [pd.RangeIndex(start=10, stop=21), pd.date_range(start="01/11/2024", end="01/21/2024")],
-            names=["range", "date"]
-        )
-    ])
+    @pytest.mark.parametrize(
+        "non_datetime_index",
+        [
+            pd.RangeIndex(start=0, stop=5),
+            pd.MultiIndex.from_arrays(
+                [pd.RangeIndex(start=10, stop=21), pd.date_range(start="01/11/2024", end="01/21/2024")],
+                names=["range", "date"],
+            ),
+        ],
+    )
     @pytest.mark.parametrize("dynamic_schema", [False, True])
     def test_date_range_throws(self, lmdb_storage, lib_name, dynamic_schema, non_datetime_index):
         ac = lmdb_storage.create_arctic()
@@ -324,8 +339,9 @@ class TestReadBatch:
         lib.write("a", df1)
         lib.write("b", df2)
         lib.write("c", df3)
-        res = lib.read_batch([ReadRequest("a", columns=[], row_range=(1, 3)), ReadRequest("b", columns=[],
-                                                                                          row_range=(4, 5))])
+        res = lib.read_batch(
+            [ReadRequest("a", columns=[], row_range=(1, 3)), ReadRequest("b", columns=[], row_range=(4, 5))]
+        )
         assert res[0].data.index.equals(df1.index[1:3])
         assert res[0].data.empty
         assert res[1].data.index.equals(df2.index[4:5])
@@ -386,6 +402,6 @@ class TestReadIndexV1LibraryNonReg:
         v1_lib.write("b", df2)
         v1_lib.write("c", df3)
         res = v1_lib.batch_read(["a", "b", "c"], columns=[[], None, []])
-        assert_frame_equal(res['a'].data, df1)
-        assert_frame_equal(res['b'].data, df2)
-        assert_frame_equal(res['c'].data, df3)
+        assert_frame_equal(res["a"].data, df1)
+        assert_frame_equal(res["b"].data, df2)
+        assert_frame_equal(res["c"].data, df3)

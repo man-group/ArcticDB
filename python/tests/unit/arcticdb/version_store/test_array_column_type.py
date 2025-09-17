@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pandas as pd
 from pandas.testing import assert_frame_equal
 import numpy as np
@@ -38,7 +39,7 @@ class TestEmptyArrays:
                 "col1": [
                     np.array([]).astype(array_type),
                     np.array([1, 2, 3, 4, 5]).astype(array_type),
-                    np.array([]).astype(array_type)
+                    np.array([]).astype(array_type),
                 ]
             }
         )

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -85,8 +86,7 @@ struct TestValue {
     mutable std::vector<stride_t> strides_;
     raw_type start_val_;
 
-    TestValue(raw_type start_val = raw_type(), size_t num_vals = 20) :
-        start_val_(start_val) {
+    TestValue(raw_type start_val = raw_type(), size_t num_vals = 20) : start_val_(start_val) {
         if (dimensions == Dimension::Dim0) {
             data_.push_back(start_val_);
             return;
@@ -103,11 +103,11 @@ struct TestValue {
             strides_ = {side * itemsize, itemsize};
         }
 
-//        // Adjust strides to the correct size
-//        std::transform(std::begin(strides_),
-//                       std::end(strides_),
-//                       std::begin(strides_),
-//                       [&](auto x) { return x * itemsize; });
+        //        // Adjust strides to the correct size
+        //        std::transform(std::begin(strides_),
+        //                       std::end(strides_),
+        //                       std::begin(strides_),
+        //                       [&](auto x) { return x * itemsize; });
 
         // Fill data
         data_.resize(num_vals);
@@ -135,23 +135,31 @@ struct TestValue {
     TensorType<raw_type> get_tensor() const {
         util::check_arg(dimensions != Dimension::Dim0, "get tensor called on scalar test value");
         reconstruct_strides();
-        return TensorType<raw_type>{shapes_.data(), ssize_t(dimensions), DataTypeTag::data_type, get_type_size(DataTypeTag::data_type), data_.data(), ssize_t(dimensions)};
+        return TensorType<raw_type>{
+                shapes_.data(),
+                ssize_t(dimensions),
+                DataTypeTag::data_type,
+                get_type_size(DataTypeTag::data_type),
+                data_.data(),
+                ssize_t(dimensions)
+        };
     }
 
-    bool check_tensor(TensorType<raw_type> &t) const {
+    bool check_tensor(TensorType<raw_type>& t) const {
         util::check_arg(dimensions != Dimension::Dim0, "check tensor called on scalar test value");
         auto req = t.request();
-        return check_impl(dimensions, 0, t.shape(), t.strides(), reinterpret_cast<const raw_type *>(req.ptr));
+        return check_impl(dimensions, 0, t.shape(), t.strides(), reinterpret_cast<const raw_type*>(req.ptr));
     }
 
-    bool check(const ssize_t *shapes, const ssize_t *strides, const raw_type *data) const {
+    bool check(const ssize_t* shapes, const ssize_t* strides, const raw_type* data) const {
         if (dimensions == Dimension::Dim0)
             return data_[0] == *data;
 
         return check_impl(dimensions, 0, shapes, strides, data);
     }
 
-    bool check_impl(Dimension dim, int pos, const shape_t *shapes, const stride_t *strides, const raw_type *data) const {
+    bool check_impl(Dimension dim, int pos, const shape_t* shapes, const stride_t* strides, const raw_type* data)
+            const {
         auto shape = shapes_[size_t(dim) - 1];
         auto stride = strides_[size_t(dim) - 1] / sizeof(raw_type);
         for (int i = 0; i < +shape; ++i) {
@@ -185,20 +193,16 @@ struct TestRow {
         starts_(num_columns),
         values_() {
         std::iota(std::begin(starts_), std::end(starts_), start_val);
-        for (auto &s : starts_)
+        for (auto& s : starts_)
             values_.emplace_back(TestValue<TDT>{s, num_vals});
         auto prev_size = bitset_.size();
         bitset_.resize(num_columns + 1);
         bitset_.set_range(prev_size, bitset_.size() - 1, true);
     }
 
-    bool check(position_t pos, TensorType<raw_type> &t) {
-        return values_[pos].check_tensor(t);
-    }
+    bool check(position_t pos, TensorType<raw_type>& t) { return values_[pos].check_tensor(t); }
 
-    const TestValue<TDT> &operator[](size_t pos) {
-        return values_[pos];
-    }
+    const TestValue<TDT>& operator[](size_t pos) { return values_[pos]; }
 
     timestamp ts_;
     std::vector<raw_type> starts_;
@@ -207,55 +211,55 @@ struct TestRow {
 };
 
 class StorageGenerator {
- public:
-  StorageGenerator(std::string storage) : storage_(std::move(storage)) {}
+  public:
+    StorageGenerator(std::string storage) : storage_(std::move(storage)) {}
 
-  [[nodiscard]] std::unique_ptr<storage::Storage> new_storage() const {
-    storage::LibraryPath library_path{"a", "b"};
-    if (storage_ == "lmdb") {
-      if (!fs::exists(TEST_DATABASES_PATH)) {
-        fs::create_directories(TEST_DATABASES_PATH);
-      }
-      arcticdb::proto::lmdb_storage::Config cfg;
-      fs::path db_name = "test_lmdb";
-      cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
-      cfg.set_map_size(128ULL * (1ULL << 20) );
-      cfg.set_recreate_if_exists(true);
+    [[nodiscard]] std::unique_ptr<storage::Storage> new_storage() const {
+        storage::LibraryPath library_path{"a", "b"};
+        if (storage_ == "lmdb") {
+            if (!fs::exists(TEST_DATABASES_PATH)) {
+                fs::create_directories(TEST_DATABASES_PATH);
+            }
+            arcticdb::proto::lmdb_storage::Config cfg;
+            fs::path db_name = "test_lmdb";
+            cfg.set_path((TEST_DATABASES_PATH / db_name).generic_string());
+            cfg.set_map_size(128ULL * (1ULL << 20));
+            cfg.set_recreate_if_exists(true);
 
-      return std::make_unique<storage::lmdb::LmdbStorage>(library_path, storage::OpenMode::WRITE, cfg);
-    } else if (storage_ == "mem") {
-      arcticdb::proto::memory_storage::Config cfg;
-      return std::make_unique<storage::memory::MemoryStorage>(library_path, storage::OpenMode::WRITE, cfg);
-    } else if (storage_ == "azure") {
-      arcticdb::proto::azure_storage::Config cfg;
-      cfg.set_use_mock_storage_for_testing(true);
-      return std::make_unique<storage::azure::AzureStorage>(library_path, storage::OpenMode::WRITE, cfg);
-    } else if (storage_ == "s3") {
-      arcticdb::proto::s3_storage::Config cfg;
-      cfg.set_use_mock_storage_for_testing(true);
-      return std::make_unique<storage::s3::S3Storage>(library_path, storage::OpenMode::WRITE, storage::s3::S3Settings(cfg));
-    } else if (storage_ == "mongo") {
-      arcticdb::proto::mongo_storage::Config cfg;
-      cfg.set_use_mock_storage_for_testing(true);
-      return std::make_unique<storage::mongo::MongoStorage>(library_path, storage::OpenMode::WRITE, cfg);
-    } else {
-      throw std::runtime_error(fmt::format("Unknown backend generator type {}.", storage_));
+            return std::make_unique<storage::lmdb::LmdbStorage>(library_path, storage::OpenMode::WRITE, cfg);
+        } else if (storage_ == "mem") {
+            arcticdb::proto::memory_storage::Config cfg;
+            return std::make_unique<storage::memory::MemoryStorage>(library_path, storage::OpenMode::WRITE, cfg);
+        } else if (storage_ == "azure") {
+            arcticdb::proto::azure_storage::Config cfg;
+            cfg.set_use_mock_storage_for_testing(true);
+            return std::make_unique<storage::azure::AzureStorage>(library_path, storage::OpenMode::WRITE, cfg);
+        } else if (storage_ == "s3") {
+            arcticdb::proto::s3_storage::Config cfg;
+            cfg.set_use_mock_storage_for_testing(true);
+            return std::make_unique<storage::s3::S3Storage>(
+                    library_path, storage::OpenMode::WRITE, storage::s3::S3Settings(cfg)
+            );
+        } else if (storage_ == "mongo") {
+            arcticdb::proto::mongo_storage::Config cfg;
+            cfg.set_use_mock_storage_for_testing(true);
+            return std::make_unique<storage::mongo::MongoStorage>(library_path, storage::OpenMode::WRITE, cfg);
+        } else {
+            throw std::runtime_error(fmt::format("Unknown backend generator type {}.", storage_));
+        }
     }
-  }
 
-  void delete_any_test_databases() const {
-    if (fs::exists(TEST_DATABASES_PATH)) {
-      fs::remove_all(TEST_DATABASES_PATH);
+    void delete_any_test_databases() const {
+        if (fs::exists(TEST_DATABASES_PATH)) {
+            fs::remove_all(TEST_DATABASES_PATH);
+        }
     }
-  }
 
-  [[nodiscard]] std::string get_name() const {
-    return storage_;
-  }
+    [[nodiscard]] std::string get_name() const { return storage_; }
 
- private:
-  const std::string storage_;
-  inline static const fs::path TEST_DATABASES_PATH = "./test_databases";
+  private:
+    const std::string storage_;
+    inline static const fs::path TEST_DATABASES_PATH = "./test_databases";
 };
 
 template<typename TagType, typename Input>

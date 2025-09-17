@@ -292,9 +292,9 @@ def get_s3_proto(
             raise UserInputException("STS credential provider and aws_profile must be set together")
 
     if use_internal_client_wrapper_for_testing:
-        assert native_cfg is not None, (
-            "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
-        )
+        assert (
+            native_cfg is not None
+        ), "use_internal_client_wrapper_for_testing can only be set if native_cfg is provided"
 
     sid, storage = get_storage_for_lib_name(s3.prefix, env)
     storage.config.Pack(s3, type_url_prefix="cxx.arctic.org")
@@ -360,11 +360,11 @@ def add_s3_library_to_env(
 
 
 def get_gcp_proto(
-        *,
-        cfg,
-        lib_name,
-        env_name,
-        with_prefix,
+    *,
+    cfg,
+    lib_name,
+    env_name,
+    with_prefix,
 ):
     env = cfg.env_by_id[env_name]
     proto = GcpConfig()
@@ -384,11 +384,11 @@ def get_gcp_proto(
 
 
 def add_gcp_library_to_env(
-        *,
-        cfg,
-        lib_name,
-        env_name,
-        with_prefix,
+    *,
+    cfg,
+    lib_name,
+    env_name,
+    with_prefix,
 ):
     env = cfg.env_by_id[env_name]
     if with_prefix and isinstance(with_prefix, str) and (with_prefix.endswith("/") or "//" in with_prefix):

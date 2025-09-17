@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -26,9 +27,12 @@ class ContainerFilterWrapper {
     const Container& original_;
     Container filtered_;
     bool use_original_;
-public:
-    explicit ContainerFilterWrapper(const Container& original_):
-        original_(original_), filtered_(), use_original_(true){};
+
+  public:
+    explicit ContainerFilterWrapper(const Container& original_) :
+        original_(original_),
+        filtered_(),
+        use_original_(true) {};
 
     /**
      * The filter should take an item and return true to indicate if the item should be removed.
@@ -95,12 +99,10 @@ public:
     }
 
     // C++20: Use bitset and Ranges to hide/combine items instead of copying
-    const Container& get() {
-        return use_original_ ? original_ : filtered_;
-    }
+    const Container& get() { return use_original_ ? original_ : filtered_; }
 
     const Container& operator*() { return get(); }
     const Container* operator->() { return &get(); }
 };
 
-}
+} // namespace arcticdb::util

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -12,7 +13,7 @@
 #include <optional>
 
 namespace arcticdb::pipelines {
-    struct PipelineContextRow;
+struct PipelineContextRow;
 }
 
 namespace arcticdb {
@@ -20,16 +21,11 @@ namespace arcticdb {
 class SegmentInMemory;
 
 struct ColumnTruncation {
-    ColumnTruncation(std::optional<size_t> start, std::optional<size_t> end) :
-        start_(start),
-        end_(end) {
-    }
+    ColumnTruncation(std::optional<size_t> start, std::optional<size_t> end) : start_(start), end_(end) {}
 
     ColumnTruncation() = default;
 
-    bool requires_truncation() const {
-        return start_ || end_;
-    }
+    bool requires_truncation() const { return start_ || end_; }
 
     std::optional<size_t> start_;
     std::optional<size_t> end_;
@@ -48,30 +44,19 @@ struct ColumnMapping {
     ColumnTruncation truncate_;
 
     ColumnMapping(
-        SegmentInMemory& frame,
-        size_t dst_col,
-        size_t field_col,
-        pipelines::PipelineContextRow& context,
-        OutputFormat output_format);
+            SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context,
+            OutputFormat output_format
+    );
 
     ColumnMapping(
-        const entity::TypeDescriptor source_type_desc,
-        const entity::TypeDescriptor dest_type_desc,
-        const entity::Field& frame_field_descriptor,
-        const size_t dest_size,
-        const size_t num_rows,
-        const size_t first_row,
-        const size_t offset_bytes,
-        const size_t dest_bytes,
-        const size_t dest_col);
+            const entity::TypeDescriptor source_type_desc, const entity::TypeDescriptor dest_type_desc,
+            const entity::Field& frame_field_descriptor, const size_t dest_size, const size_t num_rows,
+            const size_t first_row, const size_t offset_bytes, const size_t dest_bytes, const size_t dest_col
+    );
 
-    void set_truncate(ColumnTruncation truncate) {
-        truncate_ = std::move(truncate);
-    }
+    void set_truncate(ColumnTruncation truncate) { truncate_ = std::move(truncate); }
 
-    bool requires_truncation() const {
-        return truncate_.requires_truncation();
-    }
+    bool requires_truncation() const { return truncate_.requires_truncation(); }
 };
 
 struct StaticColumnMappingIterator {
@@ -104,22 +89,18 @@ struct StaticColumnMappingIterator {
     [[nodiscard]] size_t index_fieldcount() const;
 };
 
-inline void handle_truncation(
-        Column& dest_column,
-        const ColumnTruncation& truncate) {
-    if(dest_column.num_blocks() == 1 && truncate.start_ && truncate.end_) {
+inline void handle_truncation(Column& dest_column, const ColumnTruncation& truncate) {
+    if (dest_column.num_blocks() == 1 && truncate.start_ && truncate.end_) {
         dest_column.truncate_single_block(*truncate.start_, *truncate.end_);
     } else {
-        if(truncate.start_)
+        if (truncate.start_)
             dest_column.truncate_first_block(*truncate.start_);
-        if(truncate.end_)
+        if (truncate.end_)
             dest_column.truncate_last_block(*truncate.end_);
     }
 }
 
-inline void handle_truncation(
-        Column& dest_column,
-        const ColumnMapping& mapping) {
+inline void handle_truncation(Column& dest_column, const ColumnMapping& mapping) {
     handle_truncation(dest_column, mapping.truncate_);
 }
 
@@ -132,23 +113,21 @@ inline void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate
     }
 }
 
-inline void create_dense_bitmap(size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type) {
+inline void create_dense_bitmap(
+        size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type
+) {
     auto& sparse_buffer = dest_column.create_extra_buffer(
-            offset,
-            ExtraBufferType::BITMAP,
-            bitset_packed_size_bytes(sparse_map.size()),
-            allocation_type);
+            offset, ExtraBufferType::BITMAP, bitset_packed_size_bytes(sparse_map.size()), allocation_type
+    );
 
     bitset_to_packed_bits(sparse_map, sparse_buffer.data());
 }
 
-inline void create_dense_bitmap_all_zeros(size_t offset, size_t num_bits, Column& dest_column, AllocationType allocation_type) {
+inline void create_dense_bitmap_all_zeros(
+        size_t offset, size_t num_bits, Column& dest_column, AllocationType allocation_type
+) {
     auto num_bytes = bitset_packed_size_bytes(num_bits);
-    auto& sparse_buffer = dest_column.create_extra_buffer(
-            offset,
-            ExtraBufferType::BITMAP,
-            num_bytes,
-            allocation_type);
+    auto& sparse_buffer = dest_column.create_extra_buffer(offset, ExtraBufferType::BITMAP, num_bytes, allocation_type);
     std::memset(sparse_buffer.data(), 0, num_bytes);
 }
 

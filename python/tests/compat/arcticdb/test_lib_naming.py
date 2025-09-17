@@ -10,7 +10,9 @@ from tests.util.mark import SLOW_TESTS_MARK, xfail_azure_chars
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 @pytest.mark.storage
-@pytest.mark.skip_fixture_params(["real_gcp"], "Skipped because of issues with lib names containing \\n and \\r (8794791598)")
+@pytest.mark.skip_fixture_params(
+    ["real_gcp"], "Skipped because of issues with lib names containing \\n and \\r (8794791598)"
+)
 def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
     logger = get_logger("test_create_library_with_all_chars")
     ac = arctic_client_v1
@@ -53,14 +55,17 @@ def test_create_library_with_all_chars(arctic_client_v1, prefix, suffix):
 
     assert not failed, "There is at least one failure look at the result"
 
+
 @SLOW_TESTS_MARK
 @pytest.mark.parametrize("prefix", ["", "prefix"])
 @pytest.mark.parametrize("suffix", ["", "suffix"])
 @pytest.mark.storage
-@pytest.mark.skip_fixture_params(["real_gcp"], "Skipped because of issues with lib names containing \\n and \\r (8794791598)")
+@pytest.mark.skip_fixture_params(
+    ["real_gcp"], "Skipped because of issues with lib names containing \\n and \\r (8794791598)"
+)
 def test_symbol_names_with_all_chars(object_version_store, prefix, suffix):
     # Create symbol names with each character (except '\' because Azure replaces it with '/' in some cases)
-    xfail_azure_chars(object_version_store, chr(127)) # xfail azure
+    xfail_azure_chars(object_version_store, chr(127))  # xfail azure
     names = [f"{prefix}{chr(i)}{suffix}" for i in range(256) if chr(i) != "\\"]
     df = sample_dataframe()
     print("LEN: ", len(names))

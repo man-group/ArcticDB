@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import time
 
 import numpy as np
@@ -45,7 +46,9 @@ def test_read_data():
 
 def test_groupby():
     q = QueryBuilder()
-    q = q.groupby("City").agg({"Min": ("Temperature", "min"), "Max": ("Temperature", "max"), "Mean": ("Temperature", "mean")})
+    q = q.groupby("City").agg(
+        {"Min": ("Temperature", "min"), "Max": ("Temperature", "max"), "Mean": ("Temperature", "mean")}
+    )
     start = time.time()
     df = lib.read(sym, query_builder=q).data
     end = time.time()

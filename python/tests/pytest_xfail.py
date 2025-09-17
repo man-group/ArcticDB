@@ -13,28 +13,28 @@ import pytest
 
 
 MACOS = sys.platform == "darwin"
-XFAILMESSAGE= "This is due issue 9692682845 - has_library may return error on Mac_OS"
-ERROR_MARKER = "arcticdb_ext.exceptions.InternalException: Azure::Storage::StorageException(404 The specified blob does not exist."
+XFAILMESSAGE = "This is due issue 9692682845 - has_library may return error on Mac_OS"
+ERROR_MARKER = (
+    "arcticdb_ext.exceptions.InternalException: Azure::Storage::StorageException(404 The specified blob does not exist."
+)
 marked_tests = []  # Global list to collect xfailed test IDs
 
+
 def pytest_runtest_makereport(item, call):
-    #if MACOS and call.excinfo:
-        if call.excinfo:
-            err_msg = str(call.excinfo.value)
-            full_trace = ''.join(traceback.format_exception(
-                call.excinfo.type,
-                call.excinfo.value,
-                call.excinfo.tb
-            ))
+    # if MACOS and call.excinfo:
+    if call.excinfo:
+        err_msg = str(call.excinfo.value)
+        full_trace = "".join(traceback.format_exception(call.excinfo.type, call.excinfo.value, call.excinfo.tb))
 
-            if ERROR_MARKER in full_trace:
-                report = pytest.TestReport.from_item_and_call(item, call)
-                report.outcome = "skipped"
-                report.wasxfail = XFAILMESSAGE
+        if ERROR_MARKER in full_trace:
+            report = pytest.TestReport.from_item_and_call(item, call)
+            report.outcome = "skipped"
+            report.wasxfail = XFAILMESSAGE
 
-                # Collect the test ID
-                marked_tests.append(item.nodeid)
-                return report
+            # Collect the test ID
+            marked_tests.append(item.nodeid)
+            return report
+
 
 def pytest_terminal_summary(terminalreporter, exitstatus):
     if marked_tests:
@@ -43,4 +43,5 @@ def pytest_terminal_summary(terminalreporter, exitstatus):
             terminalreporter.write(f"• {test_id}\n")
         terminalreporter.write("=============================\n\n")
 
-#endregion
+
+# endregion

@@ -37,8 +37,8 @@ class RealComparisonBenchmarks:
 
     rounds = 1
     ## Note in most of our cases setup() is expensive therefore we play with number only and fix repeat to 1
-    number = 2 # invoke X times the test runs between each setup-teardown 
-    repeat = 1 # defines the number of times the measurements will invoke setup-teardown
+    number = 2  # invoke X times the test runs between each setup-teardown
+    repeat = 1  # defines the number of times the measurements will invoke setup-teardown
     min_run_count = 1
     warmup_time = 0
 
@@ -47,28 +47,28 @@ class RealComparisonBenchmarks:
     LIB_NAME = "COMPARISON"
     URL = "lmdb://compare"
     SYMBOL = "dataframe"
-    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition 
+    # NOTE: If you plan to make changes to parameters, consider that a library with previous definition
     #       may already exist. This means that symbols there will be having having different number
     #       of rows than what you defined in the test. To resolve this problem check with documentation:
     #           https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Real-storage-tests
-    NUMBER_ROWS = 2_000_000 #100_000
+    NUMBER_ROWS = 2_000_000  # 100_000
 
     # BASE_MEMORY measures class memory allocation. This is the actual memory that
     # is used by the tools and code that does the measurement. Thus any other measurement
     # number should be deducted with BASE_MEMORY number to receive actual number.
-    # The whole discussion is available at: 
+    # The whole discussion is available at:
     # https://github.com/man-group/ArcticDB/wiki/ASV-Benchmarks:-Running,-designing-and-implementing#understanding-and-implementing-peakmem-benchmarks
     params = [BASE_MEMORY, CREATE_DATAFRAME, PANDAS_PARQUET, ARCTICDB_LMDB, ARCTICDB_AMAZON_S3]
     param_names = ["backend_type"]
 
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="COMPARISON")
-    
+
     def get_logger(self) -> Logger:
         return get_logger(self)
 
     def get_library_manager(self) -> TestLibraryManager:
         return RealComparisonBenchmarks.library_manager
-    
+
     def get_population_policy(self) -> LibraryPopulationPolicy:
         lpp = LibraryPopulationPolicy(RealComparisonBenchmarks.params, self.get_logger())
         return lpp
@@ -79,7 +79,7 @@ class RealComparisonBenchmarks:
         manager = self.get_library_manager()
         symbol = RealComparisonBenchmarks.SYMBOL
         num_rows = RealComparisonBenchmarks.NUMBER_ROWS
-        
+
         st = time.time()
         dict = self.create_dict(num_rows)
         df = pd.DataFrame(dict)
@@ -90,22 +90,22 @@ class RealComparisonBenchmarks:
         ac.delete_library(RealComparisonBenchmarks.LIB_NAME)
         lib = ac.create_library(RealComparisonBenchmarks.LIB_NAME)
         lib.write(symbol=symbol, data=df)
-        
+
         # Prepare persistent library if does not exist
         manager.clear_all_benchmark_libs()
         if not manager.has_library(LibraryType.PERSISTENT):
             s3_lib = manager.get_library(LibraryType.PERSISTENT)
-            s3_lib.write(symbol, df) 
+            s3_lib.write(symbol, df)
         return (df, dict)
 
     def teardown(self, tpl, btype):
         self.delete_if_exists(self.parquet_to_write)
-        self.delete_if_exists(self.parquet_to_read )
+        self.delete_if_exists(self.parquet_to_read)
         self.manager.clear_all_modifiable_libs_from_this_process()
         self.logger.info(f"Teardown completed")
 
     def setup(self, tpl, btype):
-        df : pd.DataFrame
+        df: pd.DataFrame
         dict: Dict[str, Any]
         df, dict = tpl
         self.manager = self.get_library_manager()
@@ -117,7 +117,7 @@ class RealComparisonBenchmarks:
         self.parquet_to_write = f"{tempfile.gettempdir()}/df.parquet"
         self.parquet_to_read = f"{tempfile.gettempdir()}/df_to_read.parquet"
         self.delete_if_exists(self.parquet_to_write)
-        df.to_parquet(self.parquet_to_read , index=True)
+        df.to_parquet(self.parquet_to_read, index=True)
 
         # With shared storage we create different libs for each process
         self.s3_lib_write = self.manager.get_library(LibraryType.MODIFIABLE)
@@ -135,35 +135,35 @@ class RealComparisonBenchmarks:
             return [random_string(num) for _ in range(size)]
 
         return {
-            "element_name object" : str_col(20, size),        
-            "element_value" : np.arange(size, dtype=np.float64), 
-            "element_unit" : str_col(10, size),
-            "period_year" :  random_integers(size, np.int64), 
-            "region" : str_col(10, size),
-            "last_published_date" : random_dates(size),
-            "model_snapshot_id" :  random_integers(size, np.int64), 
-            "period" : str_col(20, size), 
-            "observation_type" : str_col(10, size),
-            "ric" : str_col(10, size),
-            "dtype" : str_col(10, size),
-        }       
+            "element_name object": str_col(20, size),
+            "element_value": np.arange(size, dtype=np.float64),
+            "element_unit": str_col(10, size),
+            "period_year": random_integers(size, np.int64),
+            "region": str_col(10, size),
+            "last_published_date": random_dates(size),
+            "model_snapshot_id": random_integers(size, np.int64),
+            "period": str_col(20, size),
+            "observation_type": str_col(10, size),
+            "ric": str_col(10, size),
+            "dtype": str_col(10, size),
+        }
 
     def peakmem_read_dataframe(self, tpl, btype):
         df, dict = tpl
         if btype == BASE_MEMORY:
-            # measures base memory which need to be deducted from 
+            # measures base memory which need to be deducted from
             # any measurements with actual operations
-            # see discussion above 
+            # see discussion above
             return
         if btype == CREATE_DATAFRAME:
             df = pd.DataFrame(dict)
         elif btype == PANDAS_PARQUET:
-            pd.read_parquet(self.parquet_to_read )
+            pd.read_parquet(self.parquet_to_read)
         elif btype == ARCTICDB_LMDB:
             self.lib.read(self.SYMBOL)
         elif btype == ARCTICDB_AMAZON_S3:
-            self.s3_lib_read.read(self.s3_symbol) 
-        else: 
+            self.s3_lib_read.read(self.s3_symbol)
+        else:
             raise Exception(f"Unsupported type: {btype}")
 
     def peakmem_write_dataframe(self, tpl, btype):
@@ -179,9 +179,9 @@ class RealComparisonBenchmarks:
             self.lib.write("symbol", df)
         elif btype == ARCTICDB_AMAZON_S3:
             self.s3_lib_write.write(self.s3_symbol, df)
-        else: 
+        else:
             raise Exception(f"Unsupported type: {btype}")
-        
+
     def create_then_write_dataframe(self, tpl, btype):
         """
         This scenario includes creation of dataframe and then its serialization to storage
@@ -190,7 +190,7 @@ class RealComparisonBenchmarks:
         if btype == BASE_MEMORY:
             # What is the tool mem load?
             return
-        df = pd.DataFrame(dict) # always create dataframe in this scenario
+        df = pd.DataFrame(dict)  # always create dataframe in this scenario
         if btype == CREATE_DATAFRAME:
             pass
         elif btype == PANDAS_PARQUET:
@@ -200,11 +200,11 @@ class RealComparisonBenchmarks:
         elif btype == ARCTICDB_AMAZON_S3:
             self.s3_lib_write.write(self.s3_symbol, df)
             pass
-        else: 
-            raise Exception(f"Unsupported type: {btype}")        
+        else:
+            raise Exception(f"Unsupported type: {btype}")
 
     def peakmem_create_then_write_dataframe(self, tpl, btype):
         self.create_then_write_dataframe(tpl, btype)
-        
-    def time_create_then_write_dataframe(self, tpl, btype):      
+
+    def time_create_then_write_dataframe(self, tpl, btype):
         self.create_then_write_dataframe(tpl, btype)

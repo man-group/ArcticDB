@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/processing/operation_dispatch_ternary.hpp>
@@ -68,7 +69,6 @@ static void BM_ternary_numeric_dense_col_sparse_col(benchmark::State& state) {
         } else {
             ternary_operator(condition, dense, sparse);
         }
-
     }
 }
 
@@ -270,7 +270,6 @@ static void BM_ternary_string_val_val(benchmark::State& state) {
     }
 }
 
-
 static void BM_ternary_numeric_val_empty(benchmark::State& state) {
     const auto num_rows = static_cast<size_t>(state.range(0));
     const auto arguments_reversed = state.range(1);
@@ -319,9 +318,7 @@ BENCHMARK(BM_ternary_bitset_bool)
         ->Args({100'000, false, false});
 BENCHMARK(BM_ternary_numeric_dense_col_dense_col)->Args({100'000});
 BENCHMARK(BM_ternary_numeric_sparse_col_sparse_col)->Args({100'000});
-BENCHMARK(BM_ternary_numeric_dense_col_sparse_col)
-        ->Args({100'000, true})
-        ->Args({100'000, false});
+BENCHMARK(BM_ternary_numeric_dense_col_sparse_col)->Args({100'000, true})->Args({100'000, false});
 BENCHMARK(BM_ternary_string_dense_col_dense_col)
         ->Args({100'000, 100'000, true})
         ->Args({100'000, 100'000, false})
@@ -337,12 +334,8 @@ BENCHMARK(BM_ternary_string_dense_col_sparse_col)
         ->Args({100'000, 100'000, false})
         ->Args({100'000, 2, true})
         ->Args({100'000, 2, false});
-BENCHMARK(BM_ternary_numeric_dense_col_val)
-        ->Args({100'000, true})
-        ->Args({100'000, false});
-BENCHMARK(BM_ternary_numeric_sparse_col_val)
-        ->Args({100'000, true})
-        ->Args({100'000, false});
+BENCHMARK(BM_ternary_numeric_dense_col_val)->Args({100'000, true})->Args({100'000, false});
+BENCHMARK(BM_ternary_numeric_sparse_col_val)->Args({100'000, true})->Args({100'000, false});
 BENCHMARK(BM_ternary_string_dense_col_val)
         ->Args({100'000, true, 100'000})
         ->Args({100'000, false, 100'000})
@@ -353,12 +346,8 @@ BENCHMARK(BM_ternary_string_sparse_col_val)
         ->Args({100'000, false, 100'000})
         ->Args({100'000, true, 2})
         ->Args({100'000, false, 2});
-BENCHMARK(BM_ternary_numeric_dense_col_empty)
-        ->Args({100'000, true})
-        ->Args({100'000, false});
-BENCHMARK(BM_ternary_numeric_sparse_col_empty)
-        ->Args({100'000, true})
-        ->Args({100'000, false});
+BENCHMARK(BM_ternary_numeric_dense_col_empty)->Args({100'000, true})->Args({100'000, false});
+BENCHMARK(BM_ternary_numeric_sparse_col_empty)->Args({100'000, true})->Args({100'000, false});
 BENCHMARK(BM_ternary_string_dense_col_empty)
         ->Args({100'000, true, 100'000})
         ->Args({100'000, false, 100'000})
@@ -371,12 +360,8 @@ BENCHMARK(BM_ternary_string_sparse_col_empty)
         ->Args({100'000, false, 2});
 BENCHMARK(BM_ternary_numeric_val_val)->Args({100'000});
 BENCHMARK(BM_ternary_string_val_val)->Args({100'000});
-BENCHMARK(BM_ternary_numeric_val_empty)
-        ->Args({100'000, true})
-        ->Args({100'000, false});
-BENCHMARK(BM_ternary_string_val_empty)
-        ->Args({100'000, true})
-        ->Args({100'000, false});
+BENCHMARK(BM_ternary_numeric_val_empty)->Args({100'000, true})->Args({100'000, false});
+BENCHMARK(BM_ternary_string_val_empty)->Args({100'000, true})->Args({100'000, false});
 BENCHMARK(BM_ternary_bool_bool)
         ->Args({100'000, true, true})
         ->Args({100'000, true, false})

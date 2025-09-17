@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -24,11 +25,14 @@ struct RowSliceClause {
     RowSliceClause() = default;
     ARCTICDB_MOVE_COPY_DEFAULT(RowSliceClause)
 
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
+    ) {
         return structure_by_row_slice(ranges_and_keys);
     }
 
-    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    ) {
         log::version().warn("RowSliceClause::structure_for_processing called");
         return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
@@ -42,8 +46,11 @@ struct RowSliceClause {
         if (entity_ids.empty()) {
             return {};
         }
-        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
-        for (const auto& segment: proc.segments_.value()) {
+        auto proc =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager_, std::move(entity_ids)
+                );
+        for (const auto& segment : proc.segments_.value()) {
             auto id = std::get<int64_t>(segment->descriptor().id());
             ++id;
             segment->descriptor().set_id(id);
@@ -51,9 +58,7 @@ struct RowSliceClause {
         return push_entities(*component_manager_, std::move(proc));
     }
 
-    [[nodiscard]] const ClauseInfo& clause_info() const {
-        return clause_info_;
-    }
+    [[nodiscard]] const ClauseInfo& clause_info() const { return clause_info_; }
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig&) {}
 
@@ -61,13 +66,9 @@ struct RowSliceClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const {
-        return output_schema;
-    }
+    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
-        return {};
-    }
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
 };
 
 struct RestructuringClause {
@@ -76,16 +77,17 @@ struct RestructuringClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
 
-    RestructuringClause() {
-        clause_info_.input_structure_ = ProcessingStructure::ALL;
-    };
+    RestructuringClause() { clause_info_.input_structure_ = ProcessingStructure::ALL; };
     ARCTICDB_MOVE_COPY_DEFAULT(RestructuringClause)
 
-    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
+    ) {
         return structure_by_row_slice(ranges_and_keys);
     }
 
-    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(std::vector<std::vector<EntityId>>&& entity_ids_vec) {
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    ) {
         log::version().warn("RestructuringClause::structure_for_processing called");
         return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
     }
@@ -99,8 +101,11 @@ struct RestructuringClause {
         if (entity_ids.empty()) {
             return {};
         }
-        auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager_, std::move(entity_ids));
-        for (const auto& segment: proc.segments_.value()) {
+        auto proc =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager_, std::move(entity_ids)
+                );
+        for (const auto& segment : proc.segments_.value()) {
             auto id = std::get<int64_t>(segment->descriptor().id());
             ++id;
             segment->descriptor().set_id(id);
@@ -108,9 +113,7 @@ struct RestructuringClause {
         return push_entities(*component_manager_, std::move(proc));
     }
 
-    [[nodiscard]] const ClauseInfo& clause_info() const {
-        return clause_info_;
-    }
+    [[nodiscard]] const ClauseInfo& clause_info() const { return clause_info_; }
 
     void set_processing_config(ARCTICDB_UNUSED const ProcessingConfig&) {}
 
@@ -118,13 +121,9 @@ struct RestructuringClause {
         component_manager_ = component_manager;
     }
 
-    OutputSchema modify_schema(OutputSchema&& output_schema) const {
-        return output_schema;
-    }
+    OutputSchema modify_schema(OutputSchema&& output_schema) const { return output_schema; }
 
-    OutputSchema join_schemas(std::vector<OutputSchema>&&) const {
-        return {};
-    }
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const { return {}; }
 };
 
 TEST(Clause, ScheduleClauseProcessingStress) {
@@ -138,7 +137,7 @@ TEST(Clause, ScheduleClauseProcessingStress) {
     std::uniform_int_distribution<> dist{0, 1};
 
     auto clauses = std::make_shared<std::vector<std::shared_ptr<Clause>>>();
-    for (auto unused=0; unused<num_clauses; ++unused) {
+    for (auto unused = 0; unused < num_clauses; ++unused) {
         if (dist(eng) == 0) {
             clauses->emplace_back(std::make_shared<Clause>(RowSliceClause()));
         } else {
@@ -147,7 +146,7 @@ TEST(Clause, ScheduleClauseProcessingStress) {
     }
 
     auto component_manager = std::make_shared<ComponentManager>();
-    for (auto& clause: *clauses) {
+    for (auto& clause : *clauses) {
         clause->set_component_manager(component_manager);
     }
 
@@ -164,22 +163,25 @@ TEST(Clause, ScheduleClauseProcessingStress) {
     // will require that segment
     auto segment_fetch_counts = generate_segment_fetch_counts(processing_unit_indexes, num_segments);
 
-    auto processed_entity_ids_fut = schedule_clause_processing(component_manager,
-                                                               std::move(segment_and_slice_futures),
-                                                               std::move(processing_unit_indexes),
-                                                               clauses);
+    auto processed_entity_ids_fut = schedule_clause_processing(
+            component_manager, std::move(segment_and_slice_futures), std::move(processing_unit_indexes), clauses
+    );
 
     for (size_t idx = 0; idx < segment_and_slice_promises.size(); ++idx) {
         SegmentInMemory segment;
         segment.descriptor().set_id(static_cast<int64_t>(idx));
-        segment_and_slice_promises[idx].setValue(SegmentAndSlice(RangesAndKey({idx, idx+1}, {0, 1}, {}), std::move(segment)));
+        segment_and_slice_promises[idx].setValue(
+                SegmentAndSlice(RangesAndKey({idx, idx + 1}, {0, 1}, {}), std::move(segment))
+        );
     }
 
     auto processed_entity_ids = std::move(processed_entity_ids_fut).get();
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(*component_manager, std::move(processed_entity_ids));
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+            *component_manager, std::move(processed_entity_ids)
+    );
     ASSERT_EQ(proc.segments_.value().size(), num_segments);
     NumericId start_id{0};
-    for (const auto& segment: proc.segments_.value()) {
+    for (const auto& segment : proc.segments_.value()) {
         auto id = std::get<NumericId>(segment->descriptor().id());
         ASSERT_EQ(id, start_id++ + num_clauses);
     }

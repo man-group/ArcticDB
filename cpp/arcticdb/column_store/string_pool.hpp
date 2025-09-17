@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -17,7 +18,7 @@
 #include <unordered_set>
 
 namespace pybind11 {
-    struct buffer_info;
+struct buffer_info;
 }
 
 namespace py = pybind11;
@@ -28,16 +29,15 @@ namespace arcticdb {
 
 class Column;
 
-
 static FieldRef ARCTICDB_UNUSED string_pool_descriptor() {
-    static TypeDescriptor type{ DataType::UINT8, Dimension::Dim1 };
-    static std::string_view name{ "__string_pool__" };
+    static TypeDescriptor type{DataType::UINT8, Dimension::Dim1};
+    static std::string_view name{"__string_pool__"};
     return FieldRef{type, name};
 }
 
 /*****************
  * StringBlock *
-*****************/
+ *****************/
 
 class StringBlock {
     friend class StringPool;
@@ -52,15 +52,15 @@ class StringBlock {
         static const size_t DataBytes = 4;
         static size_t calc_size(size_t size) { return std::max(sizeof(size_) + size, sizeof(StringHead)); }
 
-        void copy(const char *str, size_t size) {
-            size_ = static_cast<uint32_t>( size );
+        void copy(const char* str, size_t size) {
+            size_ = static_cast<uint32_t>(size);
             memset(data_, 0, DataBytes);
             memcpy(data(), str, size);
         }
 
-        [[nodiscard]] size_t size() const { return static_cast<size_t>( size_); }
-        char *data() { return data_; }
-        [[nodiscard]] const char *data() const { return data_; }
+        [[nodiscard]] size_t size() const { return static_cast<size_t>(size_); }
+        char* data() { return data_; }
+        [[nodiscard]] const char* data() const { return data_; }
 
       private:
         uint32_t size_ = 0;
@@ -69,15 +69,15 @@ class StringBlock {
 
   public:
     StringBlock() = default;
-    StringBlock(StringBlock &&that) noexcept;
-    StringBlock(const StringBlock &) = delete;
+    StringBlock(StringBlock&& that) noexcept;
+    StringBlock(const StringBlock&) = delete;
 
-    StringBlock& operator=(StringBlock &&that) noexcept;
-    StringBlock& operator=(const StringBlock &) = delete;
+    StringBlock& operator=(StringBlock&& that) noexcept;
+    StringBlock& operator=(const StringBlock&) = delete;
 
     [[nodiscard]] StringBlock clone() const;
 
-    position_t insert(const char *str, size_t size);
+    position_t insert(const char* str, size_t size);
 
     std::string_view at(position_t pos);
     [[nodiscard]] std::string_view const_at(position_t pos) const;
@@ -95,13 +95,11 @@ class StringBlock {
 
     [[nodiscard]] size_t size() const;
 
-    [[nodiscard]] const ChunkedBuffer &buffer() const;
+    [[nodiscard]] const ChunkedBuffer& buffer() const;
 
-    uint8_t * pos_data(size_t required_size);
+    uint8_t* pos_data(size_t required_size);
 
-    [[nodiscard]] size_t num_blocks() {
-        return data_.buffer().num_blocks();
-    }
+    [[nodiscard]] size_t num_blocks() { return data_.buffer().num_blocks(); }
 
     StringHead* head_at(position_t pos) {
         auto data = data_.buffer().ptr_cast<uint8_t>(pos, sizeof(StringHead));
@@ -110,9 +108,9 @@ class StringBlock {
 
     [[nodiscard]] const StringHead* const_head_at(position_t pos) const {
         auto data = data_.buffer().internal_ptr_cast<uint8_t>(pos, sizeof(StringHead));
-        auto head = reinterpret_cast<const StringHead *>(data);
+        auto head = reinterpret_cast<const StringHead*>(data);
         data_.buffer().assert_size(pos + StringHead::calc_size(head->size()));
-        return reinterpret_cast<const StringHead *>(data);
+        return reinterpret_cast<const StringHead*>(data);
     }
 
   private:
@@ -123,7 +121,7 @@ class OffsetString;
 
 /*****************
  *  StringPool  *
-*****************/
+ *****************/
 
 class StringPool {
   public:
@@ -133,18 +131,18 @@ class StringPool {
 
     StringPool() = default;
     ~StringPool() = default;
-    StringPool &operator=(const StringPool &) = delete;
-    StringPool(const StringPool &) = delete;
-    StringPool(StringPool &&that) = delete;
+    StringPool& operator=(const StringPool&) = delete;
+    StringPool(const StringPool&) = delete;
+    StringPool(StringPool&& that) = delete;
 
     std::shared_ptr<StringPool> clone() const;
 
-    StringPool &operator=(StringPool &&that) noexcept;
+    StringPool& operator=(StringPool&& that) noexcept;
 
     ColumnData column_data() const;
 
-    shape_t *allocate_shapes(size_t size);
-    uint8_t *allocate_data(size_t size);
+    shape_t* allocate_shapes(size_t size);
+    uint8_t* allocate_data(size_t size);
 
     void advance_data(size_t size);
 
@@ -154,9 +152,9 @@ class StringPool {
     void set_allow_sparse(Sparsity);
 
     OffsetString get(std::string_view s, bool deduplicate = true);
-    OffsetString get(const char *data, size_t size, bool deduplicate = true);
+    OffsetString get(const char* data, size_t size, bool deduplicate = true);
 
-    const ChunkedBuffer &data() const;
+    const ChunkedBuffer& data() const;
 
     std::string_view get_view(offset_t o);
 
@@ -173,12 +171,17 @@ class StringPool {
     py::buffer_info as_buffer_info() const;
 
     std::optional<position_t> get_offset_for_column(std::string_view str, const Column& column) const;
-    ankerl::unordered_dense::set<position_t> get_offsets_for_column(const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column) const;
-    ankerl::unordered_dense::set<position_t> get_regex_match_offsets_for_column(const util::RegexGeneric& regex_generic, const Column& column) const;
+    ankerl::unordered_dense::set<position_t> get_offsets_for_column(
+            const std::shared_ptr<std::unordered_set<std::string>>& strings, const Column& column
+    ) const;
+    ankerl::unordered_dense::set<position_t> get_regex_match_offsets_for_column(
+            const util::RegexGeneric& regex_generic, const Column& column
+    ) const;
+
   private:
     MapType map_;
     mutable StringBlock block_;
     mutable CursoredBuffer<Buffer> shapes_;
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

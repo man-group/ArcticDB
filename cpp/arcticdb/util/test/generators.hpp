@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -30,39 +31,29 @@ struct SegmentsSink {
 };
 
 template<typename CommitFunc>
-auto get_test_aggregator(CommitFunc &&func, StreamId stream_id, std::vector<FieldRef> &&fields) {
+auto get_test_aggregator(CommitFunc&& func, StreamId stream_id, std::vector<FieldRef>&& fields) {
     using namespace arcticdb::stream;
-    using TestAggregator =  Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
+    using TestAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
     auto index = TimeseriesIndex::default_index();
 
-    FixedSchema schema{
-        index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index
-    };
+    FixedSchema schema{index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index};
 
     return TestAggregator(std::move(schema), std::forward<CommitFunc>(func), stream::NeverSegmentPolicy{});
 }
 
-template <typename AggregatorType>
+template<typename AggregatorType>
 struct SinkWrapperImpl {
     using SchemaPolicy = typename AggregatorType::SchemaPolicy;
-    using IndexType =  typename AggregatorType::IndexType;
+    using IndexType = typename AggregatorType::IndexType;
 
     SinkWrapperImpl(StreamId stream_id, std::initializer_list<FieldRef> fields) :
         index_(IndexType::default_index()),
         sink_(std::make_shared<SegmentsSink>()),
         aggregator_(
-            SchemaPolicy{
-                index_.create_stream_descriptor(std::move(stream_id), fields), index_
-            },
-            [this](
-                SegmentInMemory &&mem
-            ) {
-                sink_->segments_.push_back(std::move(mem));
-            },
-           typename AggregatorType::SegmentingPolicyType{}
-        ) {
-
-    }
+                SchemaPolicy{index_.create_stream_descriptor(std::move(stream_id), fields), index_},
+                [this](SegmentInMemory&& mem) { sink_->segments_.push_back(std::move(mem)); },
+                typename AggregatorType::SegmentingPolicyType{}
+        ) {}
 
     auto& segment() {
         util::check(!sink_->segments_.empty(), "Segment vector empty");
@@ -74,9 +65,9 @@ struct SinkWrapperImpl {
     AggregatorType aggregator_;
 };
 
-using TestAggregator =  Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using TestAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using SinkWrapper = SinkWrapperImpl<TestAggregator>;
-using TestRowCountAggregator =  Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
+using TestRowCountAggregator = Aggregator<RowCountIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using RowCountSinkWrapper = SinkWrapperImpl<TestRowCountAggregator>;
 using TestSparseAggregator = Aggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy, SparseColumnPolicy>;
 using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
@@ -85,7 +76,7 @@ using SparseSinkWrapper = SinkWrapperImpl<TestSparseAggregator>;
 inline Column generate_int_column(size_t num_rows) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-    for(size_t idx = 0; idx < num_rows; ++idx) {
+    for (size_t idx = 0; idx < num_rows; ++idx) {
         column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx));
     }
     return column;
@@ -95,8 +86,8 @@ inline Column generate_int_column(size_t num_rows) {
 inline Column generate_int_sparse_column(size_t num_rows) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-    for(size_t idx = 0; idx < num_rows; ++idx) {
-        if (idx%2 == 0) {
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        if (idx % 2 == 0) {
             column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx));
         }
     }
@@ -107,7 +98,7 @@ inline Column generate_int_sparse_column(size_t num_rows) {
 inline Column generate_int_column_repeated_values(size_t num_rows, size_t unique_values) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-    for(size_t idx = 0; idx < num_rows; ++idx) {
+    for (size_t idx = 0; idx < num_rows; ++idx) {
         column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx % unique_values));
     }
     return column;
@@ -117,7 +108,7 @@ inline Column generate_int_column_repeated_values(size_t num_rows, size_t unique
 inline Column generate_int_column_sparse_repeated_values(size_t num_rows, size_t unique_values) {
     using TDT = TypeDescriptorTag<DataTypeTag<DataType::INT64>, DimensionTag<Dimension ::Dim0>>;
     Column column(static_cast<TypeDescriptor>(TDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-    for(size_t idx = 0; idx < num_rows; ++idx) {
+    for (size_t idx = 0; idx < num_rows; ++idx) {
         if (idx % (unique_values + 1) != 0) {
             column.set_scalar<int64_t>(static_cast<ssize_t>(idx), static_cast<int64_t>(idx % unique_values));
         }
@@ -146,11 +137,21 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
     SegmentInMemory seg;
     using FTDT = ScalarTagType<DataTypeTag<DataType::FLOAT64>>;
     using BTDT = ScalarTagType<DataTypeTag<DataType::BOOL8>>;
-    auto sparse_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-    auto sparse_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
-    auto dense_floats_1 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-    auto dense_floats_2 = std::make_shared<Column>(static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED);
-    auto sparse_bools = std::make_shared<Column>(static_cast<TypeDescriptor>(BTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED);
+    auto sparse_floats_1 = std::make_shared<Column>(
+            static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
+    );
+    auto sparse_floats_2 = std::make_shared<Column>(
+            static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
+    );
+    auto dense_floats_1 = std::make_shared<Column>(
+            static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED
+    );
+    auto dense_floats_2 = std::make_shared<Column>(
+            static_cast<TypeDescriptor>(FTDT{}), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED
+    );
+    auto sparse_bools = std::make_shared<Column>(
+            static_cast<TypeDescriptor>(BTDT{}), 0, AllocationType::DYNAMIC, Sparsity::PERMITTED
+    );
 
     constexpr auto nan = std::numeric_limits<double>::quiet_NaN();
 
@@ -201,8 +202,11 @@ inline SegmentInMemory generate_filter_and_project_testing_sparse_segment() {
 // * empty_<agg> - an empty column for each supported aggregation
 inline SegmentInMemory generate_groupby_testing_empty_segment(size_t num_rows, size_t unique_values) {
     SegmentInMemory seg;
-    auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
-    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
+    auto int_repeated_values_col =
+            std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
+    seg.add_column(
+            scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col
+    );
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_sum"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_min"), std::make_shared<Column>(generate_empty_column()));
     seg.add_column(scalar_field(DataType::EMPTYVAL, "empty_max"), std::make_shared<Column>(generate_empty_column()));
@@ -212,14 +216,15 @@ inline SegmentInMemory generate_groupby_testing_empty_segment(size_t num_rows, s
     return seg;
 }
 
-inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t unique_values)
-{
+inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t unique_values) {
     SegmentInMemory seg;
-    auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
-    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col);
-    std::array<std::string, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
-    for (const auto& name: col_names)
-    {
+    auto int_repeated_values_col =
+            std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
+    seg.add_column(
+            scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), int_repeated_values_col
+    );
+    std::array<std::string, 5> col_names = {"sum_int", "min_int", "max_int", "mean_int", "count_int"};
+    for (const auto& name : col_names) {
         auto col = std::make_shared<Column>(generate_int_column(num_rows));
         seg.add_column(scalar_field(col->type().data_type(), name), col);
     }
@@ -229,10 +234,14 @@ inline SegmentInMemory generate_groupby_testing_segment(size_t num_rows, size_t 
 
 inline SegmentInMemory generate_groupby_testing_sparse_segment(size_t num_rows, size_t unique_values) {
     SegmentInMemory seg;
-    auto int_repeated_values_col = std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
-    seg.add_column(scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"), std::move(int_repeated_values_col));
-    const std::array<std::string, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
-    for (const auto& name: col_names) {
+    auto int_repeated_values_col =
+            std::make_shared<Column>(generate_int_column_repeated_values(num_rows, unique_values));
+    seg.add_column(
+            scalar_field(int_repeated_values_col->type().data_type(), "int_repeated_values"),
+            std::move(int_repeated_values_col)
+    );
+    const std::array<std::string, 5> col_names = {"sum_int", "min_int", "max_int", "mean_int", "count_int"};
+    for (const auto& name : col_names) {
         auto col = std::make_shared<Column>(generate_int_sparse_column(num_rows));
         seg.add_column(scalar_field(col->type().data_type(), name), col);
     }
@@ -240,14 +249,17 @@ inline SegmentInMemory generate_groupby_testing_sparse_segment(size_t num_rows, 
     return seg;
 }
 
-inline SegmentInMemory generate_sparse_groupby_testing_segment(size_t num_rows, size_t unique_values)
-{
+inline SegmentInMemory generate_sparse_groupby_testing_segment(size_t num_rows, size_t unique_values) {
     SegmentInMemory seg;
-    auto int_sparse_repeated_values_col = std::make_shared<Column>(generate_int_column_sparse_repeated_values(num_rows, unique_values));
-    int_sparse_repeated_values_col->mark_absent_rows(num_rows-1);
-    seg.add_column(scalar_field(int_sparse_repeated_values_col->type().data_type(), "int_sparse_repeated_values"), std::move(int_sparse_repeated_values_col));
-    const std::array<std::string_view, 5> col_names = { "sum_int", "min_int", "max_int", "mean_int", "count_int" };
-    for (const auto& name: col_names) {
+    auto int_sparse_repeated_values_col =
+            std::make_shared<Column>(generate_int_column_sparse_repeated_values(num_rows, unique_values));
+    int_sparse_repeated_values_col->mark_absent_rows(num_rows - 1);
+    seg.add_column(
+            scalar_field(int_sparse_repeated_values_col->type().data_type(), "int_sparse_repeated_values"),
+            std::move(int_sparse_repeated_values_col)
+    );
+    const std::array<std::string_view, 5> col_names = {"sum_int", "min_int", "max_int", "mean_int", "count_int"};
+    for (const auto& name : col_names) {
         auto col = std::make_shared<Column>(generate_int_column(num_rows));
         seg.add_column(scalar_field(col->type().data_type(), name), col);
     }
@@ -256,14 +268,15 @@ inline SegmentInMemory generate_sparse_groupby_testing_segment(size_t num_rows, 
 }
 
 inline SegmentInMemory get_standard_timeseries_segment(const std::string& name, size_t num_rows = 10) {
-    auto wrapper = SinkWrapper(name, {
-        scalar_field(DataType::INT8, "int8"),
-        scalar_field(DataType::UINT64, "uint64"),
-        scalar_field(DataType::UTF_DYNAMIC64, "strings")
-    });
+    auto wrapper = SinkWrapper(
+            name,
+            {scalar_field(DataType::INT8, "int8"),
+             scalar_field(DataType::UINT64, "uint64"),
+             scalar_field(DataType::UTF_DYNAMIC64, "strings")}
+    );
 
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
-        wrapper.aggregator_.start_row(timestamp{i})([&](auto &&rb) {
+        wrapper.aggregator_.start_row(timestamp{i})([&](auto&& rb) {
             rb.set_scalar(1, int8_t(i));
             rb.set_scalar(2, uint64_t(i) * 2);
             rb.set_string(3, fmt::format("string_{}", i));
@@ -273,17 +286,20 @@ inline SegmentInMemory get_standard_timeseries_segment(const std::string& name, 
     return wrapper.segment();
 }
 
-inline SegmentInMemory get_seqnum_timeseries_segment(const std::string& name, size_t num_rows = 10, size_t num_seq = 3) {
-    auto wrapper = SinkWrapper(name, {
-        scalar_field(DataType::UINT64, "seqnum"),
-        scalar_field(DataType::INT8, "int8"),
-        scalar_field(DataType::UTF_DYNAMIC64, "strings")
-    });
+inline SegmentInMemory get_seqnum_timeseries_segment(
+        const std::string& name, size_t num_rows = 10, size_t num_seq = 3
+) {
+    auto wrapper = SinkWrapper(
+            name,
+            {scalar_field(DataType::UINT64, "seqnum"),
+             scalar_field(DataType::INT8, "int8"),
+             scalar_field(DataType::UTF_DYNAMIC64, "strings")}
+    );
 
     uint64_t seqnum = 0UL;
     for (timestamp i = 0UL; i < timestamp(num_rows / num_seq); ++i) {
-        for(auto j = 0UL; j < num_seq; ++j) {
-            wrapper.aggregator_.start_row(timestamp{i})([&](auto &&rb) {
+        for (auto j = 0UL; j < num_seq; ++j) {
+            wrapper.aggregator_.start_row(timestamp{i})([&](auto&& rb) {
                 rb.set_scalar(1, seqnum++);
                 rb.set_scalar(2, int8_t(i * 2));
                 rb.set_string(3, fmt::format("string_{}", i));
@@ -294,16 +310,21 @@ inline SegmentInMemory get_seqnum_timeseries_segment(const std::string& name, si
     return wrapper.segment();
 }
 
-inline SegmentInMemory get_groupable_timeseries_segment(const std::string& name, size_t rows_per_group, std::initializer_list<size_t> group_ids) {
-    auto wrapper = SinkWrapper(name, {
-            scalar_field(DataType::INT8, "int8"),
-            scalar_field(DataType::UTF_DYNAMIC64, "strings"),
-    });
+inline SegmentInMemory get_groupable_timeseries_segment(
+        const std::string& name, size_t rows_per_group, std::initializer_list<size_t> group_ids
+) {
+    auto wrapper = SinkWrapper(
+            name,
+            {
+                    scalar_field(DataType::INT8, "int8"),
+                    scalar_field(DataType::UTF_DYNAMIC64, "strings"),
+            }
+    );
 
     int i = 0;
     for (auto group_id : group_ids) {
         for (size_t j = 0; j < rows_per_group; j++) {
-            wrapper.aggregator_.start_row(timestamp{static_cast<timestamp>(rows_per_group*i + j)})([&](auto &&rb) {
+            wrapper.aggregator_.start_row(timestamp{static_cast<timestamp>(rows_per_group * i + j)})([&](auto&& rb) {
                 rb.set_scalar(1, int8_t(group_id));
                 rb.set_string(2, fmt::format("string_{}", group_id));
             });
@@ -315,19 +336,22 @@ inline SegmentInMemory get_groupable_timeseries_segment(const std::string& name,
 }
 
 inline SegmentInMemory get_sparse_timeseries_segment(const std::string& name, size_t num_rows = 10) {
-    auto wrapper = SparseSinkWrapper(name, {
-        scalar_field(DataType::INT8, "int8"),
-        scalar_field(DataType::UINT64,  "uint64"),
-        scalar_field(DataType::UTF_DYNAMIC64, "strings"),
-    });
+    auto wrapper = SparseSinkWrapper(
+            name,
+            {
+                    scalar_field(DataType::INT8, "int8"),
+                    scalar_field(DataType::UINT64, "uint64"),
+                    scalar_field(DataType::UTF_DYNAMIC64, "strings"),
+            }
+    );
 
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
-        wrapper.aggregator_.start_row(timestamp{i})([&](auto &&rb) {
+        wrapper.aggregator_.start_row(timestamp{i})([&](auto&& rb) {
             rb.set_scalar(1, int8_t(i));
-            if(i % 2 == 1)
+            if (i % 2 == 1)
                 rb.set_scalar(2, uint64_t(i) * 2);
 
-            if(i % 3 == 2)
+            if (i % 3 == 2)
                 rb.set_string(3, fmt::format("string_{}", i));
         });
     }
@@ -336,20 +360,23 @@ inline SegmentInMemory get_sparse_timeseries_segment(const std::string& name, si
 }
 
 inline SegmentInMemory get_sparse_timeseries_segment_floats(const std::string& name, size_t num_rows = 10) {
-    auto wrapper = SparseSinkWrapper(name, {
-        scalar_field(DataType::FLOAT64, "col1"),
-        scalar_field(DataType::FLOAT64, "col2"),
-        scalar_field(DataType::FLOAT64, "col3"),
-    });
+    auto wrapper = SparseSinkWrapper(
+            name,
+            {
+                    scalar_field(DataType::FLOAT64, "col1"),
+                    scalar_field(DataType::FLOAT64, "col2"),
+                    scalar_field(DataType::FLOAT64, "col3"),
+            }
+    );
 
     for (timestamp i = 0u; i < timestamp(num_rows); ++i) {
-        wrapper.aggregator_.start_row(timestamp{i})([&](auto &&rb) {
+        wrapper.aggregator_.start_row(timestamp{i})([&](auto&& rb) {
             rb.set_scalar(1, double(i));
-            if(i % 2 == 1)
+            if (i % 2 == 1)
                 rb.set_scalar(2, double(i) * 2);
 
-            if(i % 3 == 2)
-                rb.set_scalar(3, double(i)/ 2);
+            if (i % 3 == 2)
+                rb.set_scalar(3, double(i) / 2);
         });
     }
     wrapper.aggregator_.commit();
@@ -368,12 +395,13 @@ inline auto get_test_config_data(std::string name = "test") {
     return std::make_tuple(path, std::move(storages));
 }
 
-inline std::shared_ptr<arcticdb::storage::Library> get_test_library(storage::LibraryDescriptor::VariantStoreConfig cfg = {}, std::string name = "test") {
+inline std::shared_ptr<arcticdb::storage::Library> get_test_library(
+        storage::LibraryDescriptor::VariantStoreConfig cfg = {}, std::string name = "test"
+) {
     auto [path, storages] = get_test_config_data(name);
     auto library = std::make_shared<arcticdb::storage::Library>(path, std::move(storages), std::move(cfg));
     return library;
 }
-
 
 /**
  * Creates a LocalVersionedEngine from get_test_config_data().
@@ -381,7 +409,9 @@ inline std::shared_ptr<arcticdb::storage::Library> get_test_library(storage::Lib
  * See also python_version_store_in_memory() and stream_test_common.hpp for alternatives using LMDB.
  */
 template<typename VersionStoreType = version_store::LocalVersionedEngine>
-inline VersionStoreType get_test_engine(storage::LibraryDescriptor::VariantStoreConfig cfg = {}, std::string name = "test") {
+inline VersionStoreType get_test_engine(
+        storage::LibraryDescriptor::VariantStoreConfig cfg = {}, std::string name = "test"
+) {
     return VersionStoreType(get_test_library(cfg, name));
 }
 
@@ -395,15 +425,13 @@ inline auto python_version_store_in_memory() {
     return std::make_tuple(std::move(pvs), replace_store);
 }
 
-inline constexpr ssize_t to_tensor_dim(Dimension dim) {
-    return static_cast<int>(dim) + 1;
-}
+inline constexpr ssize_t to_tensor_dim(Dimension dim) { return static_cast<int>(dim) + 1; }
 
-inline NativeTensor tensor_from_column(const Column &column) {
-    return column.type().visit_tag([&column](auto &&tag) {
+inline NativeTensor tensor_from_column(const Column& column) {
+    return column.type().visit_tag([&column](auto&& tag) {
         using TypeDescriptorTag = std::decay_t<decltype(tag)>;
         shape_t scalar_shape = 0;
-        const shape_t *shape_ptr;
+        const shape_t* shape_ptr;
         constexpr auto dim = TypeDescriptorTag::DimensionTag::value;
         constexpr auto data_type = TypeDescriptorTag::DataTypeTag::data_type;
         if constexpr (dim == Dimension::Dim0) {
@@ -414,14 +442,14 @@ inline NativeTensor tensor_from_column(const Column &column) {
         }
 
         auto tensor = NativeTensor{
-            static_cast<ssize_t>(column.bytes()),
-            to_tensor_dim(dim),
-            nullptr,
-            shape_ptr,
-            data_type,
-            get_type_size(data_type),
-            column.ptr(),
-            to_tensor_dim(dim)
+                static_cast<ssize_t>(column.bytes()),
+                to_tensor_dim(dim),
+                nullptr,
+                shape_ptr,
+                data_type,
+                get_type_size(data_type),
+                column.ptr(),
+                to_tensor_dim(dim)
         };
         return tensor;
     });
@@ -431,8 +459,7 @@ struct SegmentToInputFrameAdapter {
     SegmentInMemory segment_;
     std::shared_ptr<pipelines::InputTensorFrame> input_frame_ = std::make_shared<pipelines::InputTensorFrame>();
 
-    explicit SegmentToInputFrameAdapter(SegmentInMemory &&segment) :
-        segment_(std::move(segment)) {
+    explicit SegmentToInputFrameAdapter(SegmentInMemory&& segment) : segment_(std::move(segment)) {
         input_frame_->desc = segment_.descriptor();
         input_frame_->num_rows = segment_.row_count();
         size_t col{0};
@@ -448,26 +475,21 @@ struct SegmentToInputFrameAdapter {
 
         input_frame_->set_index_range();
     }
-
 };
 
 template<typename AggregatorType>
 struct SegmentSinkWrapperImpl {
     using SchemaPolicy = typename AggregatorType::SchemaPolicy;
-    using IndexType =  typename AggregatorType::IndexType;
+    using IndexType = typename AggregatorType::IndexType;
 
     SegmentSinkWrapperImpl(StreamId stream_id, const IndexType& index, const FieldCollection& fields) :
         aggregator_(
-            [](pipelines::FrameSlice&&) {
-                // Do nothing
+                [](pipelines::FrameSlice&&) {
+                    // Do nothing
                 },
-            SchemaPolicy{
-                index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index
-            },
-            [this](SegmentInMemory&& mem) {
-                sink_->segments_.push_back(std::move(mem));
-            },
-            typename AggregatorType::SegmentingPolicyType{}
+                SchemaPolicy{index.create_stream_descriptor(std::move(stream_id), fields_from_range(fields)), index},
+                [this](SegmentInMemory&& mem) { sink_->segments_.push_back(std::move(mem)); },
+                typename AggregatorType::SegmentingPolicyType{}
         ) {}
 
     auto& segment() {
@@ -482,11 +504,14 @@ struct SegmentSinkWrapperImpl {
 using TestSegmentAggregatorNoSegment = SegmentAggregator<TimeseriesIndex, FixedSchema, stream::NeverSegmentPolicy>;
 using SegmentSinkWrapper = SegmentSinkWrapperImpl<TestSegmentAggregatorNoSegment>;
 
-inline ResampleClause<ResampleBoundary::LEFT> generate_resample_clause(const std::vector<NamedAggregator>& named_aggregators) {
+inline ResampleClause<ResampleBoundary::LEFT> generate_resample_clause(
+        const std::vector<NamedAggregator>& named_aggregators
+) {
     ResampleClause<ResampleBoundary::LEFT> res{
             "dummy_rule",
             ResampleBoundary::LEFT,
-            [](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin) -> std::vector<timestamp> { return {}; },
+            [](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
+            ) -> std::vector<timestamp> { return {}; },
             0,
             "dummy_origin"
     };
@@ -494,5 +519,4 @@ inline ResampleClause<ResampleBoundary::LEFT> generate_resample_clause(const std
     return res;
 }
 
-
-} //namespace arcticdb
+} // namespace arcticdb

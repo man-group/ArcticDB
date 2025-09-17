@@ -50,14 +50,14 @@ TEST(FieldStatsTest, ProtoConversionHyperLogLog) {
 }
 
 TEST(FieldStatsTest, CreateFromProto) {
-    using namespace arcticdb;   
+    using namespace arcticdb;
 
     arcticdb::proto::encoding::FieldStats msg;
     msg.set_max(100);
     msg.set_min(1);
     msg.set_unique_count(50);
     msg.set_unique_count_precision(arcticdb::proto::encoding::FieldStats::PRECISE);
-    msg.set_set(7);  // Example value with multiple flags set
+    msg.set_set(7); // Example value with multiple flags set
 
     FieldStatsImpl stats = create_from_proto(msg);
 

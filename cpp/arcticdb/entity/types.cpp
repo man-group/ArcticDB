@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/entity/types.hpp>
@@ -19,7 +20,9 @@ Dimension as_dim_checked(uint8_t d) {
 
 std::string_view datatype_to_str(const DataType dt) {
     switch (dt) {
-#define TO_STR(ARG) case DataType::ARG: return std::string_view(#ARG);
+#define TO_STR(ARG)                                                                                                    \
+    case DataType::ARG:                                                                                                \
+        return std::string_view(#ARG);
         TO_STR(UINT8)
         TO_STR(UINT16)
         TO_STR(UINT32)
@@ -40,13 +43,12 @@ std::string_view datatype_to_str(const DataType dt) {
         TO_STR(BOOL_OBJECT8)
         TO_STR(UTF_DYNAMIC32)
 #undef TO_STR
-        default:return std::string_view("UNKNOWN");
+    default:
+        return std::string_view("UNKNOWN");
     }
 }
 
-std::size_t internal_data_type_size(const TypeDescriptor& td) {
-    return get_type_size(td.data_type());
-}
+std::size_t internal_data_type_size(const TypeDescriptor& td) { return get_type_size(td.data_type()); }
 
 std::size_t external_data_type_size(const TypeDescriptor& td, OutputFormat output_format) {
     auto handler = TypeHandlerRegistry::instance()->get_handler(output_format, td);
@@ -57,4 +59,4 @@ std::size_t data_type_size(const TypeDescriptor& td, OutputFormat output_format,
     return mode == DataTypeMode::EXTERNAL ? external_data_type_size(td, output_format) : internal_data_type_size(td);
 }
 
-} // namespace arcticdb
+} // namespace arcticdb::entity

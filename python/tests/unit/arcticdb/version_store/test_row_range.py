@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -93,16 +94,19 @@ def test_row_range_pickled_symbol(lmdb_version_store):
         _ = lmdb_version_store.read(symbol, row_range=(1, 2))
 
 
-@pytest.mark.parametrize("row_range,expected", (
-    ((-5, None), pd.DataFrame({"a": np.arange(95, 100)})),
-    ((5, None), pd.DataFrame({"a": np.arange(5, 100)})),
-    ((0, None), pd.DataFrame({"a": np.arange(0, 100)})),
-    ((None, -5), pd.DataFrame({"a": np.arange(95)})),
-    ((None, 5), pd.DataFrame({"a": np.arange(5)})),
-    ((None, 0), pd.DataFrame({"a": []}, dtype=np.int64)),
-    ((None, None), pd.DataFrame({"a": np.arange(100)})),
-    ((5, 3), pd.DataFrame({"a": []}, dtype=np.int64)),
-))
+@pytest.mark.parametrize(
+    "row_range,expected",
+    (
+        ((-5, None), pd.DataFrame({"a": np.arange(95, 100)})),
+        ((5, None), pd.DataFrame({"a": np.arange(5, 100)})),
+        ((0, None), pd.DataFrame({"a": np.arange(0, 100)})),
+        ((None, -5), pd.DataFrame({"a": np.arange(95)})),
+        ((None, 5), pd.DataFrame({"a": np.arange(5)})),
+        ((None, 0), pd.DataFrame({"a": []}, dtype=np.int64)),
+        ((None, None), pd.DataFrame({"a": np.arange(100)})),
+        ((5, 3), pd.DataFrame({"a": []}, dtype=np.int64)),
+    ),
+)
 @pytest.mark.parametrize("api", ("query_builder", "read", "read_batch"))
 def test_row_range_open_ended(lmdb_version_store_v1, api, row_range, expected):
     symbol = "test_row_range"

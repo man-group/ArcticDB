@@ -140,18 +140,23 @@ def test_scan_object_sizes(arctic_client, lib_name):
     assert 500 < res[KeyType.VERSION_REF][1] < 1500
 
 
-@pytest.mark.parametrize("storage, encoding_version_, num_io_threads, num_cpu_threads", [
-    ("s3", EncodingVersion.V1, 1, 1),
-    ("s3", EncodingVersion.V1, 10, 1),
-    ("s3", EncodingVersion.V1, 1, 10),
-])
+@pytest.mark.parametrize(
+    "storage, encoding_version_, num_io_threads, num_cpu_threads",
+    [
+        ("s3", EncodingVersion.V1, 1, 1),
+        ("s3", EncodingVersion.V1, 10, 1),
+        ("s3", EncodingVersion.V1, 1, 10),
+    ],
+)
 def test_scan_object_sizes_threading(request, storage, encoding_version_, lib_name, num_io_threads, num_cpu_threads):
     """Some stress testing for scan_object_sizes, particularly against deadlocks. Use a small segment size so that
     there is some work to be done in parallel."""
     storage_fixture = request.getfixturevalue(storage + "_storage")
     arctic_client = storage_fixture.create_arctic(encoding_version=encoding_version_)
     try:
-        with config_context_multi({"VersionStore.NumIOThreads": num_io_threads, "VersionStore.NumCPUThreads": num_cpu_threads}):
+        with config_context_multi(
+            {"VersionStore.NumIOThreads": num_io_threads, "VersionStore.NumCPUThreads": num_cpu_threads}
+        ):
             adb_async.reinit_task_scheduler()
             if num_io_threads:
                 assert adb_async.io_thread_count() == num_io_threads
@@ -179,18 +184,25 @@ def test_scan_object_sizes_threading(request, storage, encoding_version_, lib_na
         adb_async.reinit_task_scheduler()
 
 
-@pytest.mark.parametrize("storage, encoding_version_, num_io_threads, num_cpu_threads", [
-    ("s3", EncodingVersion.V1, 1, 1),
-    ("s3", EncodingVersion.V1, 10, 1),
-    ("s3", EncodingVersion.V1, 1, 10),
-])
-def test_scan_object_sizes_by_stream_threading(request, storage, encoding_version_, lib_name, num_io_threads, num_cpu_threads):
+@pytest.mark.parametrize(
+    "storage, encoding_version_, num_io_threads, num_cpu_threads",
+    [
+        ("s3", EncodingVersion.V1, 1, 1),
+        ("s3", EncodingVersion.V1, 10, 1),
+        ("s3", EncodingVersion.V1, 1, 10),
+    ],
+)
+def test_scan_object_sizes_by_stream_threading(
+    request, storage, encoding_version_, lib_name, num_io_threads, num_cpu_threads
+):
     """Some stress testing for scan_object_sizes, particularly against deadlocks. Use a small segment size so that
     there is some work to be done in parallel."""
     storage_fixture = request.getfixturevalue(storage + "_storage")
     arctic_client = storage_fixture.create_arctic(encoding_version=encoding_version_)
     try:
-        with config_context_multi({"VersionStore.NumIOThreads": num_io_threads, "VersionStore.NumCPUThreads": num_cpu_threads}):
+        with config_context_multi(
+            {"VersionStore.NumIOThreads": num_io_threads, "VersionStore.NumCPUThreads": num_cpu_threads}
+        ):
             adb_async.reinit_task_scheduler()
             if num_io_threads:
                 assert adb_async.io_thread_count() == num_io_threads
@@ -273,11 +285,23 @@ def test_symbol_sizes_matches_boto(request, storage, lib_name):
         sizes = lib.version_store.scan_object_sizes()
         assert len(sizes) == 10
         key_types = {s.key_type for s in sizes}
-        assert key_types == {KeyType.TABLE_DATA, KeyType.TABLE_INDEX, KeyType.VERSION, KeyType.VERSION_REF, KeyType.APPEND_DATA,
-                             KeyType.MULTI_KEY, KeyType.SNAPSHOT_REF, KeyType.LOG, KeyType.LOG_COMPACTED, KeyType.SYMBOL_LIST}
+        assert key_types == {
+            KeyType.TABLE_DATA,
+            KeyType.TABLE_INDEX,
+            KeyType.VERSION,
+            KeyType.VERSION_REF,
+            KeyType.APPEND_DATA,
+            KeyType.MULTI_KEY,
+            KeyType.SNAPSHOT_REF,
+            KeyType.LOG,
+            KeyType.LOG_COMPACTED,
+            KeyType.SYMBOL_LIST,
+        }
 
         data_size = [s for s in sizes if s.key_type == KeyType.TABLE_DATA][0]
-        data_keys = [o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key]
+        data_keys = [
+            o for o in bucket.objects.all() if "test_symbol_sizes_matches_boto" in o.key and "/tdata/" in o.key
+        ]
         assert len(data_keys) == 1
         assert len(data_keys) == data_size.count
         assert data_keys[0].size == data_size.compressed_size
@@ -296,7 +320,11 @@ def test_symbol_sizes_matches_azurite(azurite_storage, lib_name):
     total_size = 0
     total_count = 0
     for blob in blobs:
-        if lib_name.replace(".", "/") in blob.name and blob.container == azurite_storage.container and "/tdata/" in blob.name:
+        if (
+            lib_name.replace(".", "/") in blob.name
+            and blob.container == azurite_storage.container
+            and "/tdata/" in blob.name
+        ):
             total_size += blob.size
             total_count += 1
 

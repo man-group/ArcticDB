@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import re
 import ssl
 from dataclasses import dataclass, fields
@@ -23,7 +24,7 @@ from arcticdb_ext.storage import (
     AWSAuthMethod,
     NativeVariantStorage,
     GCPXMLSettings as NativeGCPXMLSettings,
-    CONFIG_LIBRARY_NAME
+    CONFIG_LIBRARY_NAME,
 )
 
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
@@ -108,19 +109,27 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
 
         if query_params.access:
             if self._aws_auth == AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN:
-                raise UserInputException(f"Specified both access and awsauth=true in the GCPXML Arctic URI - only one can be set endpoint={self._endpoint} bucket={self._bucket}")
+                raise UserInputException(
+                    f"Specified both access and awsauth=true in the GCPXML Arctic URI - only one can be set endpoint={self._endpoint} bucket={self._bucket}"
+                )
             self._access = query_params.access
         elif self._aws_auth == AWSAuthMethod.DISABLED:
-            raise UserInputException(f"Access token or awsauth=true must be specified in GCPXML Arctic URI endpoint={self._endpoint} bucket={self._bucket}")
+            raise UserInputException(
+                f"Access token or awsauth=true must be specified in GCPXML Arctic URI endpoint={self._endpoint} bucket={self._bucket}"
+            )
         else:
             self._access = USE_AWS_CRED_PROVIDERS_TOKEN
 
         if query_params.secret:
             if self._aws_auth == AWSAuthMethod.DEFAULT_CREDENTIALS_PROVIDER_CHAIN:
-                raise UserInputException(f"Specified both secret and awsauth=true in the GCPXML Arctic URI - only one can be set endpoint={self._endpoint} bucket={self._bucket}")
+                raise UserInputException(
+                    f"Specified both secret and awsauth=true in the GCPXML Arctic URI - only one can be set endpoint={self._endpoint} bucket={self._bucket}"
+                )
             self._secret = query_params.secret
         elif self._aws_auth == AWSAuthMethod.DISABLED:
-            raise UserInputException(f"Secret or awsauth=true must be specified in GCPXML Arctic URI endpoint={self._endpoint} bucket={self._bucket}")
+            raise UserInputException(
+                f"Secret or awsauth=true must be specified in GCPXML Arctic URI endpoint={self._endpoint} bucket={self._bucket}"
+            )
         else:
             self._secret = USE_AWS_CRED_PROVIDERS_TOKEN
 
@@ -165,19 +174,9 @@ class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
     @property
     def config_library(self):
         env_cfg = EnvironmentConfigsMap()
-        _name = (
-            self._access
-            if self._aws_auth == AWSAuthMethod.DISABLED
-            else USE_AWS_CRED_PROVIDERS_TOKEN
-        )
-        _key = (
-            self._secret
-            if self._aws_auth == AWSAuthMethod.DISABLED
-            else USE_AWS_CRED_PROVIDERS_TOKEN
-        )
-        with_prefix = (
-            f"{self._path_prefix}/{CONFIG_LIBRARY_NAME}" if self._path_prefix else False
-        )
+        _name = self._access if self._aws_auth == AWSAuthMethod.DISABLED else USE_AWS_CRED_PROVIDERS_TOKEN
+        _key = self._secret if self._aws_auth == AWSAuthMethod.DISABLED else USE_AWS_CRED_PROVIDERS_TOKEN
+        with_prefix = f"{self._path_prefix}/{CONFIG_LIBRARY_NAME}" if self._path_prefix else False
 
         add_gcp_library_to_env(
             cfg=env_cfg,

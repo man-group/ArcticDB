@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -45,7 +46,9 @@ def test_changing_numeric_type(version_store_factory, dynamic_schema):
         received_append = lib.read(sym_append).data
         assert_frame_equal(expected_append, received_append)
 
-        expected_update = pd.DataFrame({"col": np.array([0, 0, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=3))
+        expected_update = pd.DataFrame(
+            {"col": np.array([0, 0, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=3)
+        )
         received_update = lib.read(sym_update).data
         assert_frame_equal(expected_update, received_update)
 
@@ -82,8 +85,12 @@ def test_changing_fixed_string_width(version_store_factory, dynamic_schema, wide
     sym_append = "test_changing_fixed_string_width_append"
     sym_update = "test_changing_fixed_string_width_update"
     df_write = pd.DataFrame({"col": ["aa", "bb", "cc"]}, index=pd.date_range("2024-01-01", periods=3))
-    df_append = pd.DataFrame({"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-04", periods=1))
-    df_update = pd.DataFrame({"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-02", periods=1))
+    df_append = pd.DataFrame(
+        {"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-04", periods=1)
+    )
+    df_update = pd.DataFrame(
+        {"col": ["d" * (1 if wider_strings_first else 3)]}, index=pd.date_range("2024-01-02", periods=1)
+    )
 
     lib.write(sym_append, df_write)
     lib.write(sym_update, df_write)
@@ -95,7 +102,9 @@ def test_changing_fixed_string_width(version_store_factory, dynamic_schema, wide
     received_append = lib.read(sym_append).data
     assert_frame_equal(expected_append, received_append)
 
-    expected_update = pd.DataFrame({"col": ["aa", "d" * (1 if wider_strings_first else 3), "cc"]}, index=pd.date_range("2024-01-01", periods=3))
+    expected_update = pd.DataFrame(
+        {"col": ["aa", "d" * (1 if wider_strings_first else 3), "cc"]}, index=pd.date_range("2024-01-01", periods=3)
+    )
     received_update = lib.read(sym_update).data
     assert_frame_equal(expected_update, received_update)
 
@@ -133,7 +142,9 @@ def test_type_promotion_stored_in_index_key(lmdb_version_store_dynamic_schema):
 @pytest.mark.parametrize("float_type", float_types)
 @pytest.mark.parametrize("second_append_type", [np.int64, np.uint64, np.int32, np.uint32])
 @pytest.mark.parametrize("int_first", (True, False))
-def test_type_promotion_ints_and_floats_up_to_float64(lmdb_version_store_dynamic_schema, int_type, float_type, second_append_type, int_first):
+def test_type_promotion_ints_and_floats_up_to_float64(
+    lmdb_version_store_dynamic_schema, int_type, float_type, second_append_type, int_first
+):
     # Given
     lib = lmdb_version_store_dynamic_schema
 
@@ -169,7 +180,9 @@ def test_type_promotion_ints_and_floats_up_to_float64(lmdb_version_store_dynamic
 
 @pytest.mark.parametrize("original_type", [np.int8, np.uint8, np.int16, np.uint16])
 @pytest.mark.parametrize("second_append_type", [np.int8, np.uint8, np.int16, np.uint16])
-def test_type_promotion_ints_and_floats_up_to_float32(lmdb_version_store_dynamic_schema, original_type, second_append_type):
+def test_type_promotion_ints_and_floats_up_to_float32(
+    lmdb_version_store_dynamic_schema, original_type, second_append_type
+):
     """Cases where we promote an integral type and a float32 to a float32"""
     # Given
     lib = lmdb_version_store_dynamic_schema
@@ -198,12 +211,16 @@ def test_type_promotion_ints_and_floats_up_to_float32(lmdb_version_store_dynamic
 
 @pytest.mark.parametrize("original_type", [np.int32, np.uint32])
 def test_type_promotion_int32_and_float32_up_to_float64(lmdb_version_store_dynamic_schema, original_type):
-    """We promote int32 and float32 up to float64 so we can save the int32 without a loss of precision. """
+    """We promote int32 and float32 up to float64 so we can save the int32 without a loss of precision."""
     # Given
     lib = lmdb_version_store_dynamic_schema
 
-    original_data = pd.DataFrame({"a": np.array([0, np.iinfo(original_type).min, np.iinfo(original_type).max], original_type)}, index=[0, 1, 2])
-    first_append = pd.DataFrame({"a": np.array([0, np.finfo(np.float32).min, np.finfo(np.float32).max], np.float32)}, index=[3, 4, 5])
+    original_data = pd.DataFrame(
+        {"a": np.array([0, np.iinfo(original_type).min, np.iinfo(original_type).max], original_type)}, index=[0, 1, 2]
+    )
+    first_append = pd.DataFrame(
+        {"a": np.array([0, np.finfo(np.float32).min, np.finfo(np.float32).max], np.float32)}, index=[3, 4, 5]
+    )
     lib.write("test", original_data)
     lib.append("test", first_append)
 
@@ -220,20 +237,25 @@ def test_type_promotion_int32_and_float32_up_to_float64(lmdb_version_store_dynam
     assert data.dtypes["a"] == np.float64
     assert expected_result.dtypes["a"] == np.float64
 
+
 def test_type_promotion_int64_and_float64_up_to_float64(lmdb_version_store_dynamic_schema):
     """We unavoidably lose precision in this case, this test just shows what happens when we do."""
     # Given
     lib = lmdb_version_store_dynamic_schema
     original_type = np.int64
 
-    original_data = pd.DataFrame({"a": np.array([
-        np.iinfo(original_type).min + 1,
-        np.iinfo(original_type).max - 1,
-        2 ** 53 - 1,
-        2 ** 53,
-        2 ** 53 + 1
-    ], original_type)}, index=[0, 1, 2, 3, 4])
-    append = pd.DataFrame({"a": np.array([np.finfo(np.float64).min, np.finfo(np.float64).max], np.float64)}, index=[5, 6])
+    original_data = pd.DataFrame(
+        {
+            "a": np.array(
+                [np.iinfo(original_type).min + 1, np.iinfo(original_type).max - 1, 2**53 - 1, 2**53, 2**53 + 1],
+                original_type,
+            )
+        },
+        index=[0, 1, 2, 3, 4],
+    )
+    append = pd.DataFrame(
+        {"a": np.array([np.finfo(np.float64).min, np.finfo(np.float64).max], np.float64)}, index=[5, 6]
+    )
     lib.write("test", original_data)
     lib.append("test", append)
 
@@ -248,9 +270,9 @@ def test_type_promotion_int64_and_float64_up_to_float64(lmdb_version_store_dynam
     #  2147483647 on ARM64
     expected_overflow = np.iinfo(original_type).max if ARM64 else np.iinfo(original_type).min
     assert data.iloc[1, 0] == expected_overflow
-    assert data.iloc[2, 0] == 2 ** 53 - 1  # fine, this fits in float64 which has an 11 bit exponent
-    assert data.iloc[3, 0] == 2 ** 53  # also fine
-    assert data.iloc[4, 0] == 2 ** 53  # off by one, should be 2 ** 53 + 1 but we lost precision
+    assert data.iloc[2, 0] == 2**53 - 1  # fine, this fits in float64 which has an 11 bit exponent
+    assert data.iloc[3, 0] == 2**53  # also fine
+    assert data.iloc[4, 0] == 2**53  # off by one, should be 2 ** 53 + 1 but we lost precision
 
 
 @pytest.mark.parametrize("integral_type", [np.int64, np.int32, np.uint64, np.uint32])
@@ -259,10 +281,13 @@ def test_querybuilder_project_int_gt_32_float(lmdb_version_store_tiny_segment, i
     # Given
     lib = lmdb_version_store_tiny_segment
     symbol = "test"
-    df = pd.DataFrame({
-        "col1": np.array([1, 2, 3, 4], dtype=integral_type),
-        "col2": np.array([-1.0, 2.0, 0.0, 1.0], dtype=float_type)
-    }, index=np.arange(4))
+    df = pd.DataFrame(
+        {
+            "col1": np.array([1, 2, 3, 4], dtype=integral_type),
+            "col2": np.array([-1.0, 2.0, 0.0, 1.0], dtype=float_type),
+        },
+        index=np.arange(4),
+    )
     lib.write(symbol, df)
 
     # When
@@ -290,10 +315,13 @@ def test_querybuilder_project_int32_float32_boundary(lmdb_version_store_tiny_seg
     min_int = np.iinfo(integral_type).min
     max_float32 = np.finfo(np.float32).max
     min_float32 = np.finfo(np.float32).min
-    df = pd.DataFrame({
-        "col1": np.array([min_int, min_int + 1, 0, max_int - 1, max_int], dtype=integral_type),
-        "col2": np.array([min_float32, min_float32 + 1, 0, max_float32 - 1, max_float32], dtype=np.float32)
-    }, index=np.arange(5))
+    df = pd.DataFrame(
+        {
+            "col1": np.array([min_int, min_int + 1, 0, max_int - 1, max_int], dtype=integral_type),
+            "col2": np.array([min_float32, min_float32 + 1, 0, max_float32 - 1, max_float32], dtype=np.float32),
+        },
+        index=np.arange(5),
+    )
     lib.write(symbol, df)
 
     # When
@@ -320,10 +348,10 @@ def test_querybuilder_project_int_lt_16_float(lmdb_version_store_tiny_segment, i
     # Given
     lib = lmdb_version_store_tiny_segment
     symbol = "test"
-    df = pd.DataFrame({
-        "col1": np.array([1, 2, 3, 4], dtype=np.int64),
-        "col2": np.array([-1.0, 2.0, 0.0, 1.0], dtype=float_type)
-    }, index=np.arange(4))
+    df = pd.DataFrame(
+        {"col1": np.array([1, 2, 3, 4], dtype=np.int64), "col2": np.array([-1.0, 2.0, 0.0, 1.0], dtype=float_type)},
+        index=np.arange(4),
+    )
     lib.write(symbol, df)
 
     # When
@@ -343,7 +371,9 @@ def test_querybuilder_project_int_lt_16_float(lmdb_version_store_tiny_segment, i
 
 @pytest.mark.parametrize("original_type", [np.int16, np.uint16, np.int32, np.uint32, np.int64, np.uint64])
 @pytest.mark.parametrize("append_type", [np.float32, np.float64])
-def test_type_promotion_ints_and_floats_then_project_float64_result(lmdb_version_store_dynamic_schema_v1, original_type, append_type):
+def test_type_promotion_ints_and_floats_then_project_float64_result(
+    lmdb_version_store_dynamic_schema_v1, original_type, append_type
+):
     # Given
     lib = lmdb_version_store_dynamic_schema_v1
 
@@ -379,7 +409,9 @@ def test_type_promotion_ints_and_floats_then_project_float64_result(lmdb_version
 
 
 @pytest.mark.parametrize("original_type", [np.int8, np.uint8])
-def test_type_promotion_ints_and_floats_then_project_float32_result(lmdb_version_store_dynamic_schema_v1, original_type):
+def test_type_promotion_ints_and_floats_then_project_float32_result(
+    lmdb_version_store_dynamic_schema_v1, original_type
+):
     # Given
     lib = lmdb_version_store_dynamic_schema_v1
 

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <folly/futures/Future.h>
@@ -24,21 +25,22 @@ TEST(Window, ContinuesOnException) {
 
     std::vector<Promise<int>> ps(1000);
 
-    auto res = reduce(
-        window(
-            ints,
-            [&ps](int i) {
-                if (i % 4 == 0) {
-                    throw std::runtime_error("exception should not kill process");
-                }
-                return ps[i].getFuture();
-            },
-            2),
-        0,
-        [](int sum, const Try<int>& b) {
-            sum += b.hasException<std::exception>() ? 0 : 1;
-            return sum;
-        });
+    auto res =
+            reduce(window(
+                           ints,
+                           [&ps](int i) {
+                               if (i % 4 == 0) {
+                                   throw std::runtime_error("exception should not kill process");
+                               }
+                               return ps[i].getFuture();
+                           },
+                           2
+                   ),
+                   0,
+                   [](int sum, const Try<int>& b) {
+                       sum += b.hasException<std::exception>() ? 0 : 1;
+                       return sum;
+                   });
 
     for (auto& p : ps) {
         p.setValue(0);

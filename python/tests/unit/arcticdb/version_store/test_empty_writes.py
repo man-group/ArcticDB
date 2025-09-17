@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import pytest
 import pandas as pd
 import numpy as np
@@ -146,12 +147,15 @@ def test_empty_series(lmdb_version_store_dynamic_schema, sym):
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, ser, check_index_type=False)
 
 
-@pytest.mark.parametrize("dtype, series, append_series", [
-    ("int64", pd.Series([]), pd.Series([1, 2, 3], dtype="int64")),
-    ("float64", pd.Series([]), pd.Series([1, 2, 3], dtype="float64")),
-    ("float64", pd.Series([1, 2, 3], dtype="float64"), pd.Series([])),
-    ("float64", pd.Series([]), pd.Series([])),
-])
+@pytest.mark.parametrize(
+    "dtype, series, append_series",
+    [
+        ("int64", pd.Series([]), pd.Series([1, 2, 3], dtype="int64")),
+        ("float64", pd.Series([]), pd.Series([1, 2, 3], dtype="float64")),
+        ("float64", pd.Series([1, 2, 3], dtype="float64"), pd.Series([])),
+        ("float64", pd.Series([]), pd.Series([])),
+    ],
+)
 def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, series, append_series):
     lmdb_version_store_dynamic_schema.write(sym, series)
     assert not lmdb_version_store_dynamic_schema.is_symbol_pickled(sym)
@@ -160,7 +164,9 @@ def test_append_empty_series(lmdb_version_store_dynamic_schema, sym, dtype, seri
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, series, check_index_type=(len(series) > 0))
     lmdb_version_store_dynamic_schema.append(sym, append_series)
     result_ser = pd.concat([series, append_series])
-    assert_series_equal(lmdb_version_store_dynamic_schema.read(sym).data, result_ser, check_index_type=(len(result_ser) > 0))
+    assert_series_equal(
+        lmdb_version_store_dynamic_schema.read(sym).data, result_ser, check_index_type=(len(result_ser) > 0)
+    )
 
 
 def test_entirely_empty_column(lmdb_version_store):
@@ -172,6 +178,7 @@ def test_entirely_empty_column(lmdb_version_store):
     lib.write("test_entirely_empty_column", df)
     assert_frame_equal(df, lib.read("test_entirely_empty_column").data)
 
+
 class TestEmptyIndexPreservesIndexNames:
     """
     Verify that when the dataframe (and the index) are empty the index name will be preserved. When/if the empty type
@@ -182,7 +189,10 @@ class TestEmptyIndexPreservesIndexNames:
         2. What should happen with multiindex data. The empty index has a different normalization metadata which does
         not allow for multiple names. What should be done in this case? Should we keep all index names?
     """
-    @pytest.mark.parametrize("index",[pd.DatetimeIndex([], name="my_empty_index"), pd.RangeIndex(0,0,1, name="my_empty_index")])
+
+    @pytest.mark.parametrize(
+        "index", [pd.DatetimeIndex([], name="my_empty_index"), pd.RangeIndex(0, 0, 1, name="my_empty_index")]
+    )
     def test_single_index(self, lmdb_version_store_v1, index):
         lib = lmdb_version_store_v1
         df = pd.DataFrame({"col": []}, index=index)

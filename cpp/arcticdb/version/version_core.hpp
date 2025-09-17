@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -36,7 +37,7 @@ struct SymbolProcessingResult {
 
 struct ReadVersionOutput {
     ReadVersionOutput() = delete;
-    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor):
+    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor) :
         versioned_item_(std::move(versioned_item)),
         frame_and_descriptor_(std::move(frame_and_descriptor)) {}
 
@@ -50,11 +51,11 @@ struct MultiSymbolReadOutput {
     MultiSymbolReadOutput() = delete;
     MultiSymbolReadOutput(
             std::vector<VersionedItem>&& versioned_items,
-            std::vector<proto::descriptors::UserDefinedMetadata>&& metadatas,
-            FrameAndDescriptor&& frame_and_descriptor):
-            versioned_items_(std::move(versioned_items)),
-            metadatas_(std::move(metadatas)),
-            frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+            std::vector<proto::descriptors::UserDefinedMetadata>&& metadatas, FrameAndDescriptor&& frame_and_descriptor
+    ) :
+        versioned_items_(std::move(versioned_items)),
+        metadatas_(std::move(metadatas)),
+        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
 
     ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
 
@@ -64,117 +65,86 @@ struct MultiSymbolReadOutput {
 };
 
 VersionedItem write_dataframe_impl(
-    const std::shared_ptr<Store>& store,
-    VersionId version_id,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
-    const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
-    bool allow_sparse = false,
-    bool validate_index = false
+        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputTensorFrame>& frame,
+        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
+        bool allow_sparse = false, bool validate_index = false
 );
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
-    const std::shared_ptr<Store>& store,
-    VersionId version_id,
-    const std::shared_ptr<pipelines::InputTensorFrame>& frame,
-    const WriteOptions& options,
-    const std::shared_ptr<DeDupMap>& de_dup_map,
-    bool allow_sparse,
-    bool validate_index
+        const std::shared_ptr<Store>& store, VersionId version_id,
+        const std::shared_ptr<pipelines::InputTensorFrame>& frame, const WriteOptions& options,
+        const std::shared_ptr<DeDupMap>& de_dup_map, bool allow_sparse, bool validate_index
 );
 
 folly::Future<AtomKey> async_append_impl(
-    const std::shared_ptr<Store>& store,
-    const UpdateInfo& update_info,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
-    bool validate_index,
-    bool empty_types);
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        const std::shared_ptr<InputTensorFrame>& frame, const WriteOptions& options, bool validate_index,
+        bool empty_types
+);
 
 VersionedItem append_impl(
-    const std::shared_ptr<Store>& store,
-    const UpdateInfo& update_info,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    const WriteOptions& options,
-    bool validate_index,
-    bool empty_types);
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
+        const std::shared_ptr<InputTensorFrame>& frame, const WriteOptions& options, bool validate_index,
+        bool empty_types
+);
 
 VersionedItem update_impl(
-    const std::shared_ptr<Store>& store,
-    const UpdateInfo& update_info,
-    const UpdateQuery & query,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types);
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
+        const std::shared_ptr<InputTensorFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+);
 
 folly::Future<AtomKey> async_update_impl(
-    const std::shared_ptr<Store>& store,
-    const UpdateInfo& update_info,
-    const UpdateQuery& query,
-    const std::shared_ptr<InputTensorFrame>& frame,
-    WriteOptions&& options,
-    bool dynamic_schema,
-    bool empty_types);
+        const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
+        const std::shared_ptr<InputTensorFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
+);
 
 VersionedItem delete_range_impl(
-    const std::shared_ptr<Store>& store,
-    const StreamId& stream_id,
-    const UpdateInfo& update_info,
-    const UpdateQuery& query,
-    const WriteOptions&& options,
-    bool dynamic_schema);
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
+        const UpdateQuery& query, const WriteOptions&& options, bool dynamic_schema
+);
 
 AtomKey index_key_to_column_stats_key(const IndexTypeKey& index_key);
 
 void create_column_stats_impl(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item,
-    ColumnStats& column_stats,
-    const ReadOptions& read_options);
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item, ColumnStats& column_stats,
+        const ReadOptions& read_options
+);
 
 void drop_column_stats_impl(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item,
-    const std::optional<ColumnStats>& column_stats_to_drop);
+        const std::shared_ptr<Store>& store, const VersionedItem& versioned_item,
+        const std::optional<ColumnStats>& column_stats_to_drop
+);
 
-FrameAndDescriptor read_column_stats_impl(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item);
+FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 
-ColumnStats get_column_stats_info_impl(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& versioned_item);
+ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 
 folly::Future<ReadVersionOutput> read_multi_key(
-    const std::shared_ptr<Store>& store,
-    const SegmentInMemory& index_key_seg,
-    std::any& handler_data);
+        const std::shared_ptr<Store>& store, const SegmentInMemory& index_key_seg, std::any& handler_data
+);
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
-    std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
-    std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
+        std::vector<std::vector<EntityId>>&& entity_ids_vec_fut,
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+);
 
 folly::Future<std::vector<EntityId>> schedule_clause_processing(
-    std::shared_ptr<ComponentManager> component_manager,
-    std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
-    std::vector<std::vector<size_t>>&& processing_unit_indexes,
-    std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses);
+        std::shared_ptr<ComponentManager> component_manager,
+        std::vector<folly::Future<pipelines::SegmentAndSlice>>&& segment_and_slice_futures,
+        std::vector<std::vector<size_t>>&& processing_unit_indexes,
+        std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
+);
 
-FrameAndDescriptor read_index_impl(
-    const std::shared_ptr<Store>& store,
-    const VersionedItem& version);
+FrameAndDescriptor read_index_impl(const std::shared_ptr<Store>& store, const VersionedItem& version);
 
 std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
-    const std::shared_ptr<Store>& store,
-    const StreamId& stream_id,
-    const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta,
-    const UpdateInfo& update_info,
-    const CompactIncompleteParameters& compaction_parameters,
-    const WriteOptions& write_options,
-    std::shared_ptr<PipelineContext>& pipeline_context);
+        const std::shared_ptr<Store>& store, const StreamId& stream_id,
+        const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta, const UpdateInfo& update_info,
+        const CompactIncompleteParameters& compaction_parameters, const WriteOptions& write_options,
+        std::shared_ptr<PipelineContext>& pipeline_context
+);
 
-struct PredefragmentationInfo{
+struct PredefragmentationInfo {
     std::shared_ptr<PipelineContext> pipeline_context;
     std::shared_ptr<ReadQuery> read_query;
     size_t segments_need_compaction;
@@ -182,67 +152,50 @@ struct PredefragmentationInfo{
 };
 
 PredefragmentationInfo get_pre_defragmentation_info(
-        const std::shared_ptr<Store>& store,
-        const StreamId& stream_id,
-        const UpdateInfo& update_info,
-        const WriteOptions& options,
-        size_t segment_size);
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
+        const WriteOptions& options, size_t segment_size
+);
 
 bool is_symbol_fragmented_impl(size_t segments_need_compaction);
 
 VersionedItem defragment_symbol_data_impl(
-        const std::shared_ptr<Store>& store,
-        const StreamId& stream_id,
-        const UpdateInfo& update_info,
-        const WriteOptions& options,
-        size_t segment_size);
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, const UpdateInfo& update_info,
+        const WriteOptions& options, size_t segment_size
+);
 
-        
 std::variant<VersionedItem, CompactionError> sort_merge_impl(
-    const std::shared_ptr<Store>& store,
-    const StreamId& stream_id,
-    const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta,
-    const UpdateInfo& update_info,
-    const CompactIncompleteParameters& compaction_parameters,
-    const WriteOptions& write_options,
-    std::shared_ptr<PipelineContext>& pipeline_context);
+        const std::shared_ptr<Store>& store, const StreamId& stream_id,
+        const std::optional<proto::descriptors::UserDefinedMetadata>& user_meta, const UpdateInfo& update_info,
+        const CompactIncompleteParameters& compaction_parameters, const WriteOptions& write_options,
+        std::shared_ptr<PipelineContext>& pipeline_context
+);
 
-void add_index_columns_to_query(
-    const ReadQuery& read_query, 
-    const TimeseriesDescriptor& desc);
+void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDescriptor& desc);
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
-    const std::shared_ptr<Store>& store,
-    const std::variant<VersionedItem, StreamId>& version_info,
-    const std::shared_ptr<ReadQuery>& read_query,
-    const ReadOptions& read_options,
-    std::any& handler_data
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 );
 
 folly::Future<SymbolProcessingResult> read_and_process(
-        const std::shared_ptr<Store>& store,
-        const std::variant<VersionedItem, StreamId>& version_info,
-        const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options,
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 );
 
 class DeleteIncompleteKeysOnExit {
-public:
+  public:
     DeleteIncompleteKeysOnExit(
-        std::shared_ptr<PipelineContext> pipeline_context,
-        std::shared_ptr<Store> store,
-        bool via_iteration);
+            std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration
+    );
 
     ARCTICDB_NO_MOVE_OR_COPY(DeleteIncompleteKeysOnExit)
 
     ~DeleteIncompleteKeysOnExit();
 
-    void release() {
-        released_ = true;
-    }
+    void release() { released_ = true; }
 
-private:
+  private:
     std::shared_ptr<PipelineContext> context_;
     std::shared_ptr<Store> store_;
     bool via_iteration_;
@@ -251,18 +204,16 @@ private:
 void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store);
 
 std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
-    const std::shared_ptr<PipelineContext>& pipeline_context,
-    const std::shared_ptr<Store>& store,
-    const CompactIncompleteParameters& parameters);
+        const std::shared_ptr<PipelineContext>& pipeline_context, const std::shared_ptr<Store>& store,
+        const CompactIncompleteParameters& parameters
+);
 
 folly::Future<SegmentInMemory> prepare_output_frame(
-        std::vector<SliceAndKey>&& items,
-        const std::shared_ptr<PipelineContext>& pipeline_context,
-        const std::shared_ptr<Store>& store,
-        const ReadOptions& read_options,
-        std::any& handler_data);
+        std::vector<SliceAndKey>&& items, const std::shared_ptr<PipelineContext>& pipeline_context,
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
+);
 
-} //namespace arcticdb::version_store
+} // namespace arcticdb::version_store
 
 namespace arcticdb {
 
@@ -276,9 +227,8 @@ bool is_segment_unsorted(const SegmentInMemory& segment);
 size_t n_segments_live_during_compaction();
 
 CheckOutcome check_schema_matches_incomplete(
-    const StreamDescriptor& stream_descriptor_incomplete,
-    const StreamDescriptor& pipeline_context,
-    const bool convert_int_to_float=false
+        const StreamDescriptor& stream_descriptor_incomplete, const StreamDescriptor& pipeline_context,
+        const bool convert_int_to_float = false
 );
 
 struct CompactionOptions {
@@ -287,36 +237,37 @@ struct CompactionOptions {
     bool perform_schema_checks{true};
 };
 
-template <typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy, typename IteratorType>
+template<
+        typename IndexType, typename SchemaType, typename SegmentationPolicy, typename DensityPolicy,
+        typename IteratorType>
 [[nodiscard]] CompactionResult do_compact(
-    IteratorType to_compact_start,
-    IteratorType to_compact_end,
-    const std::shared_ptr<pipelines::PipelineContext>& pipeline_context,
-    std::vector<pipelines::FrameSlice>& slices,
-    const std::shared_ptr<Store>& store,
-    std::optional<size_t> segment_size,
-    const CompactionOptions& options) {
+        IteratorType to_compact_start, IteratorType to_compact_end,
+        const std::shared_ptr<pipelines::PipelineContext>& pipeline_context, std::vector<pipelines::FrameSlice>& slices,
+        const std::shared_ptr<Store>& store, std::optional<size_t> segment_size, const CompactionOptions& options
+) {
     CompactionResult result;
     auto index = stream::index_type_from_descriptor(pipeline_context->descriptor());
 
     std::vector<folly::Future<VariantKey>> write_futures;
 
     auto semaphore = std::make_shared<folly::NativeSemaphore>(n_segments_live_during_compaction());
-    stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy>
-        aggregator{
-        [&slices](pipelines::FrameSlice &&slice) {
-            slices.emplace_back(std::move(slice));
-        },
-        SchemaType{pipeline_context->descriptor(), index},
-        [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory &&segment) {
-            auto local_index_start = IndexType::start_value_for_segment(segment);
-            auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
-            stream::StreamSink::PartialKey
-                pk{KeyType::TABLE_DATA, pipeline_context->version_id_, pipeline_context->stream_id_, local_index_start, local_index_end};
+    stream::SegmentAggregator<IndexType, SchemaType, SegmentationPolicy, DensityPolicy> aggregator{
+            [&slices](pipelines::FrameSlice&& slice) { slices.emplace_back(std::move(slice)); },
+            SchemaType{pipeline_context->descriptor(), index},
+            [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory&& segment) {
+                auto local_index_start = IndexType::start_value_for_segment(segment);
+                auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
+                stream::StreamSink::PartialKey pk{
+                        KeyType::TABLE_DATA,
+                        pipeline_context->version_id_,
+                        pipeline_context->stream_id_,
+                        local_index_start,
+                        local_index_end
+                };
 
-            write_futures.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore));
-        },
-        segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
+                write_futures.emplace_back(store->write_maybe_blocking(pk, std::move(segment), semaphore));
+            },
+            segment_size.has_value() ? SegmentationPolicy{*segment_size} : SegmentationPolicy{}
     };
 
     [[maybe_unused]] size_t count = 0;
@@ -332,16 +283,30 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
         }
 
         const SegmentInMemory& segment = sk.segment(store);
-        ARCTICDB_DEBUG(log::version(), "do_compact Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
-                       pipeline_context->stream_id_, count++, segment.row_count(), segment.columns().size(), segment.descriptor().uncompressed_bytes());
+        ARCTICDB_DEBUG(
+                log::version(),
+                "do_compact Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes {}",
+                pipeline_context->stream_id_,
+                count++,
+                segment.row_count(),
+                segment.columns().size(),
+                segment.descriptor().uncompressed_bytes()
+        );
 
-        if(!index_names_match(segment.descriptor(), pipeline_context->descriptor())) {
+        if (!index_names_match(segment.descriptor(), pipeline_context->descriptor())) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
-            return Error{throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>, fmt::format("Index names in segment {} and pipeline context {} do not match", segment.descriptor(), pipeline_context->descriptor())};
+            return Error{
+                    throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
+                    fmt::format(
+                            "Index names in segment {} and pipeline context {} do not match",
+                            segment.descriptor(),
+                            pipeline_context->descriptor()
+                    )
+            };
         }
 
-        if(options.validate_index && is_segment_unsorted(segment)) {
+        if (options.validate_index && is_segment_unsorted(segment)) {
             auto written_keys = folly::collect(write_futures).get();
             remove_written_keys(store.get(), std::move(written_keys));
             return Error{throw_error<ErrorCode::E_UNSORTED_DATA>, "Cannot compact unordered segment"};
@@ -349,7 +314,9 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
 
         if constexpr (std::is_same_v<SchemaType, FixedSchema>) {
             if (options.perform_schema_checks) {
-                CheckOutcome outcome = check_schema_matches_incomplete(segment.descriptor(), pipeline_context->descriptor(), options.convert_int_to_float);
+                CheckOutcome outcome = check_schema_matches_incomplete(
+                        segment.descriptor(), pipeline_context->descriptor(), options.convert_int_to_float
+                );
                 if (std::holds_alternative<Error>(outcome)) {
                     auto written_keys = folly::collect(write_futures).get();
                     remove_written_keys(store.get(), std::move(written_keys));
@@ -358,11 +325,7 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
             }
         }
 
-        aggregator.add_segment(
-            std::move(sk.segment(store)),
-            sk.slice(),
-            options.convert_int_to_float
-        );
+        aggregator.add_segment(std::move(sk.segment(store)), sk.slice(), options.convert_int_to_float);
         sk.unset_segment();
     }
 
@@ -370,4 +333,4 @@ template <typename IndexType, typename SchemaType, typename SegmentationPolicy, 
     return folly::collect(std::move(write_futures)).get();
 }
 
-}
+} // namespace arcticdb

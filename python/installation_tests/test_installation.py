@@ -20,7 +20,7 @@ from arcticdb.util.test import random_floats, random_strings_of_length
 from arcticdb.version_store import VersionedItem as PythonVersionedItem
 from arcticdb.toolbox.library_tool import KeyType
 from arcticdb.version_store.library import ReadRequest, StagedDataFinalizeMethod, WritePayload
-from arcticdb_ext.exceptions import SortingException 
+from arcticdb_ext.exceptions import SortingException
 from arcticdb_ext.version_store import AtomKey, RefKey
 from packaging import version
 
@@ -34,15 +34,10 @@ from arcticdb.version_store.processing import QueryBuilder
 from client_utils import delete_library
 
 
-PRE_4_X_X = (
-    False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("4.0.0")
-)    
-PRE_5_X_X = (
-    False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.0.0")
-)    
-PRE_5_2_X = (
-    False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.2.0")
-)    
+PRE_4_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("4.0.0")
+PRE_5_X_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.0.0")
+PRE_5_2_X = False if "dev" in arcticdb.__version__ else version.parse(arcticdb.__version__) < version.Version("5.2.0")
+
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     dataframes = []
@@ -137,7 +132,7 @@ def test_basic_write_read_update_and_append(ac_library):
     read_metadata = lib.read_metadata("meta")
     assert read_metadata.version == 1
 
-     
+
 def test_list_versions_write_append_update(ac_library):
     lib = ac_library
     # Note: can only update timeseries dataframes
@@ -168,13 +163,13 @@ def test_read_batch_per_symbol_query_builder(ac_library):
     batch = lib.read_batch([ReadRequest("s1", query_builder=q_1), ReadRequest("s2", query_builder=q_2)])
     # Then
     assert_frame_equal(batch[0].data, pd.DataFrame({"a": [3]}))
-    assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4, 6]}))    
+    assert_frame_equal(batch[1].data, pd.DataFrame({"a": [4, 6]}))
 
 
 @pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.APPEND, StagedDataFinalizeMethod.WRITE))
 @pytest.mark.parametrize("validate_index", (True, False, None))
 @pytest.mark.storage
-@pytest.mark.skipif(PRE_4_X_X, reason = "finalize_staged_data has 2 arguments only in older ver")
+@pytest.mark.skipif(PRE_4_X_X, reason="finalize_staged_data has 2 arguments only in older ver")
 def test_parallel_writes_and_appends_index_validation(ac_library, finalize_method, validate_index):
     lib = ac_library
     sym = "test_parallel_writes_and_appends_index_validation"
@@ -221,7 +216,7 @@ def test_update_prune_previous_versions(ac_library):
     assert ("symbol", 1) in symbols
 
 
-@pytest.mark.skipif(PRE_4_X_X, reason = "batch operations with snapshots not avail")
+@pytest.mark.skipif(PRE_4_X_X, reason="batch operations with snapshots not avail")
 def test_read_batch_mixed_with_snapshots(ac_library):
     num_symbols = 10
     num_versions = 10
@@ -343,7 +338,7 @@ def test_read_batch_mixed_with_snapshots(ac_library):
     assert_frame_equal(vits[5].data, expected)
 
 
-@pytest.mark.skipif(PRE_5_X_X, reason = "Library has no stage() method before ver 5.x")
+@pytest.mark.skipif(PRE_5_X_X, reason="Library has no stage() method before ver 5.x")
 def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     lib_opts = LibraryOptions(dynamic_schema=True, rows_per_segment=2, columns_per_segment=2)
     lib = ac_client.get_library(lib_name, create_if_missing=True, library_options=lib_opts)
@@ -398,9 +393,11 @@ def test_stage_finalize_dynamic_with_chunking(ac_client, lib_name):
     finally:
         delete_library(ac_client, lib_name)
 
-@pytest.mark.skipif(PRE_4_X_X, reason = "ModifiableEnterpriseLibraryOption not present before")
+
+@pytest.mark.skipif(PRE_4_X_X, reason="ModifiableEnterpriseLibraryOption not present before")
 def test_modify_options_affect_persistent_lib_config(ac_client, lib_name):
-    from arcticdb.options import ModifiableEnterpriseLibraryOption 
+    from arcticdb.options import ModifiableEnterpriseLibraryOption
+
     ac = ac_client
     lib = ac.create_library(lib_name)
 
@@ -416,7 +413,8 @@ def test_modify_options_affect_persistent_lib_config(ac_client, lib_name):
     finally:
         delete_library(ac_client, lib_name)
 
-@pytest.mark.skipif(PRE_4_X_X, reason = "compact_symbol_list not present before")
+
+@pytest.mark.skipif(PRE_4_X_X, reason="compact_symbol_list not present before")
 def test_force_compact_symbol_list(ac_library):
     lib = ac_library
     lib_tool = lib._nvs.library_tool()
@@ -430,7 +428,7 @@ def test_force_compact_symbol_list(ac_library):
     num_syms = 10
     payloads = list()
     syms = list()
-    df = pd.DataFrame({'A': [1], 'B': [2]})
+    df = pd.DataFrame({"A": [1], "B": [2]})
     for sym in range(num_syms):
         name = f"symbol_{sym:03}"
         syms.append(name)
@@ -456,29 +454,31 @@ def test_force_compact_symbol_list(ac_library):
     assert len(symbol_list_keys) == 1
     assert not len(lib.list_symbols())
 
+
 def sample_dataframe(start_date, *arr) -> pd.DataFrame:
     """
-        Creates a dataframe based on arrays that are passed.
-        Arrays will be used as columns data of the dataframe.
-        The returned dataframe will be indexed with timestamp 
-        starting from the given date
-        Arrays must be numpy arrays of same size
+    Creates a dataframe based on arrays that are passed.
+    Arrays will be used as columns data of the dataframe.
+    The returned dataframe will be indexed with timestamp
+    starting from the given date
+    Arrays must be numpy arrays of same size
     """
-    date_range = pd.date_range(start=start_date, periods=len(arr[0]), freq='D') 
+    date_range = pd.date_range(start=start_date, periods=len(arr[0]), freq="D")
     columns = {}
     cnt = 0
     for ar in arr:
-        columns[f"NUMBER{cnt}"] = ar    
+        columns[f"NUMBER{cnt}"] = ar
         cnt = cnt + 1
-    
+
     return pd.DataFrame(columns, index=date_range)
 
-@pytest.mark.parametrize("mode" , [StagedDataFinalizeMethod.APPEND])
+
+@pytest.mark.parametrize("mode", [StagedDataFinalizeMethod.APPEND])
 def test_finalize_staged_data_mode_append(ac_library, mode):
     lib = ac_library
     symbol = "symbol"
-    df_initial = sample_dataframe('2020-1-1', [1,2,3], [4, 5, 6])
-    df_staged = sample_dataframe('2020-1-4', [7, 8, 9], [10, 11, 12])
+    df_initial = sample_dataframe("2020-1-1", [1, 2, 3], [4, 5, 6])
+    df_staged = sample_dataframe("2020-1-4", [7, 8, 9], [10, 11, 12])
     lib.write(symbol, df_initial)
     lib.write(symbol, df_staged, staged=True)
     assert_frame_equal(lib.read(symbol).data, df_initial)

@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pickle
@@ -21,15 +22,20 @@ def test_lazy_read(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_read"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
     lib.write_pickle(sym, 1)
 
-    lazy_df = lib.read(sym, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"], lazy=True)
+    lazy_df = lib.read(
+        sym, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"], lazy=True
+    )
     assert isinstance(lazy_df, LazyDataFrame)
     received = lazy_df.collect().data
-    expected = lib.read(sym, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"]).data
+    expected = lib.read(
+        sym, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"]
+    ).data
 
     assert_frame_equal(expected, received)
 
@@ -38,7 +44,8 @@ def test_lazy_date_range(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_date_range"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -54,7 +61,8 @@ def test_lazy_filter(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_filter"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -70,7 +78,8 @@ def test_lazy_head(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_head"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -86,7 +95,8 @@ def test_lazy_tail(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_tail"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -102,7 +112,8 @@ def test_lazy_apply(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_apply"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -119,7 +130,8 @@ def test_lazy_apply_inline_col(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_apply_inline_col"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -135,7 +147,8 @@ def test_lazy_project(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_project"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -152,7 +165,8 @@ def test_lazy_project_constant_value(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_project"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -172,9 +186,9 @@ def test_lazy_ternary(lmdb_library):
         {
             "conditional": [True, False, True, True, False] * 2,
             "col1": np.arange(10, dtype=np.int64),
-            "col2": np.arange(100, 110, dtype=np.int64)
+            "col2": np.arange(100, 110, dtype=np.int64),
         },
-        index=pd.date_range("2000-01-01", periods=10)
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -206,7 +220,8 @@ def test_lazy_resample(lmdb_library):
     lib = lmdb_library
     sym = "test_lazy_resample"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym, df)
 
@@ -223,9 +238,8 @@ def test_lazy_resample(lmdb_library):
 def test_lazy_regex_match(lmdb_library, sym):
     lib = lmdb_library
     df = pd.DataFrame(
-            index=pd.date_range(pd.Timestamp(0), periods=3),
-            data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
-        )
+        index=pd.date_range(pd.Timestamp(0), periods=3), data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
+    )
     lib.write(sym, df)
 
     lazy_df = lib.read(sym, lazy=True)
@@ -278,7 +292,8 @@ def test_lazy_batch_read(lmdb_library):
     sym_0 = "test_lazy_batch_read_0"
     sym_1 = "test_lazy_batch_read_1"
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     lib.write(sym_0, df)
     lib.write_pickle(sym_0, 1)
@@ -294,7 +309,9 @@ def test_lazy_batch_read(lmdb_library):
     lazy_dfs = lib.read_batch([read_request_0, sym_1], lazy=True)
     assert isinstance(lazy_dfs, LazyDataFrameCollection)
     received = lazy_dfs.collect()
-    expected_0 = lib.read(sym_0, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"]).data
+    expected_0 = lib.read(
+        sym_0, as_of=0, date_range=(pd.Timestamp("2000-01-03"), pd.Timestamp("2000-01-07")), columns=["col2"]
+    ).data
     expected_1 = lib.read(sym_1).data
     assert_frame_equal(expected_0, received[0].data)
     assert_frame_equal(expected_1, received[1].data)
@@ -304,7 +321,8 @@ def test_lazy_batch_one_query(lmdb_library):
     lib = lmdb_library
     syms = [f"test_lazy_batch_one_query_{idx}" for idx in range(3)]
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     for sym in syms:
         lib.write(sym, df)
@@ -320,7 +338,8 @@ def test_lazy_batch_collect_separately(lmdb_library):
     lib = lmdb_library
     syms = [f"test_lazy_batch_collect_separately_{idx}" for idx in range(3)]
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     for sym in syms:
         lib.write(sym, df)
@@ -343,7 +362,8 @@ def test_lazy_batch_separate_queries_collect_together(lmdb_library):
     lib = lmdb_library
     syms = [f"test_lazy_batch_separate_queries_collect_together_{idx}" for idx in range(3)]
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     for sym in syms:
         lib.write(sym, df)
@@ -364,7 +384,8 @@ def test_lazy_batch_complex(lmdb_library):
     lib = lmdb_library
     syms = [f"test_lazy_batch_complex_{idx}" for idx in range(3)]
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     for sym in syms:
         lib.write(sym, df)
@@ -425,7 +446,8 @@ def test_lazy_batch_collect_multiple_times(lmdb_library):
     lib = lmdb_library
     syms = [f"test_lazy_batch_collect_multiple_times_{idx}" for idx in range(3)]
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     for sym in syms:
         lib.write(sym, df)
@@ -495,7 +517,8 @@ def test_lazy_batch_pickling(lmdb_library):
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
     df = pd.DataFrame(
-        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
+        {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
+        index=pd.date_range("2000-01-01", periods=10),
     )
     for sym in syms:
         lib.write(sym, df)

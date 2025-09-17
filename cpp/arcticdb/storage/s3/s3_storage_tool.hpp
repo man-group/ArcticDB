@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -11,7 +12,7 @@
 #include <s3_storage.pb.h>
 
 namespace arcticdb::proto {
-    namespace s3_storage = arcticc::pb2::s3_storage_pb2;
+namespace s3_storage = arcticc::pb2::s3_storage_pb2;
 }
 
 namespace arcticdb::storage::s3 {
@@ -19,12 +20,12 @@ namespace arcticdb::storage::s3 {
 class S3ApiInstance;
 
 class S3StorageTool {
-public:
+  public:
     using Config = arcticdb::proto::s3_storage::Config;
-    S3StorageTool(const Config &conf);
+    S3StorageTool(const Config& conf);
 
     template<class Visitor>
-    void iterate_bucket(Visitor &&visitor, const std::string& prefix = std::string());
+    void iterate_bucket(Visitor&& visitor, const std::string& prefix = std::string());
 
     void delete_bucket(const std::string& prefix = std::string());
 
@@ -39,7 +40,7 @@ public:
 
     void delete_object(const std::string& key);
 
-private:
+  private:
     std::shared_ptr<S3ApiInstance> s3_api_;
     Aws::S3::S3Client s3_client_;
     std::string bucket_name_;

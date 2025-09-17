@@ -18,4 +18,3 @@ def test_batch_roundtrip(s3_version_store_v1):
     data_vector = [df for _ in symbols]
     s3_version_store_v1.batch_write(symbols, data_vector)
     s3_version_store_v1.batch_read(symbols)
-

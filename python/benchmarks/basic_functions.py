@@ -50,7 +50,7 @@ class BasicFunctions:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         self.ac = Arctic(BasicFunctions.CONNECTION_STRING)
         rows_values = BasicFunctions.params
 
@@ -183,7 +183,7 @@ class BatchBasicFunctions:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)
         rows_values, num_symbols_values = BatchBasicFunctions.params
 
@@ -342,7 +342,7 @@ class ModificationFunctions:
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
         return lad
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         self.ac = Arctic(ModificationFunctions.CONNECTION_STRING)
         rows_values = ModificationFunctions.params
 
