@@ -84,9 +84,9 @@ def test_batch_append(lmdb_version_store_arrow):
     assert table_2.equals(received_2)
 
 
-def test_write_unsupported_typess(lmdb_version_store_arrow):
+def test_write_unsupported_types(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
-    sym = "test_write_unsupported_typess"
+    sym = "test_write_unsupported_types"
     table = pa.table({"col": pa.array([0, 1], pa.float16())})
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
