@@ -213,8 +213,6 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
     auto res = std::make_shared<InputFrame>();
     res->num_rows = 0u;
     python_util::pb_from_python(norm_meta, res->norm_meta);
-    if (!user_meta.is_none())
-        python_util::pb_from_python(user_meta, res->user_meta);
 
     if (std::holds_alternative<py::tuple>(item)) {
         // Fill index
@@ -290,38 +288,24 @@ std::shared_ptr<InputFrame> py_ndf_to_frame(
         util::check(res->norm_meta.has_arrow_table(), "Unexpected non-Arrow norm metadata provided with Arrow data");
         const auto& arrow_norm_metadata = res->norm_meta.arrow_table();
         const auto& record_batches = std::get<std::vector<RecordBatchData>>(item);
-        std::vector<sparrow::record_batch> sp_record_batches;
-        sp_record_batches.reserve(record_batches.size());
-        for (const auto& record_batch: record_batches) {
-            sp_record_batches.emplace_back(&record_batch.array_, &record_batch.schema_);
-        }
-        SegmentInMemory seg;
-        if (arrow_norm_metadata.has_index()) {
-            auto [tmp, index_column_position] = arrow_data_to_segment(sp_record_batches, arrow_norm_metadata.index_column_name());
-            seg = std::move(tmp);
+        std::vector<sparrow::record_batch> sparrow_record_batches(record_batches.size(), sparrow::record_batch{});
+        std::ranges::transform(record_batches, sparrow_record_batches.begin(), [](const RecordBatchData& record_batch) {
+            return sparrow::record_batch{&record_batch.array_, &record_batch.schema_};
+        });
+        auto [seg, index_column_position] = arrow_data_to_segment(sparrow_record_batches,
+                                                                  arrow_norm_metadata.has_index() ?
+                                                                  arrow_norm_metadata.index_column_name() :
+                                                                  std::optional<std::string>());
+        if (index_column_position.has_value()) {
             res->norm_meta.mutable_arrow_table()->set_index_column_position(*index_column_position);
-        } else {
-            seg = arrow_data_to_segment(sp_record_batches).first;
         }
-        if (arrow_norm_metadata.has_index()) {
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    !seg.columns().empty(),
-                    "Arrow index column specified but there are zero columns");
-            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                    is_time_type(seg.column(0).type().data_type()),
-                    "Specified Arrow index column has non-time type {}", seg.column(0).type().data_type());
-            seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
-            seg.descriptor().set_sorted(SortedValue::ASCENDING); // Maybe UNKNOWN?
-            res->index = TimeseriesIndex{std::string(seg.descriptor().field(0).name())};
-        } else {
-            seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
-            res->index = RowCountIndex{};
-        }
-        res->num_rows = seg.row_count();
-        res->input_data = std::move(seg);
+        res->set_segment(std::move(seg));
     }
     res->set_index_range();
     res->desc().set_id(stream_name);
+    if (!user_meta.is_none()) {
+        python_util::pb_from_python(user_meta, res->user_meta);
+    }
     return res;
 }
 

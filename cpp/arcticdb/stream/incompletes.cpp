@@ -249,7 +249,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
 
     auto next_key = std::nullopt;
     // This clone is unnecessarily expensive. We should have a sort method that produces a new segment (current one is in-place)
-    auto segment = std::holds_alternative<SegmentInMemory>(frame->input_data) ? std::get<SegmentInMemory>(frame->input_data).clone() : incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
+    auto segment = frame->has_tensors() ? incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats) : frame->segment().clone();
+//    auto segment = std::holds_alternative<SegmentInMemory>(frame->input_data) ? std::get<SegmentInMemory>(frame->input_data).clone() : incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats);
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
         std::vector<std::string> cols;

@@ -49,12 +49,11 @@ WriteToSegmentTask::WriteToSegmentTask(
 std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator() () {
     slice_.check_magic();
     magic_.check();
-    if (std::holds_alternative<SegmentInMemory>(frame_->input_data)) {
-//    if (frame_->seg.has_value()) {
+    if (!frame_->has_tensors()) {
         ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
         auto key = partial_key_gen_(slice_);
-//        const auto& frame = *frame_->seg;
-        const auto& frame = std::get<SegmentInMemory>(frame_->input_data);
+        const auto& frame = frame_->segment();
+        const auto offset = frame_->offset;
         SegmentInMemory seg;
         if (frame.descriptor().index().field_count() > 0) {
             seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
@@ -63,8 +62,8 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         }
         for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
             const auto& source_column = frame.column(col_idx);
-            const auto first_byte = (slice_.rows().first - frame_->offset) * get_type_size(source_column.type().data_type());
-            const auto bytes = ((slice_.rows().second - frame_->offset) * get_type_size(source_column.type().data_type())) - first_byte;
+            const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
+            const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
             if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
                 ChunkedBuffer chunked_buffer;
                 if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
@@ -108,8 +107,8 @@ std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToS
         }
         for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
             const auto& source_column = frame.column(col_idx);
-            const auto first_byte = (slice_.rows().first - frame_->offset) * get_type_size(source_column.type().data_type());
-            const auto bytes = ((slice_.rows().second - frame_->offset) * get_type_size(source_column.type().data_type())) - first_byte;
+            const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
+            const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
             if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
                 ChunkedBuffer chunked_buffer;
                 if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {

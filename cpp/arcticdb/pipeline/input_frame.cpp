@@ -9,6 +9,7 @@
 
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/entity/types.hpp>
+#include <arcticdb/stream/index.hpp>
 
 namespace arcticdb::pipelines {
 
@@ -18,17 +19,32 @@ InputFrame::InputFrame() :
 {
 }
 
-StreamDescriptor& InputFrame::desc() {
-    if (std::holds_alternative<SegmentInMemory>(input_data)) {
-        return std::get<SegmentInMemory>(input_data).descriptor();
+void InputFrame::set_segment(SegmentInMemory&& seg) {
+    num_rows = seg.row_count();
+    util::check(norm_meta.has_arrow_table(), "Unexpected non-Arrow norm metadata provided with Arrow data");
+    if (norm_meta.arrow_table().has_index()) {
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                !seg.columns().empty(),
+                "Arrow index column specified but there are zero columns");
+        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                is_time_type(seg.column(0).type().data_type()),
+                "Specified Arrow index column has non-time type {}", seg.column(0).type().data_type());
+        seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
+        seg.descriptor().set_sorted(SortedValue::ASCENDING); // Maybe UNKNOWN?
+        index = stream::TimeseriesIndex{std::string(seg.descriptor().field(0).name())};
     } else {
-        return std::get<InputTensors>(input_data).desc;
+        seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
+        index = stream::RowCountIndex{};
     }
-//    if (seg.has_value()) {
-//        return seg->descriptor();
-//    } else {
-//        return desc_;
-//    }
+    input_data = std::move(seg);
+}
+
+StreamDescriptor& InputFrame::desc() {
+    if (has_tensors()) {
+        return std::get<InputTensors>(input_data).desc;
+    } else {
+        return std::get<SegmentInMemory>(input_data).descriptor();
+    }
 }
 
 const StreamDescriptor& InputFrame::desc() const {
@@ -69,18 +85,6 @@ timestamp InputFrame::index_value_at(size_t row) {
                 return *input_tensors.index_tensor->ptr_cast<timestamp>(row);
             }
             );
-
-//    if (seg.has_value()) {
-//        util::check(row < seg->row_count(), "Out of range row {} requsted in InputFrame::index_value_at with segment of length",
-//                    row, seg->row_count());
-//        const auto& index_column = seg->column(0);
-//        return *index_column.scalar_at<timestamp>(row);
-//    } else {
-//        util::check(index_tensor.has_value(), "InputFrame::index_value_at call with null index tensor");
-//        util::check(index_tensor->data_type() == DataType::NANOSECONDS_UTC64,
-//                    "Expected timestamp index in append, got type {}", index_tensor->data_type());
-//        return *index_tensor->ptr_cast<timestamp>(row);
-//    }
 }
 
 void InputFrame::set_index_range() {
@@ -111,20 +115,6 @@ void InputFrame::set_index_range() {
                             index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
                         }
                         );
-
-//                if (seg.has_value()) {
-//                    const auto& index_column = seg->column(0);
-//                    index_range.start_ = IndexValue(*index_column.scalar_at<timestamp>(0));
-//                    index_range.end_ = IndexValue(*index_column.scalar_at<timestamp>(num_rows - 1));
-//                } else {
-//                    util::check(static_cast<bool>(index_tensor), "Got null index tensor in set_index_range");
-//                    util::check(index_tensor->nbytes() > 0, "Empty index tensor");
-//                    auto &tensor = index_tensor.value();
-//                    auto start_t = tensor.ptr_cast<RawType>(0);
-//                    auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
-//                    index_range.start_  = IndexValue(static_cast<timestamp>(*start_t));
-//                    index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
-//                }
             } else {
                 throw std::runtime_error("Unsupported non-integral index type");
             }
@@ -135,14 +125,23 @@ void InputFrame::set_index_range() {
     }
 }
 
+bool InputFrame::has_tensors() const {
+    return std::holds_alternative<InputTensors>(input_data);
+}
+
 const std::optional<entity::NativeTensor>& InputFrame::opt_index_tensor() const {
-    util::check(std::holds_alternative<InputTensors>(input_data), "InputFrame index_tensor requested but holds SegmentInMemory");
+    util::check(has_tensors(), "InputFrame index_tensor requested but holds SegmentInMemory");
     return std::get<InputTensors>(input_data).index_tensor;
 }
 
 const std::vector<entity::NativeTensor>& InputFrame::field_tensors() const {
-    util::check(std::holds_alternative<InputTensors>(input_data), "InputFrame field_tensors requested but holds SegmentInMemory");
+    util::check(has_tensors(), "InputFrame field_tensors requested but holds SegmentInMemory");
     return std::get<InputTensors>(input_data).field_tensors;
+}
+
+const SegmentInMemory& InputFrame::segment() const {
+    util::check(!has_tensors(), "InputFrame segment requested but holds InputTensors");
+    return std::get<SegmentInMemory>(input_data);
 }
 
 } //namespace arcticdb::pipelines

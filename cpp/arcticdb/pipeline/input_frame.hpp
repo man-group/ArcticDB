@@ -31,6 +31,7 @@ concept ValidIndex = util::any_of<
 struct InputFrame {
   public:
     InputFrame();
+    void set_segment(SegmentInMemory&& seg);
 
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
@@ -40,8 +41,10 @@ struct InputFrame {
     bool empty() const;
     timestamp index_value_at(size_t row);
     void set_index_range();
+    bool has_tensors() const;
     const std::optional<entity::NativeTensor>& opt_index_tensor() const;
     const std::vector<entity::NativeTensor>& field_tensors() const;
+    const SegmentInMemory& segment() const;
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
