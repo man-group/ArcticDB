@@ -429,63 +429,62 @@ void MeanAggregatorData::aggregate(
         const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values
 ) {
     fractions_.resize(unique_values);
-    details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, this](auto col_tag) {
-        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        if constexpr (is_sequence_type(col_type_info::data_type)) {
-            util::raise_rte("String aggregations not currently supported");
-        } else if constexpr (is_empty_type(col_type_info::data_type)) {
-            return;
-        }
-        Column::for_each_enumerated<typename col_type_info::TDT>(
-                *input_column.column_,
-                [&groups, this](auto enumerating_it) {
-                    auto& fraction = fractions_[groups[enumerating_it.idx()]];
-                    if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
-                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                            fraction.numerator_ += static_cast<double>(enumerating_it.value());
-                            ++fraction.denominator_;
-                        }
-                    } else {
-                        fraction.numerator_ += static_cast<double>(enumerating_it.value());
-                        ++fraction.denominator_;
-                    }
+    sparse_map_.resize(unique_values);
+    util::BitSet::bulk_insert_iterator inserter(sparse_map_);
+    details::visit_type(
+            input_column.column_->type().data_type(),
+            [&input_column, &groups, &inserter, this](auto col_tag) {
+                using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+                if constexpr (is_sequence_type(col_type_info::data_type)) {
+                    util::raise_rte("String aggregations not currently supported");
+                } else if constexpr (is_empty_type(col_type_info::data_type)) {
+                    return;
                 }
-        );
-    });
+                Column::for_each_enumerated<typename col_type_info::TDT>(
+                        *input_column.column_,
+                        [&groups, &inserter, this](auto enumerating_it) {
+                            auto& fraction = fractions_[groups[enumerating_it.idx()]];
+                            if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
+                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                    fraction.numerator_ += static_cast<double>(enumerating_it.value());
+                                    ++fraction.denominator_;
+                                    inserter = groups[enumerating_it.idx()];
+                                }
+                            } else {
+                                fraction.numerator_ += static_cast<double>(enumerating_it.value());
+                                ++fraction.denominator_;
+                                inserter = groups[enumerating_it.idx()];
+                            }
+                        }
+                );
+            }
+    );
+    inserter.flush();
 }
 
 SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if (!fractions_.empty()) {
         fractions_.resize(unique_values);
-        auto col = std::make_shared<Column>(
-                make_scalar_type(get_output_data_type()),
-                fractions_.size(),
-                AllocationType::PRESIZED,
-                Sparsity::NOT_PERMITTED
-        );
-        auto column_data = col->data();
-        // TODO: Empty type needs more though. Maybe we should emit a column of empty value and leave it to the
-        //   NullValueReducer to handle it. As of this PR (04.07.2025) the empty type is feature flagged and not used so
-        //   we don't worry too much about optimizing it.
+        sparse_map_.resize(unique_values);
+        auto col =
+                create_output_column(make_scalar_type(get_output_data_type()), std::move(sparse_map_), unique_values);
+        // TODO: Empty type needs more thought. Currently we emit a fully sparse column which will be populated by
+        // `copy_frame_data_to_buffer` but this might not be the right approach. As of this PR (11.09.2025) the empty
+        // type is feature flagged and not used so we don't worry too much about optimizing it.
         if (data_type_ && *data_type_ == DataType::EMPTYVAL) [[unlikely]] {
-            std::fill_n(column_data.begin<ScalarTagType<DataTypeTag<DataType::FLOAT64>>>(), fractions_.size(), 0.f);
+            auto empty_bitset = util::BitSet(unique_values);
+            col->set_sparse_map(std::move(empty_bitset));
         } else {
             details::visit_type(col->type().data_type(), [&, this]<typename TypeTag>(TypeTag) {
                 using OutputDataTypeTag =
                         std::conditional_t<is_time_type(TypeTag::data_type), TypeTag, DataTypeTag<DataType::FLOAT64>>;
                 using OutputTypeDescriptor = typename ScalarTypeInfo<OutputDataTypeTag>::TDT;
-                std::transform(
-                        fractions_.cbegin(),
-                        fractions_.cend(),
-                        column_data.begin<OutputTypeDescriptor>(),
-                        [](const auto& fraction) {
-                            return static_cast<typename OutputDataTypeTag::raw_type>(fraction.to_double());
-                        }
-                );
+                Column::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
+                    row.value() = static_cast<typename OutputDataTypeTag::raw_type>(fractions_[row.idx()].to_double());
+                });
             });
         }
-        col->set_row_data(fractions_.size() - 1);
         res.add_column(scalar_field(get_output_data_type(), output_column_name.value), std::move(col));
     }
     return res;
@@ -505,36 +504,51 @@ void CountAggregatorData::aggregate(
         const ColumnWithStrings& input_column, const std::vector<size_t>& groups, size_t unique_values
 ) {
     aggregated_.resize(unique_values);
-    details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, this](auto col_tag) {
-        using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-        Column::for_each_enumerated<typename col_type_info::TDT>(
-                *input_column.column_,
-                [&groups, this](auto enumerating_it) {
-                    if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                            auto& val = aggregated_[groups[enumerating_it.idx()]];
-                            ++val;
+    sparse_map_.resize(unique_values);
+    util::BitSet::bulk_insert_iterator inserter(sparse_map_);
+    details::visit_type(
+            input_column.column_->type().data_type(),
+            [&input_column, &groups, &inserter, this](auto col_tag) {
+                using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+                Column::for_each_enumerated<typename col_type_info::TDT>(
+                        *input_column.column_,
+                        [&groups, &inserter, this](auto enumerating_it) {
+                            if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                    auto& val = aggregated_[groups[enumerating_it.idx()]];
+                                    ++val;
+                                    inserter = groups[enumerating_it.idx()];
+                                }
+                            } else {
+                                auto& val = aggregated_[groups[enumerating_it.idx()]];
+                                ++val;
+                                inserter = groups[enumerating_it.idx()];
+                            }
                         }
-                    } else {
-                        auto& val = aggregated_[groups[enumerating_it.idx()]];
-                        ++val;
-                    }
-                }
-        );
-    });
+                );
+            }
+    );
+    inserter.flush();
 }
 
 SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if (!aggregated_.empty()) {
         aggregated_.resize(unique_values);
-        auto pos = res.add_column(
-                scalar_field(DataType::UINT64, output_column_name.value), unique_values, AllocationType::PRESIZED
-        );
-        auto& column = res.column(pos);
-        auto ptr = reinterpret_cast<uint64_t*>(column.ptr());
-        column.set_row_data(unique_values - 1);
-        memcpy(ptr, aggregated_.data(), sizeof(uint64_t) * unique_values);
+        sparse_map_.resize(unique_values);
+        auto col =
+                create_output_column(make_scalar_type(get_output_data_type()), std::move(sparse_map_), unique_values);
+        if (!col->opt_sparse_map().has_value()) {
+            // If all values are set we use memcpy for efficiency
+            auto ptr = reinterpret_cast<uint64_t*>(col->ptr());
+            memcpy(ptr, aggregated_.data(), sizeof(uint64_t) * unique_values);
+        } else {
+            using OutputTypeDescriptor = typename ScalarTypeInfo<DataTypeTag<DataType::UINT64>>::TDT;
+            Column::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
+                row.value() = aggregated_[row.idx()];
+            });
+        }
+        res.add_column(scalar_field(get_output_data_type(), output_column_name.value), std::move(col));
     }
     return res;
 }
@@ -556,11 +570,13 @@ void FirstAggregatorData::aggregate(
             using GlobalTypeDescriptorTag = typename OutputType<GlobalInputType>::type;
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
             aggregated_.resize(sizeof(GlobalRawType) * unique_values);
+            sparse_map_.resize(unique_values);
+            util::BitSet::bulk_insert_iterator inserter(sparse_map_);
             auto col_data = input_column.column_->data();
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
             details::visit_type(
                     input_column.column_->type().data_type(),
-                    [this, &groups, &out_ptr, &col_data](auto col_tag) {
+                    [this, &groups, &out_ptr, &col_data, &inserter](auto col_tag) {
                         using ColumnTagType = std::decay_t<decltype(col_tag)>;
                         using ColumnType = typename ColumnTagType::raw_type;
                         auto groups_pos = 0;
@@ -575,17 +591,20 @@ void FirstAggregatorData::aggregate(
                                     if (is_first_group_el || std::isnan(static_cast<ColumnType>(val))) {
                                         groups_cache_.insert(groups[groups_pos]);
                                         val = GlobalRawType(*ptr);
+                                        inserter = groups[groups_pos];
                                     }
                                 } else {
                                     if (is_first_group_el) {
                                         groups_cache_.insert(groups[groups_pos]);
                                         val = GlobalRawType(*ptr);
+                                        inserter = groups[groups_pos];
                                     }
                                 }
                             }
                         }
                     }
             );
+            inserter.flush();
         });
     }
 }
@@ -594,17 +613,23 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
     SegmentInMemory res;
     if (!aggregated_.empty()) {
         details::visit_type(*data_type_, [this, &res, &output_column_name, unique_values](auto col_tag) {
-            using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
+            using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+            using RawType = typename col_type_info::RawType;
             aggregated_.resize(sizeof(RawType) * unique_values);
-            auto col = std::make_shared<Column>(
-                    make_scalar_type(data_type_.value()),
-                    unique_values,
-                    AllocationType::PRESIZED,
-                    Sparsity::NOT_PERMITTED
-            );
-            memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
+            sparse_map_.resize(unique_values);
+            auto col =
+                    create_output_column(make_scalar_type(data_type_.value()), std::move(sparse_map_), unique_values);
+            if (!col->opt_sparse_map().has_value()) {
+                memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
+            } else {
+                const std::span<const RawType> group_values{
+                        reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
+                };
+                Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                    row.value() = group_values[row.idx()];
+                });
+            }
             res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
-            col->set_row_data(unique_values - 1);
         });
     }
     return res;
@@ -627,11 +652,13 @@ void LastAggregatorData::aggregate(
             using GlobalTypeDescriptorTag = typename OutputType<GlobalInputType>::type;
             using GlobalRawType = typename GlobalTypeDescriptorTag::DataTypeTag::raw_type;
             aggregated_.resize(sizeof(GlobalRawType) * unique_values);
+            sparse_map_.resize(unique_values);
+            util::BitSet::bulk_insert_iterator inserter(sparse_map_);
             auto col_data = input_column.column_->data();
             auto out_ptr = reinterpret_cast<GlobalRawType*>(aggregated_.data());
             details::visit_type(
                     input_column.column_->type().data_type(),
-                    [&groups, &out_ptr, &col_data, this](auto col_tag) {
+                    [&groups, &out_ptr, &col_data, &inserter, this](auto col_tag) {
                         using ColumnTagType = std::decay_t<decltype(col_tag)>;
                         using ColumnType = typename ColumnTagType::raw_type;
                         auto groups_pos = 0;
@@ -648,14 +675,17 @@ void LastAggregatorData::aggregate(
                                     if (is_first_group_el || !std::isnan(static_cast<ColumnType>(curr))) {
                                         groups_cache_.insert(groups[groups_pos]);
                                         val = curr;
+                                        inserter = groups[groups_pos];
                                     }
                                 } else {
                                     val = GlobalRawType(*ptr);
+                                    inserter = groups[groups_pos];
                                 }
                             }
                         }
                     }
             );
+            inserter.flush();
         });
     }
 }
@@ -663,18 +693,24 @@ void LastAggregatorData::aggregate(
 SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_name, bool, size_t unique_values) {
     SegmentInMemory res;
     if (!aggregated_.empty()) {
-        details::visit_type(*data_type_, [that = this, &res, &output_column_name, unique_values](auto col_tag) {
-            using RawType = typename decltype(col_tag)::DataTypeTag::raw_type;
-            that->aggregated_.resize(sizeof(RawType) * unique_values);
-            auto col = std::make_shared<Column>(
-                    make_scalar_type(that->data_type_.value()),
-                    unique_values,
-                    AllocationType::PRESIZED,
-                    Sparsity::NOT_PERMITTED
-            );
-            memcpy(col->ptr(), that->aggregated_.data(), that->aggregated_.size());
-            res.add_column(scalar_field(that->data_type_.value(), output_column_name.value), col);
-            col->set_row_data(unique_values - 1);
+        details::visit_type(*data_type_, [&res, &output_column_name, unique_values, this](auto col_tag) {
+            using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
+            using RawType = typename col_type_info::RawType;
+            aggregated_.resize(sizeof(RawType) * unique_values);
+            sparse_map_.resize(unique_values);
+            auto col =
+                    create_output_column(make_scalar_type(data_type_.value()), std::move(sparse_map_), unique_values);
+            if (!col->opt_sparse_map().has_value()) {
+                memcpy(col->ptr(), aggregated_.data(), aggregated_.size());
+            } else {
+                const std::span<const RawType> group_values{
+                        reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
+                };
+                Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                    row.value() = group_values[row.idx()];
+                });
+            }
+            res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
         });
     }
     return res;

@@ -112,12 +112,7 @@ void check_column(arcticdb::SegmentInMemory segment, std::string_view column_nam
     ASSERT_EQ(dt, column.type().data_type());
     for (std::size_t idx = 0u; idx < ugv; ++idx) {
         if constexpr (std::is_floating_point_v<T>) {
-            const T val = column.scalar_at<T>(idx).value();
-            if (std::isnan(val)) {
-                ASSERT_TRUE(std::isnan(f(idx)));
-            } else {
-                ASSERT_EQ(f(idx), val);
-            }
+            ASSERT_EQ(f(idx), column.scalar_at<T>(idx));
         } else {
             ASSERT_EQ(f(idx), column.scalar_at<T>(idx));
         }
@@ -192,17 +187,22 @@ TEST(Clause, AggregationSparseColumn) {
         return idx % 2 == 0 ? 450 + 10 * idx : 0;
     });
     check_column<int64_t>(*segments[0], "min_int", unique_grouping_values, [](size_t idx) -> std::optional<int64_t> {
-        return idx % 2 == 0 ? std::optional{static_cast<int64_t>(idx)} : std::nullopt;
+        return idx % 2 == 0 ? std::make_optional<int64_t>(idx) : std::nullopt;
     });
     check_column<int64_t>(*segments[0], "max_int", unique_grouping_values, [](size_t idx) -> std::optional<int64_t> {
-        return idx % 2 == 0 ? std::optional{static_cast<int64_t>(90 + idx)} : std::nullopt;
+        return idx % 2 == 0 ? std::make_optional<int64_t>(90 + idx) : std::nullopt;
     });
-    check_column<double>(*segments[0], "mean_int", unique_grouping_values, [](size_t idx) -> double {
-        return idx % 2 == 0 ? 45 + idx : std::numeric_limits<double>::quiet_NaN();
+    check_column<double>(*segments[0], "mean_int", unique_grouping_values, [](size_t idx) -> std::optional<double> {
+        return idx % 2 == 0 ? std::make_optional<double>(45 + idx) : std::nullopt;
     });
-    check_column<uint64_t>(*segments[0], "count_int", unique_grouping_values, [](size_t idx) -> uint64_t {
-        return idx % 2 == 0 ? 10 : 0;
-    });
+    check_column<uint64_t>(
+            *segments[0],
+            "count_int",
+            unique_grouping_values,
+            [](size_t idx) -> std::optional<uint64_t> {
+                return idx % 2 == 0 ? std::make_optional<uint64_t>(10) : std::nullopt;
+            }
+    );
 }
 
 TEST(Clause, AggregationSparseGroupby) {

@@ -750,3 +750,15 @@ def test_append_series_with_different_row_range_index_name(lmdb_version_store_dy
     # See Monday 9797097831, it would be best to require that index names are always matching. This is the case for
     # datetime index because it's a physical column. It's a potentially breaking change.
     assert lib.read("sym").data.index.name == "index_name_2"
+
+
+@pytest.mark.xfail(reason="Wrong normalization metadata update. Monday ref: 10029194063")
+def test_append_no_columns(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    to_write = pd.DataFrame({"col": [1, 2, 3]}, index=pd.date_range(pd.Timestamp(2025, 1, 1), periods=3))
+    to_append = pd.DataFrame({}, index=pd.date_range(pd.Timestamp(2025, 1, 4), periods=3))
+    lib.write("sym", to_write)
+    lib.append("sym", to_append)
+    expected = pd.concat([to_write, to_append])
+    result = lib.read("sym").data
+    assert_frame_equal(result, expected)

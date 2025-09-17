@@ -118,6 +118,7 @@ class MeanAggregatorData : private AggregatorDataBase {
     };
     std::vector<Fraction> fractions_;
     std::optional<DataType> data_type_;
+    util::BitMagic sparse_map_;
 };
 
 class CountAggregatorData : private AggregatorDataBase {
@@ -131,6 +132,7 @@ class CountAggregatorData : private AggregatorDataBase {
 
   private:
     std::vector<uint64_t> aggregated_;
+    util::BitMagic sparse_map_;
 };
 
 class FirstAggregatorData : private AggregatorDataBase {
@@ -146,6 +148,7 @@ class FirstAggregatorData : private AggregatorDataBase {
     std::optional<DataType> data_type_;
 
     std::unordered_set<size_t> groups_cache_;
+    util::BitMagic sparse_map_;
 };
 
 class LastAggregatorData : private AggregatorDataBase {
@@ -161,6 +164,7 @@ class LastAggregatorData : private AggregatorDataBase {
     std::optional<DataType> data_type_;
 
     std::unordered_set<size_t> groups_cache_;
+    util::BitMagic sparse_map_;
 };
 
 template<class AggregatorData>
