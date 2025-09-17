@@ -47,90 +47,13 @@ WriteToSegmentTask::WriteToSegmentTask(
 }
 
 std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator() () {
+    ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
     slice_.check_magic();
     magic_.check();
     auto key = partial_key_gen_(slice_);
-    ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
-    if (frame_->has_segment()) {
-        auto seg = slice_segment();
-        seg.descriptor().set_id(key.stream_id);
-        return {std::move(key), std::move(seg), std::move(slice_)};
-    } else {
-        return util::variant_match(index_, [this, key=std::move(key)](auto& idx) {
-            using IdxType = std::decay_t<decltype(idx)>;
-            using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
-
-            std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> output;
-
-            SingleSegmentAggregator agg{
-                    FixedSchema{*slice_.desc(), frame_->index},
-                    [key = std::move(key), slice = slice_, &output](auto&& segment) {
-                        output = std::make_tuple(key, std::forward<SegmentInMemory>(segment), slice);
-                    },
-                    NeverSegmentPolicy{},
-                    *slice_.desc()
-            };
-
-            auto regular_slice_size = util::variant_match(
-                    slicing_,
-                    [&](const NoSlicing&) { return slice_.row_range.second - slice_.row_range.first; },
-                    [&](const auto& slicer) { return slicer.row_per_slice(); }
-            );
-
-            // Offset is used for index value in row-count index
-            auto offset_in_frame = slice_begin_pos(slice_, *frame_);
-            agg.set_offset(offset_in_frame);
-
-            auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
-            if (frame_->desc().index().field_count() > 0) {
-                const auto& opt_index_tensor = frame_->opt_index_tensor();
-                util::check(opt_index_tensor.has_value(), "Got null index tensor in WriteToSegmentTask");
-                auto opt_error = aggregator_set_data(
-                        frame_->desc().fields(0).type(),
-                        *opt_index_tensor,
-                        agg,
-                        0,
-                        rows_to_write,
-                        offset_in_frame,
-                        slice_num_for_column_,
-                        regular_slice_size,
-                        false
-                );
-                if (opt_error.has_value()) {
-                    opt_error->raise(frame_->desc().fields(0).name(), offset_in_frame);
-                }
-            }
-
-            const auto& field_tensors = frame_->field_tensors();
-            for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
-                auto abs_col = col + frame_->desc().index().field_count();
-                auto& fd = slice_.non_index_field(col);
-                auto& tensor = field_tensors[slice_.absolute_field_col(col)];
-                auto opt_error = aggregator_set_data(
-                        fd.type(),
-                        tensor,
-                        agg,
-                        abs_col,
-                        rows_to_write,
-                        offset_in_frame,
-                        slice_num_for_column_,
-                        regular_slice_size,
-                        sparsify_floats_
-                );
-                if (opt_error.has_value()) {
-                    opt_error->raise(fd.name(), offset_in_frame);
-                }
-            }
-
-            agg.end_block_write(rows_to_write);
-
-            if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
-                agg.segment().calculate_statistics();
-
-            agg.finalize();
-            return output;
-        });
-    }
+    auto seg = frame_->has_segment() ? slice_segment() : slice_tensors();
+    seg.descriptor().set_id(key.stream_id);
+    return {std::move(key), std::move(seg), std::move(slice_)};
 }
 
 SegmentInMemory WriteToSegmentTask::slice_segment() const {
@@ -238,6 +161,82 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
     }
     seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
     return seg;
+}
+
+SegmentInMemory WriteToSegmentTask::slice_tensors() const {
+    return util::variant_match(index_, [this](auto& idx) {
+        using IdxType = std::decay_t<decltype(idx)>;
+        using SingleSegmentAggregator = Aggregator<IdxType, FixedSchema, NeverSegmentPolicy>;
+
+        SegmentInMemory output;
+        SingleSegmentAggregator agg{
+                FixedSchema{*slice_.desc(), frame_->index},
+                [&output](auto&& segment) {
+                    output = std::move(segment);
+                },
+                NeverSegmentPolicy{},
+                *slice_.desc()
+        };
+
+        auto regular_slice_size = util::variant_match(
+                slicing_,
+                [&](const NoSlicing&) { return slice_.row_range.second - slice_.row_range.first; },
+                [&](const auto& slicer) { return slicer.row_per_slice(); }
+        );
+
+        // Offset is used for index value in row-count index
+        auto offset_in_frame = slice_begin_pos(slice_, *frame_);
+        agg.set_offset(offset_in_frame);
+
+        auto rows_to_write = slice_.row_range.second - slice_.row_range.first;
+        if (frame_->desc().index().field_count() > 0) {
+            const auto& opt_index_tensor = frame_->opt_index_tensor();
+            util::check(opt_index_tensor.has_value(), "Got null index tensor in WriteToSegmentTask");
+            auto opt_error = aggregator_set_data(
+                    frame_->desc().fields(0).type(),
+                    *opt_index_tensor,
+                    agg,
+                    0,
+                    rows_to_write,
+                    offset_in_frame,
+                    slice_num_for_column_,
+                    regular_slice_size,
+                    false
+            );
+            if (opt_error.has_value()) {
+                opt_error->raise(frame_->desc().fields(0).name(), offset_in_frame);
+            }
+        }
+
+        const auto& field_tensors = frame_->field_tensors();
+        for (size_t col = 0, end = slice_.col_range.diff(); col < end; ++col) {
+            auto abs_col = col + frame_->desc().index().field_count();
+            auto& fd = slice_.non_index_field(col);
+            auto& tensor = field_tensors[slice_.absolute_field_col(col)];
+            auto opt_error = aggregator_set_data(
+                    fd.type(),
+                    tensor,
+                    agg,
+                    abs_col,
+                    rows_to_write,
+                    offset_in_frame,
+                    slice_num_for_column_,
+                    regular_slice_size,
+                    sparsify_floats_
+            );
+            if (opt_error.has_value()) {
+                opt_error->raise(fd.name(), offset_in_frame);
+            }
+        }
+
+        agg.end_block_write(rows_to_write);
+
+        if (ConfigsMap().instance()->get_int("Statistics.GenerateOnWrite", 0) == 1)
+            agg.segment().calculate_statistics();
+
+        agg.finalize();
+        return output;
+    });
 }
 
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices) {

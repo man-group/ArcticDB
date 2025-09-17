@@ -47,7 +47,7 @@ struct WriteToSegmentTask : public async::BaseTask {
 
   private:
     SegmentInMemory slice_segment() const;
-
+    SegmentInMemory slice_tensors() const;
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
