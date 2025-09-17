@@ -24,7 +24,7 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::stream;
 
 struct WriteToSegmentTask : public async::BaseTask {
-
+  public:
     std::shared_ptr<InputFrame> frame_;
     const FrameSlice slice_;
     const SlicingPolicy slicing_;
@@ -44,6 +44,10 @@ struct WriteToSegmentTask : public async::BaseTask {
         bool sparsify_floats);
 
     std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator()();
+
+  private:
+    SegmentInMemory slice_segment() const;
+
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
