@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-
 import time
 import numpy as np
 import pandas as pd
@@ -37,19 +36,17 @@ class ArrowReadNumeric:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
         num_rows, date_ranges = self.params
-        num_cols = 9 # 10 including the index column
+        num_cols = 9  # 10 including the index column
         self.ac.delete_library(self.lib_name)
         self.ac.create_library(self.lib_name)
         lib = self.ac.get_library(self.lib_name)
         for rows in num_rows:
             df = pd.DataFrame(
-                {
-                    f"col{idx}": np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)
-                },
-                index = pd.date_range("1970-01-01", freq="ns", periods=rows)
+                {f"col{idx}": np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)},
+                index=pd.date_range("1970-01-01", freq="ns", periods=rows),
             )
             lib.write(self.symbol_name(rows), df)
 
@@ -93,7 +90,7 @@ class ArrowReadStrings:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):        
+    def _setup_cache(self):
         rng = np.random.default_rng()
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
         num_rows, date_ranges, unique_string_counts = self.params
@@ -105,10 +102,8 @@ class ArrowReadStrings:
             strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True))
             for rows in num_rows:
                 df = pd.DataFrame(
-                    {
-                        f"col{idx}": rng.choice(strings, rows) for idx in range(num_cols)
-                    },
-                    index = pd.date_range("1970-01-01", freq="ns", periods=rows)
+                    {f"col{idx}": rng.choice(strings, rows) for idx in range(num_cols)},
+                    index=pd.date_range("1970-01-01", freq="ns", periods=rows),
                 )
                 lib.write(self.symbol_name(rows, unique_string_count), df)
 

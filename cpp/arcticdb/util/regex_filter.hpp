@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -30,7 +31,7 @@ template<typename T>
 }
 
 class PcreRegexUTF8 {
-protected:
+  protected:
     using HandleType = ::pcre2_code_8*;
     using MatchDataType = ::pcre2_match_data_8*;
     using StringType = std::string;
@@ -45,7 +46,7 @@ protected:
 };
 
 class PcreRegexUTF32 {
-protected:
+  protected:
     using HandleType = ::pcre2_code_32*;
     using MatchDataType = ::pcre2_match_data_32*;
     using StringType = std::u32string;
@@ -65,11 +66,9 @@ class RegexPattern : protected PcreRegexEncode {
     typename PcreRegexEncode::HandleType handle_ = nullptr;
     uint32_t options_ = 0;
     uint32_t capturing_groups_ = 0;
-public:
-    explicit RegexPattern(const typename PcreRegexEncode::StringType& pattern) :
-    text_(pattern) {
-        compile_regex();
-    }
+
+  public:
+    explicit RegexPattern(const typename PcreRegexEncode::StringType& pattern) : text_(pattern) { compile_regex(); }
 
     ~RegexPattern() {
         if (handle_ != nullptr) {
@@ -77,46 +76,40 @@ public:
         }
     }
 
-    [[nodiscard]] bool valid() const {
-        return handle_ != nullptr;
-    }
+    [[nodiscard]] bool valid() const { return handle_ != nullptr; }
 
-    [[nodiscard]] typename PcreRegexEncode::HandleType handle() const {
-        return handle_;
-    }
+    [[nodiscard]] typename PcreRegexEncode::HandleType handle() const { return handle_; }
 
-    [[nodiscard]] const typename PcreRegexEncode::StringType& text() const {
-        return text_;
-    }
+    [[nodiscard]] const typename PcreRegexEncode::StringType& text() const { return text_; }
 
-    [[nodiscard]] size_t capturing_groups() const {
-        return static_cast<size_t>(capturing_groups_);
-    }
+    [[nodiscard]] size_t capturing_groups() const { return static_cast<size_t>(capturing_groups_); }
 
     ARCTICDB_NO_MOVE_OR_COPY(RegexPattern)
-private:
+  private:
     void compile_regex() {
         PCRE2_SIZE erroroffset;
         int error = 0;
         handle_ = this->pcre_compile_(
-            reinterpret_cast<typename PcreRegexEncode::StringCastingType>(text_.data()),
-            PCRE2_ZERO_TERMINATED,
-            options_,
-            &error,
-            &erroroffset,
-            nullptr
+                reinterpret_cast<typename PcreRegexEncode::StringCastingType>(text_.data()),
+                PCRE2_ZERO_TERMINATED,
+                options_,
+                &error,
+                &erroroffset,
+                nullptr
         );
         util::check(
-            handle_ != nullptr, 
-            "Error {} compiling regex {} at position {}", 
-            error, 
-            convert_to_utf8_if_needed(text_), 
-            erroroffset
+                handle_ != nullptr,
+                "Error {} compiling regex {} at position {}",
+                error,
+                convert_to_utf8_if_needed(text_),
+                erroroffset
         );
         auto result = get_capturing_groups();
-        if(result != 0) {
+        if (result != 0) {
             handle_ = nullptr;
-            util::raise_rte("Failed to get capturing groups for regex {}: {}", convert_to_utf8_if_needed(text_), result);
+            util::raise_rte(
+                    "Failed to get capturing groups for regex {}: {}", convert_to_utf8_if_needed(text_), result
+            );
         }
     }
 
@@ -131,12 +124,14 @@ class Regex : private PcreRegexEncode {
     const RegexPattern<PcreRegexEncode>& pattern_;
     typename PcreRegexEncode::MatchDataType match_data_ = nullptr;
     uint32_t options_ = 0;
-    
-public:
+
+  public:
     ARCTICDB_NO_MOVE_OR_COPY(Regex);
 
     explicit Regex(const RegexPattern<PcreRegexEncode>& pattern) : pattern_(pattern) {
-        match_data_ = this->pcre_match_data_create_from_pattern(pattern_.handle(), nullptr); // Size = 1 for match string + N for N capturing substrings
+        match_data_ = this->pcre_match_data_create_from_pattern(
+                pattern_.handle(), nullptr
+        ); // Size = 1 for match string + N for N capturing substrings
     }
 
     ~Regex() {
@@ -147,20 +142,20 @@ public:
 
     bool match(typename PcreRegexEncode::StringViewType text) const { // Not thread safe
         auto res = this->pcre_match_(
-            pattern_.handle(),
-            reinterpret_cast<typename PcreRegexEncode::StringCastingType>(text.data()),
-            static_cast<PCRE2_SIZE>(text.size()),
-            0,
-            options_,
-            match_data_,
-            nullptr
+                pattern_.handle(),
+                reinterpret_cast<typename PcreRegexEncode::StringCastingType>(text.data()),
+                static_cast<PCRE2_SIZE>(text.size()),
+                0,
+                options_,
+                match_data_,
+                nullptr
         );
         util::check(
-            res >= 0 || res == PCRE2_ERROR_NOMATCH,
-            "Invalid result in regex compile with pattern {} and text {}: {}", 
-            convert_to_utf8_if_needed(pattern_.text()), 
-            convert_to_utf8_if_needed(text), 
-            res
+                res >= 0 || res == PCRE2_ERROR_NOMATCH,
+                "Invalid result in regex compile with pattern {} and text {}: {}",
+                convert_to_utf8_if_needed(pattern_.text()),
+                convert_to_utf8_if_needed(text),
+                res
         );
         return res > 0;
     }
@@ -172,24 +167,18 @@ using RegexPatternUTF8 = RegexPattern<PcreRegexUTF8>;
 using RegexPatternUTF32 = RegexPattern<PcreRegexUTF32>;
 
 class RegexGeneric {
-private:
+  private:
     RegexPatternUTF8 pattern_utf8_;
     RegexPatternUTF32 pattern_utf32_;
-public:
+
+  public:
     RegexGeneric(const std::string& pattern) :
         pattern_utf8_(pattern),
-        pattern_utf32_(boost::locale::conv::utf_to_utf<char32_t>(pattern)) {
-    }
+        pattern_utf32_(boost::locale::conv::utf_to_utf<char32_t>(pattern)) {}
     // Each thread should create its own Regex object as Regex::match is not thread-safe
-    [[nodiscard]] RegexUTF8 get_utf8_match_object() const {
-        return RegexUTF8(pattern_utf8_);
-    }
-    [[nodiscard]] RegexUTF32 get_utf32_match_object() const {
-        return RegexUTF32(pattern_utf32_);
-    }
-    std::string text() const {
-        return pattern_utf8_.text();
-    }
+    [[nodiscard]] RegexUTF8 get_utf8_match_object() const { return RegexUTF8(pattern_utf8_); }
+    [[nodiscard]] RegexUTF32 get_utf32_match_object() const { return RegexUTF32(pattern_utf32_); }
+    std::string text() const { return pattern_utf8_.text(); }
 };
 
-}
+} // namespace arcticdb::util

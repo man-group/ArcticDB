@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 from functools import partial
 import numpy as np
@@ -24,7 +25,7 @@ import arcticdb.toolbox.query_stats as qs
 pytestmark = pytest.mark.pipeline
 
 
-def sort_by_index(df_or_table : Union[pa.Table, pd.DataFrame]):
+def sort_by_index(df_or_table: Union[pa.Table, pd.DataFrame]):
     if isinstance(df_or_table, pd.DataFrame):
         return df_or_table.sort_index()
     elif isinstance(df_or_table, pa.Table):
@@ -168,9 +169,7 @@ def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment, any_outp
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_reuse_querybuilder_date_range"
-    df = pd.DataFrame(
-        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
-    )
+    df = pd.DataFrame({"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
 
     q = QueryBuilder()
@@ -188,7 +187,9 @@ def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment, any_outp
     assert_frame_equal_with_arrow(expected_2, received_2)
 
     expected_3 = df.query("col1 in [7]")
-    received_3 = lib.read(symbol, date_range=(pd.Timestamp("2000-01-06"), pd.Timestamp("2000-01-08")), query_builder=q).data
+    received_3 = lib.read(
+        symbol, date_range=(pd.Timestamp("2000-01-06"), pd.Timestamp("2000-01-08")), query_builder=q
+    ).data
     assert_frame_equal_with_arrow(expected_3, received_3)
 
 
@@ -196,19 +197,21 @@ def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment, an
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_reuse_querybuilder_date_range_batch"
-    df = pd.DataFrame(
-        {"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10)
-    )
+    df = pd.DataFrame({"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
 
     q = QueryBuilder()
     q = q[q["col1"].isin(2, 3, 7)]
 
     expected_0 = df.query("col1 in [2, 3]")
-    received_0 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=q)[symbol].data
+    received_0 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=q)[
+        symbol
+    ].data
     assert_frame_equal_with_arrow(expected_0, received_0)
 
-    received_1 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=[q])[symbol].data
+    received_1 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=[q])[
+        symbol
+    ].data
     assert_frame_equal_with_arrow(expected_0, received_1)
 
     expected_2 = df.query("col1 in [2, 3, 7]")
@@ -220,6 +223,7 @@ def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segm
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "symbol"
+
     def can_read_back(write_with_time, filter_with_time):
         df = pd.DataFrame({"col": [write_with_time]})
         lib.delete(symbol)
@@ -234,7 +238,7 @@ def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segm
     notz_winter_time = datetime.datetime(2024, 1, 1)
     notz_summer_time = datetime.datetime(2024, 6, 1)
     utc_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.tzutc())
-    us_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.gettz('America/New_York'))
+    us_time = datetime.datetime(2024, 6, 1, tzinfo=dateutil.tz.gettz("America/New_York"))
 
     # Reading back the same time should always succeed
     assert can_read_back(notz_winter_time, notz_winter_time)
@@ -251,7 +255,9 @@ def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segm
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_date_range(lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format):
+def test_querybuilder_date_range_then_date_range(
+    lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_date_range_then_date_range"
@@ -282,7 +288,9 @@ def test_querybuilder_date_range_then_date_range(lmdb_version_store_tiny_segment
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_row_range(lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format):
+def test_querybuilder_date_range_then_row_range(
+    lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_date_range_then_row_range"
@@ -312,7 +320,9 @@ def test_querybuilder_date_range_then_row_range(lmdb_version_store_tiny_segment,
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_filter(lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format):
+def test_querybuilder_date_range_then_filter(
+    lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_date_range_then_filter"
@@ -356,11 +366,11 @@ def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_ti
     rng = np.random.default_rng()
     df = pd.DataFrame(
         {"filter_col": rng.integers(0, 2, 100), "agg_col": rng.integers(0, 1000, 100)},
-        index=pd.date_range("2000-01-01", periods=100, freq="h")
+        index=pd.date_range("2000-01-01", periods=100, freq="h"),
     )
     lib.write(symbol, df)
 
-    date_range=(pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04"))
+    date_range = (pd.Timestamp("2000-01-02"), pd.Timestamp("2000-01-04"))
     q = QueryBuilder()
     q = q[q["filter_col"] == 0]
     q = q.resample("3h").agg({"agg_col": "sum"})
@@ -372,7 +382,9 @@ def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_ti
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_project(lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format):
+def test_querybuilder_date_range_then_project(
+    lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_date_range_then_project"
@@ -406,7 +418,9 @@ def test_querybuilder_date_range_then_project(lmdb_version_store_tiny_segment, b
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-def test_querybuilder_date_range_then_groupby(lmdb_version_store_tiny_segment_dynamic_strings, batch, use_date_range_clause, any_output_format):
+def test_querybuilder_date_range_then_groupby(
+    lmdb_version_store_tiny_segment_dynamic_strings, batch, use_date_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment_dynamic_strings
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_date_range_then_groupby"
@@ -474,7 +488,9 @@ def test_querybuilder_row_range(lmdb_version_store_tiny_segment, batch, use_row_
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_date_range(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
+def test_querybuilder_row_range_then_date_range(
+    lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_row_range_then_date_range"
@@ -504,7 +520,9 @@ def test_querybuilder_row_range_then_date_range(lmdb_version_store_tiny_segment,
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_row_range(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
+def test_querybuilder_row_range_then_row_range(
+    lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_row_range_then_row_range"
@@ -535,7 +553,9 @@ def test_querybuilder_row_range_then_row_range(lmdb_version_store_tiny_segment, 
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_filter(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
+def test_querybuilder_row_range_then_filter(
+    lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_row_range_then_filter"
@@ -565,7 +585,9 @@ def test_querybuilder_row_range_then_filter(lmdb_version_store_tiny_segment, bat
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_project(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
+def test_querybuilder_row_range_then_project(
+    lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_row_range_then_project"
@@ -599,7 +621,9 @@ def test_querybuilder_row_range_then_project(lmdb_version_store_tiny_segment, ba
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_groupby(lmdb_version_store_tiny_segment_dynamic_strings, batch, use_row_range_clause, any_output_format):
+def test_querybuilder_row_range_then_groupby(
+    lmdb_version_store_tiny_segment_dynamic_strings, batch, use_row_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment_dynamic_strings
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_row_range_then_groupby"
@@ -638,7 +662,9 @@ def test_querybuilder_row_range_then_groupby(lmdb_version_store_tiny_segment_dyn
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
-def test_querybuilder_row_range_then_resample(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
+def test_querybuilder_row_range_then_resample(
+    lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(any_output_format)
     symbol = "test_querybuilder_row_range_then_resample"
@@ -1069,7 +1095,8 @@ def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment, any
             "grouping_col": [0, 0, 10, -9, 20, -19, 30, -30],
             "agg_col": np.arange(8),
         },
-        index=idx)
+        index=idx,
+    )
     lib.write(symbol, df)
 
     q = QueryBuilder()
@@ -1092,7 +1119,7 @@ def test_querybuilder_resample_then_resample(lmdb_version_store_tiny_segment, an
         {
             "col": np.arange(240),
         },
-        index=pd.date_range("2024-01-01", periods=240, freq="min")
+        index=pd.date_range("2024-01-01", periods=240, freq="min"),
     )
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -1116,7 +1143,7 @@ def test_query_builder_vwap(lmdb_version_store_v1, any_output_format):
             "price": rng.random(len(index)),
             "volume": rng.integers(1, 100, len(index)),
         },
-        index=index
+        index=index,
     )
     lib.write(symbol, df)
 
@@ -1170,10 +1197,14 @@ def test_to_strings():
     q = q[q["abc"] > 3]
     q = q[q["def"] > q["ghi"]]
     q.row_range((1, 10))
-    assert str(q) == 'WHERE (Column["abc"] GT Num(3)) | WHERE (Column["def"] GT Column["ghi"]) | ROWRANGE: RANGE, start=1, end=10'
+    assert (
+        str(q)
+        == 'WHERE (Column["abc"] GT Num(3)) | WHERE (Column["def"] GT Column["ghi"]) | ROWRANGE: RANGE, start=1, end=10'
+    )
 
-    q = QueryBuilder().resample('1min').agg({"col": "sum"})
-    assert str(q) == 'RESAMPLE(1min) | AGGREGATE {col: (col, sum), }'
+    q = QueryBuilder().resample("1min").agg({"col": "sum"})
+    assert str(q) == "RESAMPLE(1min) | AGGREGATE {col: (col, sum), }"
+
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_output_format):
@@ -1190,6 +1221,7 @@ def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_ou
     expected = pd.DataFrame({"new_column": [3, 4]})
     assert_frame_equal_with_arrow(expected, result)
     assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
+
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_schema, any_output_format):
@@ -1208,9 +1240,12 @@ def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_
     assert_frame_equal_with_arrow(expected, result)
     assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
 
+
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("column_to_read", ["b", "c"])
-def test_filter_synthetic_column_and_select_on_disk_column(s3_store_factory, dynamic_schema, column_to_read, any_output_format):
+def test_filter_synthetic_column_and_select_on_disk_column(
+    s3_store_factory, dynamic_schema, column_to_read, any_output_format
+):
     lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
     lib.set_output_format(any_output_format)
     sym = "sym_0"

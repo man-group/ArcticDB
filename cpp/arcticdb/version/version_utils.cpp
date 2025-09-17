@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/version/version_utils.hpp>
@@ -12,35 +13,33 @@
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/python/python_utils.hpp>
 
-
-
 namespace arcticdb {
 
 using namespace arcticdb::storage;
 using namespace arcticdb::entity;
 using namespace arcticdb::stream;
 
-
 VariantKey write_multi_index_entry(
-    std::shared_ptr<StreamSink> store,
-    std::vector<AtomKey> &keys,
-    const StreamId &stream_id,
-    const py::object &metastruct,
-    const py::object &user_meta,
-    VersionId version_id
+        std::shared_ptr<StreamSink> store, std::vector<AtomKey>& keys, const StreamId& stream_id,
+        const py::object& metastruct, const py::object& user_meta, VersionId version_id
 ) {
     ARCTICDB_SAMPLE(WriteJournalEntry, 0)
     ARCTICDB_DEBUG(log::version(), "Version map writing multi key");
     VariantKey multi_key;
 
-    IndexAggregator<RowCountIndex> multi_index_agg(stream_id, [&multi_key, &store, version_id, stream_id](auto &&segment) {
-        multi_key = store->write_sync(KeyType::MULTI_KEY,
-                                     version_id,  // version_id
-                                     stream_id,
-                                     NumericIndex{0},  // start_index
-                                     NumericIndex{0},  // end_index
-                                     std::forward<decltype(segment)>(segment));
-    });
+    IndexAggregator<RowCountIndex> multi_index_agg(
+            stream_id,
+            [&multi_key, &store, version_id, stream_id](auto&& segment) {
+                multi_key = store->write_sync(
+                        KeyType::MULTI_KEY,
+                        version_id, // version_id
+                        stream_id,
+                        NumericIndex{0}, // start_index
+                        NumericIndex{0}, // end_index
+                        std::forward<decltype(segment)>(segment)
+                );
+            }
+    );
 
     for (const auto& key : keys) {
         multi_index_agg.add_key(key);
@@ -62,16 +61,16 @@ VariantKey write_multi_index_entry(
     return multi_key;
 }
 
-std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size)  {
+std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_ptr<Store>& store, size_t batch_size) {
     std::unordered_map<StreamId, size_t> output;
     size_t max_blocks = ConfigsMap::instance()->get_int("VersionMap.MaxVersionBlocks", 5);
-    store->iterate_type(entity::KeyType::VERSION, [&output, batch_size, max_blocks] (const VariantKey& key) {
+    store->iterate_type(entity::KeyType::VERSION, [&output, batch_size, max_blocks](const VariantKey& key) {
         ++output[variant_key_id(key)];
         if (output.size() >= batch_size) {
             // remove half of them which are under max_blocks
             // otherwise memory would blow up for big libraries
             auto iter = output.begin();
-            while(iter != output.end()) {
+            while (iter != output.end()) {
                 auto copy = iter;
                 iter++;
                 if (copy->second < max_blocks) {
@@ -86,7 +85,6 @@ std::unordered_map<StreamId, size_t> get_num_version_entries(const std::shared_p
     return output;
 }
 
-
 FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
     TimeseriesDescriptor tsd;
     auto& tsd_proto = tsd.mutable_proto();
@@ -97,7 +95,7 @@ FrameAndDescriptor frame_and_descriptor_from_segment(SegmentInMemory&& seg) {
         ensure_rowcount_norm_meta(*tsd_proto.mutable_normalization(), seg_descriptor.id());
     else
         ensure_timeseries_norm_meta(*tsd.mutable_proto().mutable_normalization(), seg_descriptor.id(), false);
-    return { SegmentInMemory(std::move(seg)), tsd, {}};
+    return {SegmentInMemory(std::move(seg)), tsd, {}};
 }
 
-}
+} // namespace arcticdb

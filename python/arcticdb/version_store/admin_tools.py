@@ -40,6 +40,7 @@ class KeyType(Enum):
 
     More information about the ArcticDB data layout is available [here](https://docs.arcticdb.io/latest/technical/on_disk_storage/).
     """
+
     TABLE_DATA = 1
     """Where the contents of data are stored, in a tiled format."""
 
@@ -123,7 +124,7 @@ class AdminTools:
         All the key types in KeyType are always included in the output.
         """
         sizes = self._nvs.version_store.scan_object_sizes()
-        return {KeyType._from_native(s.key_type) : Size(s.compressed_size, s.count) for s in sizes}
+        return {KeyType._from_native(s.key_type): Size(s.compressed_size, s.count) for s in sizes}
 
     def get_sizes_by_symbol(self) -> Dict[str, Dict[KeyType, Size]]:
         """

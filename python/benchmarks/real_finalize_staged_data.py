@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-
 import os
 from arcticdb.util.environment_setup import TestLibraryManager, LibraryType, Storage
 from arcticdb.util.utils import CachedDFGenerator, TimestampNumber, stage_chunks
@@ -22,21 +21,21 @@ class AWSFinalizeStagedData(AsvBase):
     """
 
     rounds = 1
-    number = 1 
-    repeat = 1 
+    number = 1
+    repeat = 1
     min_run_count = 1
     warmup_time = 0
 
     timeout = 1200
 
-    params = [500, 1000] # Test data [10, 20]
+    params = [500, 1000]  # Test data [10, 20]
     param_names = ["num_chunks"]
 
     library_manager = TestLibraryManager(Storage.AMAZON, "FINALIZE")
 
     def get_library_manager(self) -> TestLibraryManager:
         return AWSFinalizeStagedData.library_manager
-    
+
     def get_population_policy(self):
         pass
 
@@ -53,16 +52,14 @@ class AWSFinalizeStagedData(AsvBase):
 
         df_cache = CachedDFGenerator(500000, [5])
         return df_cache
-    
+
     def setup(self, cache, num_chunks: int):
         self.df_cache: CachedDFGenerator = cache
         self.logger = self.get_logger()
 
         self.lib = self.get_library_manager().get_library(LibraryType.MODIFIABLE)
 
-        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(
-            0, self.df_cache.TIME_UNIT
-        )  # Synchronize index frequency
+        INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, self.df_cache.TIME_UNIT)  # Synchronize index frequency
 
         df = self.df_cache.generate_dataframe_timestamp_indexed(200, 0, self.df_cache.TIME_UNIT)
         list_of_chunks = [10000] * num_chunks
@@ -84,4 +81,4 @@ class AWSFinalizeStagedData(AsvBase):
         self.logger.info(f"Library: {self.lib}")
         self.logger.info(f"Symbol: {self.symbol}")
         assert self.symbol in self.lib.get_staged_symbols()
-        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)        
+        self.lib.finalize_staged_data(self.symbol, mode=StagedDataFinalizeMethod.WRITE)

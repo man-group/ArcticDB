@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 
 from hypothesis import assume, given, settings, strategies
@@ -37,7 +38,7 @@ def test_project_ternary_condition_as_full_and_empty_result(lmdb_version_store_v
             "col1": np.arange(6, dtype=np.int64),
             "col2": np.arange(10, 16, dtype=np.int64),
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -70,7 +71,7 @@ def test_project_ternary_column_column_numeric(lmdb_version_store_v1):
             "uint8": np.arange(249, 255, dtype=np.uint8),
             "uint64": np.arange(1000, 1006, dtype=np.uint64),
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -116,7 +117,7 @@ def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1):
             "col1": ["a", "b", "c", None, "e", "f"],
             "col2": ["g", "h", "i", "j", np.nan, "l"],
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -138,7 +139,7 @@ def test_project_ternary_fixed_width_strings(version_store_factory):
             "width_1": ["a", "b", "c", "d", "e", "f"],
             "width_2": ["gg", "hh", "ii", "jj", "kk", "ll"],
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -163,7 +164,7 @@ def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
             "conditional": [True, False, False, True, False, True],
             "col1": np.arange(6),
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -190,7 +191,7 @@ def test_project_ternary_column_value_strings(lmdb_version_store_v1):
             "conditional": [True, False, False, True, False, True],
             "col1": ["a", "b", "c", "d", "e", "f"],
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -216,7 +217,7 @@ def test_project_ternary_value_value_numeric(lmdb_version_store_v1):
         {
             "conditional": [True, False, False, True, False, True],
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -236,7 +237,7 @@ def test_project_ternary_value_value_string(lmdb_version_store_v1):
         {
             "conditional": [True, False, False, True, False, True],
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -253,10 +254,9 @@ def test_project_ternary_value_value_string(lmdb_version_store_v1):
     [
         None,
         pd.MultiIndex.from_arrays(
-            [3 * [pd.Timestamp(0)] + 3 * [pd.Timestamp(1)], [0, 1, 2, 0, 1, 2]],
-            names=["datetime", "level"]
-        )
-    ]
+            [3 * [pd.Timestamp(0)] + 3 * [pd.Timestamp(1)], [0, 1, 2, 0, 1, 2]], names=["datetime", "level"]
+        ),
+    ],
 )
 def test_project_ternary_column_sliced(version_store_factory, index):
     # Cannot use lmdb_version_store_tiny_segment as it has fixed-width strings, which are not supported with the ternary
@@ -277,7 +277,7 @@ def test_project_ternary_column_sliced(version_store_factory, index):
             "str_1": ["one", "two", "three", "four", "five", "six"],
             "str_2": ["eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen"],
         },
-        index=index
+        index=index,
     )
     lib.write(symbol, df)
 
@@ -349,7 +349,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(False)
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # left column missing with column
@@ -358,7 +360,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
     expected["col1"] = expected["col1"].astype("int64")
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # right column missing with column
@@ -367,7 +371,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
     expected["col2"] = expected["col2"].astype("int64")
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # conditional and left columns missing
@@ -378,7 +384,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     expected["conditional"].fillna(False, inplace=True)
     expected["col1"].fillna(0, inplace=True)
     expected["col1"] = expected["col1"].astype("int64")
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # conditional and right columns missing
@@ -389,7 +397,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     expected["conditional"].fillna(False, inplace=True)
     expected["col2"].fillna(0, inplace=True)
     expected["col2"] = expected["col2"].astype("int64")
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # left and right columns missing
@@ -399,7 +409,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
     expected["col1"] = expected["col1"].astype("int64")
     expected["col2"] = expected["col2"].astype("int64")
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
 
@@ -452,7 +464,9 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     q = q.apply("new_col", where(q["conditional"], q["col1"], q["col2"]))
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(False)
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # left column missing with column
@@ -460,7 +474,9 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # right column missing with column
@@ -468,7 +484,9 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # conditional and left columns missing
@@ -477,7 +495,9 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # conditional and right columns missing
@@ -486,7 +506,9 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
     expected["conditional"].fillna(False, inplace=True)
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
     # left and right columns missing
@@ -494,7 +516,9 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     lib.update(symbol, update_df)
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df])
-    expected["new_col"] = np.where(expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["new_col"] = np.where(
+        expected["conditional"].to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     assert_frame_equal(expected, received)
 
 
@@ -503,8 +527,8 @@ def test_project_ternary_sparse_col_val(lmdb_version_store_v1):
     sym = "test_project_ternary_sparse_col_val"
     df = pd.DataFrame(
         {
-            "condition": [   1.0,  0.0,  1.0,    0.0,    1.0,    0.0,    1.0,    0.0],
-            "col":       [np.nan,  0.0,  1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
+            "condition": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+            "col": [np.nan, 0.0, 1.0, np.nan, np.nan, 2.0, 3.0, np.nan],
         },
         index=pd.date_range("2024-01-01", periods=8),
     )
@@ -548,11 +572,11 @@ def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
     sym = "test_project_ternary_sparse_col_col"
     df = pd.DataFrame(
         {
-            "condition1": [   1.0,    0.0,    1.0,    0.0,    1.0,    0.0,    1.0,    0.0],
-            "condition2": [   1.0,    0.0,    0.0,    1.0,    1.0,    0.0,    0.0,    1.0],
-            "col1":       [np.nan,    0.0,    1.0, np.nan, np.nan,    2.0,    3.0, np.nan],
-            "col2":       [np.nan, np.nan,   10.0,   12.0,   13.0,   14.0, np.nan, np.nan],
-            "!col1":      [  20.0, np.nan, np.nan,   21.0,   22.0, np.nan, np.nan,   23.0],
+            "condition1": [1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0],
+            "condition2": [1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0],
+            "col1": [np.nan, 0.0, 1.0, np.nan, np.nan, 2.0, 3.0, np.nan],
+            "col2": [np.nan, np.nan, 10.0, 12.0, 13.0, 14.0, np.nan, np.nan],
+            "!col1": [20.0, np.nan, np.nan, 21.0, 22.0, np.nan, np.nan, 23.0],
         },
         index=pd.date_range("2024-01-01", periods=8),
     )
@@ -561,28 +585,36 @@ def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
     # Sparse output
     # Both inputs sparse
     expected = df
-    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["projected"] = np.where(
+        (expected["condition1"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition1"] == 1.0, q["col1"], q["col2"]))
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     # Left input sparse, right input dense
     expected = df
-    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["condition2"].to_numpy())
+    expected["projected"] = np.where(
+        (expected["condition1"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["condition2"].to_numpy()
+    )
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition1"] == 1.0, q["col1"], q["condition2"]))
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     # Left input dense, right input sparse
     expected = df
-    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["condition2"].to_numpy(), expected["col2"].to_numpy())
+    expected["projected"] = np.where(
+        (expected["condition1"] == 1.0).to_numpy(), expected["condition2"].to_numpy(), expected["col2"].to_numpy()
+    )
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition1"] == 1.0, q["condition2"], q["col2"]))
     received = lib.read(sym, query_builder=q).data
     assert_frame_equal(expected, received)
     # Both inputs dense
     expected = df
-    expected["projected"] = np.where((expected["condition1"] == 1.0).to_numpy(), expected["condition2"].to_numpy(), expected["condition2"].to_numpy())
+    expected["projected"] = np.where(
+        (expected["condition1"] == 1.0).to_numpy(), expected["condition2"].to_numpy(), expected["condition2"].to_numpy()
+    )
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition1"] == 1.0, q["condition2"], q["condition2"]))
     received = lib.read(sym, query_builder=q).data
@@ -590,7 +622,9 @@ def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
 
     # Dense output
     expected = df
-    expected["projected"] = np.where((expected["condition2"] == 0.0).to_numpy(), expected["col1"].to_numpy(), expected["!col1"].to_numpy())
+    expected["projected"] = np.where(
+        (expected["condition2"] == 0.0).to_numpy(), expected["col1"].to_numpy(), expected["!col1"].to_numpy()
+    )
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition2"] == 0.0, q["col1"], q["!col1"]))
     received = lib.read(sym, query_builder=q).data
@@ -598,7 +632,9 @@ def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
 
     # Empty output
     expected = df
-    expected["projected"] = np.where((expected["condition2"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["!col1"].to_numpy())
+    expected["projected"] = np.where(
+        (expected["condition2"] == 1.0).to_numpy(), expected["col1"].to_numpy(), expected["!col1"].to_numpy()
+    )
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition2"] == 1.0, q["col1"], q["!col1"]))
     received = lib.read(sym, query_builder=q).data
@@ -608,7 +644,10 @@ def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
 def test_project_ternary_condition_empty(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_project_ternary_condition_empty"
-    df = pd.DataFrame({"condition": [0.0, 0.0, 0.0], "col1": [0.0, np.nan, np.nan], "col2": [0.0, np.nan, np.nan]}, index=pd.date_range("2024-01-01", periods=3))
+    df = pd.DataFrame(
+        {"condition": [0.0, 0.0, 0.0], "col1": [0.0, np.nan, np.nan], "col2": [0.0, np.nan, np.nan]},
+        index=pd.date_range("2024-01-01", periods=3),
+    )
     lib.write(sym, df, sparsify_floats=True)
     expected = df
     expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), 2000.0)
@@ -627,7 +666,7 @@ def test_filter_ternary_bitset_bitset(lmdb_version_store_v1):
             "col1": np.arange(6),
             "col2": np.arange(6),
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -647,7 +686,7 @@ def test_filter_ternary_bitset_column(lmdb_version_store_v1):
             "col1": np.arange(6),
             "col2": [True, False, True, False, True, False],
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -673,7 +712,7 @@ def test_filter_ternary_bool_columns(lmdb_version_store_v1):
             "col1": [True, True, True, True, False, False],
             "col2": [True, False, True, False, True, False],
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -710,7 +749,7 @@ def test_filter_ternary_bitset_value(lmdb_version_store_v1):
             "conditional": [True, False, False, True, False, True],
             "col1": np.arange(6),
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -747,7 +786,7 @@ def test_filter_ternary_bitset_full_and_empty_results(lmdb_version_store_v1):
             "conditional": [True, False, False, True, False, True],
             "col1": np.arange(6),
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -789,7 +828,7 @@ def test_filter_ternary_column_full_and_empty_results(lmdb_version_store_v1):
             "col1": [True, False] * 3,
             "col2": [0] * 6,
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -831,7 +870,7 @@ def test_filter_ternary_value_full_and_empty_results(lmdb_version_store_v1, valu
             "conditional": [True, False, False, True, False, True],
             "col2": [0] * 6,
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
@@ -872,12 +911,14 @@ def test_filter_ternary_full_and_empty_results_squared(lmdb_version_store_v1):
             "conditional": [True, False, False, True, False, True],
             "col2": [0] * 6,
         },
-        index=pd.date_range("2024-01-01", periods=6)
+        index=pd.date_range("2024-01-01", periods=6),
     )
     lib.write(symbol, df)
 
     # Full/Full
-    expected = df[np.where(df["conditional"].to_numpy(), (~(df["col2"] < 0)).to_numpy(), (~(df["col2"] < 0)).to_numpy())]
+    expected = df[
+        np.where(df["conditional"].to_numpy(), (~(df["col2"] < 0)).to_numpy(), (~(df["col2"] < 0)).to_numpy())
+    ]
     q = QueryBuilder()
     q = q[where(q["conditional"], ~(q["col2"] < 0), ~(q["col2"] < 0))]
     received = lib.read(symbol, query_builder=q).data
@@ -929,11 +970,7 @@ def test_filter_ternary_invalid_arguments(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     symbol = "test_filter_ternary_invalid_arguments"
     df = pd.DataFrame(
-        {
-            "conditional": [True],
-            "col1": [0],
-            "col2": ["hello"]
-         },
+        {"conditional": [True], "col1": [0], "col2": ["hello"]},
     )
     lib.write(symbol, df)
 
@@ -1035,7 +1072,11 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     q = q[where(q["conditional"], q["col1"] == 1, q["col2"] == 12)]
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(False)
-    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    expected = expected[
+        np.where(
+            expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy()
+        )
+    ]
     assert_frame_equal(expected, received)
 
     # left column missing
@@ -1044,7 +1085,11 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
     expected["col1"] = expected["col1"].astype("int64")
-    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    expected = expected[
+        np.where(
+            expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy()
+        )
+    ]
     assert_frame_equal(expected, received)
 
     # right column missing
@@ -1053,7 +1098,11 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     received = lib.read(symbol, query_builder=q).data
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
     expected["col2"] = expected["col2"].astype("int64")
-    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    expected = expected[
+        np.where(
+            expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy()
+        )
+    ]
     assert_frame_equal(expected, received)
 
     # conditional and left column missing
@@ -1064,7 +1113,11 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     expected["conditional"].fillna(False, inplace=True)
     expected["col1"].fillna(0, inplace=True)
     expected["col1"] = expected["col1"].astype("int64")
-    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    expected = expected[
+        np.where(
+            expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy()
+        )
+    ]
     assert_frame_equal(expected, received)
 
     # conditional and right column missing
@@ -1075,8 +1128,15 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     expected["conditional"].fillna(False, inplace=True)
     expected["col2"].fillna(0, inplace=True)
     expected["col2"] = expected["col2"].astype("int64")
-    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
-    assert_frame_equal(expected, received,)
+    expected = expected[
+        np.where(
+            expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy()
+        )
+    ]
+    assert_frame_equal(
+        expected,
+        received,
+    )
 
     # left and right column missing
     update_df = base_update_df.drop(columns=["col1", "col2"])
@@ -1085,7 +1145,11 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     expected = pd.concat([all_columns_df, update_df]).fillna(0)
     expected["col1"] = expected["col1"].astype("int64")
     expected["col2"] = expected["col2"].astype("int64")
-    expected = expected[np.where(expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy())]
+    expected = expected[
+        np.where(
+            expected["conditional"].to_numpy(), (expected["col1"] == 1).to_numpy(), (expected["col2"] == 12).to_numpy()
+        )
+    ]
     assert_frame_equal(expected, received)
 
 
@@ -1102,7 +1166,12 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
     ),
 )
 def test_ternary_hypothesis(lmdb_version_store_v1, df):
-    assume(not df.empty and not df["condition"].isnull().all() and not df["col1"].isnull().all() and not df["col2"].isnull().all())
+    assume(
+        not df.empty
+        and not df["condition"].isnull().all()
+        and not df["col1"].isnull().all()
+        and not df["col2"].isnull().all()
+    )
     lib = lmdb_version_store_v1
     dense_sym = "test_ternary_hypothesis_dense"
     sparse_sym = "test_ternary_hypothesis_sparse"
@@ -1115,7 +1184,9 @@ def test_ternary_hypothesis(lmdb_version_store_v1, df):
     # Projection
     # col/col
     expected = df.copy(deep=True)
-    expected["projected"] = np.where(expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy())
+    expected["projected"] = np.where(
+        expected["condition"].isnull().to_numpy(), expected["col1"].to_numpy(), expected["col2"].to_numpy()
+    )
     q = QueryBuilder()
     q = q.apply("projected", where(q["condition"].isnull(), q["col1"], q["col2"]))
     assert_frame_equal(expected, lib.read(dense_sym, query_builder=q).data, check_dtype=False)
@@ -1145,7 +1216,13 @@ def test_ternary_hypothesis(lmdb_version_store_v1, df):
     # Filters
     # Only test col/col, col/val etc can be achieved more efficiently without using the ternary operator
     expected = df.copy(deep=True)
-    expected = expected[np.where(expected["condition"].isnull().to_numpy(), expected["col1"].isnull().to_numpy(), expected["col2"].isnull().to_numpy())]
+    expected = expected[
+        np.where(
+            expected["condition"].isnull().to_numpy(),
+            expected["col1"].isnull().to_numpy(),
+            expected["col2"].isnull().to_numpy(),
+        )
+    ]
     q = QueryBuilder()
     q = q[where(q["condition"].isnull(), q["col1"].isnull(), q["col2"].isnull())]
     assert_frame_equal(expected, lib.read(dense_sym, query_builder=q).data, check_dtype=False)
