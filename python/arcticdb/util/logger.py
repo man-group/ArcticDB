@@ -81,4 +81,3 @@ class GitHubSanitizingException(Exception):
         # Sanitize the message
         sanitized_message = GitHubSanitizingHandler.sanitize_message(message)
         super().__init__(sanitized_message)
-

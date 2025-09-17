@@ -14,6 +14,7 @@ from tests.conftest import Marks
 
 pytestmark = Marks.dedup.mark
 
+
 def get_data_keys(lib, symbol):
     lt = lib.library_tool()
     data_keys = lt.find_keys(KeyType.TABLE_DATA)

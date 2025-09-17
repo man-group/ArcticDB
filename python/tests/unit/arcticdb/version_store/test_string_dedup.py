@@ -21,6 +21,7 @@ from tests.conftest import Marks
 
 pytestmark = Marks.dedup.mark
 
+
 def generate_dataframe(columns, number_of_rows, strings, index_start="2000-1-1"):
     data = {}
     for column in columns:

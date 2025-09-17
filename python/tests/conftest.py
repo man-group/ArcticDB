@@ -1530,19 +1530,25 @@ def clear_query_stats():
     query_stats.reset_stats()
 
 
-#region Pytest special xfail handling
+# region Pytest special xfail handling
+
 
 def pytest_runtest_makereport(item, call):
-    from tests.pytest_xfail import  pytest_runtest_makereport
+    from tests.pytest_xfail import pytest_runtest_makereport
+
     return pytest_runtest_makereport(item, call)
 
+
 def pytest_terminal_summary(terminalreporter, exitstatus):
-    from tests.pytest_xfail import  pytest_terminal_summary
+    from tests.pytest_xfail import pytest_terminal_summary
+
     pytest_terminal_summary(terminalreporter, exitstatus)
 
-#endregion    
+
+# endregion
 
 # region =================================== Pytest plugins&hooks ====================================
+
 
 class Marks:
     """Central Marks Registry
@@ -1554,6 +1560,7 @@ class Marks:
         def test_two():
             ....
     """
+
     storage = Mark("storage")
     dedup = Mark("dedup")
     authentication = Mark("authentication")
@@ -1561,7 +1568,7 @@ class Marks:
     compat = Mark("compat")
     dynamic_schema = Mark("dynamic_schema")
     encoding_v2 = Mark("encoding_v2")
-    empty_types= Mark("empty_types")
+    empty_types = Mark("empty_types")
     delayed_deletes = Mark("delayed_deletes")
     use_tombstones = Mark("use_tombstones")
     sync_passive = Mark("sync_passive")
@@ -1593,7 +1600,7 @@ class Marks:
     def list_all_marks(cls):
         """Lists all marks in the registry"""
         return [v for k, v in cls.__dict__.items() if isinstance(v, Mark)]
-    
+
 
 def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
     """
@@ -1604,14 +1611,15 @@ def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
     :param rules: dict of mark_name -> list[str | regex]
     """
     for mark_name, patterns in rules.items():
-   
+
         # Deduplication guard
         if item.get_closest_marker(mark_name):
             continue
-            
+
         marked = False
         for pattern in patterns:
-            if marked: break
+            if marked:
+                break
             for value in source_values:
                 value_lower = value.lower()
                 if isinstance(pattern, str):
@@ -1626,12 +1634,16 @@ def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
 
 
 # Define how fixtures map to marks
-ALL_FIXTURES = [ re.compile(r"^arctic_client(?!.*lmdb).*", re.I), 
-                re.compile(r"^arctic_library(?!.*lmdb).*", re.I), 
-                re.compile(r"^object_and_mem_and_lmdb.*", re.I)]
-ALL_FIXTURES_AND_LMDB = [ re.compile(r"^arctic_client.*", re.I), 
-                        re.compile(r"^arctic_library.*", re.I), 
-                        re.compile(r"^object_and_mem_and_lmdb.*", re.I)]
+ALL_FIXTURES = [
+    re.compile(r"^arctic_client(?!.*lmdb).*", re.I),
+    re.compile(r"^arctic_library(?!.*lmdb).*", re.I),
+    re.compile(r"^object_and_mem_and_lmdb.*", re.I),
+]
+ALL_FIXTURES_AND_LMDB = [
+    re.compile(r"^arctic_client.*", re.I),
+    re.compile(r"^arctic_library.*", re.I),
+    re.compile(r"^object_and_mem_and_lmdb.*", re.I),
+]
 BASIC_ARCTIC_FIXTURES = [re.compile(r"^basic_arctic", re.I)]
 BASIC_STORE_FIXTURES = [re.compile(r"^(basic_store.*|basic_version_.*) ", re.I)]
 OBJECT_STORE_FIXTURES = [re.compile(r"^(object_store.*|object_version_.*)", re.I)]
@@ -1639,46 +1651,100 @@ LOCAL_OBJECT_STORE_FIXTURES = [re.compile(r"^(local_object_store.*|local_object_
 VERSION_STORE_AND_REAL_FIXTURES = [re.compile(r"^version_store_and_real*", re.I)]
 
 FIXTURES_TO_MARK = {
-    Marks.lmdb.name: [re.compile(r"^lmdb_.*", re.I)] 
-        + ALL_FIXTURES_AND_LMDB + VERSION_STORE_AND_REAL_FIXTURES + BASIC_STORE_FIXTURES,
+    Marks.lmdb.name: [re.compile(r"^lmdb_.*", re.I)]
+    + ALL_FIXTURES_AND_LMDB
+    + VERSION_STORE_AND_REAL_FIXTURES
+    + BASIC_STORE_FIXTURES,
     Marks.mem.name: [re.compile(r"^(mem_.*|in_memory_.*)", re.I)] + ALL_FIXTURES + BASIC_STORE_FIXTURES,
-    Marks.s3.name: [re.compile(r"^(s3_.*|mock_s3.*)", re.I)] 
-        + ALL_FIXTURES + BASIC_STORE_FIXTURES + LOCAL_OBJECT_STORE_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks.s3.name: [re.compile(r"^(s3_.*|mock_s3.*)", re.I)]
+    + ALL_FIXTURES
+    + BASIC_STORE_FIXTURES
+    + LOCAL_OBJECT_STORE_FIXTURES
+    + OBJECT_STORE_FIXTURES,
     Marks.nfs.name: [re.compile(r"^nfs_.*", re.I)] + ALL_FIXTURES + OBJECT_STORE_FIXTURES,
     Marks.gcp.name: [re.compile(r"^gcp_.*", re.I)] + ALL_FIXTURES,
     Marks.mongo.name: [re.compile(r"^mongo_.*", re.I)] + ALL_FIXTURES,
-    Marks.azurite.name: [re.compile(r"^(azurite_.*|azure_.*)", re.I)] 
-        + ALL_FIXTURES + LOCAL_OBJECT_STORE_FIXTURES + OBJECT_STORE_FIXTURES + OBJECT_STORE_FIXTURES,
-    Marks.real_s3.name: [re.compile(r"^real_s3_.*", re.I)] 
-        + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES +VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
-    Marks.real_azure.name: [re.compile(r"^real_azure_.*", re.I)] 
-        + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES + VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
-    Marks.real_gcp.name: [re.compile(r"^real_gcp_.*", re.I)] 
-        + ALL_FIXTURES + BASIC_STORE_FIXTURES + BASIC_ARCTIC_FIXTURES + VERSION_STORE_AND_REAL_FIXTURES + OBJECT_STORE_FIXTURES,
+    Marks.azurite.name: [re.compile(r"^(azurite_.*|azure_.*)", re.I)]
+    + ALL_FIXTURES
+    + LOCAL_OBJECT_STORE_FIXTURES
+    + OBJECT_STORE_FIXTURES
+    + OBJECT_STORE_FIXTURES,
+    Marks.real_s3.name: [re.compile(r"^real_s3_.*", re.I)]
+    + ALL_FIXTURES
+    + BASIC_STORE_FIXTURES
+    + BASIC_ARCTIC_FIXTURES
+    + VERSION_STORE_AND_REAL_FIXTURES
+    + OBJECT_STORE_FIXTURES,
+    Marks.real_azure.name: [re.compile(r"^real_azure_.*", re.I)]
+    + ALL_FIXTURES
+    + BASIC_STORE_FIXTURES
+    + BASIC_ARCTIC_FIXTURES
+    + VERSION_STORE_AND_REAL_FIXTURES
+    + OBJECT_STORE_FIXTURES,
+    Marks.real_gcp.name: [re.compile(r"^real_gcp_.*", re.I)]
+    + ALL_FIXTURES
+    + BASIC_STORE_FIXTURES
+    + BASIC_ARCTIC_FIXTURES
+    + VERSION_STORE_AND_REAL_FIXTURES
+    + OBJECT_STORE_FIXTURES,
     Marks.dynamic_schema.name: [re.compile(r".*(dynamic_schema|dynamic(?!string)).*", re.I)],
-    Marks.empty_types.name : ["empty_types", "lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2"],
-    Marks.delayed_deletes.name : ["delayed_deletes"],
-    Marks.use_tombstones.name : ["tombstone", "basic_store_prune_previous", "basic_store_prune_previous"],
-    Marks.sync_passive.name : ["sync_passive"],
-    Marks.bucketize_dynamic.name : ["buckets"],
-    Marks.prune_previous.name : ["prune_previous", "lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_tombstone_and_pruning", 
-                                 "basic_store_delayed_deletes_v1", "basic_store_delayed_deletes_v2"],
-    Marks.segment_size.name : ["segment", "lmdb_version_store_no_symbol_list"],
-    Marks.dynamic_strings.name : ["dynamic_strings", "real_s3_version_store_dynamic_schema", "real_gcp_version_store_dynamic_schema",
-                                  "real_azure_version_store_dynamic_schema", "nfs_backed_s3_version_store_v1", "nfs_backed_s3_version_store_v2",
-                                  "s3_version_store_v1", "s3_version_store_v2", "s3_version_store_dynamic_schema_v1",
-                                  "s3_version_store_dynamic_schema_v2", "nfs_backed_s3_version_store_dynamic_schema_v2", "nfs_backed_s3_version_store_dynamic_schema_v2",
-                                  "azure_version_store_dynamic_schema", "lmdb_version_store_v1", "lmdb_version_store_v2",
-                                  "lmdb_version_store_prune_previous", "lmdb_version_store_dynamic_schema_v1", "lmdb_version_store_dynamic_schema_v2",
-                                  "lmdb_version_store_dynamic_schema", "lmdb_version_store_empty_types_v1", "lmdb_version_store_empty_types_v2",
-                                  "lmdb_version_store_empty_types_dynamic_schema_v1", "lmdb_version_store_empty_types_dynamic_schema_v2",
-                                  "lmdb_version_store_delayed_deletes_v1", "lmdb_version_store_delayed_deletes_v2",
-                                  "lmdb_version_store_tombstones_no_symbol_list", "lmdb_version_store_allows_pickling",
-                                  "lmdb_version_store_tiny_segment_dynamic_strings", "basic_store_prune_previous", 
-                                  "basic_store_dynamic_schema_v1", "basic_store_dynamic_schema_v2", "basic_store_dynamic_schema",
-                                  "basic_store_delayed_deletes_v1", "basic_store_delayed_deletes_v2",
-                                  "basic_store_tombstones_no_symbol_list", "basic_store_allows_pickling"],
-    Marks.encoding_v2.name: [re.compile(
+    Marks.empty_types.name: [
+        "empty_types",
+        "lmdb_version_store_delayed_deletes_v1",
+        "lmdb_version_store_delayed_deletes_v2",
+    ],
+    Marks.delayed_deletes.name: ["delayed_deletes"],
+    Marks.use_tombstones.name: ["tombstone", "basic_store_prune_previous", "basic_store_prune_previous"],
+    Marks.sync_passive.name: ["sync_passive"],
+    Marks.bucketize_dynamic.name: ["buckets"],
+    Marks.prune_previous.name: [
+        "prune_previous",
+        "lmdb_version_store_delayed_deletes_v1",
+        "lmdb_version_store_tombstone_and_pruning",
+        "basic_store_delayed_deletes_v1",
+        "basic_store_delayed_deletes_v2",
+    ],
+    Marks.segment_size.name: ["segment", "lmdb_version_store_no_symbol_list"],
+    Marks.dynamic_strings.name: [
+        "dynamic_strings",
+        "real_s3_version_store_dynamic_schema",
+        "real_gcp_version_store_dynamic_schema",
+        "real_azure_version_store_dynamic_schema",
+        "nfs_backed_s3_version_store_v1",
+        "nfs_backed_s3_version_store_v2",
+        "s3_version_store_v1",
+        "s3_version_store_v2",
+        "s3_version_store_dynamic_schema_v1",
+        "s3_version_store_dynamic_schema_v2",
+        "nfs_backed_s3_version_store_dynamic_schema_v2",
+        "nfs_backed_s3_version_store_dynamic_schema_v2",
+        "azure_version_store_dynamic_schema",
+        "lmdb_version_store_v1",
+        "lmdb_version_store_v2",
+        "lmdb_version_store_prune_previous",
+        "lmdb_version_store_dynamic_schema_v1",
+        "lmdb_version_store_dynamic_schema_v2",
+        "lmdb_version_store_dynamic_schema",
+        "lmdb_version_store_empty_types_v1",
+        "lmdb_version_store_empty_types_v2",
+        "lmdb_version_store_empty_types_dynamic_schema_v1",
+        "lmdb_version_store_empty_types_dynamic_schema_v2",
+        "lmdb_version_store_delayed_deletes_v1",
+        "lmdb_version_store_delayed_deletes_v2",
+        "lmdb_version_store_tombstones_no_symbol_list",
+        "lmdb_version_store_allows_pickling",
+        "lmdb_version_store_tiny_segment_dynamic_strings",
+        "basic_store_prune_previous",
+        "basic_store_dynamic_schema_v1",
+        "basic_store_dynamic_schema_v2",
+        "basic_store_dynamic_schema",
+        "basic_store_delayed_deletes_v1",
+        "basic_store_delayed_deletes_v2",
+        "basic_store_tombstones_no_symbol_list",
+        "basic_store_allows_pickling",
+    ],
+    Marks.encoding_v2.name: [
+        re.compile(
             r".*("
             r"arctic_client|"
             r"nfs_backed_s3_version_store_dynamic_schema|"
@@ -1689,19 +1755,21 @@ FIXTURES_TO_MARK = {
             r"lmdb_version_store_delayed_deletes|"
             r"basic_store_dynamic_schema"
             r").*(?!v1).*",
-            re.I
-        )],
+            re.I,
+        )
+    ],
 }
 
 ALL_FIXTURE_NAMES = set()
 
+
 def pytest_collection_modifyitems(config, items):
-    """ This hook is useful for filtering in out tests and modifying tests
+    """This hook is useful for filtering in out tests and modifying tests
     as soon as pytest collects them before execution
     """
 
     def evaluate_item(item, part_string: str, mark_to_add: Mark):
-        """ Evaluate item(test) if its module path contains certain string
+        """Evaluate item(test) if its module path contains certain string
         If there it will mark the test with specified mark
         """
         doc = item.module.__file__
@@ -1709,15 +1777,16 @@ def pytest_collection_modifyitems(config, items):
             item.add_marker(mark_to_add)
 
     # Apply this process only when asked for
-    if not EXTENDED_MARKS: return
+    if not EXTENDED_MARKS:
+        return
 
     start_time = time.time()
     for item in items:
         ## Add custom marks to test depending file path name of module to the test
         ## Electively this silently marks each test with its physical location in the repo
         ## allowing later that physical location to be used in combination with other marks
-        ## 
-        ## Example: 
+        ##
+        ## Example:
         ##   pytest -s --co -m "toolbox and storage"
         evaluate_item(item, Marks.unit.name, Marks.unit.mark)
         evaluate_item(item, Marks.integration.name, Marks.integration.mark)
