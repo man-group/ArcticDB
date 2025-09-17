@@ -24,3 +24,6 @@ fbc2a76bdbf56c0181b38caa76863b1e4c5e5bec
 
 # Clean and reorganize `OffsetString` and `StringPool`
 06a252f99f9e0c1cc19dd95c61dd239ddf68845c
+
+# Apply consistent code formatting to the repo
+7acd347e3a035b635fd71c1bde2b54e0135ac8db
