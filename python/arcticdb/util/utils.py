@@ -163,11 +163,10 @@ def verify_dynamically_added_columns(
             raise TypeError(f"Unsupported dtype: {dtype}")
 
 
-def generate_sparse_numpy_array_from_array(size: int, 
-                                           array: np.ndarray, seed: int = 3243253) -> np.ndarray:
-    """ Creates a sparse array with specified size, with supplied values from the array scattered there.
+def generate_sparse_numpy_array_from_array(size: int, array: np.ndarray, seed: int = 3243253) -> np.ndarray:
+    """Creates a sparse array with specified size, with supplied values from the array scattered there.
 
-    Usage: 
+    Usage:
         generate_sparse_numpy_array_from_array(10, np.array([pd.Timestamp(54), pd.Timestamp(543453436)], dtype='datetime64[ns]'))
         generate_sparse_numpy_array_from_array(10, np.array([1.0, 1.1]))
         generate_sparse_numpy_array_from_array(10, np.array([]))
@@ -192,18 +191,19 @@ def generate_sparse_numpy_array_from_array(size: int,
             arr[indices] = array
         arr = np.array(arr, dtype=dtype)
     elif pd.api.types.is_datetime64_any_dtype(dtype):
-        arr = np.array([np.datetime64(None)] * size, dtype='datetime64[ns]')
+        arr = np.array([np.datetime64(None)] * size, dtype="datetime64[ns]")
         if num_values > 0:
             indices = np.random.choice(size, size=num_values, replace=False)
-            arr[indices] = array    
+            arr[indices] = array
     else:
-        raise TypeError(f"Unsupported type '{dtype}' for sparse array")        
+        raise TypeError(f"Unsupported type '{dtype}' for sparse array")
     return arr
 
 
-def generate_random_sparse_numpy_array(size: int, dtype, 
-                                       density: float = 0.01, str_length: int = 10, seed: int = 8238) -> np.ndarray:
-    """ Generates random sparse numpy array of specified type with specified density.
+def generate_random_sparse_numpy_array(
+    size: int, dtype, density: float = 0.01, str_length: int = 10, seed: int = 8238
+) -> np.ndarray:
+    """Generates random sparse numpy array of specified type with specified density.
     Supported types are floats, str and timestamp
     """
     num_values = int(size * density)
@@ -211,32 +211,34 @@ def generate_random_sparse_numpy_array(size: int, dtype,
     if pd.api.types.is_float_dtype(dtype):
         values = ListGenerators.generate_random_floats(dtype, num_values, seed=seed)
     elif pd.api.types.is_string_dtype(dtype):
-        values = np.array(ListGenerators.generate_random_strings(str_size=str_length,
-                                                        length=num_values,
-                                                        include_unicode=True,
-                                                        seed=seed), dtype=np.str_)
+        values = np.array(
+            ListGenerators.generate_random_strings(
+                str_size=str_length, length=num_values, include_unicode=True, seed=seed
+            ),
+            dtype=np.str_,
+        )
     elif pd.api.types.is_datetime64_any_dtype(dtype):
-        values = generate_random_timestamp_array(num_values, seed=seed)    
+        values = generate_random_timestamp_array(num_values, seed=seed)
     else:
-        raise TypeError(f"Unsupported type {dtype} for sparse array")        
+        raise TypeError(f"Unsupported type {dtype} for sparse array")
     return generate_sparse_numpy_array_from_array(size, values, seed)
 
 
-def generate_random_series(type: ArcticTypes, length: int, name: str, 
-                    start_time: pd.Timestamp=None, freq: str='s', seed=3247) -> pd.Series:
+def generate_random_series(
+    type: ArcticTypes, length: int, name: str, start_time: pd.Timestamp = None, freq: str = "s", seed=3247
+) -> pd.Series:
     """Generates random series of specified type with or without index"""
     set_seed(seed)
     index = None
     if start_time:
         index = pd.date_range(start_time, periods=length, freq=freq)
-    return pd.Series(generate_random_numpy_array(length, type, seed), 
-                           index=index,
-                           name=name)
+    return pd.Series(generate_random_numpy_array(length, type, seed), index=index, name=name)
 
 
-def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[int, pd.Timestamp],
-                                     new_columns_to_verify: Set[str]):
-    """ Verifies the value of dynamically added columns to dataframes 
+def verify_dynamically_added_columns(
+    updated_df: pd.DataFrame, row_index: Union[int, pd.Timestamp], new_columns_to_verify: Set[str]
+):
+    """Verifies the value of dynamically added columns to dataframes
     after append/update operation with dataframe that is having additional new rows
 
     row_index is either location of the row in dataframe or its index (timestamp)
@@ -244,24 +246,24 @@ def verify_dynamically_added_columns(updated_df: pd.DataFrame, row_index: Union[
     updated_df_columns = set(updated_df.columns.to_list())
     assert updated_df_columns.issuperset(new_columns_to_verify)
     for col in new_columns_to_verify:
-            dtype = updated_df[col].dtype
-            if isinstance(row_index, pd.Timestamp):
-                value = updated_df[col].loc[row_index]
-            else:
-                value = updated_df[col].iloc[row_index]
-            if pd.api.types.is_integer_dtype(dtype):
-                assert 0 == value, f"column {col}:{dtype} -> 0 == {value}"
-            elif pd.api.types.is_float_dtype(dtype):
-                assert pd.isna(value), f"column {col}:{dtype} -> Nan == {value}"
-            elif pd.api.types.is_bool_dtype(dtype):
-                assert False == value, f"column {col}:{dtype} -> False == {value}"
-            elif 'object' in str(dtype):
-                assert value is None , f"column {col}:{dtype} -> None == {value}"
-            elif pd.api.types.is_datetime64_any_dtype(dtype):
-                assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
-            else:
-                raise TypeError(f"Unsupported dtype: {dtype}")
-            
+        dtype = updated_df[col].dtype
+        if isinstance(row_index, pd.Timestamp):
+            value = updated_df[col].loc[row_index]
+        else:
+            value = updated_df[col].iloc[row_index]
+        if pd.api.types.is_integer_dtype(dtype):
+            assert 0 == value, f"column {col}:{dtype} -> 0 == {value}"
+        elif pd.api.types.is_float_dtype(dtype):
+            assert pd.isna(value), f"column {col}:{dtype} -> Nan == {value}"
+        elif pd.api.types.is_bool_dtype(dtype):
+            assert False == value, f"column {col}:{dtype} -> False == {value}"
+        elif "object" in str(dtype):
+            assert value is None, f"column {col}:{dtype} -> None == {value}"
+        elif pd.api.types.is_datetime64_any_dtype(dtype):
+            assert pd.isna(value), f"column {col}:{dtype} -> None == {value}"
+        else:
+            raise TypeError(f"Unsupported dtype: {dtype}")
+
 
 class GitHubSanitizingException(Exception):
     def __init__(self, message: str):
@@ -721,7 +723,7 @@ class DFGenerator:
     Easy generation of DataFrames, via fluent interface
     """
 
-    def __init__(self, size: int, seed = 5555, density: float=None):
+    def __init__(self, size: int, seed=5555, density: float = None):
         """Constructs dataframe creation factory.
         Result dataframe will have specified `size`.
         If `density` is supplied will be used to make dataframe columns sparse
@@ -753,9 +755,10 @@ class DFGenerator:
         self.__data[name] = list
         self.__types[name] = dtype
         return self
-    
-    def add_float_col(self, name: str, dtype: ArcticFloatType = np.float64, min: float = None, max: float = None, 
-                      round_at: int = None ) -> 'DFGenerator':
+
+    def add_float_col(
+        self, name: str, dtype: ArcticFloatType = np.float64, min: float = None, max: float = None, round_at: int = None
+    ) -> "DFGenerator":
         if self.__density:
             list = generate_random_sparse_numpy_array(self.__size, dtype, self.__density, seed=None)
         else:
@@ -775,22 +778,21 @@ class DFGenerator:
         list = []
         if num_unique_values is None:
             if self.__density:
-                list = generate_random_sparse_numpy_array(self.__size, str, self.__density, 
-                                                          str_length=str_size, seed=None)
+                list = generate_random_sparse_numpy_array(
+                    self.__size, str, self.__density, str_length=str_size, seed=None
+                )
             else:
-                list = ListGenerators.generate_random_strings(str_size=str_size, 
-                                                          length=self.__size, 
-                                                          include_unicode=include_unicode,seed=None)
+                list = ListGenerators.generate_random_strings(
+                    str_size=str_size, length=self.__size, include_unicode=include_unicode, seed=None
+                )
         else:
-            pool = RandomStringPool(str_length=str_size, 
-                                        pool_size=num_unique_values,
-                                        include_unicode=include_unicode,
-                                        seed=None
-                                        )
+            pool = RandomStringPool(
+                str_length=str_size, pool_size=num_unique_values, include_unicode=include_unicode, seed=None
+            )
             if self.__density:
-                list = generate_sparse_numpy_array_from_array(self.__size, 
-                                                              np.array(pool.get_list(int(self.__size * self.__density))), 
-                                                              seed=None)
+                list = generate_sparse_numpy_array_from_array(
+                    self.__size, np.array(pool.get_list(int(self.__size * self.__density))), seed=None
+                )
             else:
                 list = pool.get_list(self.__size)
 
@@ -823,7 +825,7 @@ class DFGenerator:
             list = generate_random_sparse_numpy_array(self.__size, np.datetime64, self.__density, seed=None)
         else:
             if start_date:
-                list = pd.date_range(start=start_date, periods=self.__size, freq=freq) 
+                list = pd.date_range(start=start_date, periods=self.__size, freq=freq)
             else:
                 list = generate_random_timestamp_array(size=self.__size, seed=None)
         self.__data[name] = list
@@ -998,23 +1000,29 @@ class DFGenerator:
         return frame
 
     @classmethod
-    def generate_normal_dataframe(cls, num_rows: int, num_cols: int,  
-                            start_time: Union[pd.Timestamp, TimestampNumber] = None,
-                            freq: Union[str , timedelta , pd.Timedelta , pd.DateOffset] = 's',
-                            density: float = None, seed = 1234):
+    def generate_normal_dataframe(
+        cls,
+        num_rows: int,
+        num_cols: int,
+        start_time: Union[pd.Timestamp, TimestampNumber] = None,
+        freq: Union[str, timedelta, pd.Timedelta, pd.DateOffset] = "s",
+        density: float = None,
+        seed=1234,
+    ):
         """Generates dataframe with specified number of rows and columns and random data
 
         The generated dataframe will have all supported by arctic data types if the number
-        of columns is greater than the number of types. Larger number of columns will repeat 
+        of columns is greater than the number of types. Larger number of columns will repeat
         column datatypes.
 
         With parameter `density` in range (0,1] you can control the sparsity of the dataframe
         Value 'None' for that parameter guarantees non-sparse data
         """
-        cols=int(num_cols)
-        rows=int(num_rows)
+        cols = int(num_cols)
+        rows = int(num_rows)
         dtypes = supported_types_list
-        gen = DFGenerator(size=rows, density=density, seed=seed) 
+        gen = DFGenerator(size=rows, density=density, seed=seed)
+
     def generate_normal_dataframe(
         cls,
         num_rows: int,
