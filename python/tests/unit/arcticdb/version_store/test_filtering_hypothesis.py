@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from datetime import datetime
 from hypothesis import assume, given, reproduce_failure, settings
 from hypothesis.extra.pytz import timezones as timezone_st
@@ -136,9 +137,7 @@ def test_filter_numeric_set_membership(lmdb_version_store_v1, df, signed_vals, u
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df=dataframe_strategy(
-        [column_strategy("a", supported_string_dtypes())]
-    ),
+    df=dataframe_strategy([column_strategy("a", supported_string_dtypes())]),
     vals=st.frozensets(string_strategy, min_size=1),
 )
 def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
@@ -335,9 +334,9 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
     symbol = "test_filter_numeric_binary_comparison_dynamic"
     lib.delete(symbol)
     slices = [
-        df[:len(df) // 3],
-        df[len(df) // 3: 2 * len(df) // 3].drop(columns=["a"]),
-        df[2 * len(df) // 3:].drop(columns=["b"]),
+        df[: len(df) // 3],
+        df[len(df) // 3 : 2 * len(df) // 3].drop(columns=["a"]),
+        df[2 * len(df) // 3 :].drop(columns=["b"]),
     ]
     for slice in slices:
         lib.append(symbol, slice)
@@ -354,7 +353,10 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                 for slice in slices:
                     try:
                         queried_slices.append(
-                            slice[(slice["a"] if comp.startswith("col") else val) < (slice["b"] if comp.endswith("col") else val)]
+                            slice[
+                                (slice["a"] if comp.startswith("col") else val)
+                                < (slice["b"] if comp.endswith("col") else val)
+                            ]
                         )
                     except KeyError:
                         # Might have edited out the query columns entirely
@@ -364,7 +366,10 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                 for slice in slices:
                     try:
                         queried_slices.append(
-                            slice[(slice["a"] if comp.startswith("col") else val) <= (slice["b"] if comp.endswith("col") else val)]
+                            slice[
+                                (slice["a"] if comp.startswith("col") else val)
+                                <= (slice["b"] if comp.endswith("col") else val)
+                            ]
                         )
                     except KeyError:
                         # Might have edited out the query columns entirely
@@ -374,7 +379,10 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                 for slice in slices:
                     try:
                         queried_slices.append(
-                            slice[(slice["a"] if comp.startswith("col") else val) > (slice["b"] if comp.endswith("col") else val)]
+                            slice[
+                                (slice["a"] if comp.startswith("col") else val)
+                                > (slice["b"] if comp.endswith("col") else val)
+                            ]
                         )
                     except KeyError:
                         # Might have edited out the query columns entirely
@@ -384,7 +392,10 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                 for slice in slices:
                     try:
                         queried_slices.append(
-                            slice[(slice["a"] if comp.startswith("col") else val) >= (slice["b"] if comp.endswith("col") else val)]
+                            slice[
+                                (slice["a"] if comp.startswith("col") else val)
+                                >= (slice["b"] if comp.endswith("col") else val)
+                            ]
                         )
                     except KeyError:
                         # Might have edited out the query columns entirely
@@ -394,7 +405,10 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                 for slice in slices:
                     try:
                         queried_slices.append(
-                            slice[(slice["a"] if comp.startswith("col") else val) == (slice["b"] if comp.endswith("col") else val)]
+                            slice[
+                                (slice["a"] if comp.startswith("col") else val)
+                                == (slice["b"] if comp.endswith("col") else val)
+                            ]
                         )
                     except KeyError:
                         # Might have edited out the query columns entirely
@@ -404,7 +418,10 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
                 for slice in slices:
                     try:
                         queried_slices.append(
-                            slice[(slice["a"] if comp.startswith("col") else val) != (slice["b"] if comp.endswith("col") else val)]
+                            slice[
+                                (slice["a"] if comp.startswith("col") else val)
+                                != (slice["b"] if comp.endswith("col") else val)
+                            ]
                         )
                     except KeyError:
                         # Might have edited out the query columns entirely
@@ -426,13 +443,15 @@ def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_sche
     base_symbol = "test_filter_string_binary_comparison_dynamic"
 
     slices = [
-        df[:len(df) // 3],
-        df[len(df) // 3: 2 * len(df) // 3].drop(columns=["a"]),
-        df[2 * len(df) // 3:].drop(columns=["b"]),
+        df[: len(df) // 3],
+        df[len(df) // 3 : 2 * len(df) // 3].drop(columns=["a"]),
+        df[2 * len(df) // 3 :].drop(columns=["b"]),
     ]
 
     for dynamic_strings in [True, False]:
-        symbol = f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}" if dynamic_strings else f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"
+        symbol = (
+            f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}" if dynamic_strings else f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"
+        )
         lib.delete(symbol)
         for slice in slices:
             lib.append(symbol, slice, dynamic_strings=dynamic_strings)
@@ -464,8 +483,8 @@ def test_filter_numeric_set_membership_dynamic(lmdb_version_store_dynamic_schema
     symbol = "test_filter_numeric_set_membership_dynamic"
     lib.delete(symbol)
     slices = [
-        df[:len(df) // 2],
-        df[len(df) // 2:].rename(columns={"a": "b"}),
+        df[: len(df) // 2],
+        df[len(df) // 2 :].rename(columns={"a": "b"}),
     ]
     for slice in slices:
         lib.append(symbol, slice)
@@ -498,12 +517,14 @@ def test_filter_string_set_membership_dynamic(lmdb_version_store_dynamic_schema_
     lib = lmdb_version_store_dynamic_schema_v1
     base_symbol = "test_filter_string_set_membership_dynamic"
     slices = [
-        df[:len(df) // 2],
-        df[len(df) // 2:].rename(columns={"a": "b"}),
+        df[: len(df) // 2],
+        df[len(df) // 2 :].rename(columns={"a": "b"}),
     ]
 
     for dynamic_strings in [True, False]:
-        symbol = f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}" if dynamic_strings else f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"
+        symbol = (
+            f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}" if dynamic_strings else f"{base_symbol}_{FIXED_STRINGS_SUFFIX}"
+        )
         lib.delete(symbol)
         for slice in slices:
             lib.append(symbol, slice, dynamic_strings=dynamic_strings)

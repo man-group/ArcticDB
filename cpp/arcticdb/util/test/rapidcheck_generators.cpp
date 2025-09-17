@@ -2,14 +2,15 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
 #include <arrow/util/decimal.h>
 
-rc::Gen<arrow::Decimal128>  rc::Arbitrary<arrow::Decimal128>::arbitrary() {
+rc::Gen<arrow::Decimal128> rc::Arbitrary<arrow::Decimal128>::arbitrary() {
     return rc::gen::map<std::array<uint64_t, 2>>([](std::array<uint64_t, 2> data) {
         static_assert(sizeof(arrow::Decimal128) == sizeof(data));
         arrow::Decimal128 d;
@@ -20,7 +21,8 @@ rc::Gen<arrow::Decimal128>  rc::Arbitrary<arrow::Decimal128>::arbitrary() {
 
 rc::Gen<std::string> gen_arrow_decimal128_string() {
     return rc::gen::mapcat(rc::gen::arbitrary<arrow::Decimal128>(), [](arrow::Decimal128 d) {
-        const int digit_count = d.IsNegative() ? static_cast<int>(d.ToString(0).length() - 1) : static_cast<int>(d.ToString(0).length());
+        const int digit_count = d.IsNegative() ? static_cast<int>(d.ToString(0).length() - 1)
+                                               : static_cast<int>(d.ToString(0).length());
         const int allowed_scale_abs = arrow::Decimal128::kMaxScale - digit_count;
         return rc::gen::map(rc::gen::inRange<int>(-allowed_scale_abs, allowed_scale_abs), [d](int scale) {
             return d.ToString(scale);

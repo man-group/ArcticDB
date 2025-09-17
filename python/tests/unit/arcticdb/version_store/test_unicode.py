@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 We have special handling in the codebase when working with unicode Python strings, since we need to take the GIL
 to handle them. This file checks that our APIs work even when passed unicode string."""
+
 import datetime
 
 import numpy as np
@@ -20,7 +21,7 @@ from arcticdb.version_store.library import UpdatePayload
 from arcticdb_ext.storage import NoDataFoundException
 
 unicode_str = "\u0420\u043e\u0441\u0441\u0438\u044f"
-copyright = "My Thing Not Your's \u00A9"
+copyright = "My Thing Not Your's \u00a9"
 trademark = "My Word Not Your's \u2122"
 metadata = {copyright: trademark}
 symbol = "sym"
@@ -30,7 +31,11 @@ def unicode_strs_df(start_date: pd.Timestamp, num_rows: int) -> pd.DataFrame:
     index = [start_date + datetime.timedelta(days=i) for i in range(num_rows)]
     df = pd.DataFrame(
         index=index,
-        data={"a": random_strings_of_length(num_rows, 10), trademark: np.arange(num_rows), copyright: [unicode_str] * num_rows},
+        data={
+            "a": random_strings_of_length(num_rows, 10),
+            trademark: np.arange(num_rows),
+            copyright: [unicode_str] * num_rows,
+        },
     )
     return df
 
@@ -42,13 +47,19 @@ def test_write(lmdb_version_store_tiny_segment, parallel, multi_index):
     start = pd.Timestamp("2018-01-02")
     num_rows = 100
     if multi_index:
-        index = pd.MultiIndex.from_arrays([[start + datetime.timedelta(days=i) for i in range(num_rows)], [unicode_str] * num_rows])
+        index = pd.MultiIndex.from_arrays(
+            [[start + datetime.timedelta(days=i) for i in range(num_rows)], [unicode_str] * num_rows]
+        )
     else:
         index = pd.date_range(start=start, periods=num_rows)
 
     df = pd.DataFrame(
         index=index,
-        data={"a": random_strings_of_length(num_rows, 10), trademark: np.arange(num_rows), copyright: [unicode_str] * num_rows},
+        data={
+            "a": random_strings_of_length(num_rows, 10),
+            trademark: np.arange(num_rows),
+            copyright: [unicode_str] * num_rows,
+        },
     )
 
     if parallel:
@@ -207,7 +218,7 @@ def test_batch_update(lmdb_version_store):
     vit = adb_lib.read(sym_1)
     expected = pd.DataFrame(
         index=[pd.Timestamp("2018-01-02"), pd.Timestamp("2018-01-03"), pd.Timestamp("2018-01-05")],
-        data ={copyright: ["123", "456", trademark]}
+        data={copyright: ["123", "456", trademark]},
     )
     assert_frame_equal(vit.data, expected)
 
@@ -218,7 +229,7 @@ def test_batch_update(lmdb_version_store):
 
 def test_snapshots(lmdb_version_store):
     """We validate against snapshot names more strictly with the v2 API. This checks that we do something sensible
-    even without validation in the v1 API. """
+    even without validation in the v1 API."""
     start = pd.Timestamp("2018-01-02")
     index = pd.date_range(start=start, periods=4)
 
@@ -310,8 +321,14 @@ def test_get_info(lmdb_version_store, batch):
 
 def sample_nested_structures():
     return [
-        {"a": ["abc", "def", copyright, trademark, unicode_str], "b": random_strings_of_length(num=8, length=5, unique=False)},
-        (random_strings_of_length(num=10, length=6, unique=True), random_strings_of_length(num=10, length=9, unique=True)),
+        {
+            "a": ["abc", "def", copyright, trademark, unicode_str],
+            "b": random_strings_of_length(num=8, length=5, unique=False),
+        },
+        (
+            random_strings_of_length(num=10, length=6, unique=True),
+            random_strings_of_length(num=10, length=9, unique=True),
+        ),
     ]
 
 

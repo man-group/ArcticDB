@@ -720,15 +720,16 @@ def test_append_batch_missing_keys(arctic_library):
     assert read_dataframe.metadata == "great_metadata_s2"
     assert_frame_equal(read_dataframe.data, pd.concat([df2_write, df2_append]))
 
+
 def test_append_batch_empty_dataframe_does_not_increase_version(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     lib.batch_write(["sym1", "sym2"], [pd.DataFrame({"a": [1, 2, 3]}), pd.DataFrame({"b": [1, 2, 3, 4]})])
     lib_tool = lib.library_tool()
 
     for symbol in ["sym1", "sym2"]:
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1)
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1)
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1
     # One symbol list entry for sym1 and one for sym2
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
 
@@ -740,15 +741,15 @@ def test_append_batch_empty_dataframe_does_not_increase_version(lmdb_version_sto
 
     assert sym_1_vit.version == 1
     assert_frame_equal(sym_1_vit.data, pd.DataFrame({"a": [1, 2, 3, 5, 6, 7]}))
-    assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "sym1")) == 2)
-    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym1")) == 2)
-    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym1")) == 2)
+    assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "sym1")) == 2
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym1")) == 2
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym1")) == 2
 
     assert sym_2_vit.version == 0
     assert_frame_equal(sym_2_vit.data, pd.DataFrame({"b": [1, 2, 3, 4]}))
-    assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "sym2")) == 1)
-    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym2")) == 1)
-    assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym2")) == 1)
+    assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "sym2")) == 1
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym2")) == 1
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym2")) == 1
 
     # This result is wrong. The correct value is 2. This is due to a bug Monday: 9682041273, append_batch and
     # update_batch should not create symbol list keys for already existing symbols. Since append_batch is noop when
@@ -1149,21 +1150,21 @@ def test_read_batch_query_builder_missing_keys(arctic_library):
     # When
     batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)], query_builder=q)
     # Then
-    assert isinstance(batch[0], DataError) # now we check for key if deleted, look up
+    assert isinstance(batch[0], DataError)  # now we check for key if deleted, look up
     assert batch[0].symbol == "s1"
     assert batch[0].version_request_type == VersionRequestType.LATEST
     assert batch[0].version_request_data is None
     assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
     assert batch[0].error_category == ErrorCategory.STORAGE
 
-    assert isinstance(batch[1], DataError) # now we check for key if deleted, look up
+    assert isinstance(batch[1], DataError)  # now we check for key if deleted, look up
     assert batch[1].symbol == "s2"
     assert batch[1].version_request_type == VersionRequestType.LATEST
     assert batch[1].version_request_data is None
     assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
     assert batch[1].error_category == ErrorCategory.STORAGE
 
-    assert isinstance(batch[2], DataError) # now we check for key if deleted, look up
+    assert isinstance(batch[2], DataError)  # now we check for key if deleted, look up
     assert batch[2].symbol == "s3"
     assert batch[2].version_request_type == VersionRequestType.SPECIFIC
     assert batch[2].version_request_data == 0

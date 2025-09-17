@@ -60,7 +60,7 @@ def use_of_function_scoped_fixtures_in_hypothesis_checked(fun):
 
 def restricted_numeric_range(dtype):
     # Stick within the size of an int32 so that multiplication still fits inside an int64
-    min_value = max(np.finfo(dtype).min if np.issubdtype(dtype, np.floating) else np.iinfo(dtype).min, -2**31)
+    min_value = max(np.finfo(dtype).min if np.issubdtype(dtype, np.floating) else np.iinfo(dtype).min, -(2**31))
     max_value = min(np.finfo(dtype).max if np.issubdtype(dtype, np.floating) else np.iinfo(dtype).max, 2**31)
     return min_value, max_value
 
@@ -95,7 +95,13 @@ def supported_floating_dtypes(draw):
 def supported_numeric_dtypes(draw):
     # Pandas comparison of float32 series to float64 values is buggy.
     # Change float_dtypes sizes to include 32 if this is fixed https://github.com/pandas-dev/pandas/issues/59524
-    return draw(st.one_of(unsigned_integer_dtypes(endianness=ENDIANNESS), integer_dtypes(endianness=ENDIANNESS), floating_dtypes(endianness=ENDIANNESS, sizes=[64])))
+    return draw(
+        st.one_of(
+            unsigned_integer_dtypes(endianness=ENDIANNESS),
+            integer_dtypes(endianness=ENDIANNESS),
+            floating_dtypes(endianness=ENDIANNESS, sizes=[64]),
+        )
+    )
 
 
 @st.composite

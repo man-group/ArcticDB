@@ -10,9 +10,7 @@ from threading import Thread, Event
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
-from arcticdb.version_store._custom_normalizers import(
-    register_normalizer,
-    clear_registered_normalizers)
+from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
 from arcticdb.util.test import CustomDictNormalizer, CustomDict
 from tests.conftest import Marks
 from tests.util.marking import marks
@@ -25,7 +23,7 @@ def test_stress_all_strings(lmdb_version_store_big_map):
     string_length = 10
     num_rows = 100000
     columns = random_strings_of_length(num_columns, string_length, True)
-    data = {col : random_strings_of_length(num_rows, string_length, False) for col in columns}
+    data = {col: random_strings_of_length(num_rows, string_length, False) for col in columns}
     df = pd.DataFrame(data)
     lib.write(symbol, df)
     start_time = datetime.now()
@@ -41,7 +39,7 @@ def test_stress_all_strings_dynamic(lmdb_version_store_big_map):
     string_length = 10
     num_rows = 100000
     columns = random_strings_of_length(num_columns, string_length, True)
-    data = {col : random_strings_of_length(num_rows, string_length, False) for col in columns}
+    data = {col: random_strings_of_length(num_rows, string_length, False) for col in columns}
     df = pd.DataFrame(data)
     lib.write(symbol, df, dynamic_strings=True)
     start_time = datetime.now()
@@ -51,11 +49,16 @@ def test_stress_all_strings_dynamic(lmdb_version_store_big_map):
 
 
 def dataframe_with_none_and_nan(rows: int, cols: int):
-    return pd.DataFrame({f"col_{i}": np.random.choice([None, np.nan, str(np.random.randn())], size=rows) for i in range(cols)})
+    return pd.DataFrame(
+        {f"col_{i}": np.random.choice([None, np.nan, str(np.random.randn())], size=rows) for i in range(cols)}
+    )
+
+
 def alloc_nones_and_nans():
     nones = [None for _ in range(200_000)]
     nans = [np.nan for _ in range(200_000)]
     return nones, nans
+
 
 class TestConcurrentHandlingOfNoneAndNan:
     """
@@ -67,21 +70,27 @@ class TestConcurrentHandlingOfNoneAndNan:
     also test that Arctic native threads are not racing on the None refcount. We also add NaN values as their refcount
     is also managed by Arctic. Note that in contrast to None, NaN is not a global static variable.
     """
+
     def setup_method(self, method):
         self.done_reading = Event()
 
     def spin_none_nan_creation(self):
         while not self.done_reading.is_set():
             alloc_nones_and_nans()
+
     def start_background_thread(self):
         none_nan_background_creator = Thread(target=self.spin_none_nan_creation)
         none_nan_background_creator.start()
         return none_nan_background_creator
 
     def init_dataframe(self, lib, symbol_count):
-        write_payload = [arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 20)) for i in range(symbol_count)]
+        write_payload = [
+            arcticdb.WritePayload(symbol=f"stringy{i}", data=dataframe_with_none_and_nan(150_000, 20))
+            for i in range(symbol_count)
+        ]
         lib.write_batch(write_payload)
         return write_payload
+
     def test_stress_parallel_strings_read(self, s3_storage, lib_name):
         ac = s3_storage.create_arctic()
         lib = ac.create_library(lib_name)
@@ -115,8 +124,16 @@ class TestConcurrentHandlingOfNoneAndNan:
         jobs = [payload for rep in range(5) for payload in write_payload]
         qb = QueryBuilder()
         qb = qb[
-            qb["col_0"].isnull() | qb["col_1"].isnull() | qb["col_2"].isnull() | qb["col_3"].isnull() | qb["col_4"].isnull() |
-            qb["col_5"].isnull() | qb["col_6"].isnull() | qb["col_7"].isnull() | qb["col_8"].isnull() | qb["col_9"].isnull()
+            qb["col_0"].isnull()
+            | qb["col_1"].isnull()
+            | qb["col_2"].isnull()
+            | qb["col_3"].isnull()
+            | qb["col_4"].isnull()
+            | qb["col_5"].isnull()
+            | qb["col_6"].isnull()
+            | qb["col_7"].isnull()
+            | qb["col_8"].isnull()
+            | qb["col_9"].isnull()
         ]
         with ThreadPool(10) as pool:
             for _ in pool.imap_unordered(lambda payload: lib.read(payload.symbol, query_builder=qb), jobs):

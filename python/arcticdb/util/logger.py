@@ -28,19 +28,20 @@ class GitHubSanitizingHandler(logging.StreamHandler):
         if (os.getenv("GITHUB_ACTIONS") == "true") and isinstance(message, str):
             # Use regex to find and replace sensitive access keys
             sanitized_message = message
-            for regexp in [r'(secret=)[^\s&]+', 
-                           r'(access=)[^\s&]+', 
-                           r'(.*SECRET_KEY=).*$', 
-                           r'(.*ACCESS_KEY=).*$', 
-                           r'(.*AZURE_CONNECTION_STRING=).*$',
-                           r'(AccountKey=)([^;]+)']:
-                sanitized_message = re.sub(regexp, r'\1***', 
-                                    sanitized_message, flags=re.IGNORECASE)
+            for regexp in [
+                r"(secret=)[^\s&]+",
+                r"(access=)[^\s&]+",
+                r"(.*SECRET_KEY=).*$",
+                r"(.*ACCESS_KEY=).*$",
+                r"(.*AZURE_CONNECTION_STRING=).*$",
+                r"(AccountKey=)([^;]+)",
+            ]:
+                sanitized_message = re.sub(regexp, r"\1***", sanitized_message, flags=re.IGNORECASE)
             return sanitized_message
         return message
 
 
-loggers:Dict[str, logging.Logger] = {}
+loggers: Dict[str, logging.Logger] = {}
 
 
 def get_logger(bencmhark_cls: Union[str, Any] = None):
@@ -62,13 +63,13 @@ def get_logger(bencmhark_cls: Union[str, Any] = None):
         name = module.__name__
 
     logger = loggers.get(name, None)
-    if logger :
+    if logger:
         return logger
-    logger = logging.getLogger(name)    
+    logger = logging.getLogger(name)
     logger.setLevel(logLevel)
     console_handler = GitHubSanitizingHandler()
     console_handler.setLevel(logLevel)
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
     console_handler.setFormatter(formatter)
     logger.addHandler(console_handler)
     loggers[name] = logger
@@ -80,5 +81,4 @@ class GitHubSanitizingException(Exception):
         # Sanitize the message
         sanitized_message = GitHubSanitizingHandler.sanitize_message(message)
         super().__init__(sanitized_message)
-
 

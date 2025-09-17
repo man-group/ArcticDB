@@ -377,7 +377,9 @@ def test_staged_data_bad_mode(arctic_library, sort):
         fn("sym", mode="bad_mode")
 
 
-@pytest.mark.parametrize("finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, "write", "wRite"))
+@pytest.mark.parametrize(
+    "finalize_method", (StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, "write", "wRite")
+)
 @pytest.mark.storage
 def test_staged_data(arctic_library, finalize_method):
     lib = arctic_library
@@ -1542,18 +1544,19 @@ def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
         primary_storage_id: lib_cfg.storage_by_id[primary_storage_id],
     }
     lib_cfg.lib_desc.storage_ids.append(secondary_storage_id)
+
     class LibraryConfigWrapper:
         def __init__(self, original_lib_cfg, controlled_storage_by_id):
             self._original = original_lib_cfg
             self._storage_by_id = controlled_storage_by_id
-        
+
         @property
-        def storage_by_id(self): # Can't patch _storage_by_id
+        def storage_by_id(self):  # Can't patch _storage_by_id
             return self._storage_by_id
-        
+
         def __getattr__(self, name):
             return getattr(self._original, name)
-            
+
     new_lib_cfg = LibraryConfigWrapper(lib_cfg, new_storage_by_id)
     # get_backing_store() was only returning backed storage at the beginning of the list
     # so we need to recreate the situation so confirm now it returns primary storage
@@ -1562,4 +1565,3 @@ def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
         new_lib_cfg, env=Defaults.ENV, open_mode=OpenMode.DELETE
     )
     assert lib_with_s3.get_backing_store() == "lmdb_storage"
-

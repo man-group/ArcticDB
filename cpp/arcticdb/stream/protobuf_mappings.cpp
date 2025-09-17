@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/stream/protobuf_mappings.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -42,17 +43,21 @@ arcticdb::proto::descriptors::NormalizationMetadata make_rowcount_norm_meta(cons
 /**
  * Set the minimum defaults into norm_meta. Originally created to synthesize norm_meta for incomplete compaction.
  */
-void ensure_timeseries_norm_meta(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id, bool set_tz) {
-    if(norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
+void ensure_timeseries_norm_meta(
+        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id, bool set_tz
+) {
+    if (norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
         norm_meta.CopyFrom(make_timeseries_norm_meta(stream_id));
     }
 
-    if(set_tz && norm_meta.df().common().index().tz().empty())
+    if (set_tz && norm_meta.df().common().index().tz().empty())
         norm_meta.mutable_df()->mutable_common()->mutable_index()->set_tz("UTC");
 }
 
-void ensure_rowcount_norm_meta(arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id) {
-    if(norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
+void ensure_rowcount_norm_meta(
+        arcticdb::proto::descriptors::NormalizationMetadata& norm_meta, const StreamId& stream_id
+) {
+    if (norm_meta.input_type_case() == arcticdb::proto::descriptors::NormalizationMetadata::INPUT_TYPE_NOT_SET) {
         norm_meta.CopyFrom(make_rowcount_norm_meta(stream_id));
     }
 }
@@ -90,14 +95,13 @@ StreamId stream_id_from_proto(const arcticdb::proto::descriptors::StreamDescript
     return desc.id_case() == desc.kNumId ? StreamId(desc.num_id()) : StreamId(desc.str_id());
 }
 
-
 void field_stats_to_proto(const FieldStatsImpl& stats, arcticdb::proto::encoding::FieldStats& msg) {
     msg.set_min(stats.min_);
     msg.set_max(stats.max_);
     msg.set_unique_count(stats.unique_count_);
     msg.set_set(stats.set_);
 
-    switch(stats.unique_count_precision_) {
+    switch (stats.unique_count_precision_) {
     case UniqueCountType::PRECISE:
         msg.set_unique_count_precision(arcticdb::proto::encoding::FieldStats::PRECISE);
         break;
@@ -115,7 +119,7 @@ void field_stats_from_proto(const arcticdb::proto::encoding::FieldStats& msg, Fi
     stats.unique_count_ = msg.unique_count();
     stats.set_ = static_cast<uint8_t>(msg.set());
 
-    switch(msg.unique_count_precision()) {
+    switch (msg.unique_count_precision()) {
     case arcticdb::proto::encoding::FieldStats::PRECISE:
         stats.unique_count_precision_ = UniqueCountType::PRECISE;
         break;
@@ -132,4 +136,4 @@ FieldStatsImpl create_from_proto(const arcticdb::proto::encoding::FieldStats& ms
     field_stats_from_proto(msg, stats);
     return stats;
 }
-} //namespace arcticdb
+} // namespace arcticdb

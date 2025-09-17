@@ -19,8 +19,8 @@ one_sec = 1_000_000_000
 
 symbol_prefix = "process_id_"
 
-max_processes = 30 if WINDOWS else 100 # Too many processes will trigger out of mem on windows
-storage_lock_timeout_sec = 20 if WINDOWS else 10 # For Windows choosing longer wait for default storage lock timeout
+max_processes = 30 if WINDOWS else 100  # Too many processes will trigger out of mem on windows
+storage_lock_timeout_sec = 20 if WINDOWS else 10  # For Windows choosing longer wait for default storage lock timeout
 
 
 def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
@@ -46,6 +46,7 @@ def slow_increment_task(real_storage_factory, lib_name, symbol, sleep_time):
     lock_manager.free_lock_guard()
     logger.info(f"Process {pid}: completed")
 
+
 # NOTE: Is there is not enough memory the number of actually spawned processes
 # will be lowe. The test counts the actual processes that did really got executed
 @pytest.mark.parametrize("num_processes,max_sleep", [(max_processes, 1), (5, 2 * storage_lock_timeout_sec)])
@@ -60,7 +61,9 @@ def test_many_increments(real_storage_factory, lib_name, num_processes, max_slee
     lib.write(symbol, init_df)
 
     processes = [
-        Process(target=slow_increment_task, args=(real_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep))
+        Process(
+            target=slow_increment_task, args=(real_storage_factory, lib_name, symbol, 0 if i % 2 == 0 else max_sleep)
+        )
         for i in range(num_processes)
     ]
     for p in processes:

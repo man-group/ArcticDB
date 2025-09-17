@@ -26,7 +26,7 @@ class FinalizeStagedData:
     rounds = 1
     repeat = 5
     min_run_count = 1
-    warmup_time = 0    
+    warmup_time = 0
     timeout = 600
 
     # ASV creates temp directory for each run and then sets current working directory to it
@@ -56,9 +56,7 @@ class FinalizeStagedData:
         lib = ac.create_library(self.lib_name)
         for param in FinalizeStagedData.params:
             symbol = f"symbol{param}"
-            INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(
-                0, cachedDF.TIME_UNIT
-            )  # Synchronize index frequency
+            INITIAL_TIMESTAMP: TimestampNumber = TimestampNumber(0, cachedDF.TIME_UNIT)  # Synchronize index frequency
 
             df = cachedDF.generate_dataframe_timestamp_indexed(200, 0, cachedDF.TIME_UNIT)
             list_of_chunks = [10000] * param
@@ -68,7 +66,6 @@ class FinalizeStagedData:
             self.logger.info(f"Created Symbol: {symbol}")
             stage_chunks(lib, symbol, cachedDF, INITIAL_TIMESTAMP, list_of_chunks)
         copytree(FinalizeStagedData.ARCTIC_DIR, FinalizeStagedData.ARCTIC_DIR_ORIGINAL)
-
 
     def setup(self, param: int):
         self.ac = Arctic(FinalizeStagedData.CONNECTION_STRING)
@@ -95,7 +92,7 @@ from asv_runner.benchmarks.mark import SkipNotImplemented
 
 
 class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
-    warmup_time = 0    
+    warmup_time = 0
     """
     The test is meant to be executed with 3 times wider dataframe than the base test
     """
@@ -103,10 +100,8 @@ class FinalizeStagedDataWiderDataframeX3(FinalizeStagedData):
     def setup_cache(self):
         # Generating dataframe with all kind of supported data type
         if not SLOW_TESTS:
-            return #Avoid setup when skipping
-        cachedDF = CachedDFGenerator(
-            350000, [5, 25, 50]
-        )  # 3 times wider DF with bigger string columns
+            return  # Avoid setup when skipping
+        cachedDF = CachedDFGenerator(350000, [5, 25, 50])  # 3 times wider DF with bigger string columns
         start = time.time()
         self._setup_cache(cachedDF)
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
