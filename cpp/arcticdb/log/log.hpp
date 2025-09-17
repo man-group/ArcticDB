@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -21,11 +22,11 @@
 #define ARCTICDB_RUNTIME_DEBUG(logger, ...) logger.debug(__VA_ARGS__)
 
 namespace arcticc::pb2::logger_pb2 {
-    class LoggersConfig;
+class LoggersConfig;
 }
 
 namespace arcticdb::proto {
-    namespace logger = arcticc::pb2::logger_pb2;
+namespace logger = arcticc::pb2::logger_pb2;
 }
 
 namespace arcticdb::log {
@@ -44,45 +45,40 @@ class Loggers {
      * @param conf
      * @return true if configuration occurred
      */
-    bool configure(const arcticdb::proto::logger::LoggersConfig &conf, bool force=false);
+    bool configure(const arcticdb::proto::logger::LoggersConfig& conf, bool force = false);
 
-    spdlog::logger &storage();
-    spdlog::logger &inmem();
-    spdlog::logger &codec();
-    spdlog::logger &root();
-    spdlog::logger &memory();
-    spdlog::logger &version();
-    spdlog::logger &timings();
-    spdlog::logger &lock();
-    spdlog::logger &schedule();
-    spdlog::logger &message();
-    spdlog::logger &symbol();
-    spdlog::logger &snapshot();
+    spdlog::logger& storage();
+    spdlog::logger& inmem();
+    spdlog::logger& codec();
+    spdlog::logger& root();
+    spdlog::logger& memory();
+    spdlog::logger& version();
+    spdlog::logger& timings();
+    spdlog::logger& lock();
+    spdlog::logger& schedule();
+    spdlog::logger& message();
+    spdlog::logger& symbol();
+    spdlog::logger& snapshot();
 
     void flush_all();
 
   private:
-
-
     struct Impl;
 
     std::unique_ptr<Impl> impl_;
-
 };
 
+spdlog::logger& storage();
+spdlog::logger& inmem();
+spdlog::logger& codec();
+spdlog::logger& root();
+spdlog::logger& version();
+spdlog::logger& memory();
+spdlog::logger& timings();
+spdlog::logger& lock();
+spdlog::logger& schedule();
+spdlog::logger& message();
+spdlog::logger& symbol();
+spdlog::logger& snapshot();
 
-spdlog::logger &storage();
-spdlog::logger &inmem();
-spdlog::logger &codec();
-spdlog::logger &root();
-spdlog::logger &version();
-spdlog::logger &memory();
-spdlog::logger &timings();
-spdlog::logger &lock();
-spdlog::logger &schedule();
-spdlog::logger &message();
-spdlog::logger &symbol();
-spdlog::logger &snapshot();
-
-
-} //namespace arcticdb::log
+} // namespace arcticdb::log

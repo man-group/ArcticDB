@@ -5,10 +5,9 @@ from arcticdb.util.test import get_sample_dataframe
 
 
 def test_roundtrip_dataframe(tmp_path):
-    df_original = pd.DataFrame({
-        "A": [1, 2, 3],
-        "B": ["x", "y", "z"]
-    }, index=pd.date_range(start="2020-01-01", end="2020-01-03"))
+    df_original = pd.DataFrame(
+        {"A": [1, 2, 3], "B": ["x", "y", "z"]}, index=pd.date_range(start="2020-01-01", end="2020-01-03")
+    )
 
     file_path = str(tmp_path) + "testfile.dat"
     _to_file("test_symbol", df_original, str(file_path))

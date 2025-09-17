@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from __future__ import annotations
 from collections import namedtuple
 import copy
@@ -235,14 +236,12 @@ class ExpressionNode:
 
     def notnull(self):
         return ExpressionNode.compose(self, _OperationType.NOTNULL, None)
-    
+
     def regex_match(self, pattern: str):
         if isinstance(pattern, str):
             return self._apply(_RegexGeneric(pattern), _OperationType.REGEX_MATCH)
         else:
-            raise UserInputException(
-                f"'regex_match' filtering only accepts str as pattern, {type(pattern)} is given"
-            )
+            raise UserInputException(f"'regex_match' filtering only accepts str as pattern, {type(pattern)} is given")
 
     def __str__(self):
         return self.get_name()
@@ -405,6 +404,7 @@ class PythonRowRangeClause(NamedTuple):
     start: int = None
     end: int = None
 
+
 # Would be cleaner if all Python*Clause classes were dataclasses, but this is used for pickling, so hard to change now
 @dataclass
 class PythonResampleClause:
@@ -446,7 +446,7 @@ class QueryBuilder:
         ```
         q = q[q["col"].isna()]
         ```
-    
+
     * Binary comparisons: <, <=, >, >=, ==, !=
     * Unary NOT: ~
     * Binary combinators: &, |, ^
@@ -593,7 +593,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-        
+
                        to_mean
              group_1  1.666667
              group_2       2.2
@@ -611,7 +611,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-        
+
                      to_max
             group_1  5
 
@@ -629,7 +629,7 @@ class QueryBuilder:
         >>> q = q.groupby("grouping_column").agg({"to_max": "max", "to_mean": "mean"})
         >>> lib.write("symbol", df)
         >>> lib.read("symbol", query_builder=q).data
-        
+
                      to_max   to_mean
             group_1     2.5  1.666667
 
@@ -665,17 +665,21 @@ class QueryBuilder:
     def agg(self, aggregations: Dict[str, Union[str, Tuple[str, str]]]):
         # Only makes sense if previous stage is a group-by or resample
         check(
-            len(self.clauses) and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
+            len(self.clauses)
+            and isinstance(self.clauses[-1], (_GroupByClause, _ResampleClauseLeftClosed, _ResampleClauseRightClosed)),
             f"Aggregation only makes sense after groupby or resample",
         )
         for k, v in aggregations.items():
-            check(isinstance(v, (str, tuple)), f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}")
+            check(
+                isinstance(v, (str, tuple)),
+                f"Values in agg dict expected to be strings or tuples, received {v} of type {type(v)}",
+            )
             if isinstance(v, str):
                 aggregations[k] = v.lower()
             elif isinstance(v, tuple):
                 check(
                     len(v) == 2 and (isinstance(v[0], str) and isinstance(v[1], str)),
-                    f"Tuple values in agg dict expected to have 2 string elements, received {v}"
+                    f"Tuple values in agg dict expected to have 2 string elements, received {v}",
                 )
                 aggregations[k] = (v[0], v[1].lower())
 
@@ -688,12 +692,12 @@ class QueryBuilder:
         return self
 
     def resample(
-            self,
-            rule: Union[str, pd.DateOffset],
-            closed: Optional[str] = None,
-            label: Optional[str] = None,
-            offset: Optional[Union[str, pd.Timedelta]] = None,
-            origin: Union[str, pd.Timestamp] = 'epoch'
+        self,
+        rule: Union[str, pd.DateOffset],
+        closed: Optional[str] = None,
+        label: Optional[str] = None,
+        offset: Optional[Union[str, pd.Timedelta]] = None,
+        origin: Union[str, pd.Timestamp] = "epoch",
     ):
         """
         Resample a symbol on the index. The symbol must be datetime indexed. Resample operations must be followed by
@@ -800,7 +804,7 @@ class QueryBuilder:
         >>> q = adb.QueryBuilder()
         >>> q = q.resample("h", closed="right", label="right").agg({"to_sum": "sum"})
         >>> lib.read("symbol", query_builder=q).data
-        
+
                                  to_sum
             2024-01-01 00:00:00       0
             2024-01-01 01:00:00    1830
@@ -847,19 +851,25 @@ class QueryBuilder:
         try:
             pd.Timestamp(0).floor(rule)
         except ValueError:
-            raise ArcticDbNotYetImplemented(f"Frequency string '{rule}' not yet supported. Valid frequency strings "
-                                            f"are ns, us, ms, s, min, h, D, and multiples/combinations thereof such "
-                                            f"as 1h30min")
+            raise ArcticDbNotYetImplemented(
+                f"Frequency string '{rule}' not yet supported. Valid frequency strings "
+                f"are ns, us, ms, s, min, h, D, and multiples/combinations thereof such "
+                f"as 1h30min"
+            )
         if offset:
             try:
                 offset_ns = to_offset(offset).nanos
             except ValueError:
-                raise UserInputException(f'Argument offset must be pd.Timedelta or pd.Timedelta covertible string. Got "{offset}" instead.')
+                raise UserInputException(
+                    f'Argument offset must be pd.Timedelta or pd.Timedelta covertible string. Got "{offset}" instead.'
+                )
         else:
             offset_ns = 0
 
         if not (isinstance(origin, pd.Timestamp) or origin in ["start", "end", "start_day", "end_day", "epoch"]):
-            raise UserInputException(f'Argument origin must be either of type pd.Timestamp or one of ["start", "end", "start_day", "end_day", "epoch"]. Got {offset} instead')
+            raise UserInputException(
+                f'Argument origin must be either of type pd.Timestamp or one of ["start", "end", "start_day", "end_day", "epoch"]. Got {offset} instead'
+            )
         if type(origin) is pd.Timestamp:
             origin = origin.value
         # This set is documented here:
@@ -870,18 +880,30 @@ class QueryBuilder:
         boundary_map = {
             "left": _ResampleBoundary.LEFT,
             "right": _ResampleBoundary.RIGHT,
-            None: _ResampleBoundary.RIGHT if rule in end_types or origin in ["end", "end_day"] else _ResampleBoundary.LEFT
+            None: (
+                _ResampleBoundary.RIGHT if rule in end_types or origin in ["end", "end_day"] else _ResampleBoundary.LEFT
+            ),
         }
-        check(closed in boundary_map.keys(), f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
-        check(label in boundary_map.keys(), f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'")
+        check(
+            closed in boundary_map.keys(),
+            f"closed kwarg to resample must be `left`, 'right', or None, but received '{closed}'",
+        )
+        check(
+            label in boundary_map.keys(),
+            f"label kwarg to resample must be `left`, 'right', or None, but received '{closed}'",
+        )
         if boundary_map[closed] == _ResampleBoundary.LEFT:
             self.clauses = self.clauses + [_ResampleClauseLeftClosed(rule, boundary_map[label], offset_ns, origin)]
         else:
             self.clauses = self.clauses + [_ResampleClauseRightClosed(rule, boundary_map[label], offset_ns, origin)]
-        self._python_clauses = self._python_clauses + [PythonResampleClause(rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns, origin=origin)]
+        self._python_clauses = self._python_clauses + [
+            PythonResampleClause(
+                rule=rule, closed=boundary_map[closed], label=boundary_map[label], offset=offset_ns, origin=origin
+            )
+        ]
         return self
 
-    def then(self, other : QueryBuilder):
+    def then(self, other: QueryBuilder):
         """
         Applies processing specified in other after any processing already defined for this QueryBuilder.
 
@@ -899,7 +921,7 @@ class QueryBuilder:
         self._python_clauses = self._python_clauses + other._python_clauses
         return self
 
-    def prepend(self, other : QueryBuilder):
+    def prepend(self, other: QueryBuilder):
         """
         Applies processing specified in other before any processing already defined for this QueryBuilder.
 
@@ -1075,7 +1097,10 @@ class QueryBuilder:
             2025-01-02 00:00:00       2
         """
         join_lowercase = join.lower()
-        check(join_lowercase in ["outer", "inner"], f"concat 'join' argument must be one of 'outer' or 'inner', received {join}")
+        check(
+            join_lowercase in ["outer", "inner"],
+            f"concat 'join' argument must be one of 'outer' or 'inner', received {join}",
+        )
         self.clauses = self.clauses + [_ConcatClause(_JoinType.OUTER if join_lowercase == "outer" else _JoinType.INNER)]
         self._python_clauses = self._python_clauses + [PythonConcatClause(join_lowercase)]
         return self
@@ -1100,7 +1125,9 @@ class QueryBuilder:
                 item = ExpressionNode.compose(item, _OperationType.IDENTITY, None)
             input_columns, expression_context = visit_expression(item)
             self_copy = copy.deepcopy(self)
-            self_copy.clauses = self.clauses + [_FilterClause(input_columns, expression_context, self_copy._optimisation)]
+            self_copy.clauses = self.clauses + [
+                _FilterClause(input_columns, expression_context, self_copy._optimisation)
+            ]
             self_copy._python_clauses = self_copy._python_clauses + [PythonFilterClause(item)]
             return self_copy
 
@@ -1128,12 +1155,22 @@ class QueryBuilder:
             elif isinstance(python_clause, PythonGroupByClause):
                 self.clauses = self.clauses + [_GroupByClause(python_clause.name)]
             elif isinstance(python_clause, PythonAggregationClause):
-                self.clauses = self.clauses + [_AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations)]
+                self.clauses = self.clauses + [
+                    _AggregationClause(self.clauses[-1].grouping_column, python_clause.aggregations)
+                ]
             elif isinstance(python_clause, PythonResampleClause):
                 if python_clause.closed == _ResampleBoundary.LEFT:
-                    self.clauses = self.clauses + [_ResampleClauseLeftClosed(python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin)]
+                    self.clauses = self.clauses + [
+                        _ResampleClauseLeftClosed(
+                            python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin
+                        )
+                    ]
                 else:
-                    self.clauses = self.clauses + [_ResampleClauseRightClosed(python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin)]
+                    self.clauses = self.clauses + [
+                        _ResampleClauseRightClosed(
+                            python_clause.rule, python_clause.label, python_clause.offset, python_clause.origin
+                        )
+                    ]
                 if python_clause.aggregations is not None:
                     self.clauses[-1].set_aggregations(python_clause.aggregations)
             elif isinstance(python_clause, PythonRowRangeClause):
@@ -1144,7 +1181,9 @@ class QueryBuilder:
             elif isinstance(python_clause, PythonDateRangeClause):
                 self.clauses = self.clauses + [_DateRangeClause(python_clause.start, python_clause.end)]
             elif isinstance(python_clause, PythonConcatClause):
-                self.clauses = self.clauses + [_ConcatClause(_JoinType.OUTER if python_clause.join == "outer" else _JoinType.INNER)]
+                self.clauses = self.clauses + [
+                    _ConcatClause(_JoinType.OUTER if python_clause.join == "outer" else _JoinType.INNER)
+                ]
             else:
                 raise ArcticNativeException(
                     f"Unrecognised clause type {type(python_clause)} when unpickling QueryBuilder"

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -25,74 +26,57 @@
 namespace arcticdb::async {
 class TaskScheduler;
 
-struct TaskSchedulerPtrWrapper{
+struct TaskSchedulerPtrWrapper {
     TaskScheduler* ptr_;
 
     explicit TaskSchedulerPtrWrapper(TaskScheduler* ptr) : ptr_(ptr) {
         util::check(ptr != nullptr, "Null TaskScheduler ptr");
     }
 
-    TaskSchedulerPtrWrapper() : ptr_(nullptr) {
-    }
+    TaskSchedulerPtrWrapper() : ptr_(nullptr) {}
 
     ~TaskSchedulerPtrWrapper();
 
-    void reset(TaskScheduler* ptr) {
-        ptr_ = ptr;
-    }
+    void reset(TaskScheduler* ptr) { ptr_ = ptr; }
 
-    TaskScheduler* operator->() const {
-        return ptr_;
-    }
+    TaskScheduler* operator->() const { return ptr_; }
 
-    TaskScheduler& operator*() const {
-        return *ptr_;
-    }
+    TaskScheduler& operator*() const { return *ptr_; }
 };
 
-class InstrumentedNamedFactory : public folly::ThreadFactory{
-public:
-    explicit InstrumentedNamedFactory(folly::StringPiece prefix) : named_factory_(prefix){}
+class InstrumentedNamedFactory : public folly::ThreadFactory {
+  public:
+    explicit InstrumentedNamedFactory(folly::StringPiece prefix) : named_factory_(prefix) {}
 
     std::thread newThread(folly::Func&& func) override {
         std::lock_guard lock{mutex_};
-        return named_factory_.newThread(
-                [func = std::move(func)]() mutable {
-                ARCTICDB_SAMPLE_THREAD();
-              func();
-            });
-    
-  }
-
-    virtual const std::string& getNamePrefix() const override{
-        return named_factory_.getNamePrefix();
+        return named_factory_.newThread([func = std::move(func)]() mutable {
+            ARCTICDB_SAMPLE_THREAD();
+            func();
+        });
     }
 
-private:
+    virtual const std::string& getNamePrefix() const override { return named_factory_.getNamePrefix(); }
+
+  private:
     std::mutex mutex_;
     folly::NamedThreadFactory named_factory_;
 };
 
-template <typename SchedulerType>
+template<typename SchedulerType>
 struct SchedulerWrapper : public SchedulerType {
 
     using SchedulerType::SchedulerType;
 
-    void set_active_threads(size_t n) {
-        SchedulerType::activeThreads_.store(n);
-    }
+    void set_active_threads(size_t n) { SchedulerType::activeThreads_.store(n); }
 
-    void set_max_threads(size_t n) {
-        SchedulerType::maxThreads_.store(n);
-    }
+    void set_max_threads(size_t n) { SchedulerType::maxThreads_.store(n); }
 
     void set_thread_factory(std::shared_ptr<folly::ThreadFactory> factory) {
         SchedulerType::setThreadFactory(std::move(factory));
     }
 
-    void ensure_active_threads() {
-        SchedulerType::ensureActiveThreads();
-    }
+    void ensure_active_threads() { SchedulerType::ensureActiveThreads(); }
 
     void stop_orphaned_threads() {
 #ifdef _WIN32
@@ -113,9 +97,15 @@ struct CGroupValues {
 };
 
 inline std::optional<double> get_cgroup_value_v1(const std::string& cgroup_folder, const std::string& cgroup_file) {
-    if(const auto path = std::filesystem::path{fmt::format("{}/{}", cgroup_folder, cgroup_file)}; std::filesystem::exists(path)){
+    if (const auto path = std::filesystem::path{fmt::format("{}/{}", cgroup_folder, cgroup_file)};
+        std::filesystem::exists(path)) {
         std::ifstream strm(path.string());
-        util::check(static_cast<bool>(strm), "Failed to open cgroups v1 cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
+        util::check(
+                static_cast<bool>(strm),
+                "Failed to open cgroups v1 cpu file for read at path '{}': {}",
+                path.string(),
+                std::strerror(errno)
+        );
         std::string str;
         std::getline(strm, str);
         return std::stod(str);
@@ -124,15 +114,24 @@ inline std::optional<double> get_cgroup_value_v1(const std::string& cgroup_folde
 }
 
 inline CGroupValues get_cgroup_values_v1(const std::string& cgroup_folder) {
-    return CGroupValues{get_cgroup_value_v1(cgroup_folder, "cpu/cpu.cfs_quota_us"), get_cgroup_value_v1(cgroup_folder, "cpu/cpu.cfs_period_us")};
+    return CGroupValues{
+            get_cgroup_value_v1(cgroup_folder, "cpu/cpu.cfs_quota_us"),
+            get_cgroup_value_v1(cgroup_folder, "cpu/cpu.cfs_period_us")
+    };
 }
 
 // In cgroup v2, the /sys/fs/cgroup/cpu.max file is used and the format is $MAX $PERIOD
 // the default is max 100000
 inline CGroupValues get_cgroup_values_v2(const std::string& cgroup_folder) {
-    if(const auto path = std::filesystem::path{fmt::format("{}/cpu.max", cgroup_folder)}; std::filesystem::exists(path)){
+    if (const auto path = std::filesystem::path{fmt::format("{}/cpu.max", cgroup_folder)};
+        std::filesystem::exists(path)) {
         std::ifstream strm(path.string());
-        util::check(static_cast<bool>(strm), "Failed to open cgroups v2 cpu file for read at path '{}': {}", path.string(), std::strerror(errno));
+        util::check(
+                static_cast<bool>(strm),
+                "Failed to open cgroups v2 cpu file for read at path '{}': {}",
+                path.string(),
+                std::strerror(errno)
+        );
         std::string str;
         std::getline(strm, str);
         auto values = util::split_to_array<2>(str, ' ');
@@ -150,23 +149,23 @@ inline CGroupValues get_cgroup_values_v2(const std::string& cgroup_folder) {
 
 inline auto get_default_num_cpus([[maybe_unused]] const std::string& cgroup_folder) {
     int64_t cpu_count = std::thread::hardware_concurrency() == 0 ? 16 : std::thread::hardware_concurrency();
-    #ifdef _WIN32
-        return static_cast<int64_t>(cpu_count);
-    #else
-        int64_t quota_count = 0UL;
-        auto cgroup_val = get_cgroup_values_v1(cgroup_folder);
+#ifdef _WIN32
+    return static_cast<int64_t>(cpu_count);
+#else
+    int64_t quota_count = 0UL;
+    auto cgroup_val = get_cgroup_values_v1(cgroup_folder);
 
-        // if cgroup v1 values are not found, try to get values from cgroup v2
-        if (!cgroup_val.cpu_quota.has_value() || !cgroup_val.cpu_period.has_value())
-            cgroup_val = get_cgroup_values_v2(cgroup_folder);
+    // if cgroup v1 values are not found, try to get values from cgroup v2
+    if (!cgroup_val.cpu_quota.has_value() || !cgroup_val.cpu_period.has_value())
+        cgroup_val = get_cgroup_values_v2(cgroup_folder);
 
-        if ((cgroup_val.cpu_quota.has_value() && cgroup_val.cpu_period.has_value()) &&
-             (cgroup_val.cpu_quota.value() > -1 && cgroup_val.cpu_period.value() > 0))
-            quota_count = static_cast<int64_t>(ceil(cgroup_val.cpu_quota.value() / cgroup_val.cpu_period.value()));
+    if ((cgroup_val.cpu_quota.has_value() && cgroup_val.cpu_period.has_value()) &&
+        (cgroup_val.cpu_quota.value() > -1 && cgroup_val.cpu_period.value() > 0))
+        quota_count = static_cast<int64_t>(ceil(cgroup_val.cpu_quota.value() / cgroup_val.cpu_period.value()));
 
-        int64_t limit_count = quota_count != 0 ? quota_count : cpu_count;
-        return std::min(cpu_count, limit_count);
-    #endif
+    int64_t limit_count = quota_count != 0 ? quota_count : cpu_count;
+    return std::min(cpu_count, limit_count);
+#endif
 }
 
 /*
@@ -183,30 +182,62 @@ class TaskScheduler {
     using CPUSchedulerType = folly::FutureExecutor<folly::CPUThreadPoolExecutor>;
     using IOSchedulerType = folly::FutureExecutor<folly::IOThreadPoolExecutor>;
 
-     explicit TaskScheduler(const std::optional<size_t>& cpu_thread_count = std::nullopt, const std::optional<size_t>& io_thread_count = std::nullopt) :
+    explicit TaskScheduler(
+            const std::optional<size_t>& cpu_thread_count = std::nullopt,
+            const std::optional<size_t>& io_thread_count = std::nullopt
+    ) :
         cgroup_folder_("/sys/fs/cgroup"),
-        cpu_thread_count_(cpu_thread_count ? *cpu_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumCPUThreads", get_default_num_cpus(cgroup_folder_))),
-        io_thread_count_(io_thread_count ? *io_thread_count : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int) (cpu_thread_count_ * 1.5))),
-        cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")) ,
-        io_exec_(io_thread_count_,  std::make_shared<InstrumentedNamedFactory>("IOPool")){
-        util::check(cpu_thread_count_ > 0 && io_thread_count_ > 0, "Zero IO or CPU threads: {} {}", io_thread_count_, cpu_thread_count_);
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Task scheduler created with {:d} {:d}", cpu_thread_count_, io_thread_count_);
+        cpu_thread_count_(
+                cpu_thread_count ? *cpu_thread_count
+                                 : ConfigsMap::instance()->get_int(
+                                           "VersionStore.NumCPUThreads", get_default_num_cpus(cgroup_folder_)
+                                   )
+        ),
+        io_thread_count_(
+                io_thread_count
+                        ? *io_thread_count
+                        : ConfigsMap::instance()->get_int("VersionStore.NumIOThreads", (int)(cpu_thread_count_ * 1.5))
+        ),
+        cpu_exec_(cpu_thread_count_, std::make_shared<InstrumentedNamedFactory>("CPUPool")),
+        io_exec_(io_thread_count_, std::make_shared<InstrumentedNamedFactory>("IOPool")) {
+        util::check(
+                cpu_thread_count_ > 0 && io_thread_count_ > 0,
+                "Zero IO or CPU threads: {} {}",
+                io_thread_count_,
+                cpu_thread_count_
+        );
+        ARCTICDB_RUNTIME_DEBUG(
+                log::schedule(), "Task scheduler created with {:d} {:d}", cpu_thread_count_, io_thread_count_
+        );
     }
 
     template<class Task>
-    auto submit_cpu_task(Task &&t) {
+    auto submit_cpu_task(Task&& t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only supports Task derived from BaseTask");
-        ARCTICDB_DEBUG(log::schedule(), "{} Submitting CPU task {}: {} of {}", uintptr_t(this), typeid(task).name(), cpu_exec_.getTaskQueueSize(), cpu_exec_.kDefaultMaxQueueSize);
+        ARCTICDB_DEBUG(
+                log::schedule(),
+                "{} Submitting CPU task {}: {} of {}",
+                uintptr_t(this),
+                typeid(task).name(),
+                cpu_exec_.getTaskQueueSize(),
+                cpu_exec_.kDefaultMaxQueueSize
+        );
         std::lock_guard lock{cpu_mutex_};
         return cpu_exec_.addFuture(std::move(task));
     }
 
     template<class Task>
-    auto submit_io_task(Task &&t) {
+    auto submit_io_task(Task&& t) {
         auto task = std::forward<decltype(t)>(t);
         static_assert(std::is_base_of_v<BaseTask, std::decay_t<Task>>, "Only support Tasks derived from BaseTask");
-        ARCTICDB_DEBUG(log::schedule(), "{} Submitting IO task {}: {}", uintptr_t(this), typeid(task).name(), io_exec_.getPendingTaskCount());
+        ARCTICDB_DEBUG(
+                log::schedule(),
+                "{} Submitting IO task {}: {}",
+                uintptr_t(this),
+                typeid(task).name(),
+                io_exec_.getPendingTaskCount()
+        );
         std::lock_guard lock{io_mutex_};
         return io_exec_.addFuture(std::move(task));
     }
@@ -259,7 +290,9 @@ class TaskScheduler {
     }
 
     void re_init() {
-        ARCTICDB_RUNTIME_DEBUG(log::schedule(), "Reinitializing task scheduler: {} {}", cpu_thread_count_, io_thread_count_);
+        ARCTICDB_RUNTIME_DEBUG(
+                log::schedule(), "Reinitializing task scheduler: {} {}", cpu_thread_count_, io_thread_count_
+        );
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "IO exec num threads: {}", io_exec_.numActiveThreads());
         ARCTICDB_RUNTIME_DEBUG(log::schedule(), "CPU exec num threads: {}", cpu_exec_.numActiveThreads());
         set_active_threads(0);
@@ -270,20 +303,16 @@ class TaskScheduler {
         cpu_exec_.setNumThreads(cpu_thread_count_);
     }
 
-    size_t cpu_thread_count() const {
-        return cpu_thread_count_;
-    }
+    size_t cpu_thread_count() const { return cpu_thread_count_; }
 
-    size_t io_thread_count() const {
-        return io_thread_count_;
-    }
+    size_t io_thread_count() const { return io_thread_count_; }
 
     void stop_orphaned_threads() {
         io_exec_.stop_orphaned_threads();
         cpu_exec_.stop_orphaned_threads();
     }
 
-private:
+  private:
     std::string cgroup_folder_;
     size_t cpu_thread_count_;
     size_t io_thread_count_;
@@ -293,26 +322,20 @@ private:
     std::mutex io_mutex_;
 };
 
+inline auto& cpu_executor() { return TaskScheduler::instance()->cpu_exec(); }
 
-inline auto& cpu_executor() {
-    return TaskScheduler::instance()->cpu_exec();
-}
+inline auto& io_executor() { return TaskScheduler::instance()->io_exec(); }
 
-inline auto& io_executor() {
-    return TaskScheduler::instance()->io_exec();
-}
-
-template <typename Task>
+template<typename Task>
 auto submit_cpu_task(Task&& task) {
     return TaskScheduler::instance()->submit_cpu_task(std::forward<decltype(task)>(task));
 }
 
-
-template <typename Task>
+template<typename Task>
 auto submit_io_task(Task&& task) {
     return TaskScheduler::instance()->submit_io_task(std::forward<decltype(task)>(task));
 }
 
 void print_scheduler_stats();
 
-}
+} // namespace arcticdb::async

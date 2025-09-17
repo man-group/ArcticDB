@@ -33,4 +33,4 @@ struct ReadQuery {
     void convert_to_positive_row_filter(int64_t total_rows);
 };
 
-}
+} // namespace arcticdb::pipelines

@@ -2,16 +2,15 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
 
 namespace arcticdb {
 
-inline std::optional<RefKey> get_symbol_ref_key(
-    const std::shared_ptr<StreamSource> &store,
-    const StreamId &stream_id) {
+inline std::optional<RefKey> get_symbol_ref_key(const std::shared_ptr<StreamSource>& store, const StreamId& stream_id) {
     auto ref_key = RefKey{stream_id, KeyType::VERSION_REF};
     if (store->key_exists_sync(ref_key))
         return std::make_optional(std::move(ref_key));
@@ -26,14 +25,13 @@ inline std::optional<RefKey> get_symbol_ref_key(
     return std::make_optional(std::move(ref_key));
 }
 
-
 std::deque<AtomKey> backwards_compat_delete_all_versions(
-    const std::shared_ptr<Store>& store,
-    std::shared_ptr<VersionMap>& version_map,
-    const StreamId& stream_id
-    ) {
+        const std::shared_ptr<Store>& store, std::shared_ptr<VersionMap>& version_map, const StreamId& stream_id
+) {
     std::deque<AtomKey> output;
-    auto entry = version_map->check_reload(store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
+    auto entry = version_map->check_reload(
+            store, stream_id, LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
     auto indexes = entry->get_indexes(false);
     output.assign(std::begin(indexes), std::end(indexes));
 
@@ -45,11 +43,15 @@ std::deque<AtomKey> backwards_compat_delete_all_versions(
     return output;
 }
 
-std::vector<AtomKey> backwards_compat_write_and_prune_previous(std::shared_ptr<Store>& store, std::shared_ptr<VersionMap>& version_map, const AtomKey &key) {
+std::vector<AtomKey> backwards_compat_write_and_prune_previous(
+        std::shared_ptr<Store>& store, std::shared_ptr<VersionMap>& version_map, const AtomKey& key
+) {
     log::version().debug("Version map pruning previous versions for stream {}", key.id());
 
     std::vector<AtomKey> output;
-    auto entry = version_map->check_reload(store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__);
+    auto entry = version_map->check_reload(
+            store, key.id(), LoadStrategy{LoadType::ALL, LoadObjective::INCLUDE_DELETED}, __FUNCTION__
+    );
 
     auto old_entry = *entry;
     entry->clear();
@@ -58,9 +60,9 @@ std::vector<AtomKey> backwards_compat_write_and_prune_previous(std::shared_ptr<S
     version_map->remove_entry_version_keys(store, old_entry, key.id());
     output = old_entry.get_indexes(false);
 
-    if(version_map->log_changes())
+    if (version_map->log_changes())
         log_write(store, key.id(), key.version_id());
 
     return output;
 }
-}
+} // namespace arcticdb

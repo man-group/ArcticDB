@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from functools import partial
 import numpy as np
 import pandas as pd
@@ -20,7 +21,7 @@ from arcticdb.util.test import (
     common_sum_aggregation_dtype,
     compute_common_type_for_columns_in_df_list,
     expected_aggregation_type,
-    valid_common_type
+    valid_common_type,
 )
 from packaging.version import Version
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION
@@ -31,8 +32,10 @@ pytestmark = pytest.mark.pipeline
 
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 
+
 def all_aggregations_dict(col):
     return {f"to_{agg}": (col, agg) for agg in ALL_AGGREGATIONS}
+
 
 # Pandas recommended way to resample and exclude buckets with no index values, which is our behaviour
 # See https://pandas.pydata.org/pandas-docs/stable/user_guide/timeseries.html#sparse-resampling
@@ -40,6 +43,7 @@ def round(t, freq):
     freq = pd.tseries.frequencies.to_offset(freq)
     td = pd.Timedelta(freq)
     return pd.Timestamp((t.value // td.value) * td.value)
+
 
 def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_range=None):
     """
@@ -65,7 +69,9 @@ def generic_resample_test_with_empty_buckets(lib, sym, rule, aggregations, date_
 
 
 @pytest.mark.parametrize("freq", ("min", "h", "D", "1h30min"))
-@pytest.mark.parametrize("date_range", (None, (pd.Timestamp("2024-01-02T12:00:00"), pd.Timestamp("2024-01-03T12:00:00"))))
+@pytest.mark.parametrize(
+    "date_range", (None, (pd.Timestamp("2024-01-02T12:00:00"), pd.Timestamp("2024-01-03T12:00:00")))
+)
 @pytest.mark.parametrize("closed", ("left", "right"))
 @pytest.mark.parametrize("label", ("left", "right"))
 def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
@@ -100,7 +106,7 @@ def test_resampling(lmdb_version_store_v1, freq, date_range, closed, label):
         df,
         date_range=date_range,
         closed=closed,
-        label=label
+        label=label,
     )
 
 
@@ -131,68 +137,73 @@ class TestResamplingBucketInsideSegment:
     def test_all_buckets_have_values(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         sym = "test_inner_buckets_are_empty"
-        start = dt.datetime(2023, 12, 7, 23, 59, 47, 500000);
-        idx = [start + i * pd.Timedelta('1s') for i in range(0, 8)]
+        start = dt.datetime(2023, 12, 7, 23, 59, 47, 500000)
+        idx = [start + i * pd.Timedelta("1s") for i in range(0, 8)]
         df = pd.DataFrame({"mid": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 52))
-        generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
+        generic_resample_test_with_empty_buckets(lib, sym, "s", {"high": ("mid", "max")}, date_range=date_range)
 
     @pytest.mark.parametrize("closed", ("left", "right"))
     def test_first_bucket_is_empy(self, lmdb_version_store_v1, closed):
         lib = lmdb_version_store_v1
         sym = "test_first_bucket_is_empy"
-        idx = pd.DatetimeIndex([
-            dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
-            dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
-            dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
-            dt.datetime(2023, 12, 7, 23, 59, 50, 75000),
-            dt.datetime(2023, 12, 7, 23, 59, 50, 76000),
-            dt.datetime(2023, 12, 7, 23, 59, 55, 75000)
-        ])
+        idx = pd.DatetimeIndex(
+            [
+                dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
+                dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
+                dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
+                dt.datetime(2023, 12, 7, 23, 59, 50, 75000),
+                dt.datetime(2023, 12, 7, 23, 59, 50, 76000),
+                dt.datetime(2023, 12, 7, 23, 59, 55, 75000),
+            ]
+        )
         df = pd.DataFrame({"mid": [1, 2, 3, 4, 5, 6]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 49), dt.datetime(2023, 12, 7, 23, 59, 50))
-        generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
+        generic_resample_test(lib, sym, "s", {"high": ("mid", "max")}, df, date_range=date_range, closed=closed)
 
     @pytest.mark.parametrize("closed", ("left", "right"))
     def test_last_bucket_is_empty(self, lmdb_version_store_v1, closed):
         lib = lmdb_version_store_v1
         sym = "test_last_bucket_is_empty"
-        idx = pd.DatetimeIndex([
-            dt.datetime(2023, 12, 7, 23, 59, 47, 342000),
-            dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
-            dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
-            dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
-            dt.datetime(2023, 12, 7, 23, 59, 50, 75000),
-            dt.datetime(2023, 12, 7, 23, 59, 50, 76000),
-            dt.datetime(2023, 12, 7, 23, 59, 55, 75000)
-        ])
+        idx = pd.DatetimeIndex(
+            [
+                dt.datetime(2023, 12, 7, 23, 59, 47, 342000),
+                dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
+                dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
+                dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
+                dt.datetime(2023, 12, 7, 23, 59, 50, 75000),
+                dt.datetime(2023, 12, 7, 23, 59, 50, 76000),
+                dt.datetime(2023, 12, 7, 23, 59, 55, 75000),
+            ]
+        )
         df = pd.DataFrame({"mid": [1, 2, 3, 4, 5, 6, 7]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 49, 500000))
-        generic_resample_test(lib, sym, 's', {'high': ('mid', 'max')}, df, date_range=date_range, closed=closed)
-    
+        generic_resample_test(lib, sym, "s", {"high": ("mid", "max")}, df, date_range=date_range, closed=closed)
+
     def test_inner_buckets_are_empty(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         sym = "test_inner_buckets_are_empty"
-        idx = pd.DatetimeIndex([
-            dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
-            dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
-            dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
-            dt.datetime(2023, 12, 7, 23, 59, 52, 75000),
-            dt.datetime(2023, 12, 7, 23, 59, 53, 76000),
-            dt.datetime(2023, 12, 7, 23, 59, 55, 75000)
-        ])
+        idx = pd.DatetimeIndex(
+            [
+                dt.datetime(2023, 12, 7, 23, 59, 48, 342000),
+                dt.datetime(2023, 12, 7, 23, 59, 49, 717000),
+                dt.datetime(2023, 12, 7, 23, 59, 49, 921000),
+                dt.datetime(2023, 12, 7, 23, 59, 52, 75000),
+                dt.datetime(2023, 12, 7, 23, 59, 53, 76000),
+                dt.datetime(2023, 12, 7, 23, 59, 55, 75000),
+            ]
+        )
         df = pd.DataFrame({"mid": [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]}, index=idx)
         lib.write(sym, df)
-    
+
         date_range = (dt.datetime(2023, 12, 7, 23, 59, 48), dt.datetime(2023, 12, 7, 23, 59, 55))
-        generic_resample_test_with_empty_buckets(lib, sym, 's', {'high': ('mid', 'max')}, date_range=date_range)
-        
+        generic_resample_test_with_empty_buckets(lib, sym, "s", {"high": ("mid", "max")}, date_range=date_range)
 
 
 def test_resampling_timezones(lmdb_version_store_v1):
@@ -202,33 +213,18 @@ def test_resampling_timezones(lmdb_version_store_v1):
     index = pd.date_range("2024-03-31T00:00:00", freq="min", periods=240, tz="Europe/London")
     df = pd.DataFrame({"col": np.arange(len(index))}, index=index)
     lib.write(sym, df)
-    generic_resample_test(
-        lib,
-        sym,
-        "h",
-        {"sum": ("col", "sum")},
-        df
-    )
+    generic_resample_test(lib, sym, "h", {"sum": ("col", "sum")}, df)
 
     # UK clocks go back at 2am on October 27th in 2024
     index = pd.date_range("2024-10-27T00:00:00", freq="min", periods=240, tz="Europe/London")
     df = pd.DataFrame({"col": np.arange(len(index))}, index=index)
     lib.write(sym, df)
-    generic_resample_test(
-        lib,
-        sym,
-        "h",
-        {"sum": ("col", "sum")},
-        df
-    )
+    generic_resample_test(lib, sym, "h", {"sum": ("col", "sum")}, df)
 
 
 def test_resampling_nan_correctness(version_store_factory):
     lib = version_store_factory(
-        column_group_size=2,
-        segment_row_size=2,
-        dynamic_strings=True,
-        lmdb_config={"map_size": 2**30}
+        column_group_size=2, segment_row_size=2, dynamic_strings=True, lmdb_config={"map_size": 2**30}
     )
     sym = "test_resampling_nan_correctness"
     # NaN here means NaT for datetime columns and NaN/None in string columns
@@ -247,7 +243,7 @@ def test_resampling_nan_correctness(version_store_factory):
     for i in [3, 4, 5, 6, 10, 14]:
         float_col[i] = np.nan
         string_col[i] = None if i % 2 == 0 else np.nan
-        datetime_col[i] = np.datetime64('NaT')
+        datetime_col[i] = np.datetime64("NaT")
 
     df = pd.DataFrame({"float_col": float_col, "string_col": string_col, "datetime_col": datetime_col}, index=idx)
     lib.write(sym, df)
@@ -306,7 +302,7 @@ def test_resampling_bool_columns(lmdb_version_store_tiny_segment):
             "last": ("col", "last"),
             "count": ("col", "count"),
         },
-        df
+        df,
     )
 
 
@@ -339,7 +335,7 @@ def test_resampling_dynamic_schema_types_changing(lmdb_version_store_dynamic_sch
             "last": ("col", "last"),
             "count": ("col", "count"),
         },
-        pd.concat([df_0, df_1])
+        pd.concat([df_0, df_1]),
     )
 
 
@@ -379,7 +375,7 @@ def test_resampling_empty_bucket_in_range(lmdb_version_store_v1):
             "to_first": ("to_first", "first"),
             "to_last": ("to_last", "last"),
             "to_count": ("to_count", "count"),
-        }
+        },
     )
 
 
@@ -417,7 +413,9 @@ def test_resampling_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny
 def test_resample_multiindex(lmdb_version_store_v1, tz, named_levels):
     lib = lmdb_version_store_v1
     sym = "test_resample_multiindex"
-    multiindex = pd.MultiIndex.from_product([pd.date_range("2024-01-01", freq="h", periods=5, tz=tz), [0, 1], ["hello", "goodbye"]])
+    multiindex = pd.MultiIndex.from_product(
+        [pd.date_range("2024-01-01", freq="h", periods=5, tz=tz), [0, 1], ["hello", "goodbye"]]
+    )
     if named_levels:
         multiindex.names = ["datetime", "sequence number", "another index level"]
     df = pd.DataFrame(
@@ -493,8 +491,36 @@ def test_resampling_batch_read_query(lmdb_version_store_v1, use_date_range, sing
 
 # All following tests cover that an appropriate exception is thrown when unsupported operations are attempted
 
-@pytest.mark.parametrize("freq", ("B", "W", "M", "Q", "Y", "cbh", "bh", "BYS", "YS", "BYE", "YE", "BQS", "QS", "BQE",
-                                  "QE", "CBMS", "BMS", "SMS", "MS", "CBME", "BME", "SME", "ME", "C"))
+
+@pytest.mark.parametrize(
+    "freq",
+    (
+        "B",
+        "W",
+        "M",
+        "Q",
+        "Y",
+        "cbh",
+        "bh",
+        "BYS",
+        "YS",
+        "BYE",
+        "YE",
+        "BQS",
+        "QS",
+        "BQE",
+        "QE",
+        "CBMS",
+        "BMS",
+        "SMS",
+        "MS",
+        "CBME",
+        "BME",
+        "SME",
+        "ME",
+        "C",
+    ),
+)
 def test_resample_rejects_unsupported_frequency_strings(freq):
     with pytest.raises(ArcticDbNotYetImplemented):
         QueryBuilder().resample(freq)
@@ -530,10 +556,7 @@ def test_resampling_sparse_data(lmdb_version_store_v1):
     sym = "test_resampling_sparse_data"
 
     # col_1 will be dense, but with fewer rows than the index column, and so semantically sparse
-    data = {
-        "col_0": [np.nan, 1.0],
-        "col_1": [2.0, np.nan]
-    }
+    data = {"col_0": [np.nan, 1.0], "col_1": [2.0, np.nan]}
     lib.write(sym, pd.DataFrame(data, index=[pd.Timestamp(0), pd.Timestamp(1000)]), sparsify_floats=True)
 
     q = QueryBuilder()
@@ -565,6 +588,7 @@ def test_resampling_empty_type_column(lmdb_version_store_empty_types_v1):
     with pytest.raises(SchemaException):
         lib.read(sym, query_builder=q)
 
+
 @pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
 @pytest.mark.parametrize("closed", ["left", "right"])
 class TestResamplingOffset:
@@ -577,15 +601,7 @@ class TestResamplingOffset:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
-            lib,
-            sym,
-            "2min",
-            all_aggregations_dict("col"),
-            df,
-            closed=closed,
-            offset="30s"
-        )
+        generic_resample_test(lib, sym, "2min", all_aggregations_dict("col"), df, closed=closed, offset="30s")
 
     @pytest.mark.parametrize("offset", ("2min37s", pd.Timedelta(minutes=2, seconds=37)))
     def test_offset_larger_than_freq(self, lmdb_version_store_v1, closed, offset):
@@ -595,15 +611,7 @@ class TestResamplingOffset:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
-            lib,
-            sym,
-            "2min",
-            all_aggregations_dict("col"),
-            df,
-            closed=closed,
-            offset=offset
-        )
+        generic_resample_test(lib, sym, "2min", all_aggregations_dict("col"), df, closed=closed, offset=offset)
 
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
     def test_values_on_offset_boundary(self, lmdb_version_store_v1, closed, offset):
@@ -618,22 +626,17 @@ class TestResamplingOffset:
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
-            lib,
-            sym,
-            "2min",
-            all_aggregations_dict("col"),
-            df,
-            closed=closed,
-            offset=offset
-        )
+        generic_resample_test(lib, sym, "2min", all_aggregations_dict("col"), df, closed=closed, offset=offset)
 
     @pytest.mark.parametrize("offset", ("30s", pd.Timedelta(seconds=30)))
-    @pytest.mark.parametrize("date_range", [
-        (dt.datetime(2024, 1, 2, 5, 0, 30), dt.datetime(2024, 1, 3, 5, 0, 30)),
-        (dt.datetime(2024, 1, 2, 5, 0, 45), dt.datetime(2024, 1, 3, 5, 0, 50)),
-        (dt.datetime(2024, 1, 2, 5, 0, 30, 1), dt.datetime(2024, 1, 3, 5, 0, 29, 999999))
-    ])
+    @pytest.mark.parametrize(
+        "date_range",
+        [
+            (dt.datetime(2024, 1, 2, 5, 0, 30), dt.datetime(2024, 1, 3, 5, 0, 30)),
+            (dt.datetime(2024, 1, 2, 5, 0, 45), dt.datetime(2024, 1, 3, 5, 0, 50)),
+            (dt.datetime(2024, 1, 2, 5, 0, 30, 1), dt.datetime(2024, 1, 3, 5, 0, 29, 999999)),
+        ],
+    )
     def test_with_date_range(self, lmdb_version_store_v1, closed, date_range, offset):
         lib = lmdb_version_store_v1
         sym = "test_offset_larger_than_freq"
@@ -647,15 +650,9 @@ class TestResamplingOffset:
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
         generic_resample_test(
-            lib,
-            sym,
-            "2min",
-            all_aggregations_dict("col"),
-            df,
-            closed=closed,
-            offset=offset,
-            date_range=date_range
+            lib, sym, "2min", all_aggregations_dict("col"), df, closed=closed, offset=offset, date_range=date_range
         )
+
 
 @pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
 @pytest.mark.parametrize("closed", ["left", "right"])
@@ -668,14 +665,16 @@ class TestResamplingOrigin:
             "start",
             "start_day",
             pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-            pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param(
+                "end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")
+            ),
             "epoch",
             pd.Timestamp("2024-01-01"),
             pd.Timestamp("2025-01-01 15:00:00"),
             pd.Timestamp("2025-01-03 15:00:00"),
             pd.Timestamp("2025-01-01 10:00:33"),
-            pd.Timestamp("2025-01-02 12:00:13")
-        ]
+            pd.Timestamp("2025-01-02 12:00:13"),
+        ],
     )
     def test_origin(self, lmdb_version_store_v1, closed, origin):
         lib = lmdb_version_store_v1
@@ -684,36 +683,39 @@ class TestResamplingOrigin:
         # the bin generation in case of end and end_day
         start = pd.Timestamp("2025-01-01 10:00:33")
         end = pd.Timestamp("2025-01-02 12:00:20")
-        idx = pd.date_range(start, end, freq='10s')
+        idx = pd.date_range(start, end, freq="10s")
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
-        generic_resample_test(
-            lib,
-            sym,
-            "2min",
-            all_aggregations_dict("col"),
-            df,
-            closed=closed,
-            origin=origin
-        )
+        generic_resample_test(lib, sym, "2min", all_aggregations_dict("col"), df, closed=closed, origin=origin)
 
-    @pytest.mark.parametrize("origin", [
-        "start",
-        "start_day",
-        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
-    ])
-    @pytest.mark.parametrize("date_range", [
-        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:00")), # start and end are multiples of rule
-        (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:03")), # start is multiple of rule
-        (pd.Timestamp("2025-01-01 10:00:03"), pd.Timestamp("2025-01-02 12:00:00")) # end is multiple of rule
-    ])
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "start",
+            "start_day",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param(
+                "end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "date_range",
+        [
+            (
+                pd.Timestamp("2025-01-01 10:00:00"),
+                pd.Timestamp("2025-01-02 12:00:00"),
+            ),  # start and end are multiples of rule
+            (pd.Timestamp("2025-01-01 10:00:00"), pd.Timestamp("2025-01-02 12:00:03")),  # start is multiple of rule
+            (pd.Timestamp("2025-01-01 10:00:03"), pd.Timestamp("2025-01-02 12:00:00")),  # end is multiple of rule
+        ],
+    )
     def test_origin_is_multiple_of_freq(self, lmdb_version_store_v1, closed, origin, date_range):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         start, end = date_range
-        idx = pd.date_range(start, end, freq='10s')
+        idx = pd.date_range(start, end, freq="10s")
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
@@ -725,22 +727,27 @@ class TestResamplingOrigin:
             df,
             closed=closed,
             origin=origin,
-            drop_empty_buckets_for="col"
+            drop_empty_buckets_for="col",
         )
 
-    @pytest.mark.parametrize("origin", [
-        "start",
-        "start_day",
-        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-        "epoch"
-    ])
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "start",
+            "start_day",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param(
+                "end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")
+            ),
+            "epoch",
+        ],
+    )
     def test_pre_epoch_data(self, lmdb_version_store_v1, closed, origin):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         start = pd.Timestamp("1800-01-01 10:00:00")
         end = pd.Timestamp("1800-01-02 10:00:00")
-        idx = pd.date_range(start, end, freq='30s')
+        idx = pd.date_range(start, end, freq="30s")
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
@@ -752,25 +759,34 @@ class TestResamplingOrigin:
             df,
             closed=closed,
             origin=origin,
-            drop_empty_buckets_for="col"
+            drop_empty_buckets_for="col",
         )
 
-    @pytest.mark.parametrize("origin", [
-        "start",
-        "start_day",
-        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-    ])
-    @pytest.mark.parametrize("date_range",
-        list(itertools.product(
-            [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") + pd.Timedelta(1)],
-            [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") + pd.Timedelta(1)]))
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "start",
+            "start_day",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param(
+                "end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")
+            ),
+        ],
+    )
+    @pytest.mark.parametrize(
+        "date_range",
+        list(
+            itertools.product(
+                [pd.Timestamp("2024-01-01") - pd.Timedelta(1), pd.Timestamp("2024-01-01") + pd.Timedelta(1)],
+                [pd.Timestamp("2024-01-02") - pd.Timedelta(1), pd.Timestamp("2024-01-02") + pd.Timedelta(1)],
+            )
+        ),
     )
     def test_origin_off_by_one_on_boundary(self, lmdb_version_store_v1, closed, origin, date_range):
         lib = lmdb_version_store_v1
         sym = "test_origin_special_values"
         start, end = date_range
-        idx = pd.date_range(start, end, freq='10s')
+        idx = pd.date_range(start, end, freq="10s")
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
@@ -782,22 +798,35 @@ class TestResamplingOrigin:
             df,
             closed=closed,
             origin=origin,
-            drop_empty_buckets_for="col"
+            drop_empty_buckets_for="col",
         )
 
-    @pytest.mark.parametrize("origin", [
-        "start_day",
-        "start",
-        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported"))
-    ])
+    @pytest.mark.parametrize(
+        "origin",
+        [
+            "start_day",
+            "start",
+            pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+            pytest.param(
+                "end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")
+            ),
+        ],
+    )
     def test_non_epoch_origin_throws_with_daterange(self, lmdb_version_store_v1, origin, closed):
         lib = lmdb_version_store_v1
         sym = "test_origin_start_throws_with_daterange"
 
-        lib.write(sym, pd.DataFrame({"col": [1, 2, 3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")])))
+        lib.write(
+            sym,
+            pd.DataFrame(
+                {"col": [1, 2, 3]},
+                index=pd.DatetimeIndex(
+                    [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]
+                ),
+            ),
+        )
         q = QueryBuilder()
-        q = q.resample('1min', origin=origin, closed=closed).agg({"col_min":("col", "min")})
+        q = q.resample("1min", origin=origin, closed=closed).agg({"col_min": ("col", "min")})
         with pytest.raises(UserInputException) as exception_info:
             lib.read(sym, query_builder=q, date_range=(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")))
         assert all(w in str(exception_info.value) for w in [origin, "origin"])
@@ -810,7 +839,7 @@ class TestResamplingOrigin:
         # the bin generation in case of end and end_day
         start = pd.Timestamp("2025-01-01 00:00:00")
         end = pd.Timestamp("2025-01-04 00:00:00")
-        idx = pd.date_range(start, end, freq='3s')
+        idx = pd.date_range(start, end, freq="3s")
         rng = np.random.default_rng()
         df = pd.DataFrame({"col": rng.integers(0, 100, len(idx))}, index=idx)
         lib.write(sym, df)
@@ -822,23 +851,27 @@ class TestResamplingOrigin:
             df,
             closed=closed,
             origin=origin,
-            date_range=(pd.Timestamp("2025-01-02 00:00:00"), pd.Timestamp("2025-01-03 00:00:00"))
+            date_range=(pd.Timestamp("2025-01-02 00:00:00"), pd.Timestamp("2025-01-03 00:00:00")),
         )
+
 
 @pytest.mark.skipif(PANDAS_VERSION < Version("1.1.0"), reason="Pandas < 1.1.0 do not have offset param")
 @pytest.mark.parametrize("closed", ["left", "right"])
 @pytest.mark.parametrize("label", ["left", "right"])
-@pytest.mark.parametrize("origin",[
-    "start",
-    "start_day",
-    pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-    pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
-    "epoch",
-    pd.Timestamp("2024-01-01"),
-    pd.Timestamp("2025-01-01 15:00:00"),
-    pd.Timestamp("2025-01-03 15:00:00")
-])
-@pytest.mark.parametrize("offset", ['10s', '13s', '2min'])
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "start",
+        "start_day",
+        pytest.param("end", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        pytest.param("end_day", marks=pytest.mark.skipif(PANDAS_VERSION < Version("1.3.0"), reason="Not supported")),
+        "epoch",
+        pd.Timestamp("2024-01-01"),
+        pd.Timestamp("2025-01-01 15:00:00"),
+        pd.Timestamp("2025-01-03 15:00:00"),
+    ],
+)
+@pytest.mark.parametrize("offset", ["10s", "13s", "2min"])
 def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, offset):
     lib = lmdb_version_store_v1
     sym = "test_origin_special_values"
@@ -846,7 +879,7 @@ def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, of
     # the bin generation in case of end and end_day
     start = pd.Timestamp("2025-01-01 10:00:33")
     end = pd.Timestamp("2025-01-02 12:00:20")
-    idx = pd.date_range(start, end, freq='10s')
+    idx = pd.date_range(start, end, freq="10s")
     df = pd.DataFrame({"col": range(len(idx))}, index=idx)
     lib.write(sym, df)
     generic_resample_test(
@@ -859,8 +892,9 @@ def test_origin_offset_combined(lmdb_version_store_v1, closed, origin, label, of
         origin=origin,
         drop_empty_buckets_for="col",
         label=label,
-        offset=offset
+        offset=offset,
     )
+
 
 def test_max_with_one_infinity_element(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -868,8 +902,9 @@ def test_max_with_one_infinity_element(lmdb_version_store_v1):
 
     lib.write(sym, pd.DataFrame({"col": [np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
     q = QueryBuilder()
-    q = q.resample('1min').agg({"col_max":("col", "max")})
-    assert np.isinf(lib.read(sym, query_builder=q).data['col_max'][0])
+    q = q.resample("1min").agg({"col_max": ("col", "max")})
+    assert np.isinf(lib.read(sym, query_builder=q).data["col_max"][0])
+
 
 def test_min_with_one_infinity_element(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
@@ -877,8 +912,8 @@ def test_min_with_one_infinity_element(lmdb_version_store_v1):
 
     lib.write(sym, pd.DataFrame({"col": [-np.inf]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
     q = QueryBuilder()
-    q = q.resample('1min').agg({"col_min":("col", "min")})
-    assert np.isneginf(lib.read(sym, query_builder=q).data['col_min'][0])
+    q = q.resample("1min").agg({"col_min": ("col", "min")})
+    assert np.isneginf(lib.read(sym, query_builder=q).data["col_min"][0])
 
 
 def test_date_range_outside_symbol_timerange(lmdb_version_store_v1):
@@ -887,7 +922,12 @@ def test_date_range_outside_symbol_timerange(lmdb_version_store_v1):
     df = pd.DataFrame({"col": np.arange(10)}, index=pd.date_range("2025-01-01", periods=10))
     lib.write(sym, df)
     # Date range after time range
-    q = QueryBuilder().date_range((pd.Timestamp("2025-02-01"), pd.Timestamp("2025-02-02"))).resample('1min').agg({"col": "sum"})
+    q = (
+        QueryBuilder()
+        .date_range((pd.Timestamp("2025-02-01"), pd.Timestamp("2025-02-02")))
+        .resample("1min")
+        .agg({"col": "sum"})
+    )
     received_df = lib.read(sym, query_builder=q).data
     assert not len(received_df)
     assert received_df.columns == df.columns
@@ -902,9 +942,18 @@ class TestResampleDynamicSchema:
         rule = "10ns"
         lib = lmdb_version_store_dynamic_schema_v1
         sym = "sym"
-        df1 = pd.DataFrame({"aggregated": np.array([1, 2, 3], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(30)]))
-        df2 = pd.DataFrame({"not_aggregated": np.array([4, 5, 6], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(50), pd.Timestamp(55), pd.Timestamp(80)]))
-        df3 = pd.DataFrame({"aggregated": np.array([7, 8, 9], dtype), "_empty_bucket_tracker_": [0] * 3}, index=pd.DatetimeIndex([pd.Timestamp(100), pd.Timestamp(120), pd.Timestamp(121)]))
+        df1 = pd.DataFrame(
+            {"aggregated": np.array([1, 2, 3], dtype), "_empty_bucket_tracker_": [0] * 3},
+            index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(30)]),
+        )
+        df2 = pd.DataFrame(
+            {"not_aggregated": np.array([4, 5, 6], dtype), "_empty_bucket_tracker_": [0] * 3},
+            index=pd.DatetimeIndex([pd.Timestamp(50), pd.Timestamp(55), pd.Timestamp(80)]),
+        )
+        df3 = pd.DataFrame(
+            {"aggregated": np.array([7, 8, 9], dtype), "_empty_bucket_tracker_": [0] * 3},
+            index=pd.DatetimeIndex([pd.Timestamp(100), pd.Timestamp(120), pd.Timestamp(121)]),
+        )
         df_list = [df1, df2, df3]
         for df in df_list:
             lib.append(sym, df)
@@ -928,16 +977,23 @@ class TestResampleDynamicSchema:
             closed=closed,
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for="_empty_bucket_tracker_",
-            expected_types=expected_types)
+            expected_types=expected_types,
+        )
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
     @pytest.mark.parametrize("dtype", [np.int32, np.float32, np.uint16])
-    def test_bucket_intersects_two_segments_aggregation_column_not_in_first(self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype):
-        rule='10ns'
-        df1 = pd.DataFrame({'col_0': np.array([1], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
-        df2 = pd.DataFrame({'col_1': np.array([2, 3], dtype)}, index=pd.to_datetime([pd.Timestamp(10), pd.Timestamp(20)]))
-        df3 = pd.DataFrame({'col_0': np.array([4, 5], dtype)}, index=pd.to_datetime([pd.Timestamp(21), pd.Timestamp(30)]))
+    def test_bucket_intersects_two_segments_aggregation_column_not_in_first(
+        self, lmdb_version_store_dynamic_schema_v1, label, closed, dtype
+    ):
+        rule = "10ns"
+        df1 = pd.DataFrame({"col_0": np.array([1], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        df2 = pd.DataFrame(
+            {"col_1": np.array([2, 3], dtype)}, index=pd.to_datetime([pd.Timestamp(10), pd.Timestamp(20)])
+        )
+        df3 = pd.DataFrame(
+            {"col_0": np.array([4, 5], dtype)}, index=pd.to_datetime([pd.Timestamp(21), pd.Timestamp(30)])
+        )
         df_list = [df1, df2, df3]
 
         lib = lmdb_version_store_dynamic_schema_v1
@@ -965,17 +1021,20 @@ class TestResampleDynamicSchema:
             closed=closed,
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for=None,
-            expected_types=expected_types)
+            expected_types=expected_types,
+        )
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
-    def test_bucket_intersects_two_segments_aggregation_column_not_in_second(self, lmdb_version_store_dynamic_schema_v1, label, closed):
+    def test_bucket_intersects_two_segments_aggregation_column_not_in_second(
+        self, lmdb_version_store_dynamic_schema_v1, label, closed
+    ):
         lib = lmdb_version_store_dynamic_schema_v1
         dtype = np.int32
         df1 = pd.DataFrame({"col_0": np.array([1], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
         df2 = pd.DataFrame({"col_1": np.array([50], dtype)}, index=pd.DatetimeIndex([pd.Timestamp(1)]))
         df_list = [df1, df2]
-        rule="10ns"
+        rule = "10ns"
         sym = "sym"
         for df in df_list:
             # This column will be used to keep track of empty buckets.
@@ -1004,7 +1063,8 @@ class TestResampleDynamicSchema:
             label=label,
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for="_empty_bucket_tracker_",
-            expected_types=expected_types)
+            expected_types=expected_types,
+        )
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
@@ -1019,9 +1079,9 @@ class TestResampleDynamicSchema:
         df0 = pd.DataFrame(data={"col_0": np.array([1], dtype=dtype)}, index=[pd.Timestamp(1)])
         df1 = pd.DataFrame(data={"col_1": np.array([2], dtype=dtype)}, index=[pd.Timestamp(2)])
         df_list = [df0, df1]
-        rule="10ns"
-        origin="epoch"
-        offset=None
+        rule = "10ns"
+        origin = "epoch"
+        offset = None
         for df in df_list:
             # This column will be used to keep track of empty buckets.
             df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
@@ -1058,7 +1118,8 @@ class TestResampleDynamicSchema:
             label=label,
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for="_empty_bucket_tracker_",
-            expected_types=expected_types)
+            expected_types=expected_types,
+        )
 
     @pytest.mark.parametrize("label", ["left", "right"])
     @pytest.mark.parametrize("closed", ["left", "right"])
@@ -1070,13 +1131,15 @@ class TestResampleDynamicSchema:
         """
         lib = lmdb_version_store_dynamic_schema_v1
         sym = "test_bucket_spans_two_segments"
-        df0 = pd.DataFrame({"col_0": np.array([0, 0], dtype=dtype)}, index=pd.to_datetime([pd.Timestamp(0),pd.Timestamp(1)]))
+        df0 = pd.DataFrame(
+            {"col_0": np.array([0, 0], dtype=dtype)}, index=pd.to_datetime([pd.Timestamp(0), pd.Timestamp(1)])
+        )
         df1 = pd.DataFrame({"col_1": np.array([0], dtype=dtype)}, index=pd.to_datetime([pd.Timestamp(2)]))
         df2 = pd.DataFrame({"col_0": np.array([0], dtype=dtype)}, index=pd.to_datetime([pd.Timestamp(3)]))
         df_list = [df0, df1, df2]
-        rule="10ns"
-        origin="epoch"
-        offset=None
+        rule = "10ns"
+        origin = "epoch"
+        offset = None
         for df in df_list:
             # This column will be used to keep track of empty buckets.
             df["_empty_bucket_tracker_"] = np.zeros(df.shape[0], dtype=int)
@@ -1113,10 +1176,41 @@ class TestResampleDynamicSchema:
             label=label,
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for="_empty_bucket_tracker_",
-            expected_types=expected_types)
+            expected_types=expected_types,
+        )
 
-    @pytest.mark.parametrize("first_dtype,", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
-    @pytest.mark.parametrize("second_dtype", [np.int8, np.int16, np.int32, np.int64, np.uint8, np.uint16, np.uint32, np.uint64, np.float32, np.float64, bool])
+    @pytest.mark.parametrize(
+        "first_dtype,",
+        [
+            np.int8,
+            np.int16,
+            np.int32,
+            np.int64,
+            np.uint8,
+            np.uint16,
+            np.uint32,
+            np.uint64,
+            np.float32,
+            np.float64,
+            bool,
+        ],
+    )
+    @pytest.mark.parametrize(
+        "second_dtype",
+        [
+            np.int8,
+            np.int16,
+            np.int32,
+            np.int64,
+            np.uint8,
+            np.uint16,
+            np.uint32,
+            np.uint64,
+            np.float32,
+            np.float64,
+            bool,
+        ],
+    )
     def test_sum_aggregation_type(self, lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype):
         """
         Sum aggregation in resamling promotes to the largest type of the respective category.
@@ -1154,19 +1248,12 @@ class TestResampleDynamicSchema:
                 "col": np.array([1], dtype=np.int8),
                 "to_resample": np.array([2], dtype=np.int8),
             },
-            index=[pd.Timestamp(10)]
+            index=[pd.Timestamp(10)],
         )
 
         df2 = pd.DataFrame(
-            {
-                "col": np.array([-1, 3, 0, 15], dtype=np.int8)
-            },
-            index=[
-                pd.Timestamp(12),
-                pd.Timestamp(13),
-                pd.Timestamp(14),
-                pd.Timestamp(33)
-            ]
+            {"col": np.array([-1, 3, 0, 15], dtype=np.int8)},
+            index=[pd.Timestamp(12), pd.Timestamp(13), pd.Timestamp(14), pd.Timestamp(33)],
         )
 
         df3 = pd.DataFrame(
@@ -1174,7 +1261,7 @@ class TestResampleDynamicSchema:
                 "col": np.array([2], dtype=np.int8),
                 "to_resample": np.array([4], dtype=np.uint8),
             },
-            index=[pd.Timestamp(34)]
+            index=[pd.Timestamp(34)],
         )
         df_list = [df1, df2, df3]
         for df in df_list:
@@ -1184,7 +1271,11 @@ class TestResampleDynamicSchema:
 
         columns_to_resample = ["to_resample"]
         agg = {f"{name}_{op}": (name, op) for name in columns_to_resample for op in ALL_AGGREGATIONS}
-        expected_types = {f"{name}_{op}": expected_aggregation_type(op, df_list, name) for name in columns_to_resample for op in ALL_AGGREGATIONS}
+        expected_types = {
+            f"{name}_{op}": expected_aggregation_type(op, df_list, name)
+            for name in columns_to_resample
+            for op in ALL_AGGREGATIONS
+        }
         generic_resample_test(
             lib,
             sym,
@@ -1197,7 +1288,8 @@ class TestResampleDynamicSchema:
             label=label,
             # Must be int or uint column otherwise dropping of empty buckets will not work
             drop_empty_buckets_for="_empty_bucket_tracker_",
-            expected_types=expected_types)
+            expected_types=expected_types,
+        )
 
     def test_int_float_promotion(self, lmdb_version_store_dynamic_schema_v1):
         lib = lmdb_version_store_dynamic_schema_v1
@@ -1229,5 +1321,5 @@ class TestResampleDynamicSchema:
             origin=origin,
             closed="left",
             label="left",
-            expected_types=expected_types)
-
+            expected_types=expected_types,
+        )

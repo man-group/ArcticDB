@@ -22,7 +22,7 @@ from arcticdb.version_store.library import (
     LazyDataFrameAfterJoin,
     concat,
     StagedDataFinalizeMethod,
-    WriteMetadataPayload
+    WriteMetadataPayload,
 )
 from arcticdb.version_store.admin_tools import KeyType, Size
 
