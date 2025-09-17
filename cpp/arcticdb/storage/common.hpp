@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -32,7 +33,8 @@ using StorageName = util::StringWrappingValue<StorageNameTag>;
 struct InstanceUriTag {};
 using InstanceUri = util::StringWrappingValue<InstanceUriTag>;
 
-template<class T> requires std::is_same_v<T, EnvironmentName> || std::is_same_v<T, StorageName>
+template<class T>
+requires std::is_same_v<T, EnvironmentName> || std::is_same_v<T, StorageName>
 bool operator==(const T& l, const T& r) {
     return l.value == r.value;
 }
@@ -49,9 +51,8 @@ struct LibraryDescriptor {
     std::vector<StorageName> storage_ids_;
 
     using VariantStoreConfig = std::variant<
-        std::monostate, //  make variant default constructible and unconfigured
-        arcticdb::proto::storage::VersionStoreConfig
-    >;
+            std::monostate, //  make variant default constructible and unconfigured
+            arcticdb::proto::storage::VersionStoreConfig>;
 
     VariantStoreConfig config_ = std::monostate{};
 };
@@ -71,27 +72,21 @@ inline std::vector<char> stream_to_vector(std::iostream& src) {
     return v;
 }
 
-
 class NativeVariantStorage {
-public:
+  public:
     using VariantStorageConfig = std::variant<std::monostate, s3::S3Settings, s3::GCPXMLSettings>;
     explicit NativeVariantStorage(VariantStorageConfig config = std::monostate()) : config_(std::move(config)) {};
-    const VariantStorageConfig& variant() const {
-        return config_;
-    }
+    const VariantStorageConfig& variant() const { return config_; }
 
-    void update(const s3::S3Settings& config) {
-        config_ = config;
-    }
+    void update(const s3::S3Settings& config) { config_ = config; }
 
     std::string to_string() {
-        return util::variant_match(config_, [](std::monostate) -> std::string {
-            return "empty";
-        }, [](s3::S3Settings s3) {
-            return fmt::format("{}", s3);
-        }, [](s3::GCPXMLSettings gcpxml) {
-            return fmt::format("{}", gcpxml);
-        });
+        return util::variant_match(
+                config_,
+                [](std::monostate) -> std::string { return "empty"; },
+                [](s3::S3Settings s3) { return fmt::format("{}", s3); },
+                [](s3::GCPXMLSettings gcpxml) { return fmt::format("{}", gcpxml); }
+        );
     }
 
     s3::S3Settings as_s3_settings() {
@@ -100,12 +95,14 @@ public:
     }
 
     s3::GCPXMLSettings as_gcpxml_settings() {
-        util::check(std::holds_alternative<s3::GCPXMLSettings>(config_), "Expected gcpxml settings but was {}", to_string());
+        util::check(
+                std::holds_alternative<s3::GCPXMLSettings>(config_), "Expected gcpxml settings but was {}", to_string()
+        );
         return std::get<s3::GCPXMLSettings>(config_);
     }
 
-private:
+  private:
     VariantStorageConfig config_;
 };
 
-}  //namespace arcticdb::storage
+} // namespace arcticdb::storage

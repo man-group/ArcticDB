@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import collections
 import hashlib
 import msgpack
@@ -144,8 +145,10 @@ class Flattener:
 
         # Factor of 2 is because msgpack recurses with two stackframes for each level of nesting
         if depth > DEFAULT_RECURSE_LIMIT // 2:
-            raise DataTooNestedException(f"Symbol {original_symbol} cannot be recursively normalized as it contains more than "
-                                         f"{DEFAULT_RECURSE_LIMIT // 2} levels of nested dictionaries. This is a limitation of the msgpack serializer.")
+            raise DataTooNestedException(
+                f"Symbol {original_symbol} cannot be recursively normalized as it contains more than "
+                f"{DEFAULT_RECURSE_LIMIT // 2} levels of nested dictionaries. This is a limitation of the msgpack serializer."
+            )
 
         # Commit 450170d94 shows a non-recursive implementation of this function, but since `msgpack.packb` of the
         # result is itself recursive, there is little point to rewriting this function.
@@ -190,11 +193,14 @@ class Flattener:
             # readable name in the end when the leaf node is retrieved.
             str_k = str(k)
             if issubclass(item_type, collections.abc.MutableMapping) and self.SEPARATOR in str_k:
-                raise UnsupportedKeyInDictionary(f"Dictionary keys used with recursive normalizers cannot contain [{self.SEPARATOR}]. "
-                                         f"Encountered key {k} while writing symbol {original_symbol}")
+                raise UnsupportedKeyInDictionary(
+                    f"Dictionary keys used with recursive normalizers cannot contain [{self.SEPARATOR}]. "
+                    f"Encountered key {k} while writing symbol {original_symbol}"
+                )
             key_till_now = "{}{}{}".format(sym, self.SEPARATOR, str_k)
-            meta_struct["sub_keys"].append(self._create_meta_structure(v, key_till_now, to_write, depth=depth + 1,
-                                                                       original_symbol=original_symbol))
+            meta_struct["sub_keys"].append(
+                self._create_meta_structure(v, key_till_now, to_write, depth=depth + 1, original_symbol=original_symbol)
+            )
 
         return meta_struct
 

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #include <arcticdb/codec/encoded_field.hpp>
 #include <arcticdb/util/preconditions.hpp>
@@ -29,7 +30,7 @@ void block_from_proto(const arcticdb::proto::encoding::Block& input, EncodedBloc
         set_codec(input.codec().lz4(), *output.mutable_codec()->mutable_lz4());
         break;
     }
-    case arcticdb::proto::encoding::VariantCodec::kPassthrough : {
+    case arcticdb::proto::encoding::VariantCodec::kPassthrough: {
         set_codec(input.codec().passthrough(), *output.mutable_codec()->mutable_passthrough());
         break;
     }
@@ -69,12 +70,12 @@ void encoded_field_from_proto(const arcticdb::proto::encoding::EncodedField& inp
     output_ndarray->set_items_count(input_ndarray.items_count());
     output_ndarray->set_sparse_map_bytes(input_ndarray.sparse_map_bytes());
 
-    for(auto i = 0; i < input_ndarray.shapes_size(); ++i) {
+    for (auto i = 0; i < input_ndarray.shapes_size(); ++i) {
         auto* shape_block = output_ndarray->add_shapes();
         block_from_proto(input_ndarray.shapes(i), *shape_block, true);
     }
 
-    for(auto i = 0; i < input_ndarray.values_size(); ++i) {
+    for (auto i = 0; i < input_ndarray.values_size(); ++i) {
         auto* value_block = output_ndarray->add_values(EncodingVersion::V1);
         block_from_proto(input_ndarray.values(i), *value_block, false);
     }
@@ -90,12 +91,12 @@ void copy_encoded_field_to_proto(const EncodedFieldImpl& input, arcticdb::proto:
     output_ndarray->set_items_count(input_ndarray.items_count());
     output_ndarray->set_sparse_map_bytes(input_ndarray.sparse_map_bytes());
 
-    for(auto i = 0; i < input_ndarray.shapes_size(); ++i) {
+    for (auto i = 0; i < input_ndarray.shapes_size(); ++i) {
         auto* shape_block = output_ndarray->add_shapes();
         proto_from_block(input_ndarray.shapes(i), *shape_block);
     }
 
-    for(auto i = 0; i < input_ndarray.values_size(); ++i) {
+    for (auto i = 0; i < input_ndarray.values_size(); ++i) {
         auto* value_block = output_ndarray->add_values();
         proto_from_block(input_ndarray.values(i), *value_block);
     }
@@ -113,11 +114,15 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
     output.set_encoding_version(EncodingVersion(header.encoding_version()));
     output.set_compacted(header.compacted());
 
-    if(header.has_metadata_field())
-        encoded_field_from_proto(header.metadata_field(), output.mutable_metadata_field(num_blocks(header.metadata_field())));
+    if (header.has_metadata_field())
+        encoded_field_from_proto(
+                header.metadata_field(), output.mutable_metadata_field(num_blocks(header.metadata_field()))
+        );
 
-    if(header.has_string_pool_field())
-        encoded_field_from_proto(header.string_pool_field(), output.mutable_string_pool_field(num_blocks(header.string_pool_field())));
+    if (header.has_string_pool_field())
+        encoded_field_from_proto(
+                header.string_pool_field(), output.mutable_string_pool_field(num_blocks(header.string_pool_field()))
+        );
 
     auto fields_from_proto = encoded_fields_from_proto(header);
     output.set_body_fields(std::move(fields_from_proto));
@@ -126,9 +131,9 @@ SegmentHeader deserialize_segment_header_from_proto(const arcticdb::proto::encod
 
 size_t calc_proto_encoded_blocks_size(const arcticdb::proto::encoding::SegmentHeader& hdr) {
     size_t bytes{};
-    for(const auto& field : hdr.fields()) {
+    for (const auto& field : hdr.fields()) {
         bytes += EncodedFieldImpl::Size;
-        if(field.has_ndarray()) {
+        if (field.has_ndarray()) {
             const auto& ndarray = field.ndarray();
             const auto shapes_size = sizeof(EncodedBlock) * ndarray.shapes_size();
             const auto values_size = sizeof(EncodedBlock) * ndarray.values_size();
@@ -142,7 +147,7 @@ EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding
     const auto encoded_buffer_size = calc_proto_encoded_blocks_size(hdr);
     EncodedFieldCollection encoded_fields;
     encoded_fields.reserve(encoded_buffer_size, hdr.fields_size());
-    for(auto&& [index, in_field] : folly::enumerate(hdr.fields())) {
+    for (auto&& [index, in_field] : folly::enumerate(hdr.fields())) {
         auto* out_field = encoded_fields.add_field(num_blocks(in_field));
         encoded_field_from_proto(in_field, *out_field);
     }
@@ -152,7 +157,7 @@ EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding
 void copy_encoded_fields_to_proto(const EncodedFieldCollection& fields, arcticdb::proto::encoding::SegmentHeader& hdr) {
     auto& proto_fields = *hdr.mutable_fields();
     auto field = fields.begin();
-    for(auto i = 0U; i < fields.size(); ++i) {
+    for (auto i = 0U; i < fields.size(); ++i) {
         auto* proto_field = proto_fields.Add();
         copy_encoded_field_to_proto(field.current(), *proto_field);
         ++field;

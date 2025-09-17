@@ -10,6 +10,7 @@ import copy
 import datetime
 import io
 import sys
+
 if sys.version_info >= (3, 9):
     import zoneinfo
 from datetime import timedelta
@@ -84,7 +85,7 @@ NPDDataFrame = NamedTuple(
 NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
 
 
-_PICKLED_METADATA_LOGLEVEL = None # set lazily with function below
+_PICKLED_METADATA_LOGLEVEL = None  # set lazily with function below
 
 
 def get_pickled_metadata_loglevel():
@@ -96,7 +97,9 @@ def get_pickled_metadata_loglevel():
     expected_settings = ("DEBUG", "INFO", "WARN", "ERROR")
     if log_level:
         if log_level.upper() not in expected_settings:
-            log.warn(f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}")
+            log.warn(
+                f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}"
+            )
             _PICKLED_METADATA_LOGLEVEL = LogLevel.WARN
         else:
             _PICKLED_METADATA_LOGLEVEL = getattr(LogLevel, log_level.upper())
@@ -108,7 +111,16 @@ def get_pickled_metadata_loglevel():
 
 # To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
 class FrameData(
-    NamedTuple("FrameData", [("data", List[np.ndarray]), ("names", List[str]), ("index_columns", List[str]), ("row_count", int), ("offset", int)])
+    NamedTuple(
+        "FrameData",
+        [
+            ("data", List[np.ndarray]),
+            ("names", List[str]),
+            ("index_columns", List[str]),
+            ("row_count", int),
+            ("offset", int),
+        ],
+    )
 ):
     @staticmethod
     def from_npd_df(df):
@@ -602,7 +614,8 @@ class ArrowNormalizationOperations(NamedTuple):
     renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
         Column renames which can only be applied to pandas_metadata. E.g. renaming a column to an int
     """
-    renames_for_table : Mapping[int, str]
+
+    renames_for_table: Mapping[int, str]
     timezones: Mapping[int, str]
     range_index: Optional[Dict[str, Any]]
     pandas_indexes: Optional[int]
@@ -610,12 +623,12 @@ class ArrowNormalizationOperations(NamedTuple):
 
 
 class ArrowTableNormalizer(Normalizer):
-    def construct_pandas_metadata(self, fields, op : ArrowNormalizationOperations) -> Dict[str, Any]:
+    def construct_pandas_metadata(self, fields, op: ArrowNormalizationOperations) -> Dict[str, Any]:
         # Construct index_columns metadata
         if op.range_index is not None:
             index_columns = [dict(op.range_index, kind="range")]
         elif op.pandas_indexes is not None:
-            index_columns = [field.name for field in fields[:op.pandas_indexes]]
+            index_columns = [field.name for field in fields[: op.pandas_indexes]]
         else:
             index_columns = []
 
@@ -642,23 +655,27 @@ class ArrowTableNormalizer(Normalizer):
                     pandas_type = "datetimetz"
                     metadata = {"timezone": str(field.type.tz)}
 
-            pandas_columns.append({
-                "name": name,
-                "field_name": field.name,
-                "pandas_type": pandas_type,
-                "numpy_type": numpy_type,
-                "metadata": metadata,
-            })
+            pandas_columns.append(
+                {
+                    "name": name,
+                    "field_name": field.name,
+                    "pandas_type": pandas_type,
+                    "numpy_type": numpy_type,
+                    "metadata": metadata,
+                }
+            )
 
         # Construct column_index metadata
         column_index = {
             "name": None,
             "field_name": None,
-            "pandas_type": 'unicode',
-            "numpy_type": 'object',
-            "metadata": {'encoding': 'UTF-8'}
+            "pandas_type": "unicode",
+            "numpy_type": "object",
+            "metadata": {"encoding": "UTF-8"},
         }
-        renames_to_ints = len([new_name for new_name in op.renames_for_pandas_metadata.values() if isinstance(new_name, int)])
+        renames_to_ints = len(
+            [new_name for new_name in op.renames_for_pandas_metadata.values() if isinstance(new_name, int)]
+        )
         if renames_to_ints == len(fields):
             column_index["pandas_type"] = "int64"
             column_index["numpy_type"] = "int64"
@@ -667,20 +684,17 @@ class ArrowTableNormalizer(Normalizer):
             column_index["pandas_type"] = "mixed-integer"
             column_index["metadata"] = None
 
-        return {
-            "index_columns": index_columns,
-            "column_indexes": [column_index],
-            "columns": pandas_columns
-        }
-
+        return {"index_columns": index_columns, "column_indexes": [column_index], "columns": pandas_columns}
 
     def apply_pyarrow_operations(self, table, op: ArrowNormalizationOperations):
         # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
-        if (len(op.renames_for_table) == 0 and
-            len(op.timezones) == 0 and
-            op.range_index is None and
-            op.pandas_indexes is None and
-            len(op.renames_for_pandas_metadata) == 0):
+        if (
+            len(op.renames_for_table) == 0
+            and len(op.timezones) == 0
+            and op.range_index is None
+            and op.pandas_indexes is None
+            and len(op.renames_for_pandas_metadata) == 0
+        ):
             return table
 
         new_columns = []
@@ -702,9 +716,9 @@ class ArrowTableNormalizer(Normalizer):
         pandas_metadata = self.construct_pandas_metadata(new_fields, op)
 
         return pa.Table.from_arrays(
-            new_columns,
-            schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
+            new_columns, schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
         )
+
     def normalize(self, item, **kwargs):
         raise NotImplementedError("Arrow write is not yet implemented")
 
@@ -743,14 +757,14 @@ class ArrowTableNormalizer(Normalizer):
                     "name": index_name,
                     "start": index_meta.start,
                     "step": index_meta.step,
-                    "stop": index_meta.start + len(item)*index_meta.step,
+                    "stop": index_meta.start + len(item) * index_meta.step,
                 }
         else:
             multi_index_meta = pandas_meta.multi_index
-            pandas_indexes = multi_index_meta.field_count+1
+            pandas_indexes = multi_index_meta.field_count + 1
             fake_field_pos = set(multi_index_meta.fake_field_pos)
             for index_col_idx in range(pandas_indexes):
-                if index_col_idx==0:
+                if index_col_idx == 0:
                     tz = multi_index_meta.tz
                 else:
                     tz = multi_index_meta.timezone.get(index_col_idx, "")
@@ -759,7 +773,7 @@ class ArrowTableNormalizer(Normalizer):
 
                 if index_col_idx in fake_field_pos:
                     renames_for_pandas_metadata[index_col_idx] = None
-                elif index_col_idx==0:
+                elif index_col_idx == 0:
                     renames_for_table[0] = multi_index_meta.name
                 else:
                     new_name = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
@@ -784,7 +798,9 @@ class ArrowTableNormalizer(Normalizer):
                 elif col_data.original_name != col:
                     renames_for_pandas_metadata[i] = col_data.original_name
 
-        op = ArrowNormalizationOperations(renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata)
+        op = ArrowNormalizationOperations(
+            renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata
+        )
         item = self.apply_pyarrow_operations(item, op)
         return item
 
@@ -948,7 +964,6 @@ class DataFrameNormalizer(_PandasNormalizer):
             self._skip_df_consolidation = True
         else:
             self._skip_df_consolidation = False
-
 
     def df_without_consolidation(self, columns, index, item, n_indexes, data):
         """
@@ -1389,7 +1404,6 @@ class CompositeNormalizer(Normalizer):
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer
 
-
     def set_skip_df_consolidation(self):
         self.df.set_skip_df_consolidation()
 
@@ -1618,7 +1632,8 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
         data = data[
-            start.to_pydatetime(warn=False) - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            start.to_pydatetime(warn=False)
+            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
             + timedelta(microseconds=1)
         ]
     return data

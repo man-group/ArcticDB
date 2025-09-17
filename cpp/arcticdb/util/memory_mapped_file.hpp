@@ -10,7 +10,7 @@
 namespace arcticdb {
 
 class MemoryMappedFile {
-private:
+  private:
     HANDLE file_ = INVALID_HANDLE_VALUE;
     HANDLE map_ = nullptr;
     uint64_t* length_ = nullptr;
@@ -19,12 +19,14 @@ private:
     bool writeable_ = false;
     static constexpr size_t header_size = sizeof(uint64_t) + sizeof(uint64_t);
 
-public:
+  public:
     MemoryMappedFile() = default;
 
     size_t get_file_size(const std::string& file_path) {
         LARGE_INTEGER size;
-        HANDLE h = CreateFile(file_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        HANDLE h = CreateFile(
+                file_path.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr
+        );
         if (h == INVALID_HANDLE_VALUE) {
             util::raise_rte("Failed to get file size");
         }
@@ -39,7 +41,9 @@ public:
     void open_file(const std::string& filepath) {
         size_t total_size = get_file_size(filepath);
         util::check(total_size >= header_size, "File size too small");
-        file_ = CreateFile(filepath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        file_ = CreateFile(
+                filepath.c_str(), GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr
+        );
         if (file_ == INVALID_HANDLE_VALUE) {
             util::raise_rte("Error opening file for reading");
         }
@@ -57,7 +61,7 @@ public:
             util::raise_rte("Error mapping view of file");
         }
 
-        auto header = reinterpret_cast<arcticdb::util::MagicNum<'A','r','c','t'>*>(base_);
+        auto header = reinterpret_cast<arcticdb::util::MagicNum<'A', 'r', 'c', 't'>*>(base_);
         header->check();
         length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));
         data_ = base_ + header_size;
@@ -65,7 +69,15 @@ public:
 
     void create_file(const std::string& filepath, size_t size) {
         size_t total_size = header_size + size;
-        file_ = CreateFile(filepath.c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        file_ = CreateFile(
+                filepath.c_str(),
+                GENERIC_READ | GENERIC_WRITE,
+                0,
+                nullptr,
+                CREATE_ALWAYS,
+                FILE_ATTRIBUTE_NORMAL,
+                nullptr
+        );
         if (file_ == INVALID_HANDLE_VALUE) {
             util::raise_rte("Error opening file for writing");
         }
@@ -83,7 +95,7 @@ public:
             util::raise_rte("Error mapping view of file");
         }
 
-        new (base_) arcticdb::util::MagicNum<'A','r','c','t'>();
+        new (base_) arcticdb::util::MagicNum<'A', 'r', 'c', 't'>();
         *reinterpret_cast<size_t*>(base_ + sizeof(uint64_t)) = size;
         data_ = base_ + header_size;
         length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));
@@ -133,16 +145,12 @@ public:
         }
     }
 
-    [[nodiscard]] uint8_t* data() const {
-        return data_;
-    }
+    [[nodiscard]] uint8_t* data() const { return data_; }
 
-    [[nodiscard]] size_t bytes() const {
-        return length_ ? *length_ : 0;
-    }
+    [[nodiscard]] size_t bytes() const { return length_ ? *length_ : 0; }
 };
 
-} //namespace arcticdb
+} // namespace arcticdb
 
 #else
 #include <iostream>
@@ -153,14 +161,14 @@ public:
 
 namespace arcticdb {
 class MemoryMappedFile {
-private:
+  private:
     int fd_ = -1;
     uint64_t* length_ = nullptr;
-    uint8_t *base_ = nullptr;
-    uint8_t *data_ = nullptr;
+    uint8_t* base_ = nullptr;
+    uint8_t* data_ = nullptr;
     static constexpr size_t header_size = sizeof(uint64_t) + sizeof(uint64_t);
 
-public:
+  public:
     ARCTICDB_NO_MOVE_OR_COPY(MemoryMappedFile)
 
     MemoryMappedFile() = default;
@@ -172,23 +180,23 @@ public:
         return static_cast<size_t>(sb.st_size);
     }
 
-    void open_file(const std::string &filepath) {
+    void open_file(const std::string& filepath) {
         size_t total_size = get_file_size(filepath);
         util::check(total_size >= header_size, "File size too small");
         fd_ = open(filepath.c_str(), O_RDONLY);
         util::check(fd_ != -1, "Error opening file for reading");
-        base_ = static_cast<uint8_t *>(mmap(nullptr, total_size, PROT_READ, MAP_SHARED, fd_, 0));
+        base_ = static_cast<uint8_t*>(mmap(nullptr, total_size, PROT_READ, MAP_SHARED, fd_, 0));
         if (base_ == MAP_FAILED) {
             close(fd_);
             util::raise_rte("Error memory mapping the file");
         }
-        auto header = reinterpret_cast<arcticdb::util::MagicNum<'A','r','c','t'>*>(base_);
+        auto header = reinterpret_cast<arcticdb::util::MagicNum<'A', 'r', 'c', 't'>*>(base_);
         header->check();
         length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));
         data_ = base_ + header_size;
     }
 
-    void create_file(const std::string &filepath, size_t size) {
+    void create_file(const std::string& filepath, size_t size) {
         size_t total_size = header_size + size;
         fd_ = open(filepath.c_str(), O_RDWR | O_CREAT, S_IRUSR | S_IWUSR);
         util::check(fd_ != -1, "Error opening file for writing");
@@ -202,12 +210,12 @@ public:
             close(fd_);
             util::raise_rte("Error writing last byte of the file");
         }
-        base_ = static_cast<uint8_t *>(mmap(nullptr, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0));
+        base_ = static_cast<uint8_t*>(mmap(nullptr, total_size, PROT_READ | PROT_WRITE, MAP_SHARED, fd_, 0));
         if (base_ == MAP_FAILED) {
             close(fd_);
             util::raise_rte("Error memory mapping the file");
         }
-        new (base_) arcticdb::util::MagicNum<'A','r','c','t'>();
+        new (base_) arcticdb::util::MagicNum<'A', 'r', 'c', 't'>();
         *reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t)) = size;
         data_ = base_ + header_size;
         length_ = reinterpret_cast<uint64_t*>(base_ + sizeof(uint64_t));
@@ -218,7 +226,7 @@ public:
     void unmap() {
         if (base_ != nullptr) {
             auto result = msync(base_, header_size + *length_, MS_SYNC);
-            if(result == -1) {
+            if (result == -1) {
                 log::storage().warn("Could not sync the file to disk: {}", result);
             } else {
                 result = munmap(base_, header_size + *length_);
@@ -244,15 +252,11 @@ public:
             close(fd_);
     }
 
-    [[nodiscard]] uint8_t *data() const {
-        return data_;
-    }
+    [[nodiscard]] uint8_t* data() const { return data_; }
 
-    [[nodiscard]] size_t bytes() const {
-        return *length_;
-    }
+    [[nodiscard]] size_t bytes() const { return *length_; }
 };
 
-} //namespace arcticdb
+} // namespace arcticdb
 
 #endif

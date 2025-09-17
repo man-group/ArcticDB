@@ -178,9 +178,10 @@ class S3Bucket(StorageFixture):
         for key in self.iter_underlying_object_names():
             dest.copy({"Bucket": self.bucket, "Key": key}, key, SourceClient=source_client)
 
-    def check_bucket(self, assert_on_fail = True):
-        s3_tool = S3Tool(self.bucket, self.factory.default_key.id, 
-                        self.factory.default_key.secret, self.factory.endpoint)
+    def check_bucket(self, assert_on_fail=True):
+        s3_tool = S3Tool(
+            self.bucket, self.factory.default_key.id, self.factory.default_key.secret, self.factory.endpoint
+        )
         content = s3_tool.list_bucket(self.bucket)
 
         logger.warning(f"Total objects left: {len(content)}")
@@ -188,11 +189,12 @@ class S3Bucket(StorageFixture):
         logger.warning(f"BUCKET: {self.bucket}")
         left_from = set()
         for key in content:
-            library_name = key.split("/")[1] # get the name from object
+            library_name = key.split("/")[1]  # get the name from object
             left_from.add(library_name)
         logger.warning(f"Left overs from libraries: {left_from}")
-        if assert_on_fail: 
+        if assert_on_fail:
             assert len(content) < 1
+
 
 class NfsS3Bucket(S3Bucket):
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:

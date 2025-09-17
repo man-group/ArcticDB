@@ -5,12 +5,14 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import MissingDataException
 from arcticdb_ext.storage import KeyType
+
 
 @pytest.mark.parametrize("batch", (True, False))
 def test_read_incompletes_with_indexed_data(lmdb_version_store_v1, batch):
@@ -19,9 +21,9 @@ def test_read_incompletes_with_indexed_data(lmdb_version_store_v1, batch):
     sym = "test_read_incompletes_with_indexed_data"
     num_rows = 10
     df = pd.DataFrame({"col": np.arange(num_rows)}, pd.date_range("2024-01-01", periods=num_rows))
-    lib.write(sym, df.iloc[:num_rows // 2])
+    lib.write(sym, df.iloc[: num_rows // 2])
     for idx in range(num_rows // 2, num_rows):
-        lib_tool.append_incomplete(sym, df.iloc[idx: idx+1])
+        lib_tool.append_incomplete(sym, df.iloc[idx : idx + 1])
     assert lib.has_symbol(sym)
     if batch:
         received_vit = lib.batch_read([sym], date_ranges=[(df.index[1], df.index[-2])], incomplete=True)[sym]
@@ -39,7 +41,7 @@ def test_read_incompletes_no_indexed_data(lmdb_version_store_v1, batch):
     num_rows = 10
     df = pd.DataFrame({"col": np.arange(num_rows)}, pd.date_range("2024-01-01", periods=num_rows))
     for idx in range(num_rows):
-        lib_tool.append_incomplete(sym, df.iloc[idx: idx+1])
+        lib_tool.append_incomplete(sym, df.iloc[idx : idx + 1])
     assert not lib.has_symbol(sym)
     if batch:
         received_vit = lib.batch_read([sym], date_ranges=[(df.index[1], df.index[-2])], incomplete=True)[sym]
@@ -80,16 +82,20 @@ def test_read_incompletes_no_chunking(lmdb_version_store_tiny_segment):
     ref_keys = lib_tool.find_keys_for_symbol(KeyType.APPEND_REF, sym)
     assert len(ref_keys) == 1
 
+
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_read_incompletes_columns_filter(version_store_factory, dynamic_schema):
     lib = version_store_factory(dynamic_schema=dynamic_schema)
     lib_tool = lib.library_tool()
     sym = "sym"
-    df = pd.DataFrame({
-        "col": np.arange(20),
-        "float_col": np.arange(20, dtype=np.float64),
-        "str_col": [f"str_{i}" for i in range(20)]
-    }, pd.date_range("2024-01-01", periods=20))
+    df = pd.DataFrame(
+        {
+            "col": np.arange(20),
+            "float_col": np.arange(20, dtype=np.float64),
+            "str_col": [f"str_{i}" for i in range(20)],
+        },
+        pd.date_range("2024-01-01", periods=20),
+    )
     lib_tool.append_incomplete(sym, df.iloc[:5])
     lib_tool.append_incomplete(sym, df.iloc[5:8])
     lib_tool.append_incomplete(sym, df.iloc[8:10])
@@ -137,9 +143,9 @@ def test_read_incompletes_dynamic(lmdb_version_store_dynamic_schema_v1):
     def get_index(days_after_epoch, num_days):
         return pd.date_range(get_date(days_after_epoch), periods=num_days, freq="d")
 
-    df_1 = pd.DataFrame({"col_1": [1., 2., 3.], "col_2": [1., 2., 3.]}, index=get_index(0, 3))
-    df_2 = pd.DataFrame({"col_2": [4., 5.], "col_3": [1., 2.]}, index=get_index(3, 2))
-    df_3 = pd.DataFrame({"col_3": [3., 4.], "col_4": [1., 2.]}, index=get_index(5, 2))
+    df_1 = pd.DataFrame({"col_1": [1.0, 2.0, 3.0], "col_2": [1.0, 2.0, 3.0]}, index=get_index(0, 3))
+    df_2 = pd.DataFrame({"col_2": [4.0, 5.0], "col_3": [1.0, 2.0]}, index=get_index(3, 2))
+    df_3 = pd.DataFrame({"col_3": [3.0, 4.0], "col_4": [1.0, 2.0]}, index=get_index(5, 2))
 
     lib_tool.append_incomplete(sym, df_1)
     lib_tool.append_incomplete(sym, df_2)
@@ -148,7 +154,7 @@ def test_read_incompletes_dynamic(lmdb_version_store_dynamic_schema_v1):
     assert_frame_equal(df, pd.concat([df_1, df_2]))
 
     # If reading just a single incomplete we will get the result in its own schema
-    df = lib.read(sym, date_range = (get_date(3), None), incomplete=True).data
+    df = lib.read(sym, date_range=(get_date(3), None), incomplete=True).data
     assert_frame_equal(df, df_2)
 
     lib.compact_incomplete(sym, append=True, convert_int_to_float=False, via_iteration=False)

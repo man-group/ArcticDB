@@ -13,7 +13,9 @@ from arcticdb.version_store._normalization import FrameData
 class ReadResult:
     def __init__(self, version, frame_data, norm, udm, mmeta, keys):
         self.version = version
-        self.frame_data = FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
+        self.frame_data = (
+            FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
+        )
         self.norm = norm
         self.udm = udm
         self.mmeta = mmeta

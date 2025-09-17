@@ -1,4 +1,5 @@
 """nonreg tests for the processing pipeline (QueryBuilder functionality)"""
+
 import pandas as pd
 import numpy as np
 
@@ -20,11 +21,5 @@ def test_resample_mean_large_arithmetic_error_repro(lmdb_version_store_v1):
     df.index = pd.date_range("2025-01-01", periods=4, freq="s")
     lib.write(sym, df)
 
-    agg = {'col_int_mean': ('col_int', 'mean')}
-    generic_resample_test(
-        lib,
-        sym,
-        rule,
-        agg,
-        df,
-        origin=origin)
+    agg = {"col_int_mean": ("col_int", "mean")}
+    generic_resample_test(lib, sym, rule, agg, df, origin=origin)

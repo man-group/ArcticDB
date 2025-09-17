@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <google/protobuf/util/message_differencer.h>
@@ -16,7 +17,7 @@ using namespace arcticdb::pipelines;
 using namespace google::protobuf::util;
 
 class AggregationClauseOutputTypesTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override {
         initial_stream_desc_.set_id(StreamId("test symbol"));
         initial_stream_desc_.set_index({IndexDescriptor::Type::ROWCOUNT, 0});
@@ -37,23 +38,21 @@ protected:
     }
 
     std::vector<NamedAggregator> generate_aggregators(
-            const std::string& agg,
-            bool timestamp_supported = true,
-            bool string_supported = false) const {
-        std::vector<NamedAggregator> res
-                {
-                        {agg, "int8", "int8_agg"},
-                        {agg, "int16", "int16_agg"},
-                        {agg, "int32", "int32_agg"},
-                        {agg, "int64", "int64_agg"},
-                        {agg, "uint8", "uint8_agg"},
-                        {agg, "uint16", "uint16_agg"},
-                        {agg, "uint32", "uint32_agg"},
-                        {agg, "uint64", "uint64_agg"},
-                        {agg, "float32", "float32_agg"},
-                        {agg, "float64", "float64_agg"},
-                        {agg, "bool", "bool_agg"}
-                };
+            const std::string& agg, bool timestamp_supported = true, bool string_supported = false
+    ) const {
+        std::vector<NamedAggregator> res{
+                {agg, "int8", "int8_agg"},
+                {agg, "int16", "int16_agg"},
+                {agg, "int32", "int32_agg"},
+                {agg, "int64", "int64_agg"},
+                {agg, "uint8", "uint8_agg"},
+                {agg, "uint16", "uint16_agg"},
+                {agg, "uint32", "uint32_agg"},
+                {agg, "uint64", "uint64_agg"},
+                {agg, "float32", "float32_agg"},
+                {agg, "float64", "float64_agg"},
+                {agg, "bool", "bool_agg"}
+        };
         if (timestamp_supported) {
             res.emplace_back(agg, "timestamp", "timestamp_agg");
         }
@@ -64,9 +63,8 @@ protected:
     }
 
     void check_output_column_names(
-            const StreamDescriptor& stream_desc,
-            bool timestamp_supported = true,
-            bool string_supported = false) const {
+            const StreamDescriptor& stream_desc, bool timestamp_supported = true, bool string_supported = false
+    ) const {
         ASSERT_EQ(stream_desc.field(0).name(), "to_group");
         ASSERT_EQ(stream_desc.field(1).name(), "int8_agg");
         ASSERT_EQ(stream_desc.field(2).name(), "int16_agg");
@@ -87,9 +85,7 @@ protected:
         }
     }
 
-    OutputSchema initial_schema() {
-        return {initial_stream_desc_.clone(), {}};
-    }
+    OutputSchema initial_schema() { return {initial_stream_desc_.clone(), {}}; }
     StreamDescriptor initial_stream_desc_;
 };
 
@@ -98,18 +94,18 @@ TEST_F(AggregationClauseOutputTypesTest, Sum) {
     auto output_schema = aggregation_clause.modify_schema(initial_schema());
     const auto& stream_desc = output_schema.stream_descriptor();
     check_output_column_names(stream_desc, false);
-    ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::INT64); // grouping column
-    ASSERT_EQ(stream_desc.field(1).type().data_type(), DataType::INT64); // int8
-    ASSERT_EQ(stream_desc.field(2).type().data_type(), DataType::INT64); // int16
-    ASSERT_EQ(stream_desc.field(3).type().data_type(), DataType::INT64); // int32
-    ASSERT_EQ(stream_desc.field(4).type().data_type(), DataType::INT64); // int64
-    ASSERT_EQ(stream_desc.field(5).type().data_type(), DataType::UINT64); // uint8
-    ASSERT_EQ(stream_desc.field(6).type().data_type(), DataType::UINT64); // uint16
-    ASSERT_EQ(stream_desc.field(7).type().data_type(), DataType::UINT64); // uint32
-    ASSERT_EQ(stream_desc.field(8).type().data_type(), DataType::UINT64); // uint64
-    ASSERT_EQ(stream_desc.field(9).type().data_type(), DataType::FLOAT64); // float32
+    ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::INT64);    // grouping column
+    ASSERT_EQ(stream_desc.field(1).type().data_type(), DataType::INT64);    // int8
+    ASSERT_EQ(stream_desc.field(2).type().data_type(), DataType::INT64);    // int16
+    ASSERT_EQ(stream_desc.field(3).type().data_type(), DataType::INT64);    // int32
+    ASSERT_EQ(stream_desc.field(4).type().data_type(), DataType::INT64);    // int64
+    ASSERT_EQ(stream_desc.field(5).type().data_type(), DataType::UINT64);   // uint8
+    ASSERT_EQ(stream_desc.field(6).type().data_type(), DataType::UINT64);   // uint16
+    ASSERT_EQ(stream_desc.field(7).type().data_type(), DataType::UINT64);   // uint32
+    ASSERT_EQ(stream_desc.field(8).type().data_type(), DataType::UINT64);   // uint64
+    ASSERT_EQ(stream_desc.field(9).type().data_type(), DataType::FLOAT64);  // float32
     ASSERT_EQ(stream_desc.field(10).type().data_type(), DataType::FLOAT64); // float64
-    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::UINT64); // bool
+    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::UINT64);  // bool
 
     aggregation_clause = AggregationClause{"to_group", {{"sum", "timestamp", "timestamp_sum"}}};
     ASSERT_THROW(aggregation_clause.modify_schema(initial_schema()), SchemaException);
@@ -174,7 +170,7 @@ TEST_F(AggregationClauseOutputTypesTest, Count) {
 }
 
 class ResampleClauseOutputTypesTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override {
         initial_stream_desc_.set_id(StreamId("test symbol"));
         initial_stream_desc_.set_index({IndexDescriptor::Type::TIMESTAMP, 1});
@@ -198,23 +194,21 @@ protected:
     }
 
     std::vector<NamedAggregator> generate_aggregators(
-            const std::string &agg,
-            bool timestamp_supported = true,
-            bool string_supported = false) const {
-        std::vector<NamedAggregator> res
-                {
-                        {agg, "int8",    "int8_agg"},
-                        {agg, "int16",   "int16_agg"},
-                        {agg, "int32",   "int32_agg"},
-                        {agg, "int64",   "int64_agg"},
-                        {agg, "uint8",   "uint8_agg"},
-                        {agg, "uint16",  "uint16_agg"},
-                        {agg, "uint32",  "uint32_agg"},
-                        {agg, "uint64",  "uint64_agg"},
-                        {agg, "float32", "float32_agg"},
-                        {agg, "float64", "float64_agg"},
-                        {agg, "bool",    "bool_agg"}
-                };
+            const std::string& agg, bool timestamp_supported = true, bool string_supported = false
+    ) const {
+        std::vector<NamedAggregator> res{
+                {agg, "int8", "int8_agg"},
+                {agg, "int16", "int16_agg"},
+                {agg, "int32", "int32_agg"},
+                {agg, "int64", "int64_agg"},
+                {agg, "uint8", "uint8_agg"},
+                {agg, "uint16", "uint16_agg"},
+                {agg, "uint32", "uint32_agg"},
+                {agg, "uint64", "uint64_agg"},
+                {agg, "float32", "float32_agg"},
+                {agg, "float64", "float64_agg"},
+                {agg, "bool", "bool_agg"}
+        };
         if (timestamp_supported) {
             res.emplace_back(agg, "timestamp", "timestamp_agg");
         }
@@ -225,9 +219,8 @@ protected:
     }
 
     void check_output_column_names(
-            const StreamDescriptor &stream_desc,
-            bool timestamp_supported = true,
-            bool string_supported = false) const {
+            const StreamDescriptor& stream_desc, bool timestamp_supported = true, bool string_supported = false
+    ) const {
         ASSERT_EQ(stream_desc.field(0).name(), "index");
         ASSERT_EQ(stream_desc.field(1).name(), "int8_agg");
         ASSERT_EQ(stream_desc.field(2).name(), "int16_agg");
@@ -248,11 +241,10 @@ protected:
         }
     }
 
-    OutputSchema initial_schema() {
-        return {initial_stream_desc_.clone(), initial_norm_meta_};
-    }
+    OutputSchema initial_schema() { return {initial_stream_desc_.clone(), initial_norm_meta_}; }
 
-    StreamDescriptor initial_stream_desc_;;
+    StreamDescriptor initial_stream_desc_;
+    ;
     arcticdb::proto::descriptors::NormalizationMetadata initial_norm_meta_;
 };
 
@@ -263,17 +255,17 @@ TEST_F(ResampleClauseOutputTypesTest, Sum) {
     const auto& stream_desc = output_schema.stream_descriptor();
     check_output_column_names(stream_desc, false);
     ASSERT_EQ(stream_desc.field(0).type().data_type(), DataType::NANOSECONDS_UTC64); // index column
-    ASSERT_EQ(stream_desc.field(1).type().data_type(), DataType::INT64); // int8
-    ASSERT_EQ(stream_desc.field(2).type().data_type(), DataType::INT64); // int16
-    ASSERT_EQ(stream_desc.field(3).type().data_type(), DataType::INT64); // int32
-    ASSERT_EQ(stream_desc.field(4).type().data_type(), DataType::INT64); // int64
-    ASSERT_EQ(stream_desc.field(5).type().data_type(), DataType::UINT64); // uint8
-    ASSERT_EQ(stream_desc.field(6).type().data_type(), DataType::UINT64); // uint16
-    ASSERT_EQ(stream_desc.field(7).type().data_type(), DataType::UINT64); // uint32
-    ASSERT_EQ(stream_desc.field(8).type().data_type(), DataType::UINT64); // uint64
-    ASSERT_EQ(stream_desc.field(9).type().data_type(), DataType::FLOAT64); // float32
-    ASSERT_EQ(stream_desc.field(10).type().data_type(), DataType::FLOAT64); // float64
-    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::UINT64); // bool
+    ASSERT_EQ(stream_desc.field(1).type().data_type(), DataType::INT64);             // int8
+    ASSERT_EQ(stream_desc.field(2).type().data_type(), DataType::INT64);             // int16
+    ASSERT_EQ(stream_desc.field(3).type().data_type(), DataType::INT64);             // int32
+    ASSERT_EQ(stream_desc.field(4).type().data_type(), DataType::INT64);             // int64
+    ASSERT_EQ(stream_desc.field(5).type().data_type(), DataType::UINT64);            // uint8
+    ASSERT_EQ(stream_desc.field(6).type().data_type(), DataType::UINT64);            // uint16
+    ASSERT_EQ(stream_desc.field(7).type().data_type(), DataType::UINT64);            // uint32
+    ASSERT_EQ(stream_desc.field(8).type().data_type(), DataType::UINT64);            // uint64
+    ASSERT_EQ(stream_desc.field(9).type().data_type(), DataType::FLOAT64);           // float32
+    ASSERT_EQ(stream_desc.field(10).type().data_type(), DataType::FLOAT64);          // float64
+    ASSERT_EQ(stream_desc.field(11).type().data_type(), DataType::UINT64);           // bool
 
     resample_clause = generate_resample_clause({{"sum", "timestamp", "timestamp_agg"}});
     ASSERT_THROW(resample_clause.modify_schema(initial_schema()), SchemaException);

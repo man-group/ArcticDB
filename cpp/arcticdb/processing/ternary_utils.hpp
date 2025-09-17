@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -14,17 +15,23 @@ namespace arcticdb {
 // Calculates the number of physical rows in the output column and allocates memory for this
 // If this is not equal to the number of logical rows in the output column, also set the sparse map based on the input
 // condition, and the sparse maps of the input columns
-void initialise_output_column(const util::BitSet& condition,
-                              const Column& left_input_column,
-                              const Column& right_input_column,
-                              Column& output_column) {
-    util::check(&left_input_column != &output_column && &right_input_column != &output_column,
-                "Cannot overwrite input column in ternary operator");
-    util::check(left_input_column.last_row() == right_input_column.last_row(), "Mismatching column lengths in ternary operator");
+void initialise_output_column(
+        const util::BitSet& condition, const Column& left_input_column, const Column& right_input_column,
+        Column& output_column
+) {
+    util::check(
+            &left_input_column != &output_column && &right_input_column != &output_column,
+            "Cannot overwrite input column in ternary operator"
+    );
+    util::check(
+            left_input_column.last_row() == right_input_column.last_row(),
+            "Mismatching column lengths in ternary operator"
+    );
     size_t output_logical_rows = condition.size();
     util::BitSet output_sparse_map;
     if (left_input_column.is_sparse() && right_input_column.is_sparse()) {
-        output_sparse_map = (condition & left_input_column.sparse_map()) | ((~condition) & right_input_column.sparse_map());
+        output_sparse_map =
+                (condition & left_input_column.sparse_map()) | ((~condition) & right_input_column.sparse_map());
     } else if (left_input_column.is_sparse()) {
         // right_input_column is dense
         output_sparse_map = (condition & left_input_column.sparse_map()) | ~condition;
@@ -54,9 +61,7 @@ void initialise_output_column(const util::BitSet& condition,
 // and another column that is missing from this row-slice with dynamic schema, this will be EmptyResult
 template<typename FullOrEmpty>
 requires std::same_as<FullOrEmpty, FullResult> || std::same_as<FullOrEmpty, EmptyResult>
-void initialise_output_column(const util::BitSet& condition,
-                              const Column& input_column,
-                              Column& output_column) {
+void initialise_output_column(const util::BitSet& condition, const Column& input_column, Column& output_column) {
     util::check(&input_column != &output_column, "Cannot overwrite input column in ternary operator");
     size_t output_physical_rows;
     size_t output_logical_rows = condition.size();
@@ -109,18 +114,14 @@ void initialise_output_column(const util::BitSet& condition, Column& output_colu
     output_column.set_row_data(output_logical_rows - 1);
 }
 
-template <typename left_input_tdt, typename right_input_tdt, typename output_tdt, typename functor>
+template<typename left_input_tdt, typename right_input_tdt, typename output_tdt, typename functor>
 requires std::is_invocable_r_v<
-        typename output_tdt::DataTypeTag::raw_type,
-        functor,
-        bool,
-        typename output_tdt::DataTypeTag::raw_type,
+        typename output_tdt::DataTypeTag::raw_type, functor, bool, typename output_tdt::DataTypeTag::raw_type,
         typename output_tdt::DataTypeTag::raw_type>
-void ternary_transform(const util::BitSet& condition,
-                       const Column& left_input_column,
-                       const Column& right_input_column,
-                       Column& output_column,
-                       functor&& f) {
+void ternary_transform(
+        const util::BitSet& condition, const Column& left_input_column, const Column& right_input_column,
+        Column& output_column, functor&& f
+) {
     initialise_output_column(condition, left_input_column, right_input_column, output_column);
     auto left_data = left_input_column.data();
     auto right_data = right_input_column.data();
@@ -135,7 +136,9 @@ void ternary_transform(const util::BitSet& condition,
     // A possible future optimisation would be to check the counts in these bitsets, as well as in the output column's
     // sparse map (if present), and to switch to more efficient implementations depending on the situation.
     // loop is not used in cases where there are more efficient options
-    auto loop = [&condition, f = std::forward<functor>(f)]<typename L, typename R, typename O>(L left_it, R right_it, O output_it, const O output_end_it) {
+    auto loop = [&condition, f = std::forward<functor>(f)]<typename L, typename R, typename O>(
+                        L left_it, R right_it, O output_it, const O output_end_it
+                ) {
         for (; output_it != output_end_it; ++output_it) {
             const auto idx = output_it->idx();
             if (condition.get_bit(idx)) {
@@ -187,8 +190,8 @@ void ternary_transform(const util::BitSet& condition,
             // selecting only on bits from the sparse column
             auto right_it = right_data.cbegin<right_input_tdt>();
             const auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
-            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>();
-                 output_it != output_end_it; ++output_it, ++right_it) {
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it;
+                 ++output_it, ++right_it) {
                 const auto idx = output_it->idx();
                 if (condition.get_bit(idx)) {
                     while (left_it->idx() != idx) {
@@ -215,8 +218,8 @@ void ternary_transform(const util::BitSet& condition,
             // selecting only on bits from the sparse column
             auto left_it = left_data.cbegin<left_input_tdt>();
             const auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
-            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>();
-                 output_it != output_end_it; ++output_it, ++left_it) {
+            for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it;
+                 ++output_it, ++left_it) {
                 const auto idx = output_it->idx();
                 if (condition.get_bit(idx)) {
                     // Unlike in the loop lambda, we do not need a while loop here, as both left_it and output_it are
@@ -233,18 +236,14 @@ void ternary_transform(const util::BitSet& condition,
     }
 }
 
-template <typename input_tdt, typename output_tdt, bool arguments_reversed, typename functor>
+template<typename input_tdt, typename output_tdt, bool arguments_reversed, typename functor>
 requires std::is_invocable_r_v<
-        typename output_tdt::DataTypeTag::raw_type,
-        functor,
-        bool,
-        typename output_tdt::DataTypeTag::raw_type,
+        typename output_tdt::DataTypeTag::raw_type, functor, bool, typename output_tdt::DataTypeTag::raw_type,
         typename output_tdt::DataTypeTag::raw_type>
-void ternary_transform(const util::BitSet& condition,
-                       const Column& input_column,
-                       typename output_tdt::DataTypeTag::raw_type value,
-                       Column& output_column,
-                       functor&& f) {
+void ternary_transform(
+        const util::BitSet& condition, const Column& input_column, typename output_tdt::DataTypeTag::raw_type value,
+        Column& output_column, functor&& f
+) {
     util::BitSet transformed_condition;
     if constexpr (arguments_reversed) {
         transformed_condition = ~condition;
@@ -257,7 +256,9 @@ void ternary_transform(const util::BitSet& condition,
     auto output_data = output_column.data();
     // See comments in similar method above that takes 2 input columns for why this works
     // Compute the RHS result f(false, {}, value) just once
-    auto loop = [&transformed_condition, value_res=f(false, {}, value), f = std::move(f)]<typename I, typename O>(I input_it, O output_it, const O output_end_it) {
+    auto loop = [&transformed_condition,
+                 value_res = f(false, {}, value),
+                 f = std::move(f)]<typename I, typename O>(I input_it, O output_it, const O output_end_it) {
         for (; output_it != output_end_it; ++output_it) {
             const auto idx = output_it->idx();
             if (transformed_condition.get_bit(idx)) {
@@ -288,22 +289,20 @@ void ternary_transform(const util::BitSet& condition,
         auto input_it = input_data.cbegin<input_tdt>();
         const auto output_end_it = output_data.end<output_tdt>();
         size_t idx{0};
-        for (auto output_it = output_data.begin<output_tdt>(); output_it != output_end_it; ++output_it, ++input_it, ++idx) {
+        for (auto output_it = output_data.begin<output_tdt>(); output_it != output_end_it;
+             ++output_it, ++input_it, ++idx) {
             *output_it = f(transformed_condition.get_bit(idx), *input_it, value);
         }
     }
 }
 
-template <typename input_tdt, bool arguments_reversed, typename functor>
+template<typename input_tdt, bool arguments_reversed, typename functor>
 requires std::is_invocable_r_v<
-        typename input_tdt::DataTypeTag::raw_type,
-        functor,
-        typename input_tdt::DataTypeTag::raw_type>
-void ternary_transform(const util::BitSet& condition,
-                       const Column& input_column,
-                       ARCTICDB_UNUSED EmptyResult empty_result,
-                       Column& output_column,
-                       functor&& f) {
+        typename input_tdt::DataTypeTag::raw_type, functor, typename input_tdt::DataTypeTag::raw_type>
+void ternary_transform(
+        const util::BitSet& condition, const Column& input_column, ARCTICDB_UNUSED EmptyResult empty_result,
+        Column& output_column, functor&& f
+) {
     util::BitSet transformed_condition;
     if constexpr (arguments_reversed) {
         transformed_condition = ~condition;
@@ -315,7 +314,8 @@ void ternary_transform(const util::BitSet& condition,
     auto input_data = input_column.data();
     auto output_data = output_column.data();
     // See comments in similar method above that takes 2 input columns for why this works
-    auto loop = [&transformed_condition, f = std::forward<functor>(f)]<typename I, typename O>(I input_it, O output_it, const O output_end_it) {
+    auto loop = [&transformed_condition,
+                 f = std::forward<functor>(f)]<typename I, typename O>(I input_it, O output_it, const O output_end_it) {
         for (; output_it != output_end_it; ++output_it) {
             const auto idx = output_it->idx();
             if (transformed_condition.get_bit(idx)) {
@@ -352,10 +352,10 @@ void ternary_transform(const util::BitSet& condition,
 }
 
 template<typename output_tdt>
-void ternary_transform(const util::BitSet& condition,
-                       typename output_tdt::DataTypeTag::raw_type left_val,
-                       typename output_tdt::DataTypeTag::raw_type right_val,
-                       Column& output_column) {
+void ternary_transform(
+        const util::BitSet& condition, typename output_tdt::DataTypeTag::raw_type left_val,
+        typename output_tdt::DataTypeTag::raw_type right_val, Column& output_column
+) {
     auto output_rows = condition.size();
     auto output_bytes = output_rows * get_type_size(output_column.type().data_type());
     if (output_bytes > 0) {
@@ -387,17 +387,18 @@ void ternary_transform(const util::BitSet& condition,
     // true/false, but the above is faster the more unbalanced condition is (x8 faster for a 99/1 split)
     //    auto output_data = output_column.data();
     //    const auto output_end_it = output_data.end<output_tdt, IteratorType::ENUMERATED>();
-    //    for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it; ++output_it) {
+    //    for (auto output_it = output_data.begin<output_tdt, IteratorType::ENUMERATED>(); output_it != output_end_it;
+    //    ++output_it) {
     //        auto idx = output_it->idx();
     //        output_it->value() = condition.get_bit(idx) ? left_val : right_val;
     //    }
 }
 
-template <typename value_tdt, bool arguments_reversed>
-void ternary_transform(const util::BitSet& condition,
-                       typename value_tdt::DataTypeTag::raw_type value,
-                       ARCTICDB_UNUSED EmptyResult empty_result,
-                       Column& output_column) {
+template<typename value_tdt, bool arguments_reversed>
+void ternary_transform(
+        const util::BitSet& condition, typename value_tdt::DataTypeTag::raw_type value,
+        ARCTICDB_UNUSED EmptyResult empty_result, Column& output_column
+) {
     util::BitSet transformed_condition;
     if constexpr (arguments_reversed) {
         transformed_condition = ~condition;
@@ -422,4 +423,4 @@ void ternary_transform(const util::BitSet& condition,
     //    }
 }
 
-}
+} // namespace arcticdb

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -16,7 +17,7 @@
 #include <array>
 #include <memory>
 
-namespace arcticdb::query_stats{
+namespace arcticdb::query_stats {
 enum class TaskType : size_t {
     S3_ListObjectsV2 = 0,
     S3_PutObject = 1,
@@ -27,24 +28,20 @@ enum class TaskType : size_t {
     END
 };
 
-enum class StatType : size_t {
-    TOTAL_TIME_MS = 0,
-    COUNT = 1,
-    SIZE_BYTES = 2,
-    END
-};
+enum class StatType : size_t { TOTAL_TIME_MS = 0, COUNT = 1, SIZE_BYTES = 2, END };
 
 using TimePoint = std::chrono::time_point<std::chrono::steady_clock>;
 class RAIIAddTime {
-public:
+  public:
     RAIIAddTime(folly::ThreadCachedInt<timestamp>& time_var, TimePoint start);
     ~RAIIAddTime();
-private:
+
+  private:
     folly::ThreadCachedInt<timestamp>& time_var_;
     TimePoint start_;
 };
 
-/* 
+/*
 Example output:
 {
 "storage_operations": {
@@ -62,23 +59,19 @@ Example output:
     }
 }
 */
- 
-
 
 class QueryStats {
-public:
-    struct OperationStats{
+  public:
+    struct OperationStats {
         folly::ThreadCachedInt<timestamp> total_time_ns_;
         folly::ThreadCachedInt<uint64_t> count_;
         folly::ThreadCachedInt<uint64_t> size_bytes_;
-        void reset_stats(){
+        void reset_stats() {
             total_time_ns_.set(0);
             count_.set(0);
             size_bytes_.set(0);
         }
-        OperationStats(){
-            reset_stats(); 
-        }
+        OperationStats() { reset_stats(); }
     };
     using OperationStatsOutput = std::map<std::string, uint64_t>;
     using QueryStatsOutput = std::map<std::string, std::map<std::string, std::map<std::string, OperationStatsOutput>>>;
@@ -92,11 +85,13 @@ public:
     void disable();
     bool is_enabled() const;
     void add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value);
-    [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start = std::nullopt);
+    [[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(
+            TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start = std::nullopt
+    );
     QueryStatsOutput get_stats() const;
     QueryStats();
 
-private:
+  private:
     static std::once_flag init_flag_;
     static std::shared_ptr<QueryStats> instance_;
     std::atomic<bool> is_enabled_ = false;
@@ -105,5 +100,7 @@ private:
 };
 
 void add(TaskType task_type, entity::KeyType key_type, StatType stat_type, uint64_t value);
-[[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start = std::nullopt);
-}
+[[nodiscard]] std::optional<RAIIAddTime> add_task_count_and_time(
+        TaskType task_type, entity::KeyType key_type, std::optional<TimePoint> start = std::nullopt
+);
+} // namespace arcticdb::query_stats
