@@ -14,14 +14,19 @@ from argparse import ArgumentParser
 def get_git_tags():
     result = subprocess.run(["git", "tag", "--list"], capture_output=True, text=True)
 
+    def get_version_from_tag(tag):
+        version = tag.split(".")
+        major = int(version[0].replace("v", ""))
+        minor = int(version[1])
+        patch = int(version[2])
+        return major, minor, patch
+
     # Filter the tags using a regular expression
     pattern = r"^v[0-9]+\.[0-9]+\.[0-9]+$"
     tags = [tag for tag in result.stdout.splitlines() if re.match(pattern, tag)]
-    # We are only interested in tags with version 3.0.0 or higher
-    # Because there are strange bugs with the lower versions
-    filtered_tags = [
-        tag for tag in tags if int(tag.split(".")[0].replace("v", "")) >= 3
-    ]
+    # We are only interested in tags with version 5.3.0 or higher
+    # Because older versions are trying to use depricated Numpy versions
+    filtered_tags = [tag for tag in tags if get_version_from_tag(tag) >= (5, 3, 0)]
     return filtered_tags
 
 
