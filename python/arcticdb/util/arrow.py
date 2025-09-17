@@ -1,5 +1,6 @@
 from arcticdb.dependencies import pyarrow as pa
 
+
 def stringify_dictionary_encoded_columns(table, string_type=None):
     """
     Converts all pyarrow.Table dictionary encoded columns to strings.

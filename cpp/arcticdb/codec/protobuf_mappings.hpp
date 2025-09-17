@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #pragma once
 
@@ -14,7 +15,7 @@
 
 namespace arcticdb {
 
-template <typename T, typename U>
+template<typename T, typename U>
 void copy_codec(T& out_codec, const U& in_codec) {
     out_codec.MergeFrom(in_codec);
 }
@@ -34,15 +35,20 @@ inline void copy_codec(PassthroughCodec&, const arcticdb::proto::encoding::Varia
 
 [[nodiscard]] inline arcticdb::proto::encoding::VariantCodec::CodecCase codec_case(Codec codec) {
     switch (codec) {
-    case Codec::ZSTD:return arcticdb::proto::encoding::VariantCodec::kZstd;
-    case Codec::LZ4:return arcticdb::proto::encoding::VariantCodec::kLz4;
-    case Codec::PFOR:return arcticdb::proto::encoding::VariantCodec::kTp4;
-    case Codec::PASS:return arcticdb::proto::encoding::VariantCodec::kPassthrough;
-    default:util::raise_rte("Unknown codec");
+    case Codec::ZSTD:
+        return arcticdb::proto::encoding::VariantCodec::kZstd;
+    case Codec::LZ4:
+        return arcticdb::proto::encoding::VariantCodec::kLz4;
+    case Codec::PFOR:
+        return arcticdb::proto::encoding::VariantCodec::kTp4;
+    case Codec::PASS:
+        return arcticdb::proto::encoding::VariantCodec::kPassthrough;
+    default:
+        util::raise_rte("Unknown codec");
     }
 }
 
-template <typename Input, typename Output>
+template<typename Input, typename Output>
 void set_codec(Input& in, Output& out) {
     copy_codec(out, in);
 }
@@ -58,7 +64,9 @@ inline void set_zstd(const ZstdCodec& zstd_in, arcticdb::proto::encoding::Varian
     zstd_out.set_level(zstd_in.level_);
 }
 
-inline void set_passthrough(const PassthroughCodec& passthrough_in, arcticdb::proto::encoding::VariantCodec::Passthrough& passthrough_out) {
+inline void set_passthrough(
+        const PassthroughCodec& passthrough_in, arcticdb::proto::encoding::VariantCodec::Passthrough& passthrough_out
+) {
     passthrough_out.set_mark(passthrough_in.unused_);
 }
 
@@ -76,4 +84,4 @@ EncodedFieldCollection encoded_fields_from_proto(const arcticdb::proto::encoding
 
 void copy_encoded_fields_to_proto(const EncodedFieldCollection& fields, arcticdb::proto::encoding::SegmentHeader& hdr);
 
-} //namespace arcticdb
+} // namespace arcticdb

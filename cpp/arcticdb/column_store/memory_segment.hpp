@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -19,7 +20,7 @@ namespace arcticdb {
  * columns for a row as Arctic tiles across both the rows and the columns.
  */
 class SegmentInMemory {
-public:
+  public:
     using value_type = SegmentInMemoryImpl::Row;
     using Row = SegmentInMemoryImpl::Row;
     using iterator = SegmentInMemoryImpl::iterator;
@@ -28,20 +29,16 @@ public:
     SegmentInMemory();
 
     explicit SegmentInMemory(
-        const StreamDescriptor &tsd,
-        size_t expected_column_size = 0,
-        AllocationType presize = AllocationType::DYNAMIC,
-        Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-        OutputFormat output_format = OutputFormat::NATIVE,
-        DataTypeMode mode = DataTypeMode::INTERNAL);
+            const StreamDescriptor& tsd, size_t expected_column_size = 0,
+            AllocationType presize = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
+            OutputFormat output_format = OutputFormat::NATIVE, DataTypeMode mode = DataTypeMode::INTERNAL
+    );
 
     explicit SegmentInMemory(
-        StreamDescriptor&& tsd,
-        size_t expected_column_size = 0,
-        AllocationType presize = AllocationType::DYNAMIC,
-        Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-        OutputFormat output_format = OutputFormat::NATIVE,
-        DataTypeMode mode = DataTypeMode::INTERNAL);
+            StreamDescriptor&& tsd, size_t expected_column_size = 0, AllocationType presize = AllocationType::DYNAMIC,
+            Sparsity allow_sparse = Sparsity::NOT_PERMITTED, OutputFormat output_format = OutputFormat::NATIVE,
+            DataTypeMode mode = DataTypeMode::INTERNAL
+    );
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept;
 
@@ -75,7 +72,6 @@ public:
 
     friend bool operator==(const SegmentInMemory& left, const SegmentInMemory& right);
 
-
     [[nodiscard]] const FieldCollection& fields() const;
 
     [[nodiscard]] const Field& field(size_t index) const;
@@ -94,7 +90,7 @@ public:
 
     template<class T, template<class> class Tensor>
     requires std::integral<T> || std::floating_point<T>
-    void set_array(position_t pos, Tensor<T> &val) {
+    void set_array(position_t pos, Tensor<T>& val) {
         impl_->set_array(pos, val);
     }
 
@@ -108,26 +104,26 @@ public:
 
     void set_string_at(position_t col, position_t row, const char* str, size_t size);
 
-    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char *data);
+    void set_string_array(position_t idx, size_t string_size, size_t num_strings, char* data);
 
-    void set_string_list(position_t idx, const std::vector<std::string> &input);
+    void set_string_list(position_t idx, const std::vector<std::string>& input);
 
     void set_value(position_t idx, const SegmentInMemoryImpl::Location& loc);
 
-    //pybind11 can't resolve const and non-const version of column()
-    Column &column_ref(position_t idx);
+    // pybind11 can't resolve const and non-const version of column()
+    Column& column_ref(position_t idx);
 
-    Column &column(position_t idx);
+    Column& column(position_t idx);
 
-    [[nodiscard]] const Column &column(position_t idx) const;
+    [[nodiscard]] const Column& column(position_t idx) const;
 
     std::vector<std::shared_ptr<Column>>& columns();
 
     [[nodiscard]] const std::vector<std::shared_ptr<Column>>& columns() const;
 
-    position_t add_column(const Field &field, size_t num_rows, AllocationType presize);
+    position_t add_column(const Field& field, size_t num_rows, AllocationType presize);
 
-    position_t add_column(const Field &field, const std::shared_ptr<Column>& column);
+    position_t add_column(const Field& field, const std::shared_ptr<Column>& column);
 
     position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
 
@@ -137,7 +133,7 @@ public:
 
     void append(const SegmentInMemory& other);
 
-    void concatenate(SegmentInMemory&& other, bool unique_column_names=true);
+    void concatenate(SegmentInMemory&& other, bool unique_column_names = true);
 
     void drop_column(std::string_view name);
 
@@ -175,13 +171,13 @@ public:
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_external_block(position_t idx, T *val, size_t size) {
+    void set_external_block(position_t idx, T* val, size_t size) {
         impl_->set_external_block(idx, val, size);
     }
 
     template<class T>
     requires std::integral<T> || std::floating_point<T>
-    void set_sparse_block(position_t idx, T *val, size_t rows_to_write) {
+    void set_sparse_block(position_t idx, T* val, size_t rows_to_write) {
         impl_->set_sparse_block(idx, val, rows_to_write);
     }
 
@@ -205,23 +201,23 @@ public:
 
     [[nodiscard]] ColumnData column_data(size_t col) const;
 
-    [[nodiscard]] const StreamDescriptor &descriptor() const;
+    [[nodiscard]] const StreamDescriptor& descriptor() const;
 
-    StreamDescriptor &descriptor();
+    StreamDescriptor& descriptor();
 
     [[nodiscard]] const std::shared_ptr<StreamDescriptor>& descriptor_ptr() const;
 
     void attach_descriptor(std::shared_ptr<StreamDescriptor> desc);
 
-    StringPool &string_pool();
+    StringPool& string_pool();
 
-    [[nodiscard]] const StringPool &const_string_pool() const;
+    [[nodiscard]] const StringPool& const_string_pool() const;
 
     [[nodiscard]] const std::shared_ptr<StringPool>& string_pool_ptr() const;
 
     void reset_metadata();
 
-    void set_metadata(google::protobuf::Any &&meta);
+    void set_metadata(google::protobuf::Any&& meta);
 
     bool has_metadata();
 
@@ -229,7 +225,7 @@ public:
 
     void set_row_data(ssize_t rid);
 
-    [[nodiscard]] const google::protobuf::Any *metadata() const;
+    [[nodiscard]] const google::protobuf::Any* metadata() const;
 
     [[nodiscard]] bool is_index_sorted() const;
 
@@ -245,13 +241,15 @@ public:
 
     void set_string_pool(const std::shared_ptr<StringPool>& string_pool);
 
-    SegmentInMemory filter(util::BitSet&& filter_bitset, bool filter_down_stringpool=false, bool validate=false) const;
+    SegmentInMemory filter(util::BitSet&& filter_bitset, bool filter_down_stringpool = false, bool validate = false)
+            const;
 
     /// @see SegmentInMemoryImpl::truncate
     [[nodiscard]] SegmentInMemory truncate(size_t start_row, size_t end_row, bool reconstruct_string_pool) const;
 
-    [[nodiscard]] std::vector<SegmentInMemory> partition(const std::vector<uint8_t>& row_to_segment,
-                           const std::vector<uint64_t>& segment_counts) const;
+    [[nodiscard]] std::vector<SegmentInMemory> partition(
+            const std::vector<uint8_t>& row_to_segment, const std::vector<uint64_t>& segment_counts
+    ) const;
 
     [[nodiscard]] bool empty() const;
 
@@ -274,7 +272,7 @@ public:
 
     std::shared_ptr<Column> column_ptr(position_t idx) const;
 
-    template <typename RowType>
+    template<typename RowType>
     RowType make_row_ref(std::size_t row_id) {
         if constexpr (std::is_same_v<RowType, Row>) {
             return RowType(impl(), row_id);
@@ -285,18 +283,16 @@ public:
 
     [[nodiscard]] bool allow_sparse() const;
 
-
     [[nodiscard]] bool is_sparse() const;
 
-    [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows, bool filter_down_stringpool=false) const;
+    [[nodiscard]] std::vector<SegmentInMemory> split(size_t rows, bool filter_down_stringpool = false) const;
 
     void drop_empty_columns();
 
-private:
-    explicit SegmentInMemory(std::shared_ptr<SegmentInMemoryImpl> impl) :
-            impl_(std::move(impl)) {}
+  private:
+    explicit SegmentInMemory(std::shared_ptr<SegmentInMemoryImpl> impl) : impl_(std::move(impl)) {}
 
     std::shared_ptr<SegmentInMemoryImpl> impl_;
 };
 
-} //namespace arcticdb
+} // namespace arcticdb

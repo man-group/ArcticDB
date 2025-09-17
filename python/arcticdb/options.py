@@ -159,10 +159,13 @@ def output_format_to_internal(output_format: Union[OutputFormat, str]) -> Intern
         return InternalOutputFormat.PANDAS
     elif output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
         if not _PYARROW_AVAILABLE:
-            raise ModuleNotFoundError("ArcticDB's pyarrow optional dependency missing but is required to use arrow output format.")
+            raise ModuleNotFoundError(
+                "ArcticDB's pyarrow optional dependency missing but is required to use arrow output format."
+            )
         return InternalOutputFormat.ARROW
     else:
         raise ValueError(f"Unknown OutputFormat: {output_format}")
+
 
 class RuntimeOptions:
     def __init__(
@@ -170,8 +173,7 @@ class RuntimeOptions:
         *,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
     ):
-        self.output_format=output_format
-
+        self.output_format = output_format
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         self.output_format = output_format
@@ -195,10 +197,10 @@ class EnterpriseLibraryOptions:
     """
 
     def __init__(
-            self,
-            *,
-            replication: bool = False,
-            background_deletion: bool = False,
+        self,
+        *,
+        replication: bool = False,
+        background_deletion: bool = False,
     ):
         """
         Parameters
@@ -230,10 +232,7 @@ class EnterpriseLibraryOptions:
         self.background_deletion = background_deletion
 
     def __eq__(self, right):
-        return (
-                self.replication == right.replication
-                and self.background_deletion == right.background_deletion
-        )
+        return self.replication == right.replication and self.background_deletion == right.background_deletion
 
     def __repr__(self):
         return (
