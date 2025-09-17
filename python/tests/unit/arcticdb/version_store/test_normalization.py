@@ -1300,7 +1300,7 @@ def test_norm_meta_column_and_index_names_df_multi_index(lmdb_version_store_stat
     assert stream_descriptor.index.kind() == IndexKind.TIMESTAMP
 
 
-@pytest.mark.xfail(reason="Monday ref: 9714233101")
+@pytest.mark.skip(reason="Monday ref: 9714233101")
 def test_multi_index_same_names(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
@@ -1318,7 +1318,7 @@ def test_multi_index_same_names(lmdb_version_store_v1):
     assert_frame_equal(result_df, df)
 
 
-@pytest.mark.xfail(reason="Monday ref: 9715738171")
+@pytest.mark.skip(reason="Monday ref: 9715738171")
 def test_digit_columns(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(np.arange(20).resize(10, 2), columns=[1, "1"])

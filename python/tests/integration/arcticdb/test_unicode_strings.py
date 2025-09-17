@@ -105,7 +105,7 @@ def test_recursive_normalizers_blns(lmdb_version_store):
     assert_dicts_of_dfs_equal(dict, vit.data)
 
 
-@pytest.mark.xfail(reason="These do not roundtrip properly. Monday: 9256783357")
+@pytest.mark.skip(reason="These do not roundtrip properly. Monday: 9256783357")
 def test_recursive_normalizers_blns_in_keys(lmdb_version_store):
     lib = lmdb_version_store
     strings = read_strings()

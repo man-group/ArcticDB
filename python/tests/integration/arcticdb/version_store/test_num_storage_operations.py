@@ -290,20 +290,35 @@ def get_num_data_keys_intersecting_row_range(index, start, end):
 
 def get_num_data_keys_intersecting_date_range(index, start, end, exclude_fully_included=False):
     count = 0
-    for _, row in index.reset_index().iterrows():
+    for i, (_, row) in enumerate(index.reset_index().iterrows()):
         # end is inclusive when doing date_range but end_index in the column is exclusive
-        if (start is None or start < row["end_index"]) and (end is None or end >= row["start_index"]):
+        if exclude_fully_included:
+            condition1 = start is None or start < row["end_index"]
+        else:
+            # When reading, we want to include the end index, in order to support backwards compatibility with older versions.
+            # The same fix should be done for updates, but that is not implemented yet and should be added with https://github.com/man-group/ArcticDB/issues/2655
+            # The exclude_fully_included flag is only used for updates
+            condition1 = start is None or start <= row["end_index"]
+
+        condition2 = end is None or end >= row["start_index"]
+
+        basic_intersection = condition1 and condition2
+
+        if basic_intersection:
             if exclude_fully_included:
                 # When reading during an update we should only read the slices which include both elements within the
                 # range and elements outside the range.
                 # The above if checks the range has elements within the range and
                 # the below if checks the range has elements outside the range.
-                if (start is not None and row["start_index"] < start) or (
-                    end is not None and end + pd.Timedelta(1) < row["end_index"]
-                ):
+                condition3 = start is not None and row["start_index"] < start
+                condition4 = end is not None and end + pd.Timedelta(1) < row["end_index"]
+                exclude_condition = condition3 or condition4
+
+                if exclude_condition:
                     count += 1
             else:
                 count += 1
+
     return count
 
 

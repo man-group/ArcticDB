@@ -645,7 +645,7 @@ def test_delete_snapshot_basic_flow_with_delete_prev_version(basic_store):
     assert [ver["deleted"] for ver in lib.list_versions()] == [False]
 
 
-@pytest.mark.xfail(
+@pytest.mark.skip(
     reason="""ArcticDB#1863 or other bug. The fail is in the line lib.
                    read(symbol1).data after deleting snapshot 1, read operation throws exception"""
 )

@@ -7,6 +7,8 @@ import sys
 from numpy.testing import assert_array_equal
 
 from pandas import MultiIndex
+from pandas._libs.tslibs.offsets import BDay
+
 import arcticdb
 import arcticdb.exceptions
 from arcticdb.version_store import NativeVersionStore
@@ -762,3 +764,55 @@ def test_append_no_columns(lmdb_version_store_dynamic_schema_v1):
     expected = pd.concat([to_write, to_append])
     result = lib.read("sym").data
     assert_frame_equal(result, expected)
+
+
+def get_next_business_date(d: datetime) -> datetime:
+    """Returns next business date from datetime 'd' (uses pandas BDay)."""
+
+    return (d + BDay(1)).to_pydatetime()
+
+
+def create_random_data(at_date: datetime, num_cols: int = 5) -> pd.DataFrame:
+    date_range = pd.date_range(
+        start=at_date.replace(hour=0, minute=0, second=0, microsecond=0),
+        end=at_date.replace(hour=18, minute=0, second=0, microsecond=0),
+        freq="s",
+    )
+    data = np.round(np.random.random(size=(len(date_range), num_cols)) * 100, 2)
+
+    return pd.DataFrame(data=data, index=date_range, columns=[f"c{i + 1}" for i in range(num_cols)])
+
+
+def test_append_after_delete_range(sym, lmdb_version_store):
+    lib = lmdb_version_store
+
+    start_date = datetime(2025, 9, 1)
+    end_date = datetime(2025, 9, 2)
+    cur_date = start_date
+
+    # create data
+    while cur_date <= end_date:
+        df = create_random_data(at_date=cur_date)
+        lib.append("sym", df)
+        cur_date = get_next_business_date(cur_date)
+
+    # remove date
+    lib.delete("sym", date_range=(datetime(2025, 9, 2), datetime(2025, 9, 3)))
+
+    # re-insert data
+    start_date = datetime(2025, 9, 2)
+    end_date = datetime(2025, 9, 3)
+    cur_date = start_date
+
+    expected_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 2))).data
+
+    while cur_date <= end_date:
+        df = create_random_data(at_date=cur_date)
+        expected_data = pd.concat([expected_data, df])
+        lib.append("sym", df)
+        cur_date = get_next_business_date(cur_date)
+
+    assert_frame_equal(lib.read("sym").data, expected_data)
+
+    sliced_data = lib.read("sym", date_range=(datetime(2025, 9, 1), datetime(2025, 9, 4))).data
+    assert_frame_equal(sliced_data, expected_data)
