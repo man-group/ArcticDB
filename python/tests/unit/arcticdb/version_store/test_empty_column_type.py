@@ -18,7 +18,6 @@ from arcticdb_ext.exceptions import NormalizationException
 from tests.util.mark import MACOS
 
 
-
 class DtypeGenerator:
     """
     Can generate representative subset of all supported dtypes. Can generate by category (e.g. int, float, etc...) or

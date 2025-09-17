@@ -101,9 +101,14 @@ class IndexWriter {
         bool is_valid_col = *current_col_ == slice.col_range.first;
         bool is_valid_row = *current_row_ < slice.row_range.first;
         bool is_valid = (is_valid_col && is_valid_row);
-        util::check_arg(missing_row_val || new_col_group || is_valid,
-            "expected increasing row group, last col range left value {}, col arg {}, row left value {}, row arg {}",
-            current_col_.value_or(-1), slice.col_range, current_row_.value_or(-1), slice.row_range
+        util::check_arg(
+                missing_row_val || new_col_group || is_valid,
+                "expected increasing row group, last col range left value {}, col arg {}, row left value {}, row arg "
+                "{}",
+                current_col_.value_or(-1),
+                slice.col_range,
+                current_row_.value_or(-1),
+                slice.row_range
         );
 
         add_unchecked(key, slice);
