@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #include <gtest/gtest.h>
 #include <arcticdb/util/key_utils.hpp>
@@ -13,9 +14,7 @@
 using namespace arcticdb;
 
 static auto write_version_frame_with_three_segments(
-    const arcticdb::StreamId& stream_id,
-    arcticdb::VersionId v_id,
-    arcticdb::version_store::PythonVersionStore& pvs
+        const arcticdb::StreamId& stream_id, arcticdb::VersionId v_id, arcticdb::version_store::PythonVersionStore& pvs
 ) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
@@ -23,9 +22,9 @@ static auto write_version_frame_with_three_segments(
     using namespace arcticdb::pipelines;
 
     auto de_dup_map = std::make_shared<arcticdb::DeDupMap>();
-    SlicingPolicy slicing = FixedSlicer{100, 10};  // 100 cols per segment, 10 rows per segment
+    SlicingPolicy slicing = FixedSlicer{100, 10}; // 100 cols per segment, 10 rows per segment
     IndexPartialKey pk{stream_id, v_id};
-    auto wrapper = get_test_simple_frame(stream_id, 30, 0);  // 30 rows -> 3 segments
+    auto wrapper = get_test_simple_frame(stream_id, 30, 0); // 30 rows -> 3 segments
     auto& frame = wrapper.frame_;
     auto store = pvs._test_get_store();
     auto key = write_frame(std::move(pk), frame, slicing, store, de_dup_map).get();

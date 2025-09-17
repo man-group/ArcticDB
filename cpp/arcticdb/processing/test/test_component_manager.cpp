@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <gtest/gtest.h>
@@ -31,7 +32,13 @@ TEST(ComponentManager, Simple) {
 
     component_manager.add_entity(ids[1], segment_1, row_range_1, col_range_1, key_1, entity_fetch_count_1);
 
-    auto [segments, row_ranges, col_ranges, keys, entity_fetch_counts] = component_manager.get_entities_and_decrement_refcount<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>, std::shared_ptr<AtomKey>, EntityFetchCount>(ids);
+    auto [segments, row_ranges, col_ranges, keys, entity_fetch_counts] =
+            component_manager.get_entities_and_decrement_refcount<
+                    std::shared_ptr<SegmentInMemory>,
+                    std::shared_ptr<RowRange>,
+                    std::shared_ptr<ColRange>,
+                    std::shared_ptr<AtomKey>,
+                    EntityFetchCount>(ids);
 
     ASSERT_EQ(segments[0], segment_0);
     ASSERT_EQ(row_ranges[0], row_range_0);
@@ -46,5 +53,10 @@ TEST(ComponentManager, Simple) {
     ASSERT_EQ(entity_fetch_counts[1], entity_fetch_count_1);
 
     // EntityFetchCount for entity with id_1 is 2, so can be fetched again without exceptions
-    component_manager.get_entities_and_decrement_refcount<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>, std::shared_ptr<AtomKey>, EntityFetchCount>({ids[1]});
+    component_manager.get_entities_and_decrement_refcount<
+            std::shared_ptr<SegmentInMemory>,
+            std::shared_ptr<RowRange>,
+            std::shared_ptr<ColRange>,
+            std::shared_ptr<AtomKey>,
+            EntityFetchCount>({ids[1]});
 }

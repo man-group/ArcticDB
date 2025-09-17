@@ -411,22 +411,29 @@ def test_compat_update_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage,
 
             result_df = curr.lib.read(sym).data
             expected_df = pd.DataFrame(
-                {"col": [0, 3, 3, 2, 2]}, index=[
+                {"col": [0, 3, 3, 2, 2]},
+                index=[
                     pd.Timestamp("2025-01-02 00:02:00"),
                     pd.Timestamp("2025-01-02 00:14:00"),
                     pd.Timestamp("2025-01-04 00:00:00"),
                     pd.Timestamp("2025-01-05 22:00:00"),
                     pd.Timestamp("2025-01-05 23:00:00"),
-                ]
+                ],
             )
             assert_frame_equal(result_df, expected_df)
 
 
-@pytest.mark.parametrize("date_range", [
-    (pd.Timestamp("2025-01-02 10:00:00"), pd.Timestamp("2025-01-02 12:00:00")), # Empty result within problematic range
-    (pd.Timestamp("2025-01-02 10:00:00"), None), # Intersects problematic range at beginning
-    (None, pd.Timestamp("2025-01-03 10:00:00")), # Intersects with problematic range at end
-])
+@pytest.mark.parametrize(
+    "date_range",
+    [
+        (
+            pd.Timestamp("2025-01-02 10:00:00"),
+            pd.Timestamp("2025-01-02 12:00:00"),
+        ),  # Empty result within problematic range
+        (pd.Timestamp("2025-01-02 10:00:00"), None),  # Intersects problematic range at beginning
+        (None, pd.Timestamp("2025-01-03 10:00:00")),  # Intersects with problematic range at end
+    ],
+)
 def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, date_range):
     # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
     # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
@@ -473,14 +480,18 @@ def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic
         index=[pd.Timestamp("2018-01-02 00:01:00"), pd.Timestamp("2018-01-02 00:02:00")],
         data={"col_one": ["a", "b"], "col_two": ["c", "d"]},
     )
-    df.index.set_names(["col_one"], inplace=True)  # specifically testing an odd behaviour when an index name matches a column name
+    df.index.set_names(
+        ["col_one"], inplace=True
+    )  # specifically testing an odd behaviour when an index name matches a column name
 
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
-        compat.old_lib.execute([
-            'df = pd.DataFrame(index=[pd.Timestamp("2018-01-02 00:01:00"), pd.Timestamp("2018-01-02 00:02:00")], data={"col_one": ["a", "b"], "col_two": ["c", "d"]})',
-            'df.index.set_names(["col_one"], inplace=True)',
-            'lib.write("sym", df)',
-        ])
+        compat.old_lib.execute(
+            [
+                'df = pd.DataFrame(index=[pd.Timestamp("2018-01-02 00:01:00"), pd.Timestamp("2018-01-02 00:02:00")], data={"col_one": ["a", "b"], "col_two": ["c", "d"]})',
+                'df.index.set_names(["col_one"], inplace=True)',
+                'lib.write("sym", df)',
+            ]
+        )
 
         with compat.current_version() as curr:
             res = curr.lib.get_description(sym)
@@ -496,25 +507,25 @@ def test_norm_meta_column_and_index_names_write_new_read_old(old_venv_and_arctic
     start = pd.Timestamp("2018-01-02")
     index = pd.date_range(start=start, periods=4)
 
-    df = pd.DataFrame(
-        index=index,
-        data={"col_one": [1, 2, 3, 4], "col_two": [1, 2, 3, 4]},
-        dtype=np.uint64
-    )
-    df.index.set_names(["col_one"], inplace=True)  # specifically testing an odd behaviour when an index name matches a column name
+    df = pd.DataFrame(index=index, data={"col_one": [1, 2, 3, 4], "col_two": [1, 2, 3, 4]}, dtype=np.uint64)
+    df.index.set_names(
+        ["col_one"], inplace=True
+    )  # specifically testing an odd behaviour when an index name matches a column name
 
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         with compat.current_version() as curr:
             curr.lib.write("sym", df)
 
-        compat.old_lib.execute([
-            f"desc = lib.get_description('sym')",
-            "actual_desc_cols = [c.name for c in desc.columns]",
-            "assert ['__col_col_one__0', 'col_two'] == actual_desc_cols, f'Actual columns were {actual_desc_cols}'",
-            "actual_desc_index_name = desc.index[0][0]",
-            "assert actual_desc_index_name == 'col_one', f'Actual index name was {actual_desc_index_name}'",
-            "actual_df = lib.read('sym').data",
-            "assert actual_df.index.name == 'col_one', f'Actual index name was {actual_df.index.name}'",
-            "actual_col_names = list(actual_df.columns.values)",
-            "assert actual_col_names == ['col_one', 'col_two'], f'Actual col names were {actual_col_names}'"
-        ])
+        compat.old_lib.execute(
+            [
+                f"desc = lib.get_description('sym')",
+                "actual_desc_cols = [c.name for c in desc.columns]",
+                "assert ['__col_col_one__0', 'col_two'] == actual_desc_cols, f'Actual columns were {actual_desc_cols}'",
+                "actual_desc_index_name = desc.index[0][0]",
+                "assert actual_desc_index_name == 'col_one', f'Actual index name was {actual_desc_index_name}'",
+                "actual_df = lib.read('sym').data",
+                "assert actual_df.index.name == 'col_one', f'Actual index name was {actual_df.index.name}'",
+                "actual_col_names = list(actual_df.columns.values)",
+                "assert actual_col_names == ['col_one', 'col_two'], f'Actual col names were {actual_col_names}'",
+            ]
+        )

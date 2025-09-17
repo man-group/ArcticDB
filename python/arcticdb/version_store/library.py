@@ -363,9 +363,7 @@ class UpdatePayload:
         return (
             f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata}"
             if self.metadata is not None
-            else f", date_range={self.date_range}"
-            if self.date_range is not None
-            else ""
+            else f", date_range={self.date_range}" if self.date_range is not None else ""
         )
 
 
@@ -495,13 +493,14 @@ class LazyDataFrameCollection(QueryBuilder):
             f"LazyDataFrameCollection init requires all provided lazy dataframes to be referring to the same library, but received: {[lib for lib in lib_set]}",
         )
         output_format_set = {
-            lazy_dataframe.read_request.output_format for lazy_dataframe in lazy_dataframes
+            lazy_dataframe.read_request.output_format
+            for lazy_dataframe in lazy_dataframes
             if lazy_dataframe.read_request.output_format is not None
         }
         check(
             len(output_format_set) in [0, 1],
             f"LazyDataFrameCollection init requires all provided lazy dataframes to have the same output_format, but received: {output_format_set}",
-            )
+        )
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
         if len(self._lazy_dataframes):
@@ -603,7 +602,9 @@ class LazyDataFrameAfterJoin(QueryBuilder):
             return []
         else:
             lib = self._lazy_dataframes._lib
-            return lib.read_batch_and_join(self._lazy_dataframes._read_requests(), self, output_format=self._lazy_dataframes._output_format)
+            return lib.read_batch_and_join(
+                self._lazy_dataframes._read_requests(), self, output_format=self._lazy_dataframes._output_format
+            )
 
     def __str__(self) -> str:
         query_builder_repr = super().__str__()
@@ -792,7 +793,7 @@ class Library:
         self._nvs._normalizer.df.set_skip_df_consolidation()
         self._dev_tools = DevTools(nvs)
 
-    def __repr__(self) ->str:
+    def __repr__(self) -> str:
         return "Library(%s, path=%s, storage=%s)" % (
             self.arctic_instance_desc,
             self._nvs._lib_cfg.lib_desc.name,
@@ -1748,17 +1749,24 @@ class Library:
             append=mode == StagedDataFinalizeMethod.APPEND,
             prune_previous_versions=prune_previous_versions,
             delete_staged_data_on_failure=delete_staged_data_on_failure,
-            stage_results=stage_results
+            stage_results=stage_results,
         )
         if isinstance(compaction_result, _ae.version_store.VersionedItem):
             return self._nvs._convert_thin_cxx_item_to_python(compaction_result, metadata)
         elif isinstance(compaction_result, List):
             # We expect this to be a list of errors
             check(compaction_result, "List of errors in compaction result should never be empty")
-            check(all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInStageResultInfo")
-            raise MissingKeysInStageResultsError("Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result)
+            check(
+                all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result),
+                "Compaction errors should always be KeyNotFoundInStageResultInfo",
+            )
+            raise MissingKeysInStageResultsError(
+                "Missing keys during sort and finalize", tokens_with_missing_keys=compaction_result
+            )
         else:
-            raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
+            raise RuntimeError(
+                f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB."
+            )
 
     def get_staged_symbols(self) -> List[str]:
         """
@@ -1785,7 +1793,7 @@ class Library:
         columns: Optional[List[str]] = None,
         query_builder: Optional[QueryBuilder] = None,
         lazy: bool = False,
-        output_format : Optional[Union[OutputFormat, str]] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1907,7 +1915,7 @@ class Library:
         symbols: List[Union[str, ReadRequest]],
         query_builder: Optional[QueryBuilder] = None,
         lazy: bool = False,
-        output_format : Optional[Union[OutputFormat, str]] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> Union[List[Union[VersionedItem, DataError]], LazyDataFrameCollection]:
         """
         Reads multiple symbols.
@@ -2171,7 +2179,7 @@ class Library:
             per_symbol_query_builders,
             implement_read_index=True,
             iterate_snapshots_if_tombstoned=False,
-            output_format=output_format
+            output_format=output_format,
         )
 
     def read_metadata(self, symbol: str, as_of: Optional[AsOf] = None) -> VersionedItem:
@@ -2624,7 +2632,7 @@ class Library:
         as_of: Optional[AsOf] = None,
         columns: List[str] = None,
         lazy: bool = False,
-        output_format : Optional[Union[OutputFormat, str]] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
@@ -2680,7 +2688,7 @@ class Library:
         as_of: Optional[Union[int, str]] = None,
         columns: List[str] = None,
         lazy: bool = False,
-        output_format : Optional[Union[OutputFormat, str]] = None,
+        output_format: Optional[Union[OutputFormat, str]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.

@@ -5,9 +5,9 @@ from arcticdb.arctic import Arctic, Library
 from arcticdb.util.test import assert_frame_equal
 from arcticdb.util.logger import get_logger
 from tests.conftest import (
-    real_gcp_storage, 
-    real_gcp_storage_without_clean_up, 
-    real_s3_storage, 
+    real_gcp_storage,
+    real_gcp_storage_without_clean_up,
+    real_s3_storage,
     real_s3_storage_without_clean_up,
     real_azure_storage,
     real_azure_storage_without_clean_up,
@@ -32,6 +32,7 @@ else:
 
 logger = get_logger("persistant_tests")
 
+
 # Only test with encoding version 0 (a.k.a.) for now
 # because there is a problem when older versions try to read configs with a written encoding version
 # def shared_persistent_arctic_client(real_s3_storage_without_clean_up, encoding_version):
@@ -47,6 +48,7 @@ def shared_persistent_arctic_client(request):
     except Exception as e:
         print(e)
         pytest.skip("No persistence tests selected or error during configuration.")
+
 
 # TODO: Add a check if the real storage tests are enabled
 @pytest.mark.parametrize("library", LIBRARIES)
@@ -75,15 +77,21 @@ def test_real_storage_write(shared_persistent_arctic_client):
 def persistent_arctic_library(request, encoding_version, lib_name) -> Generator[Library, None, None]:
     try:
         if persistent_test_type() == PersistentTestType.GCP:
-            ac: Arctic = request.getfixturevalue(real_gcp_storage.__name__).create_arctic(encoding_version=encoding_version)
+            ac: Arctic = request.getfixturevalue(real_gcp_storage.__name__).create_arctic(
+                encoding_version=encoding_version
+            )
         elif persistent_test_type() == PersistentTestType.AWS_S3:
-            ac: Arctic =  request.getfixturevalue(real_s3_storage.__name__).create_arctic(encoding_version=encoding_version)
+            ac: Arctic = request.getfixturevalue(real_s3_storage.__name__).create_arctic(
+                encoding_version=encoding_version
+            )
         elif persistent_test_type() == PersistentTestType.AZURE:
-            ac: Arctic =  request.getfixturevalue(real_azure_storage.__name__).create_arctic(encoding_version=encoding_version)
+            ac: Arctic = request.getfixturevalue(real_azure_storage.__name__).create_arctic(
+                encoding_version=encoding_version
+            )
     except Exception as e:
         logger.info("An error occurred", exc_info=True)
-        pytest.skip("No persistence tests selected or error during configuration.")   
-    
+        pytest.skip("No persistence tests selected or error during configuration.")
+
     lib: Library = ac.create_library(lib_name)
     yield lib
     ac.delete_library(lib_name)

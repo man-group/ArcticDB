@@ -20,12 +20,7 @@ from arcticdb.util.test import (
     random_floats,
     assert_frame_equal,
 )
-from arcticdb.exceptions import (
-    InternalException,
-    SortingException,
-    NormalizationException,
-    SchemaException
-)
+from arcticdb.exceptions import InternalException, SortingException, NormalizationException, SchemaException
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from tests.util.date import DateRange
 from pandas import MultiIndex
@@ -36,13 +31,12 @@ from arcticdb.exceptions import ErrorCode, ErrorCategory
 from arcticdb.toolbox.library_tool import LibraryTool
 from arcticdb_ext.storage import KeyType
 
+
 def test_update_single_dates(lmdb_version_store_dynamic_schema):
     lib = lmdb_version_store_dynamic_schema
     df1 = pd.DataFrame(index=[pd.Timestamp(2022, 1, 3)], data=2220103.0, columns=["a"])
     df2 = pd.DataFrame(index=[pd.Timestamp(2021, 12, 22)], data=211222.0, columns=["a"])
-    df3 = pd.DataFrame(
-        index=[pd.Timestamp(2021, 12, 29)], data=2211229.0, columns=["a"]
-    )
+    df3 = pd.DataFrame(index=[pd.Timestamp(2021, 12, 29)], data=2211229.0, columns=["a"])
     sym = "data6"
     lib.update(sym, df1, upsert=True)
     lib.update(sym, df2, upsert=True)
@@ -61,9 +55,7 @@ def test_update(version_store_factory):
     lmdb_version_store.write(symbol, df)
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame(
-        {"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2
-    )
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
     vit = lmdb_version_store.read(symbol)
@@ -76,15 +68,11 @@ def test_update_long_strides(s3_version_store):
     lib = s3_version_store
     symbol = "test_update_long_strides"
 
-    write_df = pd.DataFrame(
-        {"A": 7 * [1]}, index=pd.date_range("2023-02-01", periods=7)
-    )
+    write_df = pd.DataFrame({"A": 7 * [1]}, index=pd.date_range("2023-02-01", periods=7))
     assert write_df.index.values.strides[0] == 8
     lib.write(symbol, write_df)
 
-    update_df = write_df[
-        write_df.index.isin([pd.Timestamp(2023, 2, 1), pd.Timestamp(2023, 2, 6)])
-    ].copy()
+    update_df = write_df[write_df.index.isin([pd.Timestamp(2023, 2, 1), pd.Timestamp(2023, 2, 6)])].copy()
     update_df["A"] = 999
     assert update_df.index.values.strides[0] in (8, 40)
 
@@ -127,9 +115,7 @@ def test_update_repeatedly_dynamic_schema(
     iterations,
     start_dist,
 ):
-    lmdb_version_store = version_store_factory(
-        col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True
-    )
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
     symbol = "update_dynamic_schema"
 
@@ -147,9 +133,7 @@ def test_update_repeatedly_dynamic_schema(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame(
-            {"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2
-        )
+        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
@@ -170,9 +154,7 @@ def test_update_repeatedly_dynamic_schema_hashed(
     iterations,
     start_dist,
 ):
-    lmdb_version_store = version_store_factory(
-        col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True
-    )
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2, dynamic_schema=True)
 
     symbol = "update_dynamic_schema"
 
@@ -233,9 +215,7 @@ def test_update_repeatedly(
     iterations,
     start_dist,
 ):
-    lmdb_version_store = version_store_factory(
-        col_per_group=col_per_group, row_per_segment=2
-    )
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 
     symbol = "update_no_daterange"
 
@@ -253,9 +233,7 @@ def test_update_repeatedly(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame(
-            {"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2
-        )
+        df2 = pd.DataFrame({"a": np.arange(1000 + x, 1000 + x + len(idx2), dtype="float")}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
@@ -276,9 +254,7 @@ def test_update_repeatedly_with_strings(
     iterations,
     start_dist,
 ):
-    lmdb_version_store = version_store_factory(
-        col_per_group=col_per_group, row_per_segment=2
-    )
+    lmdb_version_store = version_store_factory(col_per_group=col_per_group, row_per_segment=2)
 
     symbol = "update_no_daterange"
 
@@ -296,9 +272,7 @@ def test_update_repeatedly_with_strings(
             continue
 
         idx2 = pd.date_range(update_date, periods=periods, freq="D")
-        df2 = pd.DataFrame(
-            {"a": [random_string(10) for _ in range(len(idx2))]}, index=idx2
-        )
+        df2 = pd.DataFrame({"a": [random_string(10) for _ in range(len(idx2))]}, index=idx2)
         lmdb_version_store.update(symbol, df2)
 
         vit = lmdb_version_store.read(symbol)
@@ -319,39 +293,29 @@ def test_update_with_snapshot(version_store_factory):
     lmdb_version_store.snapshot("my_snap")
 
     idx2 = pd.date_range("1970-01-12", periods=10, freq="D")
-    df2 = pd.DataFrame(
-        {"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2
-    )
+    df2 = pd.DataFrame({"a": np.arange(1000, 1000 + len(idx2), dtype="float")}, index=idx2)
     lmdb_version_store.update(symbol, df2)
 
     assert_frame_equal(lmdb_version_store.read(symbol, as_of=0).data, original_df)
-    assert_frame_equal(
-        lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
-    )
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 
     df.update(df2)
 
     vit = lmdb_version_store.read(symbol)
     assert_frame_equal(vit.data, df)
     assert_frame_equal(lmdb_version_store.read(symbol, as_of=1).data, df)
-    assert_frame_equal(
-        lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
-    )
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 
     lmdb_version_store.delete(symbol)
     assert lmdb_version_store.list_versions() == []
 
-    assert_frame_equal(
-        lmdb_version_store.read(symbol, as_of="my_snap").data, original_df
-    )
+    assert_frame_equal(lmdb_version_store.read(symbol, as_of="my_snap").data, original_df)
 
 
 def generate_dataframe(columns, dt, num_days, num_rows_per_day):
     dataframes = []
     for _ in range(num_days):
-        index = pd.Index(
-            [dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)]
-        )
+        index = pd.Index([dt + datetime.timedelta(seconds=s) for s in range(num_rows_per_day)])
         vals = {c: random_floats(num_rows_per_day) for c in columns}
         new_df = pd.DataFrame(data=vals, index=index)
         dataframes.append(new_df)
@@ -523,9 +487,7 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
 
     def _create_product_candles_df(arr):
         timestamps = [pd.to_datetime(t[0], unit="s") for t in arr]
-        sorted_df = pd.DataFrame(
-            data=arr, index=timestamps, columns=["time_start", "volume"]
-        )
+        sorted_df = pd.DataFrame(data=arr, index=timestamps, columns=["time_start", "volume"])
         return sorted_df.sort_index()
 
     sorted_df_1 = _create_product_candles_df(not_sorted_arr_1)
@@ -538,12 +500,8 @@ def test_non_cstyle_numpy_update(lmdb_version_store):
     assert_frame_equal(after_arctic, before_arctic)
 
 
-@pytest.mark.parametrize(
-    "existing_df_sortedness", ("ASCENDING", "DESCENDING", "UNSORTED")
-)
-@pytest.mark.parametrize(
-    "update_df_sortedness", ("ASCENDING", "DESCENDING", "UNSORTED")
-)
+@pytest.mark.parametrize("existing_df_sortedness", ("ASCENDING", "DESCENDING", "UNSORTED"))
+@pytest.mark.parametrize("update_df_sortedness", ("ASCENDING", "DESCENDING", "UNSORTED"))
 @pytest.mark.parametrize("date_range_arg_provided", (True, False))
 def test_update_sortedness_checks(
     lmdb_version_store,
@@ -557,18 +515,10 @@ def test_update_sortedness_checks(
     data = np.arange(num_rows)
     ascending_idx = pd.date_range("2024-01-15", periods=num_rows)
     ascending_df = pd.DataFrame({"col": data}, index=ascending_idx)
-    descending_df = pd.DataFrame(
-        {"col": data}, index=pd.DatetimeIndex(reversed(ascending_idx))
-    )
-    unsorted_df = pd.DataFrame(
-        {"col": data}, index=pd.DatetimeIndex(np.roll(ascending_idx, num_rows // 2))
-    )
+    descending_df = pd.DataFrame({"col": data}, index=pd.DatetimeIndex(reversed(ascending_idx)))
+    unsorted_df = pd.DataFrame({"col": data}, index=pd.DatetimeIndex(np.roll(ascending_idx, num_rows // 2)))
 
-    date_range = (
-        (pd.Timestamp("2024-01-13"), pd.Timestamp("2024-01-17"))
-        if date_range_arg_provided
-        else None
-    )
+    date_range = (pd.Timestamp("2024-01-13"), pd.Timestamp("2024-01-17")) if date_range_arg_provided else None
 
     if existing_df_sortedness == "ASCENDING":
         write_df = ascending_df
@@ -680,35 +630,44 @@ class TestBatchUpdate:
         initial_data = {
             "symbol_1": pd.DataFrame({"a": range(20)}, index=pd.date_range("2024-01-01", "2024-01-20")),
             "symbol_2": pd.DataFrame({"b": range(30, 60)}, index=pd.date_range("2024-02-01", periods=30)),
-            "symbol_3": pd.DataFrame({"c": range(70, 80)}, index=pd.date_range("2024-03-01", periods=10))
+            "symbol_3": pd.DataFrame({"c": range(70, 80)}, index=pd.date_range("2024-03-01", periods=10)),
         }
         for symbol, data in initial_data.items():
             lib.write(symbol, data)
 
         batch_update_queries = {
-            "symbol_1": UpdatePayload("symbol_1", pd.DataFrame({"a": range(0, -5, -1)}, index=pd.date_range("2024-01-10", periods=5))),
-            "symbol_2": UpdatePayload("symbol_2", pd.DataFrame({"b": range(-10, -20, -1)}, index=pd.date_range("2024-02-05", periods=10, freq='h'))),
+            "symbol_1": UpdatePayload(
+                "symbol_1", pd.DataFrame({"a": range(0, -5, -1)}, index=pd.date_range("2024-01-10", periods=5))
+            ),
+            "symbol_2": UpdatePayload(
+                "symbol_2",
+                pd.DataFrame({"b": range(-10, -20, -1)}, index=pd.date_range("2024-02-05", periods=10, freq="h")),
+            ),
         }
 
         result = lib.update_batch(batch_update_queries.values())
-        assert(len(result) == len(batch_update_queries))
+        assert len(result) == len(batch_update_queries)
         for i in range(len(result)):
             versioned_item = result[i]
-            assert (isinstance(versioned_item, VersionedItem))
+            assert isinstance(versioned_item, VersionedItem)
             assert versioned_item.symbol == list(batch_update_queries.keys())[i]
 
         expected = {
-            "symbol_1": pd.concat([
-                pd.DataFrame({"a": range(0, 9)}, pd.date_range("2024-01-01", periods=9)),
-                batch_update_queries["symbol_1"].data,
-                pd.DataFrame({"a": range(14, 20)}, pd.date_range("2024-01-15", periods=6)),
-            ]),
-            "symbol_2": pd.concat([
-                pd.DataFrame({"b": range(30, 34)}, pd.date_range("2024-02-01", "2024-02-04")),
-                batch_update_queries["symbol_2"].data,
-                pd.DataFrame({"b": range(35, 60)}, pd.date_range("2024-02-06", periods=25)),
-            ]),
-            "symbol_3": initial_data["symbol_3"]
+            "symbol_1": pd.concat(
+                [
+                    pd.DataFrame({"a": range(0, 9)}, pd.date_range("2024-01-01", periods=9)),
+                    batch_update_queries["symbol_1"].data,
+                    pd.DataFrame({"a": range(14, 20)}, pd.date_range("2024-01-15", periods=6)),
+                ]
+            ),
+            "symbol_2": pd.concat(
+                [
+                    pd.DataFrame({"b": range(30, 34)}, pd.date_range("2024-02-01", "2024-02-04")),
+                    batch_update_queries["symbol_2"].data,
+                    pd.DataFrame({"b": range(35, 60)}, pd.date_range("2024-02-06", periods=25)),
+                ]
+            ),
+            "symbol_3": initial_data["symbol_3"],
         }
 
         updated = [lib.read(symbol) for symbol in expected]
@@ -725,13 +684,13 @@ class TestBatchUpdate:
             UpdatePayload(
                 "symbol_1",
                 data=pd.DataFrame({"a": range(-10, 0)}, index=pd.date_range("2024-01-01", "2024-01-10")),
-                date_range=(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02"))
+                date_range=(pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")),
             ),
             UpdatePayload(
                 "symbol_2",
                 data=pd.DataFrame({"b": range(100, 120)}, index=pd.date_range("2024-01-01", "2024-01-20")),
-                date_range=(pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-11"))
-            )
+                date_range=(pd.Timestamp("2024-01-05"), pd.Timestamp("2024-01-11")),
+            ),
         ]
         lib.update_batch(update_queries)
         symbol1, symbol2 = lib.read("symbol_1").data, lib.read("symbol_2").data
@@ -742,12 +701,30 @@ class TestBatchUpdate:
 
     def test_metadata(self, lmdb_library):
         lib = lmdb_library
-        lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata={"meta": "data"})
-        lib.write("symbol_2", pd.DataFrame({"b": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata={"meta": [1]})
-        update_result = lib.update_batch([
-            UpdatePayload("symbol_1", pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata={1, 2}),
-            UpdatePayload("symbol_2", pd.DataFrame({"b": [3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])), metadata=[4, 5])
-        ])
+        lib.write(
+            "symbol_1",
+            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
+            metadata={"meta": "data"},
+        )
+        lib.write(
+            "symbol_2",
+            pd.DataFrame({"b": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
+            metadata={"meta": [1]},
+        )
+        update_result = lib.update_batch(
+            [
+                UpdatePayload(
+                    "symbol_1",
+                    pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
+                    metadata={1, 2},
+                ),
+                UpdatePayload(
+                    "symbol_2",
+                    pd.DataFrame({"b": [3]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
+                    metadata=[4, 5],
+                ),
+            ]
+        )
         assert update_result[0].metadata == {1, 2}
         assert lib.read("symbol_1").metadata == {1, 2}
         assert update_result[1].metadata == [4, 5]
@@ -771,22 +748,32 @@ class TestBatchUpdate:
         lib = lmdb_library
         lib.write("symbol_1", pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
         lib.write("symbol_2", pd.DataFrame({"b": [2]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
-        update_result = lib.update_batch([
-            UpdatePayload(symbol="symbol_3", data=pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-02", periods=2))),
-            UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [2, 3]}, index=pd.date_range("2024-01-02", periods=2)))
-        ])
+        update_result = lib.update_batch(
+            [
+                UpdatePayload(
+                    symbol="symbol_3", data=pd.DataFrame({"a": [1, 2]}, index=pd.date_range("2024-01-02", periods=2))
+                ),
+                UpdatePayload(
+                    symbol="symbol_1", data=pd.DataFrame({"a": [2, 3]}, index=pd.date_range("2024-01-02", periods=2))
+                ),
+            ]
+        )
         assert set(lib.list_symbols()) == {"symbol_1", "symbol_2"}
         assert isinstance(update_result[0], DataError)
         assert update_result[0].symbol == "symbol_3"
         assert update_result[0].error_code == ErrorCode.E_NO_SUCH_VERSION
         assert update_result[0].error_category == ErrorCategory.MISSING_DATA
-        assert all(expected in update_result[0].exception_string for expected in ["upsert", "Cannot update", "symbol_3"])
+        assert all(
+            expected in update_result[0].exception_string for expected in ["upsert", "Cannot update", "symbol_3"]
+        )
         assert isinstance(update_result[1], VersionedItem)
 
         symbol_1_vit = lib.read("symbol_1")
         assert symbol_1_vit.version == 1
         assert len(lib.list_versions("symbol_1")) == 2
-        assert_frame_equal(symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+        assert_frame_equal(
+            symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        )
 
     def test_update_batch_upsert_creates_symbol(self, lmdb_library):
         lib = lmdb_library
@@ -794,20 +781,28 @@ class TestBatchUpdate:
 
         lib.update_batch(
             [
-                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"b": [10, 11]}, index=pd.date_range("2024-01-04", periods=2))),
-                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [2, 3]}, index=pd.date_range("2024-01-02", periods=2)))
+                UpdatePayload(
+                    symbol="symbol_2", data=pd.DataFrame({"b": [10, 11]}, index=pd.date_range("2024-01-04", periods=2))
+                ),
+                UpdatePayload(
+                    symbol="symbol_1", data=pd.DataFrame({"a": [2, 3]}, index=pd.date_range("2024-01-02", periods=2))
+                ),
             ],
-            upsert=True
+            upsert=True,
         )
 
         assert set(lib.list_symbols()) == {"symbol_1", "symbol_2"}
         symbol_1_vit, symbol_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
         assert symbol_1_vit.version == 1
         assert len(lib.list_versions("symbol_1")) == 2
-        assert_frame_equal(symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+        assert_frame_equal(
+            symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        )
         assert symbol_2_vit.version == 0
         assert len(lib.list_versions("symbol_2")) == 1
-        assert_frame_equal(symbol_2_vit.data, pd.DataFrame({"b": [10, 11]}, index=pd.date_range("2024-01-04", periods=2)))
+        assert_frame_equal(
+            symbol_2_vit.data, pd.DataFrame({"b": [10, 11]}, index=pd.date_range("2024-01-04", periods=2))
+        )
 
     def test_prune_previous(self, lmdb_library):
         lib = lmdb_library
@@ -815,22 +810,29 @@ class TestBatchUpdate:
         lib.write("symbol_2", pd.DataFrame({"b": [10]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])))
         lib.update_batch(
             [
-                UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
-                UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"b": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+                UpdatePayload(
+                    symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+                ),
+                UpdatePayload(
+                    symbol="symbol_2", data=pd.DataFrame({"b": [8, 9]}, index=pd.date_range("2023-01-01", periods=2))
+                ),
             ],
-            prune_previous_versions=True
+            prune_previous_versions=True,
         )
         symbol_1_vit, symbol_2_vit = lib.read("symbol_1"), lib.read("symbol_2")
-        assert_frame_equal(symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)))
+        assert_frame_equal(
+            symbol_1_vit.data, pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))
+        )
         assert len(lib.list_versions("symbol_1")) == 1
 
         symbol_2_expected_data = pd.DataFrame(
             {"b": [8, 9, 10]},
-            index=pd.DatetimeIndex([pd.Timestamp("2023-01-01"), pd.Timestamp("2023-01-02"), pd.Timestamp("2024-01-01")])
+            index=pd.DatetimeIndex(
+                [pd.Timestamp("2023-01-01"), pd.Timestamp("2023-01-02"), pd.Timestamp("2024-01-01")]
+            ),
         )
         assert_frame_equal(symbol_2_vit.data, symbol_2_expected_data)
         assert len(lib.list_versions("symbol_2")) == 1
-
 
     def test_repeating_symbol_in_payload_list_throws(self, lmdb_library):
         lib = lmdb_library
@@ -838,8 +840,14 @@ class TestBatchUpdate:
         with pytest.raises(arcticdb.version_store.library.ArcticDuplicateSymbolsInBatchException):
             lib.update_batch(
                 [
-                    UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3))),
-                    UpdatePayload(symbol="symbol_1", data=pd.DataFrame({"a": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+                    UpdatePayload(
+                        symbol="symbol_1",
+                        data=pd.DataFrame({"a": [1, 2, 3]}, index=pd.date_range("2024-01-01", periods=3)),
+                    ),
+                    UpdatePayload(
+                        symbol="symbol_1",
+                        data=pd.DataFrame({"a": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)),
+                    ),
                 ]
             )
 
@@ -851,7 +859,10 @@ class TestBatchUpdate:
             lib.update_batch(
                 [
                     UpdatePayload(symbol="symbol_1", data={1, 2, 3}),
-                    UpdatePayload(symbol="symbol_2", data=pd.DataFrame({"a": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)))
+                    UpdatePayload(
+                        symbol="symbol_2",
+                        data=pd.DataFrame({"a": [8, 9]}, index=pd.date_range("2023-01-01", periods=2)),
+                    ),
                 ]
             )
         assert "symbol_1" in str(ex_info.value)
@@ -865,14 +876,16 @@ class TestBatchUpdate:
         df2 = pd.DataFrame({"b": range(5)}, index=pd.date_range("2023-01-01", periods=5))
         lib.write_batch([UpdatePayload("symbol_1", df1), UpdatePayload("symbol_2", df2)])
         for symbol in ["symbol_1", "symbol_2"]:
-            assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1)
-            assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1)
-            assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1)
+            assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, symbol)) == 1
+            assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, symbol)) == 1
+            assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, symbol)) == 1
         # One symbol list entry for symbol_1 and one for symbol_2
         assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 2
         update_1 = pd.DataFrame({"a": []}, index=pd.date_range("2024-01-01", periods=0))
         update_2 = pd.DataFrame({"b": [10, 20]}, index=pd.date_range("2023-01-02", periods=2))
-        res = lib.update_batch([UpdatePayload("symbol_1", update_1), UpdatePayload("symbol_2", update_2)], upsert=upsert)
+        res = lib.update_batch(
+            [UpdatePayload("symbol_1", update_1), UpdatePayload("symbol_2", update_2)], upsert=upsert
+        )
 
         assert res[0].version == 0
         assert res[1].version == 1
@@ -881,19 +894,21 @@ class TestBatchUpdate:
 
         assert sym_1_vit.version == 0
         assert_frame_equal(sym_1_vit.data, df1)
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_1")) == 1)
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_1")) == 1)
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_1")) == 1)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_1")) == 1
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_1")) == 1
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_1")) == 1
 
         assert sym_2_vit.version == 1
-        assert_frame_equal(sym_2_vit.data, pd.DataFrame({"b": [0, 10, 20, 3, 4]}, index=pd.date_range("2023-01-01", periods=5)))
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_2")) == 2)
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_2")) == 2)
+        assert_frame_equal(
+            sym_2_vit.data, pd.DataFrame({"b": [0, 10, 20, 3, 4]}, index=pd.date_range("2023-01-01", periods=5))
+        )
+        assert len(lib_tool.find_keys_for_symbol(KeyType.VERSION, "symbol_2")) == 2
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, "symbol_2")) == 2
         # Update happens in the middle of the dataframe. Data prior the update range (value 0) is in one segment, then
         # there's one segment for the new data (values 10, 20) then there's one segment for the data that's pas the
         # update range (values 3, 4). The fourth segment is the original data segment
-        assert(len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_2")) == 4)
-        assert(len(lib_tool.read_index("symbol_2")) == 3)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "symbol_2")) == 4
+        assert len(lib_tool.read_index("symbol_2")) == 3
 
         # This result is wrong. The correct value is 2. This is due to a bug Monday: 9682041273, append_batch and
         # update_batch should not create symbol list keys for already existing symbols. Since update_batch is noop when
@@ -904,12 +919,15 @@ class TestBatchUpdate:
         sym = "symbol_1"
         input_df = pd.DataFrame({"a": [1, 2]}, index=pd.date_range(start=pd.Timestamp("2024-01-02"), periods=2))
         lmdb_library.write(sym, input_df)
-        payload = UpdatePayload(sym, pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])), date_range=(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-04")))
+        payload = UpdatePayload(
+            sym,
+            pd.DataFrame({"a": []}, index=pd.DatetimeIndex([])),
+            date_range=(pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-04")),
+        )
         lmdb_library.update_batch([payload])
         vit = lmdb_library.read(sym)
         assert vit.version == 0
         assert_frame_equal(vit.data, input_df)
-
 
 
 def test_regular_update_dynamic_schema_named_index(
@@ -917,9 +935,7 @@ def test_regular_update_dynamic_schema_named_index(
 ):
     lib = lmdb_version_store_tiny_segment_dynamic
     sym = "test_parallel_update_dynamic_schema_named_index"
-    df_0 = pd.DataFrame(
-        {"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1)
-    )
+    df_0 = pd.DataFrame({"col_0": [0], "col_1": [0.5]}, index=pd.date_range("2024-01-01", periods=1))
     df_0.index.name = "date"
     df_1 = pd.DataFrame({"col_0": [1]}, index=pd.date_range("2024-01-02", periods=1))
     lib.write(sym, df_0)
@@ -928,14 +944,24 @@ def test_regular_update_dynamic_schema_named_index(
 
     assert "date" in str(exception_info.value)
 
-@pytest.mark.parametrize("to_write, to_update", [
-    (pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])), pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)]))),
-    (pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
-    (pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])), pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))),
-    (pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
-    (np.array([1]), pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))),
-    (np.array([1]), pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)])))
-])
+
+@pytest.mark.parametrize(
+    "to_write, to_update",
+    [
+        (
+            pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
+            pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)])),
+        ),
+        (pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
+        (
+            pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])),
+            pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)])),
+        ),
+        (pd.Series([1], index=pd.DatetimeIndex([pd.Timestamp(0)])), np.array([2])),
+        (np.array([1]), pd.DataFrame({"a": [2]}, index=pd.DatetimeIndex([pd.Timestamp(0)]))),
+        (np.array([1]), pd.Series([2], index=pd.DatetimeIndex([pd.Timestamp(0)]))),
+    ],
+)
 def test_update_mismatched_object_kind(to_write, to_update, lmdb_version_store_dynamic_schema_v1):
     lib = lmdb_version_store_dynamic_schema_v1
     lib.write("sym", to_write)
@@ -947,11 +973,17 @@ def test_update_mismatched_object_kind(to_write, to_update, lmdb_version_store_d
             lib.update("sym", to_update)
         assert "Update" in str(e.value)
 
+
 def test_update_series_with_different_column_name_throws(lmdb_version_store_dynamic_schema_v1):
     # It makes sense to create a new column and turn the whole thing into a dataframe. This would require changes in the
     # logic for storing normalization metadata which is tricky. Noone has requested this, so we just throw.
     lib = lmdb_version_store_dynamic_schema_v1
-    lib.write("sym", pd.Series([1, 2, 3], name="name_1", index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)])))
+    lib.write(
+        "sym",
+        pd.Series(
+            [1, 2, 3], name="name_1", index=pd.DatetimeIndex([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)])
+        ),
+    )
     with pytest.raises(SchemaException) as e:
         lib.update("sym", pd.Series([1], name="name_2", index=pd.DatetimeIndex([pd.Timestamp(0)])))
     assert "name_1" in str(e.value) and "name_2" in str(e.value)

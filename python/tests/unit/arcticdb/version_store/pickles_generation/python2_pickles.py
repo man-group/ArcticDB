@@ -2,7 +2,8 @@
 
 Executed from a Python 2 env with msgpack 0.6.2
 """
-from email import errors # arbitrary module with some custom types to pickle
+
+from email import errors  # arbitrary module with some custom types to pickle
 import pickle
 import msgpack
 import sys

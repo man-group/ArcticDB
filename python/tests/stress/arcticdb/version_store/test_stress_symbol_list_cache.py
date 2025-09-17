@@ -19,18 +19,18 @@ def write_symbols_worker(lib, sym_id):
     sym = f"sym_{sym_id}"
     lib.write(sym, df)
 
+
 def compact_symbols_worker(lib):
-    set_config_int("SymbolList.MaxDelta", 1) # Trigger symbol list compaction on every list_symbols call
-    set_log_level(specific_log_levels = {"lock":"DEBUG"})
+    set_config_int("SymbolList.MaxDelta", 1)  # Trigger symbol list compaction on every list_symbols call
+    set_log_level(specific_log_levels={"lock": "DEBUG"})
     lib.list_symbols()
 
     lt = lib._dev_tools.library_tool()
     compacted_keys = lt.find_keys_for_id(KeyType.SYMBOL_LIST, "__symbols__")
     assert len(compacted_keys) <= 1
 
-@pytest.fixture(params=[
-    (0.5, 1200, 1500)
-])
+
+@pytest.fixture(params=[(0.5, 1200, 1500)])
 def slow_writing_library(request, real_s3_storage, lib_name):
     write_slowdown_prob, write_slowdown_min_ms, write_slowdown_max_ms = request.param
     arctic = real_s3_storage.create_arctic()
@@ -42,19 +42,14 @@ def slow_writing_library(request, real_s3_storage, lib_name):
     yield arctic.get_library(lib_name)
     arctic.delete_library(lib_name)
 
+
 @REAL_S3_TESTS_MARK
 @pytest.mark.xfail(reason="This should pass after improvements to the storage lock in the future.")
 @pytest.mark.parametrize("num_writers, num_compactors", [(10, 100)])
 def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_compactors):
-    writers = [
-        Process(target=write_symbols_worker, args=(slow_writing_library, i))
-        for i in range(num_writers)
-    ]
+    writers = [Process(target=write_symbols_worker, args=(slow_writing_library, i)) for i in range(num_writers)]
 
-    compactors = [
-        Process(target=compact_symbols_worker, args=(slow_writing_library,))
-        for i in range(num_compactors)
-    ]
+    compactors = [Process(target=compact_symbols_worker, args=(slow_writing_library,)) for i in range(num_compactors)]
 
     processes = writers + compactors
 
@@ -66,7 +61,7 @@ def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_c
         if p.exitcode != 0:
             pytest.fail(f"Process {p.pid} failed with exit code {p.exitcode}")
 
-    expected_symbol_list = { f"sym_{i}" for i in range(num_writers) }
+    expected_symbol_list = {f"sym_{i}" for i in range(num_writers)}
 
     result_symbol_list = set(slow_writing_library.list_symbols())
 
@@ -75,6 +70,7 @@ def test_stress_compaction_many_writers(slow_writing_library, num_writers, num_c
     # it is possible 0 compactions will happen if the slowdowns are big enough.
     # So we have the `test_compaction_produces_single_key` to verify that compaction works as expected without slowdowns.
     assert result_symbol_list == expected_symbol_list
+
 
 @REAL_S3_TESTS_MARK
 @pytest.mark.parametrize("compact_threshold", [1, 3, 8, 10])
@@ -88,7 +84,7 @@ def test_compaction_produces_single_key(real_s3_storage, lib_name, compact_thres
         real_s3_library.write(sym, df)
         symbols = real_s3_library.list_symbols()
 
-    expected_symbol_list = { f"sym_{i}" for i in range(num_symbols) }
+    expected_symbol_list = {f"sym_{i}" for i in range(num_symbols)}
 
     result_symbol_list = set(symbols)
     assert result_symbol_list == expected_symbol_list
@@ -100,7 +96,7 @@ def test_compaction_produces_single_key(real_s3_storage, lib_name, compact_thres
     delete_keys = [x for x in all_keys if x.id == "__delete__"]
     other_keys = [x for x in all_keys if x.id != "__delete__" and x.id != "__add__" and x.id != "__symbols__"]
 
-    expected_num_compacted_keys = 1 # First list_symbols call always compacts
+    expected_num_compacted_keys = 1  # First list_symbols call always compacts
     expected_add_keys = (num_symbols - 1) % compact_threshold
     expected_delete_keys = 0
 

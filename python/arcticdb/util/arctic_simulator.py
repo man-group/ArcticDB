@@ -15,7 +15,13 @@ from arcticdb.util.test import (
     assert_frame_equal_rebuild_index_first,
     assert_series_equal_pandas_1,
 )
-from arcticdb.util.utils import ARCTICDB_NA_VALUE_BOOL, ARCTICDB_NA_VALUE_FLOAT, ARCTICDB_NA_VALUE_INT, ARCTICDB_NA_VALUE_STRING, ARCTICDB_NA_VALUE_TIMESTAMP
+from arcticdb.util.utils import (
+    ARCTICDB_NA_VALUE_BOOL,
+    ARCTICDB_NA_VALUE_FLOAT,
+    ARCTICDB_NA_VALUE_INT,
+    ARCTICDB_NA_VALUE_STRING,
+    ARCTICDB_NA_VALUE_TIMESTAMP,
+)
 from arcticdb.version_store.library import Library
 
 
@@ -28,6 +34,7 @@ def apply_dynamic_schema_changes(to_df: pd.DataFrame, from_df: pd.DataFrame):
     Also modifies `from_df` to have the same schema by adding missing columns in appropriate positions.
     This is how arcticdb treats column combining with dynamic_schema=True on append/update
     """
+
     def empty_column_of_type(num_rows, dtype):
         if pd.api.types.is_integer_dtype(dtype):
             default_value = ARCTICDB_NA_VALUE_INT
@@ -64,7 +71,7 @@ def apply_dynamic_schema_changes(to_df: pd.DataFrame, from_df: pd.DataFrame):
 class ArcticSymbolSimulator:
     """This class is intended to be test Oracle for Arctic operations.
     Test oracles serve to predict result of an operation performed by actual product.
-    As this is work in progress this is not intended to be full oracle 
+    As this is work in progress this is not intended to be full oracle
     from the very beginning, but slowly grow with the actual needs
     """
 
@@ -73,18 +80,18 @@ class ArcticSymbolSimulator:
         self._keep_versions: bool = keep_versions
         self._dynamic_schema: bool = dynamic_schema
 
-    def write(self, df: pd.DataFrame) -> 'ArcticSymbolSimulator':
-        if (len(self._versions) == 0) or self._keep_versions: 
+    def write(self, df: pd.DataFrame) -> "ArcticSymbolSimulator":
+        if (len(self._versions) == 0) or self._keep_versions:
             self._versions.append(df.copy(deep=True))
         else:
             self._versions[len(self._versions) - 1] = df
         return self
 
-    def append(self, df: pd.DataFrame) -> 'ArcticSymbolSimulator':
+    def append(self, df: pd.DataFrame) -> "ArcticSymbolSimulator":
         self.write(self.simulate_arctic_append(self.read(), df, self._dynamic_schema))
         return self
 
-    def update(self, df: pd.DataFrame) -> 'ArcticSymbolSimulator':
+    def update(self, df: pd.DataFrame) -> "ArcticSymbolSimulator":
         self.write(self.simulate_arctic_update(self.read(), df, self._dynamic_schema))
         return self
 
@@ -93,12 +100,14 @@ class ArcticSymbolSimulator:
         assert as_of < len(self._versions)
         df = self._versions[as_of]
         return df.copy(deep=True) if df is not None else None
-    
+
     def assert_equal_to(self, other_df_or_series: Union[pd.DataFrame, pd.Series]):
         self.assert_frame_equal_rebuild_index_first(self.read(), other_df_or_series)
 
     @staticmethod
-    def assert_frame_equal_rebuild_index_first(expected: Union[pd.DataFrame, pd.Series], actual: Union[pd.DataFrame, pd.Series]):
+    def assert_frame_equal_rebuild_index_first(
+        expected: Union[pd.DataFrame, pd.Series], actual: Union[pd.DataFrame, pd.Series]
+    ):
         if isinstance(expected, pd.Series) and isinstance(actual, pd.Series):
             assert_series_equal_pandas_1(expected, actual)
         else:
@@ -106,18 +115,20 @@ class ArcticSymbolSimulator:
             assert_frame_equal_rebuild_index_first(expected, actual_df_same_col_sequence)
 
     @staticmethod
-    def simulate_arctic_append(df1: Union[pd.DataFrame, pd.Series], 
-                               df2: Union[pd.DataFrame, pd.Series], 
-                               dynamic_schema: bool = True) -> pd.DataFrame:
+    def simulate_arctic_append(
+        df1: Union[pd.DataFrame, pd.Series], df2: Union[pd.DataFrame, pd.Series], dynamic_schema: bool = True
+    ) -> pd.DataFrame:
         """Simulates arctic append operation
-        
+
         Result will be dataframe where df2 is appended to df1.
         Limitation: The order of the returned columns may differ from those from arctic"""
 
         def validate_index(df: pd.DataFrame):
             if not isinstance(df.index, (pd.RangeIndex, pd.DatetimeIndex)):
-                raise TypeError(f"Unsupported index type: {type(df.index).__name__}." +
-                                "Only RangeIndex or DatetimeIndex are supported.")
+                raise TypeError(
+                    f"Unsupported index type: {type(df.index).__name__}."
+                    + "Only RangeIndex or DatetimeIndex are supported."
+                )
 
         # Check and validation section
         validate_index(df1)
@@ -149,9 +160,11 @@ class ArcticSymbolSimulator:
             return result_df
 
     @staticmethod
-    def simulate_arctic_update(existing_df: Union[pd.DataFrame, pd.Series], 
-                               update_df: Union[pd.DataFrame, pd.Series],
-                               dynamic_schema: bool = True) -> Union[pd.DataFrame, pd.Series]:
+    def simulate_arctic_update(
+        existing_df: Union[pd.DataFrame, pd.Series],
+        update_df: Union[pd.DataFrame, pd.Series],
+        dynamic_schema: bool = True,
+    ) -> Union[pd.DataFrame, pd.Series]:
         """
         Does implement arctic logic of update() method functionality over pandas dataframes/series.
         In other words the result, new data frame will have the content of 'existing_df' dataframe/series
@@ -162,9 +175,11 @@ class ArcticSymbolSimulator:
 
         if isinstance(existing_df, pd.Series) and isinstance(update_df, pd.Series):
             if len(update_df) < 1:
-                return existing_df # Nothing to update
+                return existing_df  # Nothing to update
             if not dynamic_schema:
-                assert existing_df.dtype == update_df.dtype, f"Series must have same type {existing_df.dtype} == {update_df.dtype}"
+                assert (
+                    existing_df.dtype == update_df.dtype
+                ), f"Series must have same type {existing_df.dtype} == {update_df.dtype}"
                 assert existing_df.name == update_df.name, "Series name must be same"
         elif isinstance(existing_df, pd.DataFrame) and isinstance(update_df, pd.DataFrame):
             if not dynamic_schema:
@@ -172,9 +187,13 @@ class ArcticSymbolSimulator:
                     f"Dataframe must have identical columns types in same order.\n"
                     + f"{existing_df.dtypes.to_list()} == {update_df.dtypes.to_list()}."
                 )
-                assert existing_df.columns.to_list() == update_df.columns.to_list(), "Columns names also need to be in same order"
+                assert (
+                    existing_df.columns.to_list() == update_df.columns.to_list()
+                ), "Columns names also need to be in same order"
         else:
-            raise(f"Expected existing_df and update_df to have the same type. Types: {type(existing_df)} and {type(update_df)}")
+            raise (
+                f"Expected existing_df and update_df to have the same type. Types: {type(existing_df)} and {type(update_df)}"
+            )
 
         if dynamic_schema:
             existing_df, update_df = apply_dynamic_schema_changes(existing_df, update_df)
@@ -189,4 +208,3 @@ class ArcticSymbolSimulator:
         chunks.append(df2)
         result_df = pd.concat(chunks)
         return result_df
-

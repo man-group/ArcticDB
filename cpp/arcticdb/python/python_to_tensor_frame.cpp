@@ -2,9 +2,9 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
-
 
 #include <arcticdb/python/python_to_tensor_frame.hpp>
 #include <arcticdb/entity/performance_tracing.hpp>
@@ -18,24 +18,22 @@ constexpr const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\0
 
 using namespace arcticdb::pipelines;
 
-[[nodiscard]] static inline bool is_unicode(PyObject *obj) {
-    return PyUnicode_Check(obj);
-}
+[[nodiscard]] static inline bool is_unicode(PyObject* obj) { return PyUnicode_Check(obj); }
 
-[[nodiscard]] static inline bool is_py_boolean(PyObject* obj) {
-    return PyBool_Check(obj);
-}
+[[nodiscard]] static inline bool is_py_boolean(PyObject* obj) { return PyBool_Check(obj); }
 
-std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *obj, bool is_owned) {
-    if(is_unicode(obj)) {
+std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject* obj, bool is_owned) {
+    if (is_unicode(obj)) {
         return StringEncodingError(
-            fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name));
+                fmt::format("Unexpected unicode in Python object with type {}", obj->ob_type->tp_name)
+        );
     }
-    char *buffer;
+    char* buffer;
     ssize_t length;
     if (PYBIND11_BYTES_AS_STRING_AND_SIZE(obj, &buffer, &length)) {
-        return StringEncodingError(fmt::format("Unable to extract string contents from Python object with type {}",
-            obj->ob_type->tp_name));
+        return StringEncodingError(
+                fmt::format("Unable to extract string contents from Python object with type {}", obj->ob_type->tp_name)
+        );
     }
     return PyStringWrapper(buffer, length, is_owned ? obj : nullptr);
 }
@@ -47,7 +45,8 @@ std::variant<StringEncodingError, PyStringWrapper> pystring_to_buffer(PyObject *
 
 [[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_object_type(PyObject* obj) {
     if (is_py_boolean(obj)) {
-        normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>("Nullable booleans are not supported at the moment");
+        normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>("Nullable booleans are not supported at the moment"
+        );
         return {ValueType::BOOL_OBJECT, 1, 1};
     }
 
@@ -73,16 +72,20 @@ static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
 /// @todo We will iterate over all arrays in a column in aggregator_set_data anyways, so this is redundant, however
 ///     the type is determined at the point when obj_to_tensor is called. We need to make it possible to change the
 ///     the column type in aggregator_set_data in order not to iterate all arrays twice.
-[[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(PyObject** begin, PyObject** end) {
-    while(begin != end) {
+[[nodiscard]] static std::tuple<ValueType, uint8_t, ssize_t> determine_python_array_type(
+        PyObject** begin, PyObject** end
+) {
+    while (begin != end) {
         begin = std::find_if(begin, end, is_py_none);
-        if(begin == end) {
+        if (begin == end) {
             break;
         }
         const auto arr = pybind11::detail::array_proxy(*begin);
-        normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(arr->nd == 1, "Only one dimensional arrays are supported in columns.");
+        normalization::check<ErrorCode::E_UNIMPLEMENTED_COLUMN_SECONDARY_TYPE>(
+                arr->nd == 1, "Only one dimensional arrays are supported in columns."
+        );
         const ssize_t element_count = arr->dimensions[0];
-        if(element_count != 0) {
+        if (element_count != 0) {
             const auto [kind, val_bytes] = parse_array_descriptor(arr->descr);
             return {get_value_type(kind), static_cast<uint8_t>(val_bytes), 2};
         }
@@ -91,21 +94,29 @@ static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
     return {ValueType::EMPTY, 8, 2};
 }
 
-std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject *obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
+std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
+        PyObject* obj, std::optional<ScopedGILLock>& scoped_gil_lock
+) {
     util::check(obj != nullptr, "Got null pointer in py_unicode_to_buffer");
-    if(!is_unicode(obj)) {
+    if (!is_unicode(obj)) {
         return StringEncodingError(
-                fmt::format("Unexpected non-unicode in Python object with type {}", obj->ob_type->tp_name));
+                fmt::format("Unexpected non-unicode in Python object with type {}", obj->ob_type->tp_name)
+        );
     }
     if (PyUnicode_IS_COMPACT_ASCII(obj)) {
-        return PyStringWrapper(reinterpret_cast<char *>(PyUnicode_DATA(obj)), PyUnicode_GET_LENGTH(obj));
-    // Later versions of cpython expose macros in unicodeobject.h to perform this check, and to get the utf8_length,
-    // but for 3.6 we have to hand-roll it
+        return PyStringWrapper(reinterpret_cast<char*>(PyUnicode_DATA(obj)), PyUnicode_GET_LENGTH(obj));
+        // Later versions of cpython expose macros in unicodeobject.h to perform this check, and to get the utf8_length,
+        // but for 3.6 we have to hand-roll it
     } else if (reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8) {
-        return PyStringWrapper(reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8, reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8_length);
+        return PyStringWrapper(
+                reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8,
+                reinterpret_cast<PyCompactUnicodeObject*>(obj)->utf8_length
+        );
     } else {
         if (PyUnicode_READY(obj) != 0) {
-            return StringEncodingError(fmt::format("PyUnicode_READY failed on Python object with type", obj->ob_type->tp_name));
+            return StringEncodingError(
+                    fmt::format("PyUnicode_READY failed on Python object with type", obj->ob_type->tp_name)
+            );
         }
 
         if (!scoped_gil_lock.has_value()) {
@@ -113,17 +124,19 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(PyObject
         }
         PyObject* utf8_obj = PyUnicode_AsUTF8String(obj);
         if (!utf8_obj) {
-            return StringEncodingError(fmt::format("Unable to extract string contents from Python object with type {}", obj->ob_type->tp_name));
+            return StringEncodingError(fmt::format(
+                    "Unable to extract string contents from Python object with type {}", obj->ob_type->tp_name
+            ));
         }
         return pystring_to_buffer(utf8_obj, true);
     }
 }
 
-NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
+NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types) {
     auto& api = pybind11::detail::npy_api::get();
     util::check(api.PyArray_Check_(ptr), "Expected Python array");
     const auto arr = pybind11::detail::array_proxy(ptr);
-    const auto[kind, elsize] = parse_array_descriptor(arr->descr);
+    const auto [kind, elsize] = parse_array_descriptor(arr->descr);
     auto ndim = arr->nd;
     const ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
     // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
@@ -131,10 +144,11 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
     // See: https://github.com/man-group/ArcticDB/pull/1049
     auto val_type = size == 0 && empty_types ? ValueType::EMPTY : get_value_type(kind);
     auto val_bytes = static_cast<uint8_t>(elsize);
-    const int64_t element_count = ndim == 1 ? int64_t(arr->dimensions[0]) : int64_t(arr->dimensions[0]) * int64_t(arr->dimensions[1]);
+    const int64_t element_count =
+            ndim == 1 ? int64_t(arr->dimensions[0]) : int64_t(arr->dimensions[0]) * int64_t(arr->dimensions[1]);
     const auto c_style = arr->strides[0] == val_bytes;
 
-    if(is_empty_type(val_type)) {
+    if (is_empty_type(val_type)) {
         val_bytes = 8;
         val_type = ValueType::EMPTY;
     } else if (is_sequence_type(val_type)) {
@@ -142,9 +156,9 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
         val_bytes = 8;
 
         if (!is_fixed_string_type(val_type) && element_count > 0) {
-            auto obj = reinterpret_cast<PyObject **>(arr->data);
+            auto obj = reinterpret_cast<PyObject**>(arr->data);
             bool empty_string_placeholder = false;
-            PyObject *sample = *obj;
+            PyObject* sample = *obj;
             PyObject** current_object = obj;
             // Arctic allows both None and NaN to represent a string with no value. We have 3 options:
             // * In case all values are None we can mark this column segment as EmptyType and avoid allocating storage
@@ -159,14 +173,14 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
                 empty_string_placeholder = true;
                 util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
                 const auto* end = obj + size;
-                while(current_object < end) {
-                    if(!(is_py_nan(*current_object) || is_py_none(*current_object))) {
+                while (current_object < end) {
+                    if (!(is_py_nan(*current_object) || is_py_none(*current_object))) {
                         empty_string_placeholder = false;
                         break;
                     }
                     ++current_object;
                 }
-                if(current_object != end)
+                if (current_object != end)
                     sample = *current_object;
             }
             // Column full of NaN values is interpreted differently based on the kind. If kind is object "O" the column
@@ -175,15 +189,16 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
             // missing string values.
             if (empty_string_placeholder && kind == 'O') {
                 val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
-            } else if(is_unicode(sample)) {
+            } else if (is_unicode(sample)) {
                 val_type = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
                 val_type = ValueType::ASCII_DYNAMIC;
-            } else if(is_py_array(sample)) {
+            } else if (is_py_array(sample)) {
                 normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
-                    "Array types are not supported at the moment"
+                        "Array types are not supported at the moment"
                 );
-                std::tie(val_type, val_bytes, ndim) = determine_python_array_type(current_object, current_object + element_count);
+                std::tie(val_type, val_bytes, ndim) =
+                        determine_python_array_type(current_object, current_object + element_count);
             } else {
                 std::tie(val_type, val_bytes, ndim) = determine_python_object_type(sample);
             }
@@ -202,11 +217,9 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
 }
 
 std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
-    const StreamId& stream_name,
-    const py::tuple &item,
-    const py::object &norm_meta,
-    const py::object &user_meta,
-    bool empty_types) {
+        const StreamId& stream_name, const py::tuple& item, const py::object& norm_meta, const py::object& user_meta,
+        bool empty_types
+) {
     ARCTICDB_SUBSAMPLE_DEFAULT(NormalizeFrame)
     auto res = std::make_shared<InputTensorFrame>();
     res->desc.set_id(stream_name);
@@ -218,9 +231,12 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     // Fill index
     auto idx_names = item[0].cast<std::vector<std::string>>();
     auto idx_vals = item[2].cast<std::vector<py::object>>();
-    util::check(idx_names.size() == idx_vals.size(),
-                "Number idx names {} and values {} do not match",
-                idx_names.size(), idx_vals.size());
+    util::check(
+            idx_names.size() == idx_vals.size(),
+            "Number idx names {} and values {} do not match",
+            idx_names.size(),
+            idx_vals.size()
+    );
 
     if (!idx_names.empty()) {
         util::check(idx_names.size() == 1, "Multi-indexed dataframes not handled");
@@ -255,9 +271,9 @@ std::shared_ptr<InputTensorFrame> py_ndf_to_frame(
     for (auto i = 0u; i < col_vals.size(); ++i) {
         auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
         res->num_rows = std::max(res->num_rows, static_cast<size_t>(tensor.shape(0)));
-        if(tensor.expanded_dim() == 1) {
+        if (tensor.expanded_dim() == 1) {
             res->desc.add_field(scalar_field(tensor.data_type(), col_names[i]));
-        } else if(tensor.expanded_dim() == 2) {
+        } else if (tensor.expanded_dim() == 2) {
             res->desc.add_field(FieldRef{TypeDescriptor{tensor.data_type(), Dimension::Dim1}, col_names[i]});
         }
         res->field_tensors.push_back(std::move(tensor));
