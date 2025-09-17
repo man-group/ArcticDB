@@ -635,3 +635,29 @@ def test_add_to_snapshot_with_negative_numbers(basic_store):
     assert 102 == lib.read("s1", as_of="snap").data
     lib.add_to_snapshot("snap", ["s1"], [-2]) 
     assert 101 == lib.read("s1", as_of="snap").data
+
+
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_remove_incomplete_for_v1_API(version_store_and_real_s3_basic_store_factory, dynamic_schema):
+    """Testing staging and removing incomplete series for v1 API"""
+    
+    lib: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
+        dynamic_schema=dynamic_schema, segment_row_size=10)   
+    sym = "any symbol will do until don't" 
+    name = "series_name"
+    length_of_series =  np.random.randint(5, 26, size=10)
+
+    for iter, length in enumerate(length_of_series):
+        timestamp = pd.Timestamp(f"{1990 + iter}-1-1")
+        series = generate_random_series(np.float64, length, name, start_time=timestamp, seed=None)
+        if iter == 0:
+            lib.write(sym, series)
+        else:
+            lib.stage(sym, series, validate_index=False, sort_on_index=False) 
+        
+    assert lib.list_symbols_with_incomplete_data() == [sym]
+    lib.remove_incomplete("") # non-existing symbol
+    lib.remove_incomplete("any name will do") # non-existing symbol
+    assert lib.list_symbols_with_incomplete_data() == [sym]
+    lib.remove_incomplete(sym)
+    assert lib.list_symbols_with_incomplete_data() == []
