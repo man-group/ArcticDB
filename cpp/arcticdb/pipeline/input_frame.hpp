@@ -57,7 +57,7 @@ struct InputFrame {
     };
     std::variant<SegmentInMemory, InputTensors> input_data;
   private:
-    StreamDescriptor desc_;
+//    StreamDescriptor desc_;
 };
 
 } //namespace arcticdb::pipelines
