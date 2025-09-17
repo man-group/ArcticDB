@@ -82,4 +82,18 @@ TEST_P(BitsetForIndex, DynamicSchemaOverlapEnd) {
     ASSERT_EQ(bitset->count(), 1);
 }
 
+TEST_P(BitsetForIndex, DynamicSchemaMatchEndIndex) {
+    using namespace arcticdb;
+    using namespace arcticdb::pipelines;
+    TestContainer container;
+    container.seg().set_range(2, 4);
+    container.seg().set_range(5, 7);
+    IndexRange rg(NumericIndex{7}, NumericIndex{7});
+    auto bitset = build_bitset_for_index<TestContainer, TimeseriesIndex>(
+            container, rg, true, false, is_read_operation(), std::unique_ptr<util::BitSet>{}
+    );
+    ASSERT_EQ((*bitset)[1], is_read_operation());
+    ASSERT_EQ(bitset->count(), is_read_operation() ? 1 : 0);
+}
+
 INSTANTIATE_TEST_SUITE_P(BitsetForIndexTests, BitsetForIndex, testing::Values(true, false));

@@ -325,107 +325,110 @@ inline std::vector<FilterQuery<ContainerType>> build_update_query_filters(
     util::variant_match(
             range,
             [&](const RowRange& row_range) {
-        util::check(
-                std::holds_alternative<stream::RowCountIndex>(index),
-                "Cannot partition by row count when a timeseries-indexed frame was supplied"
-        );
-        queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
+                util::check(
+                        std::holds_alternative<stream::RowCountIndex>(index),
+                        "Cannot partition by row count when a timeseries-indexed frame was supplied"
+                );
+                queries.emplace_back(create_row_filter<ContainerType>(RowRange{row_range.first, row_range.second}));
             },
             [&](const IndexRange& index_range) {
-        util::check(
-                std::holds_alternative<stream::TimeseriesIndex>(index),
-                "Cannot partition by time when a rowcount-indexed frame was supplied"
-        );
-        queries.emplace_back(create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups)
-        );
+                util::check(
+                        std::holds_alternative<stream::TimeseriesIndex>(index),
+                        "Cannot partition by time when a rowcount-indexed frame was supplied"
+                );
+                queries.emplace_back(create_index_filter<ContainerType>(
+                        IndexRange{index_range}, dynamic_schema, column_groups, false
+                ));
             },
             [&](const auto&) {
-        util::variant_match(
-                index,
-                [&](const stream::TimeseriesIndex&) {
-                    queries.emplace_back(
-                            create_index_filter<ContainerType>(IndexRange{index_range}, dynamic_schema, column_groups)
-                    );
-                },
-                [&](const IndexRange& index_range) {
-                    util::check(
-                            std::holds_alternative<stream::TimeseriesIndex>(index),
-                            "Cannot partition by time when a rowcount-indexed frame was supplied"
-                    );
-                    queries.emplace_back(create_index_filter<ContainerType>(
-                            IndexRange{index_range}, dynamic_schema, column_groups, false
-                    ));
-                },
-                [&](const auto&) {
-                    util::variant_match(
-                            index,
-                            [&](const stream::TimeseriesIndex&) {
-                                queries.emplace_back(create_index_filter<ContainerType>(
-                                        IndexRange{index_range}, dynamic_schema, column_groups, false
-                                ));
-                            },
-                            [&](const stream::RowCountIndex&) {
-                                RowRange row_range{
-                                        std::get<NumericId>(index_range.start_),
-                                        std::get<NumericIndex>(index_range.end_)
-                                };
-                                queries.emplace_back(create_row_filter<ContainerType>(std::move(row_range)));
-                            },
-                            [&](const auto&) {}
-                    );
-                }
-        );
+                util::variant_match(
+                        index,
+                        [&](const stream::TimeseriesIndex&) {
+                            queries.emplace_back(create_index_filter<ContainerType>(
+                                    IndexRange{index_range}, dynamic_schema, column_groups, false
+                            ));
+                        },
+                        [&](const IndexRange& index_range) {
+                            util::check(
+                                    std::holds_alternative<stream::TimeseriesIndex>(index),
+                                    "Cannot partition by time when a rowcount-indexed frame was supplied"
+                            );
+                            queries.emplace_back(create_index_filter<ContainerType>(
+                                    IndexRange{index_range}, dynamic_schema, column_groups, false
+                            ));
+                        },
+                        [&](const auto&) {
+                            util::variant_match(
+                                    index,
+                                    [&](const stream::TimeseriesIndex&) {
+                                        queries.emplace_back(create_index_filter<ContainerType>(
+                                                IndexRange{index_range}, dynamic_schema, column_groups, false
+                                        ));
+                                    },
+                                    [&](const stream::RowCountIndex&) {
+                                        RowRange row_range{
+                                                std::get<NumericId>(index_range.start_),
+                                                std::get<NumericIndex>(index_range.end_)
+                                        };
+                                        queries.emplace_back(create_row_filter<ContainerType>(std::move(row_range)));
+                                    },
+                                    [&](const auto&) {}
+                            );
+                        }
+                );
+            }
+    );
 
-        return queries;
+    return queries;
 }
 
 inline FilterRange get_query_index_range(const stream::Index& index, const IndexRange& index_range) {
-        if (std::holds_alternative<stream::TimeseriesIndex>(index))
-            return index_range;
-        else
-            return RowRange{std::get<NumericIndex>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
+    if (std::holds_alternative<stream::TimeseriesIndex>(index))
+        return index_range;
+    else
+        return RowRange{std::get<NumericIndex>(index_range.start_), std::get<NumericIndex>(index_range.end_)};
 }
 
 inline std::vector<SliceAndKey> strictly_before(const FilterRange& range, std::span<const SliceAndKey> input) {
-        std::vector<SliceAndKey> output;
-        util::variant_match(
-                range,
-                [&](const RowRange& row_range) {
-                    std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
-                        // Key's row ranges are end exclusive
-                        return sk.slice_.row_range.second <= row_range.first;
-                    });
-                },
-                [&](const IndexRange& index_range) {
-                    std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
-                        // Key's index ranges are end exclusive
-                        return sk.key().index_range().end_ <= index_range.start_;
-                    });
-                },
-                [&](const auto&) { util::raise_rte("Expected specified range "); }
-        );
-        return output;
+    std::vector<SliceAndKey> output;
+    util::variant_match(
+            range,
+            [&](const RowRange& row_range) {
+                std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
+                    // Key's row ranges are end exclusive
+                    return sk.slice_.row_range.second <= row_range.first;
+                });
+            },
+            [&](const IndexRange& index_range) {
+                std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
+                    // Key's index ranges are end exclusive
+                    return sk.key().index_range().end_ <= index_range.start_;
+                });
+            },
+            [&](const auto&) { util::raise_rte("Expected specified range "); }
+    );
+    return output;
 }
 
 inline std::vector<SliceAndKey> strictly_after(const FilterRange& range, std::span<const SliceAndKey> input) {
-        std::vector<SliceAndKey> output;
-        util::variant_match(
-                range,
-                [&input, &output](const RowRange& row_range) {
-                    std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
-                        // Row range filters are end exclusive
-                        return sk.slice_.row_range.first >= row_range.second;
-                    });
-                },
-                [&input, &output](const IndexRange& index_range) {
-                    std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
-                        // Index range filters are end inclusive
-                        return sk.key().index_range().start_ > index_range.end_;
-                    });
-                },
-                [](const auto&) { util::raise_rte("Expected specified range "); }
-        );
-        return output;
+    std::vector<SliceAndKey> output;
+    util::variant_match(
+            range,
+            [&input, &output](const RowRange& row_range) {
+                std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
+                    // Row range filters are end exclusive
+                    return sk.slice_.row_range.first >= row_range.second;
+                });
+            },
+            [&input, &output](const IndexRange& index_range) {
+                std::ranges::copy_if(input, std::back_inserter(output), [&](const auto& sk) {
+                    // Index range filters are end inclusive
+                    return sk.key().index_range().start_ > index_range.end_;
+                });
+            },
+            [](const auto&) { util::raise_rte("Expected specified range "); }
+    );
+    return output;
 }
 
 } // namespace arcticdb::pipelines

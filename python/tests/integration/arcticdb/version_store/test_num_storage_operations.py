@@ -294,10 +294,14 @@ def get_num_data_keys_intersecting_date_range(index, start, end, exclude_fully_i
         # end is inclusive when doing date_range but end_index in the column is exclusive
         if exclude_fully_included:
             condition1 = start is None or start < row["end_index"]
-            condition2 = end is None or end >= row["start_index"]
         else:
+            # When reading, we want to include the end index, in order to support backwards compatibility with older versions.
+            # The same fix should be done for updates, but that is not implemented yet and should be added with https://github.com/man-group/ArcticDB/issues/2655
+            # The exclude_fully_included flag is only used for updates
             condition1 = start is None or start <= row["end_index"]
-            condition2 = end is None or end >= row["start_index"]
+
+        condition2 = end is None or end >= row["start_index"]
+
         basic_intersection = condition1 and condition2
 
         if basic_intersection:
