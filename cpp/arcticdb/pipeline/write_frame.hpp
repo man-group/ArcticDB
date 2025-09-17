@@ -46,8 +46,9 @@ struct WriteToSegmentTask : public async::BaseTask {
     std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator()();
 
   private:
-    SegmentInMemory slice_segment() const;
     SegmentInMemory slice_tensors() const;
+    SegmentInMemory slice_segment() const;
+    Column slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset) const;
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(

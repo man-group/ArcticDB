@@ -66,101 +66,59 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
     }
     for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
-        const auto& source_column = frame.column(col_idx);
-        const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
-        const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
-        if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
-            ChunkedBuffer chunked_buffer;
-            if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-                chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes);
-            } else {
-                chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
-            }
-            seg.add_column(
-                    frame.field(col_idx),
-                    std::make_shared<Column>(source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer))
-            );
-        } else if (is_time_type(source_column.type().data_type())) {
-            auto chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
-            Column col(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::NOT_PERMITTED, std::move(chunked_buffer));
-            details::visit_type(source_column.type().data_type(), [&col](auto source_tag) {
-                using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
-                timestamp factor;
-                if constexpr (source_type_info::data_type == DataType::SECONDS_UTC64) {
-                    factor = 1'000'000'000;
-                } else if constexpr (source_type_info::data_type == DataType::MILLISECONDS_UTC64) {
-                    factor = 1'000'000;
-                } else if constexpr (source_type_info::data_type == DataType::MICROSECONDS_UTC64) {
-                    factor = 1'000;
-                } else {
-                    util::raise_rte("Unexpected time type {}", source_type_info::data_type);
-                }
-                Column::transform<typename source_type_info::TDT, typename source_type_info::TDT>(
-                        col,
-                        col,
-                        [factor](timestamp ts) {
-                            // TODO: Microbenchmark with and without bounds checking
-                            // TODO: Include provided timestamp and our supported range in error message
-                            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                    ts < std::numeric_limits<timestamp>::max() / factor && ts > std::numeric_limits<timestamp>::min() / factor,
-                                    "Timestamp provided outside of ArcticDB's supported range");
-                            return factor * ts;
-                        });
-            });
-            seg.add_column(frame.field(col_idx), std::make_shared<Column>(std::move(col)));
-        }
+        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset)));
     }
     for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
-        const auto& source_column = frame.column(col_idx);
-        const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
-        const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
-        if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
-            ChunkedBuffer chunked_buffer;
-            if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-                chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes);
-            } else {
-                chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
-            }
-            seg.add_column(
-                    frame.field(col_idx),
-                    std::make_shared<Column>(source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer))
-            );
-        } else if (is_time_type(source_column.type().data_type())) {
-            auto chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
-            Column col(
-                    make_scalar_type(DataType::NANOSECONDS_UTC64),
-                    Sparsity::NOT_PERMITTED,
-                    std::move(chunked_buffer)
-            );
-            details::visit_type(source_column.type().data_type(), [&col](auto source_tag) {
-                using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
-                timestamp factor;
-                if constexpr (source_type_info::data_type == DataType::SECONDS_UTC64) {
-                    factor = 1'000'000'000;
-                } else if constexpr (source_type_info::data_type == DataType::MILLISECONDS_UTC64) {
-                    factor = 1'000'000;
-                } else if constexpr (source_type_info::data_type == DataType::MICROSECONDS_UTC64) {
-                    factor = 1'000;
-                } else {
-                    util::raise_rte("Unexpected time type {}", source_type_info::data_type);
-                }
-                Column::transform<typename source_type_info::TDT, typename source_type_info::TDT>(
-                        col,
-                        col,
-                        [factor](timestamp ts)
-                        {
-                            user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                    ts < std::numeric_limits<timestamp>::max() / factor && ts > std::numeric_limits<timestamp>::min() / factor,
-                                    "Timestamp provided outside of ArcticDB's supported range");
-                            return factor * ts;
-                        }
-                );
-            });
-            seg.add_column(frame.field(col_idx), std::make_shared<Column>(std::move(col)));
-        }
+        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset)));
     }
     seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
     return seg;
+}
+
+Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset) const {
+    const auto& source_column = frame.column(col_idx);
+    const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
+    const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
+    if (!is_time_type(source_column.type().data_type()) || source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
+        ChunkedBuffer chunked_buffer;
+        if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
+            chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes);
+        } else {
+            chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+        }
+        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
+    } else if (is_time_type(source_column.type().data_type())) {
+        auto chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+        Column col(make_scalar_type(DataType::NANOSECONDS_UTC64), Sparsity::NOT_PERMITTED, std::move(chunked_buffer));
+        details::visit_type(source_column.type().data_type(), [&col](auto source_tag) {
+            using source_type_info = ScalarTypeInfo<decltype(source_tag)>;
+            timestamp factor;
+            if constexpr (source_type_info::data_type == DataType::SECONDS_UTC64) {
+                factor = 1'000'000'000;
+            } else if constexpr (source_type_info::data_type == DataType::MILLISECONDS_UTC64) {
+                factor = 1'000'000;
+            } else if constexpr (source_type_info::data_type == DataType::MICROSECONDS_UTC64) {
+                factor = 1'000;
+            } else {
+                util::raise_rte("Unexpected time type {}", source_type_info::data_type);
+            }
+            Column::transform<typename source_type_info::TDT, typename source_type_info::TDT>(
+                    col,
+                    col,
+                    [factor](timestamp ts) {
+                        // TODO: Microbenchmark with and without bounds checking
+                        // TODO: Include provided timestamp and our supported range in error message
+                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                ts < std::numeric_limits<timestamp>::max() / factor && ts > std::numeric_limits<timestamp>::min() / factor,
+                                "Timestamp provided outside of ArcticDB's supported range");
+                        return factor * ts;
+                    });
+        });
+        return col;
+    } else {
+        // Unreachable by construction due to checks in arcticdb_type_from_arrow_type
+        util::raise_rte("Unsupported type written as Arrow {}", source_column.type().data_type());
+    }
 }
 
 SegmentInMemory WriteToSegmentTask::slice_tensors() const {
