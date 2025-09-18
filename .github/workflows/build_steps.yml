@@ -42,7 +42,7 @@ jobs:
     env:
       # 0 - uses S3 Cache, 1 - uses GHA cache
       # this way the external PRs can use the GHA cache
-      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY && 0 || 1}}
+      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY == null}}
       SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
       SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
       SCCACHE_REGION: eu-west-1
