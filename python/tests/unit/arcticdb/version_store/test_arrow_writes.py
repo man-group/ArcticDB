@@ -539,6 +539,26 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
     # TODO: Test reading back as Pandas when this works generally
 
 
+supported_types = [
+    pa.bool_(),
+    pa.uint8(),
+    pa.uint16(),
+    pa.uint32(),
+    pa.uint64(),
+    pa.int8(),
+    pa.int16(),
+    pa.int32(),
+    pa.int64(),
+    pa.float32(),
+    pa.float64(),
+    pa.timestamp("s"),
+    pa.timestamp("ms"),
+    pa.timestamp("us"),
+    pa.timestamp("ns"),
+]
+num_supported_types = len(supported_types)
+
+
 # We are more interested in the slicing than the data, so the parameters are for:
 # - dataframe length
 # - record batch structure
@@ -548,10 +568,12 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
 @settings(deadline=None)
 @given(
     df_length=st.integers(1, 200_000),
-    index_position=st.integers(0, 15), # 15 supported types + index, increase when more added
+    index_position=st.integers(0, num_supported_types),
+    # Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single record batch/
+    # row slice/ column slice
     max_record_batches=st.integers(1, 100),
     max_row_slices=st.integers(1, 100),
-    max_col_slices=st.integers(1, 15), # 15 supported types, increase when more added. Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single column slice
+    max_col_slices=st.integers(1, num_supported_types),
 )
 def test_arrow_writes_hypothesis(lmdb_version_store_big_map, df_length, index_position, max_record_batches, max_row_slices, max_col_slices):
     rng = np.random.default_rng()
@@ -559,42 +581,29 @@ def test_arrow_writes_hypothesis(lmdb_version_store_big_map, df_length, index_po
     sym = "test_arrow_writes_hypothesis"
     # version_store_factory doesn't play nicely with hypothesis, so set these values manually
     rows_per_slice = max(df_length // max_row_slices, 1)
-    cols_per_slice = 15 // max_col_slices
+    cols_per_slice = num_supported_types // max_col_slices
     lib.lib_cfg().lib_desc.version.write_options.segment_row_size = rows_per_slice
     lib.lib_cfg().lib_desc.version.write_options.column_group_size = cols_per_slice
     lib.set_output_format("experimental_arrow")
-    supported_types = [
-        pa.bool_(),
-        pa.uint8(),
-        pa.uint16(),
-        pa.uint32(),
-        pa.uint64(),
-        pa.int8(),
-        pa.int16(),
-        pa.int32(),
-        pa.int64(),
-        pa.float32(),
-        pa.float64(),
-        pa.timestamp("s"),
-        pa.timestamp("ms"),
-        pa.timestamp("us"),
-        pa.timestamp("ns"),
-    ]
     data = {}
     for idx, supported_type in enumerate(supported_types):
         if idx == index_position:
             data["ts"] = pa.array(np.arange(0, df_length, dtype="datetime64[ns]"), pa.timestamp("ns"))
         data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)
-    if index_position == 15:
+    if index_position == num_supported_types:
         data["ts"] = pa.array(np.arange(0, df_length, dtype="datetime64[ns]"), pa.timestamp("ns"))
     table = pa.table(data)
     max_chunksize = max((df_length + max_record_batches) // max_record_batches, 1)
     record_batches = table.to_batches(max_chunksize=max_chunksize)
+    # Hacky - pivot off pandas to force creation of non-view record batches. Even copy.deepcopy just produces views
+    # with pa.Table and pa.RecordBatch. Replace with construction of individual tables and pa.concat_tables, or use
+    # pa.Table.take
     pandas_dfs = [record_batch.to_pandas() for record_batch in record_batches]
     tables = [pa.Table.from_pandas(df) for df in pandas_dfs]
     table = pa.concat_tables(tables)
     lib.write(sym, table, index_column="ts")
     received = lib.read(sym).data
+    # Remove this when non-nanosecond timestamp columns have their type roundtripped correctly
     for (i, name) in enumerate(table.column_names):
         if "timestamp" in name:
             table = table.set_column(i, name, table.column(name).cast(pa.timestamp("ns")))
