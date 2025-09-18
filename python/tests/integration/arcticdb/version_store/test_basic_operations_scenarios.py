@@ -23,12 +23,16 @@ from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
 from arcticdb.exceptions import ArcticNativeException, SortingException
+from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 
 from arcticdb_ext.exceptions import (
     UnsortedDataException,
     InternalException,
     NormalizationException,
+    UserInputException,
+    MissingDataException,
+    SchemaException,
 )
 
 from benchmarks.bi_benchmarks import assert_frame_equal
@@ -582,3 +586,138 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     # Complex structures can be staged by default
     lib.stage(symbol, get_metadata())
     check_incomplete_staged(symbol)
+
+
+@pytest.mark.storage
+def test_batch_read_and_join_scenarios(basic_store):
+    """The test covers usage of batch_read_and_join with multiple parameters and error conditions"""
+    lib: NativeVersionStore = basic_store
+
+    q = QueryBuilder()
+    q.concat("outer")
+    df0 = (
+        DFGenerator(size=20)
+        .add_bool_col("bool")
+        .add_float_col("A", np.float32)
+        .add_int_col("B", np.int32)
+        .add_int_col("C", np.uint16)
+        .generate_dataframe()
+    )
+
+    df0_1 = (
+        DFGenerator(size=20)
+        .add_bool_col("bool")
+        .add_float_col("A", np.float32)
+        .add_int_col("B", np.int16)
+        .add_int_col("C", np.uint16)
+        .add_string_col("str", 10, include_unicode=True)
+        .add_timestamp_col("ts")
+        .generate_dataframe()
+    )
+
+    df1_len = 13
+    df1 = (
+        DFGenerator(size=df1_len)
+        .add_bool_col("bool")
+        .add_float_col("A", np.float64)
+        .add_float_col("B", np.float32)
+        .add_int_col("C", np.int64)
+        .generate_dataframe()
+    )
+
+    df1_1 = (
+        DFGenerator(size=df1_len)
+        .add_bool_col("bool")
+        .add_string_col("A", 10)
+        .add_int_col("B", np.int64)
+        .generate_dataframe()
+    )
+
+    lib.write("symbol_empty", empty_df)
+    lib.write("symbol0", df0)
+    lib.write("symbol1", df1)
+
+    # Concatenate multiple times
+    data: pd.DataFrame = lib.batch_read_and_join(["symbol0", "symbol1", "symbol0", "symbol1"], query_builder=q).data
+    expected = pd.concat([df0, df1, df0, df1], ignore_index=True)
+    assert_frame_equal(expected, data)
+
+    # Concatenate with error QB
+    with pytest.raises(UserInputException):
+        data: pd.DataFrame = lib.batch_read_and_join(
+            ["symbol0", "symbol1"], query_builder=QueryBuilder(), as_ofs=[0, 0]
+        ).data
+
+    # Concatenate with column filter
+    data: pd.DataFrame = lib.batch_read_and_join(
+        ["symbol0", "symbol1"], query_builder=q, columns=[["A", "C", "none"], None]
+    ).data
+    df0_subset = df0[["A", "C"]]
+    expected = pd.concat([df0_subset, df1], ignore_index=True)
+    # Pandas concat will fill NaN for bools, Arcticdb is using False
+    expected["bool"] = expected["bool"].fillna(False)
+    assert_frame_equal(expected, data)
+
+    # Concatenate symbols with column filters + row range
+    # row range limit is beyond the len of data
+    data: pd.DataFrame = lib.batch_read_and_join(
+        ["symbol0", "symbol1"], query_builder=q, columns=[["A"], ["B"]], row_ranges=[(2, 3), (10, df1_len + 2)]
+    ).data
+    df0_subset = df0.loc[2:2, ["A"]]
+    df1_subset = df1.loc[10:df1_len, ["B"]]
+    expected = pd.concat([df0_subset, df1_subset], ignore_index=True)
+    assert_frame_equal(expected, data)
+
+    lib.write("symbol0", df0_1)
+    lib.write("symbol1", df1_1)
+
+    # Concatenate with wrong schema
+    with pytest.raises(SchemaException):
+        data: pd.DataFrame = lib.batch_read_and_join(["symbol0", "symbol1"], as_ofs=[1, 1], query_builder=q)
+
+    # Concatenate symbols with column filters + row range
+    # row range limit is beyond the len of data
+    data: pd.DataFrame = lib.batch_read_and_join(
+        ["symbol0", "symbol1", "symbol0"],
+        as_ofs=[0, 0, 1],
+        query_builder=q,
+        columns=[None, ["B", "C"], None],
+        row_ranges=[(2, 3), None, None],
+    ).data
+    df0_subset = df0.loc[2:2]
+    df1_subset = df1[["B", "C"]]
+    expected = pd.concat([df0_subset, df1_subset, df0_1], ignore_index=True)
+    # Pandas concat will fill NaN for bools, Arcticdb is using False
+    expected["bool"] = expected["bool"].fillna(False)
+    # Pandas concat will fill NaN for strings, Arcticdb is using None
+    expected["str"] = expected["str"].fillna("")
+    assert_frame_equal(expected, data)
+
+    # Cover query builders per symbols
+    q0 = QueryBuilder()
+    q0 = q0[q0["A"] == 123.58743343]
+    q1 = QueryBuilder()
+    q1 = q1[q1["B"] == -3483.123434343]
+    data: pd.DataFrame = lib.batch_read_and_join(
+        ["symbol0", "symbol1"], as_ofs=[0, 0], query_builder=q, per_symbol_query_builders=[q0, q1]
+    ).data
+    assert len(data) == 0  # Nothing is selected
+    data: pd.DataFrame = lib.batch_read_and_join(
+        ["symbol0", "symbol1"], as_ofs=[0, 0], query_builder=q, per_symbol_query_builders=[q0, None]
+    ).data
+    assert_frame_equal(df1, data)
+
+
+@pytest.mark.xfail(True, reason="When non-existing symbol is used, MissingDataException is not raised")
+def test_batch_read_and_join_scenarios_errors(basic_store):
+    lib: NativeVersionStore = basic_store
+
+    q = QueryBuilder()
+    q.concat("outer")
+    df0 = DFGenerator(size=20).add_bool_col("bool").generate_dataframe()
+
+    lib.write("symbol0", df0)
+
+    # Concatenate with missing symbol
+    with pytest.raises(MissingDataException):
+        data: pd.DataFrame = lib.batch_read_and_join(["symbol0", "symbol2"], query_builder=q).data
