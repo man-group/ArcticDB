@@ -736,7 +736,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
         try:
             s3_client.create_bucket(Bucket=bucket_name)
             return
-        except botocore.exceptions.EndpointConnectionError as e:
+        except (botocore.exceptions.EndpointConnectionError, botocore.exceptions.ClientError) as e:
             if i >= max_retries - 1:
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
