@@ -25,6 +25,7 @@ from datetime import datetime, date, timedelta
 import numpy as np
 from arcticdb.util.test import (
     assert_frame_equal,
+    config_context,
     distinct_timestamps,
     random_strings_of_length,
     random_floats,
@@ -1122,52 +1123,54 @@ def test_write_metadata_batch_missing_keys(arctic_library):
 def test_read_batch_query_builder_missing_keys(arctic_library):
     lib = arctic_library
 
-    # Given
-    df1 = pd.DataFrame({"a": [3, 5, 7]})
-    df2 = pd.DataFrame({"a": [4, 6, 8]})
-    df3 = pd.DataFrame({"a": [5, 7, 9]})
-    lib.write("s1", df1)
-    lib.write("s2", df2)
-    # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing the
-    # latest two index keys in the version ref key means it will still work if we just write one version key and then
-    # delete it
-    lib.write("s3", df3)
-    lib.write("s3", df3)
-    lib.write("s3", df3)
-    lib_tool = lib._nvs.library_tool()
-    s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
-    s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
-    s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
-    s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
-    lib_tool.remove(s1_index_key)
-    lib_tool.remove(s2_data_key)
-    lib_tool.remove(s3_key_to_delete)
-    assert s3_key_to_delete not in lib_tool.find_keys_for_id(KeyType.VERSION, "s3"), "Key is successfully deleted"
-    q = QueryBuilder()
-    q = q[q["a"] < 5]
-    # When
-    batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)], query_builder=q)
-    # Then
-    assert isinstance(batch[0], DataError)  # now we check for key if deleted, look up
-    assert batch[0].symbol == "s1"
-    assert batch[0].version_request_type == VersionRequestType.LATEST
-    assert batch[0].version_request_data is None
-    assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
-    assert batch[0].error_category == ErrorCategory.STORAGE
+    with config_context("VersionMap.ReloadInterval", 60):
 
-    assert isinstance(batch[1], DataError)  # now we check for key if deleted, look up
-    assert batch[1].symbol == "s2"
-    assert batch[1].version_request_type == VersionRequestType.LATEST
-    assert batch[1].version_request_data is None
-    assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
-    assert batch[1].error_category == ErrorCategory.STORAGE
+        # Given
+        df1 = pd.DataFrame({"a": [3, 5, 7]})
+        df2 = pd.DataFrame({"a": [4, 6, 8]})
+        df3 = pd.DataFrame({"a": [5, 7, 9]})
+        lib.write("s1", df1)
+        lib.write("s2", df2)
+        # Need three versions for this symbol as we're going to delete a version key, and the optimisation of storing the
+        # latest two index keys in the version ref key means it will still work if we just write one version key and then
+        # delete it
+        lib.write("s3", df3)
+        lib.write("s3", df3)
+        lib.write("s3", df3)
+        lib_tool = lib._nvs.library_tool()
+        s1_index_key = lib_tool.find_keys_for_id(KeyType.TABLE_INDEX, "s1")[0]
+        s2_data_key = lib_tool.find_keys_for_id(KeyType.TABLE_DATA, "s2")[0]
+        s3_version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, "s3")
+        s3_key_to_delete = [key for key in s3_version_keys if key.version_id == 0][0]
+        lib_tool.remove(s1_index_key)
+        lib_tool.remove(s2_data_key)
+        lib_tool.remove(s3_key_to_delete)
+        assert s3_key_to_delete not in lib_tool.find_keys_for_id(KeyType.VERSION, "s3"), "Key is successfully deleted"
+        q = QueryBuilder()
+        q = q[q["a"] < 5]
+        # When
+        batch = lib.read_batch(["s1", "s2", ReadRequest("s3", as_of=0)], query_builder=q)
+        # Then
+        assert isinstance(batch[0], DataError)  # now we check for key if deleted, look up
+        assert batch[0].symbol == "s1"
+        assert batch[0].version_request_type == VersionRequestType.LATEST
+        assert batch[0].version_request_data is None
+        assert batch[0].error_code == ErrorCode.E_KEY_NOT_FOUND
+        assert batch[0].error_category == ErrorCategory.STORAGE
 
-    assert isinstance(batch[2], DataError)  # now we check for key if deleted, look up
-    assert batch[2].symbol == "s3"
-    assert batch[2].version_request_type == VersionRequestType.SPECIFIC
-    assert batch[2].version_request_data == 0
-    assert batch[2].error_code == ErrorCode.E_KEY_NOT_FOUND
-    assert batch[2].error_category == ErrorCategory.STORAGE
+        assert isinstance(batch[1], DataError)  # now we check for key if deleted, look up
+        assert batch[1].symbol == "s2"
+        assert batch[1].version_request_type == VersionRequestType.LATEST
+        assert batch[1].version_request_data is None
+        assert batch[1].error_code == ErrorCode.E_KEY_NOT_FOUND
+        assert batch[1].error_category == ErrorCategory.STORAGE
+
+        assert isinstance(batch[2], DataError)  # now we check for key if deleted, look up
+        assert batch[2].symbol == "s3"
+        assert batch[2].version_request_type == VersionRequestType.SPECIFIC
+        assert batch[2].version_request_data == 0
+        assert batch[2].error_code == ErrorCode.E_KEY_NOT_FOUND
+        assert batch[2].error_category == ErrorCategory.STORAGE
 
 
 @pytest.mark.storage
