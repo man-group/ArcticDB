@@ -182,6 +182,34 @@ def test_write_with_index(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+def test_write_with_non_ns_index(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_with_non_ns_index"
+    table = pa.table({"ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("s")), "col": pa.array([0, 1], pa.int64())})
+    lib.write(sym, table, index_column="ts")
+    received = lib.read(sym).data
+    table = table.set_column(0, "ts", table.column("ts").cast(pa.timestamp("ns")))
+    assert table.equals(received)
+
+
+def test_write_non_existent_index_column(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_non_existent_index_column"
+    table = pa.table({"col": pa.array([0, 1], pa.int64())})
+    with pytest.raises(SchemaException) as e:
+        lib.write(sym, table, index_column="blah")
+    assert "blah" in str(e.value)
+
+
+def test_write_non_timestamp_index_column(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_non_timestamp_index_column"
+    table = pa.table({"non-ts": pa.array([0, 1], pa.int64()), "col": pa.array([2, 3], pa.int64())})
+    with pytest.raises(UserInputException) as e:
+        lib.write(sym, table, index_column="non-ts")
+    assert "int64" in str(e.value).lower()
+
+
 def test_write_with_index_not_first_column(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_index_not_first_column"

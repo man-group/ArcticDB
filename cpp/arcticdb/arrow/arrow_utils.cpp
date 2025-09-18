@@ -133,7 +133,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(const st
     }
     if (index_name.has_value()) {
         schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(index_column_position.has_value(),
-                                                        "Specified index column name {} not present in data", *index_name);
+                                                        "Specified index column named '{}' not present in data", *index_name);
     }
     uint64_t total_rows = std::accumulate(record_batches.cbegin(), record_batches.cend(), uint64_t(0),[](const uint64_t& accum, const sparrow::record_batch& record_batch) {
         return accum + record_batch.nb_rows();
