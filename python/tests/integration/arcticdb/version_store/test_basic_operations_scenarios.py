@@ -633,7 +633,6 @@ def test_batch_read_and_join_scenarios(basic_store):
         .generate_dataframe()
     )
 
-    lib.write("symbol_empty", empty_df)
     lib.write("symbol0", df0)
     lib.write("symbol1", df1)
 
