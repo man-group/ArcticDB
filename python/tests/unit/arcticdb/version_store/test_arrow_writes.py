@@ -592,15 +592,17 @@ def test_arrow_writes_hypothesis(lmdb_version_store_big_map, df_length, index_po
         data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)
     if index_position == num_supported_types:
         data["ts"] = pa.array(np.arange(0, df_length, dtype="datetime64[ns]"), pa.timestamp("ns"))
-    table = pa.table(data)
+    original_table = pa.table(data)
+    # original_table.to_batches with max_chunksize creates a zero copy view, take actually copies the data
     max_chunksize = max((df_length + max_record_batches) // max_record_batches, 1)
-    record_batches = table.to_batches(max_chunksize=max_chunksize)
-    # Hacky - pivot off pandas to force creation of non-view record batches. Even copy.deepcopy just produces views
-    # with pa.Table and pa.RecordBatch. Replace with construction of individual tables and pa.concat_tables, or use
-    # pa.Table.take
-    pandas_dfs = [record_batch.to_pandas() for record_batch in record_batches]
-    tables = [pa.Table.from_pandas(df) for df in pandas_dfs]
+    tables = []
+    for i in range(max_record_batches):
+        if i * max_chunksize < df_length:
+            tables.append(original_table.take(list(range(i * max_chunksize, min((i + 1) * max_chunksize, df_length)))))
+        else:
+            break
     table = pa.concat_tables(tables)
+    assert table.equals(original_table)
     lib.write(sym, table, index_column="ts")
     received = lib.read(sym).data
     # Remove this when non-nanosecond timestamp columns have their type roundtripped correctly
