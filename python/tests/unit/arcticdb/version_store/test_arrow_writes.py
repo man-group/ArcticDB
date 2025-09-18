@@ -547,21 +547,22 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df_length=st.integers(1, 1_000),
+    df_length=st.integers(1, 200_000),
     index_position=st.integers(0, 15), # 15 supported types + index, increase when more added
     max_record_batches=st.integers(1, 100),
     max_row_slices=st.integers(1, 100),
     max_col_slices=st.integers(1, 15), # 15 supported types, increase when more added. Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single column slice
 )
-def test_arrow_writes_hypothesis(lmdb_version_store_arrow, df_length, index_position, max_record_batches, max_row_slices, max_col_slices):
+def test_arrow_writes_hypothesis(lmdb_version_store_big_map, df_length, index_position, max_record_batches, max_row_slices, max_col_slices):
     rng = np.random.default_rng()
-    lib = lmdb_version_store_arrow
+    lib = lmdb_version_store_big_map
     sym = "test_arrow_writes_hypothesis"
     # version_store_factory doesn't play nicely with hypothesis, so set these values manually
     rows_per_slice = max(df_length // max_row_slices, 1)
     cols_per_slice = 15 // max_col_slices
     lib.lib_cfg().lib_desc.version.write_options.segment_row_size = rows_per_slice
     lib.lib_cfg().lib_desc.version.write_options.column_group_size = cols_per_slice
+    lib.set_output_format("experimental_arrow")
     supported_types = [
         pa.bool_(),
         pa.uint8(),
