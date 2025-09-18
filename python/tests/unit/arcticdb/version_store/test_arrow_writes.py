@@ -6,6 +6,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import copy
+
+from hypothesis import given, settings
+import hypothesis.strategies as st
 import numpy as np
 import pandas as pd
 import pyarrow as pa
@@ -13,6 +17,7 @@ import pytest
 
 from arcticdb.exceptions import ArcticException, SchemaException, UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
+from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
 
@@ -534,3 +539,73 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow(df_1, received["b"]["c"][0])
     assert table_2.equals(received["b"]["d"])
     # TODO: Test reading back as Pandas when this works generally
+
+
+# We are more interested in the slicing than the data, so the parameters are for:
+# - dataframe length
+# - record batch structure
+# - timeseries index position
+# - library slicing settings
+@use_of_function_scoped_fixtures_in_hypothesis_checked
+@settings(deadline=None)
+# @given(
+#     df_length=st.integers(1, 3),
+#     index_position=st.integers(0, 0), # 15 supported types + index, increase when more added
+#     max_record_batches=st.integers(1, 3),
+#     max_row_slices=st.integers(1, 1),
+#     max_col_slices=st.integers(1, 1), # 15 supported types, increase when more added. Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single column slice
+# )
+@given(
+    df_length=st.integers(1, 200_000),
+    index_position=st.integers(0, 15), # 15 supported types + index, increase when more added
+    max_record_batches=st.integers(1, 1),
+    max_row_slices=st.integers(1, 100),
+    max_col_slices=st.integers(1, 15), # 15 supported types, increase when more added. Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single column slice
+)
+def test_arrow_writes_hypothesis(lmdb_version_store_arrow, df_length, index_position, max_record_batches, max_row_slices, max_col_slices):
+    rng = np.random.default_rng()
+    lib = lmdb_version_store_arrow
+    sym = "test_arrow_writes_hypothesis"
+    # version_store_factory doesn't play nicely with hypothesis, so set these values manually
+    rows_per_slice = max(df_length // max_row_slices, 1)
+    cols_per_slice = 15 // max_col_slices
+    lib.lib_cfg().lib_desc.version.write_options.segment_row_size = rows_per_slice
+    lib.lib_cfg().lib_desc.version.write_options.column_group_size = cols_per_slice
+    supported_types = [
+        pa.bool_(),
+        pa.uint8(),
+        pa.uint16(),
+        pa.uint32(),
+        pa.uint64(),
+        pa.int8(),
+        pa.int16(),
+        pa.int32(),
+        pa.int64(),
+        pa.float32(),
+        pa.float64(),
+        pa.timestamp("s"),
+        pa.timestamp("ms"),
+        pa.timestamp("us"),
+        pa.timestamp("ns"),
+    ]
+    data = {}
+    for idx, supported_type in enumerate(supported_types):
+        if idx == index_position:
+            data["ts"] = pa.array(np.arange(0, df_length, dtype="datetime64[ns]"), pa.timestamp("ns"))
+        data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)
+    if index_position == 15:
+        data["ts"] = pa.array(np.arange(0, df_length, dtype="datetime64[ns]"), pa.timestamp("ns"))
+    table = pa.table(data)
+    max_chunksize = max((df_length + max_record_batches) // max_record_batches, 1)
+    record_batches = table.to_batches(max_chunksize=max_chunksize)
+    pandas_dfs = [record_batch.to_pandas() for record_batch in record_batches]
+    tables = [pa.Table.from_pandas(df) for df in pandas_dfs]
+    table = pa.concat_tables(tables)
+    lib.write(sym, table, index_column="ts")
+    received = lib.read(sym).data
+    for (i, name) in enumerate(table.column_names):
+        if "timestamp" in name:
+            table = table.set_column(i, name, table.column(name).cast(pa.timestamp("ns")))
+    if not table.equals(received):
+        assert table.equals(received)
+    # assert table.equals(received)
