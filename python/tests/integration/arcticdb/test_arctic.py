@@ -44,6 +44,8 @@ from arcticdb.authorization.permissions import OpenMode
 from arcticdb.version_store._store import NativeVersionStore
 
 from arcticdb.version_store.library import ArcticInvalidApiUsageException
+from tests.conftest import Marks
+from tests.util.marking import marks
 from ...util.mark import (
     AZURE_TESTS_MARK,
     MONGO_TESTS_MARK,
@@ -1140,6 +1142,7 @@ def test_update_with_upsert(arctic_library):
     assert "symbol" in lib.list_symbols()
 
 
+@marks([Marks.pipeline, Marks.storage])
 def test_read_with_read_request_form(arctic_library):
     lib = arctic_library
 
@@ -1280,7 +1283,7 @@ def test_tail(arctic_library):
     )
 
 
-@pytest.mark.storage
+@marks([Marks.storage, Marks.dedup])
 def test_dedup(arctic_client, lib_name):
     ac = arctic_client
     errors = []

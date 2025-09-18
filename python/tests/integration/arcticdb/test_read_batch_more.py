@@ -26,6 +26,8 @@ from arcticdb.util.test import (
     dataframe_single_column_string,
     dataframe_filter_with_datetime_index,
 )
+from tests.conftest import Marks
+from tests.util.marking import marks
 
 
 def dataframe_concat_sort(*df_args: pd.DataFrame) -> pd.DataFrame:
@@ -238,7 +240,7 @@ def test_read_batch_metadata_on_different_version(arctic_library):
     assert_frame_equal_rebuild_index_first(df_all, batch[2].data)
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_library):
     """
     This test aims to combine usage of metadata along with query builder applied in
@@ -336,7 +338,7 @@ def test_read_batch_multiple_symbols_all_types_data_query_metadata(arctic_librar
         assert dfqapplied.columns.to_list() == batch[7].data.columns.to_list()
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     """
     Check that many types of errors cannot prevent exraction of many other
@@ -439,7 +441,7 @@ def test_read_batch_query_and_columns_wrong_column_names_passed(arctic_library):
     assert isinstance(batch[0], DataError)
 
 
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_read_batch_query_and_columns(arctic_library):
 
     def q1(q):
