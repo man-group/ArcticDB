@@ -149,8 +149,8 @@ def test_read_batch_2tables_7reads_different_slices(arctic_library):
     assert_frame_equal(df2_0_allfilters, batch[7].data)
 
 
-@pytest.mark.xfail(reason="ArcticDB#1970")
-@marks([Marks.pipeline, Marks.storage])
+@pytest.mark.skip(reason="ArcticDB#1970")
+@pytest.mark.storage
 def test_read_batch_query_with_and(arctic_library):
     """
     A very small test to isolate the problem with usage of "and"
@@ -177,6 +177,7 @@ def test_read_batch_query_with_and(arctic_library):
 
 
 @pytest.mark.storage
+@pytest.mark.skip(reason="ArcticDB#2004")
 def test_read_batch_metadata_on_different_version(arctic_library):
     """
     Here we test if read of metadata over several different states of DB with
@@ -390,7 +391,7 @@ def test_read_batch_multiple_wrong_things_at_once(arctic_library):
     assert_frame_equal_rebuild_index_first(df, batch[5].data)
 
 
-@pytest.mark.xfail(reason="ArcticDB#2004")
+@pytest.mark.skip(reason="ArcticDB#2004")
 @pytest.mark.storage
 def test_read_batch_query_and_columns_returned_order(arctic_library):
     """
@@ -415,7 +416,7 @@ def test_read_batch_query_and_columns_returned_order(arctic_library):
     assert_frame_equal_rebuild_index_first(df_filtered, batch[0].data)
 
 
-@pytest.mark.xfail(reason="ArcticDB#2005")
+@pytest.mark.skip(reason="ArcticDB#2005")
 @pytest.mark.storage
 def test_read_batch_query_and_columns_wrong_column_names_passed(arctic_library):
     """

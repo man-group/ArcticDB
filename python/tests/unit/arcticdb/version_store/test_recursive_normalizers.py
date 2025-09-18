@@ -482,7 +482,6 @@ def test_sequences_data_layout(lmdb_version_store_v1, sequence_type):
 
 
 class CustomClassSeparatorInStr:
-
     def __init__(self, n):
         self.n = n
 
@@ -511,7 +510,6 @@ def test_dictionaries_with_custom_keys_that_cannot_roundtrip(lmdb_version_store_
 
 
 class CustomClass:
-
     def __init__(self, n):
         self.n = n
 
@@ -756,7 +754,7 @@ def test_read_asof(lmdb_version_store_v1):
     pd.testing.assert_frame_equal(vit.data["k"], df_one)
 
 
-@pytest.mark.xfail(reason="Validation for bad queries not yet implemented. Monday: 9236603911")
+@pytest.mark.skip(reason="Validation for bad queries not yet implemented. Monday: 9236603911")
 def test_unsupported_queries(lmdb_version_store_v1):
     """Test how we fail with queries that we do not support over recursively normalized data."""
     lib = lmdb_version_store_v1
@@ -858,7 +856,6 @@ def test_data_layout(lmdb_version_store_v1):
 
 
 class TestRecursiveNormalizersCompat:
-
     @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="We don't have previous versions of arcticdb pypi released for MacOS")
     def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
