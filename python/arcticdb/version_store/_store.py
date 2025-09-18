@@ -2679,6 +2679,9 @@ class NativeVersionStore:
         """
         Add items to a snapshot. Will replace if the snapshot already contains an entry for a particular symbol.
 
+        Note: attempt to add non-existing symbol or version to a snapshot will not fail, but will have no effect
+              on the snapshot.
+
         Parameters
         ----------
         snap_name : `str`
@@ -2695,6 +2698,9 @@ class NativeVersionStore:
     def remove_from_snapshot(self, snap_name: str, symbols: List[str], versions: List[int]):
         """
         Remove items from a snapshot
+
+        Note: attempt to remove non-existing symbol or version from a snapshot will not fail, but will have no effect
+              on the snapshot.
 
         Parameters
         ----------
