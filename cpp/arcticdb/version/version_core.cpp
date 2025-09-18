@@ -1211,6 +1211,31 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
     );
 }
 
+void check_can_be_filtered(
+        const std::shared_ptr<PipelineContext>& pipeline_context, const std::shared_ptr<ReadQuery>& read_query
+) {
+    bool is_query_empty =
+            !read_query ||
+            ( // Passing a empty QueryBuilder object is a valid read but will make read_query not null
+                    !read_query->columns && !read_query->row_range &&
+                    std::holds_alternative<std::monostate>(read_query->row_filter) && read_query->clauses_.empty()
+            );
+    const auto& norm_meta = pipeline_context->norm_meta_;
+    bool is_numpy_array = norm_meta && norm_meta->has_np();
+
+    if (!is_query_empty && (pipeline_context->multi_key_ || is_numpy_array || pipeline_context->is_pickled())) {
+        std::string error_message;
+        if (pipeline_context->is_pickled()) {
+            error_message = "pickled data";
+        } else if (pipeline_context->multi_key_) {
+            error_message = "recursively normalized data";
+        } else if (is_numpy_array) {
+            error_message = "numpy array";
+        }
+        internal::raise<ErrorCode::E_RUNTIME_ERROR>("Cannot filter {}", error_message);
+    }
+}
+
 static void read_indexed_keys_to_pipeline(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const VersionedItem& version_info, ReadQuery& read_query, const ReadOptions& read_options
@@ -1929,7 +1954,6 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     const bool direct_read = read_query->clauses_.empty();
     if (!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
-        util::check_rte(!pipeline_context->is_pickled(), "Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
                 .thenValue([store, pipeline_context, &read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
                     return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
@@ -2570,18 +2594,10 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 ) {
     auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
     auto res_versioned_item = generate_result_versioned_item(version_info);
+
+    check_can_be_filtered(pipeline_context, read_query);
     if (pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, *read_query);
-        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            !read_query || 
-            ( // Passing a empty QueryBuilder object is a valid read but will make ready_query not null
-                !read_query->columns &&
-                !read_query->row_range &&
-                std::holds_alternative<std::monostate>(read_query->row_filter) &&
-                read_query->clauses_.empty()
-            ), 
-            "Filtering is not supported when data is recursively normalized"
-        );
         return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
     }
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
