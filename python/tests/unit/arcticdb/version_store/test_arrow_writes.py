@@ -6,8 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import copy
-
 from hypothesis import given, settings
 import hypothesis.strategies as st
 import numpy as np
@@ -548,17 +546,10 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
 # - library slicing settings
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
-# @given(
-#     df_length=st.integers(1, 3),
-#     index_position=st.integers(0, 0), # 15 supported types + index, increase when more added
-#     max_record_batches=st.integers(1, 3),
-#     max_row_slices=st.integers(1, 1),
-#     max_col_slices=st.integers(1, 1), # 15 supported types, increase when more added. Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single column slice
-# )
 @given(
-    df_length=st.integers(1, 200_000),
+    df_length=st.integers(1, 1_000),
     index_position=st.integers(0, 15), # 15 supported types + index, increase when more added
-    max_record_batches=st.integers(1, 1),
+    max_record_batches=st.integers(1, 100),
     max_row_slices=st.integers(1, 100),
     max_col_slices=st.integers(1, 15), # 15 supported types, increase when more added. Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single column slice
 )
@@ -606,6 +597,4 @@ def test_arrow_writes_hypothesis(lmdb_version_store_arrow, df_length, index_posi
     for (i, name) in enumerate(table.column_names):
         if "timestamp" in name:
             table = table.set_column(i, name, table.column(name).cast(pa.timestamp("ns")))
-    if not table.equals(received):
-        assert table.equals(received)
-    # assert table.equals(received)
+    assert table.equals(received)
