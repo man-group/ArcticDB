@@ -1142,6 +1142,34 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
             generic_filter_test(lib, symbol, q, expected)
 
 
+@pytest.mark.parametrize("data", ({"a": pd.DataFrame({"col": [0]})}, np.array([1, 2, 3, 4]), np.ndarray((3, 3))))
+@pytest.mark.parametrize("empty", (True, False))
+def test_filter_unfilterable_data(lmdb_version_store_v1, empty, data, sym):
+    lib = lmdb_version_store_v1
+    lib.write(sym, data, recursive_normalizers=True)
+
+    q = QueryBuilder()
+    if empty:
+        lib.read(sym, query_builder=q)
+    else:
+        q = q[q["col"] == 0]
+        with pytest.raises(InternalException):
+            lib.read(sym, query_builder=q)
+
+
+@pytest.mark.parametrize("data", ({"a": pd.DataFrame({"col": [0]})}, np.array([1, 2, 3, 4]), np.ndarray((3, 3))))
+@pytest.mark.parametrize("head", (True, False))
+def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data):
+    lib = lmdb_version_store_v1
+    lib.write(sym, data, recursive_normalizers=True)
+
+    with pytest.raises(InternalException):
+        if head:
+            lib.head(sym)
+        else:
+            lib.tail(sym)
+
+
 ################################
 # MIXED SCHEMA TESTS FROM HERE #
 ################################
