@@ -23,7 +23,7 @@ from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
 from arcticdb.exceptions import ArcticNativeException, SortingException
-from arcticdb_ext.version_store import StreamDescriptorMismatch
+from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
 
 from arcticdb_ext.exceptions import (
     UnsortedDataException,
@@ -643,7 +643,7 @@ def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
             lib.read(symbol, as_of="snap")
 
 
-@pytest.mark.xfail("Negative version numbers does not work, issue 10060901137")
+@pytest.mark.xfail(True, reason="Negative version numbers does not work, issue 10060901137")
 def test_add_to_snapshot_with_negative_numbers(basic_store):
     lib: NativeVersionStore = basic_store
     lib.write("s1", 100)
