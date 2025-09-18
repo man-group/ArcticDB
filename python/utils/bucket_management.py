@@ -6,7 +6,6 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-
 from datetime import datetime, timedelta, timezone
 from concurrent.futures import ThreadPoolExecutor
 import boto3
@@ -23,7 +22,11 @@ logger = get_logger()
 
 
 def s3_client(client_type: str = "s3") -> BaseClient:
-    """Create a boto S3 client to Amazon AWS S3 store"""
+    """Create a boto S3 client to Amazon AWS S3 store
+
+    Parameters:
+        client_type - s3, iam etc valid boto clients
+    """
     return boto3.client(
         client_type,
         aws_access_key_id=os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY"),
@@ -35,24 +38,21 @@ def gcp_client() -> BaseClient:
     """Returns a boto client to GCP stoage"""
     session = boto3.session.Session()
     return session.client(
-        service_name='s3',
+        service_name="s3",
         aws_access_key_id=os.getenv("ARCTICDB_REAL_GCP_ACCESS_KEY"),
         aws_secret_access_key=os.getenv("ARCTICDB_REAL_GCP_SECRET_KEY"),
-        endpoint_url=os.getenv("ARCTICDB_REAL_GCP_ENDPOINT")
+        endpoint_url=os.getenv("ARCTICDB_REAL_GCP_ENDPOINT"),
     )
 
 
 def azure_client() -> BlobServiceClient:
     """Creates and returns a BlobServiceClient using the provided connection string."""
-    connection_string=os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING")
+    connection_string = os.getenv("ARCTICDB_REAL_AZURE_CONNECTION_STRING")
     return BlobServiceClient.from_connection_string(connection_string)
 
 
 def list_bucket(
-    client: BaseClient,
-    bucket_name: str,
-    handler: Callable[[dict], None],
-    cutoff_date: Optional[datetime] = None
+    client: BaseClient, bucket_name: str, handler: Callable[[dict], None], cutoff_date: Optional[datetime] = None
 ) -> None:
     """
     Lists objects in a bucket that were last modified before a given date,
@@ -68,18 +68,15 @@ def list_bucket(
     if cutoff_date is None:
         cutoff_date = datetime.now(timezone.utc)
 
-    paginator = client.get_paginator('list_objects_v2')
+    paginator = client.get_paginator("list_objects_v2")
     for page in paginator.paginate(Bucket=bucket_name):
-        for obj in page.get('Contents', []):
-            if obj['LastModified'] < cutoff_date:
+        for obj in page.get("Contents", []):
+            if obj["LastModified"] < cutoff_date:
                 handler(obj)
-            
+
 
 def delete_gcp_bucket(
-    client: BaseClient,
-    bucket_name: str,
-    cutoff_date: Optional[datetime] = None,
-    max_workers: int = 50
+    client: BaseClient, bucket_name: str, cutoff_date: Optional[datetime] = None, max_workers: int = 50
 ) -> None:
     """
     Deletes objects in a GCS bucket that were last modified before a given date,
@@ -94,7 +91,7 @@ def delete_gcp_bucket(
     keys_to_delete: list[str] = []
 
     def collect_key(obj: dict) -> None:
-        keys_to_delete.append(obj['Key'])
+        keys_to_delete.append(obj["Key"])
 
     list_bucket(client, bucket_name, collect_key, cutoff_date)
     logger.info(f"Found {len(keys_to_delete)} objects to delete before {cutoff_date or datetime.now(timezone.utc)}")
@@ -108,38 +105,26 @@ def delete_gcp_bucket(
 
 
 def get_gcp_bucket_size(
-        client: BaseClient, 
-        bucket_name: str,
-        cutoff_date: Optional[datetime] = None,
+    client: BaseClient,
+    bucket_name: str,
+    cutoff_date: Optional[datetime] = None,
 ) -> int:
     """Returns the size of specified GCP bucket
-    
+
     Parameters:
         client: boto3 S3-compatible client (e.g., for GCS via HMAC).
         bucket_name: Name of the bucket.
         cutoff_date (Optional): Only include objects older than this date.
                                     Defaults to current UTC time.
     """
-
-    def calc_size_handler():
-        total = {'size': 0}  # Mutable container to hold state
-
-        def handler(obj):
-            total['size'] += obj['Size']
-
-        return handler, total
-    
-    handler, total = calc_size_handler()
-    list_bucket(client, bucket_name, handler, cutoff_date)
-    total_size = total['size']
-    return total_size        
+    return get_s3_bucket_size(client, bucket_name, cutoff_date)
 
 
 def list_azure_container(
     client: BlobServiceClient,
     container_name: str,
     handler: Callable[[BlobProperties], None],
-    cutoff_date: Optional[datetime] = None
+    cutoff_date: Optional[datetime] = None,
 ) -> None:
     """
     Lists blobs in a container that were last modified before a given date,
@@ -162,9 +147,7 @@ def list_azure_container(
 
 
 def get_azure_container_size(
-    blob_service_client: BlobServiceClient,
-    container_name: str,
-    cutoff_date: Optional[datetime] = None
+    blob_service_client: BlobServiceClient, container_name: str, cutoff_date: Optional[datetime] = None
 ) -> int:
     """Calculates the total size of all blobs in a container."""
     total_size = 0
@@ -177,25 +160,8 @@ def get_azure_container_size(
     return total_size
 
 
-def delete_azure_container33(
-    blob_service_client: BlobServiceClient,
-    container_name: str,
-    cutoff_date: Optional[datetime] = None
-) -> None:
-    """Deletes all blobs in a container."""
-    container_client = blob_service_client.get_container_client(container_name)
-
-    def delete_handler(blob: BlobProperties) -> None:
-        container_client.delete_blob(blob.name)
-        logger.info(f"Deleted: {blob.name}")
-
-    list_azure_container(blob_service_client, container_name, delete_handler, cutoff_date)
-
 def delete_azure_container(
-    client: BlobServiceClient,
-    container_name: str,
-    cutoff_date: Optional[datetime] = None,
-    max_workers: int = 20
+    client: BlobServiceClient, container_name: str, cutoff_date: Optional[datetime] = None, max_workers: int = 20
 ) -> None:
     """
     Deletes blobs in an Azure container that were last modified before the cutoff date.
@@ -219,21 +185,18 @@ def delete_azure_container(
 
     def delete_blob(blob_name: str) -> None:
         try:
+            # If needed we should optimize with
+            # https://learn.microsoft.com/en-us/dotnet/api/azure.storage.blobs.specialized.blobbatchclient.deleteblobs?view=azure-dotnet
             container_client.delete_blob(blob_name)
             logger.info(f"Deleted: {blob_name}")
         except Exception as e:
             logger.error(f"Failed to delete {blob_name}: {e}")
 
-
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         executor.map(delete_blob, blobs_to_delete)
 
 
-def get_s3_bucket_size(
-        client: BaseClient, 
-        bucket_name: str,
-        cutoff_date: Optional[datetime] = None
-) -> int:
+def get_s3_bucket_size(client: BaseClient, bucket_name: str, cutoff_date: Optional[datetime] = None) -> int:
     """
     Calculates the total size of all objects in an S3 bucket.
 
@@ -250,17 +213,14 @@ def get_s3_bucket_size(
 
     def size_accumulator(obj: dict) -> None:
         nonlocal total_size
-        total_size += obj['Size']
+        total_size += obj["Size"]
 
     list_bucket(client, bucket_name, size_accumulator, cutoff_date)
     return total_size
 
 
 def delete_s3_bucket_batch(
-    client: BaseClient,
-    bucket_name: str,
-    cutoff_date: Optional[datetime] = None,
-    batch_size: int = 1000
+    client: BaseClient, bucket_name: str, cutoff_date: Optional[datetime] = None, batch_size: int = 1000
 ) -> None:
     """
     Deletes objects in an S3-compatible bucket that were last modified before the cutoff date,
@@ -276,11 +236,11 @@ def delete_s3_bucket_batch(
     batch: list[dict] = []
 
     def delete_batch(batch):
-        client.delete_objects(Bucket=bucket_name, Delete={'Objects': batch})
+        client.delete_objects(Bucket=bucket_name, Delete={"Objects": batch})
         logger.info(f"Deleted batch of {len(batch)} AWS S3 objects")
 
     def collect_keys(obj: dict) -> None:
-        batch.append({'Key': obj['Key']})
+        batch.append({"Key": obj["Key"]})
         if len(batch) == batch_size:
             try:
                 delete_batch(batch)
@@ -296,4 +256,3 @@ def delete_s3_bucket_batch(
             delete_batch(batch)
         except Exception as e:
             logger.error(f"Final batch delete failed: {e}")
-
