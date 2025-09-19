@@ -110,6 +110,25 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
     }
 }
 
+std::pair<std::vector<DataType>, std::optional<size_t>> find_data_types_and_index_position(const sparrow::record_batch& record_batch,
+                                                                                           const std::optional<std::string>& index_name) {
+    std::vector<DataType> data_types;
+    data_types.reserve(record_batch.nb_columns());
+    std::optional<size_t> index_column_position;
+    for (size_t idx = 0; idx < record_batch.nb_columns(); ++idx) {
+        const auto& array = record_batch.get_column(idx);
+        if (index_name.has_value() && array.name().has_value() && *array.name() == *index_name) {
+            index_column_position = idx;
+        }
+        data_types.emplace_back(arcticdb_type_from_arrow_type(array.data_type()));
+    }
+    if (index_name.has_value()) {
+        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(index_column_position.has_value(),
+                                                        "Specified index column named '{}' not present in data", *index_name);
+    }
+    return {std::move(data_types), index_column_position};
+}
+
 std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(const std::vector<sparrow::record_batch>& record_batches,
                                                                         const std::optional<std::string>& index_name) {
     SegmentInMemory seg;
@@ -117,46 +136,18 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(const st
         return {seg, std::nullopt};
     }
     auto record_batch = record_batches.cbegin();
-    auto num_columns = record_batch->nb_columns();
     auto column_names = record_batch->names();
-    std::vector<DataType> data_types;
-    std::vector<ChunkedBuffer> chunked_buffers(num_columns);
-    data_types.reserve(num_columns);
-    std::optional<size_t> index_column_position;
-    for (size_t idx = 0; idx < num_columns; ++idx) {
-        const auto& array = record_batch->get_column(idx);
-        if (index_name.has_value() && array.name().has_value() && *array.name() == *index_name) {
-            index_column_position = idx;
-        }
-        const auto arrow_data_type = array.data_type();
-        const auto arcticdb_data_type = arcticdb_type_from_arrow_type(arrow_data_type);
-        data_types.emplace_back(arcticdb_data_type);
-    }
-    if (index_name.has_value()) {
-        schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(index_column_position.has_value(),
-                                                        "Specified index column named '{}' not present in data", *index_name);
-    }
+    auto [data_types, index_column_position] = find_data_types_and_index_position(*record_batch, index_name);
     uint64_t total_rows = std::accumulate(record_batches.cbegin(), record_batches.cend(), uint64_t(0),[](const uint64_t& accum, const sparrow::record_batch& record_batch) {
         return accum + record_batch.nb_rows();
     });
-    uint64_t rows{0};
+    std::vector<ChunkedBuffer> chunked_buffers(record_batch->nb_columns());
+    uint64_t start_row{0};
     for (; record_batch != record_batches.cend(); ++record_batch) {
-        util::check(record_batch == record_batches.cbegin() || std::ranges::equal(column_names, record_batch->names()),
-                "Record batches do not contain the same column names: {} != {}", column_names, record_batch->names());
-        std::optional<size_t> num_rows;
-        for (size_t idx = 0; idx < num_columns; ++idx) {
+        for (size_t idx = 0; idx < record_batch->nb_columns(); ++idx) {
             const auto& array = record_batch->get_column(idx);
-            const auto arrow_data_type = array.data_type();
-            const auto arcticdb_data_type = arcticdb_type_from_arrow_type(arrow_data_type);
-            util::check(arcticdb_data_type == data_types.at(idx), "Mismatching column types in record batches {} != {}",
-                        arcticdb_data_type, data_types.at(idx));
-            if (num_rows.has_value()) {
-                util::check(*num_rows == array.size(), "Mismatched number of rows in record batch {} != {}", *num_rows, array.size());
-            } else {
-                num_rows = array.size();
-            }
-            auto arrow_structures = sparrow::get_arrow_structures(array);
-            auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_structures.first, *arrow_structures.second);
+            auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
+            auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
             // arrow_array_buffers.at(0) seems to be the validity bitmap, and may be NULL if there are no null values
             // need to handle it being non-NULL and all 1s though
             const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
@@ -170,28 +161,26 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(const st
                 if (record_batch == record_batches.cbegin()) {
                     chunked_buffers.at(idx).ensure(total_rows);
                 }
-                packed_bits_to_buffer(data, *num_rows, chunked_buffers.at(idx).bytes_at(rows, *num_rows));
+                packed_bits_to_buffer(data, array.size(), chunked_buffers.at(idx).bytes_at(start_row, array.size()));
             } else {
-                const auto bytes = *num_rows * get_type_size(data_types.at(idx));
+                const auto bytes = array.size() * get_type_size(data_types.at(idx));
                 chunked_buffers.at(idx).add_external_block(data, bytes);
             }
         }
-        rows += *num_rows;
+        start_row += record_batch->nb_rows();
     }
     if (index_column_position.has_value()) {
         auto idx = *index_column_position;
         seg.add_column(scalar_field(data_types.at(idx), column_names[idx]),
                        std::make_shared<Column>(make_scalar_type(data_types.at(idx)), Sparsity::NOT_PERMITTED, std::move(chunked_buffers.at(idx))));
     }
-    for (size_t idx = 0; idx < num_columns; ++idx) {
+    for (size_t idx = 0; idx < column_names.size(); ++idx) {
         if (!index_column_position.has_value() || idx != *index_column_position) {
             // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
             seg.add_column(scalar_field(data_types.at(idx), column_names[idx]),
                            std::make_shared<Column>(make_scalar_type(data_types.at(idx)), Sparsity::NOT_PERMITTED, std::move(chunked_buffers.at(idx))));
         }
     }
-    // Cannot just use seg.set_row_data if bool columns are still in a packed bitset representation, as they would
-    // be marked as sparse. In that case, use seg.column(idx).set_row_data(seg.column(idx).row_count() - 1);
     seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
     return {seg, index_column_position};
 }
