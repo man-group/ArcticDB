@@ -63,6 +63,7 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
 std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(SegmentInMemory& segment) {
     const auto total_blocks = segment.num_blocks();
     const auto num_columns = segment.num_columns();
+    // Zero columns implies zero record batches were written, this just allows us to roundtrip zero record batch tables
     if (num_columns == 0) {
         return std::make_shared<std::vector<sparrow::record_batch>>();
     }

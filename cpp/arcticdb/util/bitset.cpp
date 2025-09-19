@@ -24,6 +24,12 @@ void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, uint8_t*
     auto leftover_bits = num_bits % 8;
     int64_t num_bytes = num_bits / 8;
     // Experimentally, this approach is ~33% faster than the naive bit iteration approach used for the leftover bits
+    // Explanation: the mask has a 1 in every eighth bit:
+    // 0000000100000001000000010000000100000001000000010000000100000001
+    // The input byte is then shifted by multiples of 7 so that this mask picks out the correct bit from the input for
+    // each byte of the output. e.g. and input byte of 10000001 will produce the following 8 bytes to AND with the mask,
+    // where bits that are zero in the mask are marked with an X as they are irrelevant
+    // XXXXXXX1XXXXXXX0XXXXXXX0XXXXXXX0XXXXXXX0XXXXXXX0XXXXXXX0XXXXXXX1
     auto dest_word = reinterpret_cast<uint64_t*>(dest_ptr);
     constexpr uint64_t mask = 1ULL | (1ULL << 8) | (1ULL << 16) | (1ULL << 24) | (1ULL << 32) | (1ULL << 40) | (1ULL << 48) | (1ULL << 56);
     for (auto idx = 0; idx < num_bytes; ++idx, ++packed_bits) {

@@ -9,12 +9,10 @@
 #include <arcticdb/util/test/rapidcheck.hpp>
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
-#include <arcticdb/util/bitset.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 
 #include <vector>
 #include <algorithm>
-#include <folly/container/Enumerate.h>
 
 TEST(ChunkedBuffer, Basic) {
     using namespace arcticdb;

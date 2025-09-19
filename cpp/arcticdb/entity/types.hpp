@@ -127,22 +127,21 @@ constexpr bool is_sequence_type(ValueType v) {
         uint8_t(v) <= uint8_t(ValueType::ASCII_DYNAMIC);
 }
 
+constexpr bool is_time_type(ValueType v) {
+    return uint8_t(v) == uint8_t(ValueType::SECONDS_UTC) ||
+           uint8_t(v) == uint8_t(ValueType::MILLISECONDS_UTC) ||
+           uint8_t(v) == uint8_t(ValueType::MICROSECONDS_UTC) ||
+           uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC);
+}
+
 constexpr bool is_numeric_type(ValueType v) {
-    return v == ValueType::NANOSECONDS_UTC ||
-           v == ValueType::SECONDS_UTC || v == ValueType::MILLISECONDS_UTC || v == ValueType::MICROSECONDS_UTC ||
+    return is_time_type(v) ||
         (uint8_t(v) >= uint8_t(ValueType::UINT) &&
             uint8_t(v) <= uint8_t(ValueType::FLOAT));
 }
 
 constexpr bool is_floating_point_type(ValueType v) {
     return uint8_t(v) == uint8_t(ValueType::FLOAT);
-}
-
-constexpr bool is_time_type(ValueType v) {
-    return uint8_t(v) == uint8_t(ValueType::SECONDS_UTC) ||
-           uint8_t(v) == uint8_t(ValueType::MILLISECONDS_UTC) ||
-           uint8_t(v) == uint8_t(ValueType::MICROSECONDS_UTC) ||
-           uint8_t(v) == uint8_t(ValueType::NANOSECONDS_UTC);
 }
 
 constexpr bool is_integer_type(ValueType v) {
