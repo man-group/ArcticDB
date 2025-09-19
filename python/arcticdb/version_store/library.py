@@ -356,6 +356,7 @@ class UpdatePayload:
     One instance of ``UpdatePayload`` refers to one unit that can be written through to ArcticDB.
 
     """
+
     def __init__(
         self,
         symbol: str,
