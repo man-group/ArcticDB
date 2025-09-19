@@ -90,6 +90,10 @@ struct IndexRange {
         return left.start_ <= right.end_ && left.end_ >= right.start_;
     }
 
+    friend bool closed_aware_intersects(const IndexRange& left, const IndexRange& right) {
+        return left.inclusive_start() <= right.inclusive_end() && left.inclusive_end() >= right.inclusive_start();
+    }
+
     friend bool intersects(const IndexRange& rg, const IndexValue& start, const IndexValue& end) {
         if (!rg.specified_)
             return true;
@@ -104,24 +108,21 @@ struct IndexRange {
         return left.start_ == right.start_ && left.end_ == right.end_;
     }
 
-    void adjust_open_closed_interval() {
-        if (std::holds_alternative<NumericIndex>(start_) && !start_closed_) {
-            auto start = std::get<NumericIndex>(start_);
-            start_ = NumericIndex(start + 1);
-        }
-
-        if (std::holds_alternative<NumericIndex>(end_) && !end_closed_) {
-            auto end = std::get<NumericIndex>(end_);
-            end_ = NumericIndex(end - 1);
-        }
-    }
-
     IndexValue inclusive_end() const {
         if (std::holds_alternative<NumericIndex>(end_) && !end_closed_) {
             return NumericIndex(std::get<NumericIndex>(end_) - 1);
         }
         return end_;
     }
+
+    IndexValue inclusive_start() const {
+        if (std::holds_alternative<NumericIndex>(start_) && !start_closed_) {
+            return NumericIndex(std::get<NumericIndex>(start_) + 1);
+        }
+        return start_;
+    }
+
+    bool empty() const { return inclusive_start() > inclusive_end(); }
 };
 
 inline IndexRange unspecified_range() { return {}; }

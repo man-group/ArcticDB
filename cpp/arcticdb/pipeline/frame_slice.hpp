@@ -30,6 +30,8 @@ struct AxisRange : std::pair<size_t, size_t> {
 
     [[nodiscard]] size_t end() const { return second; }
 
+    [[nodiscard]] bool empty() const { return first >= second; }
+
     struct Hasher {
         template<class T>
         std::enable_if_t<std::is_base_of_v<AxisRange, std::decay_t<T>>, std::size_t> operator()(const T& r) const {
@@ -309,6 +311,19 @@ struct formatter<arcticdb::pipelines::SliceAndKey> {
     template<typename FormatContext>
     auto format(arcticdb::pipelines::SliceAndKey sk, FormatContext& ctx) const {
         return fmt::format_to(ctx.out(), "{}{}", sk.slice(), sk.key());
+    }
+};
+
+template<>
+struct formatter<arcticdb::pipelines::RangesAndKey> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(arcticdb::pipelines::RangesAndKey sk, FormatContext& ctx) const {
+        return fmt::format_to(ctx.out(), "{},{},{},{}", sk.row_range(), sk.col_range(), sk.key_, sk.is_incomplete());
     }
 };
 
