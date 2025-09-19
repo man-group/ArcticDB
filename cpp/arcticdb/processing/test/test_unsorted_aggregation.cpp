@@ -87,7 +87,7 @@ class AggregationResult : public ::testing::TestWithParam<DataType> {
         if constexpr (is_bool_type(InputTypeTag::data_type())) {
             return std::array{2 / 3.0, 0.0, 1.0, 1 / 3.0};
         } else if constexpr (is_empty_type(InputTypeTag::data_type())) {
-            return std::array{0.0, 0.0, 0.0};
+            return std::array<double, 0>{};
         }
     }
 
@@ -148,7 +148,11 @@ TEST_P(AggregationResult, Mean) {
             ASSERT_EQ(result.field(0).type(), make_scalar_type(OutputDataTypeTag::data_type()));
             ASSERT_EQ(result.field(0).name(), "output");
             const Column& aggregated_column = result.column(0);
-            ASSERT_EQ(aggregated_column.row_count(), group_count);
+            if constexpr (!is_empty_type(TypeTag::data_type)) {
+                ASSERT_EQ(aggregated_column.row_count(), group_count);
+            } else {
+                ASSERT_EQ(aggregated_column.row_count(), 0);
+            }
             constexpr static std::array expected = get_expected_result_mean<InputDataTypeTag>();
             Column::for_each_enumerated<OutputDataTypeTag>(aggregated_column, [&](const auto& row) {
                 ASSERT_EQ(row.value(), expected[row.idx()]);
