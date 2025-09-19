@@ -26,6 +26,9 @@ WINDOWS = sys.platform.lower().startswith("win32")
 ARM64 = platform.machine().lower() in ("arm64", "aarch64")
 
 
+# Pre-process tests and assign marks
+EXTENDED_MARKS = os.getenv("ARCTICDB_EXTENDED_MARKS", "1") == "1"
+
 # Defined shorter logs on errors
 SHORTER_LOGS = marks.SHORTER_LOGS
 logger = get_logger()

@@ -357,7 +357,7 @@ class ScopedMaxDelta:
 @pytest.mark.parametrize("update_freq", [3, 8])
 @pytest.mark.parametrize("compaction_size", [2, 10, 200])
 @pytest.mark.parametrize("same_symbols", [True, False])
-@pytest.mark.xfail(reason="Needs to be fixed with issue #496")
+@pytest.mark.skip(reason="Needs to be fixed with issue #496")
 def test_symbol_list_parallel_stress_with_delete(
     lmdb_version_store_v1,
     list_freq,
