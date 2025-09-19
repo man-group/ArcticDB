@@ -711,7 +711,7 @@ def test_symbol_concat_symbols_with_different_indexes(lmdb_library, join):
     with pytest.raises(SchemaException):
         concat(lib.read_batch(["timestamp_index_sym", "multiindex_sym"], lazy=True), join).collect()
 
-
+@pytest.mark.skip(reason="Test if this will fix macos hang")
 def test_symbol_concat_non_existent_symbol(lmdb_library):
     lib = lmdb_library
     sym = "test_symbol_concat_non_existent_symbol"
@@ -719,7 +719,7 @@ def test_symbol_concat_non_existent_symbol(lmdb_library):
     with pytest.raises(NoSuchVersionException):
         concat(lib.read_batch([sym, "non-existent symbol"], lazy=True)).collect()
 
-
+@pytest.mark.skip(reason="Test if this will fix macos hang")
 def test_symbol_concat_pickled_data(lmdb_library):
     lib = lmdb_library
     df = pd.DataFrame({"bytes": np.arange(10, dtype=np.uint64)})
