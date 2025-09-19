@@ -1022,19 +1022,6 @@ class DFGenerator:
         rows = int(num_rows)
         dtypes = supported_types_list
         gen = DFGenerator(size=rows, density=density, seed=seed)
-
-    def generate_normal_dataframe(
-        cls,
-        num_rows: int,
-        num_cols: int,
-        start_time: Union[pd.Timestamp, TimestampNumber] = None,
-        freq: Union[str, timedelta, pd.Timedelta, pd.DateOffset] = "s",
-        seed=1234,
-    ):
-        cols = int(num_cols)
-        rows = int(num_rows)
-        dtypes = supported_types_list
-        gen = DFGenerator(size=rows, seed=seed)
         for i in range(cols):
             dtype = dtypes[i % len(dtypes)]
             if "int" in str(dtype):
