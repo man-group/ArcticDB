@@ -19,8 +19,10 @@ from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
+from tests.conftest import Marks
 from tests.util.date import DateRange
 from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.marking import marks
 
 
 @pytest.mark.storage
@@ -452,6 +454,7 @@ def test_delete_snapshot_regression(nfs_clean_bucket):
     assert "snap" not in lib.list_snapshots()
 
 
+@marks([Marks.pipeline])
 def test_resampling_non_timeseries(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_resampling_non_timeseries"
