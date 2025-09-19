@@ -281,6 +281,9 @@ date_ranges_to_test = [
 
 
 def get_num_data_keys_intersecting_row_range(index, start, end):
+    if end <= start:
+        # We shouldn't read any data keys if row range is empty
+        return 0
     count = 0
     for index, row in index.iterrows():
         if (start is None or start < row["end_row"]) and (end is None or end > row["start_row"]):
@@ -289,6 +292,9 @@ def get_num_data_keys_intersecting_row_range(index, start, end):
 
 
 def get_num_data_keys_intersecting_date_range(index, start, end, exclude_fully_included=False):
+    if start is not None and end is not None and end < start:
+        # We shouldn't read any data keys if date range is empty
+        return 0
     count = 0
     for i, (_, row) in enumerate(index.reset_index().iterrows()):
         # end is inclusive when doing date_range but end_index in the column is exclusive
