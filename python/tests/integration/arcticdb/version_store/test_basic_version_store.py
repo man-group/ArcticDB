@@ -27,6 +27,7 @@ from arcticdb.exceptions import (
     ArcticDbNotYetImplemented,
     InternalException,
     UserInputException,
+    ArcticException,
 )
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
@@ -34,7 +35,12 @@ from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch, ManualClockVersionStore
+from arcticdb_ext.version_store import (
+    NoSuchVersionException,
+    StreamDescriptorMismatch,
+    ManualClockVersionStore,
+    DataError,
+)
 from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
@@ -2210,6 +2216,26 @@ def test_batch_read_meta_multiple_versions(object_version_store):
     assert results_dict["sym1"][0].metadata == {"meta1": 1}
     assert results_dict["sym3"][0].metadata == {"meta3": 1}
     assert results_dict["sym2"][3].metadata == {"meta2": 4}
+
+    # We can supply only an array of symbols, including repeating symbols
+    results_dict = lib.batch_read_metadata_multi(["sym1", "sym2", "sym1", "sym3", "sym2", "sym1", "sym1"])
+    assert results_dict["sym1"][2].metadata == {"meta1": 3}
+    assert len(results_dict["sym1"]) == 1
+    assert results_dict["sym2"][3].metadata == {"meta2": 4}
+    assert results_dict["sym3"][0].metadata == {"meta3": 1}
+
+    # The lists are of different sizr
+    with pytest.raises(ArcticException):
+        results_dict = lib.batch_read_metadata_multi(["sym1", "sym2"], [0, 0, -2])
+
+    # With negative number we can go back from current versions
+    assert lib.batch_read_metadata_multi(["sym1", "sym1"], [-1, -2]) == lib.batch_read_metadata_multi(
+        ["sym1", "sym1"], [2, 1]
+    )
+
+    # Check DataError is thrown when requesting non-existing version
+    with pytest.raises(TypeError):  # Not a good error though - issue 10070002655
+        results_dict = lib.batch_read_metadata_multi(["sym1"], [10])
 
 
 @pytest.mark.storage
