@@ -62,7 +62,7 @@ VersionedItem PythonVersionStore::write_dataframe_specific_version(
 
 std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
     const std::vector<StreamId>& stream_ids,
-    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
+    const std::vector<convert::InputItem> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool empty_types) {
@@ -76,7 +76,7 @@ std::vector<std::shared_ptr<InputFrame>> create_input_tensor_frames(
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_write(
     const std::vector<StreamId>& stream_ids,
-    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
+    const std::vector<convert::InputItem> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool prune_previous_versions,
@@ -89,7 +89,7 @@ std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_wr
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_append(
     const std::vector<StreamId> &stream_ids,
-    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
+    const std::vector<convert::InputItem> &items,
     const std::vector<py::object> &norms,
     const std::vector<py::object> &user_metas,
     bool prune_previous_versions,
@@ -556,7 +556,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     const StreamId& stream_id,
     const py::object &metastruct,
     const std::vector<StreamId> &sub_keys,
-    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>> &items,
+    const std::vector<convert::InputItem> &items,
     const std::vector<py::object> &norm_metas,
     const py::object &user_meta,
     bool prune_previous_versions
@@ -602,7 +602,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
 
 VersionedItem PythonVersionStore::write_versioned_dataframe(
     const StreamId& stream_id,
-    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
+    const convert::InputItem& item,
     const py::object& norm,
     const py::object& user_meta,
     bool prune_previous_versions,
@@ -627,7 +627,7 @@ VersionedItem PythonVersionStore::test_write_versioned_segment(
 
 VersionedItem PythonVersionStore::append(
     const StreamId& stream_id,
-    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
+    const convert::InputItem& item,
     const py::object &norm,
     const py::object & user_meta,
     bool upsert,
@@ -640,7 +640,7 @@ VersionedItem PythonVersionStore::append(
 VersionedItem PythonVersionStore::update(
         const StreamId &stream_id,
         const UpdateQuery &query,
-        const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
+        const convert::InputItem& item,
         const py::object &norm,
         const py::object &user_meta,
         bool upsert,
@@ -796,7 +796,7 @@ std::variant<VersionedItem, CompactionError> PythonVersionStore::sort_merge(
 
 StageResult PythonVersionStore::write_parallel(
     const StreamId& stream_id,
-    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
+    const convert::InputItem& item,
     const py::object& norm,
     bool validate_index,
     bool sort_on_index,
@@ -836,7 +836,7 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
 
 std::vector<std::variant<VersionedItem, DataError>> PythonVersionStore::batch_update(
     const std::vector<StreamId>& stream_ids,
-    const std::vector<std::variant<py::tuple, std::vector<RecordBatchData>>>& items,
+    const std::vector<convert::InputItem>& items,
     const std::vector<py::object>& norms,
     const std::vector<py::object>& user_metas,
     const std::vector<UpdateQuery>& update_qeries,

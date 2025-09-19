@@ -205,7 +205,7 @@ NativeTensor obj_to_tensor(PyObject *ptr, bool empty_types) {
 
 std::shared_ptr<InputFrame> py_ndf_to_frame(
     const StreamId& stream_name,
-    const std::variant<py::tuple, std::vector<RecordBatchData>>& item,
+    const InputItem& item,
     const py::object &norm_meta,
     const py::object &user_meta,
     bool empty_types) {
