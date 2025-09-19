@@ -524,6 +524,7 @@ set(arcticdb_srcs
         toolbox/query_stats.cpp
         util/allocator.cpp
         util/allocation_tracing.cpp
+        util/bitset.cpp
         util/buffer_pool.cpp
         util/decimal.cpp
         util/error_code.cpp
@@ -1105,6 +1106,7 @@ if(${TEST})
             processing/test/benchmark_clause.cpp
             processing/test/benchmark_common.cpp
             processing/test/benchmark_ternary.cpp
+            util/test/benchmark_bitset.cpp
             version/test/benchmark_write.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})

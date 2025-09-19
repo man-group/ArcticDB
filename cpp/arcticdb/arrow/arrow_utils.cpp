@@ -161,11 +161,11 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(const st
             const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
             if (is_bool_type(data_types.at(idx))) {
                 // Arrow bool columns are packed bitsets
-                // TODO: This should be parallelised in WriteToSegmentTask. There is complexity when there are multiple
-                // record batches, as the length of a buffer does not tell you how many values it contains (e.g. a
-                // 2 byte buffer could represent anywhere from 9 to 16 rows from the original data)
-                // The structure we need will look a lot like a ChunkedBuffer with external blocks, plus counts of how
-                // many bits are in each block
+                // It would be more idiomatic if this unpacking happened in WriteToSegmentTask, which would also naturally
+                // parallelise the process, but this is quite complicated, particularly when there are multiple record batches.
+                // This approach is much simpler, and BM_packed_bits_to_buffer show a rate of 10 billion rows per second
+                // handled in serial. If this proves to be a bottleneck in some situations, it will probably still be
+                // easier to do the unpacking here in parallel than to try and push this down to WriteToSegmentTask
                 if (record_batch == record_batches.cbegin()) {
                     chunked_buffers.at(idx).ensure(total_rows);
                 }

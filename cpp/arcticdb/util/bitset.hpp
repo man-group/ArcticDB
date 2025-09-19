@@ -38,35 +38,8 @@ constexpr size_t bitset_packed_size_bytes(size_t num_bits) {
     return (num_bits + 7) / 8;
 }
 
-inline void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
-    std::memset(dest_ptr, 0, bitset_packed_size_bytes(bv.size()));
-    auto last = bv.end();
-    for (auto en = bv.first(); en != last; ++en) {
-        size_t bit_pos = *en;
-        size_t byte_idx = bit_pos / 8;
-        size_t bit_idx = bit_pos % 8;
-        dest_ptr[byte_idx] |= (uint8_t(1) << bit_idx);
-    }
-}
+void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr);
 
-inline void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, uint8_t* dest_ptr) {
-    auto leftover_bits = num_bits % 8;
-    int64_t num_bytes = (num_bits + 7) / 8;
-    if (leftover_bits == 0) {
-        ++num_bytes;
-    }
-    for (auto idx = 0; idx < num_bytes - 1; ++idx, ++packed_bits) {
-        uint8_t byte = *packed_bits;
-        for (size_t bit = 0; bit < 8; ++bit) {
-            *dest_ptr++ = static_cast<bool>((byte >> bit) % 2);
-        }
-    }
-    if (leftover_bits > 0) {
-        uint8_t byte = *packed_bits;
-        for (size_t bit = 0; bit < leftover_bits; ++bit) {
-            *dest_ptr++ = static_cast<bool>((byte >> bit) % 2);
-        }
-    }
-}
+void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, uint8_t* dest_ptr);
 
 }
