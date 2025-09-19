@@ -4,6 +4,8 @@
 
 ::: arcticdb.ReadRequest
 
+::: arcticdb.DeleteRequest
+
 ::: arcticdb.version_store.library.SymbolDescription
 
 ::: arcticdb.version_store.library.SymbolVersion
@@ -15,3 +17,6 @@
 ::: arcticdb.version_store.library.VersionInfo
 
 ::: arcticdb.WritePayload
+
+::: arcticdb.UpdatePayload
+
