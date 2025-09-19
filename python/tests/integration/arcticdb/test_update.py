@@ -25,7 +25,7 @@ from arcticdb.util.utils import DFGenerator, TimestampNumber, set_seed
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store._store import VersionedItem
 from arcticdb.version_store.library import Library, UpdatePayload, WritePayload
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, sample_dataframe
 from arcticdb_ext.version_store import DataError, NoSuchVersionException
 from tests.util.mark import LINUX
 
@@ -555,3 +555,18 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
         ArcticSymbolSimulator.assert_frame_equal_rebuild_index_first(
             expected_results[result.symbol], read_data[result.symbol].data
         )
+
+
+def test_batch_update_after_delete_upsert(arctic_library_lmdb):
+    lib = arctic_library_lmdb
+    lib.write("sym", sample_dataframe())
+    lib.write("sym1", sample_dataframe())
+    lib.write("sym1", sample_dataframe())
+    lib.delete_batch(["sym", "sym1"])
+    df = sample_dataframe()
+    df1 = sample_dataframe()
+    results = lib.update_batch([UpdatePayload("sym", df), UpdatePayload("sym1", df1)], upsert=True)
+    assert results[0].version == 1
+    assert results[1].version == 2
+    assert_frame_equal(lib.read("sym").data, df)
+    assert_frame_equal(lib.read("sym1").data, df1)
