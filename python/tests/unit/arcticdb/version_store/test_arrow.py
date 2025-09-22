@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import pytest
+from packaging import version
 from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
 from hypothesis.extra.pandas import columns, data_frames
@@ -19,6 +20,7 @@ from arcticdb.util.hypothesis import (
     column_strategy,
 )
 from arcticdb.util.test import get_sample_dataframe, make_dynamic
+from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
 
@@ -228,6 +230,16 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
+@pytest.mark.parametrize(
+    "output_format",
+    [
+        OutputFormat.EXPERIMENTAL_ARROW,
+        pytest.param(
+            OutputFormat.PANDAS,
+            marks=pytest.mark.skipif(IS_PANDAS_ONE, reason="Monday ref: 18013444785"),
+        ),
+    ],
+)
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("use_query_builder", [True, False])
 @pytest.mark.parametrize(
@@ -251,10 +263,10 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
     ],
 )
 def test_date_range(
-    version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, any_output_format
+    version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, output_format
 ):
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
-    lib.set_output_format(any_output_format)
+    lib.set_output_format(output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
         {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
@@ -360,6 +372,16 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
+@pytest.mark.parametrize(
+    "output_format",
+    [
+        OutputFormat.EXPERIMENTAL_ARROW,
+        pytest.param(
+            OutputFormat.PANDAS,
+            marks=pytest.mark.skipif(IS_PANDAS_ONE, reason="Monday ref: 18013444785"),
+        ),
+    ],
+)
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
 @pytest.mark.parametrize("use_query_builder", [True, False])
 @pytest.mark.parametrize(
@@ -386,11 +408,9 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
         (-21, -17),
     ],
 )
-def test_row_range(
-    version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, any_output_format
-):
+def test_row_range(version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, output_format):
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
-    lib.set_output_format(any_output_format)
+    lib.set_output_format(output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
         {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
