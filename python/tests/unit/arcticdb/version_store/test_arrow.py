@@ -250,9 +250,11 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
         (110, 120),
     ],
 )
-def test_date_range(version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder):
+def test_date_range(
+    version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, any_output_format
+):
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(any_output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
         {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
@@ -271,11 +273,11 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
     date_range = (query_start_ts, query_end_ts)
     if use_query_builder:
         q = QueryBuilder().date_range(date_range)
-        arrow_table = lib.read(sym, query_builder=q).data
+        result = lib.read(sym, query_builder=q).data
     else:
-        arrow_table = lib.read(sym, date_range=date_range).data
+        result = lib.read(sym, date_range=date_range).data
 
-    assert_frame_equal_with_arrow(expected_df, arrow_table)
+    assert_frame_equal_with_arrow(expected_df, result)
 
 
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
@@ -293,9 +295,11 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
         (3, 4),  # Empty slice within a slice
     ],
 )
-def test_date_range_with_duplicates(version_store_factory, segment_row_size, start_date, end_date, use_query_builder):
+def test_date_range_with_duplicates(
+    version_store_factory, segment_row_size, start_date, end_date, use_query_builder, any_output_format
+):
     lib = version_store_factory(segment_row_size=segment_row_size)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(any_output_format)
     index_with_duplicates = (
         [pd.Timestamp(2025, 1, 1)] * 10
         + [pd.Timestamp(2025, 1, 2)] * 13
@@ -315,10 +319,10 @@ def test_date_range_with_duplicates(version_store_factory, segment_row_size, sta
     date_range = (query_start_ts, query_end_ts)
     if use_query_builder:
         q = QueryBuilder().date_range(date_range)
-        arrow_table = lib.read(sym, query_builder=q).data
+        result = lib.read(sym, query_builder=q).data
     else:
-        arrow_table = lib.read(sym, date_range=date_range).data
-    assert_frame_equal_with_arrow(arrow_table, expected_df)
+        result = lib.read(sym, date_range=date_range).data
+    assert_frame_equal_with_arrow(result, expected_df)
 
 
 @pytest.mark.parametrize("row_range_start", [0, 1, 2, 3, 4, 5, 6])
@@ -382,9 +386,11 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
         (-21, -17),
     ],
 )
-def test_row_range(version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder):
+def test_row_range(
+    version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, any_output_format
+):
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(any_output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
         {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},

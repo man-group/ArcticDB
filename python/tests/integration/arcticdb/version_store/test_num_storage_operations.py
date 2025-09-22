@@ -12,6 +12,7 @@ from arcticdb.util.test import (
     config_context,
     config_context_string,
 )
+from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
 
 
@@ -331,8 +332,11 @@ def get_num_data_keys_intersecting_date_range(index, start, end, exclude_fully_i
 @pytest.mark.parametrize(
     "row_range_start, row_range_end", [(0, 0), (5, 5), (0, 1), (1, 2), (5, 6), (0, 4), (1, 5), (0, 6), (6, 15), (0, 15)]
 )
+@pytest.mark.parametrize("use_query_builder", [True, False])
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_row_range_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, row_range_start, row_range_end):
+def test_row_range_num_reads(
+    s3_store_factory, clear_query_stats, dynamic_schema, row_range_start, row_range_end, use_query_builder
+):
     with config_context("VersionMap.ReloadInterval", 0):
         lib = s3_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=dynamic_schema)
         qs.enable()
@@ -349,7 +353,12 @@ def test_row_range_num_reads(s3_store_factory, clear_query_stats, dynamic_schema
         assert sum_operations_by_type(stats, "S3_GetObject") == 2
 
         expected_df = df.iloc[row_range_start:row_range_end]
-        result_df = lib.read(sym, row_range=(row_range_start, row_range_end)).data
+        row_range = (row_range_start, row_range_end)
+        if use_query_builder:
+            q = QueryBuilder().row_range(row_range)
+            result_df = lib.read(sym, query_builder=q).data
+        else:
+            result_df = lib.read(sym, row_range=row_range).data
         stats = qs.get_query_stats()
         qs.reset_stats()
         assert_frame_equal(result_df, expected_df)
@@ -359,8 +368,11 @@ def test_row_range_num_reads(s3_store_factory, clear_query_stats, dynamic_schema
 
 
 @pytest.mark.parametrize("date_range_start, date_range_end", date_ranges_to_test)
+@pytest.mark.parametrize("use_query_builder", [True, False])
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-def test_date_range_num_reads(s3_store_factory, clear_query_stats, dynamic_schema, date_range_start, date_range_end):
+def test_date_range_num_reads(
+    s3_store_factory, clear_query_stats, dynamic_schema, date_range_start, date_range_end, use_query_builder
+):
     with config_context("VersionMap.ReloadInterval", 0):
         lib = s3_store_factory(column_group_size=2, segment_row_size=2, dynamic_schema=dynamic_schema)
         qs.enable()
@@ -379,7 +391,12 @@ def test_date_range_num_reads(s3_store_factory, clear_query_stats, dynamic_schem
         assert sum_operations_by_type(stats, "S3_GetObject") == 2
 
         expected_df = df.loc[date_range_start:date_range_end]
-        result_df = lib.read(sym, date_range=(date_range_start, date_range_end)).data
+        date_range = (date_range_start, date_range_end)
+        if use_query_builder:
+            q = QueryBuilder().date_range(date_range)
+            result_df = lib.read(sym, query_builder=q).data
+        else:
+            result_df = lib.read(sym, date_range=date_range).data
         stats = qs.get_query_stats()
         qs.reset_stats()
         assert_frame_equal(result_df, expected_df)
