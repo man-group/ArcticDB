@@ -361,10 +361,7 @@ def _normalize_single_index(
         return [], []
     elif isinstance(index, RangeIndex):
         if index.name:
-            if not isinstance(index.name, int) and not isinstance(index.name, str):
-                raise NormalizationException(
-                    f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
-                )
+            _check_valid_name(index.name)
             if isinstance(index.name, int):
                 index_norm.is_int = True
             index_norm.name = str(index.name)
@@ -400,10 +397,7 @@ def _normalize_single_index(
         if index_tz is not None:
             index_norm.tz = _ensure_str_timezone(index_tz)
 
-        if not isinstance(index_names[0], int) and not isinstance(index_names[0], str):
-            raise NormalizationException(
-                f"Index name must be a string or an int, received {index_names[0]} of type {type(index_names[0])}"
-            )
+        _check_valid_name(index_names[0])
         # Currently, we only support a single index column
         # when we support multi-index, we will need to implement a similar logic to the one in _normalize_columns_names
         # in the mean time, we will cast all other index names to string, so we don't crash in the cpp layer
@@ -498,6 +492,14 @@ def _denormalize_columns(item, norm_meta, idx_type, n_indexes):
     return columns, denormed_columns, data
 
 
+def _check_valid_name(name):
+    # bools are a subclass of int, so we need to check for them explicitly
+    if isinstance(name, bool) or not isinstance(name, (str, int)):
+        raise NormalizationException(
+            f"Column and index names must be of type str or int, received {name} of type {type(name)}"
+        )
+
+
 def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_schema=False):
     counter = Counter(columns_names)
     for idx in range(len(columns_names)):
@@ -510,11 +512,7 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
             columns_names[idx] = new_name
             continue
 
-        # bools are a subclass of int, so we need to check for them explicitly
-        if isinstance(col, bool) or (not isinstance(col, str) and not isinstance(col, int)):
-            raise NormalizationException(
-                f"Column names must be of type str or int, received {col} of type {type(col)} on column number {idx}"
-            )
+        _check_valid_name(col)
 
         col_str = str(col)
         columns_names[idx] = col_str

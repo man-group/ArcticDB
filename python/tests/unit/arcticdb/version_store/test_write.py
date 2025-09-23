@@ -174,3 +174,20 @@ def test_write_bool_named_columns(lmdb_version_store):
 
     assert lmdb_version_store.list_symbols() == []
     assert lmdb_version_store.has_symbol(symbol) is False
+
+
+@pytest.mark.parametrize(
+    "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
+)
+def test_write_bool_named_index(lmdb_version_store, idx):
+    symbol = "bad_write"
+
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
+    df.index.name = True
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, df)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False
