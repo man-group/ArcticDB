@@ -1,0 +1,50 @@
+name: Scheduled Cleanup
+
+on:
+  schedule:
+    - cron: "0 22 * * 6"  
+  push:
+    branches: 
+      - delete_sts_roles
+  workflow_dispatch:  
+
+jobs:
+  run-script:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Set Up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Dependencies
+        run: pip install boto3 arcticdb azure-storage-blob azure-identity
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"        
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
+
+      - name: Delete STS Roles
+        run: |
+          cd python
+          # remove the empty protobuf libs so that protobufs are loaded from installed lib
+          rm -rf arcticc
+          PYTHONPATH=. python -m utils.s3_roles_delete
+
+      - name: Cleanup buckets
+        run: |
+          cd python
+          PYTHONPATH=. python -m utils.cleanup_test_buckets 
+
+
+
