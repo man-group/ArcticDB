@@ -731,6 +731,23 @@ def run_gcp_server(port, key_file, cert_file):
     )
 
 
+def get_buckets_check(s3_client):
+    try:
+        response = s3_client.list_buckets()
+        buckets = response.get("Buckets", [])
+        
+        if buckets:
+            print("Buckets found:")
+            for bucket in buckets:
+                print(f"- {bucket['Name']}")
+        else:
+            print("Client is alive, but no buckets exist.")
+    except botocore.exceptions.EndpointConnectionError:
+        print("Could not connect to Moto S3 server. Is it running?")
+    except botocore.exceptions.ClientError as e:
+        print(f"Client error: {e.response['Error']['Message']}")
+
+
 def create_bucket(s3_client, bucket_name, max_retries=15):
     for i in range(max_retries):
         try:
@@ -740,6 +757,10 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             if i >= max_retries - 1:
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
+            logger.warning(f"Error: {e.response['Error']['Message']}")
+            get_buckets_check()
+            import pprint
+            pprint.pprint(e.response)
             time.sleep(1)
 
 
