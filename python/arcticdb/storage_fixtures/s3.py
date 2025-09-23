@@ -791,7 +791,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # We need the unique_id because we have tests that are creating the factory directly
         # and not using the fixtures
         # so this guarantees a unique bucket name
-        return f"test_{bucket_type}_bucket_{self.unique_id}_{self._bucket_id}"
+        return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
 
     def _start_server(self):
         port = self.port = get_ephemeral_port(2)
