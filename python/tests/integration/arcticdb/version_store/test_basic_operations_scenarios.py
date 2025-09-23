@@ -36,7 +36,7 @@ from arcticdb_ext.exceptions import (
 )
 
 from benchmarks.bi_benchmarks import assert_frame_equal
-from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
+from tests.util.mark import LINUX, SLOW_TESTS_MARK
 
 
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
@@ -588,10 +588,11 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     check_incomplete_staged(symbol)
 
 
+@pytest.mark.parametrize("dynamic_strings", [True, False])
 @pytest.mark.storage
-def test_batch_read_and_join_scenarios(basic_store):
+def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     """The test covers usage of batch_read_and_join with multiple parameters and error conditions"""
-    lib: NativeVersionStore = basic_store
+    lib: NativeVersionStore = basic_store_factory(dynamic_strings=dynamic_strings)
 
     q = QueryBuilder()
     q.concat("outer")
@@ -689,12 +690,10 @@ def test_batch_read_and_join_scenarios(basic_store):
     # Pandas concat will fill NaN for bools, Arcticdb is using False
     expected["bool"] = expected["bool"].fillna(False)
     # Pandas concat will fill NaN for strings, Arcticdb is using None
-    expected["str"] = expected["str"].fillna("")
-    if WINDOWS:
-        # There is a difference on Win and Linux how ArcticDB fills N/As in string columns
-        # = Linux - it will put ''
-        # - Windows - None
-        data["str"] = data["str"].fillna("")
+    if not dynamic_strings:
+        # make expected result like the actual due to static string
+        if LINUX:
+            expected["str"] = expected["str"].fillna("")
     assert_frame_equal(expected, data)
 
     # Cover query builders per symbols
