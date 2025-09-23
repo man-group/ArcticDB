@@ -711,7 +711,7 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     assert_frame_equal(df1, data)
 
 
-@pytest.mark.xfail(True, reason="When non-existing symbol is used, MissingDataException is not raised")
+@pytest.mark.xfail(True, reason="When non-existing symbol is used, MissingDataException is not raised 18023146743")
 def test_batch_read_and_join_scenarios_errors(basic_store):
     lib: NativeVersionStore = basic_store
 
@@ -724,6 +724,59 @@ def test_batch_read_and_join_scenarios_errors(basic_store):
     # Concatenate with missing symbol
     with pytest.raises(MissingDataException):
         data: pd.DataFrame = lib.batch_read_and_join(["symbol0", "symbol2"], query_builder=q).data
+
+
+@pytest.mark.storage
+@pytest.mark.xfail(True, reason="Filtering of columns does not work for dynamic schema 18023047637")
+def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_version_store_dynamic_schema_v1):
+    lib: NativeVersionStore = lmdb_version_store_dynamic_schema_v1
+
+    q = QueryBuilder()
+    q.concat("outer")
+    df0 = (
+        DFGenerator(size=20)
+        .add_bool_col("bool")
+        .add_float_col("A", np.float32)
+        .add_int_col("B", np.int32)
+        .add_int_col("C", np.uint16)
+        .generate_dataframe()
+    )
+
+    df1_len = 13
+    df1 = (
+        DFGenerator(size=df1_len)
+        .add_bool_col("bool")
+        .add_float_col("A", np.float64)
+        .add_float_col("B", np.float32)
+        .add_int_col("C", np.int64)
+        .generate_dataframe()
+    )
+
+    lib.write("symbol0", df0)
+    lib.write("symbol1", df1)
+
+    # Concatenate with column filter
+    data: pd.DataFrame = lib.batch_read_and_join(
+        ["symbol0", "symbol1"], query_builder=q, columns=[["A", "C", "none"], None]
+    ).data
+    df0_subset = df0[["A", "C"]]
+    expected = pd.concat([df0_subset, df1], ignore_index=True)
+    # Pandas concat will fill NaN for bools, Arcticdb is using False
+    expected["bool"] = expected["bool"].fillna(False)
+    ## ERROR: With dynamic schema filtering of the columns will fail
+    #  here in the 'data' df instead of None/Na values for first 19 rows for
+    #  bool and B column we will see values, which should not have been there
+    #  If this was static schema - ie 'basic_store' fixture all would be fine
+    assert_frame_equal(expected, data)
+
+    data: pd.DataFrame = lib.batch_read_and_join(
+        ["symbol0", "symbol1"], query_builder=q, columns=[["A"], ["B"]], row_ranges=[(2, 3), (10, df1_len + 2)]
+    ).data
+    df0_subset = df0.loc[2:2, ["A"]]
+    df1_subset = df1.loc[10:df1_len, ["B"]]
+    expected = pd.concat([df0_subset, df1_subset], ignore_index=True)
+    # ERROR - here we observe that -/+ inf is added for int column "A"
+    assert_frame_equal(expected, data)
 
 
 def test_add_to_snapshot_and_remove_from_snapshots_scenarios(basic_store):
