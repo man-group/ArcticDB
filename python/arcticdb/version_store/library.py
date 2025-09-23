@@ -347,6 +347,16 @@ class DeleteRequest(NamedTuple):
 
 
 class UpdatePayload:
+    """
+    UpdatePayload is designed to enable batching of multiple operations with an API that mirrors the singular
+    ``update`` API.
+
+    Construction of ``UpdatePayload`` objects is only required for batch update operations.
+
+    One instance of ``UpdatePayload`` refers to one unit that can be written through to ArcticDB.
+
+    """
+
     def __init__(
         self,
         symbol: str,
@@ -354,6 +364,22 @@ class UpdatePayload:
         metadata: Any = None,
         date_range: Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]] = None,
     ):
+        """
+        Constructor.
+
+        Parameters
+        ----------
+        symbol : str
+            Symbol name. Limited to 255 characters. The following characters are not supported in symbols:
+            ``"*", "&", "<", ">"``
+        data : NormalizableType
+            Time-indexed data to use for the update.
+        metadata : Any, default=None
+            Optional metadata to persist along with the new symbol version.
+        date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
+            Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
+            side of the range open-ended.
+        """
         self.symbol = symbol
         self.data = data
         self.metadata = metadata
@@ -1420,7 +1446,7 @@ class Library:
         Parameters
         ----------
         update_payloads: List[UpdatePayload]
-            List `arcticdb.library.UpdatePayload`. Each element of the list describes an update operation for a
+            List of `UpdatePayload`. Each element of the list describes an update operation for a
             particular symbol. Providing the symbol name, data, etc. The same symbol should not appear twice in this
             list.
         prune_previous_versions: bool, default=False
