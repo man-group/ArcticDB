@@ -36,7 +36,7 @@ from arcticdb_ext.exceptions import (
 )
 
 from benchmarks.bi_benchmarks import assert_frame_equal
-from tests.util.mark import LINUX, SLOW_TESTS_MARK
+from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 
 
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
@@ -690,6 +690,11 @@ def test_batch_read_and_join_scenarios(basic_store):
     expected["bool"] = expected["bool"].fillna(False)
     # Pandas concat will fill NaN for strings, Arcticdb is using None
     expected["str"] = expected["str"].fillna("")
+    if WINDOWS:
+        # There is a difference on Win and Linux how ArcticDB fills N/As in string columns
+        # = Linux - it will put ''
+        # - Windows - None
+        data["str"] = data["str"].fillna("")
     assert_frame_equal(expected, data)
 
     # Cover query builders per symbols
