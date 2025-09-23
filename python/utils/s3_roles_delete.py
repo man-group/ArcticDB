@@ -1,14 +1,7 @@
 from datetime import datetime
 import boto3
 import os
-
-
-def boto_client():
-    return boto3.client(
-        "iam",
-        aws_access_key_id=os.getenv("ARCTICDB_REAL_S3_ACCESS_KEY"),
-        aws_secret_access_key=os.getenv("ARCTICDB_REAL_S3_SECRET_KEY"),
-    )
+from .bucket_management import s3_client
 
 
 def list_roles_by_prefix(client, prefix):
@@ -90,7 +83,7 @@ def delete_user(iam_client, user_name):
 
 PREFIX = os.getenv("ARCTICDB_REAL_S3_STS_PREFIX", "gh_sts_test")
 
-client = boto_client()
+client = s3_client("iam")
 roles = list_roles_by_prefix(client, PREFIX)
 print(f"Found {len(roles)} roles")
 users = list_users_by_prefix(client, PREFIX)
