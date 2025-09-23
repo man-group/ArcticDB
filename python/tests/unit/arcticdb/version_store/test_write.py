@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb.exceptions import SortingException
+from arcticdb_ext.exceptions import SortingException, ArcticException as ArcticNativeException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 from pandas import MultiIndex
@@ -160,3 +160,17 @@ class TestMissingStringPlaceholders:
         lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
         data = lib.read(sym).data
         assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+
+
+def test_write_bool_named_columns(lmdb_version_store):
+    symbol = "bad_write"
+    ts = pd.Timestamp("2020-01-01")
+
+    df = pd.DataFrame({True: [1, 2, 3]}, index=pd.date_range(ts, periods=3))
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, df)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False

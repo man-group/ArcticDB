@@ -510,7 +510,8 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
             columns_names[idx] = new_name
             continue
 
-        if not isinstance(col, str) and not isinstance(col, int):
+        # bools are a subclass of int, so we need to check for them explicitly
+        if isinstance(col, bool) or (not isinstance(col, str) and not isinstance(col, int)):
             raise NormalizationException(
                 f"Column names must be of type str or int, received {col} of type {type(col)} on column number {idx}"
             )
