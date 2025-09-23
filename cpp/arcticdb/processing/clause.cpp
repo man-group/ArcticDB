@@ -17,6 +17,7 @@
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/pipeline/column_stats.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/pipeline/query.hpp>
 #include <arcticdb/util/test/random_throw.hpp>
 #include <ankerl/unordered_dense.h>
 #include <arcticdb/util/movable_priority_queue.hpp>
@@ -1376,12 +1377,13 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
+    auto row_range_filter = RowRange{start_, end_};
     ranges_and_keys.erase(
             std::remove_if(
                     ranges_and_keys.begin(),
                     ranges_and_keys.end(),
-                    [this](const RangesAndKey& ranges_and_key) {
-                        return ranges_and_key.row_range_.start() >= end_ || ranges_and_key.row_range_.end() <= start_;
+                    [&](const RangesAndKey& ranges_and_key) {
+                        return !is_slice_in_row_range(ranges_and_key.row_range(), row_range_filter);
                     }
             ),
             ranges_and_keys.end()
@@ -1532,13 +1534,14 @@ std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(std::
             processing_config_.index_type_ == IndexDescriptor::Type::TIMESTAMP,
             "Cannot use date range with non-timestamp indexed data"
     );
+    auto index_filter = IndexRange(start_, end_);
     ranges_and_keys.erase(
             std::remove_if(
                     ranges_and_keys.begin(),
                     ranges_and_keys.end(),
-                    [this](const RangesAndKey& ranges_and_key) {
-                        auto [start_index, end_index] = ranges_and_key.key_.time_range();
-                        return start_index > end_ || end_index <= start_;
+                    [&](const RangesAndKey& ranges_and_key) {
+                        auto slice_index_range = IndexRange(ranges_and_key.key_.time_range());
+                        return !is_slice_in_index_range(slice_index_range, index_filter, true);
                     }
             ),
             ranges_and_keys.end()

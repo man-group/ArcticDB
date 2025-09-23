@@ -107,13 +107,15 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
     };
     auto handlers = TypeHandlerRegistry::instance();
 
-    for (auto& column : output.columns()) {
-        auto handler = handlers->get_handler(output_format, column->type());
-        const auto data_size = data_type_size(column->type(), output_format, DataTypeMode::EXTERNAL);
-        for (auto block_row_count : block_row_counts) {
-            const auto bytes = block_row_count * data_size;
-            column->allocate_data(bytes);
-            column->advance_data(bytes);
+    if (row_count > 0) {
+        for (auto& column : output.columns()) {
+            auto handler = handlers->get_handler(output_format, column->type());
+            const auto data_size = data_type_size(column->type(), output_format, DataTypeMode::EXTERNAL);
+            for (auto block_row_count : block_row_counts) {
+                const auto bytes = block_row_count * data_size;
+                column->allocate_data(bytes);
+                column->advance_data(bytes);
+            }
         }
     }
 
