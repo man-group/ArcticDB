@@ -20,3 +20,5 @@
 
 ::: arcticdb.UpdatePayload
 
+::: arcticdb.WriteMetadataPayload
+
