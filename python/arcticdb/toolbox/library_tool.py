@@ -3,6 +3,7 @@ Copyright 2023 Man Group Operations Limited
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from typing import Optional, Union, List, Dict, Any
 import pandas as pd
 
@@ -163,23 +164,26 @@ class LibraryTool(LibraryToolImpl):
         """
         return self._nvs.read_index(symbol, as_of, **kwargs)
 
-    def normalize_dataframe_with_nvs_defaults(self, df : pd.DataFrame):
+    def normalize_dataframe_with_nvs_defaults(self, df: pd.DataFrame):
         # TODO: Have a unified place where we resolve all the normalization parameters and use that here.
 
         from arcticdb.version_store._store import resolve_defaults
+
         # Currently all these parameters are resolved in various places throughout the _store.py. This can result in
         # different defaults for different operations which is not desirable.
         write_options = self._nvs._lib_cfg.lib_desc.version.write_options
         dynamic_schema = resolve_defaults("dynamic_schema", write_options, False)
         empty_types = resolve_defaults("empty_types", write_options, False)
         dynamic_strings = self._nvs._resolve_dynamic_strings({})
-        return normalize_dataframe(df, dynamic_schema=dynamic_schema, empty_types=empty_types, dynamic_strings=dynamic_strings)
+        return normalize_dataframe(
+            df, dynamic_schema=dynamic_schema, empty_types=empty_types, dynamic_strings=dynamic_strings
+        )
 
-    def dataframe_to_segment_in_memory(self, sym, df : pd.DataFrame) -> SegmentInMemory:
+    def dataframe_to_segment_in_memory(self, sym, df: pd.DataFrame) -> SegmentInMemory:
         item, norm_meta = self.normalize_dataframe_with_nvs_defaults(df)
         return self.item_to_segment_in_memory(sym, item, norm_meta, None, None)
 
-    def overwrite_append_data_with_dataframe(self, key : VariantKey, df : pd.DataFrame) -> SegmentInMemory:
+    def overwrite_append_data_with_dataframe(self, key: VariantKey, df: pd.DataFrame) -> SegmentInMemory:
         """
         Overwrites the append data key with the provided dataframe. Use with extreme caution as overwriting with
         inappropriate data can render the symbol unreadable.
@@ -192,7 +196,7 @@ class LibraryTool(LibraryToolImpl):
         item, norm_meta = self.normalize_dataframe_with_nvs_defaults(df)
         return self.overwrite_append_data(key, item, norm_meta, None)
 
-    def update_append_data_column_type(self, key : VariantKey, column : str, to_type : type) -> SegmentInMemory:
+    def update_append_data_column_type(self, key: VariantKey, column: str, to_type: type) -> SegmentInMemory:
         old_df = self.read_to_dataframe(key)
         assert column in old_df.columns
         new_df = old_df.astype({column: to_type})

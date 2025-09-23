@@ -42,7 +42,7 @@ jobs:
     env:
       # 0 - uses S3 Cache, 1 - uses GHA cache
       # this way the external PRs can use the GHA cache
-      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY && 0 || 1}}
+      SCCACHE_GHA_VERSION: ${{secrets.AWS_S3_ACCESS_KEY == null}}
       SCCACHE_BUCKET: arcticdb-ci-sccache-bucket
       SCCACHE_ENDPOINT: http://s3.eu-west-1.amazonaws.com
       SCCACHE_REGION: eu-west-1
@@ -70,6 +70,7 @@ jobs:
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      NODE_OPTIONS: --openssl-legacy-provider
     defaults:
       run: {shell: bash}
     steps:
@@ -375,7 +376,7 @@ jobs:
         if: matrix.os == 'linux' || matrix.os == 'macos'
         uses: actions/setup-node@v3.3.0
         with:
-          node-version: '16'
+          node-version: '24'
 
       - name: Install Azurite
         uses: nick-fields/retry@v3

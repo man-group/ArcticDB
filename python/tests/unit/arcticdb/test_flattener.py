@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 from arcticdb.flattener import Flattener
 
 from arcticdb.version_store._custom_normalizers import (
@@ -80,10 +81,10 @@ def test_dict_record_keys():
     # We limit key length to 100. The "d" * 94 key will not be shortened (stored as sym__ddd...) whereas the "e" * 95 key
     # trips the threshold and will be shortened (due to the 5 characters in sym__).
     sample = {
-            "a": pd.DataFrame({"col_dict": np.random.randn(2)}),
-            "b": {"c": pd.DataFrame({"col_dict": np.random.randn(2)})},
-            "d" * 94: pd.DataFrame({"col_dict": np.random.rand(2)}),
-            "e" * 95: pd.DataFrame({"col_dict": np.random.rand(2)})  # key name should be obfuscated for this one
+        "a": pd.DataFrame({"col_dict": np.random.randn(2)}),
+        "b": {"c": pd.DataFrame({"col_dict": np.random.randn(2)})},
+        "d" * 94: pd.DataFrame({"col_dict": np.random.rand(2)}),
+        "e" * 95: pd.DataFrame({"col_dict": np.random.rand(2)}),  # key name should be obfuscated for this one
     }
 
     meta, flattened = fl.create_meta_structure(sample, "sym")

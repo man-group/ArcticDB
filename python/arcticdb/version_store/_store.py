@@ -94,7 +94,10 @@ IS_WINDOWS = sys.platform == "win32"
 
 FlattenResult = namedtuple("FlattenResult", ["is_recursive_normalize_preferred", "metastruct", "to_write"])
 
-def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, runtime_options=None, **kwargs):
+
+def resolve_defaults(
+    param_name, proto_cfg, global_default, existing_value=None, uppercase=True, runtime_options=None, **kwargs
+):
     """
     Precedence: existing_value > kwargs > runtime_defaults > env > proto_cfg > global_default
 
@@ -350,7 +353,7 @@ class NativeVersionStore:
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
-        self._runtime_options=runtime_options
+        self._runtime_options = runtime_options
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         if self._runtime_options is None:
@@ -542,8 +545,18 @@ class NativeVersionStore:
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
         return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, **kwargs)
 
-    def resolve_runtime_defaults(self, param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
-        return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, runtime_options=self._runtime_options, **kwargs)
+    def resolve_runtime_defaults(
+        self, param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs
+    ):
+        return resolve_defaults(
+            param_name,
+            proto_cfg,
+            global_default,
+            existing_value,
+            uppercase,
+            runtime_options=self._runtime_options,
+            **kwargs,
+        )
 
     def _write_options(self):
         return self._lib_cfg.lib_desc.version.write_options
@@ -569,13 +582,9 @@ class NativeVersionStore:
             norm_failure_options_msg=norm_failure_options_msg,
         )
         if isinstance(item, NPDDataFrame):
-            is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
-            result = self.version_store.write_parallel(
+            return self.version_store.write_parallel(
                 symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
             )
-            if is_new_stage_api_enabled:
-                return result
-            return None
         else:
             log.warning("The data could not be normalized to an ArcticDB format and has not been written")
             return None
@@ -704,13 +713,11 @@ class NativeVersionStore:
         )
         if isinstance(item, NPDDataFrame):
             if parallel or incomplete:
-                is_new_stage_api_enabled = get_config_int("dev.stage_new_api_enabled") == 1
-                if is_new_stage_api_enabled:
-                    warn(
-                        "Staging data with write() is deprecated. Use stage() instead.",
-                        DeprecationWarning,
-                        stacklevel=2,
-                    )
+                warn(
+                    "Staging data with write() is deprecated. Use stage() instead.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
                 self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 return None
             else:
@@ -839,6 +846,11 @@ class NativeVersionStore:
         if isinstance(item, NPDDataFrame):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
+                    warn(
+                        "Staging data with append() is deprecated. Use stage() instead.",
+                        DeprecationWarning,
+                        stacklevel=2,
+                    )
                     self.version_store.write_parallel(symbol, item, norm_meta, validate_index, False, None)
                 else:
                     call_time = time.time_ns()
@@ -2012,7 +2024,6 @@ class NativeVersionStore:
             columns = None
         return columns
 
-
     def read(
         self,
         symbol: str,
@@ -2176,7 +2187,13 @@ class NativeVersionStore:
             for c in read_result.frame_data.data:
                 data.append(c[start_idx:end_idx])
             row_count = len(data[0]) if len(data) else 0
-            read_result.frame_data = FrameData(data, read_result.frame_data.names, read_result.frame_data.index_columns, row_count, read_result.frame_data.offset)
+            read_result.frame_data = FrameData(
+                data,
+                read_result.frame_data.names,
+                read_result.frame_data.index_columns,
+                row_count,
+                read_result.frame_data.offset,
+            )
 
         vitem = self._adapt_read_res(read_result)
 
@@ -2310,7 +2327,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
         delete_staged_data_on_failure: bool = False,
-        _stage_results: Optional[List[StageResult]] = None,
+        stage_results: Optional[List[StageResult]] = None,
     ) -> VersionedItem:
         """
         Compact previously written un-indexed chunks of data, produced by a tick collector or parallel
@@ -2348,6 +2365,8 @@ class NativeVersionStore:
               ``compact_incomplete``.
 
             To manually delete staged data, use the ``remove_incomplete`` function.
+        stage_results: Optional[List[StageResult]], default=None
+            If specified, only the data corresponding to the provided ``StageResult``s will be finalized. See ``stage``.
         Returns
         -------
         VersionedItem
@@ -2368,7 +2387,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             delete_staged_data_on_failure,
-            stage_results=_stage_results
+            stage_results=stage_results,
         )
 
         if isinstance(compaction_result, ae.version_store.VersionedItem):
@@ -2376,11 +2395,17 @@ class NativeVersionStore:
         elif isinstance(compaction_result, List):
             # We expect this to be a list of errors
             check(compaction_result, "List of errors in compaction result should never be empty")
-            check(all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result), "Compaction errors should always be KeyNotFoundInStageResultInfo")
-            raise MissingKeysInStageResultsError("Missing keys during compaction", tokens_with_missing_keys=compaction_result)
+            check(
+                all(isinstance(c, KeyNotFoundInStageResultInfo) for c in compaction_result),
+                "Compaction errors should always be KeyNotFoundInStageResultInfo",
+            )
+            raise MissingKeysInStageResultsError(
+                "Missing keys during compaction", tokens_with_missing_keys=compaction_result
+            )
         else:
-            raise RuntimeError(f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB.")
-
+            raise RuntimeError(
+                f"Unexpected type for compaction_result {type(compaction_result)}. This indicates a bug in ArcticDB."
+            )
 
     @staticmethod
     def _get_index_columns_from_descriptor(descriptor):
@@ -2400,7 +2425,6 @@ class NativeVersionStore:
             index_columns.append(stream_descriptor.fields[field_idx].name)
 
         return index_columns
-
 
     def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
         if isinstance(read_result.frame_data, ArrowOutputFrame):
@@ -2443,7 +2467,6 @@ class NativeVersionStore:
                 host=self.env,
                 timestamp=read_result.version.timestamp,
             )
-
 
     def list_versions(
         self,
@@ -2656,6 +2679,9 @@ class NativeVersionStore:
         """
         Add items to a snapshot. Will replace if the snapshot already contains an entry for a particular symbol.
 
+        Note: attempt to add non-existing symbol or version to a snapshot will not fail, but will have no effect
+              on the snapshot.
+
         Parameters
         ----------
         snap_name : `str`
@@ -2672,6 +2698,9 @@ class NativeVersionStore:
     def remove_from_snapshot(self, snap_name: str, symbols: List[str], versions: List[int]):
         """
         Remove items from a snapshot
+
+        Note: attempt to remove non-existing symbol or version from a snapshot will not fail, but will have no effect
+              on the snapshot.
 
         Parameters
         ----------
@@ -3020,29 +3049,39 @@ class NativeVersionStore:
             result = True
 
         result |= norm_meta.WhichOneof("input_type") == "msg_pack_frame"
-        log_warning_message = get_config_int("VersionStore.WillItemBePickledWarningMsg") != 0 and log.is_active(_LogLevel.WARN)
+        log_warning_message = get_config_int("VersionStore.WillItemBePickledWarningMsg") != 0 and log.is_active(
+            _LogLevel.WARN
+        )
         if result and log_warning_message:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
             resolved_recursive_normalizers = resolve_defaults(
-                "recursive_normalizers", proto_cfg, global_default=False, uppercase=False, **{"recursive_normalizers": recursive_normalizers}
+                "recursive_normalizers",
+                proto_cfg,
+                global_default=False,
+                uppercase=False,
+                **{"recursive_normalizers": recursive_normalizers},
             )
             warning_msg = ""
             is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
             if resolved_recursive_normalizers and is_recursive_normalize_preferred:
-                warning_msg = ("As recursive_normalizers is enabled, the item will be "
-                                "recursively normalized in `write`. However, this API will "
-                                "still return True for historical reason, such as recursively "
-                                "normalized data not being data_range searchable like "
-                                "pickled data. ")
+                warning_msg = (
+                    "As recursive_normalizers is enabled, the item will be "
+                    "recursively normalized in `write`. However, this API will "
+                    "still return True for historical reason, such as recursively "
+                    "normalized data not being data_range searchable like "
+                    "pickled data. "
+                )
                 fl = Flattener()
                 if fl.will_obj_be_partially_pickled(item):
                     warning_msg += "Please note the item will still be partially pickled."
             elif not is_recursive_normalize_preferred:
-                warning_msg = ("The item will be msgpack normalized in `write`. "
-                               "Msgpack normalization is considered `pickled` in ArcticDB, "
-                               "therefore this API will return True. ")
+                warning_msg = (
+                    "The item will be msgpack normalized in `write`. "
+                    "Msgpack normalization is considered `pickled` in ArcticDB, "
+                    "therefore this API will return True. "
+                )
             log.warning(warning_msg)
-                
+
         return result
 
     @staticmethod
@@ -3529,18 +3568,29 @@ def resolve_dynamic_strings(kwargs):
 
     return dynamic_strings
 
+
 def _log_warning_on_writing_empty_dataframe(dataframe, symbol):
     # We allow passing other things to write such as integers and strings and python arrays but we care only about
     # dataframes and series
     is_dataframe = isinstance(dataframe, pd.DataFrame)
     is_series = isinstance(dataframe, pd.Series)
-    if (is_series or is_dataframe) and dataframe.empty and os.getenv("ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME", "1") == "1":
+    if (
+        (is_series or is_dataframe)
+        and dataframe.empty
+        and os.getenv("ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME", "1") == "1"
+    ):
         empty_column_type = pd.DataFrame({"a": []}).dtypes["a"] if is_dataframe else pd.Series([]).dtype
         current_dtypes = list(dataframe.dtypes.items()) if is_dataframe else [(dataframe.name, dataframe.dtype)]
-        log.warning("Writing empty dataframe to ArcticDB for symbol \"{}\". The dtypes of empty columns depend on the"
-                    "Pandas version being used. This can lead to unexpected behavior in the processing pipeline. For"
-                    " example if the empty columns are of object dtype they cannot be part of numeric computations in"
-                    "the processing pipeline such as filtering (qb = qb[qb['empty_column'] < 5]) or projection"
-                    "(qb = qb.apply('new', qb['empty_column'] + 5)). Pandas version is: {}, the default dtype for empty"
-                    " column is: {}. Column types in the original input: {}. Parameter \"coerce_columns\" can be used" 
-                    " to explicitly set the types of dataframe columns", symbol, PANDAS_VERSION, empty_column_type, current_dtypes)
+        log.warning(
+            'Writing empty dataframe to ArcticDB for symbol "{}". The dtypes of empty columns depend on the'
+            "Pandas version being used. This can lead to unexpected behavior in the processing pipeline. For"
+            " example if the empty columns are of object dtype they cannot be part of numeric computations in"
+            "the processing pipeline such as filtering (qb = qb[qb['empty_column'] < 5]) or projection"
+            "(qb = qb.apply('new', qb['empty_column'] + 5)). Pandas version is: {}, the default dtype for empty"
+            ' column is: {}. Column types in the original input: {}. Parameter "coerce_columns" can be used'
+            " to explicitly set the types of dataframe columns",
+            symbol,
+            PANDAS_VERSION,
+            empty_column_type,
+            current_dtypes,
+        )

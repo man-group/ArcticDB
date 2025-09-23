@@ -10,6 +10,9 @@ from pandas.testing import assert_frame_equal
 import pytest
 
 from arcticdb_ext.storage import KeyType, NoDataFoundException
+from tests.conftest import Marks
+
+pytestmark = Marks.dedup.mark
 
 
 def get_data_keys(lib, symbol):

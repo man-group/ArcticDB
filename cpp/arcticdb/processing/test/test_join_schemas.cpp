@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <google/protobuf/util/message_differencer.h>
@@ -16,7 +17,7 @@ using namespace google::protobuf::util;
 using NormalizationMetadata = arcticdb::proto::descriptors::NormalizationMetadata;
 
 class GenerateIndexDescriptorTest : public testing::Test {
-protected:
+  protected:
     IndexDescriptorImpl timestamp_2_index{IndexDescriptor::Type::TIMESTAMP, 2};
     OutputSchema rowcount_0{{{}, IndexDescriptorImpl{IndexDescriptor::Type::ROWCOUNT, 0}}, {}};
     OutputSchema timestamp_1{{{}, IndexDescriptorImpl{IndexDescriptor::Type::TIMESTAMP, 1}}, {}};
@@ -48,7 +49,7 @@ TEST_F(GenerateIndexDescriptorTest, DifferentFieldCountDifferentType) {
 }
 
 class AddIndexFieldsTest : public testing::Test {
-protected:
+  protected:
     void SetUp() override {
         one_datetime_field.add_scalar_field(DataType::NANOSECONDS_UTC64, "my index");
         one_datetime_field_rename.add_scalar_field(DataType::NANOSECONDS_UTC64, "ts");
@@ -128,7 +129,9 @@ TEST_F(AddIndexFieldsTest, ScalarIndexNonMatchingNames) {
 
 TEST_F(AddIndexFieldsTest, MultiIndexNonMatchingNames) {
     auto stream_desc = two_index_fields.clone();
-    std::vector<OutputSchema> output_schemas{{one_datetime_one_int_field, {}}, {one_datetime_one_int_field_rename_first, {}}};
+    std::vector<OutputSchema> output_schemas{
+            {one_datetime_one_int_field, {}}, {one_datetime_one_int_field_rename_first, {}}
+    };
     auto non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
     FieldCollection expected;
     expected.add_field(make_scalar_type(DataType::NANOSECONDS_UTC64), "index");
@@ -138,7 +141,8 @@ TEST_F(AddIndexFieldsTest, MultiIndexNonMatchingNames) {
     ASSERT_TRUE(non_matching_name_indices.contains(0));
 
     stream_desc = two_index_fields.clone();
-    output_schemas = std::vector<OutputSchema>{{one_datetime_one_int_field_rename_first, {}}, {one_datetime_one_int_field, {}}};
+    output_schemas =
+            std::vector<OutputSchema>{{one_datetime_one_int_field_rename_first, {}}, {one_datetime_one_int_field, {}}};
     non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
     expected = FieldCollection();
     expected.add_field(make_scalar_type(DataType::NANOSECONDS_UTC64), "index");
@@ -148,7 +152,8 @@ TEST_F(AddIndexFieldsTest, MultiIndexNonMatchingNames) {
     ASSERT_TRUE(non_matching_name_indices.contains(0));
 
     stream_desc = two_index_fields.clone();
-    output_schemas = std::vector<OutputSchema>{{one_datetime_one_int_field, {}}, {one_datetime_one_int_field_rename_second, {}}};
+    output_schemas =
+            std::vector<OutputSchema>{{one_datetime_one_int_field, {}}, {one_datetime_one_int_field_rename_second, {}}};
     non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
     expected = FieldCollection();
     expected.add_field(make_scalar_type(DataType::NANOSECONDS_UTC64), "my index");
@@ -158,7 +163,8 @@ TEST_F(AddIndexFieldsTest, MultiIndexNonMatchingNames) {
     ASSERT_TRUE(non_matching_name_indices.contains(1));
 
     stream_desc = two_index_fields.clone();
-    output_schemas = std::vector<OutputSchema>{{one_datetime_one_int_field_rename_second, {}}, {one_datetime_one_int_field, {}}};
+    output_schemas =
+            std::vector<OutputSchema>{{one_datetime_one_int_field_rename_second, {}}, {one_datetime_one_int_field, {}}};
     non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
     expected = FieldCollection();
     expected.add_field(make_scalar_type(DataType::NANOSECONDS_UTC64), "my index");
@@ -168,7 +174,8 @@ TEST_F(AddIndexFieldsTest, MultiIndexNonMatchingNames) {
     ASSERT_TRUE(non_matching_name_indices.contains(1));
 
     stream_desc = two_index_fields.clone();
-    output_schemas = std::vector<OutputSchema>{{one_datetime_one_int_field, {}}, {one_datetime_one_int_field_rename_both, {}}};
+    output_schemas =
+            std::vector<OutputSchema>{{one_datetime_one_int_field, {}}, {one_datetime_one_int_field_rename_both, {}}};
     non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
     expected = FieldCollection();
     expected.add_field(make_scalar_type(DataType::NANOSECONDS_UTC64), "index");
@@ -178,7 +185,8 @@ TEST_F(AddIndexFieldsTest, MultiIndexNonMatchingNames) {
     ASSERT_TRUE(non_matching_name_indices.contains(0) && non_matching_name_indices.contains(1));
 
     stream_desc = two_index_fields.clone();
-    output_schemas = std::vector<OutputSchema>{{one_datetime_one_int_field_rename_both, {}}, {one_datetime_one_int_field, {}}};
+    output_schemas =
+            std::vector<OutputSchema>{{one_datetime_one_int_field_rename_both, {}}, {one_datetime_one_int_field, {}}};
     non_matching_name_indices = add_index_fields(stream_desc, output_schemas);
     expected = FieldCollection();
     expected.add_field(make_scalar_type(DataType::NANOSECONDS_UTC64), "index");
@@ -189,11 +197,8 @@ TEST_F(AddIndexFieldsTest, MultiIndexNonMatchingNames) {
 }
 
 class GenerateNormMetaTest : public testing::Test {
-protected:
-    enum class PandasClass {
-        DATAFRAME,
-        SERIES
-    };
+  protected:
+    enum class PandasClass { DATAFRAME, SERIES };
 
     struct single_index_params {
         PandasClass pandas_class = PandasClass::DATAFRAME;
@@ -208,9 +213,9 @@ protected:
 
     OutputSchema single_index(const single_index_params& params) {
         NormalizationMetadata norm_meta;
-        auto* index = params.pandas_class == PandasClass::DATAFRAME ?
-                      norm_meta.mutable_df()->mutable_common()->mutable_index() :
-                      norm_meta.mutable_series()->mutable_common()->mutable_index();
+        auto* index = params.pandas_class == PandasClass::DATAFRAME
+                              ? norm_meta.mutable_df()->mutable_common()->mutable_index()
+                              : norm_meta.mutable_series()->mutable_common()->mutable_index();
         index->set_is_physically_stored(params.is_physically_stored);
         index->set_name(params.name);
         index->set_is_int(params.is_int);
@@ -232,14 +237,14 @@ protected:
 
     OutputSchema multi_index(const multi_index_params& params) {
         NormalizationMetadata norm_meta;
-        auto* index = params.pandas_class == PandasClass::DATAFRAME ?
-                      norm_meta.mutable_df()->mutable_common()->mutable_multi_index() :
-                      norm_meta.mutable_series()->mutable_common()->mutable_multi_index();
+        auto* index = params.pandas_class == PandasClass::DATAFRAME
+                              ? norm_meta.mutable_df()->mutable_common()->mutable_multi_index()
+                              : norm_meta.mutable_series()->mutable_common()->mutable_multi_index();
         index->set_name(params.name);
         index->set_field_count(params.field_count);
         index->set_is_int(params.is_int);
         index->set_tz(params.tz);
-        for (auto idx: params.fake_field_pos) {
+        for (auto idx : params.fake_field_pos) {
             index->add_fake_field_pos(idx);
         }
         return {{}, norm_meta};
@@ -247,43 +252,48 @@ protected:
 };
 
 TEST_F(GenerateNormMetaTest, SingleNormMeta) {
-    auto single = single_index({.name="ts", .tz="UTC"});
+    auto single = single_index({.name = "ts", .tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single}, {}), single.norm_metadata_));
-    auto multi = multi_index({.name="ts", .tz="UTC"});
+    auto multi = multi_index({.name = "ts", .tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi}, {}), multi.norm_metadata_));
 }
 
 TEST_F(GenerateNormMetaTest, IdenticalNormMetas) {
-    auto single_df = single_index({.name="ts", .tz="UTC"});
+    auto single_df = single_index({.name = "ts", .tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_df, single_df}, {}), single_df.norm_metadata_));
-    auto multi_df = multi_index({.name="ts", .tz="UTC"});
+    auto multi_df = multi_index({.name = "ts", .tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi_df, multi_df}, {}), multi_df.norm_metadata_));
-    auto single_series = single_index({.pandas_class=PandasClass::SERIES, .name="ts", .tz="UTC"});
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_series, single_series}, {}), single_series.norm_metadata_));
-    auto multi_series = multi_index({.pandas_class=PandasClass::SERIES, .name="ts", .tz="UTC"});
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi_series, multi_series}, {}), multi_series.norm_metadata_));
+    auto single_series = single_index({.pandas_class = PandasClass::SERIES, .name = "ts", .tz = "UTC"});
+    ASSERT_TRUE(MessageDifferencer::Equals(
+            generate_norm_meta({single_series, single_series}, {}), single_series.norm_metadata_
+    ));
+    auto multi_series = multi_index({.pandas_class = PandasClass::SERIES, .name = "ts", .tz = "UTC"});
+    ASSERT_TRUE(MessageDifferencer::Equals(
+            generate_norm_meta({multi_series, multi_series}, {}), multi_series.norm_metadata_
+    ));
 }
 
 TEST_F(GenerateNormMetaTest, DataFrameDifferentNames) {
     // Different index names (either in the name or is_int fields) should lead to an empty string index name
     // If fake_name is true for any index the output must also have this as true
-    auto str_1 = single_index({.name="1", .tz="UTC"});
-    auto str_2 = single_index({.name="2", .tz="UTC"});
-    auto int_1 = single_index({.name="1", .is_int=true, .tz="UTC"});
-    auto int_2 = single_index({.name="2", .is_int=true, .tz="UTC"});
-    auto fake_name = single_index({.name="index", .fake_name=true, .tz="UTC"});
+    auto str_1 = single_index({.name = "1", .tz = "UTC"});
+    auto str_2 = single_index({.name = "2", .tz = "UTC"});
+    auto int_1 = single_index({.name = "1", .is_int = true, .tz = "UTC"});
+    auto int_2 = single_index({.name = "2", .is_int = true, .tz = "UTC"});
+    auto fake_name = single_index({.name = "index", .fake_name = true, .tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, str_2}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, int_2}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, int_1}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, str_1}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({fake_name, int_1}, {}), fake_name.norm_metadata_));
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name, int_1}, {}), fake_name.norm_metadata_));
-    str_1 = multi_index({.name="1", .tz="UTC"});
-    str_2 = multi_index({.name="2", .tz="UTC"});
-    int_1 = multi_index({.name="1", .is_int=true, .tz="UTC"});
-    int_2 = multi_index({.name="2", .is_int=true, .tz="UTC"});
-    auto no_name = multi_index({.tz="UTC"});
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name, int_1}, {}), fake_name.norm_metadata_)
+    );
+    str_1 = multi_index({.name = "1", .tz = "UTC"});
+    str_2 = multi_index({.name = "2", .tz = "UTC"});
+    int_1 = multi_index({.name = "1", .is_int = true, .tz = "UTC"});
+    int_2 = multi_index({.name = "2", .is_int = true, .tz = "UTC"});
+    auto no_name = multi_index({.tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, str_2}, {}), no_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, int_2}, {}), no_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, int_1}, {}), no_name.norm_metadata_));
@@ -293,23 +303,25 @@ TEST_F(GenerateNormMetaTest, DataFrameDifferentNames) {
 TEST_F(GenerateNormMetaTest, SeriesDifferentNames) {
     // Different index names (either in the name or is_int fields) should lead to an empty string index name
     // If fake_name is true for any index the output must also have this as true
-    auto str_1 = single_index({.pandas_class=PandasClass::SERIES, .name="1", .tz="UTC"});
-    auto str_2 = single_index({.pandas_class=PandasClass::SERIES, .name="2", .tz="UTC"});
-    auto int_1 = single_index({.pandas_class=PandasClass::SERIES, .name="1", .is_int=true, .tz="UTC"});
-    auto int_2 = single_index({.pandas_class=PandasClass::SERIES, .name="2", .is_int=true, .tz="UTC"});
-    auto fake_name = single_index({.pandas_class=PandasClass::SERIES, .name="index", .fake_name=true, .tz="UTC"});
+    auto str_1 = single_index({.pandas_class = PandasClass::SERIES, .name = "1", .tz = "UTC"});
+    auto str_2 = single_index({.pandas_class = PandasClass::SERIES, .name = "2", .tz = "UTC"});
+    auto int_1 = single_index({.pandas_class = PandasClass::SERIES, .name = "1", .is_int = true, .tz = "UTC"});
+    auto int_2 = single_index({.pandas_class = PandasClass::SERIES, .name = "2", .is_int = true, .tz = "UTC"});
+    auto fake_name =
+            single_index({.pandas_class = PandasClass::SERIES, .name = "index", .fake_name = true, .tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, str_2}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, int_2}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, int_1}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, str_1}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name}, {}), fake_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({fake_name, int_1}, {}), fake_name.norm_metadata_));
-    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name, int_1}, {}), fake_name.norm_metadata_));
-    str_1 = multi_index({.pandas_class=PandasClass::SERIES, .name="1", .tz="UTC"});
-    str_2 = multi_index({.pandas_class=PandasClass::SERIES, .name="2", .tz="UTC"});
-    int_1 = multi_index({.pandas_class=PandasClass::SERIES, .name="1", .is_int=true, .tz="UTC"});
-    int_2 = multi_index({.pandas_class=PandasClass::SERIES, .name="2", .is_int=true, .tz="UTC"});
-    auto no_name = multi_index({.pandas_class=PandasClass::SERIES, .tz="UTC"});
+    ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, fake_name, int_1}, {}), fake_name.norm_metadata_)
+    );
+    str_1 = multi_index({.pandas_class = PandasClass::SERIES, .name = "1", .tz = "UTC"});
+    str_2 = multi_index({.pandas_class = PandasClass::SERIES, .name = "2", .tz = "UTC"});
+    int_1 = multi_index({.pandas_class = PandasClass::SERIES, .name = "1", .is_int = true, .tz = "UTC"});
+    int_2 = multi_index({.pandas_class = PandasClass::SERIES, .name = "2", .is_int = true, .tz = "UTC"});
+    auto no_name = multi_index({.pandas_class = PandasClass::SERIES, .tz = "UTC"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, str_2}, {}), no_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({int_1, int_2}, {}), no_name.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({str_1, int_1}, {}), no_name.norm_metadata_));
@@ -317,49 +329,50 @@ TEST_F(GenerateNormMetaTest, SeriesDifferentNames) {
 }
 
 TEST_F(GenerateNormMetaTest, MultiIndexFakeFieldPos) {
-    // Fake field positions in multi-indexes are basically unioned together with the second argument to generate_norm_meta
-    const auto no_fake_fields = multi_index({.name="ts"});
-    const auto first_field_fake = multi_index({.name="index", .fake_field_pos{0}});
-    const auto second_field_fake = multi_index({.name="ts", .fake_field_pos{1}});
-    const auto both_fields_fake = multi_index({.name="index", .fake_field_pos{0, 1}});
+    // Fake field positions in multi-indexes are basically unioned together with the second argument to
+    // generate_norm_meta
+    const auto no_fake_fields = multi_index({.name = "ts"});
+    const auto first_field_fake = multi_index({.name = "index", .fake_field_pos{0}});
+    const auto second_field_fake = multi_index({.name = "ts", .fake_field_pos{1}});
+    const auto both_fields_fake = multi_index({.name = "index", .fake_field_pos{0, 1}});
     // Ordering in fake_field_pos should not matter
-    const auto both_fields_fake_reversed = multi_index({.name="index", .fake_field_pos{1, 0}});
+    const auto both_fields_fake_reversed = multi_index({.name = "index", .fake_field_pos{1, 0}});
     // Feels like there should be a simpler way to get the correct FieldDescriptor* to pass to TreatAsSet to ignore the
     // ordering of fake_field_pos, but couldn't readily find examples
     MessageDifferencer md;
     const auto reflection = first_field_fake.norm_metadata_.df().common().multi_index().GetReflection();
     std::vector<const google::protobuf::FieldDescriptor*> fields;
     reflection->ListFields(first_field_fake.norm_metadata_.df().common().multi_index(), &fields);
-    for (auto field: fields) {
+    for (auto field : fields) {
         if (field->name() == "fake_field_pos") {
             md.TreatAsSet(field);
             break;
         }
     }
-    std::vector<OutputSchema> schemas{no_fake_fields, first_field_fake, second_field_fake, both_fields_fake, both_fields_fake_reversed};
+    std::vector<OutputSchema> schemas{
+            no_fake_fields, first_field_fake, second_field_fake, both_fields_fake, both_fields_fake_reversed
+    };
     std::vector<std::unordered_set<size_t>> non_matching_name_indices_vec{{}, {0}, {1}, {0, 1}};
-    for (const auto& first_schema: schemas) {
+    for (const auto& first_schema : schemas) {
         const auto& first_norm = first_schema.norm_metadata_;
-        for (const auto& second_schema: schemas) {
+        for (const auto& second_schema : schemas) {
             const auto& second_norm = second_schema.norm_metadata_;
             // Deliberately take a copy because generate_norm_meta takes this argument as an rvalue
-            for (auto non_matching_name_indices: non_matching_name_indices_vec) {
-                const bool first_fake =
-                        md.Compare(first_norm, first_field_fake.norm_metadata_) ||
-                        md.Compare(first_norm, both_fields_fake.norm_metadata_) ||
-                        md.Compare(first_norm, both_fields_fake_reversed.norm_metadata_) ||
-                        md.Compare(second_norm, first_field_fake.norm_metadata_) ||
-                        md.Compare(second_norm, both_fields_fake.norm_metadata_) ||
-                        md.Compare(second_norm, both_fields_fake_reversed.norm_metadata_) ||
-                        non_matching_name_indices.contains(0);
-                const bool second_fake =
-                        md.Compare(first_norm, second_field_fake.norm_metadata_) ||
-                        md.Compare(first_norm, both_fields_fake.norm_metadata_) ||
-                        md.Compare(first_norm, both_fields_fake_reversed.norm_metadata_) ||
-                        md.Compare(second_norm, second_field_fake.norm_metadata_) ||
-                        md.Compare(second_norm, both_fields_fake.norm_metadata_) ||
-                        md.Compare(second_norm, both_fields_fake_reversed.norm_metadata_) ||
-                        non_matching_name_indices.contains(1);
+            for (auto non_matching_name_indices : non_matching_name_indices_vec) {
+                const bool first_fake = md.Compare(first_norm, first_field_fake.norm_metadata_) ||
+                                        md.Compare(first_norm, both_fields_fake.norm_metadata_) ||
+                                        md.Compare(first_norm, both_fields_fake_reversed.norm_metadata_) ||
+                                        md.Compare(second_norm, first_field_fake.norm_metadata_) ||
+                                        md.Compare(second_norm, both_fields_fake.norm_metadata_) ||
+                                        md.Compare(second_norm, both_fields_fake_reversed.norm_metadata_) ||
+                                        non_matching_name_indices.contains(0);
+                const bool second_fake = md.Compare(first_norm, second_field_fake.norm_metadata_) ||
+                                         md.Compare(first_norm, both_fields_fake.norm_metadata_) ||
+                                         md.Compare(first_norm, both_fields_fake_reversed.norm_metadata_) ||
+                                         md.Compare(second_norm, second_field_fake.norm_metadata_) ||
+                                         md.Compare(second_norm, both_fields_fake.norm_metadata_) ||
+                                         md.Compare(second_norm, both_fields_fake_reversed.norm_metadata_) ||
+                                         non_matching_name_indices.contains(1);
                 NormalizationMetadata expected;
                 if (first_fake && second_fake) {
                     expected = both_fields_fake.norm_metadata_;
@@ -371,7 +384,10 @@ TEST_F(GenerateNormMetaTest, MultiIndexFakeFieldPos) {
                     // Neither fake
                     expected = no_fake_fields.norm_metadata_;
                 }
-                ASSERT_TRUE(md.Compare(generate_norm_meta({first_schema, second_schema}, std::move(non_matching_name_indices)), expected));
+                ASSERT_TRUE(md.Compare(
+                        generate_norm_meta({first_schema, second_schema}, std::move(non_matching_name_indices)),
+                        expected
+                ));
             }
         }
     }
@@ -379,43 +395,58 @@ TEST_F(GenerateNormMetaTest, MultiIndexFakeFieldPos) {
 
 TEST_F(GenerateNormMetaTest, DifferentTimezones) {
     // Different index timezones should lead to an empty string index timezone
-    auto single_utc = single_index({.name="ts", .tz="UTC"});
-    auto single_est = single_index({.name="ts", .tz="EST"});
-    auto expected = single_index({.name="ts"});
+    auto single_utc = single_index({.name = "ts", .tz = "UTC"});
+    auto single_est = single_index({.name = "ts", .tz = "EST"});
+    auto expected = single_index({.name = "ts"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_utc, single_est}, {}), expected.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({single_est, single_utc}, {}), expected.norm_metadata_));
-    auto multi_utc = multi_index({.name="ts", .tz="UTC"});
-    auto multi_est = multi_index({.name="ts", .tz="EST"});
-    expected = multi_index({.name="ts"});
+    auto multi_utc = multi_index({.name = "ts", .tz = "UTC"});
+    auto multi_est = multi_index({.name = "ts", .tz = "EST"});
+    expected = multi_index({.name = "ts"});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi_utc, multi_est}, {}), expected.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({multi_est, multi_utc}, {}), expected.norm_metadata_));
 }
 
 TEST_F(GenerateNormMetaTest, DifferentIsPhysicallyStored) {
-    ASSERT_THROW(generate_norm_meta({single_index({.name="ts"}), single_index({.name="ts", .is_physically_stored=false})}, {}), SchemaException);
+    ASSERT_THROW(
+            generate_norm_meta(
+                    {single_index({.name = "ts"}), single_index({.name = "ts", .is_physically_stored = false})}, {}
+            ),
+            SchemaException
+    );
 }
 
 TEST_F(GenerateNormMetaTest, DifferentFieldCount) {
-    ASSERT_THROW(generate_norm_meta({multi_index({.name="ts", .tz="UTC"}), multi_index({.field_count=3, .name="ts", .tz="UTC"})}, {}), SchemaException);
+    ASSERT_THROW(
+            generate_norm_meta(
+                    {multi_index({.name = "ts", .tz = "UTC"}),
+                     multi_index({.field_count = 3, .name = "ts", .tz = "UTC"})},
+                    {}
+            ),
+            SchemaException
+    );
 }
 
 TEST_F(GenerateNormMetaTest, RangeIndexBasic) {
-    auto index = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .step=1});
+    auto index = single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .step = 1});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({index, index, index}, {}), index.norm_metadata_));
 }
 
 TEST_F(GenerateNormMetaTest, RangeIndexNonDefaultStep) {
-    auto first = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .start=10, .step=2});
-    auto second = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .start=5, .step=2});
-    auto third = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .start=12, .step=2});
+    auto first =
+            single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .start = 10, .step = 2});
+    auto second =
+            single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .start = 5, .step = 2});
+    auto third =
+            single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .start = 12, .step = 2});
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({first, second, third}, {}), first.norm_metadata_));
 }
 
 TEST_F(GenerateNormMetaTest, RangeIndexNonMatchingStep) {
-    auto a = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .start=10, .step=2});
-    auto b = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .start=5, .step=3});
-    auto c = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .start=12, .step=2});
-    auto expected_result = single_index({.name="index", .fake_name=true, .is_physically_stored=false, .step=1});
+    auto a = single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .start = 10, .step = 2});
+    auto b = single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .start = 5, .step = 3});
+    auto c = single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .start = 12, .step = 2});
+    auto expected_result = single_index({.name = "index", .fake_name = true, .is_physically_stored = false, .step = 1});
     // Order that the steps are seen in should not matter
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({a, b, c}, {}), expected_result.norm_metadata_));
     ASSERT_TRUE(MessageDifferencer::Equals(generate_norm_meta({b, c, a}, {}), expected_result.norm_metadata_));
@@ -426,12 +457,12 @@ TEST_F(GenerateNormMetaTest, RangeIndexNonMatchingStep) {
 }
 
 TEST_F(GenerateNormMetaTest, SeriesAndDataFrame) {
-    auto series_single = single_index({.pandas_class=PandasClass::SERIES});
-    auto df_single = single_index({.pandas_class=PandasClass::DATAFRAME});
+    auto series_single = single_index({.pandas_class = PandasClass::SERIES});
+    auto df_single = single_index({.pandas_class = PandasClass::DATAFRAME});
     ASSERT_THROW(generate_norm_meta({series_single, df_single}, {}), SchemaException);
     ASSERT_THROW(generate_norm_meta({df_single, series_single}, {}), SchemaException);
-    auto series_multi = multi_index({.pandas_class=PandasClass::SERIES});
-    auto df_multi = multi_index({.pandas_class=PandasClass::DATAFRAME});
+    auto series_multi = multi_index({.pandas_class = PandasClass::SERIES});
+    auto df_multi = multi_index({.pandas_class = PandasClass::DATAFRAME});
     ASSERT_THROW(generate_norm_meta({series_multi, df_multi}, {}), SchemaException);
     ASSERT_THROW(generate_norm_meta({df_multi, series_multi}, {}), SchemaException);
 }
@@ -439,7 +470,7 @@ TEST_F(GenerateNormMetaTest, SeriesAndDataFrame) {
 ankerl::unordered_dense::map<std::string, DataType> generate_column_types(const FieldCollection& fields) {
     ankerl::unordered_dense::map<std::string, DataType> res;
     res.reserve(fields.size());
-    for (const auto& field: fields) {
+    for (const auto& field : fields) {
         res.emplace(field.name(), field.type().data_type());
     }
     return res;

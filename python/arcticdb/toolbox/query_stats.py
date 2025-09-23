@@ -20,21 +20,21 @@ from arcticdb_ext.exceptions import UserInputException
 def query_stats() -> Iterator[None]:
     """
     Context manager for enabling query statistics collection within a specific scope.
-    
+
     When entering the context, query statistics collection is enabled.
     When exiting the context, it is automatically disabled.
-    
+
     Raises
     ------
     UserInputException
         If query stats is already enabled.
-        
+
     Examples
     --------
     >>> with query_stats():
     ...     store.list_symbols()
-    
-    
+
+
     Notes
     ----------
     !!! warning
@@ -46,17 +46,17 @@ def query_stats() -> Iterator[None]:
     enable()
     yield
     disable()
-    
+
 
 def get_query_stats() -> Dict[str, Any]:
     """
     Get collected query statistics.
-    
+
     Returns
     -------
     Dict[str, Any]:
         A dictionary containing statistics organized by key type,
-        operation group, and task type. Each task contains timing and count information. 
+        operation group, and task type. Each task contains timing and count information.
         Example output:
         {
             "storage_operations": {
@@ -71,7 +71,7 @@ def get_query_stats() -> Dict[str, Any]:
                 }
             }
         }
-    
+
     Notes
     ----------
     !!! warning
@@ -83,10 +83,10 @@ def get_query_stats() -> Dict[str, Any]:
 def reset_stats() -> None:
     """
     Reset all collected query statistics.
-    
+
     This clears all statistics that have been collected since enabling
     the query statistics collection.
-    
+
     Notes
     ----------
     !!! warning
@@ -98,10 +98,10 @@ def reset_stats() -> None:
 def enable() -> None:
     """
     Enable query statistics collection.
-    
+
     Once enabled, statistics will be collected for operations performed
     until disable() is called or the context manager exits.
-    
+
     Notes
     ----------
     !!! warning
@@ -113,14 +113,13 @@ def enable() -> None:
 def disable() -> None:
     """
     Disable query statistics collection.
-    
+
     Stops collecting statistics for subsequent operations.
     Previously collected statistics remain available via get_query_stats().
-    
+
     Notes
     ----------
     !!! warning
         This API is unstable and not governed by semantic versioning.
     """
     qs.disable()
-

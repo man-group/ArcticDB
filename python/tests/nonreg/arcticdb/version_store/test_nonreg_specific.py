@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import datetime
@@ -18,8 +19,10 @@ from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
+from tests.conftest import Marks
 from tests.util.date import DateRange
 from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.marking import marks
 
 
 @pytest.mark.storage
@@ -215,24 +218,27 @@ def test_batch_write_unicode_strings(lmdb_version_store):
         lib.batch_append(syms, data)
 
 
-@pytest.mark.parametrize("PandasType, assert_pandas_container_equal", [
-    (pd.Series, assert_series_equal),
-    (pd.DataFrame, assert_frame_equal),
-])
-def test_update_with_empty_series_or_dataframe(lmdb_version_store_empty_types_v1, PandasType, assert_pandas_container_equal):
+@pytest.mark.parametrize(
+    "PandasType, assert_pandas_container_equal",
+    [
+        (pd.Series, assert_series_equal),
+        (pd.DataFrame, assert_frame_equal),
+    ],
+)
+def test_update_with_empty_series_or_dataframe(
+    lmdb_version_store_empty_types_v1, PandasType, assert_pandas_container_equal
+):
     # Non-regression test for https://github.com/man-group/ArcticDB/issues/892
     lib = lmdb_version_store_empty_types_v1
 
-    kwargs = { "name": "a" } if PandasType == pd.Series else { "columns": ["a"] }
+    kwargs = {"name": "a"} if PandasType == pd.Series else {"columns": ["a"]}
     data = np.array([1.0]) if PandasType == pd.Series else np.array([[1.0]])
 
     empty = PandasType(data=[], dtype=float, index=pd.DatetimeIndex([]), **kwargs)
     one_row = PandasType(
         data=data,
         dtype=float,
-        index=pd.DatetimeIndex([
-            datetime.datetime(2019, 4, 9, 10, 5, 2, 1)
-        ]),
+        index=pd.DatetimeIndex([datetime.datetime(2019, 4, 9, 10, 5, 2, 1)]),
         **kwargs,
     )
 
@@ -306,15 +312,12 @@ def test_date_range_multi_index(lmdb_version_store):
         {"col": pd.Series([], dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([pd.DatetimeIndex([]), []], names=["dt_level", "str_level"]),
     )
-    result_df = lib.read(
-        sym, date_range=DateRange(pd.Timestamp("2099-01-01"), pd.Timestamp("2099-01-02"))
-    ).data
+    result_df = lib.read(sym, date_range=DateRange(pd.Timestamp("2099-01-01"), pd.Timestamp("2099-01-02"))).data
     assert_frame_equal(result_df, expected_df)
 
 
 @pytest.mark.parametrize(
-    "method",
-    ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
+    "method", ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
 )
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
@@ -425,7 +428,9 @@ def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, inde
     index = [pd.Timestamp(index_start), pd.Timestamp(index_start + 1)]
 
     # Gap of 2 nanoseconds so we can insert inbetween the 2 tiny segments
-    initial_df = pd.DataFrame({"col": [1, 2, 3, 4]}, index=[pd.Timestamp(2), pd.Timestamp(3), pd.Timestamp(6), pd.Timestamp(7)])
+    initial_df = pd.DataFrame(
+        {"col": [1, 2, 3, 4]}, index=[pd.Timestamp(2), pd.Timestamp(3), pd.Timestamp(6), pd.Timestamp(7)]
+    )
     update_df = pd.DataFrame({"col": [100, 200]}, index=index)
     lib.write(sym, initial_df)
     lib.update(sym, update_df)
@@ -449,16 +454,22 @@ def test_delete_snapshot_regression(nfs_clean_bucket):
     assert "snap" not in lib.list_snapshots()
 
 
+@marks([Marks.pipeline])
 def test_resampling_non_timeseries(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_resampling_non_timeseries"
 
     df = pd.DataFrame({"col": np.arange(10)})
     lib.write(sym, df)
-    q = QueryBuilder().resample('1min').agg({"col": "sum"})
+    q = QueryBuilder().resample("1min").agg({"col": "sum"})
     with pytest.raises(UserInputException):
         lib.read(sym, query_builder=q)
-    q = QueryBuilder().date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01"))).resample('1min').agg({"col": "sum"})
+    q = (
+        QueryBuilder()
+        .date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01")))
+        .resample("1min")
+        .agg({"col": "sum"})
+    )
     with pytest.raises(UserInputException) as e:
         lib.read(sym, query_builder=q)
     assert "std::length_error(vector::reserve)" not in str(e.value)

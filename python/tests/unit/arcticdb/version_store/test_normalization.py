@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import datetime
 from email import errors
 import inspect
@@ -83,9 +84,12 @@ def test_msg_pack_legacy_1():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York'
+    packed = b"\x82\xa1a\xc7\x0b \x92\xcf\x15\t\x05:\xdfT\xc8\x00\xc0\xa1b\xc7\x1b \x92\xcf\x14\x9e\xc2\x84+~ \x00\xb0America/New_York"
     data = norm._msgpack_unpackb(packed)
-    assert data == {'a': pd.Timestamp('2018-01-12 09:15:00'), 'b': pd.Timestamp('2017-01-31 00:00:00-0500', tz='America/New_York')}
+    assert data == {
+        "a": pd.Timestamp("2018-01-12 09:15:00"),
+        "b": pd.Timestamp("2017-01-31 00:00:00-0500", tz="America/New_York"),
+    }
 
 
 def test_msg_pack_legacy_2():
@@ -93,7 +97,7 @@ def test_msg_pack_legacy_2():
     # serialised data created with Python 3.6, msgpack 0.6.2, pandas 0.25.3
     # this was before string and bytes types were seperated in msgpack
     norm = test_msgpack_normalizer
-    packed = b'\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York'
+    packed = b"\xc7\x1b!\x92\xcf\x15\x93w\xb1\xd2\xa6\x8f\xe8\xb0America/New_York"
     dt = datetime.datetime(2019, 4, 8, 10, 5, 2, 1)
     nytz = pytz.timezone("America/New_York")
     loc_dt = nytz.localize(dt)
@@ -132,7 +136,7 @@ def test_decode_python2_str_in_msgpack():
     This is to check that we can still deserialize strings that were written with Python 2 correctly.
     """
     norm = test_msgpack_normalizer
-    packed = b'\xa9my_string'
+    packed = b"\xa9my_string"
     data = norm._msgpack_unpackb(packed)
     assert data == "my_string"
     assert isinstance(data, str)
@@ -144,7 +148,7 @@ def test_decode_python2_bytes_in_old_msgpack():
     This is to check that we can still deserialize bytes that were written with Python 2 correctly.
     """
     norm = test_msgpack_normalizer
-    packed = b'\xa8my_bytes'
+    packed = b"\xa8my_bytes"
     data = norm._msgpack_unpackb(packed)
 
     # We claim it's `str` upon decoding because the `xa8` leading bytes tells us this is a fixed string type.
@@ -161,7 +165,7 @@ def test_decode_python2_bytes_in_newer_msgpack():
     This is to check that we can still deserialize bytes that were written with Python 2 correctly.
     """
     norm = test_msgpack_normalizer
-    packed = b'\xc4\x08my_bytes'
+    packed = b"\xc4\x08my_bytes"
     data = norm._msgpack_unpackb(packed)
     assert data == b"my_bytes"
     assert isinstance(data, bytes)
@@ -259,6 +263,8 @@ if sys.version_info > (3, 9):
         zoneinfo.ZoneInfo("Pacific/Kiritimati"),
         zoneinfo.ZoneInfo("America/Los_Angeles"),
     ]
+
+
 # See test_get_description_date_range_tz in test_arctic.py for the V2 API equivalent
 @pytest.mark.parametrize("tz", timezone_params)
 def test_write_tz(lmdb_version_store, sym, tz):
@@ -282,7 +288,9 @@ def test_write_tz(lmdb_version_store, sym, tz):
     assert end_ts == index[-1]
 
 
-@pytest.mark.parametrize("column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")]))
+@pytest.mark.parametrize(
+    "column_data", itertools.permutations([pd.Timestamp(0), pd.NaT, pd.Timestamp(0, tz="Europe/Amsterdam")])
+)
 def test_write_mixed_tz(lmdb_version_store_v1, column_data):
     lib = lmdb_version_store_v1
     sym = "test_write_mixed_tz"
@@ -551,8 +559,12 @@ def test_will_item_be_pickled(lmdb_version_store, sym):
     "data",
     [
         {"a": {"b": {"c": {"d": np.arange(24)}}}},
-        {"a": [1, 2, 3], "b": {"c": np.arange(24)}, "d": [TestCustomNormalizer()]} # A random item that will be pickled
-    ]
+        {
+            "a": [1, 2, 3],
+            "b": {"c": np.arange(24)},
+            "d": [TestCustomNormalizer()],
+        },  # A random item that will be pickled
+    ],
 )
 def test_will_item_be_pickled_recursive_normalizer(lmdb_version_store_v1, data):
     lib = lmdb_version_store_v1
@@ -791,12 +803,14 @@ def test_norm_failure_error_message(lmdb_version_store_v1):
     with pytest.raises(ArcticDbNotYetImplemented) as update_exception:
         lib.update(sym, df)
 
-    assert all(col_name in str(e.value) for e in
-               [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception])
-    assert all("pickle_on_failure" in str(e.value) for e in
-               [write_exception, batch_write_exception])
-    assert all("pickle_on_failure" not in str(e.value) for e in
-               [append_exception, batch_append_exception, update_exception])
+    assert all(
+        col_name in str(e.value)
+        for e in [write_exception, batch_write_exception, append_exception, batch_append_exception, update_exception]
+    )
+    assert all("pickle_on_failure" in str(e.value) for e in [write_exception, batch_write_exception])
+    assert all(
+        "pickle_on_failure" not in str(e.value) for e in [append_exception, batch_append_exception, update_exception]
+    )
 
 
 def test_writing_timedelta(lmdb_version_store_v1):
@@ -813,12 +827,12 @@ def test_bools_are_pickled(lmdb_version_store_allows_pickling):
 
     df = pd.DataFrame({"a": [True, False]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
     df = pd.DataFrame({"a": [True, False, np.nan]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
 
@@ -837,12 +851,12 @@ def test_arrays_are_pickled(lmdb_version_store_allows_pickling):
 
     df = pd.DataFrame({"a": [np.array([1, 2])]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
     df = pd.DataFrame({"a": [[1, 2]]})
     lib.write(sym, df)
-    lib.get_info(sym)['type'] == 'pickled'
+    lib.get_info(sym)["type"] == "pickled"
     assert_frame_equal(df, lib.read(sym).data)
 
 
@@ -858,25 +872,23 @@ def test_arrays_throw_without_pickling(lmdb_version_store_v1):
 
 def test_series_zero_name(lmdb_version_store, sym):
     lib = lmdb_version_store
-    series = pd.Series([3.14, np.nan, 5.7, np.inf], pd.date_range("2020-01-01", periods=4, freq="D", name="date")).rename(0)
+    series = pd.Series(
+        [3.14, np.nan, 5.7, np.inf], pd.date_range("2020-01-01", periods=4, freq="D", name="date")
+    ).rename(0)
     lib.write(sym, series)
     vit = lib.read(sym)
     assert vit.data.equals(series)
+
 
 @pytest.mark.parametrize(
     "returns_expected",
     [
         {"returns": ArcticDbNotYetImplemented(), "expected": ArcticDbNotYetImplemented},
         {"returns": Exception(), "expected": ArcticNativeException},
-        {"returns": (MagicMock(), None), "expected": ArcticNativeException}
-    ]
+        {"returns": (MagicMock(), None), "expected": ArcticNativeException},
+    ],
 )
-@pytest.mark.parametrize(
-    "method_to_test",
-    [
-        "write", "update", "stage", "append"
-    ]
-)
+@pytest.mark.parametrize("method_to_test", ["write", "update", "stage", "append"])
 def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_version_store):
     mock_normalizer = MagicMock(name="mock_normalizer")
     returns = returns_expected["returns"]
@@ -890,10 +902,9 @@ def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_versio
     lib._normalizer = mock_normalizer
 
     method_to_test = getattr(lib, method_to_test)
-    non_default_arg_count = sum(
-        1 for param in inspect.signature(method_to_test).parameters.values()
-        if param.default is param.empty
-    ) - 1
+    non_default_arg_count = (
+        sum(1 for param in inspect.signature(method_to_test).parameters.values() if param.default is param.empty) - 1
+    )
     args = [MagicMock()] * non_default_arg_count
     with pytest.raises(expected):
         method_to_test(*args)
@@ -901,25 +912,25 @@ def test_throws_correct_exceptions(returns_expected, method_to_test, lmdb_versio
 
 def test_numpy_none_slice(lmdb_version_store):
     lib = lmdb_version_store
-    
+
     dat = np.array([1.0, 2.0, 3.0, 4.0])
     idx = pd.DatetimeIndex(["2020-01-01"], name="date")
     columns_names = ["A", "B", "C", "D"]
-    
+
     # This is a view, not a copy
     # it transposes the array, so the shape is (4,) instead of (1,4)
     sl = dat[None, :]
     df = pd.DataFrame(sl, index=idx, columns=columns_names)
-    
+
     lib.write("df_none_slice", df)
-    
+
     result = lib.read("df_none_slice").data
     pd.testing.assert_frame_equal(result, df)
 
 
 def test_numpy_newaxis_slice(lmdb_version_store):
     lib = lmdb_version_store
-    
+
     dat = np.array([1.0, 2.0, 3.0, 4.0])
     idx = pd.DatetimeIndex(["2020-01-01"], name="date")
     columns_names = ["A", "B", "C", "D"]
@@ -928,9 +939,9 @@ def test_numpy_newaxis_slice(lmdb_version_store):
     # it transposes the array, so the shape is (4,) instead of (1,4)
     sl = dat[np.newaxis, :]
     df = pd.DataFrame(sl, index=idx, columns=columns_names)
-    
+
     lib.write("df_none_slice", df)
-    
+
     result = lib.read("df_none_slice").data
     pd.testing.assert_frame_equal(result, df)
 
@@ -943,9 +954,9 @@ def test_view_with_reshape(lmdb_version_store):
     idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
     columns_names = ["A", "B", "C"]
     df = pd.DataFrame(reshaped, index=idx, columns=columns_names)
-    
+
     lib.write("df_reshaped", df)
-    
+
     result = lib.read("df_reshaped").data
     pd.testing.assert_frame_equal(result, df)
 
@@ -957,29 +968,30 @@ def test_view_with_transpose(lmdb_version_store):
     transposed = original.T  # Shape changes from (2,3) to (3,2)
     idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02", "2020-01-03"], name="date")
     columns_names = ["A", "B"]
-    
+
     df = pd.DataFrame(transposed, index=idx, columns=columns_names)
-    
+
     lib.write("df_transposed", df)
-    
+
     result = lib.read("df_transposed").data
     pd.testing.assert_frame_equal(result, df)
+
 
 def test_view_with_fancy_indexing(lmdb_version_store):
     lib = lmdb_version_store
 
     original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
-    
+
     indices = np.array([0, 2])
     view = original[indices]  # Selects rows 0 and 2
-    
+
     idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
     columns_names = ["A", "B", "C", "D"]
-    
+
     df = pd.DataFrame(view, index=idx, columns=columns_names)
-    
+
     lib.write("df_fancy_idx", df)
-    
+
     result = lib.read("df_fancy_idx").data
     pd.testing.assert_frame_equal(result, df)
 
@@ -988,17 +1000,17 @@ def test_view_with_boolean_masking(lmdb_version_store):
     lib = lmdb_version_store
 
     original = np.array([[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]])
-    
+
     mask = np.array([True, False, True])
     view = original[mask]  # Selects rows 0 and 2
-    
+
     idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
     columns_names = ["A", "B", "C", "D"]
-    
+
     df = pd.DataFrame(view, index=idx, columns=columns_names)
-    
+
     lib.write("df_bool_mask", df)
-    
+
     result = lib.read("df_bool_mask").data
     pd.testing.assert_frame_equal(result, df)
 
@@ -1011,31 +1023,31 @@ def test_view_with_slice(lmdb_version_store):
     view = original[0:2, 1:3]  # Select rows 0-1 and columns 1-2
     idx = pd.DatetimeIndex(["2020-01-01", "2020-01-02"], name="date")
     columns_names = ["B", "C"]
-    
+
     df = pd.DataFrame(view, index=idx, columns=columns_names)
-    
+
     lib.write("df_slice", df)
-    
+
     result = lib.read("df_slice").data
     pd.testing.assert_frame_equal(result, df)
 
 
 def test_empty_dimension(lmdb_version_store):
     lib = lmdb_version_store
-    
+
     # 0 rows, 3 columns
     zero_dim_array = np.zeros((0, 3))
     columns_names = ["A", "B", "C"]
-    
+
     # Empty index
     # N.B. Make sure not to pass a name to the index
     # as we don't keep names for empty indices
     # and pandas does
     idx = pd.DatetimeIndex([])
     df = pd.DataFrame(zero_dim_array, index=idx, columns=columns_names)
-    
+
     lib.write("df_zero_dim", df)
-    
+
     result = lib.read("df_zero_dim").data
     pd.testing.assert_frame_equal(result, df)
 
@@ -1050,15 +1062,26 @@ def test_empty_dimension(lmdb_version_store):
         None,
         pd.date_range("2025-01-01", periods=12),
         pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=6), ["hello", "goodbye"]]),
-        pd.MultiIndex.from_product([pd.date_range("2025-01-01", periods=3), ["hello", "goodbye"], ["bonjour", "au revoir"]]),
-    ]
+        pd.MultiIndex.from_product(
+            [pd.date_range("2025-01-01", periods=3), ["hello", "goodbye"], ["bonjour", "au revoir"]]
+        ),
+    ],
 )
-def test_required_field_inclusion(version_store_factory, dynamic_schema, segment_row_size, column_group_size, data_type, index):
-    lib = version_store_factory(dynamic_schema=dynamic_schema, column_group_size=column_group_size, segment_row_size=segment_row_size)
+def test_required_field_inclusion(
+    version_store_factory, dynamic_schema, segment_row_size, column_group_size, data_type, index
+):
+    lib = version_store_factory(
+        dynamic_schema=dynamic_schema, column_group_size=column_group_size, segment_row_size=segment_row_size
+    )
     sym = "test_required_field_inclusion"
     num_rows = len(index) if index is not None else 12
-    original_data = pd.Series(np.arange(num_rows), index=index) if data_type == "series" else \
-    pd.DataFrame({"col1": np.arange(num_rows), "col2": np.arange(num_rows), "col3": np.arange(num_rows)}, index=index)
+    original_data = (
+        pd.Series(np.arange(num_rows), index=index)
+        if data_type == "series"
+        else pd.DataFrame(
+            {"col1": np.arange(num_rows), "col2": np.arange(num_rows), "col3": np.arange(num_rows)}, index=index
+        )
+    )
     lib.write(sym, original_data)
     received_data = lib.read(sym).data
     if data_type == "series":
@@ -1119,9 +1142,7 @@ def test_norm_meta_column_and_index_names_df(lmdb_version_store, use_col_name_fo
     index = pd.date_range(start=start, periods=2)
 
     df = pd.DataFrame(
-        index=index,
-        data=[[1, 2, 3, 4, 5]],
-        columns=["col_one", "col_two", "col_two", "col_one", "col_three"]
+        index=index, data=[[1, 2, 3, 4, 5]], columns=["col_one", "col_two", "col_two", "col_one", "col_three"]
     )
 
     if use_col_name_for_index:
@@ -1161,11 +1182,7 @@ def test_norm_meta_column_and_index_names_series(lmdb_version_store_static_and_d
     start = pd.Timestamp("2018-01-02")
     index = pd.date_range(start=start, periods=2)
 
-    series = pd.Series(
-        index=index,
-        data=[1, 2],
-        name="col_one"
-    )
+    series = pd.Series(index=index, data=[1, 2], name="col_one")
 
     if use_col_name_for_index:
         index_name = "col_one"
@@ -1207,11 +1224,7 @@ def test_norm_meta_column_and_index_names_df_dynamic_schema(lmdb_version_store_d
     start = pd.Timestamp("2018-01-02")
     index = pd.date_range(start=start, periods=2)
 
-    df = pd.DataFrame(
-        index=index,
-        data=[[1, 2]],
-        columns=["col_one", "col_two"]
-    )
+    df = pd.DataFrame(index=index, data=[[1, 2]], columns=["col_one", "col_two"])
 
     if use_col_name_for_index:
         index_name = "col_one"
@@ -1253,12 +1266,11 @@ def test_norm_meta_column_and_index_names_df_multi_index(lmdb_version_store_stat
 
     start = pd.Timestamp("2018-01-02")
     num_rows = 4
-    index = pd.MultiIndex.from_arrays([[start + datetime.timedelta(days=i) for i in range(num_rows)], ["a", "b", "c", "d"]])
-
-    df = pd.DataFrame(
-        index=index,
-        data={"col_one": [1, 2, 3, 4], "col_two": [1, 2, 3, 4], "col_three": [5, 6, 7, 8]}
+    index = pd.MultiIndex.from_arrays(
+        [[start + datetime.timedelta(days=i) for i in range(num_rows)], ["a", "b", "c", "d"]]
     )
+
+    df = pd.DataFrame(index=index, data={"col_one": [1, 2, 3, 4], "col_two": [1, 2, 3, 4], "col_three": [5, 6, 7, 8]})
     df.index.set_names(["col_one", "col_two"], inplace=True)
     lib.write("sym", df)
 
@@ -1288,24 +1300,25 @@ def test_norm_meta_column_and_index_names_df_multi_index(lmdb_version_store_stat
     assert stream_descriptor.index.kind() == IndexKind.TIMESTAMP
 
 
-@pytest.mark.xfail(reason="Monday ref: 9714233101")
+@pytest.mark.skip(reason="Monday ref: 9714233101")
 def test_multi_index_same_names(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(
         {"x": np.arange(10)},
-        index = [
-            [chr(ord('a') + i//5) for i in range(10)],
-            [i%2 for i in range(10)],
-            [i%3 for i in range(10)],
-            [i%4 for i in range(10)],
-        ]
+        index=[
+            [chr(ord("a") + i // 5) for i in range(10)],
+            [i % 2 for i in range(10)],
+            [i % 3 for i in range(10)],
+            [i % 4 for i in range(10)],
+        ],
     )
     df.index.names = ["index", "index", "index", "another_index", "another_index"]
     lib.write("sym", df)
     result_df = lib.read("sym").data
     assert_frame_equal(result_df, df)
 
-@pytest.mark.xfail(reason="Monday ref: 9715738171")
+
+@pytest.mark.skip(reason="Monday ref: 9715738171")
 def test_digit_columns(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     df = pd.DataFrame(np.arange(20).resize(10, 2), columns=[1, "1"])

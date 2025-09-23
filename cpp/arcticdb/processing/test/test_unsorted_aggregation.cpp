@@ -4,7 +4,7 @@
 
 using namespace arcticdb;
 
-class UnsortedAggregationDataTypeParametrizationFixture :public ::testing::TestWithParam<DataType> {};
+class UnsortedAggregationDataTypeParametrizationFixture : public ::testing::TestWithParam<DataType> {};
 
 TEST_P(UnsortedAggregationDataTypeParametrizationFixture, Sum) {
     SumAggregatorData aggregator_data;
@@ -46,27 +46,27 @@ TEST_P(UnsortedAggregationDataTypeParametrizationFixture, Mean) {
         }
     }
 }
-INSTANTIATE_TEST_SUITE_P(AllTypes, UnsortedAggregationDataTypeParametrizationFixture, ::testing::ValuesIn(all_data_types()));
+INSTANTIATE_TEST_SUITE_P(
+        AllTypes, UnsortedAggregationDataTypeParametrizationFixture, ::testing::ValuesIn(all_data_types())
+);
 
 class AggregationResult : public ::testing::TestWithParam<DataType> {
-public:
+  public:
     template<typename InputTypeTag>
     requires util::instantiation_of<InputTypeTag, TypeDescriptorTag>
     static constexpr auto get_input_mean() {
         constexpr DataType input_data_type = InputTypeTag::data_type();
         using InputRawType = typename InputTypeTag::DataTypeTag::raw_type;
-        if constexpr(is_unsigned_type(input_data_type)) {
+        if constexpr (is_unsigned_type(input_data_type)) {
             return std::array<InputRawType, 7>{5, 0, 1, 10, 5, 6, 4};
-        } else if constexpr (is_signed_type(input_data_type) || is_floating_point_type(input_data_type) || is_time_type(input_data_type)) {
+        } else if constexpr (is_signed_type(input_data_type) || is_floating_point_type(input_data_type) ||
+                             is_time_type(input_data_type)) {
             return std::array<InputRawType, 14>{0, -4, 5, 1, -6, 0, -5, 5, -1, 4, 6, -5, -10, 10};
         } else if constexpr (is_bool_type(InputTypeTag::data_type())) {
             return std::array<InputRawType, 12>{
-                true, false, true,
-                false, false, false,
-                true, true, true,
-                true, false, false
+                    true, false, true, false, false, false, true, true, true, true, false, false
             };
-        } else if constexpr(is_empty_type(InputTypeTag::data_type())) {
+        } else if constexpr (is_empty_type(InputTypeTag::data_type())) {
             return std::array<InputRawType, 0>{};
         }
     }
@@ -76,14 +76,18 @@ public:
     static constexpr auto get_expected_result_mean() {
         if constexpr (is_time_type(InputTypeTag::data_type())) {
             return std::array<typename InputTypeTag::DataTypeTag::raw_type, 6>{3, 3, -3, -3, 10, -10};
-        } else if constexpr(is_signed_type(InputTypeTag::data_type()) || is_floating_point_type(InputTypeTag::data_type())) {
-            return std::array{(1 + 4 + 5) / 3.0, (0 + 5 + 6) / 3.0, -(1 + 4 + 5) / 3.0, -(0 + 5 + 6) / 3.0, 10.0, -10.0};
-        } else if constexpr(is_unsigned_type(InputTypeTag::data_type())) {
+        } else if constexpr (is_signed_type(InputTypeTag::data_type()) ||
+                             is_floating_point_type(InputTypeTag::data_type())) {
+            return std::array{
+                    (1 + 4 + 5) / 3.0, (0 + 5 + 6) / 3.0, -(1 + 4 + 5) / 3.0, -(0 + 5 + 6) / 3.0, 10.0, -10.0
+            };
+        } else if constexpr (is_unsigned_type(InputTypeTag::data_type())) {
             return std::array{(1 + 4 + 5) / 3.0, (0 + 5 + 6) / 3.0, 10.0};
-        } if constexpr (is_bool_type(InputTypeTag::data_type())) {
-            return std::array{ 2 / 3.0, 0.0, 1.0, 1 / 3.0};
+        }
+        if constexpr (is_bool_type(InputTypeTag::data_type())) {
+            return std::array{2 / 3.0, 0.0, 1.0, 1 / 3.0};
         } else if constexpr (is_empty_type(InputTypeTag::data_type())) {
-            return std::array{0.0, 0.0, 0.0};
+            return std::array<double, 0>{};
         }
     }
 
@@ -91,9 +95,10 @@ public:
     requires util::instantiation_of<InputTypeTag, TypeDescriptorTag>
     static std::vector<size_t> get_groups_mean() {
         constexpr DataType input_data_type = InputTypeTag::data_type();
-        if constexpr(is_unsigned_type(input_data_type)) {
+        if constexpr (is_unsigned_type(input_data_type)) {
             return std::vector<size_t>{0, 1, 0, 2, 1, 1, 0};
-        } else if constexpr (is_signed_type(input_data_type) || is_floating_point_type(input_data_type) || is_time_type(input_data_type)) {
+        } else if constexpr (is_signed_type(input_data_type) || is_floating_point_type(input_data_type) ||
+                             is_time_type(input_data_type)) {
             return std::vector<size_t>{3, 2, 1, 0, 3, 1, 2, 0, 2, 0, 1, 3, 5, 4};
         } else if constexpr (is_bool_type(InputTypeTag::data_type())) {
             return std::vector<size_t>{0, 0, 0, 1, 1, 1, 2, 2, 2, 3, 3, 3};
@@ -106,9 +111,10 @@ public:
     requires util::instantiation_of<InputTypeTag, TypeDescriptorTag>
     static constexpr size_t get_group_count_mean() {
         constexpr DataType input_data_type = InputTypeTag::data_type();
-        if constexpr(is_unsigned_type(input_data_type)) {
+        if constexpr (is_unsigned_type(input_data_type)) {
             return 3;
-        } else if constexpr (is_signed_type(input_data_type) || is_floating_point_type(input_data_type) || is_time_type(input_data_type)) {
+        } else if constexpr (is_signed_type(input_data_type) || is_floating_point_type(input_data_type) ||
+                             is_time_type(input_data_type)) {
             return 6;
         } else if constexpr (is_bool_type(InputTypeTag::data_type())) {
             return 4;
@@ -120,8 +126,11 @@ public:
 
 TEST_P(AggregationResult, Mean) {
     details::visit_type(GetParam(), []<typename TypeTag>(TypeTag) {
-        if constexpr(is_allowed_mean_input(TypeTag::data_type)) {
-            using OutputDataTypeTag = std::conditional_t<is_time_type(TypeTag::data_type), ScalarTagType<TypeTag>, ScalarTagType<DataTypeTag<DataType::FLOAT64>>>;
+        if constexpr (is_allowed_mean_input(TypeTag::data_type)) {
+            using OutputDataTypeTag = std::conditional_t<
+                    is_time_type(TypeTag::data_type),
+                    ScalarTagType<TypeTag>,
+                    ScalarTagType<DataTypeTag<DataType::FLOAT64>>>;
             using InputDataTypeTag = ScalarTagType<TypeTag>;
             MeanAggregatorData aggregator_data;
             aggregator_data.add_data_type(GetParam());
@@ -139,7 +148,11 @@ TEST_P(AggregationResult, Mean) {
             ASSERT_EQ(result.field(0).type(), make_scalar_type(OutputDataTypeTag::data_type()));
             ASSERT_EQ(result.field(0).name(), "output");
             const Column& aggregated_column = result.column(0);
-            ASSERT_EQ(aggregated_column.row_count(), group_count);
+            if constexpr (!is_empty_type(TypeTag::data_type)) {
+                ASSERT_EQ(aggregated_column.row_count(), group_count);
+            } else {
+                ASSERT_EQ(aggregated_column.row_count(), 0);
+            }
             constexpr static std::array expected = get_expected_result_mean<InputDataTypeTag>();
             Column::for_each_enumerated<OutputDataTypeTag>(aggregated_column, [&](const auto& row) {
                 ASSERT_EQ(row.value(), expected[row.idx()]);

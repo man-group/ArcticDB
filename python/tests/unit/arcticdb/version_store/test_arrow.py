@@ -10,6 +10,7 @@ from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.options import OutputFormat
 import pyarrow as pa
+import pyarrow.compute as pc
 from arcticdb.util.hypothesis import (
     use_of_function_scoped_fixtures_in_hypothesis_checked,
     ENDIANNESS,
@@ -17,7 +18,7 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
-from arcticdb.util.test import get_sample_dataframe
+from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
 
@@ -66,7 +67,7 @@ def test_double_columns(lmdb_version_store_arrow):
 
 def test_bool_columns(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
-    df = pd.DataFrame({"x": [i%3 == 0 for i in range(10)], "y": [i%2 == 0 for i in range(10)]})
+    df = pd.DataFrame({"x": [i % 3 == 0 for i in range(10)], "y": [i % 2 == 0 for i in range(10)]})
     lib.write("arrow", df)
     table = lib.read("arrow").data
     assert_frame_equal_with_arrow(table, df)
@@ -76,15 +77,15 @@ def test_column_filtering(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     df = pd.DataFrame({"x": np.arange(10), "y": np.arange(10.0, 20.0)})
     lib.write("arrow", df)
-    table = lib.read("arrow", columns=['y']).data
-    df = df.drop('x', axis=1)
+    table = lib.read("arrow", columns=["y"]).data
+    df = df.drop("x", axis=1)
     assert_frame_equal_with_arrow(table, df)
 
 
-@pytest.mark.parametrize("dynamic_strings", [
-    True,
-    pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))
-])
+@pytest.mark.parametrize(
+    "dynamic_strings",
+    [True, pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))],
+)
 def test_strings_basic(lmdb_version_store_arrow, dynamic_strings):
     lib = lmdb_version_store_arrow
     df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
@@ -140,19 +141,21 @@ def test_fixed_width_strings(lmdb_version_store_arrow):
     assert "my_column" in str(e.value) and "Arrow" in str(e.value)
 
 
-@pytest.mark.parametrize("dynamic_strings", [
-    True,
-    pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))
-])
+@pytest.mark.parametrize(
+    "dynamic_strings",
+    [True, pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))],
+)
 def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, dynamic_strings):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
-    df = pd.DataFrame({
-        "x": [f"x_{i//2}" for i in range(100)],
-        "x_copy": [f"x_{i//2}" for i in range(100)],
-        "y": [f"y_{i}" for i in range(100)],
-        "z": [f"z_{i//5}" for i in range(100)],
-    })
+    df = pd.DataFrame(
+        {
+            "x": [f"x_{i//2}" for i in range(100)],
+            "x_copy": [f"x_{i//2}" for i in range(100)],
+            "y": [f"y_{i}" for i in range(100)],
+            "z": [f"z_{i//5}" for i in range(100)],
+        }
+    )
     lib.write("arrow", df, dynamic_strings=dynamic_strings)
     table = lib.read("arrow").data
     assert_frame_equal_with_arrow(table, df)
@@ -175,7 +178,10 @@ def test_all_types(lmdb_version_store_arrow):
 def test_date_range_corner_cases(version_store_factory, date_range_start, date_range_width, dynamic_schema):
     lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
-    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": np.arange(7)}, index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7))
+    df = pd.DataFrame(
+        data={"col1": np.arange(7), "col2": np.arange(7), "col3": np.arange(7)},
+        index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7),
+    )
     sym = "test_date_range_corner_cases"
     lib.write(sym, df)
 
@@ -206,7 +212,10 @@ def test_date_range_between_index_values(lmdb_version_store_tiny_segment):
 def test_date_range_empty_result(version_store_factory, date_range_start, dynamic_schema):
     lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
-    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]}, index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7))
+    df = pd.DataFrame(
+        data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]},
+        index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7),
+    )
     sym = "test_date_range_empty_result"
     lib.write(sym, df)
 
@@ -225,7 +234,10 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     initial_timestamp = pd.Timestamp("2019-01-01")
-    df = pd.DataFrame({"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]}, index=pd.date_range(initial_timestamp, periods=100))
+    df = pd.DataFrame(
+        {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
+        index=pd.date_range(initial_timestamp, periods=100),
+    )
     sym = "arrow_date_test"
     lib.write(sym, df)
 
@@ -237,10 +249,10 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
     df = data_closed_table.to_pandas()
     assert query_start_ts == df.index[0]
     assert query_end_ts == df.index[-1]
-    assert df['numeric'].iloc[0] == start_offset
-    assert df['numeric'].iloc[-1] == end_offset
-    assert df['strings'].iloc[0] == f"{start_offset}"
-    assert df['strings'].iloc[-1] == f"{end_offset}"
+    assert df["numeric"].iloc[0] == start_offset
+    assert df["numeric"].iloc[-1] == end_offset
+    assert df["strings"].iloc[0] == f"{start_offset}"
+    assert df["strings"].iloc[-1] == f"{end_offset}"
 
 
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
@@ -249,14 +261,14 @@ def test_date_range_with_duplicates(version_store_factory, segment_row_size, sta
     lib = version_store_factory(segment_row_size=segment_row_size)
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     index_with_duplicates = (
-            [ pd.Timestamp(2025, 1, 1) ] * 10 +
-            [ pd.Timestamp(2025, 1, 2) ] * 13 +
-            [ pd.Timestamp(2025, 1, 5) ] * 5 +
-            [ pd.Timestamp(2025, 1, 6) ] * 1 +
-            [ pd.Timestamp(2025, 1, 7) ] * 25
+        [pd.Timestamp(2025, 1, 1)] * 10
+        + [pd.Timestamp(2025, 1, 2)] * 13
+        + [pd.Timestamp(2025, 1, 5)] * 5
+        + [pd.Timestamp(2025, 1, 6)] * 1
+        + [pd.Timestamp(2025, 1, 7)] * 25
     )
     size = len(index_with_duplicates)
-    df = pd.DataFrame(data=np.arange(size, dtype=np.int64), index=index_with_duplicates, columns=['x'])
+    df = pd.DataFrame(data=np.arange(size, dtype=np.int64), index=index_with_duplicates, columns=["x"])
     sym = "arrow_date_test"
     lib.write(sym, df)
 
@@ -292,7 +304,9 @@ def test_row_range_corner_cases(version_store_factory, row_range_start, row_rang
 def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_schema, index):
     lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
-    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]}, index=index)
+    df = pd.DataFrame(
+        data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]}, index=index
+    )
     sym = "test_row_range_empty_result"
     lib.write(sym, df)
 
@@ -308,7 +322,10 @@ def test_row_range(version_store_factory, segment_row_size, start_offset, end_of
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     initial_timestamp = pd.Timestamp("2019-01-01")
-    df = pd.DataFrame({"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]}, index=pd.date_range(initial_timestamp, periods=100))
+    df = pd.DataFrame(
+        {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
+        index=pd.date_range(initial_timestamp, periods=100),
+    )
     sym = "arrow_date_test"
     lib.write(sym, df)
 
@@ -317,13 +334,13 @@ def test_row_range(version_store_factory, segment_row_size, start_offset, end_of
     df = data_closed_table.to_pandas()
 
     start_ts = initial_timestamp + pd.DateOffset(start_offset)
-    end_ts = initial_timestamp + pd.DateOffset(end_offset-1)
+    end_ts = initial_timestamp + pd.DateOffset(end_offset - 1)
     assert start_ts == df.index[0]
     assert end_ts == df.index[-1]
-    assert df['numeric'].iloc[0] == start_offset
-    assert df['numeric'].iloc[-1] == end_offset-1
-    assert df['strings'].iloc[0] == f"{start_offset}"
-    assert df['strings'].iloc[-1] == f"{end_offset - 1}"
+    assert df["numeric"].iloc[0] == start_offset
+    assert df["numeric"].iloc[-1] == end_offset - 1
+    assert df["strings"].iloc[0] == f"{start_offset}"
+    assert df["strings"].iloc[-1] == f"{end_offset - 1}"
 
 
 def test_with_querybuilder(lmdb_version_store_arrow):
@@ -342,15 +359,17 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     lib_tool = lib.library_tool()
     num_rows = 100
-    df = pd.DataFrame(data={"int": np.arange(num_rows, dtype=np.int64), "str": [f"x_{i//3}" for i in range(num_rows)]},
-                      index=pd.date_range(pd.Timestamp(0), periods=num_rows))
+    df = pd.DataFrame(
+        data={"int": np.arange(num_rows, dtype=np.int64), "str": [f"x_{i//3}" for i in range(num_rows)]},
+        index=pd.date_range(pd.Timestamp(0), periods=num_rows),
+    )
     lib.write("sym", df, dynamic_strings=True)
     data_keys = lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")
-    assert len(data_keys) == num_rows//2
+    assert len(data_keys) == num_rows // 2
 
     arrow_table = lib.read("sym").data
     batches = arrow_table.to_batches()
-    assert len(batches) == num_rows//2
+    assert len(batches) == num_rows // 2
     for record_batch in batches:
         index_arr, int_arr, str_arr = record_batch.columns
         assert index_arr.type == pa.timestamp("ns")
@@ -360,15 +379,38 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
 
 @pytest.mark.parametrize(
     "first_type",
-    [pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64(), pa.int8(), pa.int16(), pa.int32(), pa.int64(), pa.float32(), pa.float64()]
+    [
+        pa.uint8(),
+        pa.uint16(),
+        pa.uint32(),
+        pa.uint64(),
+        pa.int8(),
+        pa.int16(),
+        pa.int32(),
+        pa.int64(),
+        pa.float32(),
+        pa.float64(),
+    ],
 )
 @pytest.mark.parametrize(
     "second_type",
-    [pa.uint8(), pa.uint16(), pa.uint32(), pa.uint64(), pa.int8(), pa.int16(), pa.int32(), pa.int64(), pa.float32(), pa.float64()]
+    [
+        pa.uint8(),
+        pa.uint16(),
+        pa.uint32(),
+        pa.uint64(),
+        pa.int8(),
+        pa.int16(),
+        pa.int32(),
+        pa.int64(),
+        pa.float32(),
+        pa.float64(),
+    ],
 )
 def test_arrow_dynamic_schema_changing_types(lmdb_version_store_dynamic_schema_v1, first_type, second_type):
-    if ((pa.types.is_uint64(first_type) and pa.types.is_signed_integer(second_type)) or
-            (pa.types.is_uint64(second_type) and pa.types.is_signed_integer(first_type))):
+    if (pa.types.is_uint64(first_type) and pa.types.is_signed_integer(second_type)) or (
+        pa.types.is_uint64(second_type) and pa.types.is_signed_integer(first_type)
+    ):
         pytest.skip("Unsupported ArcticDB type combination")
     lib = lmdb_version_store_dynamic_schema_v1
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
@@ -459,11 +501,19 @@ def combinable_numeric_dtypes(draw):
             column_strategy("string_2", supported_string_dtypes()),
         ]
     ),
-    columns_0=st.lists(st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True),
-    columns_1=st.lists(st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True),
-    columns_2=st.lists(st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True),
+    columns_0=st.lists(
+        st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True
+    ),
+    columns_1=st.lists(
+        st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True
+    ),
+    columns_2=st.lists(
+        st.sampled_from(["numeric_1", "numeric_2", "string_1", "string_2"]), min_size=1, max_size=4, unique=True
+    ),
 )
-def test_arrow_dynamic_schema_missing_columns_hypothesis(lmdb_version_store_dynamic_schema_v1, df_0, df_1, df_2, columns_0, columns_1, columns_2):
+def test_arrow_dynamic_schema_missing_columns_hypothesis(
+    lmdb_version_store_dynamic_schema_v1, df_0, df_1, df_2, columns_0, columns_1, columns_2
+):
     assume(len(df_0) and len(df_1) and len(df_2))
     lib = lmdb_version_store_dynamic_schema_v1
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
@@ -536,7 +586,9 @@ def test_arrow_sparse_floats_date_range(version_store_factory, dynamic_schema, d
     df.index = pd.date_range("2025-01-01", periods=15)
     lib.write(sym, df, sparsify_floats=True)
     date_range = (date_range_start, date_range_start + pd.Timedelta(days=date_range_width))
-    expected = pa.concat_tables([table_0, table_1, table_2]).slice(offset=(date_range_start - pd.Timestamp("2025-01-01")).days, length=date_range_width + 1)
+    expected = pa.concat_tables([table_0, table_1, table_2]).slice(
+        offset=(date_range_start - pd.Timestamp("2025-01-01")).days, length=date_range_width + 1
+    )
     received = lib.read(sym, date_range=date_range).data
     assert expected["col"].equals(received["col"])
 
@@ -558,7 +610,9 @@ def test_arrow_sparse_floats_row_range(version_store_factory, dynamic_schema, ro
     df.index = pd.RangeIndex(0, 15)
     lib.write(sym, df, sparsify_floats=True)
     row_range = (row_range_start, row_range_start + row_range_width)
-    expected = pa.concat_tables([table_0, table_1, table_2]).slice(offset=row_range[0], length=row_range[1] - row_range[0])
+    expected = pa.concat_tables([table_0, table_1, table_2]).slice(
+        offset=row_range[0], length=row_range[1] - row_range[0]
+    )
     received = lib.read(sym, row_range=row_range).data
     assert expected.equals(received)
 
@@ -567,11 +621,7 @@ def test_arrow_sparse_floats_row_range(version_store_factory, dynamic_schema, ro
 @settings(deadline=None)
 @given(
     df=data_frames(
-        columns(
-            ["col"],
-            elements=st.floats(min_value=0, max_value=1000, allow_nan=False),
-            fill=st.just(np.nan)
-        ),
+        columns(["col"], elements=st.floats(min_value=0, max_value=1000, allow_nan=False), fill=st.just(np.nan)),
     ),
     rows_per_slice=st.integers(2, 10),
     use_row_range=st.booleans(),
@@ -587,7 +637,7 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
     row_slices = []
     num_row_slices = (row_count + (rows_per_slice - 1)) // rows_per_slice
     for i in range(num_row_slices):
-        row_slice = df[i * rows_per_slice: (i + 1) * rows_per_slice]
+        row_slice = df[i * rows_per_slice : (i + 1) * rows_per_slice]
         if row_slice["col"].notna().sum() == 0:
             row_slice["col"][i * rows_per_slice] = 100
         row_slices.append(row_slice)
@@ -595,8 +645,9 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
     lib.write(sym, adjusted_df, sparsify_floats=True)
     if use_row_range:
         row_range = (row_count // 3, (2 * row_count) // 3)
-        expected = (pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
-                    .slice(offset=row_range[0], length=row_range[1] - row_range[0]))
+        expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices]).slice(
+            offset=row_range[0], length=row_range[1] - row_range[0]
+        )
         received = lib.read(sym, row_range=row_range).data
     else:
         expected = pa.concat_tables([pa.Table.from_pandas(row_slice) for row_slice in row_slices])
@@ -604,14 +655,14 @@ def test_arrow_sparse_floats_hypothesis(lmdb_version_store_arrow, df, rows_per_s
     assert expected.equals(received)
 
 
-@pytest.mark.parametrize(
-    "type_to_drop", [pa.int64(), pa.float64(), pa.large_string()]
-)
+@pytest.mark.parametrize("type_to_drop", [pa.int64(), pa.float64(), pa.large_string()])
 def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_v1, type_to_drop):
     lib = lmdb_version_store_dynamic_schema_v1
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     sym = "sym"
-    column_to_drop = pa.array(["a", "b"], type_to_drop) if type_to_drop == pa.large_string() else pa.array([1, 2], type_to_drop)
+    column_to_drop = (
+        pa.array(["a", "b"], type_to_drop) if type_to_drop == pa.large_string() else pa.array([1, 2], type_to_drop)
+    )
     table_1 = pa.table({"col": pa.array([0, 1])})
     table_2 = pa.table({"col": pa.array([5, 6]), "col_to_drop": column_to_drop})
     table_3 = pa.table({"col": pa.array([2, 3])})
@@ -625,3 +676,144 @@ def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_
     q = q[q["col"] < 5]
     received = stringify_dictionary_encoded_columns(lib.read(sym, query_builder=q).data)
     assert expected.equals(received)
+
+
+def test_project_dynamic_schema(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    table_1 = pa.table({"a": pa.array([1, 2])})
+    table_2 = pa.table({"a": pa.array([3, 4]), "b": pa.array([1, 2])})
+    table_3 = pa.table({"b": pa.array([3, 4])})
+    lib.write(sym, table_1.to_pandas())
+    lib.append(sym, table_2.to_pandas())
+    lib.append(sym, table_3.to_pandas())
+    q = QueryBuilder()
+    q = q.apply("c", q["a"] * q["b"] + 10)
+    received = lib.read(sym, query_builder=q).data
+    expected = pa.concat_tables([table_1, table_2, table_3], promote_options="permissive")
+    expected_new_col = pc.add(pc.multiply(expected.column("a"), expected.column("b")), 10)
+    expected = expected.append_column("c", expected_new_col)
+    assert expected.equals(received)
+
+
+def test_project_dynamic_schema_complex(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    df = pd.DataFrame(
+        {
+            "int_col_1": np.arange(0, 10, dtype=np.int16),
+            "int_col_2": np.arange(10, 20, dtype=np.int32),
+            "float_col": np.arange(20, 30, dtype=np.float64),
+        }
+    )
+    expected, slices = make_dynamic(df)
+    for df_slice in slices:
+        lib.append(sym, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q = q.apply("new_float_1", q["int_col_1"] / q["float_col"] + 1)
+    q = q.apply("new_float_2", q["int_col_2"] * q["new_float_1"])
+
+    table = lib.read(sym, query_builder=q).data
+    expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
+
+
+def test_aggregation_empty_slices(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    df_1 = pd.DataFrame(
+        {
+            "group_col": [chr(ord("a") + i) for i in range(5)],
+            "mean_col": np.arange(0, 5, dtype=np.float64),
+            "sum_col": np.arange(0, 5, dtype=np.float64),
+            "min_col": np.arange(0, 5, dtype=np.float64),
+            "max_col": np.arange(0, 5, dtype=np.float64),
+            "count_col": np.arange(0, 5, dtype=np.float64),
+        }
+    )
+    df_2 = pd.DataFrame(
+        {
+            "group_col": [chr(ord("a") + i + 10) for i in range(5)],
+        }
+    )
+    lib.write(sym, df_1, dynamic_strings=True)
+    lib.append(sym, df_2, dynamic_strings=True)
+
+    q = QueryBuilder()
+    q.groupby("group_col").agg(
+        {
+            "mean_col": "mean",
+            "sum_col": "sum",
+            "min_col": "min",
+            "max_col": "max",
+            "count_col": "count",
+        }
+    )
+
+    table = lib.read(sym, query_builder=q).data
+    # sum_col is correctly filled with 0s instead of nulls
+    assert pc.count(table.column("sum_col"), mode="only_null").as_py() == 0
+    assert pc.count(table.column("mean_col"), mode="only_null").as_py() == 5
+    assert pc.count(table.column("min_col"), mode="only_null").as_py() == 5
+    assert pc.count(table.column("max_col"), mode="only_null").as_py() == 5
+    assert pc.count(table.column("count_col"), mode="only_null").as_py() == 5
+    expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
+
+
+def test_resample_empty_slices(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+
+    def gen_df(start, num_rows, with_columns=True):
+        data = {}
+        if with_columns:
+            data = {
+                "mean_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "sum_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "min_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "max_col": np.arange(start, start + num_rows, dtype=np.float64),
+                "count_col": np.arange(start, start + num_rows, dtype=np.float64),
+            }
+        index = pd.date_range(pd.Timestamp(2025, 1, start), periods=num_rows)
+        return pd.DataFrame(data, index=index)
+
+    slices = [
+        gen_df(1, 3),
+        gen_df(4, 2, False),  # We expect an entirely missing slice 4th-5th
+        gen_df(6, 3),
+        gen_df(9, 5, False),  # We expect two missing slices 10th-11th and 12th-13th
+        gen_df(14, 2),
+        gen_df(16, 2, False),  # We expect one missing slice 16th-17th
+        # TODO: If we don't finish with an append with columns our normalization metadata will be broken
+        gen_df(18, 1),
+    ]
+    for df_slice in slices:
+        lib.append(sym, df_slice, write_if_missing=True)
+
+    q = QueryBuilder()
+    q.resample("2d").agg(
+        {
+            "mean_col": "mean",
+            "sum_col": "sum",
+            "min_col": "min",
+            "max_col": "max",
+            "count_col": "count",
+        }
+    )
+
+    table = lib.read(sym, query_builder=q).data
+    # sum_col is correctly filled with 0s instead of nulls
+    assert pc.count(table.column("sum_col"), mode="only_null").as_py() == 0
+    # We expect 4 entirely empty buckets
+    assert pc.count(table.column("mean_col"), mode="only_null").as_py() == 4
+    assert pc.count(table.column("min_col"), mode="only_null").as_py() == 4
+    assert pc.count(table.column("max_col"), mode="only_null").as_py() == 4
+    assert pc.count(table.column("count_col"), mode="only_null").as_py() == 4
+    expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
+    assert_frame_equal_with_arrow(table, expected)
