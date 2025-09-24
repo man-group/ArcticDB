@@ -3,10 +3,7 @@ import pandas as pd
 import numpy as np
 import pytest
 from arcticdb.version_store import NativeVersionStore
-from arcticdb_ext.exceptions import (
-    InternalException,
-    NormalizationException,
-)
+from arcticdb_ext.exceptions import InternalException, NormalizationException, ArcticException as ArcticNativeException
 from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext import set_config_int
 from hypothesis import given, assume, settings, strategies as st
@@ -287,3 +284,21 @@ def test_regular_append_dynamic_schema_named_index(
         lib.append(sym, df_1)
 
     assert "date" in str(exception_info.value)
+
+
+@pytest.mark.parametrize(
+    "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
+)
+def test_append_bool_named_col(lmdb_version_store_dynamic_schema, idx):
+    symbol = "bad_append"
+
+    initial = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
+    lmdb_version_store_dynamic_schema.write(symbol, initial)
+
+    bad_df = pd.DataFrame({True: [4, 5, 6]}, index=idx)
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store_dynamic_schema.append(symbol, bad_df)
+
+    assert_frame_equal(lmdb_version_store_dynamic_schema.read(symbol).data, initial)
