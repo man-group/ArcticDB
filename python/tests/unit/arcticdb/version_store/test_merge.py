@@ -227,7 +227,8 @@ class TestMergeTimeseries:
         write_vit = lib.write("sym", target)
 
         source = pd.DataFrame(
-            {"a": [1, 20, 3], "b": [1.0, 20.0, 3.0]},
+            {"a": [4, 5, 6], "b": [7.0, 8.0, 9.0]},
+            # Only the second row: "2024-01-02" matches
             index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"]),
         )
         monkeypatch.setattr(
@@ -254,7 +255,8 @@ class TestMergeTimeseries:
         assert merge_vit.host == write_vit.host
         assert merge_vit.data is None
 
-        expected = pd.DataFrame({"a": [1, 20, 3], "b": [1.0, 20.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        # Only the second row: "2024-01-02" is updated
+        expected = pd.DataFrame({"a": [1, 4, 3], "b": [1.0, 8.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
 
         monkeypatch.setattr(
             lib,
