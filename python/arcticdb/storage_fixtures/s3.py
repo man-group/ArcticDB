@@ -758,7 +758,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
             logger.warning(f"Error: {e.response['Error']['Message']}")
-            get_buckets_check()
+            get_buckets_check(s3_client)
             import pprint
             pprint.pprint(e.response)
             time.sleep(1)
