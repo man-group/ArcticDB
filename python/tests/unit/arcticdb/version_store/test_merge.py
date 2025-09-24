@@ -50,10 +50,8 @@ class TestMergeTimeseries:
         "strategy",
         (
             MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-            MergeStrategy(MergeAction.INSERT, MergeAction.DO_NOTHING),
             MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
             MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            MergeStrategy(MergeAction.INSERT, MergeAction.INSERT),
         ),
     )
     def test_merge_matched_update_with_metadata(self, lmdb_library, strategy, monkeypatch):
@@ -125,10 +123,8 @@ class TestMergeTimeseries:
         "strategy",
         (
             MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-            MergeStrategy(MergeAction.INSERT, MergeAction.DO_NOTHING),
             MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
             MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            MergeStrategy(MergeAction.INSERT, MergeAction.INSERT),
         ),
     )
     def test_merge_does_not_write_new_version_with_empty_source(self, lmdb_library, metadata, strategy, monkeypatch):
@@ -149,10 +145,8 @@ class TestMergeTimeseries:
         (
             None,
             MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-            MergeStrategy(MergeAction.INSERT, MergeAction.DO_NOTHING),
             MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
             MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            MergeStrategy(MergeAction.INSERT, MergeAction.INSERT),
         ),
     )
     @pytest.mark.parametrize(
@@ -192,10 +186,8 @@ class TestMergeTimeseries:
         "strategy",
         (
             MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
-            MergeStrategy(MergeAction.INSERT, MergeAction.DO_NOTHING),
             MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
             MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
-            MergeStrategy(MergeAction.INSERT, MergeAction.INSERT),
         ),
     )
     def test_throws_if_source_is_not_sorted(self, lmdb_library, strategy, monkeypatch):
@@ -220,7 +212,19 @@ class TestMergeTimeseries:
     # ================================================================================================
     # ==================================== TEST UPDATE ON MATCH ======================================
     # ================================================================================================
-    def test_merge_update(self, lmdb_library, monkeypatch):
+    @pytest.mark.parametrize(
+        "strategy",
+        (
+            MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING),
+            MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING),
+            MergeStrategy(not_matched_by_target="do_nothing"),
+            MergeStrategy("update", "do_nothing"),
+            MergeStrategy("UPDATE", "DO_NOTHING"),
+            MergeStrategy(MergeAction.UPDATE, "do_nothing"),
+            MergeStrategy("update", MergeAction.DO_NOTHING),
+        ),
+    )
+    def test_merge_update(self, lmdb_library, monkeypatch, strategy):
         lib = lmdb_library
 
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
@@ -246,7 +250,7 @@ class TestMergeTimeseries:
             raising=False,
         )
 
-        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
+        merge_vit = lib.merge("sym", source, strategy=strategy)
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.timestamp > write_vit.timestamp
@@ -523,7 +527,17 @@ class TestMergeTimeseries:
     # ================================= TEST INSERT NOT MATCHED ======================================
     # ================================================================================================
 
-    def test_merge_insert_not_matched(self, lmdb_library, monkeypatch):
+    @pytest.mark.parametrize(
+        "strategy",
+        (
+            MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT),
+            MergeStrategy("do_nothing", "insert"),
+            MergeStrategy("DO_NOTHING", "INSERT"),
+            MergeStrategy(MergeAction.DO_NOTHING, "insert"),
+            MergeStrategy("do_nothing", MergeAction.INSERT),
+        ),
+    )
+    def test_merge_insert_not_matched(self, lmdb_library, monkeypatch, strategy):
         lib = lmdb_library
 
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
@@ -548,7 +562,7 @@ class TestMergeTimeseries:
             raising=False,
         )
 
-        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        merge_vit = lib.merge("sym", source, strategy=strategy)
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.timestamp > write_vit.timestamp
@@ -748,7 +762,18 @@ class TestMergeTimeseries:
     # ======================================== TEST UPSERT ===========================================
     # ================================================================================================
 
-    def test_upsert(self, lmdb_library, monkeypatch):
+    @pytest.mark.parametrize(
+        "strategy",
+        (
+            None,
+            MergeStrategy(MergeAction.UPDATE, MergeAction.INSERT),
+            MergeStrategy("update", "insert"),
+            MergeStrategy("UPDATE", "INSERT"),
+            MergeStrategy("update", MergeAction.INSERT),
+            MergeStrategy(MergeAction.UPDATE, "insert"),
+        ),
+    )
+    def test_upsert(self, lmdb_library, monkeypatch, strategy):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
@@ -777,7 +802,7 @@ class TestMergeTimeseries:
             raising=False,
         )
 
-        merge_vit = lib.merge("sym", source)
+        merge_vit = lib.merge("sym", source, strategy=strategy) if strategy else lib.merge("sym", source)
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.timestamp > write_vit.timestamp
