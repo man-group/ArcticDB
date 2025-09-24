@@ -36,7 +36,7 @@ from arcticdb_ext.exceptions import (
 )
 
 from benchmarks.bi_benchmarks import assert_frame_equal
-from tests.util.mark import LINUX, SLOW_TESTS_MARK
+from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 
 
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
@@ -692,7 +692,8 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     # Pandas concat will fill NaN for strings, Arcticdb is using None
     if not dynamic_strings:
         # make expected result like the actual due to static string
-        if LINUX:
+        if not WINDOWS:
+            # windows does not have static strings
             expected["str"] = expected["str"].fillna("")
     assert_frame_equal(expected, data)
 
