@@ -354,6 +354,7 @@ class NativeVersionStore:
         self._open_mode = open_mode
         self._native_cfg = native_cfg
         self._runtime_options = runtime_options
+        # Do not make this a runtime option, as it is only temporary until Arrow writes are fully supported
         self._allow_arrow_input = False
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):

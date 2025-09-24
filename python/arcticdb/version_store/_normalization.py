@@ -750,9 +750,7 @@ class ArrowTableNormalizer(Normalizer):
         elif input_type == "arrow_table":
             if norm_meta.arrow_table.has_index:
                 index_column_position = norm_meta.arrow_table.index_column_position
-                # TODO: Handle column selection
                 if index_column_position != 0 and index_column_position < item.num_columns:
-                    # TODO: Is this zero-copy? Will need to handle in the C++ layer if not
                     item = item.select(
                         list(range(1, index_column_position + 1))
                         + [0]
@@ -1451,6 +1449,7 @@ class CompositeNormalizer(Normalizer):
     def set_skip_df_consolidation(self):
         self.df.set_skip_df_consolidation()
 
+    # Can remove allow_arrow_input once Arrow writes fully supported, but need it to be opt-in initially in case anyone is pickling pyarrow Tables already
     def _normalize(
         self,
         item,

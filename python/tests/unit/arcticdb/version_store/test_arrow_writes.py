@@ -664,8 +664,6 @@ def test_staging_without_sorting(version_store_factory, method):
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1])
     received = lib.read(sym).data
-    # TODO: Remove this when timeseries indexes with norm metadata implemented for Arrow
-    # received = received.rename_columns({"time": "ts"})
     assert expected.equals(received)
 
 
@@ -739,7 +737,6 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
     assert isinstance(received["b"]["c"], list) and len(received["b"]["c"]) == 1
     assert_frame_equal_with_arrow(df_1, received["b"]["c"][0])
     assert table_2.equals(received["b"]["d"])
-    # TODO: Test reading back as Pandas when this works generally
 
 
 supported_types = [
