@@ -107,8 +107,6 @@ Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col
                     col,
                     col,
                     [factor](timestamp ts) {
-                        // TODO: Microbenchmark with and without bounds checking
-                        // TODO: Include provided timestamp and our supported range in error message
                         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                                 ts < std::numeric_limits<timestamp>::max() / factor &&
                                         ts > std::numeric_limits<timestamp>::min() / factor,

@@ -149,11 +149,10 @@ std::pair<std::vector<DataType>, std::optional<size_t>> find_data_types_and_inde
     data_types.reserve(record_batch.nb_columns());
     std::optional<size_t> index_column_position;
     for (size_t idx = 0; idx < record_batch.nb_columns(); ++idx) {
-        const auto& array = record_batch.get_column(idx);
         if (index_name.has_value() && record_batch.get_column_name(idx) == *index_name) {
             index_column_position = idx;
         }
-        data_types.emplace_back(arcticdb_type_from_arrow_type(array.data_type()));
+        data_types.emplace_back(arcticdb_type_from_arrow_type(record_batch.get_column(idx).data_type()));
     }
     if (index_name.has_value()) {
         schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
@@ -171,7 +170,6 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
         return {seg, std::nullopt};
     }
     auto record_batch = record_batches.cbegin();
-    auto column_names = record_batch->names();
     auto [data_types, index_column_position] = find_data_types_and_index_position(*record_batch, index_name);
     uint64_t total_rows = std::accumulate(
             record_batches.cbegin(),
@@ -185,13 +183,15 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     uint64_t start_row{0};
     for (; record_batch != record_batches.cend(); ++record_batch) {
         for (size_t idx = 0; idx < record_batch->nb_columns(); ++idx) {
+            auto& chunked_buffer = chunked_buffers.at(idx);
+            const auto& data_type = data_types.at(idx);
             const auto& array = record_batch->get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
             // arrow_array_buffers.at(0) seems to be the validity bitmap, and may be NULL if there are no null values
             // need to handle it being non-NULL and all 1s though
             const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
-            if (is_bool_type(data_types.at(idx))) {
+            if (is_bool_type(data_type)) {
                 // Arrow bool columns are packed bitsets
                 // It would be more idiomatic if this unpacking happened in WriteToSegmentTask, which would also
                 // naturally parallelise the process, but this is quite complicated, particularly when there are
@@ -200,22 +200,23 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 // it will probably still be easier to do the unpacking here in parallel than to try and push this down
                 // to WriteToSegmentTask
                 if (record_batch == record_batches.cbegin()) {
-                    chunked_buffers.at(idx).ensure(total_rows);
+                    chunked_buffer.ensure(total_rows);
                 }
                 packed_bits_to_buffer(
                         data,
                         array.size(),
                         arrow_array->offset,
-                        chunked_buffers.at(idx).bytes_at(start_row, array.size())
+                        chunked_buffer.bytes_at(start_row, array.size())
                 );
             } else {
-                data += arrow_array->offset * get_type_size(data_types.at(idx));
-                const auto bytes = array.size() * get_type_size(data_types.at(idx));
-                chunked_buffers.at(idx).add_external_block(data, bytes);
+                data += arrow_array->offset * get_type_size(data_type);
+                const auto bytes = array.size() * get_type_size(data_type);
+                chunked_buffer.add_external_block(data, bytes);
             }
         }
         start_row += record_batch->nb_rows();
     }
+    auto column_names = record_batches.front().names();
     if (index_column_position.has_value()) {
         auto idx = *index_column_position;
         seg.add_column(
