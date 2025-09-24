@@ -850,15 +850,19 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
 
     def _safe_enter(self):
-        for _ in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
+        for _ in range(5):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
             try:
                 self._start_server()
+                self._s3_admin = self._boto(service="s3", key=self.default_key)
+                get_buckets_check(self._s3_admin)
+                logger.info("Moto S3 STARTED!!!")
                 break
             except AssertionError as e:  # Thrown by wait_for_server_to_come_up
                 sys.stderr.write(repr(e))
                 GracefulProcessUtils.terminate(self._p)
+            except Exception as e:
+                logger.error(f"Error during startup of Moto S3. Trying again. Error: {e}")
 
-        self._s3_admin = self._boto(service="s3", key=self.default_key)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
