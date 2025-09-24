@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import platform
+import pprint
 from tempfile import mkdtemp
 from urllib.parse import urlparse
 import boto3
@@ -753,16 +754,15 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
         try:
             s3_client.create_bucket(Bucket=bucket_name)
             return
-        except (botocore.exceptions.EndpointConnectionError, botocore.exceptions.ClientError) as e:
+        except botocore.exceptions.EndpointConnectionError as e:
             if i >= max_retries - 1:
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
-            logger.warning(f"Error: {e.response['Error']['Message']}")
-            get_buckets_check(s3_client)
-            import pprint
-
-            pprint.pprint(e.response)
             time.sleep(1)
+        except Exception as e:
+            logger.error(f"Error: {e.response['Error']['Message']}")
+            get_buckets_check(s3_client)
+            pprint.pprint(e.response)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -954,8 +954,8 @@ class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
 
 class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
-    def _start_server(self):
-        port = self.port = get_ephemeral_port(3)
+    def _start_server(self, seed=9):
+        port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
