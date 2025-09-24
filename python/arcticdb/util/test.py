@@ -1204,6 +1204,7 @@ def compute_common_type_for_columns(segment_columns: List[dict]):
                 common_types[name] = valid_common_type(common_types[name], np.dtype(dtype))
     return common_types
 
+
 def assert_vit_equals_except_data(left, right):
     """
     Checks if two VersionedItem objects are equal disregarding differences in the data field. This is because when a
