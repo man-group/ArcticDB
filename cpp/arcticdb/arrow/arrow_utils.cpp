@@ -203,10 +203,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                     chunked_buffer.ensure(total_rows);
                 }
                 packed_bits_to_buffer(
-                        data,
-                        array.size(),
-                        arrow_array->offset,
-                        chunked_buffer.bytes_at(start_row, array.size())
+                        data, array.size(), arrow_array->offset, chunked_buffer.bytes_at(start_row, array.size())
                 );
             } else {
                 data += arrow_array->offset * get_type_size(data_type);
