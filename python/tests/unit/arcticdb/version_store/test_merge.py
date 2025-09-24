@@ -26,7 +26,7 @@ class MergeAction(Enum):
 
 class MergeStrategy(NamedTuple):
     matched: MergeAction = MergeAction.UPDATE
-    not_matched: MergeAction = MergeAction.INSERT
+    not_matched_by_target: MergeAction = MergeAction.INSERT
 
 
 def mock_find_keys_for_symbol(key_types):
@@ -246,7 +246,7 @@ class TestMergeTimeseries:
             raising=False,
         )
 
-        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
+        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
         assert merge_vit.version == 1
         assert merge_vit.symbol == write_vit.symbol
         assert merge_vit.timestamp > write_vit.timestamp
@@ -310,7 +310,7 @@ class TestMergeTimeseries:
             raising=False,
         )
         source = pd.DataFrame({"a": [4, 5], "b": [4.0, 5.0]}, index=pd.date_range("2023-01-01", periods=2))
-        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
+        merge_vit = lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
         assert merge_vit.version == 1
         assert merge_vit.timestamp > write_vit.timestamp
 
@@ -359,7 +359,7 @@ class TestMergeTimeseries:
             {"a": [30, 50], "b": [30.1, 50.1]},
             index=pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-05")]),
         )
-        lib.merge("sym", source, strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
+        lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
 
         expected = pd.DataFrame({"a": [1, 2, 30, 4, 50], "b": [1.0, 2.0, 31.1, 4.0, 50.1]})
         monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
@@ -409,7 +409,7 @@ class TestMergeTimeseries:
             ),
         )
         monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
-        lib.merge("sym", source, on=["a"], strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
+        lib.merge("sym", source, on=["a"], strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
 
         expected = pd.DataFrame({"a": [1, 2, 3], "b": [10.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
         monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
@@ -451,7 +451,9 @@ class TestMergeTimeseries:
         )
 
         monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
-        lib.merge("sym", source, on=["b", "d", "e"], strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
+        lib.merge(
+            "sym", source, on=["b", "d", "e"], strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)
+        )
 
         expected = pd.DataFrame(
             {
@@ -479,7 +481,7 @@ class TestMergeTimeseries:
         lib.write("sym", target)
         monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
         source = pd.DataFrame({"a": [5], "b": [20.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")]))
-        lib.merge("sym", source, strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
+        lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
         expected = pd.DataFrame(
             {"a": [5, 5, 3], "b": [20.0, 20.0, 3.0]},
             index=pd.DatetimeIndex(
@@ -946,7 +948,9 @@ class TestMergeTimeseries:
         )
 
         monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
-        lib.merge("sym", source, on=["b", "d", "e"], strategy=MergeStrategy(not_matched=MergeAction.DO_NOTHING))
+        lib.merge(
+            "sym", source, on=["b", "d", "e"], strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING)
+        )
         expected = pd.DataFrame(
             {
                 "a": [10, 2, 20, 3, 30, 4, 40, 50],
