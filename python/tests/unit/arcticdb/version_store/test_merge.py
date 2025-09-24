@@ -523,6 +523,52 @@ class TestMergeTimeseries:
         with pytest.raises(UserInputException):
             lib.merge("sym", source, strategy=strategy)
 
+    @pytest.mark.parametrize("merge_metadata", (None, "meta"))
+    def test_merge_update_target_is_empty(self, lmdb_library, monkeypatch, merge_metadata):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
+        write_vit = lib.write("sym", target)
+
+        source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
+        monkeypatch.setattr(
+            lib.__class__,
+            "merge",
+            lambda *args, **kwargs: VersionedItem(
+                symbol=write_vit.symbol,
+                library=write_vit.library,
+                data=None,
+                version=1,
+                metadata=merge_metadata,
+                host=write_vit.host,
+                timestamp=write_vit.timestamp + 1,
+            ),
+            raising=False,
+        )
+        # NOTE: detecting that nothing will be changed is easier when the target is empty. It will be easy to not
+        # increase the version number. However, this will create two different behaviors because we currently increase
+        # the version if nothing is updated. I think having too many different behaviors will be confusing. IMO this
+        # must have the same behavior as test_merge_update_writes_new_version_even_if_nothing_is_changed.
+        merge_vit = lib.merge(
+            "sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING), metadata=merge_metadata
+        )
+        expected = target
+        monkeypatch.setattr(
+            lib,
+            "read",
+            lambda *args, **kwargs: VersionedItem(
+                symbol=merge_vit.symbol,
+                library=merge_vit.library,
+                data=expected,
+                version=merge_vit.version,
+                metadata=merge_vit.metadata,
+                host=merge_vit.host,
+                timestamp=merge_vit.timestamp,
+            ),
+        )
+        read_vit = lib.read("sym")
+        assert_vit_equals_except_data(merge_vit, read_vit)
+        assert_frame_equal(read_vit.data, expected)
+
     # ================================================================================================
     # ================================= TEST INSERT NOT MATCHED ======================================
     # ================================================================================================
@@ -757,6 +803,45 @@ class TestMergeTimeseries:
         monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
+
+    def test_merge_insert_target_is_empty(self, lmdb_library, monkeypatch):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
+        write_vit = lib.write("sym", target)
+
+        source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
+        monkeypatch.setattr(
+            lib.__class__,
+            "merge",
+            lambda *args, **kwargs: VersionedItem(
+                symbol=write_vit.symbol,
+                library=write_vit.library,
+                data=None,
+                version=1,
+                metadata=None,
+                host=write_vit.host,
+                timestamp=write_vit.timestamp + 1,
+            ),
+            raising=False,
+        )
+        merge_vit = lib.merge("sym", source, strategy=MergeStrategy("do_nothing", "insert"))
+        expected = source
+        monkeypatch.setattr(
+            lib,
+            "read",
+            lambda *args, **kwargs: VersionedItem(
+                symbol=merge_vit.symbol,
+                library=merge_vit.library,
+                data=expected,
+                version=merge_vit.version,
+                metadata=merge_vit.metadata,
+                host=merge_vit.host,
+                timestamp=merge_vit.timestamp,
+            ),
+        )
+        read_vit = lib.read("sym")
+        assert_vit_equals_except_data(merge_vit, read_vit)
+        assert_frame_equal(read_vit.data, expected)
 
     # ================================================================================================
     # =================================== TEST UPDATE AND INSERT =====================================
@@ -1007,6 +1092,45 @@ class TestMergeTimeseries:
         monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
+
+    def test_merge_update_and_insert_target_is_empty(self, lmdb_library, monkeypatch):
+        lib = lmdb_library
+        target = pd.DataFrame({"a": np.array([], dtype=np.int64)}, index=pd.DatetimeIndex([]))
+        write_vit = lib.write("sym", target)
+
+        source = pd.DataFrame({"a": np.array([1, 2], dtype=np.int64)}, index=pd.date_range("2024-01-01", periods=2))
+        monkeypatch.setattr(
+            lib.__class__,
+            "merge",
+            lambda *args, **kwargs: VersionedItem(
+                symbol=write_vit.symbol,
+                library=write_vit.library,
+                data=None,
+                version=1,
+                metadata=None,
+                host=write_vit.host,
+                timestamp=write_vit.timestamp + 1,
+            ),
+            raising=False,
+        )
+        merge_vit = lib.merge("sym", source)
+        expected = source
+        monkeypatch.setattr(
+            lib,
+            "read",
+            lambda *args, **kwargs: VersionedItem(
+                symbol=merge_vit.symbol,
+                library=merge_vit.library,
+                data=expected,
+                version=merge_vit.version,
+                metadata=merge_vit.metadata,
+                host=merge_vit.host,
+                timestamp=merge_vit.timestamp,
+            ),
+        )
+        read_vit = lib.read("sym")
+        assert_vit_equals_except_data(merge_vit, read_vit)
+        assert_frame_equal(read_vit.data, expected)
 
     class TestMergeRowRange:
         """Not implemented yet"""
