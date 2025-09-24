@@ -1153,7 +1153,7 @@ def test_filter_unfilterable_data(lmdb_version_store_v1, empty, data, sym):
         lib.read(sym, query_builder=q)
     else:
         q = q[q["col"] == 0]
-        with pytest.raises(InternalException):
+        with pytest.raises(SchemaException):
             lib.read(sym, query_builder=q)
 
 
@@ -1163,7 +1163,7 @@ def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data):
     lib = lmdb_version_store_v1
     lib.write(sym, data, recursive_normalizers=True)
 
-    with pytest.raises(InternalException):
+    with pytest.raises(SchemaException):
         if head:
             lib.head(sym)
         else:
