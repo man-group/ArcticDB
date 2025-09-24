@@ -167,15 +167,15 @@ def test_write_unsupported_types(lmdb_version_store_arrow):
     table = pa.table({"col": pa.array([0, 1], pa.float16())})
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
-    assert "float16" in str(e.value)
+    assert "unsupported" in str(e.value).lower()
     table = pa.table({"col": pa.array(["hello", "there"], pa.string())})
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
-    assert "string" in str(e.value).lower()
+    assert "unsupported" in str(e.value).lower()
     table = pa.table({"col": pa.array(["hello", "there"], pa.large_string())})
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
-    assert "string" in str(e.value).lower()
+    assert "unsupported" in str(e.value).lower()
 
 
 def test_basic_write_bools(lmdb_version_store_arrow):

@@ -136,7 +136,7 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
         return DataType::NANOSECONDS_UTC64;
     default:
         schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                "Unsupported Arrow data type provided `{}`", std::format("{}", arrow_type)
+                "Unsupported Arrow data type provided `{}`", sparrow::data_type_to_format(arrow_type)
         );
         return DataType::UNKNOWN; // Prevent "control reaches end of non-void function"
     }

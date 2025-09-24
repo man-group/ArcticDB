@@ -233,25 +233,25 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
     int64_t write_window = write_window_size();
-    return folly::collect(
-                   folly::window(
-                           std::move(slice_and_rowcount),
-                           [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
-                               return async::submit_cpu_task(WriteToSegmentTask(
-                                                                     frame,
-                                                                     slice.first,
-                                                                     slicing,
-                                                                     get_partial_key_gen(frame, key),
-                                                                     slice.second,
-                                                                     frame->index,
-                                                                     sparsify_floats
-                                                             ))
-                                       .then([sink, de_dup_map](auto&& ks) { return sink->async_write(ks, de_dup_map); }
-                                       );
-                           },
-                           write_window
-                   )
-    )
+    return folly::collect(folly::window(
+                                  std::move(slice_and_rowcount),
+                                  [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice
+                                  ) {
+                                      return async::submit_cpu_task(WriteToSegmentTask(
+                                                                            frame,
+                                                                            slice.first,
+                                                                            slicing,
+                                                                            get_partial_key_gen(frame, key),
+                                                                            slice.second,
+                                                                            frame->index,
+                                                                            sparsify_floats
+                                                                    ))
+                                              .then([sink, de_dup_map](auto&& ks) {
+                                                  return sink->async_write(ks, de_dup_map);
+                                              });
+                                  },
+                                  write_window
+                          ))
             .via(&async::io_executor());
 }
 
