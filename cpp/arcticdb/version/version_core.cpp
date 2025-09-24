@@ -1213,6 +1213,7 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
 
 void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query) {
     // To remain backward compatibility, pending new major release to merge into below section
+    // Ticket: 18038782559
     bool is_pickled = pipeline_context->norm_meta_ && pipeline_context->is_pickled();
     util::check(
             !is_pickled ||
