@@ -759,7 +759,7 @@ class TestMergeTimeseries:
         assert_frame_equal(received, expected)
 
     # ================================================================================================
-    # ======================================== TEST UPSERT ===========================================
+    # =================================== TEST UPDATE AND INSERT =====================================
     # ================================================================================================
 
     @pytest.mark.parametrize(
@@ -773,7 +773,7 @@ class TestMergeTimeseries:
             MergeStrategy(MergeAction.UPDATE, "insert"),
         ),
     )
-    def test_upsert(self, lmdb_library, monkeypatch, strategy):
+    def test_update_and_insert(self, lmdb_library, monkeypatch, strategy):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
@@ -856,7 +856,7 @@ class TestMergeTimeseries:
         "slicing_policy",
         [{"rows_per_segment": 2}, {"columns_per_segment": 2}, {"rows_per_segment": 2, "columns_per_segment": 2}],
     )
-    def test_upsert_with_slicing(self, lmdb_library_factory, monkeypatch, slicing_policy):
+    def test_update_and_insert_with_slicing(self, lmdb_library_factory, monkeypatch, slicing_policy):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
             {"a": [1, 2, 3, 4, 5], "b": [1.0, 2.0, 3.0, 4.0, 5.0], "c": ["a", "b", "c", "d", "e"]},
@@ -906,7 +906,7 @@ class TestMergeTimeseries:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    def test_upsert_on_index_and_column(self, lmdb_library, monkeypatch):
+    def test_update_and_insert_on_index_and_column(self, lmdb_library, monkeypatch):
         lib = lmdb_library
         target = pd.DataFrame(
             {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
@@ -945,7 +945,7 @@ class TestMergeTimeseries:
 
         assert_frame_equal(received, expected)
 
-    def test_upsert_multiple_columns(self, lmdb_library, monkeypatch):
+    def test_update_and_insert_multiple_columns(self, lmdb_library, monkeypatch):
         lib = lmdb_library
         target = pd.DataFrame(
             {
