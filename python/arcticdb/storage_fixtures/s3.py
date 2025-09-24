@@ -815,8 +815,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # so this guarantees a unique bucket name
         return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
 
-    def _start_server(self):
-        port = self.port = get_ephemeral_port(2)
+    def _start_server(self, seed=2):
+        port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
@@ -850,9 +850,9 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
 
     def _safe_enter(self):
-        for _ in range(5):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
+        for i in range(5):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
             try:
-                self._start_server()
+                self._start_server(2 + i)
                 self._s3_admin = self._boto(service="s3", key=self.default_key)
                 get_buckets_check(self._s3_admin)
                 logger.info("Moto S3 STARTED!!!")
