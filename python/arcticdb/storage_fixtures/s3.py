@@ -735,17 +735,17 @@ def get_buckets_check(s3_client):
     try:
         response = s3_client.list_buckets()
         buckets = response.get("Buckets", [])
-        
+
         if buckets:
-            print("Buckets found:")
+            logger.warning("Buckets found:")
             for bucket in buckets:
-                print(f"- {bucket['Name']}")
+                logger.warning(f"- {bucket['Name']}")
         else:
-            print("Client is alive, but no buckets exist.")
+            logger.warning("Client is alive, but no buckets exist.")
     except botocore.exceptions.EndpointConnectionError:
-        print("Could not connect to Moto S3 server. Is it running?")
+        logger.warning("Could not connect to Moto S3 server. Is it running?")
     except botocore.exceptions.ClientError as e:
-        print(f"Client error: {e.response['Error']['Message']}")
+        logger.warning(f"Client error: {e.response['Error']['Message']}")
 
 
 def create_bucket(s3_client, bucket_name, max_retries=15):
@@ -760,6 +760,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
             logger.warning(f"Error: {e.response['Error']['Message']}")
             get_buckets_check(s3_client)
             import pprint
+
             pprint.pprint(e.response)
             time.sleep(1)
 
