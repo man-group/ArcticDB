@@ -725,7 +725,7 @@ class TestMergeTimeseries:
         lib.write("sym", target)
 
         source = pd.DataFrame(
-            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            {"a": [1, 2, 4], "b": [1.0, 2.0, 4.0]},
             index=pd.DatetimeIndex(
                 [
                     pd.Timestamp("2024-01-01"),  # Matches first row of target
@@ -737,6 +737,12 @@ class TestMergeTimeseries:
 
         monkeypatch.setattr(lib.__class__, "merge", lambda *args, **kwargs: None, raising=False)
         lib.merge("sym", source, strategy=MergeStrategy(MergeAction.DO_NOTHING, MergeAction.INSERT))
+        expected = pd.DataFrame(
+            {"a": [1, 2, 3, 4], "b": [1.0, 2.0, 3.0, 4.0]}, index=pd.date_range("2024-01-01", periods=4)
+        )
+        monkeypatch.setattr(lib, "read", lambda *args, **kwargs: VersionedItem("sym", "lib", expected, 2))
+        received = lib.read("sym").data
+        assert_frame_equal(received, expected)
 
     # ================================================================================================
     # ======================================== TEST UPSERT ===========================================
