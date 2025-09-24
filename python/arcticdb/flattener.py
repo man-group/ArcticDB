@@ -22,7 +22,7 @@ except ImportError:
 from arcticdb import _msgpack_compat
 from arcticdb.log import version as log
 from arcticdb.version_store._custom_normalizers import get_custom_normalizer
-from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNormalizer, _check_valid_name
+from arcticdb.version_store._normalization import MsgPackNormalizer, CompositeNormalizer
 
 
 class Flattener:
@@ -191,7 +191,6 @@ class Flattener:
         for k, v in iterables:
             # Note: It's fine to not worry about the separator given we just use it to form some sort of vaguely
             # readable name in the end when the leaf node is retrieved.
-            _check_valid_name(k)
             str_k = str(k)
             if issubclass(item_type, collections.abc.MutableMapping) and self.SEPARATOR in str_k:
                 raise UnsupportedKeyInDictionary(

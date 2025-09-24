@@ -18,7 +18,6 @@ from arcticdb.util.test import assert_frame_equal
 from arcticdb.exceptions import (
     DataTooNestedException,
     UnsupportedKeyInDictionary,
-    NormalizationException,
     ArcticException as ArcticNativeException,
 )
 from arcticdb_ext.storage import KeyType
@@ -508,7 +507,7 @@ def test_dictionaries_with_custom_keys_that_cannot_roundtrip(lmdb_version_store_
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {CustomClassSeparatorInStr(1): df}
 
-    with pytest.raises(NormalizationException):
+    with pytest.raises(arcticdb_ext.exceptions.UserInputException):
         lib.write("sym", data, recursive_normalizers=True)
 
     assert not lib.has_symbol("sym")
@@ -536,10 +535,37 @@ def test_dictionaries_with_custom_keys(lmdb_version_store_v1):
     df = pd.DataFrame({"d": [1, 2, 3]})
     data = {CustomClass(1): df}
 
-    with pytest.raises(NormalizationException):
-        lib.write("sym", data, recursive_normalizers=True)
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
 
-    assert not lib.has_symbol("sym")
+    actual_data = lib.read("sym").data
+
+    assert len(actual_data) == 1
+    assert_frame_equal(actual_data["CustomClassStr1"], df)
+
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert [i.id for i in index_keys] == ["sym__CustomClassStr1"]
+    assert len(data_keys) == 1
+
+    assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.VERSION, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")) == 1
+    assert len(lt.find_keys_for_id(KeyType.TABLE_INDEX, "sym")) == 0
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 1
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__CustomClassStr1"
 
 
 def test_list_with_custom_elements(lmdb_version_store_v1):
@@ -585,17 +611,46 @@ def test_list_with_custom_elements(lmdb_version_store_v1):
 
 
 def test_dictionaries_with_non_str_keys(lmdb_version_store_v1):
+    """We seem to inadvertently coerce dictionary keys to strings. We should change this so we either round trup correctly
+    or raise, but this test records the current behaviour."""
     lib = lmdb_version_store_v1
     df = pd.DataFrame({"d": [1, 2, 3]})
 
     data = {1: df, None: 1, 1.1: df, False: df}
+    lib.write("sym", data, recursive_normalizers=True)
+    assert lib.get_info("sym")["type"] != "pickled"  # check we're testing the right feature!
 
-    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
-    with pytest.raises(NormalizationException):
-        lib.write("sym", data, recursive_normalizers=True)
+    actual_data = lib.read("sym").data
+    assert len(actual_data) == 4
+    assert_frame_equal(actual_data["1.1"], df)
+    assert actual_data["None"] == 1
+    assert_frame_equal(actual_data["1.1"], df)
+    assert_frame_equal(actual_data["False"], df)
 
-    assert lib.list_symbols() == []
-    assert lib.has_symbol("sym") is False
+    lt = lib.library_tool()
+
+    assert len(lt.find_keys(KeyType.VERSION_REF)) == 1
+    assert len(lt.find_keys(KeyType.VERSION)) == 1
+    assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
+    index_keys = lt.find_keys(KeyType.TABLE_INDEX)
+    assert [i.id for i in index_keys] == ["sym__1", "sym__1.1", "sym__False"]
+    data_keys = lt.find_keys(KeyType.TABLE_DATA)
+    assert len(data_keys) == 3
+
+    # Check that the multi key structure is correct
+    multi_key = lt.find_keys_for_id(KeyType.MULTI_KEY, "sym")[0]
+    assert multi_key.version_id == 0
+    segment = lt.read_to_dataframe(multi_key)
+    assert segment.shape[0] == 3
+    contents = segment.iloc[0].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1"
+    contents = segment.iloc[1].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__1.1"
+    contents = segment.iloc[2].to_dict()
+    assert contents["key_type"] == KeyType.TABLE_INDEX.value
+    assert contents["stream_id"] == b"sym__False"
 
 
 DataFrameHolder = namedtuple("DataFrameHolder", ["contents"])
@@ -868,12 +923,10 @@ def test_write_recursive_norm_bool_named_key(lmdb_version_store):
 
     data = {True: df, "l": [1, 2, 3], "m": {"n": "o", "p": df}, "p": df}
 
-    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
-    with pytest.raises(ArcticNativeException):
-        lmdb_version_store.write(symbol, data, recursive_normalizers=True)
+    lmdb_version_store.write(symbol, data, recursive_normalizers=True)
 
-    assert lmdb_version_store.list_symbols() == []
-    assert lmdb_version_store.has_symbol(symbol) is False
+    res = lmdb_version_store.read(symbol).data
+    assert_frame_equal(res["True"], df)
 
 
 def test_write_recursive_norm_bool_named_columns(lmdb_version_store):
