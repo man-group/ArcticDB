@@ -78,10 +78,13 @@ Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col
     const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
     if (!is_time_type(source_column.type().data_type()) ||
         source_column.type().data_type() == DataType::NANOSECONDS_UTC64) {
+        auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
         ChunkedBuffer chunked_buffer;
-        if (source_column.data().buffer().bytes_within_one_block(first_byte, bytes)) {
-            chunked_buffer.add_external_block(source_column.data().buffer().bytes_at(first_byte, bytes), bytes);
+        if (byte_blocks_at.size() == 1) {
+            // All required bytes lie within a single block, so we can avoid a copy by adding an external block
+            chunked_buffer.add_external_block(byte_blocks_at.front().first, bytes);
         } else {
+            // Required bytes span multiple blocks, so we need to memcpy them into a single block for encoding
             chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
         }
         return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
@@ -230,25 +233,25 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
     int64_t write_window = write_window_size();
-    return folly::collect(folly::window(
-                                  std::move(slice_and_rowcount),
-                                  [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice
-                                  ) {
-                                      return async::submit_cpu_task(WriteToSegmentTask(
-                                                                            frame,
-                                                                            slice.first,
-                                                                            slicing,
-                                                                            get_partial_key_gen(frame, key),
-                                                                            slice.second,
-                                                                            frame->index,
-                                                                            sparsify_floats
-                                                                    ))
-                                              .then([sink, de_dup_map](auto&& ks) {
-                                                  return sink->async_write(ks, de_dup_map);
-                                              });
-                                  },
-                                  write_window
-                          ))
+    return folly::collect(
+                   folly::window(
+                           std::move(slice_and_rowcount),
+                           [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
+                               return async::submit_cpu_task(WriteToSegmentTask(
+                                                                     frame,
+                                                                     slice.first,
+                                                                     slicing,
+                                                                     get_partial_key_gen(frame, key),
+                                                                     slice.second,
+                                                                     frame->index,
+                                                                     sparsify_floats
+                                                             ))
+                                       .then([sink, de_dup_map](auto&& ks) { return sink->async_write(ks, de_dup_map); }
+                                       );
+                           },
+                           write_window
+                   )
+    )
             .via(&async::io_executor());
 }
 

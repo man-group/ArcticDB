@@ -329,11 +329,6 @@ class ChunkedBufferImpl {
         return const_cast<ChunkedBufferImpl*>(this)->bytes_at(pos_bytes, required);
     }
 
-    bool bytes_within_one_block(size_t pos_bytes, size_t required) const {
-        auto [block, pos, _] = block_and_offset(pos_bytes);
-        return pos + required <= block->bytes();
-    }
-
     uint8_t& operator[](size_t pos_bytes) {
         auto [block, pos, _] = block_and_offset(pos_bytes);
         util::check(
