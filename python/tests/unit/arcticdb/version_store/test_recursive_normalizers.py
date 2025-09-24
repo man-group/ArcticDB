@@ -15,7 +15,11 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
+from arcticdb.exceptions import (
+    DataTooNestedException,
+    UnsupportedKeyInDictionary,
+    ArcticException as ArcticNativeException,
+)
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb_ext.stream as adb_stream
@@ -909,3 +913,54 @@ for key in data.keys():
                 ],
                 dfs=dfs,
             )
+
+
+def test_write_recursive_norm_bool_named_key(lmdb_version_store):
+    symbol = "bad_write"
+    ts = pd.Timestamp("2020-01-01")
+
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=pd.date_range(ts, periods=3))
+
+    data = {True: df, "l": [1, 2, 3], "m": {"n": "o", "p": df}, "p": df}
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, data, recursive_normalizers=True)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False
+
+
+def test_write_recursive_norm_bool_named_columns(lmdb_version_store):
+    symbol = "bad_write"
+    ts = pd.Timestamp("2020-01-01")
+
+    df = pd.DataFrame({True: [1, 2, 3]}, index=pd.date_range(ts, periods=3))
+
+    data = {"c": df, "l": [1, 2, 3], "m": {"n": "o", "p": df}, "p": df}
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, data, recursive_normalizers=True)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False
+
+
+@pytest.mark.parametrize(
+    "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
+)
+def test_write_recursive_norm_bool_named_index(lmdb_version_store, idx):
+    symbol = "bad_write"
+
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
+    df.index.name = True
+
+    data = {"col": df, "l": [1, 2, 3], "m": {"n": "o", "p": df}, "p": df}
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, data, recursive_normalizers=True)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False

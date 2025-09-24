@@ -18,6 +18,8 @@ import pandas as pd
 import numpy as np
 import string
 
+from arcticdb_ext.exceptions import ArcticException as ArcticNativeException
+
 from arcticdb.options import LibraryOptions
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
@@ -555,3 +557,21 @@ def test_update_batch_different_updates_dynamic_schema(custom_library):
         ArcticSymbolSimulator.assert_frame_equal_rebuild_index_first(
             expected_results[result.symbol], read_data[result.symbol].data
         )
+
+
+@pytest.mark.parametrize(
+    "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
+)
+def test_update_bool_named_col(lmdb_version_store_dynamic_schema, idx):
+    symbol = "bad_append"
+
+    initial = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
+    lmdb_version_store_dynamic_schema.write(symbol, initial)
+
+    bad_df = pd.DataFrame({True: [4, 5, 6]}, index=idx)
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store_dynamic_schema.update(symbol, bad_df)
+
+    assert_frame_equal(lmdb_version_store_dynamic_schema.read(symbol).data, initial)
