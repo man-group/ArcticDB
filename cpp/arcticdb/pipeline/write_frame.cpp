@@ -109,11 +109,11 @@ Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col
                     [factor](timestamp ts) {
                         // This bounds check in the tight loop adds ~33% to the execution time, but we might still want
                         // to add it in as overflow would produce very confusing results
-//                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-//                                ts < std::numeric_limits<timestamp>::max() / factor &&
-//                                        ts > std::numeric_limits<timestamp>::min() / factor,
-//                                "Timestamp provided outside of ArcticDB's supported range"
-//                        );
+                        //                        user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        //                                ts < std::numeric_limits<timestamp>::max() / factor &&
+                        //                                        ts > std::numeric_limits<timestamp>::min() / factor,
+                        //                                "Timestamp provided outside of ArcticDB's supported range"
+                        //                        );
                         return factor * ts;
                     }
             );
