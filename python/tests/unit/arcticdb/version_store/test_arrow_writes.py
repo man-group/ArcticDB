@@ -164,7 +164,7 @@ def test_batch_append(lmdb_version_store_arrow):
 def test_write_unsupported_types(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_unsupported_types"
-    table = pa.table({"col": pa.array([0, 1], pa.float16())})
+    table = pa.table({"col": pa.array(np.arange(2, dtype=np.float16), pa.float16())})
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
     assert "unsupported" in str(e.value).lower()
@@ -612,8 +612,11 @@ def test_write_with_out_of_range_timestamps(lmdb_version_store_arrow):
     sym = "test_write_with_out_of_range_timestamps"
     table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp("s")),
-            "col": pa.array([pd.Timestamp("1970-01-04"), pd.Timestamp("2300-01-01")], pa.timestamp("s")),
+            "ts": pa.array([pa.scalar(0, type=pa.timestamp("s")), pa.scalar(1, type=pa.timestamp("s"))]),
+            # 10 billion seconds is 10^19 nanoseconds, which is larger than the max value of an int64
+            "col": pa.array(
+                [pa.scalar(3, type=pa.timestamp("s")), pa.scalar(10_000_000_000, type=pa.timestamp("s"))],
+            ),
         }
     )
     with pytest.raises(UserInputException):
