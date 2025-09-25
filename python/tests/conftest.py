@@ -274,13 +274,11 @@ def test_prefix():
     return "test_bucket_prefix"
 
 
-@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
+@pytest.fixture(scope="function", params=[nfs_backed_s3_storage_factory, s3_no_ssl_storage_factory])
 def s3_and_nfs_storage_bucket(test_prefix, request):
-    with request.param(
-        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
-    ) as factory:
-        with factory.create_fixture() as bucket:
-            yield bucket
+    factory = request.getfixturevalue(request.param)
+    with factory.create_fixture() as bucket:
+        yield bucket
 
 
 @pytest.fixture(scope="session")
@@ -1626,7 +1624,6 @@ def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
     :param rules: dict of mark_name -> list[str | regex]
     """
     for mark_name, patterns in rules.items():
-
         # Deduplication guard
         if item.get_closest_marker(mark_name):
             continue
