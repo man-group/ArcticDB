@@ -749,7 +749,7 @@ def get_buckets_check(s3_client):
     except botocore.exceptions.ClientError as e:
         logger.warning(f"get_buckets_check - Client error: {e.response['Error']['Message']}")
         pprint.pprint(e.response)
-        raise 
+        raise
 
 
 def create_bucket(s3_client, bucket_name, max_retries=15):

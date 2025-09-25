@@ -256,15 +256,21 @@ def s3_no_ssl_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, 
 
 
 @pytest.fixture(scope="session")
-def s3_ssl_disabled_storage_factory() -> Generator[MotoS3StorageFixtureFactory, None, None]:
-    with MotoS3StorageFixtureFactory(use_ssl=False, ssl_test_support=False, bucket_versioning=False) as f:
+def s3_ssl_disabled_storage_factory(test_prefix) -> Generator[MotoS3StorageFixtureFactory, None, None]:
+    with MotoS3StorageFixtureFactory(
+        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
+    ) as f:
         yield f
 
 
 @pytest.fixture(scope="session")
-def nfs_backed_s3_storage_factory() -> Generator[MotoNfsBackedS3StorageFixtureFactory, None, None]:
+def nfs_backed_s3_storage_factory(test_prefix) -> Generator[MotoNfsBackedS3StorageFixtureFactory, None, None]:
     with MotoNfsBackedS3StorageFixtureFactory(
-        use_ssl=False, ssl_test_support=False, bucket_versioning=False, _test_only_is_nfs_layout=True
+        use_ssl=False,
+        ssl_test_support=False,
+        bucket_versioning=False,
+        _test_only_is_nfs_layout=True,
+        default_prefix=test_prefix,
     ) as f:
         yield f
 
@@ -274,13 +280,11 @@ def test_prefix():
     return "test_bucket_prefix"
 
 
-@pytest.fixture(scope="function", params=[MotoNfsBackedS3StorageFixtureFactory, MotoS3StorageFixtureFactory])
-def s3_and_nfs_storage_bucket(test_prefix, request):
-    with request.param(
-        use_ssl=False, ssl_test_support=False, bucket_versioning=False, default_prefix=test_prefix
-    ) as factory:
-        with factory.create_fixture() as bucket:
-            yield bucket
+@pytest.fixture(scope="function", params=["nfs_backed_s3_storage_factory", "s3_ssl_disabled_storage_factory"])
+def s3_and_nfs_storage_bucket(request):
+    factory = request.getfixturevalue(request.param)
+    with factory.create_fixture() as bucket:
+        yield bucket
 
 
 @pytest.fixture(scope="session")
@@ -1626,7 +1630,6 @@ def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
     :param rules: dict of mark_name -> list[str | regex]
     """
     for mark_name, patterns in rules.items():
-
         # Deduplication guard
         if item.get_closest_marker(mark_name):
             continue
