@@ -187,6 +187,11 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             const auto& data_type = data_types.at(idx);
             const auto& array = record_batch->get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
+            schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+                    arrow_array->null_count == 0,
+                    "Column '{}' contains null values, which are not currently supported",
+                    record_batch->names()[idx]
+            );
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
             // arrow_array_buffers.at(0) seems to be the validity bitmap, and may be NULL if there are no null values
             // need to handle it being non-NULL and all 1s though

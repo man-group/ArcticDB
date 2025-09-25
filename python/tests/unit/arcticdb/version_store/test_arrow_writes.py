@@ -270,6 +270,17 @@ def test_write_with_timezone(lmdb_version_store_arrow):
     assert table.equals(received)
 
 
+# TODO: Remove this test and replace with comprehensive sparse data testing as part of 9838111397
+@pytest.mark.parametrize("data", [pa.array([0, None, 1], pa.int64()), pa.array([None, True, False, None], pa.bool_())])
+def test_write_sparse_data(lmdb_version_store_arrow, data):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_sparse_data"
+    table = pa.table({"my_col": data})
+    with pytest.raises(SchemaException) as e:
+        lib.write(sym, table)
+    assert "my_col" in str(e.value)
+
+
 def test_write_with_non_ns_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_non_ns_index"
