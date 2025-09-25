@@ -751,6 +751,7 @@ class ArrowTableNormalizer(Normalizer):
             if norm_meta.arrow_table.has_index:
                 index_column_position = norm_meta.arrow_table.index_column_position
                 if index_column_position != 0 and index_column_position < item.num_columns:
+                    # Verified experimentally that this is zero-copy as the docs do not specify
                     item = item.select(
                         list(range(1, index_column_position + 1))
                         + [0]
