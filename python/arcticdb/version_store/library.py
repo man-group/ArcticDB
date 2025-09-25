@@ -216,6 +216,7 @@ class WritePayload:
     def __repr__(self):
         res = f"WritePayload(symbol={self.symbol}, data_id={id(self.data)}"
         res += f", metadata={self.metadata}" if self.metadata is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column is not None else ""
         res += ")"
         return res
 
@@ -224,6 +225,8 @@ class WritePayload:
         yield self.data
         if self.metadata is not None:
             yield self.metadata
+        if self.index_column is not None:
+            yield self.index_column
 
 
 class WriteMetadataPayload:
@@ -399,11 +402,12 @@ class UpdatePayload:
         self.index_column = index_column
 
     def __repr__(self):
-        return (
-            f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}, metadata={self.metadata}"
-            if self.metadata is not None
-            else f", date_range={self.date_range}" if self.date_range is not None else ""
-        )
+        res = f"UpdatePayload(symbol={self.symbol}, data_id={id(self.data)}"
+        res += f", metadata={self.metadata}" if self.metadata is not None else ""
+        res += f", date_range={self.date_range}" if self.date_range is not None else ""
+        res += f", index_column={self.index_column}" if self.index_column is not None else ""
+        res += ")"
+        return res
 
 
 class LazyDataFrame(QueryBuilder):
