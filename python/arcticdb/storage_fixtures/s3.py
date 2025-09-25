@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import platform
+import pprint
 from tempfile import mkdtemp
 from urllib.parse import urlparse
 import boto3
@@ -731,6 +732,26 @@ def run_gcp_server(port, key_file, cert_file):
     )
 
 
+def get_buckets_check(s3_client):
+    try:
+        response = s3_client.list_buckets()
+        buckets = response.get("Buckets", [])
+
+        if buckets:
+            logger.warning("Buckets found:")
+            for bucket in buckets:
+                logger.warning(f"- {bucket['Name']}")
+        else:
+            logger.warning("Client is alive, but no buckets exist.")
+    except botocore.exceptions.EndpointConnectionError:
+        logger.warning("Could not connect to Moto S3 server. Is it running?")
+        raise
+    except botocore.exceptions.ClientError as e:
+        logger.warning(f"get_buckets_check - Client error: {e.response['Error']['Message']}")
+        pprint.pprint(e.response)
+        raise 
+
+
 def create_bucket(s3_client, bucket_name, max_retries=15):
     for i in range(max_retries):
         try:
@@ -741,6 +762,10 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
             time.sleep(1)
+        except Exception as e:
+            logger.error(f"create_bucket - Error: {e.response['Error']['Message']}")
+            pprint.pprint(e.response)
+            get_buckets_check(s3_client)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -791,10 +816,10 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # We need the unique_id because we have tests that are creating the factory directly
         # and not using the fixtures
         # so this guarantees a unique bucket name
-        return f"test_{bucket_type}_bucket_{self.unique_id}_{self._bucket_id}"
+        return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
 
-    def _start_server(self):
-        port = self.port = get_ephemeral_port(2)
+    def _start_server(self, seed=2):
+        port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
@@ -828,15 +853,20 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
 
     def _safe_enter(self):
-        for _ in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
+        for i in range(5):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
             try:
-                self._start_server()
+                logger.info(f"Attempt to start server - {i}")
+                self._start_server(2 + i)
+                self._s3_admin = self._boto(service="s3", key=self.default_key)
+                get_buckets_check(self._s3_admin)
+                logger.info(f"Moto S3 STARTED!!! on port {self.port}")
                 break
             except AssertionError as e:  # Thrown by wait_for_server_to_come_up
                 sys.stderr.write(repr(e))
                 GracefulProcessUtils.terminate(self._p)
+            except Exception as e:
+                logger.error(f"Error during startup of Moto S3. Trying again. Error: {e}")
 
-        self._s3_admin = self._boto(service="s3", key=self.default_key)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -928,8 +958,8 @@ class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
 
 class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
-    def _start_server(self):
-        port = self.port = get_ephemeral_port(3)
+    def _start_server(self, seed=9):
+        port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
