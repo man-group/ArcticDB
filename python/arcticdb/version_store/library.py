@@ -200,6 +200,9 @@ class WritePayload:
             Data to be written. If data is not of NormalizableType then it will be pickled.
         metadata : Any, default=None
             Optional metadata to persist along with the symbol.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         See Also
         --------
@@ -385,6 +388,9 @@ class UpdatePayload:
         date_range : Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]], default=None
             Restricts the update to the specified range in the stored data. Leaving either bound as ``None`` leaves that
             side of the range open-ended.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
         """
         self.symbol = symbol
         self.data = data
@@ -886,6 +892,9 @@ class Library:
             index will be used as the primary sort column, and the others as secondaries.
         sort_columns:
             Sort the data by specific columns prior to writing.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -967,6 +976,9 @@ class Library:
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -1246,6 +1258,9 @@ class Library:
         validate_index
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -1405,6 +1420,9 @@ class Library:
             modified, even if ``data`` covers a wider date range.
         prune_previous_versions: bool, default=False
             Removes previous (non-snapshotted) versions from the database.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------

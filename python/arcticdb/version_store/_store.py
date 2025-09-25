@@ -653,6 +653,9 @@ class NativeVersionStore:
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
             data to be sorted
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
         kwargs :
             passed through to the write handler
 
@@ -797,6 +800,9 @@ class NativeVersionStore:
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
             on your input DataFrame to see if Pandas believes the data to be sorted
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
         kwargs :
             passed through to the write handler
 
@@ -926,6 +932,9 @@ class NativeVersionStore:
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -1533,7 +1542,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         pickle_on_failure=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[str]] = None,
+        index_column_vector: Optional[List[Optional[str]]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1561,6 +1570,10 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        index_column_vector: Optional[List[Optional[str]]], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
+            i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
 
@@ -1606,7 +1619,7 @@ class NativeVersionStore:
         pickle_on_failure: bool,
         norm_failure_msg: str,
         operation_supports_categoricals: bool = False,
-        index_column_vector: Optional[List[str]] = None,
+        index_column_vector: Optional[List[Optional[str]]] = None,
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
@@ -1650,7 +1663,7 @@ class NativeVersionStore:
         pickle_on_failure=None,
         validate_index: bool = False,
         throw_on_error: bool = True,
-        index_column_vector: Optional[List[str]] = None,
+        index_column_vector: Optional[List[Optional[str]]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1739,7 +1752,7 @@ class NativeVersionStore:
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
         validate_index: bool = False,
-        index_column_vector: Optional[List[str]] = None,
+        index_column_vector: Optional[List[Optional[str]]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1765,6 +1778,10 @@ class NativeVersionStore:
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
             you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+        index_column_vector: Optional[List[Optional[str]]], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
+            i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
 
