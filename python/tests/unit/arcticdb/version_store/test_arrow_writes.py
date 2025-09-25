@@ -281,6 +281,23 @@ def test_write_sparse_data(lmdb_version_store_arrow, data):
     assert "my_col" in str(e.value)
 
 
+@pytest.mark.xfail(reason="Index column position not alway correct yet, issue number 18042073623")
+def test_write_with_index_and_read_with_column_slicing(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_with_index_and_read_with_column_slicing"
+    table = pa.table(
+        {
+            "col1": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
+            "col2": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
+            "col3": pa.Array.from_pandas(pd.date_range("2025-01-05", periods=2), type=pa.timestamp("ns")),
+        }
+    )
+    lib.write(sym, table, index_column="col3")
+    received = lib.read(sym, columns=["col1"]).data
+    expected = table.select([0, 2])
+    assert expected.equals(received)
+
+
 def test_write_with_non_ns_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_non_ns_index"
