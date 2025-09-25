@@ -55,6 +55,23 @@ def test_basic_write(lmdb_version_store_arrow):
     assert received.metadata == metadata
 
 
+def test_write_pandas_df_with_specified_index_column(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_write_pandas_df_with_specified_index_column"
+    df = pd.DataFrame({"col": [0, 1]})
+    lib.write(sym, df, index_column="col")
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
+    df.index = pd.date_range("2025-01-01", periods=2)
+    df.index.name = "ts"
+    lib.write(sym, df, index_column="col")
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
+    lib.write(sym, df, index_column="ts")
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
+
+
 def test_write_arrow_read_pandas_no_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_arrow_read_pandas_no_index"
