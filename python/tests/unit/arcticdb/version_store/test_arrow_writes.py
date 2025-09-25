@@ -55,22 +55,23 @@ def test_basic_write(lmdb_version_store_arrow, type):
     assert received.metadata == metadata
 
 
-@pytest.mark.parametrize("unit", ["us", "ms", "s"])
+@pytest.mark.parametrize("type", [pa.timestamp("us"), pa.timestamp("ms"), pa.timestamp("s")])
 @pytest.mark.parametrize("index_column", [None, "ts"])
-def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, unit, index_column):
+def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, type, index_column):
     lib = lmdb_version_store_arrow
     sym = "test_write_with_non_nanosecond_time_types"
     table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp(unit)),
-            "col": pa.array([pd.Timestamp("1970-01-04"), pd.Timestamp("1970-01-03")], pa.timestamp(unit)),
+            # "ts": pa.array([pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp(unit)),
+            "ts": pa.Array.from_pandas(pd.date_range("1970-01-01", periods=2), type=type),
+            "col": pa.Array.from_pandas(pd.date_range("1970-01-03", periods=2), type=type),
         }
     )
     lib.write(sym, table, index_column=index_column)
     received = lib.read(sym).data
     # TODO: Remove when 9951777416 is done
     for i, name in enumerate(received.column_names):
-        received = received.set_column(i, name, received.column(name).cast(pa.timestamp(unit)))
+        received = received.set_column(i, name, received.column(name).cast(type))
     assert table.equals(received)
 
 
@@ -95,7 +96,7 @@ def test_write_with_index(lmdb_version_store_arrow, index_col_position):
     sym = "test_write_with_index"
     table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([0, 1], pa.int64()),
         }
     )
@@ -111,31 +112,21 @@ def test_write_multiple_record_batches_indexed(lmdb_version_store_arrow):
     sym = "test_write_multiple_record_batches_indexed"
     rb0 = pa.RecordBatch.from_arrays(
         [
-            pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
             pa.array([0, 1], pa.int32()),
         ],
         names=["ts", "col"],
     )
     rb1 = pa.RecordBatch.from_arrays(
         [
-            pa.array(
-                [pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-05")], pa.timestamp("ns")
-            ),
+            pa.Array.from_pandas(pd.date_range("2025-01-03", periods=3), type=pa.timestamp("ns")),
             pa.array([2, 3, 4], pa.int32()),
         ],
         names=["ts", "col"],
     )
     rb2 = pa.RecordBatch.from_arrays(
         [
-            pa.array(
-                [
-                    pd.Timestamp("2025-01-06"),
-                    pd.Timestamp("2025-01-07"),
-                    pd.Timestamp("2025-01-08"),
-                    pd.Timestamp("2025-01-09"),
-                ],
-                pa.timestamp("ns"),
-            ),
+            pa.Array.from_pandas(pd.date_range("2025-01-06", periods=4), type=pa.timestamp("ns")),
             pa.array([5, 6, 7, 8], pa.int32()),
         ],
         names=["ts", "col"],
@@ -264,11 +255,13 @@ def test_write_with_timezone(lmdb_version_store_arrow):
     sym = "test_write_with_timezone"
     table = pa.table(
         {
-            "ts": pa.array(
-                [pd.Timestamp("1970-01-01"), pd.Timestamp("1970-01-02")], pa.timestamp("ns", tz="America/New_York")
+            "ts": pa.Array.from_pandas(
+                pd.date_range("2025-01-01", periods=2, tz="America/New_York"),
+                type=pa.timestamp("ns", tz="America/New_York"),
             ),
-            "col": pa.array(
-                [pd.Timestamp("1970-01-04"), pd.Timestamp("1970-01-03")], pa.timestamp("ns", tz="Europe/Amsterdam")
+            "col": pa.Array.from_pandas(
+                pd.date_range("2025-01-03", periods=2, tz="Europe/Amsterdam"),
+                type=pa.timestamp("ns", tz="Europe/Amsterdam"),
             ),
         }
     )
@@ -282,12 +275,13 @@ def test_write_with_non_ns_index(lmdb_version_store_arrow):
     sym = "test_write_with_non_ns_index"
     table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("s")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("s")),
             "col": pa.array([0, 1], pa.int64()),
         }
     )
     lib.write(sym, table, index_column="ts")
     received = lib.read(sym).data
+    # TODO: Remove when 9951777416 is done
     table = table.set_column(0, "ts", table.column("ts").cast(pa.timestamp("ns")))
     assert table.equals(received)
 
@@ -365,14 +359,14 @@ def test_append_with_index(lmdb_version_store_arrow, existing_data):
     if existing_data:
         write_table = pa.table(
             {
-                "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
                 "col": pa.array([0, 1], pa.int64()),
             }
         )
         lib.write(sym, write_table)
     append_table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([3, 4], pa.int64()),
         }
     )
@@ -390,22 +384,14 @@ def test_update(lmdb_version_store_arrow, existing_data):
     if existing_data:
         write_table = pa.table(
             {
-                "ts": pa.array(
-                    [
-                        pd.Timestamp("2025-01-01"),
-                        pd.Timestamp("2025-01-02"),
-                        pd.Timestamp("2025-01-03"),
-                        pd.Timestamp("2025-01-04"),
-                    ],
-                    pa.timestamp("ns"),
-                ),
+                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
                 "col": pa.array([0, 1, 2, 3], pa.int64()),
             }
         )
         lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([4, 5], pa.int64()),
         }
     )
@@ -415,15 +401,7 @@ def test_update(lmdb_version_store_arrow, existing_data):
     if existing_data:
         expected = pa.table(
             {
-                "ts": pa.array(
-                    [
-                        pd.Timestamp("2025-01-01"),
-                        pd.Timestamp("2025-01-02"),
-                        pd.Timestamp("2025-01-03"),
-                        pd.Timestamp("2025-01-04"),
-                    ],
-                    pa.timestamp("ns"),
-                ),
+                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
                 "col": pa.array([0, 4, 5, 3], pa.int64()),
             }
         )
@@ -445,17 +423,7 @@ def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_r
     reference_sym = "test_update_with_date_range_wider_than_data_reference"
     write_table = pa.table(
         {
-            "ts": pa.array(
-                [
-                    pd.Timestamp("2025-01-01"),
-                    pd.Timestamp("2025-01-02"),
-                    pd.Timestamp("2025-01-03"),
-                    pd.Timestamp("2025-01-04"),
-                    pd.Timestamp("2025-01-05"),
-                    pd.Timestamp("2025-01-06"),
-                ],
-                pa.timestamp("ns"),
-            ),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=6), type=pa.timestamp("ns")),
             "col": pa.array([0, 1, 2, 3, 4, 5], pa.int64()),
         }
     )
@@ -463,7 +431,7 @@ def test_update_with_date_range_wider_than_data(lmdb_version_store_arrow, date_r
     lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([6, 7], pa.int64()),
         }
     )
@@ -487,24 +455,14 @@ def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, dat
     sym = "test_update_with_date_range_narrower_than_data"
     write_table = pa.table(
         {
-            "ts": pa.array(
-                [
-                    pd.Timestamp("2025-01-01"),
-                    pd.Timestamp("2025-01-02"),
-                    pd.Timestamp("2025-01-03"),
-                    pd.Timestamp("2025-01-04"),
-                    pd.Timestamp("2025-01-05"),
-                    pd.Timestamp("2025-01-06"),
-                ],
-                pa.timestamp("ns"),
-            ),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=6), type=pa.timestamp("ns")),
             "col": pa.array([0, 1, 2, 3, 4, 5], pa.int64()),
         }
     )
     lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
-            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([6, 7], pa.int64()),
         }
     )
@@ -522,9 +480,7 @@ def test_staging_without_sorting(version_store_factory, method):
     sym = "test_staging_without_sorting"
     table_0 = pa.table(
         {
-            "ts": pa.array(
-                [pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")
-            ),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=3), type=pa.timestamp("ns")),
             "col0": pa.array([0, 1, 2], pa.uint16()),
             "col1": pa.array([10, 11, 12], pa.uint8()),
             "col2": pa.array([20, 21, 22], pa.uint32()),
@@ -532,9 +488,7 @@ def test_staging_without_sorting(version_store_factory, method):
     )
     table_1 = pa.table(
         {
-            "ts": pa.array(
-                [pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-05"), pd.Timestamp("2025-01-06")], pa.timestamp("ns")
-            ),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-04", periods=3), type=pa.timestamp("ns")),
             "col0": pa.array([3, 4, 5], pa.uint16()),
             "col1": pa.array([13, 14, 15], pa.uint8()),
             "col2": pa.array([23, 24, 25], pa.uint32()),
@@ -568,9 +522,7 @@ def test_staging_with_sorting(version_store_factory):
     sym = "test_staging_with_sorting"
     table_0 = pa.table(
         {
-            "ts": pa.array(
-                [pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")
-            ),
+            "ts": pa.array([3, 1, 2], pa.timestamp("ns")),
             "col0": pa.array([0, 1, 2], pa.uint16()),
             "col1": pa.array([10, 11, 12], pa.uint8()),
             "col2": pa.array([20, 21, 22], pa.uint32()),
@@ -578,9 +530,7 @@ def test_staging_with_sorting(version_store_factory):
     )
     table_1 = pa.table(
         {
-            "ts": pa.array(
-                [pd.Timestamp("2025-01-04"), pd.Timestamp("2025-01-06"), pd.Timestamp("2025-01-05")], pa.timestamp("ns")
-            ),
+            "ts": pa.array([4, 6, 5], pa.timestamp("ns")),
             "col0": pa.array([3, 4, 5], pa.uint16()),
             "col1": pa.array([13, 14, 15], pa.uint8()),
             "col2": pa.array([23, 24, 25], pa.uint32()),
@@ -638,7 +588,7 @@ def test_batch_write(lmdb_version_store_arrow):
     df_1 = pd.DataFrame({"col1": np.arange(2, 5, dtype=np.int32)})
     table_2 = pa.table(
         {
-            "ts": pa.array([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=3), type=pa.timestamp("ns")),
             "col2": pa.array([5, 6, 7], pa.int64()),
         }
     )
@@ -657,14 +607,14 @@ def test_batch_append(lmdb_version_store_arrow):
     df_1 = pd.DataFrame({"col1": np.arange(2, 5, dtype=np.int32)})
     table_2 = pa.table(
         {
-            "ts": pa.array([pd.Timestamp(0), pd.Timestamp(1), pd.Timestamp(2)], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=3), type=pa.timestamp("ns")),
             "col2": pa.array([5, 6, 7], pa.int64()),
         }
     )
     lib.batch_write(["sym0", "sym1"], [table_0, df_1], index_column_vector=[None, None, "ts"])
     table_2 = pa.table(
         {
-            "ts": pa.array([pd.Timestamp(3), pd.Timestamp(4), pd.Timestamp(5)], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-04", periods=3), type=pa.timestamp("ns")),
             "col2": pa.array([5, 6, 7], pa.int64()),
         }
     )
@@ -696,7 +646,7 @@ def test_write_arrow_read_pandas_with_index(lmdb_version_store_arrow):
     table = pa.table(
         {
             "col": pa.array([0, 1], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
         }
     )
     lib.write(sym, table, index_column="ts")
@@ -776,10 +726,14 @@ def test_arrow_writes_hypothesis(
     data = {}
     for idx, supported_type in enumerate(supported_types):
         if idx == index_position:
-            data["ts"] = pa.array(np.arange(0, df_length, dtype="datetime64[ns]"), pa.timestamp("ns"))
+            data["ts"] = pa.Array.from_pandas(
+                pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
+            )
         data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)
     if index_position == num_supported_types:
-        data["ts"] = pa.array(np.arange(0, df_length, dtype="datetime64[ns]"), pa.timestamp("ns"))
+        data["ts"] = pa.Array.from_pandas(
+            pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
+        )
     original_table = pa.table(data)
     # original_table.to_batches with max_chunksize creates a zero copy view, take actually copies the data
     max_chunksize = max((df_length + max_record_batches) // max_record_batches, 1)
@@ -793,7 +747,7 @@ def test_arrow_writes_hypothesis(
     assert table.equals(original_table)
     lib.write(sym, table, index_column="ts")
     received = lib.read(sym).data
-    # Remove this when non-nanosecond timestamp columns have their type roundtripped correctly
+    # TODO: Remove when 9951777416 is done
     for i, name in enumerate(table.column_names):
         if "timestamp" in name:
             table = table.set_column(i, name, table.column(name).cast(pa.timestamp("ns")))

@@ -142,19 +142,19 @@ def test_basic_modifications(lmdb_library, allow_arrow_input):
     write_table = pa.table(
         {
             "col": pa.array([1, 2], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
         }
     )
     append_table = pa.table(
         {
             "col": pa.array([3, 4], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
         }
     )
     update_table = pa.table(
         {
             "col": pa.array([5, 6], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
         }
     )
     if allow_arrow_input:
@@ -165,15 +165,7 @@ def test_basic_modifications(lmdb_library, allow_arrow_input):
         expected = pa.table(
             {
                 "col": pa.array([1, 5, 6, 4], pa.int64()),
-                "ts": pa.array(
-                    [
-                        pd.Timestamp("2025-01-01"),
-                        pd.Timestamp("2025-01-02"),
-                        pd.Timestamp("2025-01-03"),
-                        pd.Timestamp("2025-01-04"),
-                    ],
-                    pa.timestamp("ns"),
-                ),
+                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
             }
         )
         assert expected.equals(received)
@@ -195,19 +187,19 @@ def test_batch_modifications(lmdb_library, allow_arrow_input):
     write_table = pa.table(
         {
             "col": pa.array([1, 2], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
         }
     )
     append_table = pa.table(
         {
             "col": pa.array([3, 4], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
         }
     )
     update_table = pa.table(
         {
             "col": pa.array([5, 6], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-02"), pd.Timestamp("2025-01-03")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
         }
     )
     if allow_arrow_input:
@@ -218,15 +210,7 @@ def test_batch_modifications(lmdb_library, allow_arrow_input):
         expected = pa.table(
             {
                 "col": pa.array([1, 5, 6, 4], pa.int64()),
-                "ts": pa.array(
-                    [
-                        pd.Timestamp("2025-01-01"),
-                        pd.Timestamp("2025-01-02"),
-                        pd.Timestamp("2025-01-03"),
-                        pd.Timestamp("2025-01-04"),
-                    ],
-                    pa.timestamp("ns"),
-                ),
+                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
             }
         )
         assert expected.equals(received)
@@ -249,7 +233,7 @@ def test_write_pickle(lmdb_library, batch, allow_arrow_input):
     table = pa.table(
         {
             "col": pa.array([1, 2], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
         }
     )
     if batch:
@@ -275,13 +259,13 @@ def test_stage(lmdb_library, allow_arrow_input):
     table_0 = pa.table(
         {
             "col": pa.array([1, 2], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
         }
     )
     table_1 = pa.table(
         {
             "col": pa.array([3, 4], pa.int64()),
-            "ts": pa.array([pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")], pa.timestamp("ns")),
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
         }
     )
     if allow_arrow_input:
@@ -292,15 +276,7 @@ def test_stage(lmdb_library, allow_arrow_input):
         expected = pa.table(
             {
                 "col": pa.array([1, 2, 3, 4], pa.int64()),
-                "ts": pa.array(
-                    [
-                        pd.Timestamp("2025-01-01"),
-                        pd.Timestamp("2025-01-02"),
-                        pd.Timestamp("2025-01-03"),
-                        pd.Timestamp("2025-01-04"),
-                    ],
-                    pa.timestamp("ns"),
-                ),
+                "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
             }
         )
         assert expected.equals(received)
