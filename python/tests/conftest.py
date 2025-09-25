@@ -274,7 +274,7 @@ def test_prefix():
     return "test_bucket_prefix"
 
 
-@pytest.fixture(scope="function", params=[nfs_backed_s3_storage_factory, s3_no_ssl_storage_factory])
+@pytest.fixture(scope="function", params=["nfs_backed_s3_storage_factory", "s3_no_ssl_storage_factory"])
 def s3_and_nfs_storage_bucket(test_prefix, request):
     factory = request.getfixturevalue(request.param)
     with factory.create_fixture() as bucket:
