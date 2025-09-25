@@ -1246,10 +1246,11 @@ void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_cont
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
     bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
     if (!is_query_empty) {
-        if (is_pickled) {
-            internal::raise<ErrorCode::E_RUNTIME_ERROR>("Cannot filter pickled data"); // Pending major release to change to E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA
-        } else if (pipeline_context->multi_key_) {
-            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>("Cannot filter recursively normalized data");
+        // Exception for filterig pickled data is skipped for now for backward compatibility
+        if (pipeline_context->multi_key_) {
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                    "Cannot filter recursively normalized data"
+            );
         } else if (is_numpy_array) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>("Cannot filter numpy array");
         }
@@ -1974,6 +1975,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
     const bool direct_read = read_query->clauses_.empty();
     if (!direct_read) {
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
+        util::check_rte(!pipeline_context->is_pickled(), "Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
                 .thenValue([store, pipeline_context, &read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
                     return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
