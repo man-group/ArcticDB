@@ -726,6 +726,22 @@ def test_prune_previous_versions_append_batch(basic_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
 
 
+def test_batch_append_after_delete_upsert(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.write("sym1", 1)
+    lib.write("sym1", 1)
+    lib.batch_delete_symbols(["sym", "sym1"])
+
+    df = sample_dataframe()
+    df1 = sample_dataframe()
+    results = lib.batch_append(["sym", "sym1"], [df, df1])
+    assert results[0].version == 1
+    assert results[1].version == 2
+    assert_frame_equal(lib.read("sym").data, df)
+    assert_frame_equal(lib.read("sym1").data, df1)
+
+
 @pytest.mark.storage
 def test_deleting_unknown_symbol(basic_store, symbol):
     df = sample_dataframe()
