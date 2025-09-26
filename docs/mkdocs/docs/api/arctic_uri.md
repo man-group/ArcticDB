@@ -47,7 +47,7 @@ Please refer to [Azure](https://learn.microsoft.com/en-us/azure/storage/common/s
 | SharedAccessSignature | Shared Access Signature for authentication |
 | EndpointSuffix | Suffix of the endpoint |
 
-### Additional options specific for ArcticDB:;
+### Additional options specific for ArcticDB
 | Option        | Description   |
 |---------------|---------------|
 | Container     | Azure container for blobs |
