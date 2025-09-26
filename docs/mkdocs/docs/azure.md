@@ -54,3 +54,5 @@ connection_string = '<CONNECTION_STRING>'
 ca_cert_path = '<CA_CERT_PATH>'
 arctic = adb.Arctic(f"azure://{connection_string};Container=data;CA_cert_path={ca_cert_path}")
 ```
+
+Please check the [URI manual](https://docs.arcticdb.io/latest/api/arctic_uri/#azure) for more deatils about Azure Conncetion String

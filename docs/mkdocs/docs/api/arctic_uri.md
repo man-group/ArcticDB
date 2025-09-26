@@ -37,8 +37,17 @@ Please refer to [Azure](https://learn.microsoft.com/en-us/azure/storage/common/s
 
 `options` is a string that specifies connection specific options as `<name>=<value>` pairs joined with `;` (the final key value pair should not include a trailing `;`).
 
-Additional options specific for ArcticDB:
+### Notable options
+| Option        | Description   |
+|---------------|---------------|
+| DefaultEndpointsProtocol |  Indicate whether the connection to the storage account through https or http |
+| AccountName | Name of the storage account |
+| AccountKey | Access key of the storage account |
+| BlobEndpoint | Endpoint of the storage account; Usually this should end with `blob.core.windows.net` |
+| SharedAccessSignature | Shared Access Signature for authentication |
+| EndpointSuffix | Suffix of the endpoint |
 
+### Additional options specific for ArcticDB:;
 | Option        | Description   |
 |---------------|---------------|
 | Container     | Azure container for blobs |
@@ -46,6 +55,15 @@ Additional options specific for ArcticDB:
 | CA_cert_path  | (Linux platform only) Azure CA certificate path. If not set, python ``ssl.get_default_verify_paths().cafile`` will be used. If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see [here](https://github.com/Azure/azure-sdk-for-cpp/issues/4738). For example, `Failed to iterate azure blobs 'C' 0:`.|
 | CA_cert_dir   | (Linux platform only) Azure CA certificate directory. If not set, python ``ssl.get_default_verify_paths().capath`` will be used. Certificates can only be used if corresponding hash files [exist](https://www.openssl.org/docs/man1.0.2/man3/SSL_CTX_load_verify_locations.html). If the certificate cannot be found in the provided path, an Azure exception with no meaningful error code will be thrown. For more details, please see [here](https://github.com/Azure/azure-sdk-for-cpp/issues/4738). For example, `Failed to iterate azure blobs 'C' 0:`.|
 
+### Example
+
+#### With Access Key Authentication
+`azure://DefaultEndpointsProtocol=https;AccountName=arcticdb;AccountKey=KEY;EndpointSuffix=core.windows.net;Container=test`
+
+#### With Shared Access Signature Authentication
+`azure://BlobEndpoint=https://arcticdb.blob.core.windows.net/;SharedAccessSignature=KEY;Container=test`
+
+### Notes
 For non-Linux platforms, neither `CA_cert_path` nor `CA_cert_dir` may be set. Please set CA certificate related options using operating system settings.
 For Windows, please see [here](https://learn.microsoft.com/en-us/skype-sdk/sdn/articles/installing-the-trusted-root-certificate)
 
