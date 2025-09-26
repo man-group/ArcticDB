@@ -31,7 +31,7 @@ from arcticdb.util.test import (
     generic_filter_test_strings,
     generic_filter_test_nans,
     unicode_symbols,
-    equals
+    equals,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 
