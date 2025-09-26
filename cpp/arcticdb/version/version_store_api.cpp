@@ -654,6 +654,24 @@ VersionedItem PythonVersionStore::append(
     );
 }
 
+VersionedItem PythonVersionStore::merge(
+        const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
+        bool prune_previous_versions, const py::tuple& py_strategy, const std::vector<std::string>& on,
+        bool match_on_timeseries_index
+) {
+    const MergeStrategy strategy{
+            .matched = py_strategy[0].cast<MergeAction>(), .not_matched_by_target = py_strategy[1].cast<MergeAction>()
+    };
+    return merge_internal(
+            stream_id,
+            convert::py_ndf_to_frame(stream_id, source, norm, user_meta, cfg().write_options().empty_types()),
+            prune_previous_versions,
+            strategy,
+            on,
+            match_on_timeseries_index
+    );
+}
+
 VersionedItem PythonVersionStore::update(
         const StreamId& stream_id, const UpdateQuery& query, const py::tuple& item, const py::object& norm,
         const py::object& user_meta, bool upsert, bool dynamic_schema, bool prune_previous_versions

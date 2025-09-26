@@ -25,6 +25,7 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/util/pybind_mutex.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>
+#include <arcticdb/version/merge_options.hpp>
 
 namespace arcticdb::version_store {
 
@@ -240,6 +241,12 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     py::enum_<OutputFormat>(version, "InternalOutputFormat")
             .value("PANDAS", OutputFormat::PANDAS)
             .value("ARROW", OutputFormat::ARROW);
+
+    py::enum_<MergeAction>(version, "MergeAction")
+            .value("DO_NOTHING", MergeAction::DO_NOTHING)
+            .value("UPDATE", MergeAction::UPDATE)
+            .value("INSERT", MergeAction::INSERT)
+            .export_values();
 
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
             .def(py::init())
@@ -632,6 +639,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::append,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Append a dataframe to the most recent version")
+            .def("merge",
+                 &PythonVersionStore::merge,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Merge a dataframe into the most recent version")
             .def("append_incomplete",
                  &PythonVersionStore::append_incomplete,
                  py::call_guard<SingleThreadMutexHolder>(),

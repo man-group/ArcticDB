@@ -411,6 +411,7 @@ set(arcticdb_srcs
         version/version_store_api.hpp
         version/version_store_objects.hpp
         version/version_utils.hpp
+        version/merge_options.hpp
         # CPP files
         arrow/arrow_handlers.cpp
         arrow/arrow_output_frame.cpp

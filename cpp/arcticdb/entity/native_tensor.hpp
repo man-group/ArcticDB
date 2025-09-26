@@ -14,6 +14,7 @@
 
 // for std::accumulate
 #include <numeric>
+#include <span>
 
 #include <pybind11/numpy.h>
 
@@ -144,6 +145,20 @@ struct NativeTensor {
     [[nodiscard]] ssize_t size() const { return calc_elements(shape(), ndim()); }
 
     NativeTensor& request() { return *this; }
+
+    template<typename T>
+    std::span<const T> as_span() const {
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(ndim() == 1, "Can only convert 1D NativeTensor to span");
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(elsize() > 0, "Cannot convert NativeTensor with elsize 0 to span");
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                details::visit_type(
+                        dt_, []<typename TypeTag>(TypeTag) { return std::is_same_v<typename TypeTag::raw_type, T>; }
+                ),
+                "Type mismatch when converting {} to span",
+                dt_
+        );
+        return std::span<const T>{static_cast<const T*>(ptr), nbytes() / sizeof(T)};
+    }
 
     util::MagicNum<'T', 'n', 's', 'r'> magic_;
     int64_t nbytes_;

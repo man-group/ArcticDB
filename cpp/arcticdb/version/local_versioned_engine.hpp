@@ -21,6 +21,7 @@
 #include <arcticdb/version/versioned_engine.hpp>
 #include <arcticdb/entity/descriptor_item.hpp>
 #include <arcticdb/entity/data_error.hpp>
+#include <arcticdb/version/merge_options.hpp>
 
 namespace arcticdb::version_store {
 
@@ -66,6 +67,11 @@ class LocalVersionedEngine : public VersionedEngine {
     explicit LocalVersionedEngine(const std::shared_ptr<storage::Library>& library, const ClockType& = ClockType{});
 
     virtual ~LocalVersionedEngine() = default;
+
+    VersionedItem merge_internal(
+            const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& source, bool prune_previous_versions,
+            const MergeStrategy& strategy, std::span<const std::string> on, bool match_on_timeseries_index
+    ) override;
 
     VersionedItem update_internal(
             const StreamId& stream_id, const UpdateQuery& query, const std::shared_ptr<InputTensorFrame>& frame,

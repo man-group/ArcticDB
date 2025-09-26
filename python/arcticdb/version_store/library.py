@@ -25,7 +25,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
+from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo, MergeAction
 
 import pandas as pd
 import numpy as np
@@ -391,6 +391,11 @@ class UpdatePayload:
             if self.metadata is not None
             else f", date_range={self.date_range}" if self.date_range is not None else ""
         )
+
+
+class MergeStrategy(NamedTuple):
+    matched: MergeAction = MergeAction.UPDATE
+    not_matched_by_target: MergeAction = MergeAction.INSERT
 
 
 class LazyDataFrame(QueryBuilder):
@@ -3021,3 +3026,28 @@ class Library:
             raise ArcticInvalidApiUsageException(
                 "mode must be one of StagedDataFinalizeMethod.WRITE, StagedDataFinalizeMethod.APPEND, 'write', 'append'"
             )
+
+    def merge(
+        self,
+        symbol: str,
+        dataframe: NormalizableType,
+        strategy: MergeStrategy,
+        prune_previous_versions: bool = False,
+        metadata: Optional[Any] = None,
+        upsert: bool = False,
+    ) -> VersionedItem:
+        udm, item, norm_meta = self._nvs._try_normalize(
+            symbol,
+            dataframe,
+            metadata,
+            pickle_on_failure=False,
+            dynamic_strings=True,
+            coerce_columns=None,
+            norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
+        )
+        on_timeseries_index = True
+        on = []
+        vit = self._nvs.version_store.merge(
+            symbol, item, norm_meta, udm, prune_previous_versions, strategy, on, on_timeseries_index
+        )
+        return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)

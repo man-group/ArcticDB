@@ -134,6 +134,62 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
 
     return desc;
 }
+
+void check_can_perform_merge(
+        const InputTensorFrame& source, const index::IndexSegmentReader& target_index_segment_reader,
+        const MergeStrategy& strategy, std::span<const std::string> on, bool match_on_timeseries_index,
+        bool dynamic_schema
+) {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            strategy.matched == MergeAction::UPDATE && strategy.not_matched_by_target == MergeAction::DO_NOTHING,
+            "The only merge strategy currently supported is matched=UPDATE, not_matched_by_target=DO_NOTHING"
+    );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            match_on_timeseries_index,
+            "Currently the set of columns to match on for a merge command must always include the index via setting "
+            "match_on_timeseries_index=True"
+    );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            source.sorted() == SortedValue::ASCENDING,
+            "Currently the source data for a merge command must be sorted in ascending order"
+    );
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            on.empty(), "Currently the 'on' parameter of the merge command is not supported and must be empty"
+    );
+    const IndexDescriptorImpl& target_index_desc = target_index_segment_reader.tsd().index();
+    check_index_match(source.index, target_index_desc);
+    if (target_index_desc.type() == IndexDescriptor::Type::TIMESTAMP) {
+        sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                target_index_segment_reader.sorted() == SortedValue::ASCENDING,
+                "When merging into a timeseries-indexed frame, the target frame must be "
+                "sorted in ascending order"
+        );
+    }
+    fix_descriptor_mismatch_or_throw(MERGE, dynamic_schema, target_index_segment_reader, source, false);
+}
+
+struct SliceAffectedByMerge {
+    /// Index in [0;source_row_count) of the first index value that falls into the range of the key
+    ssize_t first_source_index_position;
+    /// The index of the slice in the index segment reader
+    size_t slice_index;
+};
+
+std::vector<SliceAffectedByMerge> slices_affected_by_merge(
+        const InputTensorFrame& source, std::span<const SliceAndKey> slices
+) {
+    std::vector<SliceAffectedByMerge> affected_slices;
+    std::span<const timestamp> source_index = source.index_tensor->as_span<timestamp>();
+    for (size_t slice_index = 0; slice_index < slices.size(); slice_index++) {
+        const timestamp start = slices[slice_index].key().start_time();
+        const timestamp end = slices[slice_index].key().end_time();
+        if (const auto lower = ranges::lower_bound(source_index, start); lower != source_index.end() && *lower < end) {
+            const ssize_t first_source_index_position = lower - source_index.begin();
+            affected_slices.emplace_back(first_source_index_position, slice_index);
+        }
+    }
+    return affected_slices;
+}
 } // namespace
 
 void sorted_data_check_append(const InputTensorFrame& frame, index::IndexSegmentReader& index_segment_reader) {
@@ -548,6 +604,189 @@ folly::Future<AtomKey> async_update_impl(
             });
 }
 
+struct SerializedIndex {
+    std::vector<SliceAndKey> slice_and_keys;
+    TimeseriesDescriptor tsd;
+};
+
+void update_segment_inplace(
+        SegmentInMemory& target, const InputTensorFrame& source, const SliceAndKey& slice_to_update,
+        size_t row_in_source
+) {
+    std::span<const timestamp> source_index = source.index_tensor->as_span<timestamp>();
+    const Column& target_index = target.column(0);
+    using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+    auto target_index_search_start = target_index.begin<IndexType>();
+    const auto target_index_end = target_index.end<IndexType>();
+    while (row_in_source < source.num_rows) {
+        const timestamp source_index_value = source_index[row_in_source];
+        if (slice_to_update.key().end_time() <= source_index_value) {
+            break;
+        }
+
+        auto target_row_it = std::lower_bound(target_index_search_start, target_index_end, source_index_value);
+        while (target_row_it != target_index_end && *target_row_it == source_index_value) {
+            ankerl::unordered_dense::map<size_t, ChunkedBuffer> flattened_columns;
+            const AxisRange col_range = slice_to_update.slice().columns();
+            const ssize_t target_row_num = target_row_it - target_index.begin<IndexType>();
+            for (size_t col_idx = col_range.start(); col_idx < col_range.end(); ++col_idx) {
+                // The first column (at index 0) is always the index
+                const size_t column_index_in_slice = col_idx - slice_to_update.slice().col_range.first + 1;
+                Column& target_col = target.column(column_index_in_slice);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        !target_col.is_sparse(), "Merge is not implemented for sparse columns"
+                );
+                target_col.type().visit_tag([&]<typename TDT>(TDT) {
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                            TDT::dimension() == Dimension::Dim0, "Merge operation supports only scalar types"
+                    );
+                    using RawType = typename TDT::RawType;
+                    const NativeTensor& tensor = source.field_tensors[col_idx - 1];
+                    if constexpr (is_numeric_type(TDT::data_type()) || is_bool_type(TDT::data_type())) {
+                        uint8_t* data = target_col.bytes_at(target_row_num * sizeof(RawType), true);
+                        *reinterpret_cast<RawType*>(data) = *(tensor.ptr_cast<RawType>(row_in_source));
+                    } else if constexpr (is_sequence_type(TDT::data_type())) {
+                        if constexpr (is_fixed_string_type(TDT::data_type())) {
+                            const auto str_stride = tensor.strides(0);
+                            auto char_data = static_cast<const char*>(tensor.data()) + row_in_source * str_stride;
+                            const auto str_len = tensor.elsize();
+                            target.set_string_at(column_index_in_slice, target_row_num, char_data, str_len);
+                        } else {
+                            // TODO:
+                            //  1. In order to get performant string the inner loop must be over the rows, not over
+                            //  the columns so that the lock is acquired once per column
+                            //  2. If the data is not c_style the tensor will be flattened once per slice.
+                            auto ptr_data = static_cast<PyObject* const*>(tensor.data());
+                            ptr_data += row_in_source;
+                            const bool c_style = util::is_cstyle_array<RawType>(tensor);
+                            if (!c_style) {
+                                if (const auto it = flattened_columns.find(col_idx); it != flattened_columns.end()) {
+                                    ptr_data = reinterpret_cast<PyObject* const*>(it->second.data()) + row_in_source;
+                                } else {
+                                    auto flattened_buffer = ChunkedBuffer::presized(source.num_rows * sizeof(RawType));
+                                    TypedTensor<RawType> typed_tensor(tensor);
+                                    util::FlattenHelper flattener{typed_tensor};
+                                    auto dst = reinterpret_cast<RawType*>(flattened_buffer.data());
+                                    flattener.flatten(dst, reinterpret_cast<RawType const*>(typed_tensor.data()));
+                                    ptr_data =
+                                            reinterpret_cast<PyObject* const*>(flattened_buffer.data()) + row_in_source;
+                                    flattened_columns.emplace(col_idx, std::move(flattened_buffer));
+                                }
+                            }
+                            auto out_ptr = reinterpret_cast<position_t*>(
+                                    target_col.bytes_at(target_row_num * sizeof(position_t), true)
+                            );
+                            if (is_py_none(*ptr_data)) {
+                                *out_ptr = not_a_string();
+                            } else if (is_py_nan(*ptr_data)) {
+                                *out_ptr = nan_placeholder();
+                            } else {
+                                std::optional<ScopedGILLock> scoped_gil_lock;
+                                util::variant_match(
+                                        [](PyObject* obj, std::optional<ScopedGILLock>& scoped_gil_lock) {
+                                            if constexpr (is_utf_type(slice_value_type(TDT::data_type()))) {
+                                                return convert::py_unicode_to_buffer(obj, scoped_gil_lock);
+                                            } else {
+                                                return convert::pystring_to_buffer(obj, false);
+                                            }
+                                        }(*ptr_data, scoped_gil_lock),
+                                        [&target, out_ptr](convert::PyStringWrapper&& string) {
+                                            StringPool& target_string_pool = target.string_pool();
+                                            *out_ptr = target_string_pool.get(string.buffer_, string.length_).offset();
+                                        },
+                                        [&target,
+                                         column_index_in_slice,
+                                         row_in_source](convert::StringEncodingError&& error) {
+                                            error.raise(
+                                                    target.descriptor().field(column_index_in_slice).name(),
+                                                    row_in_source
+                                            );
+                                        }
+                                );
+                            }
+                        }
+                    } else {
+                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                "Type {} is not supported in merge operations", TDT::data_type()
+                        );
+                    }
+                });
+            }
+            ++target_row_it;
+        }
+        if (target_row_it != target_index_end) {
+            target_index_search_start = target_row_it;
+        }
+        ++row_in_source;
+    };
+}
+
+VersionedItem merge_impl(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<InputTensorFrame>& source,
+        const UpdateInfo& update_info, WriteOptions&& options, const MergeStrategy& strategy,
+        std::span<const std::string> on, bool match_on_timeseries_index
+) {
+    return index::async_get_index_reader(*(update_info.previous_index_key_), store)
+            .thenValue([&](index::IndexSegmentReader&& target) {
+                check_can_perform_merge(
+                        *source, target, strategy, on, match_on_timeseries_index, options.dynamic_schema
+                );
+                target.mutable_tsd().set_user_metadata(std::move(source->user_meta));
+                return std::make_shared<SerializedIndex>(std::vector(target.begin(), target.end()), target.tsd());
+            })
+            .thenValue([&](std::shared_ptr<SerializedIndex>&& index) {
+                const std::vector<SliceAffectedByMerge> affected_slices =
+                        slices_affected_by_merge(*source, index->slice_and_keys);
+                std::vector<folly::Future<folly::Unit>> merge_segments_fut;
+                merge_segments_fut.reserve(affected_slices.size());
+                for (const SliceAffectedByMerge& affected : affected_slices) {
+                    merge_segments_fut.emplace_back(
+                            store->read(index->slice_and_keys[affected.slice_index].key())
+                                    .via(&async::cpu_executor())
+                                    .thenValue([&, affected](std::pair<VariantKey, SegmentInMemory>&& key_segment) {
+                                        const SliceAndKey& affected_slice = index->slice_and_keys[affected.slice_index];
+                                        update_segment_inplace(
+                                                key_segment.second,
+                                                *source,
+                                                affected_slice,
+                                                affected.first_source_index_position
+                                        );
+                                        return std::move(key_segment);
+                                    })
+                                    .thenValue([store,
+                                                &update_info](std::pair<VariantKey, SegmentInMemory>&& key_segment) {
+                                        const AtomKey& key = std::get<AtomKey>(key_segment.first);
+                                        return store->write(
+                                                key.type(),
+                                                update_info.next_version_id_,
+                                                key.id(),
+                                                key.start_index(),
+                                                key.end_index(),
+                                                std::move(key_segment.second)
+                                        );
+                                    })
+                                    .thenValueInline([index, affected](VariantKey&& key) {
+                                        index->slice_and_keys[affected.slice_index].set_key(
+                                                std::move(std::get<AtomKey>(key))
+                                        );
+                                    })
+                    );
+                }
+                return folly::collect(merge_segments_fut)
+                        .via(&async::io_executor())
+                        .thenValue([index, store, &update_info](auto) {
+                            return index::write_index(
+                                    index_type_from_descriptor(index->tsd.as_stream_descriptor()),
+                                    index->tsd,
+                                    std::move(index->slice_and_keys),
+                                    IndexPartialKey{index->tsd.stream_id_, update_info.next_version_id_},
+                                    store
+                            );
+                        });
+            })
+            .get();
+}
+
 VersionedItem update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
         const std::shared_ptr<InputTensorFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
@@ -782,12 +1021,12 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
         std::vector<std::vector<size_t>>&& processing_unit_indexes,
         std::shared_ptr<std::vector<std::shared_ptr<Clause>>> clauses
 ) {
-    // All the shared pointers as arguments to this function and created within it are to ensure that resources are
-    // correctly kept alive after this function returns its future
+    // All the shared pointers as arguments to this function and created within it are to ensure that resources
+    // are correctly kept alive after this function returns its future
     const auto num_segments = segment_and_slice_futures.size();
 
-    // Map from index in segment_and_slice_future_splitters to the number of calls to process in the first clause that
-    // will require that segment
+    // Map from index in segment_and_slice_future_splitters to the number of calls to process in the first
+    // clause that will require that segment
     auto segment_fetch_counts = generate_segment_fetch_counts(processing_unit_indexes, num_segments);
 
     auto segment_and_slice_future_splitters =
@@ -797,10 +1036,11 @@ folly::Future<std::vector<EntityId>> schedule_clause_processing(
             get_entity_ids_and_position_map(component_manager, num_segments, std::move(processing_unit_indexes));
 
     // At this point we have a set of entity ids grouped by the work units produced by the original
-    // structure_for_processing, and a map of those ids to the position in the vector of futures or future-splitters
-    // (which is the same order as originally generated from the index via the pipeline_context and ranges_and_keys), so
-    // we can add each entity id and its components to the component manager and schedule the first stage of work (i.e.
-    // from the beginning until either the end of the pipeline or the next required structure_for_processing
+    // structure_for_processing, and a map of those ids to the position in the vector of futures or
+    // future-splitters (which is the same order as originally generated from the index via the pipeline_context
+    // and ranges_and_keys), so we can add each entity id and its components to the component manager and
+    // schedule the first stage of work (i.e. from the beginning until either the end of the pipeline or the
+    // next required structure_for_processing
     auto futures = schedule_first_iteration(
             component_manager,
             num_segments,
@@ -877,10 +1117,10 @@ void set_output_descriptors(
         new_stream_descriptor = merge_descriptors(*new_stream_descriptor, fields, std::vector<std::string>{});
     }
     if (new_stream_descriptor.has_value()) {
-        // Finding and erasing fields from the FieldCollection contained in StreamDescriptor is O(n) in number of fields
-        // So maintain map from field names to types in the new_stream_descriptor to make these operations O(1)
-        // Cannot use set of FieldRef as the name in the output might match the input, but with a different type after
-        // processing
+        // Finding and erasing fields from the FieldCollection contained in StreamDescriptor is O(n) in number
+        // of fields So maintain map from field names to types in the new_stream_descriptor to make these
+        // operations O(1) Cannot use set of FieldRef as the name in the output might match the input, but with
+        // a different type after processing
         std::unordered_map<std::string_view, TypeDescriptor> new_fields;
         for (const auto& field : new_stream_descriptor->fields()) {
             new_fields.emplace(field.name(), field.type());
@@ -889,8 +1129,8 @@ void set_output_descriptors(
         auto original_stream_descriptor = pipeline_context->descriptor();
         StreamDescriptor final_stream_descriptor{original_stream_descriptor.id()};
         final_stream_descriptor.set_index(new_stream_descriptor->index());
-        // Erase field from new_fields as we add them to final_stream_descriptor, as all fields left in new_fields
-        // after these operations were created by the processing pipeline, and so should be appended
+        // Erase field from new_fields as we add them to final_stream_descriptor, as all fields left in
+        // new_fields after these operations were created by the processing pipeline, and so should be appended
         // Index columns should always appear first
         if (index_column.has_value()) {
             const auto nh = new_fields.extract(*index_column);
@@ -905,8 +1145,8 @@ void set_output_descriptors(
             }
         }
         // Iterate through new_stream_descriptor->fields() rather than remaining new_fields to preserve ordering
-        // e.g. if there were two projections then users will expect the column produced by the first one to appear
-        // first in the output df
+        // e.g. if there were two projections then users will expect the column produced by the first one to
+        // appear first in the output df
         for (const auto& field : new_stream_descriptor->fields()) {
             if (new_fields.contains(field.name())) {
                 final_stream_descriptor.add_field(field);
@@ -946,8 +1186,8 @@ std::vector<RangesAndKey> generate_ranges_and_keys(PipelineContext& pipeline_con
             is_incomplete = true;
         }
         auto& sk = it->slice_and_key();
-        // Take a copy here as things like defrag need the keys in pipeline_context->slice_and_keys_ that aren't being
-        // modified at the end
+        // Take a copy here as things like defrag need the keys in pipeline_context->slice_and_keys_ that aren't
+        // being modified at the end
         auto key = sk.key();
         res.emplace_back(sk.slice(), std::move(key), is_incomplete);
     }
@@ -1008,15 +1248,12 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> generate_segment_and_slic
 
 static StreamDescriptor generate_initial_output_schema_descriptor(const PipelineContext& pipeline_context) {
     const StreamDescriptor& desc = pipeline_context.descriptor();
-    // pipeline_context.overall_column_bitset_ can be different from std::nullopt only in case of static schema. We use
-    // it to constrain the initial set of columns. If dynamic schema is used and only certain columns must be read we
-    // use the whole descriptor and at the end of the read return only the ones that were selected. This is because
-    // currently dynamic schema cannot handle column dependencies e.g.
-    // columns on disk: col1, col2
-    // q = QueryBuilder()
-    // q = q["col1" < 1]
-    // lib.read(columns=["col2", query_builder=q)
-    // We want to read only col2 but the filtering requires col1, thus the OutputSchema must contain both col1 and col2
+    // pipeline_context.overall_column_bitset_ can be different from std::nullopt only in case of static schema.
+    // We use it to constrain the initial set of columns. If dynamic schema is used and only certain columns
+    // must be read we use the whole descriptor and at the end of the read return only the ones that were
+    // selected. This is because currently dynamic schema cannot handle column dependencies e.g. columns on
+    // disk: col1, col2 q = QueryBuilder() q = q["col1" < 1] lib.read(columns=["col2", query_builder=q) We want
+    // to read only col2 but the filtering requires col1, thus the OutputSchema must contain both col1 and col2
     // in order to satisfy the filter clause.
     if (pipeline_context.overall_column_bitset_) {
         FieldCollection fields_to_use;
@@ -1083,9 +1320,10 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
 
     auto ranges_and_keys = generate_ranges_and_keys(*pipeline_context);
 
-    // Each element of the vector corresponds to one processing unit containing the list of indexes in ranges_and_keys
-    // required for that processing unit i.e. if the first processing unit needs ranges_and_keys[0] and
-    // ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3] then the structure will be
+    // Each element of the vector corresponds to one processing unit containing the list of indexes in
+    // ranges_and_keys required for that processing unit i.e. if the first processing unit needs
+    // ranges_and_keys[0] and ranges_and_keys[1], and the second needs ranges_and_keys[2] and ranges_and_keys[3]
+    // then the structure will be
     // {{0, 1}, {2, 3}}
     std::vector<std::vector<size_t>> processing_unit_indexes;
     if (read_query->clauses_.empty()) {
@@ -1110,12 +1348,12 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
 /*
  * Processes the slices in the given pipeline_context.
  *
- * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the same
- * processing unit collected into a single ProcessingUnit. Slices contained within a single ProcessingUnit are processed
- * within a single thread.
+ * Slices are processed in an order defined by the first clause in the pipeline, with slices corresponding to the
+ * same processing unit collected into a single ProcessingUnit. Slices contained within a single ProcessingUnit are
+ * processed within a single thread.
  *
- * Where possible (generally, when there is no column slicing), clauses are processed in the same folly thread as the
- * decompression without context switching to try and optimise cache access.
+ * Where possible (generally, when there is no column slicing), clauses are processed in the same folly thread as
+ * the decompression without context switching to try and optimise cache access.
  */
 folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
@@ -1261,7 +1499,6 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         const std::optional<std::vector<StageResult>>& stage_results, const ReadQuery& read_query,
         const ReadOptions& read_options, const ReadIncompletesFlags& flags
 ) {
-
     std::vector<SliceAndKey> incomplete_segments;
     bool load_data{false};
     if (stage_results) {
@@ -1294,9 +1531,9 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         return false;
     }
 
-    // In order to have the right normalization metadata and descriptor we need to find the first non-empty segment.
-    // Picking an empty segment when there are non-empty ones will impact the index type and column namings.
-    // If all segments are empty we will proceed as if were appending/writing and empty dataframe.
+    // In order to have the right normalization metadata and descriptor we need to find the first non-empty
+    // segment. Picking an empty segment when there are non-empty ones will impact the index type and column
+    // namings. If all segments are empty we will proceed as if were appending/writing and empty dataframe.
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(!incomplete_segments.empty(), "Incomplete segments must be non-empty");
     const auto first_non_empty_seg = ranges::find_if(incomplete_segments, [&](auto& slice) {
         auto res = slice.segment(store).row_count() > 0;
@@ -1318,7 +1555,8 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     pipeline_context->incompletes_after_ = pipeline_context->slice_and_keys_.size();
 
     if (!flags.has_active_version) {
-        // If there are only incompletes we need to do the following (typically done when reading the index key):
+        // If there are only incompletes we need to do the following (typically done when reading the index
+        // key):
         // - add the index columns to query
         // - in case of static schema: populate the descriptor and column_bitset
         add_index_columns_to_query(read_query, seg.index_descriptor());
@@ -1342,7 +1580,8 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
     if (pipeline_context->desc_) {
         schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                 index_names_match(staged_desc, *pipeline_context->desc_),
-                "The index names in the staged stream descriptor {} are not identical to that of the stream descriptor "
+                "The index names in the staged stream descriptor {} are not identical to that of the stream "
+                "descriptor "
                 "on storage {}",
                 staged_desc,
                 *pipeline_context->desc_
@@ -1366,7 +1605,8 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         [[maybe_unused]] auto& first_incomplete_seg = incomplete_segments[0].segment(store);
         ARCTICDB_DEBUG(
                 log::version(),
-                "Symbol {}: First incomplete segment has rows {} columns {} uncompressed bytes {} descriptor {}",
+                "Symbol {}: First incomplete segment has rows {} columns {} uncompressed bytes {} descriptor "
+                "{}",
                 pipeline_context->stream_id_,
                 first_incomplete_seg.row_count(),
                 first_incomplete_seg.columns().size(),
@@ -1376,7 +1616,9 @@ static std::variant<bool, CompactionError> read_incompletes_to_pipeline(
         if (pipeline_context->desc_) {
             schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
                     columns_match(*pipeline_context->desc_, staged_desc, flags.convert_int_to_float),
-                    "When static schema is used the staged stream descriptor {} must equal the stream descriptor on "
+                    "When static schema is used the staged stream descriptor {} must equal the stream "
+                    "descriptor "
+                    "on "
                     "storage {}",
                     staged_desc,
                     *pipeline_context->desc_
@@ -1405,20 +1647,23 @@ static void check_incompletes_index_ranges_dont_overlap(
      Checks:
       - that the existing data is not known to be unsorted in the case of a parallel append
       - that the index ranges of incomplete segments do not overlap with one another
-      - that the earliest timestamp in an incomplete segment is greater than the latest timestamp existing in the
-        symbol in the case of a parallel append
+      - that the earliest timestamp in an incomplete segment is greater than the latest timestamp existing in
+     the symbol in the case of a parallel append
      */
     if (pipeline_context->descriptor().index().type() == IndexDescriptorImpl::Type::TIMESTAMP) {
         std::optional<timestamp> last_existing_index_value;
         if (append_to_existing) {
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                     previous_sorted_value.has_value(),
-                    "When staged data is appended to existing data the descriptor should hold the \"sorted\" status of "
+                    "When staged data is appended to existing data the descriptor should hold the \"sorted\" "
+                    "status of "
                     "the existing data"
             );
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     *previous_sorted_value == SortedValue::ASCENDING || *previous_sorted_value == SortedValue::UNKNOWN,
-                    "Cannot append staged segments to existing data as existing data is not sorted in ascending order"
+                    "Cannot append staged segments to existing data as existing data is not sorted in "
+                    "ascending "
+                    "order"
             );
             auto last_indexed_slice_and_key = std::prev(pipeline_context->incompletes_begin())->slice_and_key();
             // -1 as end_time is stored as 1 greater than the last index value in the segment
@@ -1435,7 +1680,8 @@ static void check_incompletes_index_ranges_dont_overlap(
             const auto& key = it->slice_and_key().key();
             sorting::check<ErrorCode::E_UNSORTED_DATA>(
                     !last_existing_index_value.has_value() || key.start_time() >= *last_existing_index_value,
-                    "Cannot append staged segments to existing data as incomplete segment contains index value < "
+                    "Cannot append staged segments to existing data as incomplete segment contains index value "
+                    "< "
                     "existing data (in UTC): {} <= {}",
                     util::format_timestamp(key.start_time()),
                     // Should never reach "" but the standard mandates that all function arguments are evaluated
@@ -1447,7 +1693,8 @@ static void check_incompletes_index_ranges_dont_overlap(
                     // If the segment is entirely covering a single index value, then duplicates are fine
                     // -1 as end_time is stored as 1 greater than the last index value in the segment
                     inserted || key.end_time() - 1 == key.start_time(),
-                    "Cannot finalize staged data as 2 or more incomplete segments cover identical index values (in "
+                    "Cannot finalize staged data as 2 or more incomplete segments cover identical index values "
+                    "(in "
                     "UTC): ({}, {})",
                     util::format_timestamp(key.start_time()),
                     util::format_timestamp(key.end_time())
@@ -1460,7 +1707,9 @@ static void check_incompletes_index_ranges_dont_overlap(
                 sorting::check<ErrorCode::E_UNSORTED_DATA>(
                         // -1 as end_time is stored as 1 greater than the last index value in the segment
                         next_it->first >= it->second - 1,
-                        "Cannot finalize staged data as incomplete segment index values overlap one another (in UTC): "
+                        "Cannot finalize staged data as incomplete segment index values overlap one another "
+                        "(in "
+                        "UTC): "
                         "({}, {}) intersects ({}, {})",
                         util::format_timestamp(it->first),
                         util::format_timestamp(it->second - 1),
@@ -1534,8 +1783,8 @@ void copy_frame_data_to_buffer(
         init_sparse_dst_column_before_copy(
                 dst_column, offset, num_rows, dst_rawtype_size, output_format, std::nullopt, default_value
         );
-        // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows
-        // values
+        // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than
+        // num_rows values
     } else if (src_column.opt_sparse_map().has_value() &&
                is_valid_type_promotion_to_target(
                        src_column.type(), dst_column.type(), IntToFloatConversion::PERMISSIVE
@@ -1597,21 +1846,21 @@ void copy_frame_data_to_buffer(
                ) ||
                (src_column.type().data_type() == DataType::FLOAT64 && dst_column.type().data_type() == DataType::FLOAT32
                )) {
-        // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type between
-        // these types. This means that the second condition cannot happen during a regular read. The processing
-        // pipeline, however, can produce a set of segments where some are int64 and other uint64. This can happen in
-        // the sum aggregation (both for unsorted aggregations and resampling). Because we promote the sum type to the
-        // largest type of the respective category. E.g., we have int8 and uint8. Dynamic schema will allow this, and
-        // the global type descriptor will be int16. However, when segments are processed on their own int8 -> int64 and
-        // uint8 -> int64. We have decided to allow this and assign a common type of int64 (done in the modify_schema
-        // procedure). This is what pyarrow does as well. Because of the above, we allow here copying uint64 buffer in
-        // an int64 buffer.
+        // Arctic cannot contain both uint64 and int64 columns in the dataframe because there is no common type
+        // between these types. This means that the second condition cannot happen during a regular read. The
+        // processing pipeline, however, can produce a set of segments where some are int64 and other uint64.
+        // This can happen in the sum aggregation (both for unsorted aggregations and resampling). Because we
+        // promote the sum type to the largest type of the respective category. E.g., we have int8 and uint8.
+        // Dynamic schema will allow this, and the global type descriptor will be int16. However, when segments
+        // are processed on their own int8 -> int64 and uint8 -> int64. We have decided to allow this and assign
+        // a common type of int64 (done in the modify_schema procedure). This is what pyarrow does as well.
+        // Because of the above, we allow here copying uint64 buffer in an int64 buffer.
         //
-        // Having float64 as a source and float32 as a destination should not appear during a regular read however it
-        // can happen in the processing pipeline. E.g., performing a first/last/min/max aggregations in resampling or
-        // groupby. There might be 4 segments float32, uint16, int8 and float32, if the first segment is in a separate
-        // group/bucket and the second 3 segments are in the same group the processing pipeline will output two segments
-        // one with float32 dtype and one with dtype:
+        // Having float64 as a source and float32 as a destination should not appear during a regular read
+        // however it can happen in the processing pipeline. E.g., performing a first/last/min/max aggregations
+        // in resampling or groupby. There might be 4 segments float32, uint16, int8 and float32, if the first
+        // segment is in a separate group/bucket and the second 3 segments are in the same group the processing
+        // pipeline will output two segments one with float32 dtype and one with dtype:
         // common_type(common_type(uint16, int8), float32) = common_type(int32, float32) = float64
         details::visit_type(dst_column.type().data_type(), [&](auto dest_desc_tag) {
             using DestinationRawType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
@@ -1678,8 +1927,8 @@ struct CopyToBufferTask : async::BaseTask {
         const size_t first_col = frame_slice_.columns().first;
         const bool first_col_slice = first_col == 0;
         const auto& fields = source_segment_.descriptor().fields();
-        // Skip the "true" index fields (i.e. those stored in every column slice) if we are not in the first column
-        // slice
+        // Skip the "true" index fields (i.e. those stored in every column slice) if we are not in the first
+        // column slice
         for (size_t idx = first_col_slice ? 0 : get_index_field_count(source_segment_); idx < fields.size(); ++idx) {
             // First condition required to avoid underflow when subtracting one unsigned value from another
             if (required_fields_count_ >= first_col && idx < required_fields_count_ - first_col) {
@@ -1999,7 +2248,8 @@ void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store) {
             keys_to_delete.emplace_back(slice_and_key.key());
         } else {
             log::storage().error(
-                    "Delete incomplete keys procedure tries to delete a wrong key type {}. Key type must be {}.",
+                    "Delete incomplete keys procedure tries to delete a wrong key type {}. Key type must be "
+                    "{}.",
                     slice_and_key.key(),
                     KeyType::APPEND_DATA
             );
@@ -2074,7 +2324,8 @@ static void validate_slicing_policy_for_compaction(
             user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                     pipeline_context->slice_and_keys_.front().slice().columns() ==
                             pipeline_context->slice_and_keys_.back().slice().columns(),
-                    "Appending using sort_and_finalize_staged_data/compact_incompletes/finalize_staged_data is not"
+                    "Appending using sort_and_finalize_staged_data/compact_incompletes/finalize_staged_data is "
+                    "not"
                     " supported when existing data being appended to is column sliced."
             );
         }
@@ -2167,7 +2418,9 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                             std::get<timestamp>(TimeseriesIndex::start_value_for_segment(segments[0].segment(store)));
                     sorting::check<ErrorCode::E_UNSORTED_DATA>(
                             last_index_on_disc <= incomplete_start,
-                            "Cannot append staged segments to existing data as incomplete segment contains index value "
+                            "Cannot append staged segments to existing data as incomplete segment contains "
+                            "index "
+                            "value "
                             "{} < existing data {}",
                             util::format_timestamp(incomplete_start),
                             util::format_timestamp(last_index_on_disc)
@@ -2202,7 +2455,8 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
 
                     ARCTICDB_DEBUG(
                             log::version(),
-                            "sort_merge_impl Symbol {} Segment {}: Segment has rows {} columns {} uncompressed bytes "
+                            "sort_merge_impl Symbol {} Segment {}: Segment has rows {} columns {} uncompressed "
+                            "bytes "
                             "{}",
                             pipeline_context->stream_id_,
                             count++,
@@ -2223,9 +2477,8 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                 pipeline_context->desc_->set_sorted(compute_sorted_status(initial_index_sorted_status));
             },
             [&](const auto&) {
-                util::raise_rte(
-                        "Sort merge only supports datetime indexed data. You data does not have a datetime index."
-                );
+                util::raise_rte("Sort merge only supports datetime indexed data. You data does not have a "
+                                "datetime index.");
             }
     );
 
@@ -2241,7 +2494,6 @@ std::variant<VersionedItem, CompactionError> compact_incomplete_impl(
         const UpdateInfo& update_info, const CompactIncompleteParameters& compaction_parameters,
         const WriteOptions& write_options, std::shared_ptr<PipelineContext>& pipeline_context
 ) {
-
     ReadQuery read_query;
     ReadOptions read_options;
     read_options.set_dynamic_schema(true);
@@ -2396,7 +2648,8 @@ PredefragmentationInfo get_pre_defragmentation_info(
                 compaction_start_info = *start_point;
             else {
                 log::version().warn(
-                        "Missing segment containing column 0 for row {}; Resetting compaction starting point to 0",
+                        "Missing segment containing column 0 for row {}; Resetting compaction starting point "
+                        "to 0",
                         slice.row_range.start()
                 );
                 compaction_start_info = {0u, 0u};
@@ -2547,12 +2800,13 @@ std::shared_ptr<PipelineContext> setup_pipeline_context(
 VersionedItem generate_result_versioned_item(const std::variant<VersionedItem, StreamId>& version_info) {
     VersionedItem versioned_item;
     if (std::holds_alternative<StreamId>(version_info)) {
-        // This isn't ideal. It would be better if the version() and timestamp() methods on the C++ VersionedItem class
-        // returned optionals, but this change would bubble up to the Python VersionedItem class defined in _store.py.
-        // This class is very hard to change at this point, as users do things like pickling them to pass them around.
-        // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
-        // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
-        // values are meaningless before an indexed version exists.
+        // This isn't ideal. It would be better if the version() and timestamp() methods on the C++
+        // VersionedItem class returned optionals, but this change would bubble up to the Python VersionedItem
+        // class defined in _store.py. This class is very hard to change at this point, as users do things like
+        // pickling them to pass them around. This at least gets the symbol attribute of VersionedItem correct.
+        // The creation timestamp will be zero, which corresponds to 1970, and so with this obviously ridiculous
+        // version ID, it should be clear to users that these values are meaningless before an indexed version
+        // exists.
         versioned_item = VersionedItem(AtomKeyBuilder()
                                                .version_id(std::numeric_limits<VersionId>::max())
                                                .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
@@ -2626,8 +2880,8 @@ folly::Future<SymbolProcessingResult> read_and_process(
             .thenValueInline([res_versioned_item = std::move(res_versioned_item),
                               pipeline_context,
                               output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
-                // Pipeline context user metadata is not populated in the case that only incomplete segments exist for a
-                // symbol, no indexed versions
+                // Pipeline context user metadata is not populated in the case that only incomplete segments
+                // exist for a symbol, no indexed versions
                 return SymbolProcessingResult{
                         std::move(res_versioned_item),
                         pipeline_context->user_meta_ ? std::move(*pipeline_context->user_meta_)
@@ -2672,7 +2926,8 @@ CheckOutcome check_schema_matches_incomplete(
         return Error{
                 throw_error<ErrorCode::E_DESCRIPTOR_MISMATCH>,
                 fmt::format(
-                        "{} When static schema is used all staged segments must have the same column and column types."
+                        "{} When static schema is used all staged segments must have the same column and column "
+                        "types."
                         "{} is different than {}",
                         error_code_data<ErrorCode::E_DESCRIPTOR_MISMATCH>.name_,
                         stream_descriptor_incomplete,
