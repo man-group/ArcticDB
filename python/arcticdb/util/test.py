@@ -1067,6 +1067,9 @@ def equals(x, y):
     elif isinstance(x, np.ndarray):
         assert isinstance(y, np.ndarray)
         assert np.allclose(x, y)
+    elif isinstance(x, pd.DataFrame):
+        assert isinstance(y, pd.DataFrame)
+        assert_frame_equal(x, y)
     else:
         assert x == y
 
