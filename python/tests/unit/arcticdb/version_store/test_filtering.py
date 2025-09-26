@@ -31,6 +31,7 @@ from arcticdb.util.test import (
     generic_filter_test_strings,
     generic_filter_test_nans,
     unicode_symbols,
+    equals
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 
@@ -1150,7 +1151,7 @@ def test_filter_unfilterable_data(lmdb_version_store_v1, empty, data, sym):
 
     q = QueryBuilder()
     if empty:
-        lib.read(sym, query_builder=q)
+        equals(lib.read(sym, query_builder=q).data, data)
     else:
         q = q[q["col"] == 0]
         with pytest.raises(SchemaException):
