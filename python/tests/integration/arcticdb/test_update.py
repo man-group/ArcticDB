@@ -576,7 +576,7 @@ def test_update_bool_named_col(lmdb_version_store_dynamic_schema, idx):
 
     assert_frame_equal(lmdb_version_store_dynamic_schema.read(symbol).data, initial)
 
-    
+
 def test_batch_update_after_delete_upsert(arctic_library_lmdb):
     lib = arctic_library_lmdb
     lib.write("sym", sample_dataframe())
