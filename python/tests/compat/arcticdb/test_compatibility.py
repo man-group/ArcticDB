@@ -434,11 +434,14 @@ def test_compat_update_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage,
         (None, pd.Timestamp("2025-01-03 10:00:00")),  # Intersects with problematic range at end
     ],
 )
-def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, date_range):
+@pytest.mark.parametrize("use_query_builder", [True, False])
+def test_compat_date_range_old_updated_data(
+    pandas_v1_venv, s3_ssl_disabled_storage, lib_name, date_range, use_query_builder, any_output_format
+):
     # There was a bug where data written using update and old versions of ArcticDB produced data keys where the
     # end_index value was not 1 nanosecond larger than the last index value in the segment (as it should be), but
     # instead contained the start of the date_range passed into the update call.
-    # We want to verify C++ truncation within arrow works with the old broken end index values.
+    # We want to verify reading date range of the old broken end index values works.
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
     with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
         sym = "sym"
@@ -456,6 +459,11 @@ def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_sto
         compat.old_lib.update(sym, df_1, '(pd.Timestamp("2025-01-03 00:00:00"), None)')
         compat.old_lib.update(sym, df_2, '(pd.Timestamp("2025-01-04 00:00:00"), None)')
 
+        expected_df = pd.concat([df_0.iloc[:1], df_1.iloc[:1], df_2])
+        filter_after_start = expected_df.index >= date_range[0] if date_range[0] else True
+        filter_before_end = expected_df.index <= date_range[1] if date_range[1] else True
+        expected_df = expected_df[filter_after_start & filter_before_end]
+
         # Resample using current version
         with compat.current_version() as curr:
             index_df = curr.lib._nvs.read_index(sym)
@@ -465,9 +473,12 @@ def test_compat_arrow_range_old_updated_data(pandas_v1_venv, s3_ssl_disabled_sto
             assert index_df["end_index"].iloc[1] == pd.Timestamp("2025-01-04 00:00:00")
             assert index_df["end_index"].iloc[2] == pd.Timestamp("2025-01-05 23:00:00") + pd.Timedelta(1, unit="ns")
 
-            arrow_table = curr.lib.read(sym, date_range=date_range, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
-            expected_df = curr.lib.read(sym, date_range=date_range).data
-            assert_frame_equal_with_arrow(arrow_table, expected_df)
+            if use_query_builder:
+                q = QueryBuilder().date_range(date_range)
+                result = curr.lib.read(sym, query_builder=q, output_format=any_output_format).data
+            else:
+                result = curr.lib.read(sym, date_range=date_range, output_format=any_output_format).data
+            assert_frame_equal_with_arrow(result, expected_df)
 
 
 def test_norm_meta_column_and_index_names_write_old_read_new(old_venv_and_arctic_uri, lib_name):

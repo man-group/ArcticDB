@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import pytest
+from packaging import version
 from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
 from hypothesis.extra.pandas import columns, data_frames
@@ -19,6 +20,7 @@ from arcticdb.util.hypothesis import (
     column_strategy,
 )
 from arcticdb.util.test import get_sample_dataframe, make_dynamic
+from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
 from tests.util.mark import WINDOWS
 
@@ -228,11 +230,43 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
+@pytest.mark.parametrize(
+    "output_format",
+    [
+        OutputFormat.EXPERIMENTAL_ARROW,
+        pytest.param(
+            OutputFormat.PANDAS,
+            marks=pytest.mark.skipif(IS_PANDAS_ONE, reason="Monday ref: 18013444785"),
+        ),
+    ],
+)
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
-@pytest.mark.parametrize("start_offset,end_offset", [(2, 3), (3, 75), (4, 32), (0, 99), (7, 56)])
-def test_date_range(version_store_factory, segment_row_size, start_offset, end_offset):
+@pytest.mark.parametrize("use_query_builder", [True, False])
+@pytest.mark.parametrize(
+    "start_offset,end_offset",
+    [
+        (2, 3),
+        (3, 75),
+        (4, 32),
+        (0, 99),
+        (7, 56),
+        (97, 120),
+        (-20, 3),
+        # Open ended
+        (None, 30),
+        (30, None),
+        (None, None),
+        # Empty slices
+        (11, 10),
+        (-10, -5),
+        (110, 120),
+    ],
+)
+def test_date_range(
+    version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, output_format
+):
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
         {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
@@ -241,25 +275,43 @@ def test_date_range(version_store_factory, segment_row_size, start_offset, end_o
     sym = "arrow_date_test"
     lib.write(sym, df)
 
-    query_start_ts = initial_timestamp + pd.DateOffset(start_offset)
-    query_end_ts = initial_timestamp + pd.DateOffset(end_offset)
+    query_start_ts = None if start_offset is None else initial_timestamp + pd.DateOffset(start_offset)
+    query_end_ts = None if end_offset is None else initial_timestamp + pd.DateOffset(end_offset)
+
+    filter_after_start = df.index >= (query_start_ts if query_start_ts else initial_timestamp)
+    filter_before_end = df.index <= (query_end_ts if query_end_ts else initial_timestamp + pd.DateOffset(100))
+    expected_df = df[filter_after_start & filter_before_end]
 
     date_range = (query_start_ts, query_end_ts)
-    data_closed_table = lib.read(sym, date_range=date_range).data
-    df = data_closed_table.to_pandas()
-    assert query_start_ts == df.index[0]
-    assert query_end_ts == df.index[-1]
-    assert df["numeric"].iloc[0] == start_offset
-    assert df["numeric"].iloc[-1] == end_offset
-    assert df["strings"].iloc[0] == f"{start_offset}"
-    assert df["strings"].iloc[-1] == f"{end_offset}"
+    if use_query_builder:
+        q = QueryBuilder().date_range(date_range)
+        result = lib.read(sym, query_builder=q).data
+    else:
+        result = lib.read(sym, date_range=date_range).data
+
+    assert_frame_equal_with_arrow(expected_df, result)
 
 
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
-@pytest.mark.parametrize("start_date,end_date", [(1, 1), (1, 4), (1, 5), (3, 7), (6, 7), (6, 10), (7, 7)])
-def test_date_range_with_duplicates(version_store_factory, segment_row_size, start_date, end_date):
+@pytest.mark.parametrize("use_query_builder", [True, False])
+@pytest.mark.parametrize(
+    "start_date,end_date",
+    [
+        (1, 1),
+        (1, 4),
+        (1, 5),
+        (3, 7),
+        (6, 7),
+        (6, 10),
+        (7, 7),
+        (3, 4),  # Empty slice within a slice
+    ],
+)
+def test_date_range_with_duplicates(
+    version_store_factory, segment_row_size, start_date, end_date, use_query_builder, any_output_format
+):
     lib = version_store_factory(segment_row_size=segment_row_size)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(any_output_format)
     index_with_duplicates = (
         [pd.Timestamp(2025, 1, 1)] * 10
         + [pd.Timestamp(2025, 1, 2)] * 13
@@ -275,10 +327,14 @@ def test_date_range_with_duplicates(version_store_factory, segment_row_size, sta
     query_start_ts = pd.Timestamp(2025, 1, start_date)
     query_end_ts = pd.Timestamp(2025, 1, end_date)
 
-    date_range = (query_start_ts, query_end_ts)
-    arrow_table = lib.read(sym, date_range=date_range).data
     expected_df = df[(df.index >= query_start_ts) & (df.index <= query_end_ts)]
-    assert_frame_equal_with_arrow(arrow_table, expected_df)
+    date_range = (query_start_ts, query_end_ts)
+    if use_query_builder:
+        q = QueryBuilder().date_range(date_range)
+        result = lib.read(sym, query_builder=q).data
+    else:
+        result = lib.read(sym, date_range=date_range).data
+    assert_frame_equal_with_arrow(result, expected_df)
 
 
 @pytest.mark.parametrize("row_range_start", [0, 1, 2, 3, 4, 5, 6])
@@ -316,31 +372,62 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
+@pytest.mark.parametrize(
+    "output_format",
+    [
+        OutputFormat.EXPERIMENTAL_ARROW,
+        pytest.param(
+            OutputFormat.PANDAS,
+            marks=pytest.mark.skipif(IS_PANDAS_ONE, reason="Monday ref: 18013444785"),
+        ),
+    ],
+)
 @pytest.mark.parametrize("segment_row_size", [1, 2, 10, 100])
-@pytest.mark.parametrize("start_offset,end_offset", [(2, 4), (3, 76), (4, 33), (0, 100), (7, 57)])
-def test_row_range(version_store_factory, segment_row_size, start_offset, end_offset):
+@pytest.mark.parametrize("use_query_builder", [True, False])
+@pytest.mark.parametrize(
+    "start_offset,end_offset",
+    [
+        # Regular ranges
+        (2, 4),
+        (3, 76),
+        (4, 33),
+        (0, 100),
+        (7, 57),
+        # Open ended
+        (None, 30),
+        (30, None),
+        (None, None),
+        # Emtpy slices
+        (2, 2),
+        (3, 2),
+        (120, 130),
+        (-120, -110),
+        # Negative ranges
+        (5, -5),
+        (-50, 80),
+        (-21, -17),
+    ],
+)
+def test_row_range(version_store_factory, segment_row_size, start_offset, end_offset, use_query_builder, output_format):
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_strings=True)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
         {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
         index=pd.date_range(initial_timestamp, periods=100),
     )
-    sym = "arrow_date_test"
+    sym = "arrow_row_test"
     lib.write(sym, df)
 
     row_range = (start_offset, end_offset)
-    data_closed_table = lib.read(sym, row_range=row_range).data
-    df = data_closed_table.to_pandas()
+    expected_df = df.iloc[start_offset:end_offset]
+    if use_query_builder:
+        q = QueryBuilder().row_range(row_range)
+        result = lib.read(sym, query_builder=q).data
+    else:
+        result = lib.read(sym, row_range=row_range).data
 
-    start_ts = initial_timestamp + pd.DateOffset(start_offset)
-    end_ts = initial_timestamp + pd.DateOffset(end_offset - 1)
-    assert start_ts == df.index[0]
-    assert end_ts == df.index[-1]
-    assert df["numeric"].iloc[0] == start_offset
-    assert df["numeric"].iloc[-1] == end_offset - 1
-    assert df["strings"].iloc[0] == f"{start_offset}"
-    assert df["strings"].iloc[-1] == f"{end_offset - 1}"
+    assert_frame_equal_with_arrow(expected_df, result)
 
 
 def test_with_querybuilder(lmdb_version_store_arrow):
