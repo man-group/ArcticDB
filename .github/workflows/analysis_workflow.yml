@@ -169,11 +169,6 @@ jobs:
         env:
           CMAKE_BUILD_PARALLEL_LEVEL: ${{vars.CMAKE_BUILD_PARALLEL_LEVEL}}
 
-      - name: Remove GitHub default packages (manylinux) # To save space
-        run: |
-          du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
-          nohup rm -rf /mnt/usr/local/lib/android &
-
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
