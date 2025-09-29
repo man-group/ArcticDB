@@ -177,7 +177,7 @@ jobs:
                     - /:/mnt
             windows_matrix:
               - os: windows
-                distro: windows-latest
+                distro: windows-2022
                 cmake_preset_prefix: windows-cl
                 cibw_build_suffix: win_amd64
                 build_dir: C:/cpp_build
