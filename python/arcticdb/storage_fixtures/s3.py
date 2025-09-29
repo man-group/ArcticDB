@@ -759,26 +759,6 @@ def is_server_type(url: str, server_type: str):
     return False
 
 
-def get_buckets_check(s3_client):
-    try:
-        response = s3_client.list_buckets()
-        buckets = response.get("Buckets", [])
-
-        if buckets:
-            logger.warning("Buckets found:")
-            for bucket in buckets:
-                logger.warning(f"- {bucket['Name']}")
-        else:
-            logger.warning("Client is alive, but no buckets exist.")
-    except botocore.exceptions.EndpointConnectionError:
-        logger.warning("Could not connect to Moto S3 server. Is it running?")
-        raise
-    except botocore.exceptions.ClientError as e:
-        logger.warning(f"get_buckets_check - Client error: {e.response['Error']['Message']}")
-        pprint.pprint(e.response)
-        raise
-
-
 def create_bucket(s3_client, bucket_name, max_retries=15):
     for i in range(max_retries):
         try:
@@ -792,7 +772,6 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
         except Exception as e:
             logger.error(f"create_bucket - Error: {e.response['Error']['Message']}")
             pprint.pprint(e.response)
-            # get_buckets_check(s3_client)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -895,7 +874,6 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 logger.info(f"Attempt to start server - {i}")
                 self._start_server(2 + i)
                 self._s3_admin = self._boto(service="s3", key=self.default_key)
-                # get_buckets_check(self._s3_admin)
                 logger.info(f"Moto S3 STARTED!!! on port {self.port}")
                 break
             except AssertionError as e:  # Thrown by wait_for_server_to_come_up
