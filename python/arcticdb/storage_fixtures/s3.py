@@ -668,6 +668,11 @@ class HostDispatcherApplication(DomainDispatcherApplication):
             ):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Something to prove imds is reachable"]
+            
+            # Lets add ability to identify type as S3
+            if path_info in ("/whoami"):
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Moto AWS S3"]            
 
             # Allow setting up a rate limit
             if path_info in ("/rate_limit", b"/rate_limit"):
@@ -696,6 +701,13 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
     """GCP's S3 implementation does not have batch delete."""
 
     def __call__(self, environ, start_response):
+        path_info: bytes = environ.get("PATH_INFO", "")
+
+        # Lets add ability to identify type as GCP
+        if path_info in ("/whoami"):
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Moto GCP"]            
+
         if environ["REQUEST_METHOD"] == "POST" and environ["QUERY_STRING"] == "delete":
             response_body = (
                 b'<?xml version="1.0" encoding="UTF-8"?>'
@@ -732,6 +744,20 @@ def run_gcp_server(port, key_file, cert_file):
     )
 
 
+def is_server_type(url: str, server_type: str):
+    """Check if a server is of certain type.
+    
+    /whoami url is added to Moto* objects to identify GCP or S3"""
+    try:
+        response = requests.get(url,  verify=False) 
+        if response.status_code == 200 and server_type in response.text: 
+            return True
+    except Exception as e:
+        logger.error(f"Error during server type check: {e}")
+    logger.error(f"Was not of expected type: status code {response.status_code}, text: {response.text}")
+    return False 
+
+
 def get_buckets_check(s3_client):
     try:
         response = s3_client.list_buckets()
@@ -765,7 +791,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
         except Exception as e:
             logger.error(f"create_bucket - Error: {e.response['Error']['Message']}")
             pprint.pprint(e.response)
-            get_buckets_check(s3_client)
+            #get_buckets_check(s3_client)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -817,6 +843,15 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # and not using the fixtures
         # so this guarantees a unique bucket name
         return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
+    
+    def is_server_type(url: str, server_type: str):
+        try:
+            response = requests.get(url,  verify=False) 
+            if response.status_code == 200 and server_type in response.text: 
+                return True
+        except Exception:
+            pass  
+        return False 
 
     def _start_server(self, seed=2):
         port = self.port = get_ephemeral_port(seed)
@@ -851,6 +886,8 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
         # Due to this, we need to wait for the server to come up for a longer time
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
+        assert is_server_type(self.endpoint + "/whoami", "S3"), "The server has not identified as S3"
+
 
     def _safe_enter(self):
         for i in range(5):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
@@ -858,7 +895,7 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
                 logger.info(f"Attempt to start server - {i}")
                 self._start_server(2 + i)
                 self._s3_admin = self._boto(service="s3", key=self.default_key)
-                get_buckets_check(self._s3_admin)
+                #get_buckets_check(self._s3_admin)
                 logger.info(f"Moto S3 STARTED!!! on port {self.port}")
                 break
             except AssertionError as e:  # Thrown by wait_for_server_to_come_up
@@ -958,7 +995,7 @@ class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
 
 class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
-    def _start_server(self, seed=9):
+    def _start_server(self, seed=20):
         port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
@@ -991,6 +1028,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
         # Due to this, we need to wait for the server to come up for a longer time
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
+        assert is_server_type(self.endpoint + "/whoami", "GCP"), "The server has not identified as GCP"
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")
