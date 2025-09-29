@@ -668,11 +668,6 @@ class HostDispatcherApplication(DomainDispatcherApplication):
             ):
                 start_response("200 OK", [("Content-Type", "text/plain")])
                 return [b"Something to prove imds is reachable"]
-            
-            # Lets add ability to identify type as S3
-            if path_info in ("/whoami"):
-                start_response("200 OK", [("Content-Type", "text/plain")])
-                return [b"Moto AWS S3"]            
 
             # Allow setting up a rate limit
             if path_info in ("/rate_limit", b"/rate_limit"):
@@ -694,6 +689,11 @@ class HostDispatcherApplication(DomainDispatcherApplication):
             else:
                 self._reqs_till_rate_limit -= 1
 
+            # Lets add ability to identify type as S3
+            if "/whoami" in path_info:
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Moto AWS S3"]
+
         return super().__call__(environ, start_response)
 
 
@@ -702,11 +702,6 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
 
     def __call__(self, environ, start_response):
         path_info: bytes = environ.get("PATH_INFO", "")
-
-        # Lets add ability to identify type as GCP
-        if path_info in ("/whoami"):
-                start_response("200 OK", [("Content-Type", "text/plain")])
-                return [b"Moto GCP"]            
 
         if environ["REQUEST_METHOD"] == "POST" and environ["QUERY_STRING"] == "delete":
             response_body = (
@@ -721,6 +716,12 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
                 "501 Not Implemented", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
             )
             return [response_body]
+
+        # Lets add ability to identify type as GCP
+        if "/whoami" in path_info:
+            start_response("200 OK", [("Content-Type", "text/plain")])
+            return [b"Moto GCP"]
+
         return super().__call__(environ, start_response)
 
 
@@ -746,16 +747,16 @@ def run_gcp_server(port, key_file, cert_file):
 
 def is_server_type(url: str, server_type: str):
     """Check if a server is of certain type.
-    
+
     /whoami url is added to Moto* objects to identify GCP or S3"""
     try:
-        response = requests.get(url,  verify=False) 
-        if response.status_code == 200 and server_type in response.text: 
+        response = requests.get(url, verify=False)
+        if response.status_code == 200 and server_type in response.text:
             return True
     except Exception as e:
         logger.error(f"Error during server type check: {e}")
     logger.error(f"Was not of expected type: status code {response.status_code}, text: {response.text}")
-    return False 
+    return False
 
 
 def get_buckets_check(s3_client):
@@ -775,7 +776,7 @@ def get_buckets_check(s3_client):
     except botocore.exceptions.ClientError as e:
         logger.warning(f"get_buckets_check - Client error: {e.response['Error']['Message']}")
         pprint.pprint(e.response)
-        raise 
+        raise
 
 
 def create_bucket(s3_client, bucket_name, max_retries=15):
@@ -791,7 +792,7 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
         except Exception as e:
             logger.error(f"create_bucket - Error: {e.response['Error']['Message']}")
             pprint.pprint(e.response)
-            #get_buckets_check(s3_client)
+            # get_buckets_check(s3_client)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -843,15 +844,15 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # and not using the fixtures
         # so this guarantees a unique bucket name
         return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
-    
+
     def is_server_type(url: str, server_type: str):
         try:
-            response = requests.get(url,  verify=False) 
-            if response.status_code == 200 and server_type in response.text: 
+            response = requests.get(url, verify=False)
+            if response.status_code == 200 and server_type in response.text:
                 return True
         except Exception:
-            pass  
-        return False 
+            pass
+        return False
 
     def _start_server(self, seed=2):
         port = self.port = get_ephemeral_port(seed)
@@ -888,14 +889,13 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
         assert is_server_type(self.endpoint + "/whoami", "S3"), "The server has not identified as S3"
 
-
     def _safe_enter(self):
         for i in range(5):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
             try:
                 logger.info(f"Attempt to start server - {i}")
                 self._start_server(2 + i)
                 self._s3_admin = self._boto(service="s3", key=self.default_key)
-                #get_buckets_check(self._s3_admin)
+                # get_buckets_check(self._s3_admin)
                 logger.info(f"Moto S3 STARTED!!! on port {self.port}")
                 break
             except AssertionError as e:  # Thrown by wait_for_server_to_come_up
