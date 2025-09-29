@@ -57,8 +57,9 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
     auto type = err.GetErrorType();
 
     auto error_message_suffix = fmt::format(
-            "S3Error#{} {}: {} for object '{}'",
+            "S3Error:{}, HttpResponseCode:{}, {}: {} for object '{}'",
             int(err.GetErrorType()),
+            int(err.GetResponseCode()),
             err.GetExceptionName().c_str(),
             err.GetMessage().c_str(),
             object_name

@@ -43,10 +43,10 @@ def test_s3_storage_failures(mock_s3_store_with_error_simulation):
     result_df = lib.read(symbol_success).data
     assert_frame_equal(result_df, df)
 
-    with pytest.raises(StorageException, match="Network error: S3Error#99"):
+    with pytest.raises(StorageException, match="Network error: S3Error:99"):
         lib.write(symbol_fail_write, df)
 
-    with pytest.raises(StorageException, match="Unexpected error: S3Error#17"):
+    with pytest.raises(StorageException, match="Unexpected error: S3Error:17"):
         lib.read(symbol_fail_read)
 
 
@@ -174,15 +174,15 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
         # Depending on the reload interval, the error might be different
         # Setting the reload interval to 0 will make the error be "StorageException"
         with config_context("VersionMap.ReloadInterval", 0):
-            with pytest.raises(StorageException, match="Network error: S3Error#99"):
+            with pytest.raises(StorageException, match="Network error: S3Error:99"):
                 lib.read("s")
 
         with config_context_string("S3ClientTestWrapper.FailureBucket", test_bucket_name):
-            with pytest.raises(StorageException, match="Network error: S3Error#99"):
+            with pytest.raises(StorageException, match="Network error: S3Error:99"):
                 lib.write("s", data=create_df())
 
         with config_context_string("S3ClientTestWrapper.FailureBucket", f"{test_bucket_name},non_existent_bucket"):
-            with pytest.raises(StorageException, match="Network error: S3Error#99"):
+            with pytest.raises(StorageException, match="Network error: S3Error:99"):
                 lib.write("s", data=create_df())
 
         # There should be no failures
