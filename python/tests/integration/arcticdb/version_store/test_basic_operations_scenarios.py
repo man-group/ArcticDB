@@ -861,7 +861,7 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     expected_df = df1
     expected_df["B"] = expected_df["B"].astype(np.float64)
     assert_frame_equal(expected_df, data)
-    
+
 
 @pytest.mark.xfail(True, reason="When non-existing symbol is used, MissingDataException is not raised 18023146743")
 def test_batch_read_and_join_scenarios_errors(basic_store):
