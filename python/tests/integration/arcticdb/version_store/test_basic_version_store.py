@@ -1157,11 +1157,11 @@ def test_update_time(basic_store):
     lib.snapshot("snap")
     lib.write("sym1", df)
 
-    # Negative number for as_of works as expected
+    # Negative number for as_of works as expected (dataframes)
     assert lib.update_time("sym1") == lib.update_time("sym1", -1) == lib.update_time("sym1", 2)
-    # Snapshots are accepted
+    # Snapshots are accepted (series)
     assert lib.update_time("sym1", 1) == lib.update_time("sym1", -2) == lib.update_time("sym1", "snap")
-    # All types of supported data have update_time
+    # and now check for np array
     assert lib.update_time("sym1", 0) == lib.update_time("sym1", -3)
 
     # Times are ordered
