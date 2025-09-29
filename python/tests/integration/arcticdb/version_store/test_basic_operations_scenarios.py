@@ -46,8 +46,6 @@ from arcticdb_ext.exceptions import (
 )
 
 
-
-
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
     df.index = pd.date_range(start_time, periods=df.shape[0], freq="s")
 
@@ -738,7 +736,7 @@ def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_facto
             nvs.write(sym, df_sparse, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
             assert_frame_equal(df_sparse, nvs.read(sym).data)
 
- 
+
 @pytest.mark.parametrize("dynamic_strings", [True, False])
 @pytest.mark.storage
 def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
@@ -1031,4 +1029,3 @@ def test_remove_incomplete_for_v1_API(version_store_and_real_s3_basic_store_fact
     assert lib.list_symbols_with_incomplete_data() == [sym]
     lib.remove_incomplete(sym)
     assert lib.list_symbols_with_incomplete_data() == []
-    
