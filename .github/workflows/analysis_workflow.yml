@@ -197,7 +197,8 @@ jobs:
       
       - name: Build project for ASV
         run: |
-          python -m pip install -ve .[Testing]
+          df -h
+          sudo -H python -m pip install -ve .[Testing]
           
       - name: Run ASV Tests Check script
         run: |
