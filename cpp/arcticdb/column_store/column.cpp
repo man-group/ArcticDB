@@ -185,8 +185,15 @@ bool operator==(const Column& left, const Column& right) {
                 for (auto i = 0u; i < left.row_count(); ++i) {
                     auto left_val = left.scalar_at<LeftRawType>(i);
                     auto right_val = right.scalar_at<RightRawType>(i);
-                    if (left_val != right_val)
+                    const bool same = left_val == right_val;
+                    if constexpr (std::floating_point<LeftRawType>) {
+                        if (!same && !(left_val && right_val && std::isnan(*left_val) && std::isnan(*right_val))) {
+                            return false;
+                        }
+                    }
+                    if (!same) {
                         return false;
+                    }
                 }
                 return true;
             } else {

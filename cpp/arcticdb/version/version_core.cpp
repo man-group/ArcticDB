@@ -2870,9 +2870,11 @@ folly::Future<VersionedItem> merge_update_impl(
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             !write_options.dynamic_schema, "Cannot merge update with dynamic schema"
     );
+    const IndexDescriptor::Type index_type = pipeline_context->descriptor().index().type();
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-            pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP &&
-                    pipeline_context->descriptor().sorted() == SortedValue::ASCENDING,
+            (index_type == IndexDescriptor::Type::TIMESTAMP &&
+             pipeline_context->descriptor().sorted() == SortedValue::ASCENDING) ||
+                    index_type == IndexDescriptor::Type::ROWCOUNT,
             "Only timeseries ascending indexed target data is supported for merge update"
     );
     return read_modify_write_data_keys(store, read_query, read_options, target_partial_index_key, pipeline_context)
