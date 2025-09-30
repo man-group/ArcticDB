@@ -52,15 +52,15 @@ inline TypeDescriptor get_type_descriptor(py::buffer_info& info) {
     return TypeDescriptor(get_buffer_type(dtype), as_dim_checked(uint8_t(info.ndim)));
 }
 
-inline bool is_py_nan(PyObject* obj) {
+inline bool is_py_nan(const PyObject* obj) {
     if (PyFloat_Check(obj)) {
-        auto val = PyFloat_AsDouble(obj);
+        const auto val = PyFloat_AsDouble(const_cast<PyObject*>(obj));
         return std::isnan(val);
     }
     return false;
 }
 
-inline bool is_py_none(PyObject* obj) {
+inline bool is_py_none(const PyObject* obj) {
 #if PY_MAJOR_VERSION > 3 || (PY_MAJOR_VERSION == 3 && PY_MINOR_VERSION >= 10)
     return Py_IsNone(obj);
 #else

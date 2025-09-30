@@ -23,10 +23,12 @@
 #include <arcticdb/pipeline/pipeline_common.hpp>
 #include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/util/string_utils.hpp>
+
 #include <vector>
 #include <string>
 #include <variant>
 #include <memory>
+#include <ranges>
 
 namespace arcticdb {
 
@@ -851,7 +853,11 @@ struct WriteClause {
 struct MergeUpdateClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
-    ankerl::unordered_dense::set<std::string, util::TransparentStringHash, std::equal_to<>> on_;
+    /// Defines the order in which the columns will be iterated. Currently, it's the same as the order in which the user
+    /// passed it via the API. In future query optimization can reoder it. Does not contain duplicates.
+    std::vector<std::string> on_;
+    /// Used to check if a column is in on_ without performing a linear search.
+    ankerl::unordered_dense::set<std::string_view> on_set_;
     MergeStrategy strategy_;
     std::shared_ptr<InputFrame> source_;
     MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
@@ -884,7 +890,7 @@ struct MergeUpdateClause {
     [[nodiscard]] std::string to_string() const;
 
   private:
-    void update_and_insert(
+    bool update_and_insert(
             const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
             const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
     ) const;
@@ -897,8 +903,18 @@ struct MergeUpdateClause {
     /// processed. Each element is a vector of the rows from the target data that has the same index as the
     /// corresponding source row
     std::vector<std::vector<size_t>> filter_index_match(
-            const Column& target_index, const std::span<const timestamp> source_index,
-            const TimestampRange& target_atom_key_range
+            const Column& target_index, const std::span<const timestamp> source_index, const ProcessingUnit& proc
+    ) const;
+
+    std::vector<std::vector<size_t>> filter_on_additional_columns_match(
+            const StreamDescriptor& source_descriptor, const StreamDescriptor& target_descriptor,
+            const std::span<const NativeTensor> source_tensors, const ProcessingUnit& proc,
+            std::optional<std::vector<std::vector<size_t>>>&& index_match
+    ) const;
+
+    std::vector<std::vector<size_t>> initialize_rows_to_update_for_rowrange_indexed_data(
+            const ProcessingUnit& proc, const StreamDescriptor& source_descriptor,
+            const StreamDescriptor& target_descriptor
     ) const;
 
     std::vector<std::vector<size_t>> filter_on_additional_columns_match(
@@ -913,5 +929,7 @@ struct MergeUpdateClause {
     /// interval is closed in the start and open in the end: [start, end)
     ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
             source_start_end_for_row_range_;
+
+    std::pair<size_t, size_t> get_source_start_end(const ProcessingUnit& proc) const;
 };
 } // namespace arcticdb
