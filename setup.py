@@ -13,7 +13,7 @@ from setuptools.command.build_py import build_py
 from setuptools.command.develop import develop
 from wheel.bdist_wheel import bdist_wheel
 
-
+# test
 # experimental flag to indicate that we want
 # the dependencies from a conda
 ARCTICDB_USING_CONDA = os.environ.get("ARCTICDB_USING_CONDA", "0")
