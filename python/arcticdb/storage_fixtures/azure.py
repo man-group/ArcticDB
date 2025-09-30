@@ -13,6 +13,7 @@ import ssl
 import stat
 import tempfile
 import uuid
+import requests
 from typing import TYPE_CHECKING, Optional, Union
 from tempfile import mkdtemp
 
@@ -214,7 +215,22 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             process_start_cmd=args,
             cwd=self.working_dir,
         )
+        assert self.is_azurite(self.endpoint_root), f"Azurite not started at: {self.endpoint_root}"
         return self
+
+    def is_azurite(self, url: str, timeout: int = 60):
+        try:
+            response = requests.get(url, timeout=timeout)
+            headers = response.headers
+
+            # Check for Azurite-specific headers
+            server_header = headers.get("Server", "").lower()
+            has_azurite_headers = "x-ms-request-id" in str(headers) and "azurite" in server_header
+
+            return has_azurite_headers
+
+        except requests.RequestException:
+            return False
 
     def __exit__(self, exc_type, exc_value, traceback):
         with handle_cleanup_exception(self, "process", consequence="Subsequent file deletion may also fail. "):
