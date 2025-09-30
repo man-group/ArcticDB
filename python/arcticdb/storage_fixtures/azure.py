@@ -215,7 +215,9 @@ class AzuriteStorageFixtureFactory(StorageFixtureFactory):
             process_start_cmd=args,
             cwd=self.working_dir,
         )
-        assert self.is_azurite(self.endpoint_root), f"Azurite not started at: {self.endpoint_root}"
+        if not self.ssl_test_support:
+            # Do not verify when ssl test support because of need of proper certs
+            assert self.is_azurite(self.endpoint_root), f"Azurite not started at: {self.endpoint_root}"
         return self
 
     def is_azurite(self, url: str, timeout: int = 60):
