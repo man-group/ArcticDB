@@ -1476,7 +1476,11 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     if (add_new_symbol) {
         write_version_fut =
                 std::move(write_version_fut)
-                        .then([this, index_key_id = index_key.id(), reference_id = index_key.version_id()](auto&&) {
+                        .thenValue([this,
+                                    index_key_id = index_key.id(),
+                                    reference_id = index_key.version_id(
+                                    )](auto&&) { // Using .then and not using validating result from previous future
+                                                 // will swallow exception from previous future
                             return async::submit_io_task(
                                     WriteSymbolTask(store(), symbol_list_ptr(), index_key_id, reference_id)
                             );
@@ -1722,10 +1726,9 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                         missing_data::check<ErrorCode::E_NO_SUCH_VERSION>(
                                                 upsert, "Cannot append to non-existent symbol {}", stream_id
                                         );
-                                        constexpr static auto version_id = 0;
                                         index_key_fut = async_write_dataframe_impl(
                                                 store(),
-                                                version_id,
+                                                update_info.next_version_id_,
                                                 frame,
                                                 write_options,
                                                 std::make_shared<DeDupMap>(),
@@ -1815,7 +1818,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                         );
                                         index_key_fut = async_write_dataframe_impl(
                                                 store(),
-                                                0,
+                                                update_info.next_version_id_,
                                                 std::move(frame),
                                                 std::move(write_options),
                                                 std::make_shared<DeDupMap>(),
