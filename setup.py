@@ -6,6 +6,7 @@ import platform
 import shutil
 import re
 from tempfile import mkdtemp
+from pathlib import Path
 from setuptools import setup, Command, find_namespace_packages
 from setuptools import Extension, find_packages
 from setuptools.command.build_ext import build_ext
@@ -29,6 +30,45 @@ print(f"ARCTICDB_BUILD_CPP_TESTS={ARCTICDB_BUILD_CPP_TESTS}")
 def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
+
+def cleanup_vcpkg_artifacts():
+    cpp_dir = Path("cpp")
+    if not cpp_dir.exists():
+        return
+    
+    vcpkg_dir = cpp_dir / "vcpkg"
+    if not vcpkg_dir.exists():
+        return
+    
+    def safe_remove_directory(dir_path):
+        # To handle Windows symbolic links
+        if not dir_path.exists():
+            print(f"Directory not found (skipping): {dir_path}")
+            return
+        
+        try:
+            if os.path.islink(str(dir_path)):
+                target = os.readlink(str(dir_path))
+                if os.path.isabs(target):
+                    target_path = Path(target)
+                else:
+                    target_path = dir_path.parent / target
+                
+                os.unlink(str(dir_path))
+                print(f"Removed symbolic link: {dir_path}")
+                
+                if target_path.exists() and target_path.is_dir():
+                    shutil.rmtree(str(target_path))
+                    print(f"Removed target directory: {target_path}")
+            else:
+                shutil.rmtree(str(dir_path))
+                print(f"Removed: {dir_path}")
+        except Exception as e:
+            print(f"Warning: Could not remove {dir_path}: {e}")
+    
+    safe_remove_directory(vcpkg_dir / "buildtrees")
+    safe_remove_directory(vcpkg_dir / "downloads")
+    safe_remove_directory(vcpkg_dir / "packages")
 
 
 class CompileProto(Command):
@@ -164,6 +204,8 @@ class CMakeBuild(build_ext):
             cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 
         _log_and_run(*cmd, cwd="cpp")
+        
+        cleanup_vcpkg_artifacts()
 
         search = f"cpp/out/{preset}-build"
         candidates = glob.glob(search)
