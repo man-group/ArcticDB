@@ -194,7 +194,16 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "${{inputs.job_type == 'cpp-tests' && (matrix.cmake_extra_args != '' && format('[{0}, ''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'', ''-DTEST=ON'']', matrix.cmake_extra_args) || '[''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'', ''-DTEST=ON'']') || (matrix.cmake_extra_args != '' && format('[{0}, ''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'']', matrix.cmake_extra_args) || '[''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'']')}}"
+          configurePresetAdditionalArgs: >-
+            ${{
+              format('[{0}{1}''-DVCPKG_INSTALL_OPTIONS=--clean-after-build''{2}]',
+                matrix.cmake_extra_args,
+                # Add a comma if there are extra args
+                matrix.cmake_extra_args != '' && ', ' || '',
+                # Add test-specific args
+                inputs.job_type == 'cpp-tests' && ', ''-DTEST=ON'', ''ARCTICDB_ENABLE_SEGMENT_PRETTY_PRINT=1''' || ''
+              )
+            }}
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}

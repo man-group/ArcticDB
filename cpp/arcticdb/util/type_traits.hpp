@@ -9,6 +9,7 @@
 #pragma once
 
 #include <type_traits>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb::util {
 

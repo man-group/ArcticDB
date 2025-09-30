@@ -89,6 +89,34 @@ RawType* flatten_tensor(
     return reinterpret_cast<RawType*>(flattened_buffer->data());
 }
 
+template<DataType dt>
+std::variant<position_t, convert::StringEncodingError> add_py_string_to_pool(
+        PyObject* py_string_object, std::optional<ScopedGILLock>& scoped_gil_lock, StringPool& pool
+) {
+    if (is_py_none(py_string_object)) {
+        return not_a_string();
+    } else if (is_py_nan(py_string_object)) {
+        return nan_placeholder();
+    } else {
+        std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
+        if constexpr (is_utf_type(slice_value_type(dt))) {
+            wrapper_or_error = convert::py_unicode_to_buffer(py_string_object, scoped_gil_lock);
+        } else {
+            wrapper_or_error = convert::pystring_to_buffer(py_string_object, false);
+        }
+        // Cannot use util::variant_match as only one of the branches would have a return type
+        if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
+            const convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
+            const auto offset = pool.get(wrapper.buffer_, wrapper.length_);
+            return offset.offset();
+        } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
+            return std::get<convert::StringEncodingError>(std::move(wrapper_or_error));
+        } else {
+            internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
+        }
+    }
+}
+
 template<typename AggregatorType, typename TagType, typename RawType>
 std::optional<convert::StringEncodingError> set_sequence_type(
         AggregatorType& agg, const entity::NativeTensor& tensor, size_t col, size_t rows_to_write, size_t row,
@@ -99,25 +127,23 @@ std::optional<convert::StringEncodingError> set_sequence_type(
     std::optional<ChunkedBuffer> flattened_buffer;
 
     ARCTICDB_SAMPLE_DEFAULT(SetDataString)
+    const auto data = const_cast<void*>(tensor.data());
     if (is_fixed_string_type(dt)) {
         // deduplicate the strings
         auto str_stride = tensor.strides(0);
-        auto data = const_cast<void*>(tensor.data());
-        auto char_data = reinterpret_cast<char*>(data) + row * str_stride;
+        auto char_data = static_cast<char*>(data) + row * str_stride;
         auto str_len = tensor.elsize();
 
         for (size_t s = 0; s < rows_to_write; ++s, char_data += str_stride) {
             agg.set_string_at(col, s, char_data, str_len);
         }
     } else {
-        auto data = const_cast<void*>(tensor.data());
-        auto ptr_data = reinterpret_cast<PyObject**>(data);
+        auto ptr_data = static_cast<PyObject**>(data);
         ptr_data += row;
         if (!c_style)
             ptr_data =
                     flatten_tensor<PyObject*>(flattened_buffer, rows_to_write, tensor, slice_num, regular_slice_size);
 
-        std::variant<convert::StringEncodingError, convert::PyStringWrapper> wrapper_or_error;
         // GIL will be acquired if there is a string that is not pure ASCII/UTF-8
         // In this case a PyObject will be allocated by convert::py_unicode_to_buffer
         // If such a string is encountered in a column, then the GIL will be held until that whole column has
@@ -128,29 +154,14 @@ std::optional<convert::StringEncodingError> set_sequence_type(
         auto out_ptr = reinterpret_cast<entity::position_t*>(column.buffer().data());
         auto& string_pool = agg.segment().string_pool();
         for (size_t s = 0; s < rows_to_write; ++s, ++ptr_data) {
-            if (is_py_none(*ptr_data)) {
-                *out_ptr++ = not_a_string();
-            } else if (is_py_nan(*ptr_data)) {
-                *out_ptr++ = nan_placeholder();
-            } else {
-                if constexpr (is_utf_type(slice_value_type(dt))) {
-                    wrapper_or_error = convert::py_unicode_to_buffer(*ptr_data, scoped_gil_lock);
-                } else {
-                    wrapper_or_error = convert::pystring_to_buffer(*ptr_data, false);
-                }
-                // Cannot use util::variant_match as only one of the branches would have a return type
-                if (std::holds_alternative<convert::PyStringWrapper>(wrapper_or_error)) {
-                    convert::PyStringWrapper wrapper(std::move(std::get<convert::PyStringWrapper>(wrapper_or_error)));
-                    const auto offset = string_pool.get(wrapper.buffer_, wrapper.length_);
-                    *out_ptr++ = offset.offset();
-                } else if (std::holds_alternative<convert::StringEncodingError>(wrapper_or_error)) {
-                    auto error = std::get<convert::StringEncodingError>(wrapper_or_error);
-                    error.row_index_in_slice_ = s;
-                    return std::optional<convert::StringEncodingError>(error);
-                } else {
-                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unexpected variant alternative");
-                }
+            std::variant<position_t, convert::StringEncodingError> string_pool_entry =
+                    add_py_string_to_pool<dt>(*ptr_data, scoped_gil_lock, string_pool);
+            if (auto* err = std::get_if<convert::StringEncodingError>(&string_pool_entry); err) {
+                err->row_index_in_slice_ = s;
+                return std::move(*err);
             }
+            *out_ptr = std::get<position_t>(string_pool_entry);
+            ++out_ptr;
         }
     }
     return std::optional<convert::StringEncodingError>{};

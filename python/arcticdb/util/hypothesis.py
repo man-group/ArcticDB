@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import string
 from dataclasses import dataclass
 from typing import NamedTuple, Callable, Any, Optional
 from enum import Enum
@@ -15,10 +16,12 @@ import pandas as pd
 
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor
 from arcticdb.version_store._common import TimeFrame
+from arcticdb.util.test import unicode_symbols
 
 from hypothesis import settings, HealthCheck, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes, from_dtype
 from hypothesis.extra.pandas import column, data_frames, range_indexes
+import hypothesis.extra.pandas as hs_pd
 
 _function_scoped_fixture = getattr(HealthCheck, "function_scoped_fixture", None)
 
@@ -146,6 +149,89 @@ def numeric_type_strategies(draw):
             max_value=max_value,
         )
     )
+
+
+@st.composite
+def date(draw, min_date, max_date, unit="ns"):
+    """
+    Return a date between `min_date` and `max_date` using resolution `unit`.
+
+    Getting a diff in nanoseconds and then using it get an offset in that range is faster than using the numpy date
+    strategy. Using numpy's date strategy will also issue "too many failed filter operations" with a narrow date range
+
+    Note
+    --------
+    This way of generation will not generate np.NaT
+    """
+    if min_date == max_date:
+        return min_date
+
+    if isinstance(max_date, pd.Timestamp):
+        delta = int((max_date - min_date) / pd.Timedelta(1, unit=unit))
+    else:
+        delta = (max_date - min_date).astype(f"timedelta64[{unit}]").astype(np.int64)
+
+    unit_resolution = np.timedelta64(1, unit)
+    if delta < unit_resolution:
+        raise ValueError(
+            f"Error when generating date in range {min_date} {max_date}. Time delta in {unit}={delta} is less than the resolution of {unit}={unit_resolution}."
+        )
+    offset_from_start_in_ns = draw(st.integers(min_value=0, max_value=delta))
+    return min_date + np.timedelta64(offset_from_start_in_ns, unit)
+
+
+@st.composite
+def dataframe(draw, column_names, column_dtypes, min_date, max_date, index_name="index"):
+    assert index_name not in column_names, f"Column name '{index_name}' conflicts with index name"
+    index = hs_pd.indexes(elements=date(min_date=min_date, max_date=max_date), min_size=1)
+    columns = []
+    for name, dtype in zip(column_names, column_dtypes):
+        if pd.api.types.is_integer_dtype(dtype):
+            # Cap the int size to be in the range of either (u)int32 or the range of the given dtype if it's smaller.
+            # There are two reasons to cap int size:
+            # 1. To avoid overflows (happens usually when the dtype is 64bit and sum aggregator is used)
+            # 2. When dynamic schema is used. If we use pd.concat([df1, df2]) on two dataframes which are using dynamic
+            #    schema segments, the columns which are missing in either df will become float64 in the result (so that
+            #    the missing values can be NaN), however, if int64 is used some values won't be represented correctly,
+            #    and the test will fail.
+            current_byte_size = np.dtype(dtype).itemsize
+            if current_byte_size <= 4:
+                type_info = np.iinfo(dtype)
+            else:
+                is_signed = pd.api.types.is_signed_integer_dtype(np.dtype(dtype))
+                capping_dtype = np.dtype("int32") if is_signed else np.dtype("uint32")
+                type_info = np.iinfo(capping_dtype)
+            min_value = type_info.min
+            max_value = type_info.max
+            columns.append(
+                hs_pd.column(name=name, elements=st.integers(min_value=min_value, max_value=max_value), dtype=dtype)
+            )
+        elif pd.api.types.is_float_dtype(dtype):
+            # The column will still be of the specified dtype (float32 or float64), but by asking hypothesis to generate
+            # 16-bit floats, we reduce overflows. Pandas use Kahan summation, which can sometimes yield a different
+            # result for overflows. Passing min_value and max_value will disable generation of NaN, -inf and
+            # inf, which are supposed to work and have to be tested.
+            columns.append(hs_pd.column(name=name, elements=st.floats(width=16), dtype=dtype))
+        elif pd.api.types.is_object_dtype(dtype):
+            # Object dtypes denote strings
+            columns.append(
+                hs_pd.column(
+                    name=name,
+                    dtype=dtype,
+                    elements=st.one_of(
+                        st.text(min_size=1, max_size=20, alphabet=string.ascii_letters + string.digits),  # ASCII
+                        st.text(min_size=1, max_size=20, alphabet=unicode_symbols),  # Unicode
+                        st.just(np.nan),  # Missing value
+                        st.just(None),  # Missing value
+                    ),
+                )
+            )
+        else:
+            columns.append(hs_pd.column(name=name, dtype=dtype))
+    result = draw(hs_pd.data_frames(columns, index=index))
+    result.sort_index(inplace=True)
+    result.index.name = index_name
+    return result
 
 
 class FactoryReturn(NamedTuple):

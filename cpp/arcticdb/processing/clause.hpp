@@ -21,6 +21,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <folly/Poly.h>
 #include <arcticdb/pipeline/pipeline_common.hpp>
+#include <arcticdb/version/merge_options.hpp>
 #include <vector>
 #include <string>
 #include <variant>
@@ -36,6 +37,10 @@ using SliceAndKey = pipelines::SliceAndKey;
 namespace stream {
 struct PartialKey;
 } // namespace stream
+
+namespace pipelines {
+struct InputFrame;
+}
 
 class DeDupMap;
 
@@ -837,4 +842,67 @@ struct WriteClause {
     stream::PartialKey create_partial_key(const SegmentInMemory& segment) const;
 };
 
+/// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is
+/// the source_ member. Source and target must have the same index type. There are two actions
+/// UPDATE: For a particular row in the segment if there's a row in source_ for which all values in the columns listed
+/// in on and the index (only in case if timeseries) match update will be performed.
+/// INSERT: Each row in source_ not matched by the target will be inserted
+struct MergeUpdateClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    std::vector<std::string> on_;
+    MergeStrategy strategy_;
+    std::shared_ptr<InputFrame> source_;
+    MergeUpdateClause(std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source);
+    ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
+
+    /// Row range indexes require full table scan
+    /// In case of timestamp index this will filter out only the ranges and keys whose index span contains at least one
+    /// value from the source index. This does not mean that there's a match only that a match is possible. A crucial
+    /// assumption is that the source is ordered. This means that after ranges_and_keys are ordered by row slice we can
+    /// perform only forward iteration over the source index to find matches (except the edge of one segment starting
+    /// with the same value as the previous ends, see below)
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    );
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const;
+
+    void set_processing_config(const ProcessingConfig&);
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+
+    [[nodiscard]] std::string to_string() const;
+
+  private:
+    void update_and_insert(
+            const std::span<const NativeTensor> source_tensors, const StreamDescriptor& source_descriptor,
+            const ProcessingUnit& proc, const std::span<const std::vector<size_t>> rows_to_update
+    ) const;
+
+    /// Filter segments which will be affected by the merge. The complexity is O(m * log(n)) where n is the number
+    /// of rows in the source data and m is the number of row slices in the library
+    std::vector<std::vector<size_t>> structure_for_processing_log(std::vector<RangesAndKey>& ranges_and_keys);
+
+    /// @return Vector of size equal to the number of source data rows that are within the row slice being
+    /// processed. Each element is a vector of the rows from the target data that has the same index as the
+    /// corresponding source row
+    std::vector<std::vector<size_t>> filter_index_match(
+            const Column& target_index, const std::span<const timestamp> source_index,
+            const TimestampRange& target_atom_key_range
+    ) const;
+
+    /// For each timestamp range stores the first and last row in the source that overlaps with the row range. The
+    /// interval is closed in the start and open in the end: [start, end)
+    ankerl::unordered_dense::map<TimestampRange, std::pair<size_t, size_t>, folly::hasher<TimestampRange>>
+            source_start_end_for_row_range_;
+};
 } // namespace arcticdb

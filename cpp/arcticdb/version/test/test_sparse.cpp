@@ -7,7 +7,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <util/test/gtest_utils.hpp>
 
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/schema.hpp>
@@ -18,6 +17,7 @@
 #include <arcticdb/python/python_handlers.hpp>
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/util/native_handler.hpp>
+#include <arcticdb/util/test/gtest_utils.hpp>
 
 struct SparseTestStore : arcticdb::TestStore {
   protected:
