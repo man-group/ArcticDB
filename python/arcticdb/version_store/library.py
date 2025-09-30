@@ -830,7 +830,7 @@ class Library:
         validate_index=True,
         sort_on_index=False,
         sort_columns: List[str] = None,
-    ) -> None:
+    ) -> StageResult:
         """
         Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they
         are finalized. This enables multiple writers to a single symbol - all writing staged data at the same time -
