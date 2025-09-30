@@ -77,5 +77,5 @@ class TestStressTimeseriesMergeUpdate:
         assert stats["storage_operations"]["S3_PutObject"]["TABLE_INDEX"]["count"] == 1
 
         result = lib.read("sym").data
-        expected = merge(self.__class__.data, source, strategy=strategy, inplace=False)
+        expected = merge(self.__class__.data, source, strategy=strategy)
         assert_frame_equal(result, expected)
