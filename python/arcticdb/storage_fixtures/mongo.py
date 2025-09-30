@@ -117,7 +117,7 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
     def __init__(self, data_dir: Optional[str] = None, port=0, executable="mongod"):
         self._data_dir = data_dir or tempfile.mkdtemp("ManagedMongoDBServer")
-        self._port = port or get_ephemeral_port(5)
+        self._port = port or get_ephemeral_port(7)
         self._executable = executable
         self._client = None
 
