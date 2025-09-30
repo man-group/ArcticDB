@@ -149,7 +149,7 @@ auto split_pack(Data&&... data) {
 }
 
 template<
-        std::ranges::sized_range IndexCols, typename ColumnSlice, std::ranges::sized_range CurrentCol,
+        std::ranges::sized_range... IndexCols, typename ColumnSlice, std::ranges::sized_range CurrentCol,
         std::ranges::sized_range... RestCols>
 requires(
         util::instantiation_of<ColumnSlice, std::tuple> &&
@@ -161,7 +161,8 @@ void slice_data_into_segments_helper(
         const std::span<const StreamDescriptor> descriptors, const size_t rows_per_segment,
         const size_t cols_per_segment, pipelines::ColRange col_range, std::vector<SegmentInMemory>& segments,
         std::vector<pipelines::ColRange>& col_ranges, std::vector<pipelines::RowRange>& row_ranges,
-        const std::tuple<IndexCols&&>& index, ColumnSlice&& column_slice, CurrentCol&& current_col, RestCols&&... data
+        const std::tuple<IndexCols&&...>& index, ColumnSlice&& column_slice, CurrentCol&& current_col,
+        RestCols&&... data
 ) {
     auto new_column_slice = std::tuple_cat(
             std::forward<ColumnSlice>(column_slice), std::forward_as_tuple(std::forward<CurrentCol>(current_col))
@@ -232,6 +233,14 @@ slice_data_into_segments(
     std::vector<pipelines::RowRange> row_ranges;
 
     auto [index_columns, data_columns] = split_pack<index::field_count()>(std::forward<Data>(data)...);
+    static_assert(
+            std::tuple_size_v<decltype(index_columns)> == index::field_count(),
+            "Index columns must be the first N columns, or 0 for RowCountIndex"
+    );
+    static_assert(
+            std::tuple_size_v<decltype(data_columns)> == sizeof...(Data) - index::field_count(),
+            "Data columns must be the last N columns"
+    );
     std::apply(
             [&]<typename... Cols>(Cols&&... cols) {
                 slice_data_into_segments_helper(
