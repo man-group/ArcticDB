@@ -71,9 +71,9 @@ def target_and_source(
 
 
 @use_of_function_scoped_fixtures_in_hypothesis_checked
-@given(target_source=target_and_source(COL_NAMES, DTYPES))
+@given(target_source=target_and_source(COL_NAMES, DTYPES), on=st.lists(st.sampled_from(COL_NAMES), unique=True))
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_merge_update(lmdb_version_store_v1, target_source):
+def test_merge_update(lmdb_version_store_v1, target_source, on):
     target_list, source = target_source
     lib = lmdb_version_store_v1
     symbol = "test_merge_update"
@@ -81,7 +81,7 @@ def test_merge_update(lmdb_version_store_v1, target_source):
     for df in target_list:
         lib.append(symbol, df)
     strategy = MergeStrategy(matched="update", not_matched_by_target="do_nothing")
-    lib.merge_experimental(symbol, source, strategy=strategy)
+    lib.merge_experimental(symbol, source, strategy=strategy, on=on)
     result = lib.read(symbol).data
-    expected = merge(pd.concat(target_list), source, strategy=strategy, inplace=True)
+    expected = merge(pd.concat(target_list), source, strategy=strategy, on=on)
     assert_frame_equal(result, expected)

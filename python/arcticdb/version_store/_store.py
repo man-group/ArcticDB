@@ -3937,13 +3937,15 @@ class NativeVersionStore:
             The elements of `MergeStrategy` can be either values of the `MergeAction` enum or case-insensitive strings
             representing the enum values.
         on : Optional[List[str]]
-            !!! warning
-                Not yet implemented
-
             Columns which are used to determine row equality between source and target. A row is considered matched when
             all specified columns have equal values in both source and target.
 
             IMPORTANT: For date-time indexed data, the index is always included in matching and cannot be excluded.
+
+            Note on equality semantics:
+                - In float columns, NaN is considered equal to NaN.
+                - In string columns, None and NaN are indistinguishable. NaN == None, NaN == NaN, None == None,
+                  and None == NaN all evaluate to True.
         metadata : Any, optional
             Metadata to save alongside the new version.
         prune_previous_versions : bool, default False
