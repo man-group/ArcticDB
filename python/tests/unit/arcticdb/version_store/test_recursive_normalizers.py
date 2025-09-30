@@ -14,7 +14,7 @@ from arcticdb.version_store._custom_normalizers import CustomNormalizer, registe
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from arcticdb dynamically loads arcticc.pb2
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
-from arcticdb.util.test import assert_frame_equal
+from arcticdb.util.test import assert_frame_equal, assert_vit_equals_except_data
 from arcticdb.exceptions import (
     DataTooNestedException,
     UnsupportedKeyInDictionary,
