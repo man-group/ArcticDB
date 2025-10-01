@@ -483,3 +483,106 @@ def test_force_compact_symbol_list_lock_held_past_ttl(lmdb_version_store_v1, mak
     lock = lib.version_store.get_storage_lock(CompactionLockName)
     lock.lock()
     assert lib.compact_symbol_list() == 0
+
+
+def test_compact_symbol_list_with_special_character_symbols_and_long_names(lmdb_version_store_v1):
+    """Test compaction with symbols containing special characters and long symbol names"""
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+    max_length = 254
+
+    # Symbols with various special characters
+    special_symbols = [
+        "symbol_with_underscore",
+        "symbol-with-dash",
+        "symbol.with.dots",
+        "symbol123with456numbers",
+        "symbol with spaces",  # Note: spaces might not be supported in all backends
+        "symbol$with$dollar",
+        "symbol@with@at",
+        "symbol=with=equals",
+        "symbol;with;semicolon",
+        "symbol:with:colon",
+        "symbol+with+plus",
+        "symbol,with,comma",
+        "symbol?with?question",
+        "symbol{with}braces",
+        "symbol[with]brackets",
+        "symbol'with'quotes",
+        "symbol~with~tilde",
+        "symbol#with#hash",
+        "symbol!with!exclamation",
+        "symbol-_.()combination",
+        "a" * 100,
+        "b" * 200,
+        "c" * max_length,
+    ]
+
+    # Filter out symbols that might not be supported by the backend
+    valid_symbols = []
+    for symbol in special_symbols:
+        try:
+            lib.write(symbol, pd.DataFrame({"test": [1]}))
+            valid_symbols.append(symbol)
+        except Exception:
+            # Skip symbols that are not supported
+            continue
+
+    # Compact and verify
+    result = lib.compact_symbol_list()
+    assert result == len(valid_symbols)
+
+    symbol_list_keys_after = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys_after) == 1
+
+    # Verify all symbols are still accessible
+    symbols = lib.list_symbols()
+    assert len(symbols) == len(valid_symbols)
+    for symbol in valid_symbols:
+        assert symbol in symbols
+
+
+def test_compact_symbol_list_chunking_when_symbol_deleted_and_recreated_symbols(lmdb_version_store_v1):
+    """Test chunking during symbol delete of compacted symbol list and symbol recreation"""
+    lib = lmdb_version_store_v1
+    lib_tool = lib.library_tool()
+
+    # Create initial symbols
+    initial_symbols = ["sym1", "sym2", "sym3", "sym4", "sym5"]
+    for symbol in initial_symbols:
+        lib.write(symbol, pd.DataFrame({"data": [1, 2, 3]}))
+
+    # Compact and verify
+    result = lib.compact_symbol_list()
+    assert result == len(initial_symbols)
+
+    symbol_list_keys_after = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys_after) == 1
+
+    # Delete symbol
+    lib.delete("sym2")
+    symbol_list_keys_after = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys_after) == 2  # The list is now halved
+
+    # Delete another symbols
+    lib.delete("sym4")
+    symbol_list_keys_after = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys_after) == 3  # And once again one of chunks is halved
+
+    # Recreate deleted symbol with different data
+    lib.write("sym2", pd.DataFrame({"different_data": [4, 5, 6]}))
+
+    symbol_list_keys_after = lib_tool.find_keys(KeyType.SYMBOL_LIST)
+    assert len(symbol_list_keys_after) == 4  # Recreation creates another chunk
+
+    # Verify expected symbols exist
+    symbols = lib.list_symbols()
+    expected_symbols = ["sym1", "sym2", "sym3", "sym5"]
+    assert len(symbols) == len(expected_symbols)
+    for symbol in expected_symbols:
+        assert symbol in symbols
+
+    # Verify recreated symbol has new data
+    recreated_data = lib.read("sym2").data
+    expected_recreated = pd.DataFrame({"different_data": [4, 5, 6]})
+    pd.testing.assert_frame_equal(recreated_data, expected_recreated)

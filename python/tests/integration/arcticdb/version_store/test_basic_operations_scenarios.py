@@ -725,7 +725,7 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
         ["symbol0", "symbol1"], as_ofs=[0, 0], query_builder=q, per_symbol_query_builders=[q0, None]
     ).data
     expected_df = df1
-    expected_df["B"] = expected_df["B"].astype(np.float64)    
+    expected_df["B"] = expected_df["B"].astype(np.float64)
     assert_frame_equal(df1, data)
 
 
