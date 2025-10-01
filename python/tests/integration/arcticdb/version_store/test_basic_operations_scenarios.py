@@ -6,9 +6,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import random
 import re
+import string
 import sys
-from typing import List
+from typing import List, Union
 import pytest
 import pandas as pd
 import numpy as np
@@ -17,12 +19,15 @@ from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
+    assert_frame_equal,
+    random_string,
 )
 from arcticdb.util.utils import DFGenerator, generate_random_series, set_seed, supported_types_list
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
 
-from arcticdb.exceptions import ArcticNativeException, SortingException
+from arcticdb.exceptions import ArcticNativeException, SortingException, MissingKeysInStageResultsError
+from arcticdb_ext.storage import KeyType
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
 
@@ -35,7 +40,7 @@ from arcticdb_ext.exceptions import (
     SchemaException,
 )
 
-from benchmarks.bi_benchmarks import assert_frame_equal
+from tests.conftest import Marks
 from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 
 
@@ -80,6 +85,16 @@ def get_metadata():
         "tags": ["v1.2", "regression"],
     }
     return [metadata, {}, [metadata, {}, [metadata, {}], 1], "", None]
+
+
+def assert_equals(expected: Union[pd.DataFrame, pd.Series], actual: Union[pd.DataFrame, pd.Series]):
+    if isinstance(expected.index, pd.RangeIndex) or isinstance(actual.index, pd.RangeIndex):
+        expected = expected.reset_index(drop=True)
+        actual = actual.reset_index(drop=True)
+    if isinstance(expected, pd.DataFrame):
+        assert_frame_equal(expected, actual)
+    else:
+        assert_series_equal_pandas_1(expected, actual)
 
 
 @SLOW_TESTS_MARK
@@ -148,7 +163,7 @@ def test_write_append_update_read_scenario_with_different_series_combinations(
             assert meta == ver.metadata
 
 
-@pytest.mark.storage
+@Marks.storage.mark
 def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_real_s3_basic_store_factory):
     """
     The test does series of append operations with new columns of all supported column types.
@@ -244,7 +259,7 @@ def test_append_update_dynamic_schema_add_columns_all_types(version_store_and_re
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
-@pytest.mark.storage
+@Marks.storage.mark
 def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic_store_factory, dynamic_schema):
     """
     Test error messages and exception types for various failure scenarios mixed with
@@ -456,7 +471,7 @@ def split_dataframe_into_random_chunks(df: pd.DataFrame, min_size: int = 1, max_
 
 
 @pytest.mark.parametrize("num_columns", [1, 50])
-@pytest.mark.storage
+@Marks.storage.mark
 # Problem is on Linux and Python 3.8 with pandas 1.5.3
 @pytest.mark.xfail(
     LINUX and (sys.version_info[:2] == (3, 8)),
@@ -523,7 +538,7 @@ def test_stage_error(version_store_and_real_s3_basic_store_factory):
     assert_frame_equal_rebuild_index_first(expected_data, lib.read(symbol).data)
 
 
-@pytest.mark.storage
+@Marks.storage.mark
 def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_factory):
     """
     Tests  if different size chunks of dataframe can be staged
@@ -589,7 +604,7 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
 
 
 @pytest.mark.parametrize("dynamic_strings", [True, False])
-@pytest.mark.storage
+@Marks.storage.mark
 def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     """The test covers usage of batch_read_and_join with multiple parameters and error conditions"""
     lib: NativeVersionStore = basic_store_factory(dynamic_strings=dynamic_strings)
@@ -727,7 +742,7 @@ def test_batch_read_and_join_scenarios_errors(basic_store):
         data: pd.DataFrame = lib.batch_read_and_join(["symbol0", "symbol2"], query_builder=q).data
 
 
-@pytest.mark.storage
+@Marks.storage.mark
 @pytest.mark.xfail(True, reason="Filtering of columns does not work for dynamic schema 18023047637")
 def test_batch_read_and_join_scenarios_dynamic_schema_filtering_error(lmdb_version_store_dynamic_schema_v1):
     lib: NativeVersionStore = lmdb_version_store_dynamic_schema_v1
@@ -880,3 +895,269 @@ def test_remove_incomplete_for_v1_API(version_store_and_real_s3_basic_store_fact
     assert lib.list_symbols_with_incomplete_data() == [sym]
     lib.remove_incomplete(sym)
     assert lib.list_symbols_with_incomplete_data() == []
+
+
+@Marks.storage.mark
+def test_complete_incomplete_additional_scenarios(basic_store):
+    """The test examines different combinations of input data types and compact_incomplete parameters
+    to determine if incompletes are properly completed.
+
+    During the test following 3 parameters are examined together:
+      - stage_results
+      - validate_index
+      - delete_staged_data_on_failure
+
+    The tests are executed with timestamped indexed series and dataframes on a single symbol in
+    sequence one after the other
+    """
+    lib: NativeVersionStore = basic_store
+    lib_tool = lib.library_tool()
+
+    timestamps_ok = pd.to_datetime(
+        [
+            "2020-02-01",
+            "2020-03-01",
+        ]
+    )
+
+    # An index with NaT is not considered good, we have to see arcticdb reaction of
+    # compatct_incomplete with such data
+    timestamps_unsorted_with_nat = pd.to_datetime(
+        [
+            "2023-01-01",
+            pd.NaT,
+            "2023-01-03",
+            "2023-01-04",
+        ]
+    )
+
+    # An index with proper values but unsorted
+    timestamps_unsorted = pd.to_datetime(
+        [
+            "2023-01-01",
+            "2023-01-05",
+            "2023-01-02",
+        ]
+    )
+
+    df = pd.DataFrame({"value": [1, 2]}, index=timestamps_ok)
+    df_unsorted = pd.DataFrame({"value": [10, 20, 30]}, index=timestamps_unsorted)
+    df_unsorted_with_nat = pd.DataFrame({"value": [10, 20, 30, 40]}, index=timestamps_unsorted_with_nat)
+
+    series = pd.Series(data=[0.1, 0.2], name="name", index=timestamps_ok)
+    series_unsorted = pd.Series(data=[1, 2, 3.3, 4], name="name", index=timestamps_unsorted_with_nat)
+
+    def do_tests(df_or_series: Union[pd.DataFrame, pd.Series], df_or_series_unsorted: Union[pd.DataFrame, pd.Series]):
+        """Here we test behavior of completion of data when we have timestamp index"""
+        symbol = "Sirius v1.0124"  #''.join(random.choices(string.ascii_uppercase, k=6))
+        df_empty = df_or_series.iloc[0:0]
+
+        # Lets prepare a symbol and write data through stage
+        lib.stage(symbol, df_or_series, validate_index=True)
+        lib.stage(symbol, df_empty, validate_index=True)
+        lib.compact_incomplete(symbol, append=False, validate_index=True, convert_int_to_float=False)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Compact incomplete fails on append due to data index is not sorted
+        stage_res = lib.stage(symbol, df_or_series_unsorted, validate_index=False)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 1
+        with pytest.raises(UnsortedDataException):
+            lib.compact_incomplete(symbol, append=True, validate_index=True, convert_int_to_float=False)
+        assert_equals(df_or_series, lib.read(symbol).data)
+
+        # Compact incomplete fails on write due to data index is not sorted, but we will delete the staged data on failure
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 1
+        with pytest.raises(UnsortedDataException):
+            lib.compact_incomplete(
+                symbol,
+                append=False,
+                validate_index=True,
+                convert_int_to_float=False,
+                delete_staged_data_on_failure=True,
+            )
+        assert_equals(df_or_series, lib.read(symbol).data)
+
+        # Validating that the deletion took place
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Will try to compact_incomplete with valid and invalid stage result and other parameters
+        stage_res_new = lib.stage(symbol, df_or_series_unsorted, validate_index=False)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 1
+        with pytest.raises(MissingKeysInStageResultsError):
+            lib.compact_incomplete(
+                symbol,
+                append=False,
+                stage_results=[stage_res_new, stage_res],
+                validate_index=True,
+                convert_int_to_float=False,
+                delete_staged_data_on_failure=True,
+            )
+        assert_equals(df_or_series, lib.read(symbol).data)
+        # Data should be still deleted
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Will try to compact_incomplete with valid stage result with invalid index order and other parameters
+        a = lib.stage(symbol, df_or_series_unsorted, validate_index=False)
+        b = lib.stage(symbol, df_empty, validate_index=False)  # This one is valid empty
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 2
+        with pytest.raises(UnsortedDataException):
+            lib.compact_incomplete(
+                symbol, append=False, stage_results=[a, b], validate_index=True, convert_int_to_float=False
+            )
+        assert_equals(df_or_series, lib.read(symbol).data)
+
+        # Repeat same compaction with validating index == False
+        with pytest.raises(UnsortedDataException):
+            lib.compact_incomplete(
+                symbol,
+                append=True,
+                stage_results=[a, b],
+                validate_index=False,
+                convert_int_to_float=False,
+                delete_staged_data_on_failure=True,
+            )
+        assert_equals(df_or_series, lib.read(symbol).data)
+        # Data should be still deleted
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        if isinstance(df_or_series_unsorted.index, pd.DatetimeIndex) and not df_or_series_unsorted.index.isna().any():
+            # if the df_or_series_unsorted does not contain NaT only then following tests will be valid
+            a = lib.stage(symbol, df_or_series_unsorted.sort_index(), validate_index=False)
+            b = lib.stage(symbol, df_empty, validate_index=False)
+            lib.compact_incomplete(
+                symbol,
+                append=True,
+                stage_results=[a, b],
+                validate_index=False,
+                convert_int_to_float=False,
+                delete_staged_data_on_failure=True,
+            )
+            assert_equals(pd.concat([df_or_series, df_or_series_unsorted.sort_index()]), lib.read(symbol).data)
+
+    do_tests(df, df_unsorted_with_nat)
+    do_tests(df, df_unsorted)
+    do_tests(series, series_unsorted)
+
+
+@Marks.storage.mark
+def test_complete_incomplete_additional_scenarios_no_timestamp_index(basic_store):
+    """The test examines different combinations of input data types and compact_incomplete parameters
+    to determine if incompletes are properly completed.
+
+    During the test following 3 parameters are examined together:
+      - stage_results
+      - validate_index
+      - delete_staged_data_on_failure
+
+    The tests are executed with a range indexed dataframes a series without index and np arrays on a single symbol in
+    sequence one after the other
+    """
+    lib: NativeVersionStore = basic_store
+    lib_tool = lib.library_tool()
+
+    df_rangeindex = pd.DataFrame({"value": [1, 2]}, index=[1, 2])
+    df_rangeindex_unsorted = pd.DataFrame({"value": [10, 20, 30]}, index=[3, 5, 4])
+
+    df = pd.DataFrame({"value": [1, 2]})
+    df_add = pd.DataFrame({"value": [10, 20, 30]})
+
+    series = pd.Series(data=[0.1, 0.2], name="name")
+    series_add = pd.Series(data=[1, 2, 3.3, 4], name="name")
+
+    np_arr = np.array([1, 2], dtype=np.int64)
+    np_arr_add = np.array([3, 4, 5], dtype=np.int64)
+
+    def do_tests(df_or_series: Union[pd.DataFrame, pd.Series], df_or_series_unsorted: Union[pd.DataFrame, pd.Series]):
+        """Here we test completion of data that has different than timestamp index"""
+        symbol = "Soya beans & rice"
+        if isinstance(df_or_series, np.ndarray):
+            df_empty = df_or_series[:0]
+        else:
+            df_empty = df_or_series.iloc[0:0]
+
+        # Lets prepare a symbol and write data through stage
+        lib.stage(symbol, df_or_series, validate_index=True)
+        lib.compact_incomplete(symbol, append=False, validate_index=True, convert_int_to_float=False)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Compact incomplete with wrong index should always succeed, regardless of append or write
+        stage_res = lib.stage(symbol, df_or_series_unsorted, validate_index=False)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 1
+        lib.compact_incomplete(symbol, append=True, validate_index=True, convert_int_to_float=False)
+        assert_equals(pd.concat([df_or_series, df_or_series_unsorted]), lib.read(symbol).data)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Compact incomplete with wrong index should always succeed, regardless of append or write
+        stage_res = lib.stage(symbol, df_or_series_unsorted, validate_index=False)
+        lib.compact_incomplete(
+            symbol, append=False, validate_index=True, convert_int_to_float=False, delete_staged_data_on_failure=True
+        )
+        assert_equals(df_or_series_unsorted, lib.read(symbol).data)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Will try to compact_incomplete with valid and invalid stage result and other parameters
+        stage_res_new = lib.stage(symbol, df_or_series_unsorted, validate_index=False)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 1
+        with pytest.raises(MissingKeysInStageResultsError):
+            lib.compact_incomplete(
+                symbol,
+                append=False,
+                stage_results=[stage_res_new, stage_res],
+                validate_index=True,
+                convert_int_to_float=False,
+                delete_staged_data_on_failure=True,
+            )
+        assert_equals(df_or_series_unsorted, lib.read(symbol).data)
+        # Data staged in completed
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Will try to compact_incomplete with valid stage result with invalid index order (range index) and other parameters
+        stage_res_new = lib.stage(symbol, df_or_series_unsorted, validate_index=False)
+        stage_res_new_empty = lib.stage(symbol, df_empty, validate_index=False)
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 2
+        lib.compact_incomplete(
+            symbol,
+            append=False,
+            stage_results=[stage_res_new, stage_res_new_empty],
+            validate_index=True,
+            convert_int_to_float=False,
+            delete_staged_data_on_failure=True,
+        )
+        assert_equals(df_or_series_unsorted, lib.read(symbol).data)
+        # Data staged in completed
+        assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+    do_tests(df_rangeindex, df_rangeindex_unsorted)
+    do_tests(series, series_add)
+    # This one has issues - a separate test will cover it for now
+    # do_tests(np_arr, np_arr_add)
+
+
+@pytest.mark.xfail
+def test_complete_incomplete_additional_scenarios_errors_np_array(basic_store):
+    lib: NativeVersionStore = basic_store
+    np_arr = np.array([1, 2], dtype=np.int64)
+    np_arr_add = np.array([3, 4, 5], dtype=np.int64)
+
+    symbol = "A"
+    symbolB = "B"
+
+    # This will pass
+    lib.write(symbol, np_arr)
+    lib.append(symbol, np_arr_add)
+
+    lib.read(symbol).data
+
+    # This one should also pass
+    lib.stage(symbolB, np_arr, validate_index=False)
+    lib.stage(symbolB, np_arr_add, validate_index=False)
+    lib.compact_incomplete(
+        symbolB, append=False, validate_index=False, convert_int_to_float=False, delete_staged_data_on_failure=True
+    )
+    lib.read(symbolB).data
+    ## Above will produce error:
+    #     def denormalize(self, item, norm_meta):
+    #        original_shape = tuple(norm_meta.shape)
+    #        data = item.data[0]
+    # >       return data.reshape(original_shape)
+    # E       ValueError: cannot reshape array of size 5 into shape (3,)
