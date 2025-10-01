@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/memory_segment_impl.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -787,7 +788,7 @@ std::vector<std::shared_ptr<SegmentInMemoryImpl>> SegmentInMemoryImpl::partition
                     }
                 }
                 auto row_to_segment_it = row_to_segment.cbegin();
-                Column::for_each<typename type_info::TDT>(**column, [&row_to_segment_it, &output_ptrs](auto val) {
+                arcticdb::for_each<typename type_info::TDT>(**column, [&row_to_segment_it, &output_ptrs](auto val) {
                     if (ARCTICDB_LIKELY(*row_to_segment_it != std::numeric_limits<uint8_t>::max())) {
                         *(output_ptrs[*row_to_segment_it]++) = val;
                     }
@@ -871,7 +872,7 @@ std::shared_ptr<SegmentInMemoryImpl> SegmentInMemoryImpl::truncate(
         details::visit_type(column->type().data_type(), [&](auto col_tag) {
             using type_info = ScalarTypeInfo<decltype(col_tag)>;
             if constexpr (is_sequence_type(type_info::data_type)) {
-                Column::transform<typename type_info::TDT, typename type_info::TDT>(
+                arcticdb::transform<typename type_info::TDT, typename type_info::TDT>(
                         *truncated_column,
                         *truncated_column,
                         [this, &output](auto string_pool_offset) -> typename type_info::RawType {
@@ -1067,9 +1068,8 @@ void SegmentInMemoryImpl::sort(position_t idx) {
             "column data or filter the empty columns out",
             idx
     );
-    auto table = sort_col.type().visit_tag([&sort_col](auto tdt) {
-        using TagType = decltype(tdt);
-        return create_jive_table<TagType>(sort_col);
+    auto table = details::visit_scalar(sort_col.type(), [&sort_col](auto tdt) {
+        return create_jive_table<decltype(tdt)>(sort_col);
     });
 
     auto pre_allocated_space = std::vector<uint32_t>(sort_col.row_count());
@@ -1087,7 +1087,7 @@ void SegmentInMemoryImpl::calculate_statistics() {
         if (column->type().dimension() == Dimension::Dim0) {
             const auto type = column->type();
             if (is_numeric_type(type.data_type()) || is_sequence_type(type.data_type())) {
-                type.visit_tag([&column](auto tdt) {
+                details::visit_scalar(type, [&column](auto tdt) {
                     using TagType = std::decay_t<decltype(tdt)>;
                     column->set_statistics(generate_column_statistics<TagType>(column->data()));
                 });

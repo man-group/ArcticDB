@@ -8,11 +8,11 @@
 
 #include <gtest/gtest.h>
 
+#include <sparrow/record_batch.hpp>
+
 #include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
 
 using namespace arcticdb;
@@ -50,7 +50,7 @@ SegmentInMemory get_detachable_segment(
 
     for (auto i = 0u; i < num_columns + 1; ++i) {
         auto& column = segment.column(i);
-        column.type().visit_tag([&column, &num_rows, &chunk_size](auto&& impl) {
+        details::visit_scalar(column.type(), [&column, &num_rows, &chunk_size](auto&& impl) {
             using TagType = std::decay_t<decltype(impl)>;
             using RawType = typename TagType::DataTypeTag::raw_type;
             allocate_and_fill_chunked_column<RawType>(column, num_rows, chunk_size);

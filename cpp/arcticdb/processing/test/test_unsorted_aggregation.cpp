@@ -154,7 +154,7 @@ TEST_P(AggregationResult, Mean) {
                 ASSERT_EQ(aggregated_column.row_count(), 0);
             }
             constexpr static std::array expected = get_expected_result_mean<InputDataTypeTag>();
-            Column::for_each_enumerated<OutputDataTypeTag>(aggregated_column, [&](const auto& row) {
+            arcticdb::for_each_enumerated<OutputDataTypeTag>(aggregated_column, [&](const auto& row) {
                 ASSERT_EQ(row.value(), expected[row.idx()]);
             });
         }

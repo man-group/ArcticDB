@@ -7,8 +7,16 @@
  */
 #pragma once
 
-#include <sparrow/record_batch.hpp>
+#include <memory>
+#include <string_view>
 #include <vector>
+
+// Anything that transitively includes sparrow.array.hpp takes ages to build the (unused by us) std::format impl
+// So avoid including sparrow in headers where possible until this is resolved
+namespace sparrow {
+class array;
+class record_batch;
+} // namespace sparrow
 
 namespace arcticdb {
 
