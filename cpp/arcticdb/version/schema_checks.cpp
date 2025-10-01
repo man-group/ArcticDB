@@ -1,19 +1,9 @@
 #include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/python/normalization_checks.hpp>
 #include <arcticdb/pipeline/index_segment_reader.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
-
-std::string_view normalization_operation_str(NormalizationOperation operation) {
-    switch (operation) {
-    case APPEND:
-        return "APPEND";
-    case UPDATE:
-        return "UPDATE";
-    default:
-        util::raise_rte("Unknown operation type {}", static_cast<uint8_t>(operation));
-    }
-}
 
 IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right) {
     if (left == right) {
@@ -139,13 +129,14 @@ bool columns_match(
 }
 
 void fix_descriptor_mismatch_or_throw(
-        NormalizationOperation operation, bool dynamic_schema, const pipelines::index::IndexSegmentReader& existing_isr,
-        const pipelines::InputTensorFrame& new_frame, bool empty_types
+        arcticdb::NormalizationOperation operation, bool dynamic_schema,
+        const pipelines::index::IndexSegmentReader& existing_isr, const pipelines::InputTensorFrame& new_frame,
+        bool empty_types
 ) {
     const auto& old_sd = existing_isr.tsd().as_stream_descriptor();
     check_normalization_index_match(operation, old_sd, new_frame, empty_types);
 
-    fix_normalization_or_throw(operation == APPEND, existing_isr, new_frame);
+    fix_normalization_or_throw(operation, existing_isr, new_frame);
 
     // We need to check that the index names match regardless of the dynamic schema setting
     if (!index_names_match(old_sd, new_frame.desc)) {
@@ -186,4 +177,13 @@ void fix_descriptor_mismatch_or_throw(
         );
     }
 }
+
+StreamDescriptorMismatch::StreamDescriptorMismatch(
+        const char* preamble, const StreamId& stream_id, const StreamDescriptor& existing,
+        const StreamDescriptor& new_val, NormalizationOperation operation
+) :
+    ArcticSpecificException(fmt::format(
+            "{}: {}; stream_id=\"{}\"; existing=\"{}\"; new_val=\"{}\"", preamble, operation, stream_id,
+            existing.fields(), new_val.fields()
+    )) {}
 } // namespace arcticdb

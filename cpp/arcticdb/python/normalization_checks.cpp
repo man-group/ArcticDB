@@ -195,7 +195,7 @@ bool check_ndarray_append(const NormalizationMetadata& old_norm, NormalizationMe
 }
 
 void fix_normalization_or_throw(
-        bool is_append, const pipelines::index::IndexSegmentReader& existing_isr,
+        NormalizationOperation operation, const pipelines::index::IndexSegmentReader& existing_isr,
         const pipelines::InputTensorFrame& new_frame
 ) {
     auto& old_norm = existing_isr.tsd().proto().normalization();
@@ -203,7 +203,7 @@ void fix_normalization_or_throw(
     normalization::check<ErrorCode::E_INCOMPATIBLE_OBJECTS>(
             old_norm.input_type_case() == new_frame.norm_meta.input_type_case(),
             "{} can be performed only on objects of the same type. Existing type is {} new type is {}.",
-            is_append ? "Append" : "Update",
+            operation,
             old_norm.input_type_case(),
             new_frame.norm_meta.input_type_case()
     );
@@ -215,13 +215,15 @@ void fix_normalization_or_throw(
         }
         return;
     }
-    if (is_append) {
+    if (operation == NormalizationOperation::APPEND) {
         if (check_ndarray_append(old_norm, new_norm))
             return;
     } else {
         // ndarray normalizes to a ROWCOUNT frame and we don't support update on those
         normalization::check<ErrorCode::E_UPDATE_NOT_SUPPORTED>(
-                !old_norm.has_np() && !new_norm.has_np(), "current normalization scheme doesn't allow update of ndarray"
+                !old_norm.has_np() && !new_norm.has_np(),
+                "current normalization scheme doesn't allow performing {} of ndarray",
+                operation
         );
     }
 }

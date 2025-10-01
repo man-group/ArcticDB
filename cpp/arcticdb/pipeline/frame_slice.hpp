@@ -256,9 +256,16 @@ struct SliceAndKey {
 
     bool invalid() const { return (!segment_ && !key_) || (segment_ && segment_->is_null()); }
 
-    const AtomKey& key() const {
+    const AtomKey& key() const& {
         util::check(static_cast<bool>(key_), "No key found");
         return *key_;
+    }
+
+    void set_key(AtomKey&& key) { key_ = std::move(key); }
+
+    AtomKey&& key() && {
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(key_, "No key found");
+        return std::move(*key_);
     }
 
     void unset_segment() { segment_ = std::nullopt; }

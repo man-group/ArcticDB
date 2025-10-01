@@ -65,7 +65,7 @@ class SegmentInMemory {
     }
 
     template<typename T>
-    requires std::same_as<std::decay_t<T>, std::string>
+    requires std::convertible_to<T, std::string_view>
     void set_scalar(position_t idx, const T& val) {
         impl_->set_string(idx, val);
     }

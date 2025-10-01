@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/version/merge_options.hpp>
 #include <string>
 
 namespace arcticdb::version_store {
@@ -86,6 +87,12 @@ VersionedItem append_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info,
         const std::shared_ptr<InputTensorFrame>& frame, const WriteOptions& options, bool validate_index,
         bool empty_types
+);
+
+VersionedItem merge_impl(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<InputTensorFrame>& frame,
+        const UpdateInfo& update_info, WriteOptions&& options, const MergeStrategy& strategy,
+        std::span<const std::string> on, bool match_on_timeseries_index
 );
 
 VersionedItem update_impl(

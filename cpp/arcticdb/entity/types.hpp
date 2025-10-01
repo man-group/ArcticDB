@@ -481,6 +481,7 @@ requires std::is_base_of_v<DataTypeTagBase, DT> && std::is_base_of_v<DimensionTa
 struct TypeDescriptorTag {
     using DataTypeTag = DT;
     using DimensionTag = D;
+    using RawType = typename DataTypeTag::raw_type;
     explicit constexpr operator TypeDescriptor() const { return type_descriptor(); }
 
     [[nodiscard]] static constexpr Dimension dimension() { return DimensionTag::value; }

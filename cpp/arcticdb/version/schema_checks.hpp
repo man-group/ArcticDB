@@ -1,14 +1,14 @@
 #pragma once
 
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
-#include <arcticdb/python/normalization_checks.hpp>
 
 namespace arcticdb {
 
-enum NormalizationOperation : uint8_t {
-    APPEND,
-    UPDATE,
-};
+namespace pipelines::index {
+struct IndexSegmentReader;
+}
+
+enum NormalizationOperation : uint8_t { APPEND, UPDATE, MERGE };
 
 std::string_view normalization_operation_str(NormalizationOperation operation);
 
@@ -16,11 +16,7 @@ struct StreamDescriptorMismatch : ArcticSpecificException<ErrorCode::E_DESCRIPTO
     StreamDescriptorMismatch(
             const char* preamble, const StreamId& stream_id, const StreamDescriptor& existing,
             const StreamDescriptor& new_val, NormalizationOperation operation
-    ) :
-        ArcticSpecificException(fmt::format(
-                "{}: {}; stream_id=\"{}\"; existing=\"{}\"; new_val=\"{}\"", preamble,
-                normalization_operation_str(operation), stream_id, existing.fields(), new_val.fields()
-        )) {}
+    );
 };
 
 IndexDescriptor::Type get_common_index_type(const IndexDescriptor::Type& left, const IndexDescriptor::Type& right);
@@ -42,3 +38,25 @@ void fix_descriptor_mismatch_or_throw(
         const pipelines::InputTensorFrame& new_frame, bool empty_types
 );
 } // namespace arcticdb
+
+template<>
+struct fmt::formatter<arcticdb::NormalizationOperation> {
+
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::NormalizationOperation op, FormatContext& ctx) const {
+        using namespace arcticdb::entity;
+        switch (op) {
+        case arcticdb::NormalizationOperation::APPEND:
+            return fmt::format_to(ctx.out(), "APPEND");
+        case arcticdb::NormalizationOperation::UPDATE:
+            return fmt::format_to(ctx.out(), "UPDATE");
+        case arcticdb::NormalizationOperation::MERGE:
+            return fmt::format_to(ctx.out(), "MERGE");
+        }
+    }
+};

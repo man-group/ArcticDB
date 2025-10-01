@@ -56,6 +56,8 @@ struct InputTensorFrame {
         }
     }
 
+    SortedValue sorted() const { return desc.sorted(); }
+
     void set_bucketize_dynamic(bool bucketize) const { bucketize_dynamic = bucketize; }
 
     bool has_index() const { return desc.index().field_count() != 0ULL; }

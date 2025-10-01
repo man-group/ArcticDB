@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <arcticdb/version/merge_options.hpp>
 
 namespace arcticdb::version_store {
 
@@ -42,6 +43,10 @@ enum class Slicing { NoSlicing, RowSlicing };
 class VersionedEngine {
 
   public:
+    virtual VersionedItem merge_internal(
+            const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& source, bool prune_previous_versions,
+            const MergeStrategy& strategy, std::span<const std::string> on, bool match_on_timeseries_index
+    ) = 0;
     virtual VersionedItem update_internal(
             const StreamId& stream_id, const UpdateQuery& query, const std::shared_ptr<InputTensorFrame>& frame,
             bool upsert, bool dynamic_schema, bool prune_previous_versions

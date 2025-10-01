@@ -75,6 +75,12 @@ class PythonVersionStore : public LocalVersionedEngine {
             bool upsert, bool prune_previous_versions, bool validate_index
     );
 
+    VersionedItem merge(
+            const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
+            bool prune_previous_versions, const py::tuple& py_strategy, const std::vector<std::string>& on,
+            bool match_on_timeseries_index
+    );
+
     VersionedItem update(
             const StreamId& stream_id, const UpdateQuery& query, const py::tuple& item, const py::object& norm,
             const py::object& user_meta, bool upsert, bool dynamic_schema, bool prune_previous_versions
