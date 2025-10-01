@@ -31,6 +31,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
+from arcticdb.util.utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
@@ -726,6 +727,22 @@ def test_prune_previous_versions_append_batch(basic_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
 
 
+def test_batch_append_after_delete_upsert(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.write("sym1", 1)
+    lib.write("sym1", 1)
+    lib.batch_delete_symbols(["sym", "sym1"])
+
+    df = sample_dataframe()
+    df1 = sample_dataframe()
+    results = lib.batch_append(["sym", "sym1"], [df, df1])
+    assert results[0].version == 1
+    assert results[1].version == 2
+    assert_frame_equal(lib.read("sym").data, df)
+    assert_frame_equal(lib.read("sym1").data, df1)
+
+
 @pytest.mark.storage
 def test_deleting_unknown_symbol(basic_store, symbol):
     df = sample_dataframe()
@@ -1142,6 +1159,37 @@ def test_update_times(basic_store):
     assert update_times_default[0] < update_times_default[1]
     assert len(update_times_versioned) == 3
     assert update_times_versioned[0] < update_times_versioned[1] < update_times_versioned[2]
+
+
+@pytest.mark.storage
+def test_update_time(basic_store):
+    lib: NativeVersionStore = basic_store
+
+    nparr = generate_random_numpy_array(50, np.float32, seed=None)
+    series = generate_random_series(np.uint64, 50, "numbers")
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
+    lib.write("sym1", nparr)
+    lib.write("sym1", series)
+    lib.snapshot("snap")
+    lib.write("sym1", df)
+
+    # Negative number for as_of works as expected (dataframes)
+    assert lib.update_time("sym1") == lib.update_time("sym1", -1) == lib.update_time("sym1", 2)
+    # Snapshots are accepted (series)
+    assert lib.update_time("sym1", 1) == lib.update_time("sym1", -2) == lib.update_time("sym1", "snap")
+    # and now check for np array
+    assert lib.update_time("sym1", 0) == lib.update_time("sym1", -3)
+
+    # Times are ordered
+    assert lib.update_time("sym1") > lib.update_time("sym1", 1) > lib.update_time("sym1", 0)
+
+    # Correct exception thrown if symbol does not exist
+    with pytest.raises(NoDataFoundException):
+        lib.update_time("sym12")
+
+    # Correct exception thrown if version does not exist
+    with pytest.raises(NoDataFoundException):
+        lib.update_time("sym1", 11)
 
 
 @pytest.mark.storage
@@ -2540,6 +2588,7 @@ def test_batch_restore_version_mixed_as_ofs(lmdb_version_store):
     second_ts = pd.Timestamp(2000)
     ManualClockVersionStore.time = second_ts.value
     lib.batch_write(syms, second_data, second_metadata)
+    lib.snapshot("snap")
 
     third_ts = pd.Timestamp(3000)
     ManualClockVersionStore.time = third_ts.value
@@ -2568,6 +2617,32 @@ def test_batch_restore_version_mixed_as_ofs(lmdb_version_store):
     assert_equal(latest["s2"].data, second_data[1])
     assert_equal(latest["s3"].data, first_data[2])
     assert latest["s1"].metadata == "s1-3"
+    assert latest["s2"].metadata == "s2-2"
+    assert latest["s3"].metadata == "s3-1"
+
+    # check restore from snapshot and negative ver number
+    res = lib.batch_restore_version(syms, [-3, "snap", -1])
+
+    # check returned data
+    assert res[0].symbol == "s1"
+    assert res[1].symbol == "s2"
+    assert res[2].symbol == "s3"
+    assert res[0].version == 3
+    assert res[1].version == 4
+    assert res[2].version == 3  # We restored last version (-1 is last)
+    assert res[0].metadata == "s1-1"
+    assert res[1].metadata == "s2-2"
+    assert res[2].metadata == "s3-1"
+
+    # check latest version of symbols from the read
+    latest = lib.batch_read(syms)
+    assert latest["s1"].version == 3
+    assert latest["s2"].version == 4
+    assert latest["s3"].version == 3
+    assert_equal(latest["s1"].data, first_data[0])
+    assert_equal(latest["s2"].data, second_data[1])
+    assert_equal(latest["s3"].data, first_data[2])
+    assert latest["s1"].metadata == "s1-1"
     assert latest["s2"].metadata == "s2-2"
     assert latest["s3"].metadata == "s3-1"
 
@@ -2707,6 +2782,15 @@ def test_batch_restore_version(basic_store_tombstone):
     for d, symbol in enumerate(symbols):
         read_df = lmdb_version_store.read(symbol).data
         assert_equal(read_df, dfs[d])
+
+
+@pytest.mark.storage
+def test_name_method(basic_store_factory):
+
+    for lib_name in ["my name", "1243"]:
+        lib: NativeVersionStore = basic_store_factory(name=lib_name)
+        assert lib_name == lib.name()
+        lib.version_store.clear()
 
 
 @pytest.mark.storage

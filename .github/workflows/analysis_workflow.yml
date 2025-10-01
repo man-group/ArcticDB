@@ -205,6 +205,11 @@ jobs:
           python python/utils/asv_checks.py
         continue-on-error: false
 
+      - name: Disk usage
+        if: always()
+        run: du -m . | sort -n | tail -n 50 || true; df -h
+        continue-on-error: true
+
   # code_coverage:
   #   runs-on: "ubuntu-22.04"
   #   container:
