@@ -6,6 +6,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
+import os
 import re
 import sys
 from typing import List
@@ -17,11 +18,20 @@ from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
 from arcticdb.util.test import (
     assert_series_equal_pandas_1,
     assert_frame_equal_rebuild_index_first,
+    assert_frame_equal,
 )
-from arcticdb.util.utils import DFGenerator, generate_random_series, set_seed, supported_types_list
+from arcticdb.util.utils import (
+    DFGenerator,
+    generate_random_series,
+    generate_random_sparse_numpy_array,
+    set_seed,
+    supported_types_list,
+)
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem
 from datetime import timedelta, timezone
+from arcticdb_ext.exceptions import InternalException, UnsortedDataException
 
+from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 from arcticdb.exceptions import ArcticNativeException, SortingException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb_ext.version_store import StreamDescriptorMismatch, NoSuchVersionException
@@ -34,9 +44,6 @@ from arcticdb_ext.exceptions import (
     MissingDataException,
     SchemaException,
 )
-
-from benchmarks.bi_benchmarks import assert_frame_equal
-from tests.util.mark import LINUX, SLOW_TESTS_MARK, WINDOWS
 
 
 def add_index(df: pd.DataFrame, start_time: pd.Timestamp):
@@ -588,6 +595,148 @@ def test_stage_with_and_without_errors(version_store_and_real_s3_basic_store_fac
     check_incomplete_staged(symbol)
 
 
+@pytest.mark.parametrize("dynamic_schema", [True, False])
+def test_write_sparse_data_all_types(version_store_and_real_s3_basic_store_factory, dynamic_schema):
+    """
+    Test writing and reading a variety of sparse data types to a NativeVersionStore.
+
+    This test ensures that the store correctly handles multiple data formats,
+    index validation settings, and version pruning behavior. It parametrizes over:
+
+    Overall, this test provides broad coverage of the NativeVersionStore write/read
+    pipeline for heterogeneous, sparse, and non-tabular payloads under different
+    configuration flags.
+    """
+
+    max_length: int = 100
+    max_cols: int = 200
+    sym: str = "__qwerty124"
+
+    nvs: NativeVersionStore = version_store_and_real_s3_basic_store_factory(
+        dynamic_schema=dynamic_schema, segment_row_size=(max_length // 2), column_group_size=(max_cols // 2)
+    )
+
+    # Data definitions to be written to symbol include different types
+    # of
+    arr_float = generate_random_sparse_numpy_array(max_length, np.float64)
+    arr_str = generate_random_sparse_numpy_array(max_length, str)
+    arr_datetime = generate_random_sparse_numpy_array(max_length, np.datetime64)
+    arr_empty = np.empty((3))
+    arr_multi = np.random.rand(2, 3, 4, 5, 6)
+    ser_float = pd.Series(arr_float, name="float")
+    ser_str = pd.Series(arr_str, name="str")
+    ser_date = pd.Series(arr_datetime, name="date")
+    df_sparse = (
+        DFGenerator(size=max_length, density=0.19)
+        .add_float_col("float")
+        .add_int_col("int")
+        .add_bool_col("bool")
+        .add_timestamp_col("ts")
+        .add_string_col("str", str_size=18)
+        .add_string_col("str2", num_unique_values=44, str_size=6)
+        .generate_dataframe()
+    )
+    df_wide = DFGenerator.generate_normal_dataframe(
+        num_rows=max_length, num_cols=max_cols, density=0.23, start_time=pd.Timestamp(3243243)
+    )
+    df_empty = pd.DataFrame()
+
+    df_not_sorted = pd.DataFrame({"value": [100, 200, 300]}, index=[pd.Timestamp(1), pd.Timestamp(3), pd.Timestamp(2)])
+
+    for pickle_on_failure in [False, True]:
+        for validate_index in [True, False]:
+            # Avoiding
+            #   arcticdb.exceptions.ArcticDbNotYetImplemented: Not supported: normalizing, symbol: __qwerty124,
+            #   Reason: Numpy strings are not yet implemented on Windows, Setting the pickle_on_failure parameter
+            #   to True will allow the object to be written. However, many operations
+            #   (such as date_range filtering and column selection) will not work on pickled data.
+            arr_to_write = arr_str.tolist() if WINDOWS else arr_str
+            nvs.write(sym, arr_to_write, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            np.testing.assert_array_equal(arr_to_write, nvs.read(sym).data)
+
+            meta = get_metadata()
+            nvs.write(
+                sym, arr_datetime, pickle_on_failure=pickle_on_failure, validate_index=validate_index, metadata=meta
+            )
+            np.testing.assert_array_equal(arr_datetime, nvs.read(sym).data)
+            assert 2 <= len(nvs.list_versions())  # Assert it grows
+            assert meta == nvs.read(sym).metadata  # Metadata on arrays
+
+            if validate_index:
+                with pytest.raises(UnsortedDataException):
+                    nvs.write(sym, df_not_sorted, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            else:
+                nvs.write(sym, df_not_sorted, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+                assert_frame_equal(df_not_sorted, nvs.read(sym).data)
+
+            nvs.write(sym, ser_float, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert_series_equal_pandas_1(ser_float, nvs.read(sym).data)
+
+            nvs.write(sym, None, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert nvs.read(sym).data is None
+
+            nvs.write(
+                sym,
+                ser_str,
+                pickle_on_failure=pickle_on_failure,
+                validate_index=validate_index,
+                prune_previous_version=False,
+            )
+            assert_series_equal_pandas_1(ser_str, nvs.read(sym).data)
+            assert 2 < len(nvs.list_versions())  # Assert prune_previous_version false has no effect
+
+            nvs.write(sym, arr_float, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            np.testing.assert_array_equal(arr_float, nvs.read(sym).data)
+
+            nvs.write(sym, df_empty, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            # when we write empty dataframe it will have default RangeIndex
+            # But when we read it back - the index will be Timestamp
+            #    >       assert_class_equal(left, right, exact=exact, obj=obj)
+            #    E       AssertionError: DataFrame.index are different
+            #    E
+            #    E       DataFrame.index classes are different
+            #    E       [left]:  RangeIndex(start=0, stop=0, step=1)
+            #    E       [right]: DatetimeIndex([], dtype='datetime64[ns]', freq=None)
+            assert len(df_empty) == len(nvs.read(sym).data)
+            assert nvs.read(sym).data.columns.size == 0
+
+            meta = get_metadata()
+            nvs.write(
+                sym,
+                ser_date,
+                pickle_on_failure=pickle_on_failure,
+                validate_index=validate_index,
+                prune_previous_version=True,
+                metadata=meta,
+            )
+            assert_series_equal_pandas_1(ser_date, nvs.read(sym).data)
+            assert meta == nvs.read(sym).metadata  # Metadata on Series
+            assert 1 == len(nvs.list_versions())
+
+            nvs.write(sym, df_wide, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert_frame_equal(df_wide, nvs.read(sym).data)
+
+            nvs.write(sym, os.urandom(128), pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            with pytest.raises(InternalException):
+                nvs.append(sym, os.urandom(128))
+
+            nvs.write(sym, arr_empty, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            np.testing.assert_array_equal(arr_empty, nvs.read(sym).data)
+
+            nvs.write(
+                sym,
+                arr_multi,
+                pickle_on_failure=pickle_on_failure,
+                validate_index=validate_index,
+                prune_previous_version=True,
+            )
+            np.testing.assert_array_equal(arr_multi, nvs.read(sym).data)
+            assert 1 == len(nvs.list_versions())  # Assert prune_previous_version have desired effect
+
+            nvs.write(sym, df_sparse, pickle_on_failure=pickle_on_failure, validate_index=validate_index)
+            assert_frame_equal(df_sparse, nvs.read(sym).data)
+
+
 @pytest.mark.parametrize("dynamic_strings", [True, False])
 @pytest.mark.storage
 def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
@@ -709,7 +858,9 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     data: pd.DataFrame = lib.batch_read_and_join(
         ["symbol0", "symbol1"], as_ofs=[0, 0], query_builder=q, per_symbol_query_builders=[q0, None]
     ).data
-    assert_frame_equal(df1, data)
+    expected_df = df1
+    expected_df["B"] = expected_df["B"].astype(np.float64)
+    assert_frame_equal(expected_df, data)
 
 
 @pytest.mark.xfail(True, reason="When non-existing symbol is used, MissingDataException is not raised 18023146743")
