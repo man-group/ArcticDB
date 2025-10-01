@@ -74,6 +74,8 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(4002, E_UNSUPPORTED_COLUMN_TYPE)                                                                        \
     ERROR_CODE(4003, E_UNSUPPORTED_INDEX_TYPE)                                                                         \
     ERROR_CODE(4004, E_OPERATION_NOT_SUPPORTED_WITH_PICKLED_DATA)                                                      \
+    ERROR_CODE(4005, E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA)                                         \
+    ERROR_CODE(4006, E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY)                                                       \
     ERROR_CODE(5000, E_KEY_NOT_FOUND)                                                                                  \
     ERROR_CODE(5001, E_DUPLICATE_KEY)                                                                                  \
     ERROR_CODE(5002, E_SYMBOL_NOT_FOUND)                                                                               \
