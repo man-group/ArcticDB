@@ -1133,7 +1133,7 @@ def test_complete_incomplete_additional_scenarios_no_timestamp_index(basic_store
     # do_tests(np_arr, np_arr_add)
 
 
-@pytest.mark.xfail
+@pytest.mark.xfail(True, reason="Compact_incomplete over staged np.arrays will result in unreadable data 18084289947")
 def test_complete_incomplete_additional_scenarios_errors_np_array(basic_store):
     lib: NativeVersionStore = basic_store
     np_arr = np.array([1, 2], dtype=np.int64)
