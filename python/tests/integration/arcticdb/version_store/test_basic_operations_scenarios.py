@@ -724,6 +724,8 @@ def test_batch_read_and_join_scenarios(basic_store_factory, dynamic_strings):
     data: pd.DataFrame = lib.batch_read_and_join(
         ["symbol0", "symbol1"], as_ofs=[0, 0], query_builder=q, per_symbol_query_builders=[q0, None]
     ).data
+    expected_df = df1
+    expected_df["B"] = expected_df["B"].astype(np.float64)    
     assert_frame_equal(df1, data)
 
 
@@ -920,6 +922,15 @@ def test_complete_incomplete_additional_scenarios(basic_store):
         ]
     )
 
+    timestamps_sorted_but_in_past = pd.to_datetime(
+        [
+            "2010-02-01",
+            "2010-03-01",
+            "2010-05-01",
+            "2010-10-01",
+        ]
+    )
+
     # An index with NaT is not considered good, we have to see arcticdb reaction of
     # compatct_incomplete with such data
     timestamps_unsorted_with_nat = pd.to_datetime(
@@ -943,13 +954,15 @@ def test_complete_incomplete_additional_scenarios(basic_store):
     df = pd.DataFrame({"value": [1, 2]}, index=timestamps_ok)
     df_unsorted = pd.DataFrame({"value": [10, 20, 30]}, index=timestamps_unsorted)
     df_unsorted_with_nat = pd.DataFrame({"value": [10, 20, 30, 40]}, index=timestamps_unsorted_with_nat)
+    df_sorted_but_in_past = pd.DataFrame({"value": [10, 20, 30, 40]}, index=timestamps_sorted_but_in_past)
 
     series = pd.Series(data=[0.1, 0.2], name="name", index=timestamps_ok)
     series_unsorted = pd.Series(data=[1, 2, 3.3, 4], name="name", index=timestamps_unsorted_with_nat)
 
+    symbol = "Sirius v1.0124"
+
     def do_tests(df_or_series: Union[pd.DataFrame, pd.Series], df_or_series_unsorted: Union[pd.DataFrame, pd.Series]):
         """Here we test behavior of completion of data when we have timestamp index"""
-        symbol = "Sirius v1.0124"  #''.join(random.choices(string.ascii_uppercase, k=6))
         df_empty = df_or_series.iloc[0:0]
 
         # Lets prepare a symbol and write data through stage
@@ -1037,6 +1050,12 @@ def test_complete_incomplete_additional_scenarios(basic_store):
     do_tests(df, df_unsorted_with_nat)
     do_tests(df, df_unsorted)
     do_tests(series, series_unsorted)
+
+    # One final test for index validation - staged data is sorted, but it is in the past vs the already written
+    lib.write(symbol, df)
+    lib.stage(symbol, df_sorted_but_in_past)
+    with pytest.raises(UnsortedDataException):
+        lib.compact_incomplete(symbol, append=True, validate_index=True, convert_int_to_float=False)
 
 
 @Marks.storage.mark
@@ -1126,6 +1145,10 @@ def test_complete_incomplete_additional_scenarios_no_timestamp_index(basic_store
         assert_equals(df_or_series_unsorted, lib.read(symbol).data)
         # Data staged in completed
         assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, symbol)) == 0
+
+        # Compact with empty stage_results
+        with pytest.raises(UserInputException, match=r".*E_NO_STAGED_SEGMENTS.*"):
+            lib.compact_incomplete(symbol, append=False, convert_int_to_float=False, stage_results=[])
 
     do_tests(df_rangeindex, df_rangeindex_unsorted)
     do_tests(series, series_add)
