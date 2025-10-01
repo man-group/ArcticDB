@@ -196,7 +196,6 @@ def test_wrapped_s3_storage(lib_name, wrapped_s3_storage_bucket):
     lib.write("s", data=create_df())
 
 
-@SKIP_CONDA_MARK  # issue with fixture init will be fixed in https://github.com/man-group/ArcticDB/issues/2640
 def test_library_get_key_path(lib_name, s3_and_nfs_storage_bucket, test_prefix):
     lib = s3_and_nfs_storage_bucket.create_version_store_factory(lib_name)()
     lib.write("s", data=create_df())
