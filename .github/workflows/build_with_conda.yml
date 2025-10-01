@@ -172,7 +172,14 @@ jobs:
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            # Run pytest on each test folder separately
+            for test_folder in tests/*/; do
+              if [ -d "$test_folder" ]; then
+                folder_name=$(basename "$test_folder")
+                echo "Running tests for folder: $folder_name"
+                python -m pytest --timeout=3600 -v -n logical --dist worksteal "$test_folder" $ARCTICDB_PYTEST_ARGS
+              fi
+            done
           fi
         env:
           ARCTICDB_USING_CONDA: 1
@@ -281,11 +288,16 @@ jobs:
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            for test_folder in tests/*/; do
+              if [ -d "$test_folder" ]; then
+                folder_name=$(basename "$test_folder")
+                echo "Running tests for folder: $folder_name"
+                python -m pytest --timeout=3600 -v -n logical --dist worksteal "$test_folder" $ARCTICDB_PYTEST_ARGS
+              fi
+            done
           fi
         env:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{ inputs.run_commandline }}
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
           NODE_OPTIONS: --openssl-legacy-provider
-
