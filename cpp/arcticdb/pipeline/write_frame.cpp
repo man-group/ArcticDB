@@ -6,6 +6,8 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include "async/tasks.hpp"
+
 #include <arcticdb/pipeline/input_tensor_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -146,7 +148,7 @@ int64_t write_window_size() {
     );
 }
 
-folly::Future<std::vector<SliceAndKey>> write_slices(
+folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputTensorFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& key, const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
@@ -155,27 +157,24 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
-    int64_t write_window = write_window_size();
-    return folly::collect(folly::window(
-                                  std::move(slice_and_rowcount),
-                                  [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice
-                                  ) {
-                                      return async::submit_cpu_task(WriteToSegmentTask(
-                                                                            frame,
-                                                                            slice.first,
-                                                                            slicing,
-                                                                            get_partial_key_gen(frame, key),
-                                                                            slice.second,
-                                                                            frame->index,
-                                                                            sparsify_floats
-                                                                    ))
-                                              .then([sink, de_dup_map](auto&& ks) {
-                                                  return sink->async_write(ks, de_dup_map);
-                                              });
-                                  },
-                                  write_window
-                          ))
-            .via(&async::io_executor());
+    int64_t write_window = 3; // test: write_window_size();
+    auto window = folly::window(
+            std::move(slice_and_rowcount),
+            [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
+                return async::submit_cpu_task(WriteToSegmentTask(
+                                                      frame,
+                                                      slice.first,
+                                                      slicing,
+                                                      get_partial_key_gen(frame, key),
+                                                      slice.second,
+                                                      frame->index,
+                                                      sparsify_floats
+                                              ))
+                        .then([sink, de_dup_map](auto&& ks) { return sink->async_write(ks, de_dup_map); });
+            },
+            write_window
+    );
+    return folly::collectAll(std::move(window));
 }
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
@@ -190,7 +189,48 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
-    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats);
+    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
+            .via(&async::cpu_executor()) // Q: Discuss
+            .thenValue([sink](auto&& ks) mutable {
+                std::vector<SliceAndKey> succeeded;
+                std::optional<folly::exception_wrapper> exception;
+                bool has_quota_limit_exceeded = false;
+                succeeded.reserve(ks.size());
+                for (auto& k : ks) {
+                    if (k.hasException()) {
+                        if (!exception.has_value()) {
+                            // Q: Should we immediately throw on non-quota exception or wait for possible rollback
+                            // first?
+                            exception = k.exception();
+                        }
+
+                        if (k.exception().template is_compatible_with<QuotaExceededException>()) {
+                            has_quota_limit_exceeded = true;
+                        }
+
+                    } else {
+                        succeeded.emplace_back(std::move(k.value()));
+                    }
+                }
+
+                if (has_quota_limit_exceeded) {
+                    // rollback
+                    folly::collect(
+                            folly::window(
+                                    succeeded,
+                                    [sink](const auto& slice_and_key) { return sink->remove_key(slice_and_key.key()); },
+                                    write_window_size()
+                            )
+                    )
+                            .get();
+                }
+
+                if (exception.has_value()) {
+                    exception->throw_exception();
+                }
+                return succeeded;
+            })
+            .via(&async::io_executor());
 }
 
 folly::Future<entity::AtomKey> write_frame(

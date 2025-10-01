@@ -51,7 +51,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
 int64_t write_window_size();
 
-folly::Future<std::vector<SliceAndKey>> write_slices(
+folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputTensorFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats

@@ -1,6 +1,8 @@
 
 #pragma once
 
+#include "storage/failure_simulation.hpp"
+
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/log/log.hpp>
@@ -74,6 +76,9 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
         type == Aws::S3::S3Errors::SIGNATURE_DOES_NOT_MATCH) {
         raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: {}", error_message_suffix));
     }
+
+    // if type == sth
+    // raise<ErrorCode::E_QUOTA_EXCEEDED>("Quota exceeded!");
 
     if (type == Aws::S3::S3Errors::UNKNOWN) {
         // Unknown is a catchall which can contain several different important exception types which we want to identify
@@ -149,6 +154,10 @@ void do_write_impl(
             query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
     auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
+    // action_factories::maybe_execute(0.5, [](FailureType type) {
+    //     raise<ErrorCode::E_QUOTA_EXCEEDED>("Quota exceeded!");
+    // })(FailureType::WRITE);
+    //
     if (put_object_result.is_success()) {
         query_stats::add(
                 query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size
@@ -392,14 +401,16 @@ void do_remove_no_batching_impl(
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
             auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
             auto error_message = error.GetMessage();
-            failed_deletes.push_back(FailedDelete{
-                    variant_key_from_bytes(
-                            reinterpret_cast<const uint8_t*>(bad_key_name.data()),
-                            bad_key_name.size(),
-                            variant_key_type(k)
-                    ),
-                    std::move(error_message)
-            });
+            failed_deletes.push_back(
+                    FailedDelete{
+                            variant_key_from_bytes(
+                                    reinterpret_cast<const uint8_t*>(bad_key_name.data()),
+                                    bad_key_name.size(),
+                                    variant_key_type(k)
+                            ),
+                            std::move(error_message)
+                    }
+            );
         } else {
             ARCTICDB_RUNTIME_DEBUG(
                     log::storage(), "Acceptable error when deleting object with key '{}'", variant_key_view(k)
