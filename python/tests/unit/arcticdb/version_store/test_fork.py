@@ -60,7 +60,10 @@ def test_parallel_reads(local_object_version_store):
     symbols = ["XXX"] * 20
     p = Pool(10)
     local_object_version_store.write(symbols[0], df("test1"))
-    time.sleep(0.1)  # Make sure the writes have finished, especially azurite.
+    if "azure" in lib.get_backing_store():
+        time.sleep(5)  # Make sure the writes have finished, especially azurite.
+    else:
+        time.sleep(0.1)
     p.map(_read_and_assert_symbol, [(local_object_version_store, s, idx) for idx, s in enumerate(symbols)])
     p.close()
     p.join()
