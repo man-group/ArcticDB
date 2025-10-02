@@ -962,7 +962,12 @@ def object_version_store_prune_previous(object_store_factory) -> NativeVersionSt
 
 
 @pytest.fixture(
-    scope="function", params=["s3_store_factory", pytest.param("azure_store_factory", marks=AZURE_TESTS_MARK)]
+    scope="function",
+    params=[
+        pytest.param("s3_store_factory", marks=SIM_S3_TESTS_MARK),
+        pytest.param("gcp_store_factory", marks=SIM_GCP_TESTS_MARK),
+        pytest.param("azurite_store_factory", marks=AZURE_TESTS_MARK),
+    ],
 )
 def local_object_store_factory(request):
     """
