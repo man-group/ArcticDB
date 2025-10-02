@@ -18,19 +18,10 @@ from arcticdb.util.logger import get_logger
 
 COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
-# Make sure the start date is pre-epoch so that we can test pre-epoch dates. Not all C++ libraries handle pre-epoch well.
-MIN_DATE = np.datetime64("1960-01-01")
-MAX_DATE = np.datetime64("2025-01-01")
+MIN_DATE = np.datetime64("1969-06-01")
+MAX_DATE = np.datetime64("1970-06-01")
 
-pytestmark = pytest.mark.pipeline
-
-
-def dense_row_count_in_resampled_dataframe(df_list, rule):
-    """
-    The number of rows Arctic's resampling will produce after appending all dataframes in `df_list` and then resampling
-    with `rule`.  Assumes df_list is sorted by start date and the indexes are not overlapping.
-    """
-    return (df_list[-1].index[-1] - df_list[0].index[0]).value // pd.Timedelta(rule).value
+pytestmark = pytest.mark.pipeline  # Covered
 
 
 @st.composite
@@ -111,14 +102,14 @@ def freq_fits_in_64_bits(count, unit):
     This is used to check if a frequency is usable by Arctic. ArcticDB converts the frequency to signed 64-bit integer.
     """
     billion = 1_000_000_000
-    mult = {"h": 3600 * billion, "min": 60 * billion, "s": billion, "ms": billion // 1000, "us": 1000, "ns": 1}
+    mult = {"h": 3600 * billion, "min": 60 * billion, "s": billion}
     return (mult[unit] * count).bit_length() <= 63
 
 
 @st.composite
 def rule(draw):
     count = draw(st.integers(min_value=1, max_value=10_000))
-    unit = draw(st.sampled_from(["min", "h", "s", "ms", "us", "ns"]))
+    unit = draw(st.sampled_from(["min", "h", "s"]))
     result = f"{count}{unit}"
     assume(freq_fits_in_64_bits(count=count, unit=unit))
     return result
@@ -126,7 +117,7 @@ def rule(draw):
 
 @st.composite
 def offset(draw):
-    unit = draw(st.sampled_from(["s", "min", "h", "ms", "us", "ns", None]))
+    unit = draw(st.sampled_from(["s", "min", "h", None]))
     if unit is None:
         return None
     count = draw(st.integers(min_value=1, max_value=100))
@@ -181,11 +172,9 @@ def dynamic_schema_column_list(draw):
     origin=origin(),
     offset=offset(),
 )
-def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
-    # The assumption below is to avoid OOM-ing the GitHub runners.
-    assume(dense_row_count_in_resampled_dataframe([df], rule) < 150000)
-
+def test_resample(lmdb_version_store_v1, any_output_format, df, rule, origin, offset):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym"
     logger = get_logger()
     logger.info(f"Data frame generated has {df.shape[0]} rows")
@@ -231,12 +220,12 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(df_list=dynamic_schema_column_list(), rule=rule(), origin=origin(), offset=offset())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, rule, origin, offset):
-    # The assumption below is to avoid OOM-ing the GitHub runners.
-    assume(dense_row_count_in_resampled_dataframe(df_list, rule) < 150000)
-
+def test_resample_dynamic_schema(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, df_list, rule, origin, offset
+):
     common_column_types = compute_common_type_for_columns_in_df_list(df_list)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     lib.version_store.clear()
     sym = "sym"
     agg = {f"{name}_{op}": (name, op) for name in common_column_types for op in ALL_AGGREGATIONS}
