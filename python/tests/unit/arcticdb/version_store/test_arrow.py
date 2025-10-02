@@ -904,3 +904,24 @@ def test_resample_empty_slices(lmdb_version_store_dynamic_schema_v1):
     assert pc.count(table.column("count_col"), mode="only_null").as_py() == 4
     expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
     assert_frame_equal_with_arrow(table, expected)
+
+
+def test_resample_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_segment):
+    # Closely mimics test_resampling_row_slice_responsible_for_no_buckets with arrow from test_resample.py
+    # TODO: Remove this test if we enable pipeline tests with arrow
+    lib = lmdb_version_store_tiny_segment
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "sym"
+    df = pd.DataFrame(
+        {
+            "to_sum": [1, 2, 3, 4],
+        },
+        index=[pd.Timestamp(0), pd.Timestamp(100), pd.Timestamp(200), pd.Timestamp(3000)],
+    )
+    lib.write(sym, df)
+
+    q = QueryBuilder().resample("us").agg({"to_sum": ("to_sum", "sum")})
+    date_range = (pd.Timestamp(0), pd.Timestamp(1500))
+    table = lib.read(sym, date_range=date_range, query_builder=q).data
+    expected = pd.DataFrame({"to_sum": [6]}, index=[pd.Timestamp(0)])
+    assert_frame_equal_with_arrow(table, expected)
