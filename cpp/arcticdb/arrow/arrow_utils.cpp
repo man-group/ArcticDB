@@ -14,7 +14,7 @@
 
 namespace arcticdb {
 
-inline std::optional<sparrow::validity_bitmap> create_validity_bitmap(
+std::optional<sparrow::validity_bitmap> create_validity_bitmap(
         size_t offset, const Column& column, size_t bitmap_size
 ) {
     if (column.has_extra_buffer(offset, ExtraBufferType::BITMAP)) {
@@ -43,7 +43,7 @@ sparrow::primitive_array<T> create_primitive_array(
 }
 
 template<>
-inline sparrow::primitive_array<bool> create_primitive_array(
+sparrow::primitive_array<bool> create_primitive_array(
         bool* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
 ) {
     // We need special handling for bools because arrow uses dense bool representation (i.e. 8 bools per byte)
@@ -98,7 +98,7 @@ sparrow::dictionary_encoded_array<T> create_dict_array(
 // TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
 //  consistent when there are zero rows or the validity bitmap is all zeros. But sparrow (or possibly Arrow) requires at
 //  least one key-value pair in the dictionary, even if there are zero rows
-inline sparrow::big_string_array minimal_strings_dict() {
+sparrow::big_string_array minimal_strings_dict() {
     std::unique_ptr<int64_t[]> offset_ptr(new int64_t[2]);
     offset_ptr[0] = 0;
     offset_ptr[1] = 1;
