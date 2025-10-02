@@ -17,7 +17,7 @@ using namespace arcticdb;
 
 // run like: --benchmark_time_unit=ms --benchmark_filter=.* --benchmark_min_time=5x
 
-static void BM_arrow_write_single_record_batch(benchmark::State& state) {
+static void BM_arrow_convert_single_record_batch_to_segment(benchmark::State& state) {
     const auto num_rows = state.range(0);
     const auto num_columns = state.range(1);
     const auto index_column = state.range(2);
@@ -40,7 +40,7 @@ static void BM_arrow_write_single_record_batch(benchmark::State& state) {
     }
 }
 
-static void BM_arrow_write_multiple_record_batches(benchmark::State& state) {
+static void BM_arrow_convert_multiple_record_batches_to_segment(benchmark::State& state) {
     const auto num_rows = state.range(0);
     const auto num_columns = state.range(1);
     const auto num_record_batches = state.range(2);
@@ -61,17 +61,17 @@ static void BM_arrow_write_multiple_record_batches(benchmark::State& state) {
     }
 }
 
-BENCHMARK(BM_arrow_write_single_record_batch)
+BENCHMARK(BM_arrow_convert_single_record_batch_to_segment)
         // Short and wide data
         ->Args({10, 100'000, -1})
         ->Args({10, 100'000, 0})
         ->Args({10, 100'000, 50'000})
-        // Long and thin data
+        // Long and thin data``````````````¬¬¬``¬¬¬¬``````
         ->Args({10'000'000, 10, -1})
         ->Args({10'000'000, 10, 0})
         ->Args({10'000'000, 10, 5});
 
-BENCHMARK(BM_arrow_write_multiple_record_batches)
+BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
         // Short and wide data
         ->Args({10, 100'000, 10})
         // Long and thin data

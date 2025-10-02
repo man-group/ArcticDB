@@ -343,8 +343,8 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     uint64_t start_row{0};
     for (; record_batch != record_batches.cend(); ++record_batch) {
         for (size_t idx = 0; idx < record_batch->nb_columns(); ++idx) {
-            auto& chunked_buffer = chunked_buffers.at(idx);
-            const auto& data_type = data_types.at(idx);
+            auto& chunked_buffer = chunked_buffers[idx];
+            const auto& data_type = data_types[idx];
             const auto& array = record_batch->get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
             schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
@@ -355,7 +355,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
             // arrow_array_buffers.at(0) seems to be the validity bitmap, and may be NULL if there are no null values
             // need to handle it being non-NULL and all 1s though
-            const auto* data = arrow_array_buffers.at(1).data<uint8_t>();
+            const auto* data = arrow_array_buffers[1].data<uint8_t>();
             if (is_bool_type(data_type)) {
                 // Arrow bool columns are packed bitsets
                 // This is the limiting factor when writing a lot of bool data as it is serial. This should be moved to
@@ -378,11 +378,9 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     if (index_column_position.has_value()) {
         auto idx = *index_column_position;
         seg.add_column(
-                scalar_field(data_types.at(idx), column_names[idx]),
+                scalar_field(data_types[idx], column_names[idx]),
                 std::make_shared<Column>(
-                        make_scalar_type(data_types.at(idx)),
-                        Sparsity::NOT_PERMITTED,
-                        std::move(chunked_buffers.at(idx))
+                        make_scalar_type(data_types[idx]), Sparsity::NOT_PERMITTED, std::move(chunked_buffers[idx])
                 )
         );
     }
@@ -390,11 +388,9 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
         if (!index_column_position.has_value() || idx != *index_column_position) {
             // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
             seg.add_column(
-                    scalar_field(data_types.at(idx), column_names[idx]),
+                    scalar_field(data_types[idx], column_names[idx]),
                     std::make_shared<Column>(
-                            make_scalar_type(data_types.at(idx)),
-                            Sparsity::NOT_PERMITTED,
-                            std::move(chunked_buffers.at(idx))
+                            make_scalar_type(data_types[idx]), Sparsity::NOT_PERMITTED, std::move(chunked_buffers[idx])
                     )
             );
         }

@@ -224,7 +224,7 @@ TEST(ArrowDataToSegment, MultiColumnDifferentTypes) {
     ASSERT_EQ(seg.num_columns(), num_columns);
     ASSERT_EQ(seg.row_count(), num_rows);
     for (auto [idx, data_type] : folly::enumerate(numeric_data_types)) {
-        ARCTICDB_UNUSED const auto column_index = seg.column_index(fmt::format("{}", data_type));
+        const auto column_index = seg.column_index(fmt::format("{}", data_type));
         ASSERT_TRUE(column_index.has_value());
         ASSERT_EQ(*column_index, idx);
         const auto& col = seg.column(idx);
