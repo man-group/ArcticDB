@@ -75,6 +75,35 @@ def test_bool_columns(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow(table, df)
 
 
+def test_read_empty(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "sym"
+    df = pd.DataFrame()
+    lib.write(sym, df)
+    table = lib.read(sym).data
+    expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
+    # During normalization when doing the write we attach an empty DateTimeIndex to the DataFrame. We correctly see it
+    # in arrow
+    assert table.column_names == ["index"]
+    assert table.shape == (0, 1)
+    # arcticdb read(output_format=PANDAS) produces `pd.RangeIndex(start=0, stop=0, step=1)` column index if no columns
+    # pyarrow to_pandas produces `pd.Index([])` if no columns.
+    expected.columns = pd.Index([])
+    assert_frame_equal_with_arrow(table, expected)
+
+
+def test_read_empty_with_columns(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "sym"
+    df = pd.DataFrame({"col_int": np.zeros(0, dtype=np.int32), "col_float": np.zeros(0, dtype=np.float64)})
+    lib.write(sym, df)
+    table = lib.read(sym).data
+    expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
+    assert table.column_names == ["index", "col_int", "col_float"]
+    assert table.shape == (0, 3)
+    assert_frame_equal_with_arrow(table, expected)
+
+
 def test_column_filtering(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     df = pd.DataFrame({"x": np.arange(10), "y": np.arange(10.0, 20.0)})
@@ -924,4 +953,22 @@ def test_resample_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_s
     date_range = (pd.Timestamp(0), pd.Timestamp(1500))
     table = lib.read(sym, date_range=date_range, query_builder=q).data
     expected = pd.DataFrame({"to_sum": [6]}, index=[pd.Timestamp(0)])
+    assert_frame_equal_with_arrow(table, expected)
+
+
+def test_symbol_concat_empty_intersection(lmdb_version_store_arrow):
+    # Tests a failing subset of test_symbol_concat_empty_column_intersection
+    # TODO: Remove this test if we enable pipeline tests with arrow
+    lib = lmdb_version_store_arrow
+    sym_0 = "sym_0"
+    sym_1 = "sym_1"
+    df_0 = pd.DataFrame({"col_0": [0]})
+    df_1 = pd.DataFrame({"col_1": [1]})
+    lib.write(sym_0, df_0)
+    lib.write(sym_1, df_1)
+    q = QueryBuilder().concat("inner")
+    table = lib.batch_read_and_join([sym_0, sym_1], query_builder=q).data
+    assert table.column_names == []
+    assert table.shape == (0, 0)
+    expected = pd.DataFrame()
     assert_frame_equal_with_arrow(table, expected)
