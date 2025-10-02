@@ -1,0 +1,8 @@
+name: arcticdb
+channels:
+  - conda-forge
+dependencies:
+  - arcticdb==6.1.1
+  - numpy
+  - pyarrow
+  - protobuf
