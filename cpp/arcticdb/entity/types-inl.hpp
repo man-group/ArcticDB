@@ -89,6 +89,18 @@ auto visit_type(DataType dt, Callable&& c) {
     }
 }
 
+template<class Callable>
+constexpr auto visit_scalar(TypeDescriptor type_descriptor, Callable&& callable) {
+    switch (type_descriptor.dimension()) {
+    case Dimension::Dim0:
+        return details::visit_dim<DimensionTag<Dimension::Dim0>>(type_descriptor.data_type(), callable);
+    case Dimension::Dim1:
+    case Dimension::Dim2:
+    default:
+        util::raise_rte("Non-zero dimension {} in visit_scalar", static_cast<uint16_t>(type_descriptor.dimension()));
+    }
+}
+
 } // namespace details
 
 template<class Callable>

@@ -465,7 +465,7 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
                 }
                 ssize_t previous_value_index = 0;
 
-                Column::for_each_enumerated<typename col_type_info::TDT>(*col.column_, [&](auto enumerating_it) {
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col.column_, [&](auto enumerating_it) {
                     typename col_type_info::RawType val;
                     if constexpr (is_sequence_type(col_type_info::data_type)) {
                         auto offset = enumerating_it.value();

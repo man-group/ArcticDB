@@ -172,15 +172,11 @@ class RowBuilder {
     template<typename T>
     requires std::integral<T> || std::floating_point<T>
     void set_block(std::size_t pos, T* val, size_t size) {
-        descriptor().fields[pos].type_desc.visit_tag([&](auto&& tag) {
+        details::visit_scalar(descriptor().fields[pos].type_desc, [&](auto&& tag) {
             using DT = std::decay_t<decltype(tag)>;
-            using RawType = typename DT::DataTypeTag::raw_type;
-            if constexpr (std::is_same_v<typename DT::DimensionTag, DimensionTag<Dimension::Dim0>>) {
-                aggregator_.set_block(pos, val, size);
-                nbytes_ += sizeof(RawType) * size;
-            } else {
-                throw std::runtime_error("Can't set non-scalar block");
-            }
+            using RawType = typename DT::raw_type;
+            aggregator_.set_block(pos, val, size);
+            nbytes_ += sizeof(RawType) * size;
         });
     }
 

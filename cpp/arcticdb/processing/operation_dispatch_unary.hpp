@@ -11,6 +11,7 @@
 
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -75,7 +76,7 @@ VariantData unary_operator(const ColumnWithStrings& col, Func&& func) {
                             type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-            Column::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+            arcticdb::transform<typename type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                     *(col.column_),
                     *output_column,
                     [&func](auto input_value) -> TargetType { return func.apply(input_value); }
@@ -132,7 +133,7 @@ VariantData unary_comparator(const ColumnWithStrings& col, Func&& func) {
     details::visit_type(col.column_->type().data_type(), [&, sparse_missing_value_output](auto col_tag) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         // Non-explicit lambda capture due to a bug in LLVM: https://github.com/llvm/llvm-project/issues/34798
-        Column::transform<typename type_info::TDT>(
+        arcticdb::transform<typename type_info::TDT>(
                 *(col.column_),
                 output_bitset,
                 sparse_missing_value_output,
