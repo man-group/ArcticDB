@@ -247,7 +247,7 @@ set(arcticdb_srcs
         pipeline/index_segment_reader.hpp
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
-        pipeline/input_tensor_frame.hpp
+        pipeline/input_frame.hpp
         pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
@@ -456,6 +456,7 @@ set(arcticdb_srcs
         pipeline/frame_utils.cpp
         pipeline/index_segment_reader.cpp
         pipeline/index_utils.cpp
+        pipeline/input_frame.cpp
         pipeline/pipeline_context.cpp
         pipeline/query.cpp
         pipeline/read_frame.cpp
@@ -526,6 +527,7 @@ set(arcticdb_srcs
         toolbox/query_stats.cpp
         util/allocator.cpp
         util/allocation_tracing.cpp
+        util/bitset.cpp
         util/buffer_pool.cpp
         util/decimal.cpp
         util/error_code.cpp
@@ -934,7 +936,9 @@ if(${TEST})
     python_utils_dump_vars_if_enabled("Python for test compilation")
 
     set(unit_test_srcs
-            arrow/test/test_arrow.cpp
+            arrow/test/arrow_test_utils.hpp
+            arrow/test/test_arrow_read.cpp
+            arrow/test/test_arrow_write.cpp
             async/test/test_async.cpp
             codec/test/test_codec.cpp
             codec/test/test_encode_field_collection.cpp
@@ -1100,12 +1104,15 @@ if(${TEST})
 
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
+            arrow/test/arrow_test_utils.hpp
+            arrow/test/benchmark_arrow_writes.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_binary.cpp
             processing/test/benchmark_clause.cpp
             processing/test/benchmark_common.cpp
             processing/test/benchmark_ternary.cpp
+            util/test/benchmark_bitset.cpp
             version/test/benchmark_write.cpp)
 
     add_executable(benchmarks ${benchmark_srcs})
@@ -1128,6 +1135,7 @@ if(${TEST})
             column_store/test/rapidcheck_column_map.cpp
             processing/test/rapidcheck_resample.cpp
             stream/test/stream_test_common.cpp
+            util/test/rapidcheck_bitset.cpp
             util/test/rapidcheck_decimal.cpp
             util/test/rapidcheck_generators.cpp
             util/test/rapidcheck_string_pool.cpp

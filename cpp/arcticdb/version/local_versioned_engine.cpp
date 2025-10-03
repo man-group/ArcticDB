@@ -604,8 +604,8 @@ VersionedItem LocalVersionedEngine::delete_range_internal(
 }
 
 VersionedItem LocalVersionedEngine::update_internal(
-        const StreamId& stream_id, const UpdateQuery& query, const std::shared_ptr<InputTensorFrame>& frame,
-        bool upsert, bool dynamic_schema, bool prune_previous_versions
+        const StreamId& stream_id, const UpdateQuery& query, const std::shared_ptr<InputFrame>& frame, bool upsert,
+        bool dynamic_schema, bool prune_previous_versions
 ) {
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: update");
     py::gil_scoped_release release_gil;
@@ -670,7 +670,7 @@ VersionedItem LocalVersionedEngine::write_versioned_metadata_internal(
         return VersionedItem{std::move(index_key)};
     } else {
         auto frame = convert::py_none_to_frame();
-        frame->desc.set_id(stream_id);
+        frame->desc().set_id(stream_id);
         frame->user_meta = std::move(user_meta);
         auto versioned_item =
                 write_versioned_dataframe_internal(stream_id, frame, prune_previous_versions, false, false);
@@ -707,7 +707,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
                                         );
                                     } else {
                                         auto frame = convert::py_none_to_frame();
-                                        frame->desc.set_id(stream_id);
+                                        frame->desc().set_id(stream_id);
                                         frame->user_meta = std::move(user_meta_proto);
                                         auto version_id = 0;
                                         auto write_options = get_write_options();
@@ -747,7 +747,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 }
 
 VersionedItem LocalVersionedEngine::write_versioned_dataframe_internal(
-        const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool prune_previous_versions,
+        const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool prune_previous_versions,
         bool allow_sparse, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteVersionedDataFrame, 0)
@@ -1121,7 +1121,7 @@ std::set<StreamId> LocalVersionedEngine::get_active_incomplete_refs() {
 }
 
 void LocalVersionedEngine::append_incomplete_frame(
-        const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool validate_index
+        const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index
 ) const {
     arcticdb::append_incomplete(store_, stream_id, frame, validate_index);
 }
@@ -1131,8 +1131,8 @@ void LocalVersionedEngine::append_incomplete_segment(const StreamId& stream_id, 
 }
 
 StageResult LocalVersionedEngine::write_parallel_frame(
-        const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool validate_index,
-        bool sort_on_index, const std::optional<std::vector<std::string>>& sort_columns
+        const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool validate_index, bool sort_on_index,
+        const std::optional<std::vector<std::string>>& sort_columns
 ) const {
     py::gil_scoped_release release_gil;
     WriteIncompleteOptions options{
@@ -1229,14 +1229,14 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
 }
 
 std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
-        const std::vector<AtomKey>& keys, std::any& handler_data
+        const std::vector<AtomKey>& keys, const ReadOptions& read_options, std::any& handler_data
 ) {
     std::vector<folly::Future<ReadVersionOutput>> res;
     res.reserve(keys.size());
     py::gil_scoped_release release_gil;
     for (const auto& index_key : keys) {
         res.emplace_back(
-                read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
+                read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), read_options, handler_data)
         );
     }
     Allocator::instance()->trim();
@@ -1493,7 +1493,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
 
 std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
         const std::vector<VersionId>& version_ids, const std::vector<StreamId>& stream_ids,
-        std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+        std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
@@ -1530,7 +1530,7 @@ VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_write_versioned_dataframe_internal(
-        const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+        const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         bool prune_previous_versions, bool validate_index, bool throw_on_error
 ) {
     py::gil_scoped_release release_gil;
@@ -1632,8 +1632,8 @@ std::vector<std::variant<folly::Unit, DataError>> LocalVersionedEngine::batch_de
 }
 
 VersionedItem LocalVersionedEngine::append_internal(
-        const StreamId& stream_id, const std::shared_ptr<InputTensorFrame>& frame, bool upsert,
-        bool prune_previous_versions, bool validate_index
+        const StreamId& stream_id, const std::shared_ptr<InputFrame>& frame, bool upsert, bool prune_previous_versions,
+        bool validate_index
 ) {
     py::gil_scoped_release release_gil;
     auto update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
@@ -1679,7 +1679,7 @@ VersionedItem LocalVersionedEngine::append_internal(
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_append_internal(
-        const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputTensorFrame>>&& frames,
+        const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         bool prune_previous_versions, bool validate_index, bool upsert, bool throw_on_error
 ) {
     py::gil_scoped_release release_gil;
@@ -1762,7 +1762,7 @@ std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_
 }
 
 std::vector<std::variant<VersionedItem, DataError>> LocalVersionedEngine::batch_update_internal(
-        const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<InputTensorFrame>>&& frames,
+        const std::vector<StreamId>& stream_ids, std::vector<std::shared_ptr<InputFrame>>&& frames,
         const std::vector<UpdateQuery>& update_queries, bool prune_previous_versions, bool upsert
 ) {
     py::gil_scoped_release release_gil;

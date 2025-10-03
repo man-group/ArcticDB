@@ -80,8 +80,9 @@ SegmentInMemory LibraryTool::item_to_segment_in_memory(
 ) {
     auto frame =
             convert::py_ndf_to_frame(stream_id, item, norm, user_meta, engine_.cfg().write_options().empty_types());
-    auto segment_in_memory =
-            incomplete_segment_from_frame(frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse());
+    auto segment_in_memory = incomplete_segment_from_tensor_frame(
+            frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse()
+    );
     return segment_in_memory;
 }
 
