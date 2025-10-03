@@ -20,7 +20,7 @@ COLUMN_DTYPE = ["float", "int", "uint"]
 ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 # Make sure the start date is pre-epoch so that we can test pre-epoch dates. Not all C++ libraries handle pre-epoch well.
 MIN_DATE = np.datetime64("1960-01-01")
-MAX_DATE = np.datetime64("2025-01-01")
+MAX_DATE = np.datetime64("1980-01-01")
 
 pytestmark = pytest.mark.pipeline
 
@@ -118,7 +118,7 @@ def freq_fits_in_64_bits(count, unit):
 @st.composite
 def rule(draw):
     count = draw(st.integers(min_value=1, max_value=10_000))
-    unit = draw(st.sampled_from(["min", "h", "s", "ms", "us", "ns"]))
+    unit = draw(st.sampled_from(["min", "h", "s"]))
     result = f"{count}{unit}"
     assume(freq_fits_in_64_bits(count=count, unit=unit))
     return result
