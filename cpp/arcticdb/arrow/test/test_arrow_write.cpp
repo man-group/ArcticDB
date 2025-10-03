@@ -10,13 +10,33 @@
 #include <gtest/gtest.h>
 #include <sparrow/record_batch.hpp>
 
-#include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/test/arrow_test_utils.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/allocator.hpp>
 
 using namespace arcticdb;
+
+// Duplicated from arrow_utils.cpp to keep build times down until sparrow array formatting is moved out of
+// sparrow/array.hpp
+template<typename T>
+sparrow::timestamp_without_timezone_nanoseconds_array create_timestamp_array(
+        T* data_ptr, size_t data_size, std::optional<sparrow::validity_bitmap>&& validity_bitmap
+) {
+    static_assert(sizeof(T) == sizeof(sparrow::zoned_time_without_timezone_nanoseconds));
+    // We default to using timestamps without timezones. If the normalization metadata contains a timezone it will be
+    // applied during normalization in python layer.
+    sparrow::u8_buffer<sparrow::zoned_time_without_timezone_nanoseconds> buffer(
+            reinterpret_cast<sparrow::zoned_time_without_timezone_nanoseconds*>(data_ptr), data_size
+    );
+    if (validity_bitmap) {
+        return sparrow::timestamp_without_timezone_nanoseconds_array{
+                std::move(buffer), data_size, std::move(*validity_bitmap)
+        };
+    } else {
+        return sparrow::timestamp_without_timezone_nanoseconds_array{std::move(buffer), data_size};
+    }
+}
 
 template<typename types>
 class ArrowDataToSegmentNumeric : public testing::Test {};
@@ -147,6 +167,7 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
     ASSERT_EQ(buffer.bytes(), total_rows * sizeof(TypeParam));
     if constexpr (std::is_same_v<TypeParam, bool>) {
         ASSERT_EQ(buffer.blocks().size(), 1);
+        ASSERT_EQ(buffer.blocks()[0]->capacity(), total_rows * sizeof(TypeParam));
     } else {
         ASSERT_EQ(buffer.blocks().size(), rows_per_batch.size());
         ASSERT_EQ(buffer.block_offsets().size(), rows_per_batch.size() + 1);

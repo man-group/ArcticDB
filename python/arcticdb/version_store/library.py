@@ -14,7 +14,7 @@ import pytz
 from enum import Enum, auto
 from typing import Optional, Any, Tuple, Dict, Union, List, Iterable, NamedTuple
 
-from arcticdb.dependencies import pyarrow as pa
+from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
 from arcticdb.exceptions import ArcticDbNotYetImplemented, MissingKeysInStageResultsError
 from numpy import datetime64
 
@@ -42,7 +42,6 @@ AsOf = Union[int, str, datetime.datetime]
 
 
 NORMALIZABLE_TYPES = (pd.DataFrame, pd.Series, np.ndarray)
-_EXPERIMENTAL_NORMALIZABLE_TYPES = (pa.Table,)
 
 
 NormalizableType = Union[NORMALIZABLE_TYPES]
@@ -849,6 +848,14 @@ class Library:
     def __contains__(self, symbol: str) -> bool:
         return self.has_symbol(symbol)
 
+    def _allowed_input_type(self, data) -> bool:
+        if isinstance(data, NORMALIZABLE_TYPES) or (
+            _PYARROW_AVAILABLE and isinstance(data, pa.Table) and self._nvs._allow_arrow_input
+        ):
+            return True
+        else:
+            return False
+
     def options(self) -> LibraryOptions:
         """Library options set on this library. See also `enterprise_options`."""
         write_options = self._nvs.lib_cfg().lib_desc.version.write_options
@@ -890,7 +897,8 @@ class Library:
         data : NormalizableType
             Data to be written. Staged data must be normalizable.
         validate_index:
-            Check that the index is sorted prior to writing. In the case of unsorted data, throw an UnsortedDataException
+            Check that the index is sorted prior to writing. In the case of unsorted data, throw an UnsortedDataException.
+            Note that no checks are performed for Arrow input data.
         sort_on_index:
             If an appropriate index is present, sort the data on it. In combination with sort_columns the
             index will be used as the primary sort column, and the others as secondaries.
@@ -908,9 +916,7 @@ class Library:
 
         """
 
-        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
-            pass
-        elif not isinstance(data, NORMALIZABLE_TYPES):
+        if not self._allowed_input_type(data):
             raise ArcticUnsupportedDataTypeException(
                 "data is of a type that cannot be normalized. Consider using "
                 f"write_pickle instead. type(data)=[{type(data)}]"
@@ -980,6 +986,7 @@ class Library:
         validate_index: bool, default=True
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+            Note that no checks are performed for Arrow input data.
         index_column: Optional[str], default=None
             Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
             table.
@@ -1011,9 +1018,7 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
-        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
-            pass
-        elif not isinstance(data, NORMALIZABLE_TYPES):
+        if not self._allowed_input_type(data):
             raise ArcticUnsupportedDataTypeException(
                 "data is of a type that cannot be normalized. Consider using "
                 f"write_pickle instead. type(data)=[{type(data)}]"
@@ -1090,9 +1095,7 @@ class Library:
     def _raise_if_unsupported_type_in_write_batch(self, payloads):
         bad_symbols = []
         for p in payloads:
-            if isinstance(p.data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
-                pass
-            elif not isinstance(p.data, NORMALIZABLE_TYPES):
+            if not self._allowed_input_type(p.data):
                 bad_symbols.append((p.symbol, type(p.data)))
 
         if not bad_symbols:
@@ -1121,6 +1124,7 @@ class Library:
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+            Note that no checks are performed for Arrow input data.
 
         Returns
         -------
@@ -1262,6 +1266,7 @@ class Library:
         validate_index
             If True, verify that the index of `data` supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+            Note that no checks are performed for Arrow input data.
         index_column: Optional[str], default=None
             Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
             table.
@@ -1309,9 +1314,7 @@ class Library:
         2018-01-06       6
         """
 
-        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
-            pass
-        elif not isinstance(data, NORMALIZABLE_TYPES):
+        if not self._allowed_input_type(data):
             raise ArcticUnsupportedDataTypeException(
                 f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
             )
@@ -1344,6 +1347,7 @@ class Library:
         validate_index: bool, default=True
             Verify that each entry in the batch has an index that supports date range searches and update operations.
             This tests that the data is sorted in ascending order, using Pandas DataFrame.index.is_monotonic_increasing.
+            Note that no checks are performed for Arrow input data.
 
         Returns
         -------
@@ -1483,9 +1487,7 @@ class Library:
 
         """
 
-        if isinstance(data, _EXPERIMENTAL_NORMALIZABLE_TYPES) and self._nvs._allow_arrow_input:
-            pass
-        elif not isinstance(data, NORMALIZABLE_TYPES):
+        if not self._allowed_input_type(data):
             raise ArcticUnsupportedDataTypeException(
                 f"data is of a type that cannot be normalized. type(data)=[{type(data)}]"
             )
@@ -1643,7 +1645,7 @@ class Library:
             If True, and staged segments are timeseries, will verify that the index of the symbol after this operation
             supports date range searches and update operations. This requires that the indexes of the staged segments
             are non-overlapping with each other, and, in the case of `StagedDataFinalizeMethod.APPEND`, fall after the
-            last index value in the previous version.
+            last index value in the previous version.  Note that no checks are performed for Arrow input data.
         delete_staged_data_on_failure : bool, default=False
             Determines the handling of staged data when an exception occurs during the execution of the
             ``finalize_staged_data`` function.

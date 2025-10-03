@@ -140,11 +140,15 @@ TimeseriesDescriptor pack_timeseries_descriptor(
     return tsd;
 }
 
-SegmentInMemory incomplete_segment_from_frame(
+SegmentInMemory incomplete_segment_from_tensor_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key, bool allow_sparse
 ) {
     using namespace arcticdb::stream;
+    util::check(
+            frame->has_tensors(),
+            "incomplete_segment_from_tensor_frame should not be called with InputFrame backed by SegmentInMemory"
+    );
 
     auto offset_in_frame = 0;
     auto slice_num_for_column = 0;
@@ -277,7 +281,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     auto next_key = std::nullopt;
     // This clone is unnecessarily expensive. We should have a sort method that produces a new segment (current one is
     // in-place)
-    auto segment = frame->has_tensors() ? incomplete_segment_from_frame(frame, 0, next_key, sparsify_floats)
+    // Note that we do not set `next_key` in the has_segment() case as that is only used by the library tool
+    auto segment = frame->has_tensors() ? incomplete_segment_from_tensor_frame(frame, 0, next_key, sparsify_floats)
                                         : frame->segment().clone();
     if (options.sort_on_index) {
         util::check(frame->has_index(), "Sort requested on index but no index supplied");
@@ -600,7 +605,7 @@ void append_incomplete(
     auto desc = frame->desc().clone();
 
     auto index_range = frame->index_range;
-    auto segment = incomplete_segment_from_frame(frame, 0, std::move(next_key), false);
+    auto segment = incomplete_segment_from_tensor_frame(frame, 0, std::move(next_key), false);
 
     auto new_key = store->write(KeyType::APPEND_DATA,
                                 VersionId(0),

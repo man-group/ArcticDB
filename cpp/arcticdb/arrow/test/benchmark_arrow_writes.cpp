@@ -76,4 +76,6 @@ BENCHMARK(BM_arrow_convert_multiple_record_batches_to_segment)
         ->Args({10, 100'000, 10})
         // Long and thin data
         ->Args({10'000'000, 10, 100})
-        ->Args({10'000'000, 10, 10'000});
+        ->Args({10'000'000, 10, 10'000})
+        // Highly fragmented data
+        ->Args({1'000, 10, 1'000});

@@ -76,6 +76,9 @@ Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col
     const auto& source_column = frame.column(col_idx);
     const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
     const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
+    // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
+    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to multiples
+    // of the type size
     auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
     ChunkedBuffer chunked_buffer;
     if (byte_blocks_at.size() == 1) {

@@ -24,7 +24,7 @@ import pandas as pd
 import pickle
 from abc import ABCMeta, abstractmethod
 
-from arcticdb.dependencies import pyarrow as pa
+from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
 from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
@@ -729,11 +729,13 @@ class ArrowTableNormalizer(Normalizer):
         norm_metadata = NormalizationMetadata()
         index_column = kwargs.get("index_column", None)
         if index_column is None:
-            norm_metadata.arrow_table.has_index = False
+            norm_metadata.experimental_arrow.has_index = False
         else:
             check(isinstance(index_column, str), "Arrow index column specifier must be a string")
-            norm_metadata.arrow_table.has_index = True
-            norm_metadata.arrow_table.index_column_name = index_column
+            norm_metadata.experimental_arrow.has_index = True
+            norm_metadata.experimental_arrow.index_column_name = index_column
+            # It would be cleaner if the index column position finding happened here. However, finding a column by name
+            # is O(n), and we have to iterate through the columns in the C++ layer anyway
         return arcticdb_record_batches, norm_metadata
 
     def denormalize(self, item, norm_meta):
@@ -746,9 +748,9 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
-        elif input_type == "arrow_table":
-            if norm_meta.arrow_table.has_index:
-                index_column_position = norm_meta.arrow_table.index_column_position
+        elif input_type == "experimental_arrow":
+            if norm_meta.experimental_arrow.has_index:
+                index_column_position = norm_meta.experimental_arrow.index_column_position
                 if index_column_position != 0 and index_column_position < item.num_columns:
                     # Verified experimentally that this is zero-copy as the docs do not specify
                     item = item.select(
@@ -1034,7 +1036,7 @@ class DataFrameNormalizer(_PandasNormalizer):
         return df_from_arrays(item.data, columns, index, n_indexes)
 
     def _pandas_norm_meta_from_arrow_norm_meta(
-        self, arrow_table: NormalizationMetadata.ArrowTable
+        self, arrow_table: NormalizationMetadata.ExperimentalArrow
     ) -> NormalizationMetadata.PandasDataFrame:
         res = NormalizationMetadata.PandasDataFrame()
         if arrow_table.has_index:
@@ -1049,7 +1051,7 @@ class DataFrameNormalizer(_PandasNormalizer):
     def denormalize(self, item, norm_meta):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
 
-        if isinstance(norm_meta, NormalizationMetadata.ArrowTable):
+        if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
             norm_meta = self._pandas_norm_meta_from_arrow_norm_meta(norm_meta)
 
         if norm_meta.HasField("multi_columns"):
@@ -1504,7 +1506,7 @@ class CompositeNormalizer(Normalizer):
         if isinstance(item, np.ndarray):
             return self.np.normalize
 
-        if isinstance(item, pa.Table) and allow_arrow_input:
+        if _PYARROW_AVAILABLE and isinstance(item, pa.Table) and allow_arrow_input:
             return self.pa.normalize
 
         if self.fallback_normalizer is not None:
@@ -1559,8 +1561,8 @@ class CompositeNormalizer(Normalizer):
                 return self.tf.denormalize(item, norm_meta.ts)
             elif input_type == "np":
                 return self.np.denormalize(item, norm_meta.np)
-            elif input_type == "arrow_table":
-                return self.df.denormalize(item, norm_meta.arrow_table)
+            elif input_type == "experimental_arrow":
+                return self.df.denormalize(item, norm_meta.experimental_arrow)
             elif input_type == "msg_pack":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 
@@ -1687,13 +1689,13 @@ def restrict_data_to_date_range_only(
             # of duplicating exception messages.
             raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
-    elif isinstance(data, pa.Table):
+    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
         check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")
         col = data.column(index_column)
         start, end = _strip_tz(start, end)
         check(
             start <= col[0].as_py().tz_localize(None) and end >= col[-1].as_py().tz_localize(None),
-            "update with date_range and pyarrow Tbale not yet supported with date_range overlapping the data",
+            "update with date_range and pyarrow Table not yet supported with date_range overlapping the data",
         )
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):

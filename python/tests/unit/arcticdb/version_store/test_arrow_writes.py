@@ -13,7 +13,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
-from arcticdb.exceptions import ArcticException, SchemaException, UserInputException
+from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
@@ -215,6 +215,31 @@ def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_
         assert_frame_equal(pandas_df, arrow_df)
 
 
+@pytest.mark.parametrize("rows_per_slice", [1, 2, 10, 100_000])
+def test_many_record_batches_many_slices(version_store_factory, rows_per_slice):
+    rng = np.random.default_rng()
+    lib = version_store_factory(segment_row_size=rows_per_slice)
+    lib.set_output_format("experimental_arrow")
+    lib._set_allow_arrow_input()
+    sym = "test_many_record_batches_many_slices"
+    record_batch_sizes = [1, 2, 1, 15, 13, 2, 1, 10]
+    tables = []
+    for idx, length in enumerate(record_batch_sizes):
+        tables.append(
+            pa.table(
+                {
+                    "int32": pa.array(rng.integers(0, 1_000_000, length, dtype=np.int32), pa.int32()),
+                    "float64": pa.array(rng.random(length), pa.float64()),
+                    "bool": pa.array(rng.choice([True, False], length), pa.bool_()),
+                }
+            )
+        )
+    table = pa.concat_tables(tables)
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    assert table.equals(received)
+
+
 def test_write_view(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_view"
@@ -234,6 +259,7 @@ def test_write_view(lmdb_version_store_arrow):
 
 
 def test_write_owned_and_non_owned_buffers(lmdb_version_store_tiny_segment):
+    # This test is about our ChunkedBuffer holding mixes of owned and non-owned blocks, not Arrow views
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format("experimental_arrow")
     lib._set_allow_arrow_input()
@@ -373,18 +399,39 @@ def test_append_with_index(lmdb_version_store_arrow, existing_data):
                 "col": pa.array([0, 1], pa.int64()),
             }
         )
-        lib.write(sym, write_table)
+        lib.write(sym, write_table, index_column="ts")
     append_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
             "col": pa.array([3, 4], pa.int64()),
         }
     )
-    lib.append(sym, append_table)
+    lib.append(sym, append_table, index_column="ts")
 
     received = lib.read(sym).data
     expected = pa.concat_tables([write_table, append_table]) if existing_data else append_table
     assert expected.equals(received)
+
+
+@pytest.mark.parametrize("method", ["append", "update"])
+def test_wrong_index_name(lmdb_version_store_arrow, method):
+    lib = lmdb_version_store_arrow
+    sym = "test_wrong_index_name"
+    table_0 = pa.table(
+        {
+            "ts1": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([0, 1], pa.int64()),
+        }
+    )
+    lib.write(sym, table_0, index_column="ts1")
+    table_1 = pa.table(
+        {
+            "ts2": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array([3, 4], pa.int64()),
+        }
+    )
+    with pytest.raises(StreamDescriptorMismatch):
+        getattr(lib, method)(sym, table_1, index_column="ts2")
 
 
 @pytest.mark.parametrize("existing_data", [True, False])
@@ -664,7 +711,7 @@ num_supported_types = len(supported_types)
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
-    df_length=st.integers(1, 200_000),
+    df_length=st.integers(3, 200_000),
     index_position=st.integers(0, num_supported_types),
     # Defined this way as hypothesis shrinks towards smaller ints, and we want to shrink towards a single record batch/
     # row slice/ column slice
@@ -707,6 +754,8 @@ def test_arrow_writes_hypothesis(
             break
     table = pa.concat_tables(tables)
     assert table.equals(original_table)
-    lib.write(sym, table, index_column="ts")
+    lib.write(sym, table.slice(0, df_length // 3), index_column="ts")
+    lib.append(sym, table.slice((2 * df_length) // 3), index_column="ts")
+    lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)), index_column="ts")
     received = lib.read(sym).data
     assert table.equals(received)

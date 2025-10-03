@@ -60,7 +60,7 @@ get_common_pandas(const proto::descriptors::NormalizationMetadata& norm_meta) {
         return std::make_optional(std::reference_wrapper<Pandas>(norm_meta.ts().common()));
     case proto::descriptors::NormalizationMetadata::kMsgPackFrame:
     case proto::descriptors::NormalizationMetadata::kNp:
-    case proto::descriptors::NormalizationMetadata::kArrowTable:
+    case proto::descriptors::NormalizationMetadata::kExperimentalArrow:
         return std::nullopt;
     default:
         return get_pandas_common_via_reflection(norm_meta, [](auto& norm_meta, auto one_of, auto common_field) {
@@ -85,7 +85,7 @@ get_common_pandas(proto::descriptors::NormalizationMetadata& norm_meta) {
         return std::make_optional(std::reference_wrapper<Pandas>(*norm_meta.mutable_ts()->mutable_common()));
     case proto::descriptors::NormalizationMetadata::kMsgPackFrame:
     case proto::descriptors::NormalizationMetadata::kNp:
-    case proto::descriptors::NormalizationMetadata::kArrowTable:
+    case proto::descriptors::NormalizationMetadata::kExperimentalArrow:
         return std::nullopt;
     default:
         return get_pandas_common_via_reflection(norm_meta, [](auto& norm_meta, auto one_of, auto common_field) {

@@ -224,7 +224,7 @@ message NormalizationMetadata {
         repeated uint64 shape = 1;
     }
 
-    message ArrowTable {
+    message ExperimentalArrow {
         bool has_index = 1;
         string index_column_name = 2;
         uint64 index_column_position = 3;
@@ -236,7 +236,7 @@ message NormalizationMetadata {
         NormalisedTimeSeries ts = 3;
         MsgPackFrame msg_pack_frame = 4;
         NdArray np = 5;
-        ArrowTable arrow_table = 6;
+        ExperimentalArrow experimental_arrow = 6;
     }
 
     CustomNormalizerMeta custom = 64;

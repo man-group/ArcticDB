@@ -13,6 +13,7 @@
 #include <arcticdb/python/python_types.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <pybind11/numpy.h>
+#include <sparrow/record_batch.hpp>
 
 namespace arcticdb::convert {
 constexpr const char none_char[8] = {'\300', '\000', '\000', '\000', '\000', '\000', '\000', '\000'};
@@ -247,13 +248,13 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
 
             desc.add_scalar_field(index_tensor.dt_, index_column_name);
             frame.index = stream::TimeseriesIndex(index_column_name);
+            opt_index_tensor = std::move(index_tensor);
         } else {
             frame.index = stream::RowCountIndex();
             desc.set_index_type(IndexDescriptor::Type::ROWCOUNT);
             desc.add_scalar_field(index_tensor.dt_, index_column_name);
             field_tensors.push_back(std::move(index_tensor));
         }
-        opt_index_tensor = std::move(index_tensor);
     }
 
     // Fill tensors
@@ -290,8 +291,10 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
 }
 
 void record_batches_to_frame(const std::vector<RecordBatchData>& record_batches, InputFrame& frame) {
-    util::check(frame.norm_meta.has_arrow_table(), "Unexpected non-Arrow norm metadata provided with Arrow data");
-    const auto& arrow_norm_metadata = frame.norm_meta.arrow_table();
+    util::check(
+            frame.norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data"
+    );
+    const auto& arrow_norm_metadata = frame.norm_meta.experimental_arrow();
     std::vector<sparrow::record_batch> sparrow_record_batches(record_batches.size(), sparrow::record_batch{});
     std::ranges::transform(record_batches, sparrow_record_batches.begin(), [](const RecordBatchData& record_batch) {
         return sparrow::record_batch{&record_batch.array_, &record_batch.schema_};
@@ -301,7 +304,7 @@ void record_batches_to_frame(const std::vector<RecordBatchData>& record_batches,
             arrow_norm_metadata.has_index() ? arrow_norm_metadata.index_column_name() : std::optional<std::string>()
     );
     if (index_column_position.has_value()) {
-        frame.norm_meta.mutable_arrow_table()->set_index_column_position(*index_column_position);
+        frame.norm_meta.mutable_experimental_arrow()->set_index_column_position(*index_column_position);
     }
     frame.set_segment(std::move(seg));
 }

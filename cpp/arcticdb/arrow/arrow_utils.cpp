@@ -361,7 +361,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 // This is the limiting factor when writing a lot of bool data as it is serial. This should be moved to
                 // WriteToSegmentTask
                 if (record_batch == record_batches.cbegin()) {
-                    chunked_buffer.ensure(total_rows);
+                    chunked_buffer = ChunkedBuffer::presized(total_rows);
                 }
                 packed_bits_to_buffer(
                         data, array.size(), arrow_array->offset, chunked_buffer.bytes_at(start_row, array.size())

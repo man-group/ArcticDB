@@ -18,8 +18,8 @@ InputFrame::InputFrame() : index(stream::empty_index()) {}
 
 void InputFrame::set_segment(SegmentInMemory&& seg) {
     num_rows = seg.row_count();
-    util::check(norm_meta.has_arrow_table(), "Unexpected non-Arrow norm metadata provided with Arrow data");
-    if (norm_meta.arrow_table().has_index()) {
+    util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
+    if (norm_meta.experimental_arrow().has_index()) {
         user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
                 !seg.columns().empty(), "Arrow index column specified but there are zero columns"
         );
@@ -57,21 +57,7 @@ const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*
 
 void InputFrame::set_offset(ssize_t off) const { offset = off; }
 
-void InputFrame::set_sorted(SortedValue sorted) {
-    switch (sorted) {
-    case SortedValue::UNSORTED:
-        desc().set_sorted(SortedValue::UNSORTED);
-        break;
-    case SortedValue::DESCENDING:
-        desc().set_sorted(SortedValue::DESCENDING);
-        break;
-    case SortedValue::ASCENDING:
-        desc().set_sorted(SortedValue::ASCENDING);
-        break;
-    default:
-        desc().set_sorted(SortedValue::UNKNOWN);
-    }
-}
+void InputFrame::set_sorted(SortedValue sorted) { desc().set_sorted(sorted); }
 
 bool InputFrame::has_index() const { return desc().index().field_count() != 0ULL; }
 
@@ -89,6 +75,8 @@ timestamp InputFrame::index_value_at(size_t row) {
                         seg.row_count()
                 );
                 const auto& index_column = seg.column(0);
+                // Note that scalar_at is O(log(n)) where n is the number of chunks in the underlying buffer, which is
+                // equal to the number of input record batches for Arrow
                 return *index_column.scalar_at<timestamp>(row);
             },
             [row](InputTensors& input_tensors) {
@@ -112,34 +100,8 @@ void InputFrame::set_index_range() {
         index_range.start_ = IndexValue{NumericIndex{0}};
         index_range.end_ = IndexValue{NumericIndex{0}};
     } else if (desc().index().field_count() == 1) {
-        visit_field(desc().field(0), [&](auto&& tag) {
-            using DT = std::decay_t<decltype(tag)>;
-            using RawType = typename DT::DataTypeTag::raw_type;
-            if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>) {
-                util::variant_match(
-                        input_data,
-                        [this](SegmentInMemory& segment) {
-                            const auto& index_column = segment.column(0);
-                            index_range.start_ = IndexValue(*index_column.scalar_at<timestamp>(0));
-                            index_range.end_ = IndexValue(*index_column.scalar_at<timestamp>(num_rows - 1));
-                        },
-                        [this](InputTensors& input_tensors) {
-                            util::check(
-                                    static_cast<bool>(input_tensors.index_tensor),
-                                    "Got null index tensor in set_index_range"
-                            );
-                            util::check(input_tensors.index_tensor->nbytes() > 0, "Empty index tensor");
-                            auto& tensor = input_tensors.index_tensor.value();
-                            auto start_t = tensor.ptr_cast<RawType>(0);
-                            auto end_t = tensor.ptr_cast<RawType>(static_cast<size_t>(tensor.shape(0) - 1));
-                            index_range.start_ = IndexValue(static_cast<timestamp>(*start_t));
-                            index_range.end_ = IndexValue(static_cast<timestamp>(*end_t));
-                        }
-                );
-            } else {
-                throw std::runtime_error("Unsupported non-integral index type");
-            }
-        });
+        index_range.start_ = index_value_at(0);
+        index_range.end_ = index_value_at(num_rows - 1);
     } else {
         index_range.start_ = IndexValue{NumericIndex{0}};
         index_range.end_ = IndexValue{static_cast<timestamp>(num_rows) - 1};

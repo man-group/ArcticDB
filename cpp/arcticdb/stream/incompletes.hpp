@@ -119,7 +119,7 @@ void append_incomplete(
         const std::shared_ptr<pipelines::InputFrame>& frame, bool validate_index
 );
 
-SegmentInMemory incomplete_segment_from_frame(
+SegmentInMemory incomplete_segment_from_tensor_frame(
         const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key, bool allow_sparse
 );
