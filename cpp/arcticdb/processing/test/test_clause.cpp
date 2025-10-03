@@ -375,7 +375,7 @@ TEST(Clause, Merge) {
     for (auto i = 0u; i < num_rows; ++i) {
         auto& current = segs[i % num_segs];
         for (auto j = 0U; j < seg.descriptor().field_count(); ++j) {
-            current.column(j).type().visit_tag([&current, &seg, i, j](auto&& tag) {
+            details::visit_scalar(current.column(j).type(), [&current, &seg, i, j](auto&& tag) {
                 using DT = std::decay_t<decltype(tag)>;
                 const auto data_type = DT::DataTypeTag::data_type;
                 using RawType = typename DT::DataTypeTag::raw_type;

@@ -10,6 +10,7 @@
 
 #include <fmt/core.h>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/processing/expression_context.hpp>
@@ -134,7 +135,7 @@ std::pair<std::vector<bucket_id>, std::vector<uint64_t>> get_buckets(
     using TDT = typename Grouper::GrouperDescriptor;
 
     if (col.column_->is_sparse()) {
-        Column::for_each_enumerated<TDT>(*col.column_, [&](auto enumerating_it) {
+        arcticdb::for_each_enumerated<TDT>(*col.column_, [&](auto enumerating_it) {
             auto opt_group = grouper.group(enumerating_it.value(), col.string_pool_);
             if (ARCTICDB_LIKELY(opt_group.has_value())) {
                 auto bucket = bucketizer.bucket(*opt_group);
@@ -143,7 +144,7 @@ std::pair<std::vector<bucket_id>, std::vector<uint64_t>> get_buckets(
             }
         });
     } else {
-        Column::for_each<TDT>(*col.column_, [&](auto val) {
+        arcticdb::for_each<TDT>(*col.column_, [&](auto val) {
             auto opt_group = grouper.group(val, col.string_pool_);
             if (ARCTICDB_LIKELY(opt_group.has_value())) {
                 auto bucket = bucketizer.bucket(*opt_group);
@@ -166,55 +167,59 @@ std::vector<ProcessingUnit> partition_processing_segment(
     auto get_result = input.get(ColumnName(grouping_column_name));
     if (std::holds_alternative<ColumnWithStrings>(get_result)) {
         auto partitioning_column = std::get<ColumnWithStrings>(get_result);
-        partitioning_column.column_->type().visit_tag([&output, &input, &partitioning_column](auto type_desc_tag) {
-            using TypeDescriptorTag = decltype(type_desc_tag);
-            using DescriptorType = std::decay_t<TypeDescriptorTag>;
-            using TagType = typename DescriptorType::DataTypeTag;
-            using ResolvedGrouperType = typename GrouperType::template Grouper<TypeDescriptorTag>;
+        details::visit_scalar(
+                partitioning_column.column_->type(),
+                [&output, &input, &partitioning_column](auto type_desc_tag) {
+                    using TypeDescriptorTag = decltype(type_desc_tag);
+                    using DescriptorType = std::decay_t<TypeDescriptorTag>;
+                    using TagType = typename DescriptorType::DataTypeTag;
+                    using ResolvedGrouperType = typename GrouperType::template Grouper<TypeDescriptorTag>;
 
-            // Partitioning on an empty column should return an empty composite
-            if constexpr (!is_empty_type(TagType::data_type)) {
-                ResolvedGrouperType grouper;
-                auto num_buckets = ConfigsMap::instance()->get_int(
-                        "Partition.NumBuckets", async::TaskScheduler::instance()->cpu_thread_count()
-                );
-                if (num_buckets > std::numeric_limits<bucket_id>::max()) {
-                    log::version().warn(
-                            "GroupBy partitioning buckets capped at {} (received {})",
-                            std::numeric_limits<bucket_id>::max(),
-                            num_buckets
-                    );
-                    num_buckets = std::numeric_limits<bucket_id>::max();
-                }
-                std::vector<ProcessingUnit> procs{static_cast<bucket_id>(num_buckets)};
-                BucketizerType bucketizer(num_buckets);
-                auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
-                for (auto&& [input_idx, seg] : folly::enumerate(input.segments_.value())) {
-                    auto new_segs = partition_segment(*seg, row_to_bucket, bucket_counts);
-                    for (auto&& [output_idx, new_seg] : folly::enumerate(new_segs)) {
-                        if (bucket_counts.at(output_idx) > 0) {
-                            auto& proc = procs.at(output_idx);
-                            if (!proc.segments_.has_value()) {
-                                proc.segments_ = std::make_optional<std::vector<std::shared_ptr<SegmentInMemory>>>();
-                                proc.row_ranges_ =
-                                        std::make_optional<std::vector<std::shared_ptr<pipelines::RowRange>>>();
-                                proc.col_ranges_ =
-                                        std::make_optional<std::vector<std::shared_ptr<pipelines::ColRange>>>();
+                    // Partitioning on an empty column should return an empty composite
+                    if constexpr (!is_empty_type(TagType::data_type)) {
+                        ResolvedGrouperType grouper;
+                        auto num_buckets = ConfigsMap::instance()->get_int(
+                                "Partition.NumBuckets", async::TaskScheduler::instance()->cpu_thread_count()
+                        );
+                        if (num_buckets > std::numeric_limits<bucket_id>::max()) {
+                            log::version().warn(
+                                    "GroupBy partitioning buckets capped at {} (received {})",
+                                    std::numeric_limits<bucket_id>::max(),
+                                    num_buckets
+                            );
+                            num_buckets = std::numeric_limits<bucket_id>::max();
+                        }
+                        std::vector<ProcessingUnit> procs{static_cast<bucket_id>(num_buckets)};
+                        BucketizerType bucketizer(num_buckets);
+                        auto [row_to_bucket, bucket_counts] = get_buckets(partitioning_column, grouper, bucketizer);
+                        for (auto&& [input_idx, seg] : folly::enumerate(input.segments_.value())) {
+                            auto new_segs = partition_segment(*seg, row_to_bucket, bucket_counts);
+                            for (auto&& [output_idx, new_seg] : folly::enumerate(new_segs)) {
+                                if (bucket_counts.at(output_idx) > 0) {
+                                    auto& proc = procs.at(output_idx);
+                                    if (!proc.segments_.has_value()) {
+                                        proc.segments_ =
+                                                std::make_optional<std::vector<std::shared_ptr<SegmentInMemory>>>();
+                                        proc.row_ranges_ =
+                                                std::make_optional<std::vector<std::shared_ptr<pipelines::RowRange>>>();
+                                        proc.col_ranges_ =
+                                                std::make_optional<std::vector<std::shared_ptr<pipelines::ColRange>>>();
+                                    }
+                                    proc.segments_->emplace_back(std::make_shared<SegmentInMemory>(std::move(new_seg)));
+                                    proc.row_ranges_->emplace_back(input.row_ranges_->at(input_idx));
+                                    proc.col_ranges_->emplace_back(input.col_ranges_->at(input_idx));
+                                }
                             }
-                            proc.segments_->emplace_back(std::make_shared<SegmentInMemory>(std::move(new_seg)));
-                            proc.row_ranges_->emplace_back(input.row_ranges_->at(input_idx));
-                            proc.col_ranges_->emplace_back(input.col_ranges_->at(input_idx));
+                        }
+                        for (auto&& [idx, proc] : folly::enumerate(procs)) {
+                            if (bucket_counts.at(idx) > 0) {
+                                proc.bucket_ = idx;
+                                output.emplace_back(std::move(proc));
+                            }
                         }
                     }
                 }
-                for (auto&& [idx, proc] : folly::enumerate(procs)) {
-                    if (bucket_counts.at(idx) > 0) {
-                        proc.bucket_ = idx;
-                        output.emplace_back(std::move(proc));
-                    }
-                }
-            }
-        });
+        );
     } else {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 dynamic_schema, "Grouping column missing from row-slice in static schema symbol"

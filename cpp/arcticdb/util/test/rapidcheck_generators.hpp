@@ -148,7 +148,7 @@ folly::Future<arcticdb::entity::VariantKey> write_frame_data(const TestDataFrame
     for (size_t row = 0; row < data_frame.num_rows_; ++row) {
         writer.start_row(timestamp)([&](auto&& rb) {
             for (size_t col = 0; col < data_frame.num_columns_; ++col) {
-                data_frame.types_[col].visit_tag([&](auto type_desc_tag) {
+                arcticdb::details::visit_scalar(data_frame.types_[col], [&](auto type_desc_tag) {
                     using raw_type = typename decltype(type_desc_tag)::DataTypeTag::raw_type;
                     using data_type_tag = typename decltype(type_desc_tag)::DataTypeTag;
                     if (is_sequence_type(data_type_tag::data_type))

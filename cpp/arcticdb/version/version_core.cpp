@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -1601,7 +1602,7 @@ void copy_frame_data_to_buffer(
             );
             details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
-                Column::for_each_enumerated<typename src_type_info::TDT>(
+                arcticdb::for_each_enumerated<typename src_type_info::TDT>(
                         src_column,
                         [typed_dst_ptr](auto enumerating_it) {
                             typed_dst_ptr[enumerating_it.idx()] =
@@ -1631,7 +1632,7 @@ void copy_frame_data_to_buffer(
                         default_value
                 );
                 SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
-                Column::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
+                arcticdb::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
                     typed_dst_ptr[row.idx()] = row.value();
                 });
             }
@@ -1676,11 +1677,11 @@ void copy_frame_data_to_buffer(
                                 src_column.opt_sparse_map(),
                                 default_value
                         );
-                        Column::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
+                        arcticdb::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
                             typed_dst_ptr[row.idx()] = row.value();
                         });
                     } else {
-                        Column::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
+                        arcticdb::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
                             *typed_dst_ptr = value;
                             ++typed_dst_ptr;
                         });

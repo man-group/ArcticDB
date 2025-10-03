@@ -179,7 +179,6 @@ endif ()
 set(arcticdb_srcs
         storage/memory_layout.hpp
         # header files
-        arrow/array_from_block.hpp
         arrow/arrow_handlers.hpp
         arrow/arrow_output_frame.hpp
         arrow/arrow_utils.hpp
@@ -206,6 +205,7 @@ set(arcticdb_srcs
         column_store/column_data.hpp
         column_store/column_data_random_accessor.hpp
         column_store/column.hpp
+        column_store/column_algorithms.hpp
         column_store/column_utils.hpp
         column_store/key_segment.hpp
         column_store/memory_segment.hpp
@@ -431,6 +431,7 @@ set(arcticdb_srcs
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
+        column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp
         column_store/memory_segment.cpp
         column_store/memory_segment_impl.cpp

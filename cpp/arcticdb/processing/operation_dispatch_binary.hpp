@@ -12,6 +12,7 @@
 #include <arcticdb/pipeline/value.hpp>
 #include <arcticdb/pipeline/value_set.hpp>
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/type_utils.hpp>
@@ -113,7 +114,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                         auto offset_set = column_with_strings.string_pool_->get_offsets_for_column(
                                 typed_value_set, *column_with_strings.column_
                         );
-                        Column::transform<typename col_type_info::TDT>(
+                        arcticdb::transform<typename col_type_info::TDT>(
                                 *column_with_strings.column_,
                                 output_bitset,
                                 sparse_missing_value_output,
@@ -134,7 +135,7 @@ VariantData binary_membership(const ColumnWithStrings& column_with_strings, Valu
                                 typename val_set_type_info::RawType,
                                 std::remove_reference_t<Func>>::type;
                         auto typed_value_set = value_set.get_set<WideType>();
-                        Column::transform<typename col_type_info::TDT>(
+                        arcticdb::transform<typename col_type_info::TDT>(
                                 *column_with_strings.column_,
                                 output_bitset,
                                 sparse_missing_value_output,
@@ -213,7 +214,7 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                               is_fixed_string_type(right_type_info::data_type)) {
                     strip_fixed_width_trailing_nulls = true;
                 }
-                Column::transform<typename left_type_info::TDT, typename right_type_info::TDT>(
+                arcticdb::transform<typename left_type_info::TDT, typename right_type_info::TDT>(
                         *left.column_,
                         *right.column_,
                         output_bitset,
@@ -232,7 +233,7 @@ VariantData binary_comparator(const ColumnWithStrings& left, const ColumnWithStr
                                  )) {
                 using comp = typename arcticdb::
                         Comparable<typename left_type_info::RawType, typename right_type_info::RawType>;
-                Column::transform<typename left_type_info::TDT, typename right_type_info::TDT>(
+                arcticdb::transform<typename left_type_info::TDT, typename right_type_info::TDT>(
                         *left.column_,
                         *right.column_,
                         output_bitset,
@@ -297,7 +298,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                         auto value_offset = column_with_strings.string_pool_->get_offset_for_column(
                                 value_string, *column_with_strings.column_
                         );
-                        Column::transform<typename col_type_info::TDT>(
+                        arcticdb::transform<typename col_type_info::TDT>(
                                 *column_with_strings.column_,
                                 output_bitset,
                                 sparse_missing_value_output,
@@ -321,7 +322,7 @@ VariantData binary_comparator(const ColumnWithStrings& column_with_strings, cons
                                 typename arcticdb::Comparable<ValType, ColType>,
                                 typename arcticdb::Comparable<ColType, ValType>>;
                         auto value = static_cast<typename comp::right_type>(val.get<ValType>());
-                        Column::transform<typename col_type_info::TDT>(
+                        arcticdb::transform<typename col_type_info::TDT>(
                                 *column_with_strings.column_,
                                 output_bitset,
                                 sparse_missing_value_output,
@@ -375,7 +376,7 @@ VariantData binary_comparator(
                 auto offset_set = column_with_strings.string_pool_->get_regex_match_offsets_for_column(
                         regex_generic, *column_with_strings.column_
                 );
-                Column::transform<typename col_type_info::TDT>(
+                arcticdb::transform<typename col_type_info::TDT>(
                         *column_with_strings.column_,
                         output_bitset,
                         false,
@@ -508,7 +509,7 @@ VariantData binary_operator(const ColumnWithStrings& left, const ColumnWithStrin
                     std::remove_reference_t<decltype(func)>>::type;
             constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
             output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-            Column::transform<
+            arcticdb::transform<
                     typename left_type_info::TDT,
                     typename right_type_info::TDT,
                     ScalarTagType<DataTypeTag<output_data_type>>>(
@@ -561,7 +562,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                 column_name = binary_operation_column_name(fmt::format("{}", raw_value), func, col.column_name_);
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-                Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                arcticdb::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
                         *output_column,
                         [&func, raw_value](auto input_value) -> TargetType {
@@ -572,7 +573,7 @@ VariantData binary_operator(const ColumnWithStrings& col, const Value& val, Func
                 column_name = binary_operation_column_name(col.column_name_, func, fmt::format("{}", raw_value));
                 constexpr auto output_data_type = data_type_from_raw_type<TargetType>();
                 output_column = std::make_unique<Column>(make_scalar_type(output_data_type), Sparsity::PERMITTED);
-                Column::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
+                arcticdb::transform<typename col_type_info::TDT, ScalarTagType<DataTypeTag<output_data_type>>>(
                         *(col.column_),
                         *output_column,
                         [&func, raw_value](auto input_value) -> TargetType {
