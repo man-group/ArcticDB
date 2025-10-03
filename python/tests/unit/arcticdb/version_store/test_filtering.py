@@ -31,6 +31,7 @@ from arcticdb.util.test import (
     generic_filter_test_strings,
     generic_filter_test_nans,
     unicode_symbols,
+    equals,
 )
 from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 
@@ -1140,6 +1141,34 @@ def test_float32_binary_comparison(lmdb_version_store_v1):
                 q = q[qb_lhs != qb_rhs]
                 expected = df[pandas_lhs != pandas_rhs]
             generic_filter_test(lib, symbol, q, expected)
+
+
+@pytest.mark.parametrize("data", ({"a": pd.DataFrame({"col": [0]})}, np.array([1, 2, 3, 4]), np.ndarray((3, 3))))
+@pytest.mark.parametrize("empty", (True, False))
+def test_filter_unfilterable_data(lmdb_version_store_v1, empty, data, sym):
+    lib = lmdb_version_store_v1
+    lib.write(sym, data, recursive_normalizers=True)
+
+    q = QueryBuilder()
+    if empty:
+        equals(lib.read(sym, query_builder=q).data, data)
+    else:
+        q = q[q["col"] == 0]
+        with pytest.raises(SchemaException):
+            lib.read(sym, query_builder=q)
+
+
+@pytest.mark.parametrize("data", ({"a": pd.DataFrame({"col": [0]})}, np.array([1, 2, 3, 4]), np.ndarray((3, 3))))
+@pytest.mark.parametrize("head", (True, False))
+def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data):
+    lib = lmdb_version_store_v1
+    lib.write(sym, data, recursive_normalizers=True)
+
+    with pytest.raises(SchemaException):
+        if head:
+            lib.head(sym)
+        else:
+            lib.tail(sym)
 
 
 ################################
