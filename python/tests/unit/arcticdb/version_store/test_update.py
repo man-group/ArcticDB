@@ -987,3 +987,50 @@ def test_update_series_with_different_column_name_throws(lmdb_version_store_dyna
     with pytest.raises(SchemaException) as e:
         lib.update("sym", pd.Series([1], name="name_2", index=pd.DatetimeIndex([pd.Timestamp(0)])))
     assert "name_1" in str(e.value) and "name_2" in str(e.value)
+
+
+def test_update_index_has_the_same_start_end(version_store_factory):
+    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
+    row_count = 10
+    columns = [f"col_{i}" for i in range(10)]
+    df = pd.DataFrame(
+        {col_name: range(row_count) for col_name in columns}, index=pd.date_range("2024-01-01", periods=row_count)
+    )
+    lib.write("sym", df)
+    lib_tool = lib.library_tool()
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 25
+
+    update_df = pd.DataFrame(
+        {col_name: range(10, row_count + 10) for col_name in columns},
+        index=pd.date_range("2024-01-01", periods=row_count),
+    )
+    lib.update("sym", update_df)
+    assert_frame_equal(lib.read("sym").data, update_df)
+
+    lib_tool = lib.library_tool()
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 50
+    assert len(lib_tool.read_index("sym")) == 25
+
+
+def test_update_new_data_contains_old(version_store_factory):
+    lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
+    row_count = 10
+    columns = [f"col_{i}" for i in range(10)]
+    df = pd.DataFrame(
+        {col_name: range(row_count) for col_name in columns}, index=pd.date_range("2024-01-01", periods=row_count)
+    )
+    lib.write("sym", df)
+    lib_tool = lib.library_tool()
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 25
+
+    new_row_count = 12
+    update_df = pd.DataFrame(
+        {col_name: range(10, new_row_count + 10) for col_name in columns},
+        index=pd.date_range("2023-12-31", periods=new_row_count),
+    )
+    lib.update("sym", update_df)
+    assert_frame_equal(lib.read("sym").data, update_df)
+
+    lib_tool = lib.library_tool()
+    assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")) == 55
+    assert len(lib_tool.read_index("sym")) == 30
