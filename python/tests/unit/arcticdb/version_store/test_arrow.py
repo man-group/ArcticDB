@@ -92,6 +92,7 @@ def test_read_empty(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow(table, expected)
 
 
+@pytest.mark.skipif(IS_PANDAS_ONE, reason="Different empty frame handling in pandas 1.x")
 def test_read_empty_with_columns(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "sym"
@@ -956,6 +957,7 @@ def test_resample_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_s
     assert_frame_equal_with_arrow(table, expected)
 
 
+@pytest.mark.skipif(IS_PANDAS_ONE, reason="Different empty frame handling in pandas 1.x")
 def test_symbol_concat_empty_intersection(lmdb_version_store_arrow):
     # Tests a failing subset of test_symbol_concat_empty_column_intersection
     # TODO: Remove this test if we enable pipeline tests with arrow
