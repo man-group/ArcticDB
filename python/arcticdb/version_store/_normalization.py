@@ -742,7 +742,9 @@ class ArrowTableNormalizer(Normalizer):
         index_type = pandas_meta.WhichOneof("index_type")
         if index_type == "index":
             index_meta = pandas_meta.index
-            if index_meta.is_physically_stored:
+            # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
+            is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
+            if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
                 pandas_indexes = 1
                 if index_meta.tz:
                     timezones[0] = index_meta.tz
