@@ -206,16 +206,6 @@ bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.s
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
 
-std::vector<SliceAndKey> filter_existing_slices(std::vector<std::optional<SliceAndKey>>&& maybe_slices) {
-    std::vector<SliceAndKey> result;
-    for (auto& maybe_slice : maybe_slices) {
-        if (maybe_slice.has_value()) {
-            result.push_back(std::move(*maybe_slice));
-        }
-    }
-    return result;
-}
-
 /// Represents all slices which are intersecting (but not overlapping) with range passed to update
 /// First member is a vector of all segments intersecting with the first row-slice of the update range
 /// Second member is a vector of all segments intersecting with the last row-slice of the update range
@@ -233,8 +223,8 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             "Both first and last index range of the update range must intersect with at least one of the slices in the "
             "dataframe"
     );
-    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_before_fut;
-    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_after_fut;
+    std::vector<folly::Future<SliceAndKey>> maybe_intersect_before_fut;
+    std::vector<folly::Future<SliceAndKey>> maybe_intersect_after_fut;
 
     for (const auto& affected_slice_and_key : *affected_keys) {
         const auto& affected_range = affected_slice_and_key.key().index_range();
@@ -252,12 +242,21 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             ));
         }
     }
-    return collect(collect(maybe_intersect_before_fut)
+    return collect(collectAll(maybe_intersect_before_fut)
                            .via(&async::io_executor())
-                           .thenValueInline(filter_existing_slices),
-                   collect(maybe_intersect_after_fut).via(&async::io_executor()).thenValueInline(filter_existing_slices)
-    )
-            .via(&async::io_executor());
+                           .thenValueInline([store](auto&& maybe_intersect_before) {
+                               return rollback_on_quota_exceeded(
+                                       std::move(maybe_intersect_before), std::static_pointer_cast<StreamSink>(store)
+                               );
+                           }),
+                   collectAll(maybe_intersect_after_fut)
+                           .via(&async::io_executor())
+                           .thenValueInline([store](auto&& maybe_intersect_after) {
+                               return rollback_on_quota_exceeded(
+                                       std::move(maybe_intersect_after), std::static_pointer_cast<StreamSink>(store)
+                               );
+                           })
+    ).via(&async::io_executor());
 }
 
 } // namespace
@@ -469,55 +468,72 @@ folly::Future<AtomKey> async_update_impl(
         const std::shared_ptr<Store>& store, const UpdateInfo& update_info, const UpdateQuery& query,
         const std::shared_ptr<InputTensorFrame>& frame, WriteOptions&& options, bool dynamic_schema, bool empty_types
 ) {
-    return index::async_get_index_reader(*(update_info.previous_index_key_), store)
-            .thenValue([store, update_info, query, frame, options = std::move(options), dynamic_schema, empty_types](
-                               index::IndexSegmentReader&& index_segment_reader
-                       ) {
-                check_can_update(*frame, index_segment_reader, update_info, dynamic_schema, empty_types);
-                ARCTICDB_DEBUG(
-                        log::version(),
-                        "Update versioned dataframe for stream_id: {} , version_id = {}",
-                        frame->desc.id(),
-                        update_info.previous_index_key_->version_id()
-                );
-                frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
-                return slice_and_write(
-                               frame,
-                               get_slicing_policy(options, *frame),
-                               IndexPartialKey{frame->desc.id(), update_info.next_version_id_},
-                               store
-                )
-                        .via(&async::cpu_executor())
-                        .thenValue([store,
-                                    update_info,
-                                    query,
-                                    frame,
-                                    dynamic_schema,
-                                    index_segment_reader = std::move(index_segment_reader
-                                    )](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
-                            std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
-                            auto affected_keys =
-                                    get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
-                            auto unaffected_keys =
-                                    get_keys_not_affected_by_update(index_segment_reader, *affected_keys);
-                            util::check(
-                                    affected_keys->size() + unaffected_keys.size() == index_segment_reader.size(),
-                                    "The sum of affected keys and unaffected keys must be equal to the total number of "
-                                    "keys {} + {} != {}",
-                                    affected_keys->size(),
-                                    unaffected_keys.size(),
-                                    index_segment_reader.size()
-                            );
-                            const UpdateRanges update_ranges =
-                                    compute_update_ranges(query.row_filter, *frame, new_slice_and_keys);
-                            return async_intersecting_segments(
+    return index::
+            async_get_index_reader(*(update_info.previous_index_key_), store)
+                    .thenValue(
+                            [store,
+                             update_info,
+                             query,
+                             frame,
+                             options = std::move(options),
+                             dynamic_schema,
+                             empty_types](index::IndexSegmentReader&& index_segment_reader) {
+                                check_can_update(
+                                        *frame, index_segment_reader, update_info, dynamic_schema, empty_types
+                                );
+                                ARCTICDB_DEBUG(
+                                        log::version(),
+                                        "Update versioned dataframe for stream_id: {} , version_id = {}",
+                                        frame->desc.id(),
+                                        update_info.previous_index_key_->version_id()
+                                );
+                                frame->set_bucketize_dynamic(index_segment_reader.bucketize_dynamic());
+                                return slice_and_write(
+                                               frame,
+                                               get_slicing_policy(options, *frame),
+                                               IndexPartialKey{frame->desc.id(), update_info.next_version_id_},
+                                               store
+                                )
+                                        .via(&async::cpu_executor())
+                                        .thenValue(
+                                                [store,
+                                                 update_info,
+                                                 query,
+                                                 frame,
+                                                 dynamic_schema,
+                                                 index_segment_reader = std::move(index_segment_reader)](
+                                                        std::vector<SliceAndKey>&& new_slice_and_keys
+                                                ) mutable {
+                                                    std::sort(
+                                                            std::begin(new_slice_and_keys), std::end(new_slice_and_keys)
+                                                    );
+                                                    auto affected_keys = get_keys_affected_by_update(
+                                                            index_segment_reader, *frame, query, dynamic_schema
+                                                    );
+                                                    auto unaffected_keys = get_keys_not_affected_by_update(
+                                                            index_segment_reader, *affected_keys
+                                                    );
+                                                    util::check(
+                                                            affected_keys->size() + unaffected_keys.size() ==
+                                                                    index_segment_reader.size(),
+                                                            "The sum of affected keys and unaffected keys must be "
+                                                            "equal to the total number of "
+                                                            "keys {} + {} != {}",
+                                                            affected_keys->size(),
+                                                            unaffected_keys.size(),
+                                                            index_segment_reader.size()
+                                                    );
+                                                    const UpdateRanges update_ranges = compute_update_ranges(
+                                                            query.row_filter, *frame, new_slice_and_keys
+                                                    );
+                                                    return async_intersecting_segments(
                                            affected_keys,
                                            update_ranges.front,
                                            update_ranges.back,
                                            update_info.next_version_id_,
                                            store
                             )
-                                    .thenValue([new_slice_and_keys = std::move(new_slice_and_keys),
+                                    .thenValue([new_slice_and_keys = std::move(new_slice_and_keys) /* TODO: think about the move here as there is another callback down below*/,
                                                 update_ranges = update_ranges,
                                                 unaffected_keys = std::move(unaffected_keys),
                                                 affected_keys = std::move(affected_keys),
@@ -543,9 +559,20 @@ folly::Future<AtomKey> async_update_impl(
                                                 IndexPartialKey{frame->desc.id(), update_info.next_version_id_},
                                                 store
                                         );
+                                    })
+                                    .thenError([store, new_slice_and_keys/* TODO: think about copy here */](folly::exception_wrapper&& error) mutable {
+                                        // TODO: This is okay if we stop at first non-quota excepiton if we wait for all of it we must make sure that the quota exception is exactly the one being propagated to here.
+                                        if (error.template is_compatible_with<QuotaExceededException>()) {
+                                            return remove_slice_and_keys(std::move(new_slice_and_keys), *store /* TODO: Think about if this is safe */).thenTry([error](auto&&) {
+                                                return folly::makeSemiFuture<AtomKeyImpl>(error);
+                                            });
+                                        }
+                                        return folly::makeFuture<AtomKeyImpl>(error);
                                     });
-                        });
-            });
+                                                }
+                                        );
+                            }
+                    );
 }
 
 VersionedItem update_impl(
