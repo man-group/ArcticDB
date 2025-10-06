@@ -16,17 +16,31 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::stream;
 using namespace arcticdb::pipelines::index;
 
-IndexValue start_index(const std::vector<SliceAndKey>& sk, std::size_t row) { return sk[row].key().start_index(); }
-
-IndexValue start_index(const index::IndexSegmentReader& isr, std::size_t row) {
-    return index::index_value_from_segment(isr.seg(), row, index::Fields::start_index);
+RowRange slice_row_range_at(const IndexSegmentReader& isr, std::size_t row) {
+    auto start_row = isr.column(index::Fields::start_row).scalar_at<std::size_t>(row).value();
+    auto end_row = isr.column(index::Fields::end_row).scalar_at<std::size_t>(row).value();
+    return {start_row, end_row};
 }
 
-IndexValue end_index(const index::IndexSegmentReader& isr, std::size_t row) {
-    return index::index_value_from_segment(isr.seg(), row, index::Fields::end_index);
+RowRange slice_row_range_at(const std::vector<SliceAndKey>& sk, std::size_t row) { return sk[row].slice_.row_range; }
+
+bool is_slice_in_row_range(const RowRange& slice_row_range, const RowRange& row_filter) {
+    // If the row_filter is empty we return false (i.e. don't read the slice).
+    // This is required for cases like a range (3, 2) which falls completely within an index row (0, 10). We
+    // know that if the range is empty we don't need to read the data key for (0, 10) because it won't contain
+    // any elements within the empty range.
+    return slice_row_range.first < row_filter.second && slice_row_range.second > row_filter.first &&
+           !row_filter.empty();
 }
 
-IndexValue end_index(const std::vector<SliceAndKey>& sk, std::size_t row) { return sk[row].key().end_index(); }
+bool is_slice_in_index_range(IndexRange slice_index_range, const IndexRange& index_filter, bool is_read_operation) {
+    // Typically slice_index_range should be end exclusive, however due to old bugs we have old data written with
+    // inclusive end_index. So, when we are reading we explicitly set the interval as closed to be able to read
+    // old_data. The same fix should be done for updates, but that is not implemented yet and should be added with
+    // https://github.com/man-group/ArcticDB/issues/2655
+    slice_index_range.end_closed_ = is_read_operation;
+    return closed_aware_intersects(slice_index_range, index_filter) && !index_filter.empty();
+}
 
 template<typename ContainerType, typename IdxType>
 std::unique_ptr<util::BitSet> build_bitset_for_index(
@@ -92,16 +106,9 @@ std::unique_ptr<util::BitSet> build_bitset_for_index(
         auto start_idx_pos = start_idx_col.template begin<IndexTagType>();
         auto end_idx_pos = end_idx_col.template begin<IndexTagType>();
 
-        using RawType = typename IndexTagType::DataTypeTag::raw_type;
-        const auto range_start = std::get<timestamp>(rg.start_);
-        const auto range_end = std::get<timestamp>(rg.end_);
         for (auto i = 0u; i < container.size(); ++i) {
-            // If we are reading, we want to include the the end index, in order to support backwards compatibility with
-            // older versions. The same fix should be done for updates, but that is not implemented yet and should be
-            // added with https://github.com/man-group/ArcticDB/issues/2655
-            const auto adjusted_end_idx_pos = is_read_operation ? *end_idx_pos : *end_idx_pos - 1;
             const auto intersects =
-                    range_intersects<RawType>(range_start, range_end, *start_idx_pos, adjusted_end_idx_pos);
+                    is_slice_in_index_range(IndexRange(*start_idx_pos, *end_idx_pos), rg, is_read_operation);
             (*res)[i] = intersects;
             if (intersects)
                 ARCTICDB_DEBUG(log::version(), "range intersects at {}", i);

@@ -14,8 +14,10 @@ from arcticdb_ext.version_store import DataError, VersionRequestType
 from arcticdb_ext.exceptions import ErrorCode, ErrorCategory
 from arcticdb.version_store.library import (
     WritePayload,
+    UpdatePayload,
     ReadInfoRequest,
     ReadRequest,
+    DeleteRequest,
     col,
     LazyDataFrame,
     LazyDataFrameCollection,

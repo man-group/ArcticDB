@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/version/version_core.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/stream/segment_aggregator.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
@@ -1211,6 +1212,52 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
     );
 }
 
+void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query) {
+    // To remain backward compatibility, pending new major release to merge into below section
+    // Ticket: 18038782559
+    bool is_pickled = pipeline_context->norm_meta_ && pipeline_context->is_pickled();
+    util::check(
+            !is_pickled ||
+                    (!read_query.columns.has_value() && std::holds_alternative<std::monostate>(read_query.row_filter)),
+            "The data for this symbol is pickled and does not support column stats, date_range, row_range, or column "
+            "queries"
+    );
+    if (pipeline_context->multi_key_) {
+        check_multi_key_is_not_index_only(*pipeline_context, read_query);
+    }
+
+    // To keep
+    if (pipeline_context->desc_) {
+        util::check(
+                pipeline_context->descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP ||
+                        !std::holds_alternative<IndexRange>(read_query.row_filter),
+                "Cannot apply date range filter to symbol with non-timestamp index"
+        );
+        auto sorted_value = pipeline_context->descriptor().sorted();
+        sorting::check<ErrorCode::E_UNSORTED_DATA>(
+                sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING ||
+                        !std::holds_alternative<IndexRange>(read_query.row_filter),
+                "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
+                "it "
+                "is not sorted in ascending order and cannot therefore filter the data using date_range."
+        );
+    }
+    bool is_query_empty =
+            (!read_query.columns && !read_query.row_range &&
+             std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
+    bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
+    if (!is_query_empty) {
+        // Exception for filterig pickled data is skipped for now for backward compatibility
+        if (pipeline_context->multi_key_) {
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
+                    "Cannot filter recursively normalized data"
+            );
+        } else if (is_numpy_array) {
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>("Cannot filter numpy array");
+        }
+    }
+}
+
 static void read_indexed_keys_to_pipeline(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const VersionedItem& version_info, ReadQuery& read_query, const ReadOptions& read_options
@@ -1222,7 +1269,6 @@ static void read_indexed_keys_to_pipeline(
     auto index_segment_reader = std::move(*maybe_reader);
     ARCTICDB_DEBUG(log::version(), "Read index segment with {} keys", index_segment_reader.size());
     check_can_read_index_only_if_required(index_segment_reader, read_query);
-    check_column_and_date_range_filterable(index_segment_reader, read_query);
     add_index_columns_to_query(read_query, index_segment_reader.tsd());
 
     const auto& tsd = index_segment_reader.tsd();
@@ -1245,6 +1291,7 @@ static void read_indexed_keys_to_pipeline(
             std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta())
     );
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
+    check_can_be_filtered(pipeline_context, read_query);
     ARCTICDB_DEBUG(
             log::version(),
             "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows",
@@ -1555,7 +1602,7 @@ void copy_frame_data_to_buffer(
             );
             details::visit_type(src_column.type().data_type(), [&](auto src_tag) {
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
-                Column::for_each_enumerated<typename src_type_info::TDT>(
+                arcticdb::for_each_enumerated<typename src_type_info::TDT>(
                         src_column,
                         [typed_dst_ptr](auto enumerating_it) {
                             typed_dst_ptr[enumerating_it.idx()] =
@@ -1585,7 +1632,7 @@ void copy_frame_data_to_buffer(
                         default_value
                 );
                 SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
-                Column::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
+                arcticdb::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
                     typed_dst_ptr[row.idx()] = row.value();
                 });
             }
@@ -1630,11 +1677,11 @@ void copy_frame_data_to_buffer(
                                 src_column.opt_sparse_map(),
                                 default_value
                         );
-                        Column::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
+                        arcticdb::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
                             typed_dst_ptr[row.idx()] = row.value();
                         });
                     } else {
-                        Column::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
+                        arcticdb::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
                             *typed_dst_ptr = value;
                             ++typed_dst_ptr;
                         });
@@ -2570,8 +2617,11 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 ) {
     auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
     auto res_versioned_item = generate_result_versioned_item(version_info);
+
     if (pipeline_context->multi_key_) {
-        check_multi_key_is_not_index_only(*pipeline_context, *read_query);
+        if (read_query) {
+            check_can_be_filtered(pipeline_context, *read_query);
+        }
         return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
     }
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");

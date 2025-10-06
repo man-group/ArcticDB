@@ -6,6 +6,7 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
 #include <arcticdb/processing/aggregation_utils.hpp>
 #include <arcticdb/entity/types.hpp>
@@ -21,7 +22,7 @@ void MinMaxAggregatorData::aggregate(const ColumnWithStrings& input_column) {
         using type_info = ScalarTypeInfo<decltype(col_tag)>;
         using RawType = typename type_info::RawType;
         if constexpr (!is_sequence_type(type_info::data_type)) {
-            Column::for_each<typename type_info::TDT>(*input_column.column_, [this](auto value) {
+            arcticdb::for_each<typename type_info::TDT>(*input_column.column_, [this](auto value) {
                 const auto& curr = static_cast<RawType>(value);
                 if (ARCTICDB_UNLIKELY(!min_.has_value())) {
                     min_ = Value{curr, type_info::data_type};
@@ -197,7 +198,7 @@ void SumAggregatorData::aggregate(
             details::visit_type(input_column.column_->type().data_type(), [&input_column, &groups, &out](auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 if constexpr (!is_sequence_type(col_type_info::data_type)) {
-                    Column::for_each_enumerated<typename col_type_info::TDT>(
+                    arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                             *input_column.column_,
                             [&out, &groups](auto enumerating_it) {
                                 if constexpr (is_floating_point_type(col_type_info::data_type)) {
@@ -296,22 +297,25 @@ void aggregate_impl(
                     using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                     using ColRawType = typename col_type_info::RawType;
                     if constexpr (!is_sequence_type(col_type_info::data_type)) {
-                        Column::for_each_enumerated<typename col_type_info::TDT>(*input_column->column_, [&](auto row) {
-                            auto& group_entry = out[row_to_group[row.idx()]];
-                            const auto& current_value = GlobalRawType(row.value());
-                            if constexpr (std::is_floating_point_v<ColRawType>) {
-                                if (!sparse_map[row_to_group[row.idx()]] ||
-                                    std::isnan(static_cast<ColRawType>(group_entry))) {
-                                    group_entry = current_value;
-                                    sparse_map.set(row_to_group[row.idx()]);
-                                } else if (!std::isnan(static_cast<ColRawType>(current_value))) {
-                                    group_entry = apply_extremum<T>(group_entry, current_value);
+                        arcticdb::for_each_enumerated<typename col_type_info::TDT>(
+                                *input_column->column_,
+                                [&](auto row) {
+                                    auto& group_entry = out[row_to_group[row.idx()]];
+                                    const auto& current_value = GlobalRawType(row.value());
+                                    if constexpr (std::is_floating_point_v<ColRawType>) {
+                                        if (!sparse_map[row_to_group[row.idx()]] ||
+                                            std::isnan(static_cast<ColRawType>(group_entry))) {
+                                            group_entry = current_value;
+                                            sparse_map.set(row_to_group[row.idx()]);
+                                        } else if (!std::isnan(static_cast<ColRawType>(current_value))) {
+                                            group_entry = apply_extremum<T>(group_entry, current_value);
+                                        }
+                                    } else {
+                                        group_entry = apply_extremum<T>(group_entry, current_value);
+                                        sparse_map.set(row_to_group[row.idx()]);
+                                    }
                                 }
-                            } else {
-                                group_entry = apply_extremum<T>(group_entry, current_value);
-                                sparse_map.set(row_to_group[row.idx()]);
-                            }
-                        });
+                        );
                     } else {
                         util::raise_rte("String aggregations not currently supported");
                     }
@@ -337,7 +341,7 @@ SegmentInMemory finalize_impl(
             const std::span<const RawType> group_values{
                     reinterpret_cast<const RawType*>(aggregated.data()), aggregated.size() / sizeof(RawType)
             };
-            Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+            arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
                 row.value() = group_values[row.idx()];
             });
         });
@@ -440,7 +444,7 @@ void MeanAggregatorData::aggregate(
                 } else if constexpr (is_empty_type(col_type_info::data_type)) {
                     return;
                 }
-                Column::for_each_enumerated<typename col_type_info::TDT>(
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *input_column.column_,
                         [&groups, &inserter, this](auto enumerating_it) {
                             auto& fraction = fractions_[groups[enumerating_it.idx()]];
@@ -480,7 +484,7 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
                 using OutputDataTypeTag =
                         std::conditional_t<is_time_type(TypeTag::data_type), TypeTag, DataTypeTag<DataType::FLOAT64>>;
                 using OutputTypeDescriptor = typename ScalarTypeInfo<OutputDataTypeTag>::TDT;
-                Column::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
+                arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
                     row.value() = static_cast<typename OutputDataTypeTag::raw_type>(fractions_[row.idx()].to_double());
                 });
             });
@@ -510,7 +514,7 @@ void CountAggregatorData::aggregate(
             input_column.column_->type().data_type(),
             [&input_column, &groups, &inserter, this](auto col_tag) {
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
-                Column::for_each_enumerated<typename col_type_info::TDT>(
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *input_column.column_,
                         [&groups, &inserter, this](auto enumerating_it) {
                             if constexpr (is_floating_point_type(col_type_info::data_type)) {
@@ -544,7 +548,7 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
             memcpy(ptr, aggregated_.data(), sizeof(uint64_t) * unique_values);
         } else {
             using OutputTypeDescriptor = typename ScalarTypeInfo<DataTypeTag<DataType::UINT64>>::TDT;
-            Column::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
+            arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
                 row.value() = aggregated_[row.idx()];
             });
         }
@@ -625,7 +629,7 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
                 const std::span<const RawType> group_values{
                         reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
                 };
-                Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
                     row.value() = group_values[row.idx()];
                 });
             }
@@ -706,7 +710,7 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
                 const std::span<const RawType> group_values{
                         reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
                 };
-                Column::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
                     row.value() = group_values[row.idx()];
                 });
             }

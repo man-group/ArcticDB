@@ -291,7 +291,7 @@ TEST(ColumnData, LowerBound) {
 }
 
 FieldStatsImpl generate_stats_from_column(const Column& column) {
-    return column.type().visit_tag([&column](auto tdt) {
+    return details::visit_scalar(column.type(), [&column](auto tdt) {
         using TagType = std::decay_t<decltype(tdt)>;
         return generate_column_statistics<TagType>(column.data());
     });

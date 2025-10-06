@@ -111,9 +111,17 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
         auto handler = handlers->get_handler(output_format, column->type());
         const auto data_size = data_type_size(column->type(), output_format, DataTypeMode::EXTERNAL);
         for (auto block_row_count : block_row_counts) {
-            const auto bytes = block_row_count * data_size;
-            column->allocate_data(bytes);
-            column->advance_data(bytes);
+            if (block_row_count > 0) {
+                // We can end up with empty segments from the processing pipeline, e.g. when:
+                // - Filtering a data key to the empty set (e.g. date_range = (3, 3) in a data key with no index=3)
+                // - Resampling with a date range with a bucket slice containing no indices
+                // 0 sized memory blocks would break the offset assumptions in chunked buffers, and it is fine to have
+                // number of memory blocks not equal number of segments because follow-up methods like
+                // `copy_frame_data_to_buffer` rely on offsets rather than block indices.
+                const auto bytes = block_row_count * data_size;
+                column->allocate_data(bytes);
+                column->advance_data(bytes);
+            }
         }
     }
 

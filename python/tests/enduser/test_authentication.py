@@ -131,7 +131,7 @@ def test_arcticdb_s3_uri(uri: str, expected: List[str]):
         ),
         (
             f"gcpxml://storage.googleapis.com:{gcp_bucket}?access={access_mark}1fds&secret={secret_mark}",
-            ["S3Error#22 SignatureDoesNotMatch"],
+            ["S3Error#22 SignatureDoesNotMatch", "S3Error:22, HttpResponseCode:403, SignatureDoesNotMatch"],
         ),
         (
             f"gcpxml://storage.googleapis.com:{gcp_bucket}?secret={secret_mark}",
