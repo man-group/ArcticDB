@@ -8,7 +8,7 @@ from hypothesis.extra.pandas import columns, data_frames
 
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, stringify_dictionary_encoded_columns
 from arcticdb.exceptions import SchemaException
-from arcticdb.version_store.processing import QueryBuilder
+from arcticdb.version_store.processing import QueryBuilder, where
 from arcticdb.options import OutputFormat
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -973,4 +973,41 @@ def test_symbol_concat_empty_intersection(lmdb_version_store_arrow):
     assert table.column_names == []
     assert table.shape == (0, 0)
     expected = pd.DataFrame()
+    assert_frame_equal_with_arrow(table, expected)
+
+
+def test_sparse_strings_from_processing_pipeline(lmdb_version_store_dynamic_schema_v1):
+    lib = lmdb_version_store_dynamic_schema_v1
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    sym = "test_sparse_strings_from_processing_pipeline"
+    df_1 = pd.DataFrame(
+        {
+            "condition": [True, False],
+            "col_1": ["a", "b"],
+            "col_2": ["cc", "dd"],
+        }
+    )
+    df_2 = pd.DataFrame(
+        {
+            "condition": [i % 4 == 0 for i in range(10)],
+            "col_2": [chr(i + ord("a")) * (i + 1) for i in range(10)],
+        }
+    )
+    df_3 = pd.DataFrame(
+        {
+            "condition": [i % 3 == 0 for i in range(10)],
+            "col_1": [chr(10 + i + ord("a")) * (i + 1) for i in range(10)],
+        }
+    )
+    lib.write(sym, df_1)
+    lib.append(sym, df_2)
+    lib.append(sym, df_3)
+
+    q = QueryBuilder()
+    q = q.apply("new_col", where(q["condition"], q["col_1"], q["col_2"]))
+    table = lib.read(sym, query_builder=q).data
+
+    expected = pd.concat([df_1, df_2, df_3])
+    expected["new_col"] = np.where(expected["condition"].to_numpy(), expected["col_1"], expected["col_2"])
+    expected.reset_index(drop=True, inplace=True)
     assert_frame_equal_with_arrow(table, expected)
