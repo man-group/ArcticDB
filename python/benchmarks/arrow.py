@@ -11,17 +11,21 @@ import numpy as np
 import pandas as pd
 
 from arcticdb import Arctic, OutputFormat
+from arcticdb.dependencies import pyarrow as pa
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
+from benchmarks.common import generate_pseudo_random_dataframe
 
-class ArrowReadNumeric:
+
+class ArrowNumeric:
     number = 5
     warmup_time = 0
     timeout = 6000
     rounds = 1
-    connection_string = "lmdb://arrow_read_numeric?map_size=20GB"
-    lib_name = "arrow_read_numeric"
+    connection_string = "lmdb://arrow_numeric?map_size=20GB"
+    lib_name_prewritten = "arrow_numeric_prewritten"
+    lib_name_fresh = "arrow_numeric_fresh"
     params = ([100_000, 100_000_000], [None, "middle"])
     param_names = ["rows", "date_range"]
 
@@ -40,9 +44,10 @@ class ArrowReadNumeric:
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
         num_rows, date_ranges = self.params
         num_cols = 9  # 10 including the index column
-        self.ac.delete_library(self.lib_name)
-        self.ac.create_library(self.lib_name)
-        lib = self.ac.get_library(self.lib_name)
+        self.ac.delete_library(self.lib_name_prewritten)
+        self.ac.create_library(self.lib_name_prewritten)
+        lib = self.ac.get_library(self.lib_name_prewritten)
+        lib._nvs._set_allow_arrow_input()
         for rows in num_rows:
             df = pd.DataFrame(
                 {f"col{idx}": np.arange(idx * rows, (idx + 1) * rows, dtype=np.int64) for idx in range(num_cols)},
@@ -51,16 +56,34 @@ class ArrowReadNumeric:
             lib.write(self.symbol_name(rows), df)
 
     def teardown(self, rows, date_range):
+        for lib in self.ac.list_libraries():
+            if "prewritten" in lib:
+                continue
+            self.ac.delete_library(lib)
         del self.ac
 
     def setup(self, rows, date_range):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
-        self.lib = self.ac.get_library(self.lib_name)
+        self.lib = self.ac.get_library(self.lib_name_prewritten)
+        self.lib._nvs._set_allow_arrow_input()
         if date_range is None:
             self.date_range = None
         else:
             # Create a date range that excludes the first and last 10 rows of the data only
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
+        self.fresh_lib = self.get_fresh_lib()
+        self.fresh_lib._nvs._set_allow_arrow_input()
+        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))
+
+    def get_fresh_lib(self):
+        self.ac.delete_library(self.lib_name_fresh)
+        return self.ac.create_library(self.lib_name_fresh)
+
+    def time_write(self, rows, date_range):
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
+
+    def peakmem_write(self, rows, date_range):
+        self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)

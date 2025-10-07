@@ -24,7 +24,8 @@ import pandas as pd
 import pickle
 from abc import ABCMeta, abstractmethod
 
-from arcticdb.dependencies import pyarrow as pa
+from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
+from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
@@ -38,7 +39,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
-from arcticdb_ext.version_store import SortedValue as _SortedValue
+from arcticdb_ext.version_store import RecordBatchData, SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -718,16 +719,27 @@ class ArrowTableNormalizer(Normalizer):
             new_columns, schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
         )
 
-    def normalize(self, item, **kwargs):
-        raise NotImplementedError("Arrow write is not yet implemented")
+    def normalize(self, table, **kwargs):
+        pa_record_batches = table.to_batches()
+        arcticdb_record_batches = []
+        for pa_record_batch in pa_record_batches:
+            arcticdb_record_batch = RecordBatchData()
+            pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
+            arcticdb_record_batches.append(arcticdb_record_batch)
+        norm_metadata = NormalizationMetadata()
+        index_column = kwargs.get("index_column", None)
+        if index_column is None:
+            norm_metadata.experimental_arrow.has_index = False
+        else:
+            check(isinstance(index_column, str), "Arrow index column specifier must be a string")
+            norm_metadata.experimental_arrow.has_index = True
+            norm_metadata.experimental_arrow.index_column_name = index_column
+            # It would be cleaner if the index column position finding happened here. However, finding a column by name
+            # is O(n), and we have to iterate through the columns in the C++ layer anyway
+        return arcticdb_record_batches, norm_metadata
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
-        renames_for_table = {}
-        timezones = {}
-        range_index = None
-        pandas_indexes = None
-        renames_for_pandas_metadata = {}
 
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
@@ -736,8 +748,25 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
+        elif input_type == "experimental_arrow":
+            if norm_meta.experimental_arrow.has_index:
+                index_column_position = norm_meta.experimental_arrow.index_column_position
+                if index_column_position != 0 and index_column_position < item.num_columns:
+                    # Verified experimentally that this is zero-copy as the docs do not specify
+                    item = item.select(
+                        list(range(1, index_column_position + 1))
+                        + [0]
+                        + list(range(index_column_position + 1, item.num_columns))
+                    )
+            return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
+
+        renames_for_table = {}
+        timezones = {}
+        range_index = None
+        pandas_indexes = None
+        renames_for_pandas_metadata = {}
 
         index_type = pandas_meta.WhichOneof("index_type")
         if index_type == "index":
@@ -1008,9 +1037,24 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         return df_from_arrays(item.data, columns, index, n_indexes)
 
+    def _pandas_norm_meta_from_arrow_norm_meta(
+        self, arrow_table: NormalizationMetadata.ExperimentalArrow
+    ) -> NormalizationMetadata.PandasDataFrame:
+        res = NormalizationMetadata.PandasDataFrame()
+        if arrow_table.has_index:
+            res.common.index.is_physically_stored = True
+            res.common.index.name = arrow_table.index_column_name
+            # Handle timezones, issue number 9929831600
+        else:
+            res.common.index.step = 1
+        return res
+
     # @profile
     def denormalize(self, item, norm_meta):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
+
+        if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
+            norm_meta = self._pandas_norm_meta_from_arrow_norm_meta(norm_meta)
 
         if norm_meta.HasField("multi_columns"):
             raise ArcticDbNotYetImplemented(
@@ -1395,6 +1439,7 @@ class CompositeNormalizer(Normalizer):
         self.series = SeriesNormalizer()
         self.tf = TimeFrameNormalizer()
         self.np = NdArrayNormalizer()
+        self.pa = ArrowTableNormalizer()
 
         if use_norm_failure_handler_known_types and fallback_normalizer is not None:
             self.df = KnownTypeFallbackOnError(self.df, fallback_normalizer)
@@ -1408,10 +1453,19 @@ class CompositeNormalizer(Normalizer):
     def set_skip_df_consolidation(self):
         self.df.set_skip_df_consolidation()
 
+    # Can remove allow_arrow_input once Arrow writes fully supported, but need it to be opt-in initially in case anyone is pickling pyarrow Tables already
     def _normalize(
-        self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
+        self,
+        item,
+        string_max_len=None,
+        dynamic_strings=False,
+        coerce_columns=None,
+        empty_types=False,
+        index_column=None,
+        allow_arrow_input=False,
+        **kwargs,
     ):
-        normalizer = self.get_normalizer_for_type(item)
+        normalizer = self.get_normalizer_for_type(item, allow_arrow_input)
 
         if not normalizer:
             return item, None
@@ -1423,10 +1477,11 @@ class CompositeNormalizer(Normalizer):
             dynamic_strings=dynamic_strings,
             coerce_columns=coerce_columns,
             empty_types=empty_types,
+            index_column=index_column,
             **kwargs,
         )
 
-    def get_normalizer_for_type(self, item):
+    def get_normalizer_for_type(self, item, allow_arrow_input=False):
         # TODO: this should use customcompositenormalizer as well.
         if isinstance(item, DataFrame):
             if (
@@ -1452,6 +1507,9 @@ class CompositeNormalizer(Normalizer):
 
         if isinstance(item, np.ndarray):
             return self.np.normalize
+
+        if _PYARROW_AVAILABLE and isinstance(item, pa.Table) and allow_arrow_input:
+            return self.pa.normalize
 
         if self.fallback_normalizer is not None:
             # Msgpack normalize if everything else fails.
@@ -1505,6 +1563,8 @@ class CompositeNormalizer(Normalizer):
                 return self.tf.denormalize(item, norm_meta.ts)
             elif input_type == "np":
                 return self.np.denormalize(item, norm_meta.np)
+            elif input_type == "experimental_arrow":
+                return self.df.denormalize(item, norm_meta.experimental_arrow)
             elif input_type == "msg_pack":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 
@@ -1605,7 +1665,9 @@ def normalize_dataframe(df, **kwargs):
 T = TypeVar("T", bound=Union[pd.DataFrame, pd.Series])
 
 
-def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestamp) -> T:
+def restrict_data_to_date_range_only(
+    data: T, *, start: Timestamp, end: Timestamp, index_column: Optional[str] = None
+) -> T:
     """Return a copy of `data` filtered so that its contents lie between `start` and `end` (inclusive).
 
     `data` must be time-indexed.
@@ -1629,6 +1691,14 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
             # of duplicating exception messages.
             raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
+    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+        check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")
+        col = data.column(index_column)
+        start, end = _strip_tz(start, end)
+        check(
+            start <= col[0].as_py().tz_localize(None) and end >= col[-1].as_py().tz_localize(None),
+            "update with date_range and pyarrow Table not yet supported with date_range overlapping the data",
+        )
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)

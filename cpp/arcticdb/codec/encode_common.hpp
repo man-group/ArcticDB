@@ -176,7 +176,7 @@ void encode_metadata(
             meta_ptr = reinterpret_cast<uint8_t*>(alloca(bytes_count));
         }
         ChunkedBuffer meta_buffer;
-        meta_buffer.add_external_block(meta_ptr, bytes_count, 0u);
+        meta_buffer.add_external_block(meta_ptr, bytes_count);
         const auto num_encoded_fields = BytesEncoder<EncodingPolicyType>::num_encoded_blocks(meta_buffer);
         auto& encoded_field = segment_header.mutable_metadata_field(num_encoded_fields);
         google::protobuf::io::ArrayOutputStream aos(&meta_buffer[0], static_cast<int>(bytes_count));

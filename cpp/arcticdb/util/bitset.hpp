@@ -35,15 +35,8 @@ constexpr bm::bvector<>::size_type bv_size(uint64_t val) { return static_cast<bm
 // The number of bytes needed to hold num_bits in a packed bitset
 constexpr size_t bitset_packed_size_bytes(size_t num_bits) { return (num_bits + 7) / 8; }
 
-inline void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
-    std::memset(dest_ptr, 0, bitset_packed_size_bytes(bv.size()));
-    auto last = bv.end();
-    for (auto en = bv.first(); en != last; ++en) {
-        size_t bit_pos = *en;
-        size_t byte_idx = bit_pos / 8;
-        size_t bit_idx = bit_pos % 8;
-        dest_ptr[byte_idx] |= (uint8_t(1) << bit_idx);
-    }
-}
+void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr);
+
+void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t offset, uint8_t* dest_ptr);
 
 } // namespace arcticdb

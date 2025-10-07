@@ -65,12 +65,12 @@ TimeseriesDescriptor timeseries_descriptor_from_pipeline_context(
 }
 
 TimeseriesDescriptor index_descriptor_from_frame(
-        const std::shared_ptr<pipelines::InputTensorFrame>& frame, size_t existing_rows,
+        const std::shared_ptr<pipelines::InputFrame>& frame, size_t existing_rows,
         std::optional<entity::AtomKey>&& prev_key
 ) {
     return make_timeseries_descriptor(
             frame->num_rows + existing_rows,
-            frame->desc,
+            frame->desc(),
             std::move(frame->norm_meta),
             std::move(frame->user_meta),
             std::move(prev_key),
@@ -198,9 +198,9 @@ std::vector<size_t> output_block_row_counts(const std::shared_ptr<pipelines::Pip
     return output;
 }
 
-bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputTensorFrame& frame) {
+bool index_is_not_timeseries_or_is_sorted_ascending(const pipelines::InputFrame& frame) {
     return !std::holds_alternative<stream::TimeseriesIndex>(frame.index) ||
-           frame.desc.sorted() == SortedValue::ASCENDING;
+           frame.desc().sorted() == SortedValue::ASCENDING;
 }
 
 } // namespace arcticdb

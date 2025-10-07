@@ -136,6 +136,8 @@ struct formatter<arcticdb::proto::descriptors::NormalizationMetadata::InputTypeC
             return fmt::format_to(ctx.out(), "Pickled data");
         case arcticdb::proto::descriptors::NormalizationMetadata::kNp:
             return fmt::format_to(ctx.out(), "Array");
+        case arcticdb::proto::descriptors::NormalizationMetadata::kExperimentalArrow:
+            return fmt::format_to(ctx.out(), "Arrow Table");
         default:
             return fmt::format_to(ctx.out(), "Unknown");
         }
