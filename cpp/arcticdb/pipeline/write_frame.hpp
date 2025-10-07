@@ -10,7 +10,7 @@
 
 #include <arcticdb/entity/index_range.hpp>
 
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <folly/futures/Future.h>
 #include <arcticdb/pipeline/frame_slice.hpp>
@@ -24,8 +24,8 @@ namespace arcticdb::pipelines {
 using namespace arcticdb::stream;
 
 struct WriteToSegmentTask : public async::BaseTask {
-
-    std::shared_ptr<InputTensorFrame> frame_;
+  public:
+    std::shared_ptr<InputFrame> frame_;
     const FrameSlice slice_;
     const SlicingPolicy slicing_;
     folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)> partial_key_gen_;
@@ -35,16 +35,21 @@ struct WriteToSegmentTask : public async::BaseTask {
     util::MagicNum<'W', 's', 'e', 'g'> magic_;
 
     WriteToSegmentTask(
-            std::shared_ptr<InputTensorFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
+            std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
             folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
             size_t slice_num_for_column, Index index, bool sparsify_floats
     );
 
     std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator()();
+
+  private:
+    SegmentInMemory slice_tensors() const;
+    SegmentInMemory slice_segment() const;
+    Column slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset) const;
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
-        const std::shared_ptr<InputTensorFrame>& frame, const SlicingPolicy& slicing, IndexPartialKey&& partial_key,
+        const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing, IndexPartialKey&& partial_key,
         const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(), bool allow_sparse = false
 );
@@ -52,19 +57,19 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 int64_t write_window_size();
 
 folly::Future<std::vector<SliceAndKey>> write_slices(
-        const std::shared_ptr<InputTensorFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
+        const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
 );
 
 folly::Future<entity::AtomKey> write_frame(
-        IndexPartialKey&& key, const std::shared_ptr<InputTensorFrame>& frame, const SlicingPolicy& slicing,
+        IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
         const std::shared_ptr<Store>& store, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
         bool allow_sparse = false
 );
 
 folly::Future<entity::AtomKey> append_frame(
-        IndexPartialKey&& key, const std::shared_ptr<InputTensorFrame>& frame, const SlicingPolicy& slicing,
+        IndexPartialKey&& key, const std::shared_ptr<InputFrame>& frame, const SlicingPolicy& slicing,
         index::IndexSegmentReader& index_segment_reader, const std::shared_ptr<Store>& store, bool dynamic_schema,
         bool ignore_sort_order
 );

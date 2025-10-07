@@ -224,12 +224,19 @@ message NormalizationMetadata {
         repeated uint64 shape = 1;
     }
 
+    message ExperimentalArrow {
+        bool has_index = 1;
+        string index_column_name = 2;
+        uint64 index_column_position = 3;
+    }
+
     oneof input_type {
         PandasDataFrame df = 1;
         PandasDataFrame series = 2;
         NormalisedTimeSeries ts = 3;
         MsgPackFrame msg_pack_frame = 4;
         NdArray np = 5;
+        ExperimentalArrow experimental_arrow = 6;
     }
 
     CustomNormalizerMeta custom = 64;

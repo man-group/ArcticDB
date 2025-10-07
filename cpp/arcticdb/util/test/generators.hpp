@@ -10,7 +10,7 @@
 
 #include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/column_store/column.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/version/version_store_api.hpp>
 #include <arcticdb/storage/storages.hpp>
@@ -457,21 +457,25 @@ inline NativeTensor tensor_from_column(const Column& column) {
 
 struct SegmentToInputFrameAdapter {
     SegmentInMemory segment_;
-    std::shared_ptr<pipelines::InputTensorFrame> input_frame_ = std::make_shared<pipelines::InputTensorFrame>();
+    std::shared_ptr<pipelines::InputFrame> input_frame_ = std::make_shared<pipelines::InputFrame>();
 
     explicit SegmentToInputFrameAdapter(SegmentInMemory&& segment) : segment_(std::move(segment)) {
-        input_frame_->desc = segment_.descriptor();
         input_frame_->num_rows = segment_.row_count();
         size_t col{0};
+        std::optional<entity::NativeTensor> index_tensor;
         if (segment_.descriptor().index().type() != IndexDescriptorImpl::Type::ROWCOUNT) {
             for (size_t i = 0; i < segment_.descriptor().index().field_count(); ++i) {
-                input_frame_->index_tensor = tensor_from_column(segment_.column(col));
+                index_tensor = tensor_from_column(segment_.column(col));
                 ++col;
             }
         }
 
+        std::vector<entity::NativeTensor> field_tensors;
         while (col < segment_.num_columns())
-            input_frame_->field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
+            field_tensors.emplace_back(tensor_from_column(segment_.column(col++)));
+        input_frame_->set_from_tensors(
+                std::move(segment_.descriptor()), std::move(field_tensors), std::move(index_tensor)
+        );
 
         input_frame_->set_index_range();
     }

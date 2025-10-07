@@ -482,7 +482,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
 
     std::vector<StreamId> symbols;
     std::vector<TestTensorFrame> wrappers;
-    std::vector<std::shared_ptr<pipelines::InputTensorFrame>> frames;
+    std::vector<std::shared_ptr<pipelines::InputFrame>> frames;
     std::vector<VersionId> version_ids;
     std::vector<std::shared_ptr<DeDupMap>> dedup_maps;
 
