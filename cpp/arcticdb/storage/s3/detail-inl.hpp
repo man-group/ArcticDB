@@ -93,6 +93,10 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
             );
         }
 
+        if (err.GetExceptionName().find("InsufficientCapacity") != std::string::npos) {
+            raise<ErrorCode::E_QUOTA_EXCEEDED>(fmt::format("Quota exceeded: {}", error_message_suffix));
+        }
+
         if (err.GetResponseCode() == Aws::Http::HttpResponseCode::BAD_REQUEST) {
             raise<ErrorCode::E_BAD_REQUEST>(fmt::format(
                     "Aws-sdk sent a bad request to S3. This could be due to improper use of the sdk or due "
