@@ -11,6 +11,7 @@
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 
 namespace arcticdb {
 
@@ -51,7 +52,6 @@ void ArrowStringHandler::convert_type(
         std::any&, const std::shared_ptr<StringPool>& string_pool
 ) const {
     using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
-    auto input_data = source_column.data();
     struct DictEntry {
         int32_t offset_buffer_pos_;
         int64_t string_buffer_pos_;
@@ -65,49 +65,49 @@ void ArrowStringHandler::convert_type(
     unique_offsets.reserve(source_column.row_count());
     int64_t bytes = 0;
     int32_t unique_offset_count = 0;
-    auto dest_ptr = reinterpret_cast<int32_t*>(
-            dest_column.bytes_at(mapping.offset_bytes_, source_column.row_count() * sizeof(int32_t))
-    );
+    auto dest_ptr = reinterpret_cast<int32_t*>(dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_));
 
-    util::BitSet bitset;
-    util::BitSet::bulk_insert_iterator inserter(bitset);
-    const auto end = input_data.cend<ArcticStringColumnTag, IteratorType::ENUMERATED>();
-    // First go through the source column once to compute the size of offset and string buffers.
-    // TODO: This can't be right if the column was sparse as it has only been decoded, not expanded
-    for (auto en = input_data.cbegin<ArcticStringColumnTag, IteratorType::ENUMERATED>(); en != end; ++en) {
-        if (is_a_string(en->value())) {
+    util::BitSet dest_bitset;
+    util::BitSet::bulk_insert_iterator inserter(dest_bitset);
+    // For dense columns we populate an inverted bitmap (i.e. set the bits where values are missing)
+    // This makes processing fully dense columns faster because it doesn't need to insert often into the bitmap.
+    // Benchmarks in benchmark_arrow_reads.cpp show a 20% speedup with this approach for a dense string column with few
+    // unique strings.
+    bool populate_inverted_bitset = !source_column.opt_sparse_map().has_value();
+    for_each_enumerated<ArcticStringColumnTag>(source_column, [&](const auto& en) {
+        if (is_a_string(en.value())) {
             auto [entry, is_emplaced] = unique_offsets.try_emplace(
-                    en->value(),
-                    DictEntry{
-                            static_cast<int32_t>(unique_offset_count), bytes, string_pool->get_const_view(en->value())
-                    }
+                    en.value(), DictEntry{unique_offset_count, bytes, string_pool->get_const_view(en.value())}
             );
             if (is_emplaced) {
                 bytes += entry->second.strv.size();
-                unique_offsets_in_order.push_back(en->value());
+                unique_offsets_in_order.push_back(en.value());
                 ++unique_offset_count;
             }
-            *dest_ptr = entry->second.offset_buffer_pos_;
-        } else {
-            inserter = en->idx();
+            dest_ptr[en.idx()] = entry->second.offset_buffer_pos_;
+            if (!populate_inverted_bitset) {
+                inserter = en.idx();
+            }
+        } else if (populate_inverted_bitset) {
+            inserter = en.idx();
         }
-        ++dest_ptr;
-    }
+    });
     inserter.flush();
-    // At this point bitset has ones where the source column contained None or NaN
-    // Inverting and shrinking to the source column size it then makes a sparse map for the input data
-    bitset.invert();
-    // TODO: row_count() here won't be right when the original data was sparse, but we don't support sparse
-    // string columns yet anyway
-    bitset.resize(source_column.row_count());
-    if (bitset.count() != bitset.size()) {
-        handle_truncation(bitset, mapping.truncate_);
-        create_dense_bitmap(mapping.offset_bytes_, bitset, dest_column, AllocationType::DETACHABLE);
-    } // else there weren't any Nones or NaNs
-    // bitset.count() == 0 is the special case where all of the rows contained None or NaN. In this case, do not create
+    if (populate_inverted_bitset) {
+        // For dense columns at this point bitset has ones where the source column is missing values.
+        // We invert it back, so we can use it for the sparse map on the output column.
+        dest_bitset.invert();
+    }
+    dest_bitset.resize(mapping.num_rows_);
+
+    if (dest_bitset.count() != dest_bitset.size()) {
+        handle_truncation(dest_bitset, mapping.truncate_);
+        create_dense_bitmap(mapping.offset_bytes_, dest_bitset, dest_column, AllocationType::DETACHABLE);
+    } // else there weren't any missing values
+    // bitset.count() == 0 is the special case where all the rows were missing. In this case, do not create
     // the extra string and offset buffers. string_dict_from_block will then do the right thing and call
     // minimal_strings_dict
-    if (bitset.count() > 0) {
+    if (dest_bitset.count() > 0) {
         auto& string_buffer = dest_column.create_extra_buffer(
                 mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE
         );
