@@ -104,8 +104,7 @@ class RollbackOnQuotaExceededUpdate : public RollbackOnQuotaExceeded {
         const auto& scenario = GetParam();
         StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.failures}});
 
-        initial_keys_ = get_keys();
-        auto& [version_ref_keys, version_keys, index_keys, data_keys] = initial_keys_;
+        auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys();
 
         ASSERT_EQ(version_ref_keys.size(), 1);
         ASSERT_EQ(version_keys.size(), 1);
@@ -117,12 +116,9 @@ class RollbackOnQuotaExceededUpdate : public RollbackOnQuotaExceeded {
         auto frame = get_test_timeseries_frame(stream_id_, 30, 0).frame_; // 30 rows -> 3 segments
         version_store_->update_internal(stream_id_, UpdateQuery{}, std::move(frame), false, false, false);
     }
-
-    std::tuple<std::vector<RefKey>, std::vector<AtomKeyImpl>, std::vector<AtomKeyImpl>, std::vector<AtomKeyImpl>>
-            initial_keys_;
 };
 
-auto TEST_DATA = ::testing::Values(
+const auto TEST_DATA = ::testing::Values(
         TestScenario{
                 .name = "Every_second_write_fails",
                 .failures = make_fault_sequence({0, 1}),
@@ -165,6 +161,19 @@ auto TEST_DATA = ::testing::Values(
         }
 );
 
+const auto TEST_DATA_UPDATE_ONLY = ::testing::Values(
+        TestScenario{
+                .name = "Update_succeeds_initial_write_then_fails_on_rewrite",
+                .failures = make_fault_sequence({0, 0, 0, 1}),
+                .expected_ref_keys = 0,
+                .expected_version_keys = 0,
+                .expected_index_keys = 0,
+                .expected_data_keys = 0,
+                .num_writes = 1,
+                .write_should_throw = {true}
+        }
+);
+
 INSTANTIATE_TEST_SUITE_P(, RollbackOnQuotaExceeded, TEST_DATA, [](const testing::TestParamInfo<TestScenario>& info) {
     return info.param.name;
 });
@@ -191,6 +200,8 @@ TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
 TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
     const auto& scenario = GetParam();
 
+    auto initial_keys = get_keys();
+
     for (size_t i = 0; i < scenario.num_writes; ++i) {
         if (scenario.write_should_throw[i]) {
             EXPECT_THROW(update_with_three_segments(), QuotaExceededException);
@@ -203,9 +214,10 @@ TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
     auto [version_ref_keys, version_keys, index_keys, data_keys] = keys;
     if (scenario.expected_ref_keys == 0) {
         // Nothing should have changed
-        ASSERT_EQ(keys, initial_keys_);
+        ASSERT_EQ(keys, initial_keys);
     }
 
+    // Excluding the initial write
     ASSERT_EQ(version_ref_keys.size(), 1);
     ASSERT_EQ(version_keys.size(), scenario.expected_version_keys + 1);
     ASSERT_EQ(index_keys.size(), scenario.expected_index_keys + 1);
@@ -213,6 +225,11 @@ TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        , RollbackOnQuotaExceededUpdate, TEST_DATA,
+        RollbackUpdateCommon, RollbackOnQuotaExceededUpdate, TEST_DATA,
+        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        RollbackUpdate, RollbackOnQuotaExceededUpdate, TEST_DATA_UPDATE_ONLY,
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );

@@ -533,7 +533,7 @@ folly::Future<AtomKey> async_update_impl(
                                            update_info.next_version_id_,
                                            store
                             )
-                                    .thenValue([new_slice_and_keys = std::move(new_slice_and_keys) /* TODO: think about the move here as there is another callback down below*/,
+                                    .thenValue([new_slice_and_keys/* TODO: think about the copy here, cant move as here as there is another callback down below*/,
                                                 update_ranges = update_ranges,
                                                 unaffected_keys = std::move(unaffected_keys),
                                                 affected_keys = std::move(affected_keys),
