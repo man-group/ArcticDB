@@ -897,6 +897,8 @@ def test_read_as_of_tombstoned_version_alive_in_snapshot(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     num_symbols = 10
     num_versions = 10
+    # This means at most 5 versions of each symbol will be alive, ensuring we test the version being tombstoned AND not
+    # in any snapshots
     num_snapshots = 5
     for sym_idx in range(num_symbols):
         sym = f"sym_{sym_idx}"
