@@ -94,8 +94,6 @@ class MockMongoClient : public MongoClientWrapper {
     bool key_exists(const std::string& database_name, const std::string& collection_name, const entity::VariantKey& key)
             override;
 
-    void ensure_collection(std::string_view database_name, std::string_view collection_name) override;
-
     void drop_collection(std::string database_name, std::string collection_name) override;
 
   private:

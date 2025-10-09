@@ -193,6 +193,10 @@ class AsyncStore : public Store {
 
     void write_compressed_sync(storage::KeySegmentPair ks) override { library_->write(ks); }
 
+    void update_compressed_sync(storage::KeySegmentPair ks, storage::UpdateOpts opts) override {
+        library_->update(ks, opts);
+    }
+
     folly::Future<entity::VariantKey> update(
             const entity::VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts opts
     ) override {

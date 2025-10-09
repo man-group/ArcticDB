@@ -384,6 +384,10 @@ jobs:
           timeout_minutes: 10
           max_attempts: 3
           command: npm install -g azurite 
+          
+      - name: Install MongoDB
+        if: matrix.os == 'linux'
+        uses: ./.github/actions/install_mongodb
 
       - name: Install the wheel and dependencies
         run: |

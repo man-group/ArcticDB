@@ -1,0 +1,11 @@
+name: 'Install MongoDB'
+runs:
+  using: "composite"
+  steps:
+    - name: Install MongoDB Community Edition
+      shell: bash
+      run: |
+        curl -LO https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-rhel80-7.0.0.tgz
+        tar -xzf mongodb-linux-x86_64-rhel80-7.0.0.tgz
+        cp mongodb-linux-x86_64-rhel80-7.0.0/bin/* /usr/local/bin/
+        mongod --version

@@ -47,7 +47,7 @@ from arcticdb.storage_fixtures.s3 import (
     real_s3_sts_clean_up,
 )
 from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
-from arcticdb.storage_fixtures.mongo import auto_detect_server
+from arcticdb.storage_fixtures.mongo import ManagedMongoDBServer, auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
 from arcticdb_ext import set_config_int
@@ -552,6 +552,12 @@ def mongo_server():
 def mongo_storage(mongo_server):
     with mongo_server.create_fixture() as f:
         yield f
+
+
+@pytest.fixture(scope="function")
+def mongo_server_fn_scope():
+    with ManagedMongoDBServer() as s:
+        yield s
 
 
 @pytest.fixture(scope="session")
