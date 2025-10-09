@@ -186,11 +186,12 @@ void register_termination_handler() {
                 std::rethrow_exception(eptr);
             } catch (const std::exception& e) {
                 arcticdb::log::root().error(
-                        "Terminate called in thread {}: {}\n Aborting", std::this_thread::get_id(), e.what()
+                        "Terminate called in thread {}: {}\n Exiting", std::this_thread::get_id(), e.what()
                 );
             }
         }
-        std::abort();
+        // std::abort();
+        return;
     });
 }
 
