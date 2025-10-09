@@ -314,6 +314,10 @@ class InMemoryStore : public Store {
         util::raise_rte("visit_object_sizes not implemented for InMemoryStore");
     }
 
+    bool do_iterate_type_until_match(KeyType, const IterateTypePredicate&, const std::string&) override {
+        util::raise_rte("do_iterate_type_until_match not implemented for InMemoryStore");
+    }
+
     bool scan_for_matching_key(KeyType kt, const IterateTypePredicate& predicate) override {
         auto failure_sim = StorageFailureSimulator::instance();
 
