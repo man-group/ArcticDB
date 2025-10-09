@@ -187,6 +187,45 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
     return index_keys_in_snapshots;
 }
 
+std::optional<entity::AtomKey> find_index_key_in_snapshots(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, VersionId version_id
+) {
+    std::optional<AtomKey> res;
+    auto key_found = store->do_iterate_type_until_match(KeyType::SNAPSHOT_REF, [&] (VariantKey&& snapshot_key) {
+        SegmentInMemory snapshot_segment = store->read_sync(snapshot_key).second;
+        auto opt_idx_for_stream_id = row_id_for_stream_in_snapshot_segment(snapshot_segment, true, stream_id);
+        if (opt_idx_for_stream_id) {
+            auto candidate_key = read_key_row(snapshot_segment, static_cast<ssize_t>(*opt_idx_for_stream_id));
+            if (candidate_key.version_id() == version_id) {
+                res = std::move(candidate_key);
+                return true;
+            }
+        }
+        return false;
+    });
+    if (key_found) {
+        return res;
+    } else {
+        key_found = store->do_iterate_type_until_match(KeyType::SNAPSHOT, [&] (VariantKey&& snapshot_key) {
+            SegmentInMemory snapshot_segment = store->read_sync(snapshot_key).second;
+            auto opt_idx_for_stream_id = row_id_for_stream_in_snapshot_segment(snapshot_segment, false, stream_id);
+            if (opt_idx_for_stream_id) {
+                auto candidate_key = read_key_row(snapshot_segment, static_cast<ssize_t>(*opt_idx_for_stream_id));
+                if (candidate_key.version_id() == version_id) {
+                    res = std::move(candidate_key);
+                    return true;
+                }
+            }
+            return false;
+        });
+    }
+    if (key_found) {
+        return res;
+    } else {
+        return std::nullopt;
+    }
+}
+
 /**
  * Returned pair has first: keys not in snapshots, second: keys in snapshots.
  */

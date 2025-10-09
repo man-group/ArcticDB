@@ -73,6 +73,12 @@ class Library {
         storages_->visit_object_sizes(type, prefix, visitor);
     }
 
+    bool do_iterate_type_until_match(
+            KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix = ""
+    ) {
+        return storages_->do_iterate_type_until_match(key_type, visitor, prefix);
+    }
+
     /**
      * Scan through every key of the given type until one matches the predicate.
      *

@@ -42,6 +42,11 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id
 );
 
+// Finds an index key of specified symbol/version in all snapshots. Returns std::nullopt if no such index keyt exists
+std::optional<entity::AtomKey> find_index_key_in_snapshots(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, VersionId version_id
+);
+
 std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_partitioned_by_inclusion_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, std::vector<entity::AtomKey>&& all_index_keys
 );

@@ -279,6 +279,12 @@ class AsyncStore : public Store {
                 });
     }
 
+    bool do_iterate_type_until_match(
+            KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix = ""
+    ) override {
+        return library_->do_iterate_type_until_match(key_type, visitor, prefix);
+    }
+
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) override {
         return library_->scan_for_matching_key(key_type, predicate);
     }

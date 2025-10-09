@@ -52,6 +52,10 @@ struct StreamSource {
             KeyType type, const std::optional<StreamId>& stream_id_opt, storage::ObjectSizesVisitor visitor
     ) = 0;
 
+    virtual bool do_iterate_type_until_match(
+            KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix = ""
+    ) = 0;
+
     virtual bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) = 0;
 
     [[nodiscard]] virtual folly::Future<bool> key_exists(const entity::VariantKey& key) = 0;
