@@ -190,8 +190,7 @@ void register_termination_handler() {
                 );
             }
         }
-        // std::abort();
-        return;
+        py::set_error(py::type_error(e.what()));  // Or any appropriate Python exception type
     });
 }
 
