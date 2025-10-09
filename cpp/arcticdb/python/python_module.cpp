@@ -188,9 +188,10 @@ void register_termination_handler() {
                 arcticdb::log::root().error(
                         "Terminate called in thread {}: {}\n Exiting", std::this_thread::get_id(), e.what()
                 );
+                py::set_error(py::type_error(e.what()));
             }
         }
-        py::set_error(py::type_error(e.what()));  // Or any appropriate Python exception type
+        throw py::error_already_set();
     });
 }
 
