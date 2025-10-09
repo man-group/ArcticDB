@@ -9,6 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import pytest
 import numpy as np
 import pandas as pd
+import random
 import re
 
 from arcticdb.util.arctic_simulator import ArcticSymbolSimulator
@@ -890,3 +891,27 @@ def test_snapshot_deletion_multiple_symbols(lmdb_version_store_v1):
     for symbol_idx in range(2):
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, f"sym_{symbol_idx}")) == 1
         assert len(lib_tool.find_keys_for_symbol(KeyType.TABLE_INDEX, f"sym_{symbol_idx}")) == 1
+
+
+def test_read_as_of_tombstoned_version_alive_in_snapshot(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    num_symbols = 10
+    num_versions = 10
+    num_snapshots = 5
+    for sym_idx in range(num_symbols):
+        sym = f"sym_{sym_idx}"
+        for version_idx in range(num_versions):
+            lib.write(sym, f"{sym} {version_idx}")
+    for snapshot_idx in range(num_snapshots):
+        versions = {f"sym_{sym_idx}": random.randint(0, 9) for sym_idx in range(num_symbols)}
+        lib.snapshot(f"snap_{snapshot_idx}", versions=versions)
+    for sym_idx in range(num_symbols):
+        sym = f"sym_{sym_idx}"
+        lib.delete(sym)
+        live_versions = {version["version"] for version in lib.list_versions(sym)}
+        for version_idx in range(num_versions):
+            if version_idx in live_versions:
+                assert lib.read(sym, version_idx).data == f"{sym} {version_idx}"
+            else:
+                with pytest.raises(NoSuchVersionException):
+                    lib.read(sym, version_idx)
