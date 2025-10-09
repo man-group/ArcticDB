@@ -187,15 +187,20 @@ class Storages {
     }
 
     bool do_iterate_type_until_match(
-            KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix = "", bool primary_only = true
+            KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix = "",
+            bool primary_only = true
     ) {
         if (primary_only) {
             return primary().do_iterate_type_until_match(key_type, visitor, prefix);
         }
 
-        return std::any_of(std::begin(storages_), std::end(storages_), [key_type, &visitor, &prefix](const auto& storage) {
-            return storage->do_iterate_type_until_match(key_type, visitor, prefix);
-        });
+        return std::any_of(
+                std::begin(storages_),
+                std::end(storages_),
+                [key_type, &visitor, &prefix](const auto& storage) {
+                    return storage->do_iterate_type_until_match(key_type, visitor, prefix);
+                }
+        );
     }
 
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate, bool primary_only = true) {

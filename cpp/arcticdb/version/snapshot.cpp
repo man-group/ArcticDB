@@ -191,7 +191,7 @@ std::optional<entity::AtomKey> find_index_key_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, VersionId version_id
 ) {
     std::optional<AtomKey> res;
-    auto key_found = store->do_iterate_type_until_match(KeyType::SNAPSHOT_REF, [&] (VariantKey&& snapshot_key) {
+    auto key_found = store->do_iterate_type_until_match(KeyType::SNAPSHOT_REF, [&](VariantKey&& snapshot_key) {
         SegmentInMemory snapshot_segment = store->read_sync(snapshot_key).second;
         auto opt_idx_for_stream_id = row_id_for_stream_in_snapshot_segment(snapshot_segment, true, stream_id);
         if (opt_idx_for_stream_id) {
@@ -206,7 +206,7 @@ std::optional<entity::AtomKey> find_index_key_in_snapshots(
     if (key_found) {
         return res;
     } else {
-        key_found = store->do_iterate_type_until_match(KeyType::SNAPSHOT, [&] (VariantKey&& snapshot_key) {
+        key_found = store->do_iterate_type_until_match(KeyType::SNAPSHOT, [&](VariantKey&& snapshot_key) {
             SegmentInMemory snapshot_segment = store->read_sync(snapshot_key).second;
             auto opt_idx_for_stream_id = row_id_for_stream_in_snapshot_segment(snapshot_segment, false, stream_id);
             if (opt_idx_for_stream_id) {
