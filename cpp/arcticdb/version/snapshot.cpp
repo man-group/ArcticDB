@@ -190,6 +190,7 @@ std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
 std::optional<AtomKey> index_key_for_stream_and_version_in_snapshot_segment(
         SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id, VersionId version_id
 ) {
+    // Logic is very similar to row_id_for_stream_in_snapshot_segment
     if (using_ref_key) {
         // With ref keys we are sure the snapshot segment has the index atom keys sorted by stream_id.
         auto lb = std::lower_bound(std::begin(seg), std::end(seg), stream_id, [&](auto& row, StreamId t) {
@@ -205,6 +206,8 @@ std::optional<AtomKey> index_key_for_stream_and_version_in_snapshot_segment(
     } else {
         // Fall back to linear search for old atom key snapshots.
         for (size_t idx = 0; idx < seg.row_count(); idx++) {
+            // Check that the version id matches first as this does not involve materialising a string from the string
+            // pool
             auto row_version_id = version_id_from_segment<pipelines::index::Fields>(seg, static_cast<ssize_t>(idx));
             if (row_version_id == version_id) {
                 auto row_stream_id = stream_id_from_segment<pipelines::index::Fields>(seg, static_cast<ssize_t>(idx));
@@ -221,6 +224,7 @@ std::optional<AtomKey> find_index_key_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id, VersionId version_id
 ) {
     std::optional<AtomKey> res;
+    // Snapshot ref keys are much more prevalent than snapshot keys, so iterate them first
     store->do_iterate_type_until_match(KeyType::SNAPSHOT_REF, [&](VariantKey&& snapshot_key) {
         SegmentInMemory snapshot_segment = store->read_sync(snapshot_key).second;
         res = index_key_for_stream_and_version_in_snapshot_segment(snapshot_segment, true, stream_id, version_id);
@@ -229,6 +233,8 @@ std::optional<AtomKey> find_index_key_in_snapshots(
     if (res.has_value()) {
         return res;
     } else {
+        // Fall back to checking very old snapshot keys if not found in ref keys. List operation here will return zero
+        // entries most of the time
         store->do_iterate_type_until_match(KeyType::SNAPSHOT, [&](VariantKey&& snapshot_key) {
             SegmentInMemory snapshot_segment = store->read_sync(snapshot_key).second;
             res = index_key_for_stream_and_version_in_snapshot_segment(snapshot_segment, false, stream_id, version_id);
