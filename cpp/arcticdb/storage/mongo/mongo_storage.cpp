@@ -35,7 +35,7 @@ std::string MongoStorage::collection_name(KeyType k) { return (fmt::format("{}{}
  */
 void raise_mongo_exception(const mongocxx::operation_exception& e, const std::string& object_name) {
     auto error_code = e.code().value();
-    auto mongo_error_suffix = fmt::format("MongoError#{}: {} for object {}", error_code, e.what(), object_name);
+    auto mongo_error_suffix = get_mongo_error_suffix(e, object_name);
 
     if (error_code == static_cast<int>(MongoError::NoSuchKey) ||
         error_code == static_cast<int>(MongoError::KeyNotFound)) {
