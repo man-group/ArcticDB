@@ -12,33 +12,11 @@
 
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
+#include <arcticdb/arrow/test/arrow_test_utils.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
 
 using namespace arcticdb;
-
-template<typename RawType>
-void allocate_and_fill_chunked_column(
-        Column& column, size_t num_rows, size_t chunk_size, std::optional<std::span<RawType>> values = std::nullopt
-) {
-    // Allocate column in chunks
-    for (size_t row = 0; row < num_rows; row += chunk_size) {
-        auto data_size = data_type_size(column.type(), OutputFormat::ARROW, DataTypeMode::EXTERNAL);
-        auto current_block_size = std::min(chunk_size, num_rows - row);
-        auto bytes = current_block_size * data_size;
-        column.allocate_data(bytes);
-        column.advance_data(bytes);
-    }
-
-    // Actually fill the data
-    for (size_t row = 0; row < num_rows; ++row) {
-        if (values.has_value()) {
-            column.reference_at<RawType>(row) = values.value()[row];
-        } else {
-            column.reference_at<RawType>(row) = static_cast<RawType>(row);
-        }
-    }
-}
 
 SegmentInMemory get_detachable_segment(
         StreamId symbol, std::span<const FieldRef> fields, size_t num_rows, size_t chunk_size
