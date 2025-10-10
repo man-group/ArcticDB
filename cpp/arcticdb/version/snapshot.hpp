@@ -34,7 +34,8 @@ void tombstone_snapshot(
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor);
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
-        SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id
+        SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id,
+        const std::optional<VersionId> version_id = std::nullopt
 );
 
 // Get a set of the index keys of a particular symbol that exist in any snapshot
