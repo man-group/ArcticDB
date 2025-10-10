@@ -248,9 +248,9 @@ std::optional<AtomKey> find_index_key_in_snapshots(
                                         version_id
                                 );
                                 if (opt_res.has_value()) {
+                                    found.store(true);
                                     std::lock_guard<std::mutex> lock(res_mutex);
                                     res = std::move(opt_res);
-                                    found.store(true);
                                 }
                                 return folly::Unit{};
                             });
