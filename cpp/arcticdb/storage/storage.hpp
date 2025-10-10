@@ -153,6 +153,12 @@ class Storage {
         do_visit_object_sizes(key_type, prefix, visitor);
     }
 
+    // Stop iteration and return true upon the first key k for which visitor(k) is true, return false if no key matches
+    // the predicate.
+    virtual bool do_iterate_type_until_match(
+            KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
+    ) = 0;
+
     bool scan_for_matching_key(KeyType key_type, const IterateTypePredicate& predicate) {
         return do_iterate_type_until_match(key_type, predicate, std::string());
     }
@@ -231,12 +237,6 @@ class Storage {
     virtual SupportsAtomicWrites do_supports_atomic_writes() const = 0;
 
     virtual bool do_fast_delete() = 0;
-
-    // Stop iteration and return true upon the first key k for which visitor(k) is true, return false if no key matches
-    // the predicate.
-    virtual bool do_iterate_type_until_match(
-            KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
-    ) = 0;
 
     virtual void do_visit_object_sizes(
             [[maybe_unused]] KeyType key_type, [[maybe_unused]] const std::string& prefix,
