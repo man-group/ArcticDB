@@ -34,12 +34,18 @@ void tombstone_snapshot(
 void iterate_snapshots(const std::shared_ptr<Store>& store, folly::Function<void(entity::VariantKey&)> visitor);
 
 std::optional<size_t> row_id_for_stream_in_snapshot_segment(
-        SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id
+        SegmentInMemory& seg, bool using_ref_key, const StreamId& stream_id,
+        const std::optional<VersionId> version_id = std::nullopt
 );
 
 // Get a set of the index keys of a particular symbol that exist in any snapshot
 std::unordered_set<entity::AtomKey> get_index_keys_in_snapshots(
         const std::shared_ptr<Store>& store, const StreamId& stream_id
+);
+
+// Finds an index key of specified symbol/version in all snapshots. Returns std::nullopt if no such index key exists
+std::optional<AtomKey> find_index_key_in_snapshots(
+        const std::shared_ptr<Store>& store, const StreamId& stream_id, VersionId version_id
 );
 
 std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_partitioned_by_inclusion_in_snapshots(
