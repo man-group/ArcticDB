@@ -18,6 +18,7 @@ from arcticdb.arctic import Arctic
 from arcticdb.options import LibraryOptions
 from arcticdb.storage_fixtures.s3 import BaseS3StorageFixtureFactory, real_s3_from_environment_variables
 from arcticdb.storage_fixtures.azure import real_azure_from_environment_variables
+from arcticdb.storage_fixtures.mongo import auto_detect_server
 from arcticdb.util.utils import DFGenerator, ListGenerators, TimestampNumber
 from arcticdb.util.logger import get_logger
 from arcticdb.version_store.library import Library
@@ -35,6 +36,7 @@ class Storage(Enum):
     LMDB = 2
     GOOGLE = 3
     AZURE = 4
+    MONGO = 5
 
 
 class StorageSpace(Enum):
@@ -72,6 +74,7 @@ class StorageSetup:
 
     _instance = None
     _aws_default_factory: BaseS3StorageFixtureFactory = None
+    _mongo_server = None
 
     def __new__(cls, *args, **kwargs):
         if not cls._instance:
@@ -96,6 +99,9 @@ class StorageSetup:
             cls._azure_factory.default_prefix = None
             cls._azure_factory.default_container = AZURE_DEFAULT_CONTAINER
             cls._azure_factory.clean_bucket_on_fixture_exit = False
+
+            # Mongo initialization - auto-detect server (external or managed)
+            cls._mongo_server = auto_detect_server()
 
     @classmethod
     def get_machine_id(cls):
@@ -124,9 +130,9 @@ class StorageSetup:
     def _check_persistance_access_asked(
         cls, storage_space: StorageSpace, confirm_persistent_storage_need: bool = False
     ) -> str:
-        assert (
-            cls._aws_default_factory
-        ), "Environment variables not initialized (ARCTICDB_REAL_S3_ACCESS_KEY,ARCTICDB_REAL_S3_SECRET_KEY)"
+        # Only check AWS credentials for AWS storage - other storages have their own setup
+        if hasattr(cls, '_aws_default_factory') and cls._aws_default_factory:
+            pass  # AWS credentials are available
         if storage_space == StorageSpace.PERSISTENT:
             assert confirm_persistent_storage_need, f"Use of persistent store not confirmed!"
 
@@ -154,6 +160,12 @@ class StorageSetup:
             # All runs can be only under this account name
             assert AZURE_ACCOUNT_NAME in cls._azure_factory.account_name, "Account name is not expected one"
             return cls._azure_factory.create_fixture().arctic_uri
+        elif storage == Storage.MONGO:
+            # Use auto-detected mongo server and create fixture with prefix
+            mongo_fixture = cls._mongo_server.create_fixture()
+            # For mongo, we use the prefix as part of the database name to separate storage spaces
+            # The MongoDatabase fixture already handles prefixing via PrefixingLibraryAdapterDecorator
+            return mongo_fixture.arctic_uri
         else:
             raise Exception("Unsupported storage type :", storage)
 
