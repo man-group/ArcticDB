@@ -11,9 +11,10 @@ import pytest
 from arcticdb.util.test import sample_dataframe, populate_db, assert_frame_equal
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.types import DataType
-from arcticdb_ext.exceptions import SchemaException, InternalException
+from arcticdb_ext.exceptions import SchemaException, InternalException, StorageException
 from arcticdb_ext.version_store import Slicing
 from arcticdb_ext.stream import SegmentInMemory
+from tests.util.mark import MONGO_TESTS_MARK
 
 
 def get_ref_key_types():
@@ -429,3 +430,39 @@ def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
     expected_df = lib_tool.read_to_dataframe(tdata_key)
 
     assert_frame_equal(expected_df, dataframe)
+
+
+@pytest.mark.storage
+def test_update_keys(object_and_mem_and_lmdb_version_store):
+    """Test the update method of LibraryTool, which uses update_compressed_sync internally."""
+    populate_db(object_and_mem_and_lmdb_version_store)
+    lib_tool = object_and_mem_and_lmdb_version_store.library_tool()
+    all_key_types = lib_tool.key_types()
+    all_keys = []
+    for key_type in all_key_types:
+        if key_type not in get_ref_key_types() + get_log_types():
+            all_keys = all_keys + lib_tool.find_keys(key_type)
+
+    for key in all_keys:
+        original_segment = lib_tool.read_to_segment(key)
+        original_fields_count = original_segment.fields_size()
+
+        lib_tool.update(key, original_segment)
+
+        updated_segment = lib_tool.read_to_segment(key)
+        assert updated_segment.fields_size() == original_fields_count
+
+
+@pytest.mark.storage
+@MONGO_TESTS_MARK
+def test_update_non_existing_key(
+    mongo_version_store,
+):  # Only testing mongo as s3 and azure wrappers call write in corresponding update calls
+    lib = mongo_version_store
+    lib.write("sym", 1)
+    lib_tool = lib.library_tool()
+    key = lib_tool.find_keys(KeyType.TABLE_DATA)[0]
+    segment = lib_tool.read_to_segment(key)
+    key.change_id("NOT_EXISTING_ID")
+    with pytest.raises(StorageException):
+        lib_tool.update(key, segment)

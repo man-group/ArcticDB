@@ -201,10 +201,6 @@ std::vector<VariantKey> MockMongoClient::list_keys(
     return output;
 }
 
-void MockMongoClient::ensure_collection(std::string_view, std::string_view) {
-    // a database, collection is always guaranteed to be created if not existent
-}
-
 void MockMongoClient::drop_collection(std::string database_name, std::string collection_name) {
     for (auto it = mongo_contents.begin(); it != mongo_contents.end();) {
         if (it->first.database_name_ == database_name && it->first.collection_name_ == collection_name) {

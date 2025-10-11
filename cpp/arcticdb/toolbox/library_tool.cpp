@@ -62,14 +62,18 @@ TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& k
     return store()->read_timeseries_descriptor(key).get().second;
 }
 
-void LibraryTool::write(VariantKey key, Segment& segment) {
-    storage::KeySegmentPair kv{std::move(key), std::move(segment)};
+void LibraryTool::write(VariantKey key, const Segment& segment) {
+    storage::KeySegmentPair kv{std::move(key), segment.clone()};
     store()->write_compressed_sync(kv);
 }
 
-void LibraryTool::overwrite_segment_in_memory(VariantKey key, SegmentInMemory& segment_in_memory) {
-    auto segment =
-            encode_dispatch(std::move(segment_in_memory), *(async_store().codec_), async_store().encoding_version_);
+void LibraryTool::update(VariantKey key, const Segment& segment) {
+    storage::KeySegmentPair kv{std::move(key), segment.clone()};
+    store()->update_compressed_sync(kv, storage::UpdateOpts{});
+}
+
+void LibraryTool::overwrite_segment_in_memory(VariantKey key, const SegmentInMemory& segment_in_memory) {
+    auto segment = encode_dispatch(segment_in_memory.clone(), *(async_store().codec_), async_store().encoding_version_);
     remove(key);
     write(key, segment);
 }

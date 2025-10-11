@@ -257,6 +257,20 @@ class InMemoryStore : public Store {
         }
     }
 
+    void update_compressed_sync(storage::KeySegmentPair key_segment, storage::UpdateOpts opts) override {
+        auto key = key_segment.variant_key();
+        if (!opts.upsert_) {
+            util::check_rte(key_exists(key).get(), "update called with upsert=false but key does not exist");
+        }
+        if (std::holds_alternative<RefKey>(key)) {
+            auto ref_key = std::get<RefKey>(key);
+            add_segment(ref_key, decode_segment(*key_segment.segment_ptr()));
+        } else {
+            auto atom_key = key_segment.atom_key();
+            add_segment(atom_key, decode_segment(*key_segment.segment_ptr()));
+        }
+    }
+
     RemoveKeyResultType remove_key_sync(const entity::VariantKey& key, storage::RemoveOpts opts) override {
         StorageFailureSimulator::instance()->go(FailureType::DELETE);
         std::lock_guard lock{mutex_};
