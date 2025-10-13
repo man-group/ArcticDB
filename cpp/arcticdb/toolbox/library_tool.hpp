@@ -42,8 +42,6 @@ class LibraryTool {
 
     void write(VariantKey key, const Segment& segment);
 
-    void update(VariantKey key, const Segment& segment);
-
     void overwrite_segment_in_memory(VariantKey key, const SegmentInMemory& segment_in_memory);
 
     SegmentInMemory item_to_segment_in_memory(

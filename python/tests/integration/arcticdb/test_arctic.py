@@ -1579,6 +1579,7 @@ def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
     lib._nvs.write(sym, 1)
     key = lt.find_keys(KeyType.TABLE_DATA)[0]
     segment = lt.read_to_segment(key)
+    segment_in_memory = lt.dataframe_to_segment_in_memory(sym, pd.DataFrame({"a": [1, 2, 3]}))
     GracefulProcessUtils.terminate(mongo_server_fn_scope._p)
 
     operations = [
@@ -1587,7 +1588,7 @@ def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
         ("read_to_keys", lambda: lt.read_to_keys(key)),
         ("remove", lambda: lt.remove(key)),
         ("key_exists", lambda: lt.key_exists(key)),
-        ("update", lambda: lt.update(key, segment)),
+        ("update", lambda: lt.overwrite_segment_in_memory(key, segment_in_memory)),
     ]
 
     for operation_name, operation_func in operations:
