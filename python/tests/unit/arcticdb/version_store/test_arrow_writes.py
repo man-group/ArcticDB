@@ -346,10 +346,6 @@ def test_write_unsupported_types(lmdb_version_store_arrow):
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
     assert "unsupported" in str(e.value).lower()
-    table = pa.table({"col": pa.array(["hello", "there"], pa.string())})
-    with pytest.raises(SchemaException) as e:
-        lib.write(sym, table)
-    assert "unsupported" in str(e.value).lower()
     table = pa.table({"col": pa.array(["hello", "there"], pa.large_string())})
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
@@ -759,3 +755,12 @@ def test_arrow_writes_hypothesis(
     lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)), index_column="ts")
     received = lib.read(sym).data
     assert table.equals(received)
+
+
+def test_basic_write_strings(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_basic_write_strings"
+    table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], pa.string())})
+    lib.write(sym, table)
+    received = lib.read(sym)
+    assert table.equals(received.data)
