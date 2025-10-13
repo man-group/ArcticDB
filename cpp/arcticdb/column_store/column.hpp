@@ -77,7 +77,7 @@ struct ExtraBufferIndexHash {
 };
 
 struct ExtraBufferContainer {
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
     std::unordered_map<ExtraBufferIndex, ChunkedBuffer, ExtraBufferIndexHash> buffers_;
 
     ChunkedBuffer& create_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type);
