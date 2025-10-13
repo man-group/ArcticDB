@@ -982,13 +982,13 @@ def test_sparse_strings_from_processing_pipeline(lmdb_version_store_dynamic_sche
     df_2 = pd.DataFrame(
         {
             "condition": [i % 4 == 0 for i in range(10)],
-            "col_2": [chr(i + ord("a")) * (i + 1) if i%3>0 else None for i in range(10)],
+            "col_2": [chr(i + ord("a")) * (i + 1) if i % 3 > 0 else None for i in range(10)],
         }
     )
     df_3 = pd.DataFrame(
         {
             "condition": [i % 3 == 0 for i in range(10)],
-            "col_1": [chr(10 + i + ord("a")) * (i + 1) if i%2==0 else np.nan for i in range(10)],
+            "col_1": [chr(10 + i + ord("a")) * (i + 1) if i % 2 == 0 else np.nan for i in range(10)],
         }
     )
     lib.write(sym, df_1)
