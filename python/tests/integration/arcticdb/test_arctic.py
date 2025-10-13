@@ -1571,27 +1571,27 @@ def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
 @SLOW_TESTS_MARK
 @MONGO_TESTS_MARK
 def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
-    set_config_int("VersionMap.MaxReadRefTrials", 0)
-    ac = Arctic(mongo_server_fn_scope.mongo_uri)
-    lib = ac.get_library("test", create_if_missing=True)
-    lt = lib._nvs.library_tool()
+    with config_context("VersionMap.MaxReadRefTrials", 0):
+        ac = Arctic(mongo_server_fn_scope.mongo_uri)
+        lib = ac.get_library("test", create_if_missing=True)
+        lt = lib._nvs.library_tool()
 
-    lib._nvs.write(sym, 1)
-    key = lt.find_keys(KeyType.TABLE_DATA)[0]
-    segment = lt.read_to_segment(key)
-    segment_in_memory = lt.dataframe_to_segment_in_memory(sym, pd.DataFrame({"a": [1, 2, 3]}))
-    GracefulProcessUtils.terminate(mongo_server_fn_scope._p)
+        lib._nvs.write(sym, 1)
+        key = lt.find_keys(KeyType.TABLE_DATA)[0]
+        segment = lt.read_to_segment(key)
+        segment_in_memory = lt.dataframe_to_segment_in_memory(sym, pd.DataFrame({"a": [1, 2, 3]}))
+        GracefulProcessUtils.terminate(mongo_server_fn_scope._p)
 
-    operations = [
-        ("write", lambda: lt.write(key, segment)),
-        ("find_keys", lambda: lt.find_keys(KeyType.TABLE_DATA)),
-        ("read_to_keys", lambda: lt.read_to_keys(key)),
-        ("remove", lambda: lt.remove(key)),
-        ("key_exists", lambda: lt.key_exists(key)),
-        ("update", lambda: lt.overwrite_segment_in_memory(key, segment_in_memory)),
-    ]
+        operations = [
+            ("write", lambda: lt.write(key, segment)),
+            ("find_keys", lambda: lt.find_keys(KeyType.TABLE_DATA)),
+            ("read_to_keys", lambda: lt.read_to_keys(key)),
+            ("remove", lambda: lt.remove(key)),
+            ("key_exists", lambda: lt.key_exists(key)),
+            ("update", lambda: lt.overwrite_segment_in_memory(key, segment_in_memory)),
+        ]
 
-    for operation_name, operation_func in operations:
-        with pytest.raises(InternalException) as exception_info:
-            operation_func()
-        assert "E_MONGO_RETRYABLE" in str(exception_info.value), f"Failed for operation: {operation_name}"
+        for operation_name, operation_func in operations:
+            with pytest.raises(InternalException) as exception_info:
+                operation_func()
+            assert "E_MONGO_RETRYABLE" in str(exception_info.value), f"Failed for operation: {operation_name}"
