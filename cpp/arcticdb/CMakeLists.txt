@@ -1105,6 +1105,7 @@ if(${TEST})
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             arrow/test/arrow_test_utils.hpp
+            arrow/test/benchmark_arrow_reads.cpp
             arrow/test/benchmark_arrow_writes.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp

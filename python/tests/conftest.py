@@ -1124,6 +1124,14 @@ def lmdb_version_store_dynamic_schema(
 
 
 @pytest.fixture
+def lmdb_version_store_dynamic_schema_arrow(lmdb_version_store_dynamic_schema_v1) -> NativeVersionStore:
+    store = lmdb_version_store_dynamic_schema_v1
+    store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    store._set_allow_arrow_input()
+    return store
+
+
+@pytest.fixture
 def lmdb_version_store_empty_types_v1(version_store_factory, lib_name) -> NativeVersionStore:
     library_name = lib_name + "_v1"
     return version_store_factory(dynamic_strings=True, empty_types=True, name=library_name)

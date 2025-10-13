@@ -5,10 +5,12 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
  * will be governed by the Apache License, version 2.0.
  */
+#pragma once
 
 #include <sparrow/record_batch.hpp>
 
 #include <arcticdb/util/allocator.hpp>
+#include <arcticdb/column_store/column.hpp>
 
 using namespace arcticdb;
 
@@ -30,10 +32,33 @@ sparrow::array create_array(const std::vector<T>& data) {
     }
 }
 
-sparrow::record_batch create_record_batch(const std::vector<std::pair<std::string, sparrow::array>>& columns) {
+inline sparrow::record_batch create_record_batch(const std::vector<std::pair<std::string, sparrow::array>>& columns) {
     sparrow::record_batch record_batch{};
     for (const auto& column : columns) {
         record_batch.add_column(column.first, column.second);
     }
     return record_batch;
+}
+
+template<typename RawType>
+void allocate_and_fill_chunked_column(
+        Column& column, size_t num_rows, size_t chunk_size, std::optional<std::span<RawType>> values = std::nullopt
+) {
+    // Allocate column in chunks
+    for (size_t row = 0; row < num_rows; row += chunk_size) {
+        auto data_size = data_type_size(column.type(), OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+        auto current_block_size = std::min(chunk_size, num_rows - row);
+        auto bytes = current_block_size * data_size;
+        column.allocate_data(bytes);
+        column.advance_data(bytes);
+    }
+
+    // Actually fill the data
+    for (size_t row = 0; row < num_rows; ++row) {
+        if (values.has_value()) {
+            column.reference_at<RawType>(row) = values.value()[row];
+        } else {
+            column.reference_at<RawType>(row) = static_cast<RawType>(row);
+        }
+    }
 }
