@@ -837,6 +837,8 @@ class Library:
         with one process able to later finalize all staged data rendering the data readable by clients.
         To finalize staged data see ``finalize_staged_data`` or ``sort_and_finalize_staged_data``.
 
+        Check out the [demo notebook](https://docs.arcticdb.io/latest/notebooks/ArcticDB_staged_data_with_tokens/) for more info and examples.
+
         Parameters
         ----------
         symbol : str
