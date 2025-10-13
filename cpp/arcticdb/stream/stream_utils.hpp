@@ -132,6 +132,11 @@ inline StreamId stream_id_from_segment(const SegmentInMemory& seg, ssize_t row) 
 }
 
 template<typename FieldType>
+inline VersionId version_id_from_segment(const SegmentInMemory& seg, ssize_t row) {
+    return seg.scalar_at<VersionId>(row, int(FieldType::version_id)).value();
+}
+
+template<typename FieldType>
 auto read_key_row_into_builder(const SegmentInMemory& seg, ssize_t i) {
     return atom_key_builder()
             .gen_id(seg.scalar_at<VersionId>(i, int(FieldType::version_id)).value())
