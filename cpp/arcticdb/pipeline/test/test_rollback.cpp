@@ -19,7 +19,7 @@ static StorageFailureSimulator::ParamActionSequence make_fault_sequence(
     StorageFailureSimulator::ParamActionSequence seq;
     seq.reserve(fault_probabilities.size());
     for (auto prob : fault_probabilities) {
-        seq.push_back(action_factories::fault<QuotaExceededException>(prob));
+        seq.emplace_back(action_factories::fault<QuotaExceededException>(prob));
     }
     return seq;
 }
@@ -52,34 +52,29 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
     void TearDown() override { StorageFailureSimulator::instance()->reset(); }
 
     void write_version_frame_with_three_segments() {
-        using namespace arcticdb;
-        using namespace arcticdb::storage;
-        using namespace arcticdb::stream;
-        using namespace arcticdb::pipelines;
-
         auto frame = get_test_timeseries_frame(stream_id_, 30, 0).frame_; // 30 rows -> 3 segments
         version_store_->write_versioned_dataframe_internal(stream_id_, std::move(frame), false, false, false);
     }
 
     auto get_keys() {
-        auto& mock_store = *version_store_->_test_get_store();
+        auto mock_store = version_store_->_test_get_store();
         std::vector<RefKey> version_ref_keys;
-        mock_store.iterate_type(KeyType::VERSION_REF, [&](auto&& vk) {
+        mock_store->iterate_type(KeyType::VERSION_REF, [&](VariantKey&& vk) {
             version_ref_keys.emplace_back(std::get<RefKey>(std::move(vk)));
         });
 
         std::vector<AtomKeyImpl> version_keys;
-        mock_store.iterate_type(KeyType::VERSION, [&](auto&& vk) {
+        mock_store->iterate_type(KeyType::VERSION, [&](VariantKey&& vk) {
             version_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
         });
 
         std::vector<AtomKeyImpl> index_keys;
-        mock_store.iterate_type(KeyType::TABLE_INDEX, [&](auto&& vk) {
+        mock_store->iterate_type(KeyType::TABLE_INDEX, [&](VariantKey&& vk) {
             index_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
         });
 
         std::vector<AtomKeyImpl> data_keys;
-        mock_store.iterate_type(KeyType::TABLE_DATA, [&](auto&& vk) {
+        mock_store->iterate_type(KeyType::TABLE_DATA, [&](VariantKey&& vk) {
             data_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
         });
 
@@ -165,6 +160,16 @@ const auto TEST_DATA_UPDATE_ONLY = ::testing::Values(
         TestScenario{
                 .name = "Update_succeeds_initial_write_then_fails_on_rewrite",
                 .failures = make_fault_sequence({0, 0, 0, 1}),
+                .expected_ref_keys = 0,
+                .expected_version_keys = 0,
+                .expected_index_keys = 0,
+                .expected_data_keys = 0,
+                .num_writes = 1,
+                .write_should_throw = {true}
+        },
+        TestScenario{
+                .name = "Update_fails_inital_write_then_no_rewrite",
+                .failures = make_fault_sequence({0, 1, 0, 0}),
                 .expected_ref_keys = 0,
                 .expected_version_keys = 0,
                 .expected_index_keys = 0,
