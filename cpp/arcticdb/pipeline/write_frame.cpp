@@ -63,16 +63,22 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
     }
     for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
-        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool())));
+        seg.add_column(
+                frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
-        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool())));
+        seg.add_column(
+                frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
     return seg;
 }
 
-Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset, ARCTICDB_UNUSED StringPool& string_pool) const {
+Column WriteToSegmentTask::slice_column(
+        const SegmentInMemory& frame, size_t col_idx, size_t offset, ARCTICDB_UNUSED StringPool& string_pool
+) const {
     const auto& source_column = frame.column(col_idx);
     if (is_sequence_type(source_column.type().data_type())) {
         auto type_size = get_type_size(source_column.type().data_type());
@@ -81,13 +87,18 @@ Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col
         auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
         const auto& block_offsets = source_column.data().buffer().block_offsets();
         auto first_block_offset = source_column.data().buffer().block_and_offset(first_byte).block_index_;
-        auto block_offsets_it = block_offsets.cbegin() +  first_block_offset;
-        Column res(make_scalar_type(DataType::UTF_DYNAMIC64), slice_.rows().diff(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+        auto block_offsets_it = block_offsets.cbegin() + first_block_offset;
+        Column res(
+                make_scalar_type(DataType::UTF_DYNAMIC64),
+                slice_.rows().diff(),
+                AllocationType::PRESIZED,
+                Sparsity::NOT_PERMITTED
+        );
         res.set_row_data(slice_.rows().diff() - 1);
         auto col_data = res.data();
         // String columns use int64_t as the offsets
         auto col_it = col_data.begin<ScalarTagType<DataTypeTag<DataType::INT64>>>();
-        for (const auto& ptr_and_size: byte_blocks_at) {
+        for (const auto& ptr_and_size : byte_blocks_at) {
             const auto& strings_buffer = source_column.get_extra_buffer(*block_offsets_it++, ExtraBufferType::STRING);
             auto ptr = reinterpret_cast<const int64_t*>(ptr_and_size.first);
             auto size = ptr_and_size.second / sizeof(int64_t);
@@ -95,7 +106,10 @@ Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col
                 auto strings_buffer_offset = *ptr;
                 auto next_strings_buffer_offset = idx == size - 1 ? strings_buffer.bytes() : *(ptr + 1);
                 auto string_length = next_strings_buffer_offset - strings_buffer_offset;
-                std::string_view str(reinterpret_cast<const char*>(strings_buffer.bytes_at(strings_buffer_offset, string_length)), string_length);
+                std::string_view str(
+                        reinterpret_cast<const char*>(strings_buffer.bytes_at(strings_buffer_offset, string_length)),
+                        string_length
+                );
                 *col_it++ = string_pool.get(str).offset();
             }
         }
@@ -105,8 +119,8 @@ Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col
         const auto bytes =
                 ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
         // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
-        // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to multiples
-        // of the type size
+        // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
+        // multiples of the type size
         auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
         ChunkedBuffer chunked_buffer;
         if (byte_blocks_at.size() == 1) {

@@ -390,7 +390,9 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 ChunkedBuffer strings_buffer;
                 const auto string_bytes = arrow_array_buffers[2].size();
                 strings_buffer.add_external_block(arrow_array_buffers[2].data<uint8_t>(), string_bytes);
-                column.set_extra_buffer(start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer));
+                column.set_extra_buffer(
+                        start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
+                );
             } else {
                 data += arrow_array->offset * get_type_size(data_type);
                 const auto bytes = array.size() * get_type_size(data_type);
