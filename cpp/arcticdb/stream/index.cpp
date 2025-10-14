@@ -14,36 +14,37 @@
 
 namespace arcticdb::stream {
 
-template <typename Derived>
+template<typename Derived>
 StreamDescriptor BaseIndex<Derived>::create_stream_descriptor(
-    StreamId stream_id,
-    std::initializer_list<FieldRef> fields
+        StreamId stream_id, std::initializer_list<FieldRef> fields
 ) const {
     std::vector<FieldRef> fds{fields};
     return create_stream_descriptor(stream_id, std::views::all(fds));
 }
 
 [[nodiscard]] IndexDescriptor::Type get_index_value_type(const AtomKey& key) {
-    return std::holds_alternative<timestamp>(key.start_index()) ? IndexDescriptor::Type::TIMESTAMP : IndexDescriptor::Type::STRING;
+    return std::holds_alternative<timestamp>(key.start_index()) ? IndexDescriptor::Type::TIMESTAMP
+                                                                : IndexDescriptor::Type::STRING;
 }
 
-template <typename Derived> const Derived* BaseIndex<Derived>::derived() const {
+template<typename Derived>
+const Derived* BaseIndex<Derived>::derived() const {
     return static_cast<const Derived*>(this);
 }
 
-template <typename Derived> BaseIndex<Derived>::operator IndexDescriptorImpl() const {
+template<typename Derived>
+BaseIndex<Derived>::operator IndexDescriptorImpl() const {
     return {Derived::type(), Derived::field_count()};
 }
 
-template <typename Derived> FieldRef BaseIndex<Derived>::field(size_t) const {
+template<typename Derived>
+FieldRef BaseIndex<Derived>::field(size_t) const {
     return {static_cast<TypeDescriptor>(typename Derived::TypeDescTag{}), std::string_view(derived()->name())};
 }
 
 TimeseriesIndex::TimeseriesIndex(const std::string& name) : name_(name) {}
 
-TimeseriesIndex TimeseriesIndex::default_index() {
-    return TimeseriesIndex(DefaultName);
-}
+TimeseriesIndex TimeseriesIndex::default_index() { return TimeseriesIndex(DefaultName); }
 
 void TimeseriesIndex::check(const FieldCollection& fields) const {
     const size_t fields_size = fields.size();
@@ -58,10 +59,10 @@ void TimeseriesIndex::check(const FieldCollection& fields) const {
     const bool compatible_types = valid_type_promotion || trivial_type_compatibility;
 
     util::check_arg(
-        fields_size >= current_fields_size,
-        "expected at least {} fields, actual {}",
-        current_fields_size,
-        fields_size
+            fields_size >= current_fields_size,
+            "expected at least {} fields, actual {}",
+            current_fields_size,
+            fields_size
     );
     util::check_arg(compatible_types, "expected field[0]={}, actual {}", this->field(0), fields[0]);
 }
@@ -98,9 +99,7 @@ IndexValue TimeseriesIndex::end_value_for_keys_segment(const SegmentInMemory& se
     return {last_ts};
 }
 
-const char* TimeseriesIndex::name() const {
-    return name_.c_str();
-}
+const char* TimeseriesIndex::name() const { return name_.c_str(); }
 
 TimeseriesIndex TimeseriesIndex::make_from_descriptor(const StreamDescriptor& desc) {
     if (desc.field_count() > 0)
@@ -109,20 +108,13 @@ TimeseriesIndex TimeseriesIndex::make_from_descriptor(const StreamDescriptor& de
     return TimeseriesIndex(DefaultName);
 }
 
+TableIndex::TableIndex(const std::string& name) : name_(name) {}
 
-TableIndex::TableIndex(const std::string& name) : name_(name) {
-}
-
-TableIndex TableIndex::default_index() {
-    return TableIndex(DefaultName);
-}
+TableIndex TableIndex::default_index() { return TableIndex(DefaultName); }
 
 void TableIndex::check(const FieldCollection& fields) const {
     util::check_arg(
-        fields.size() >= int(field_count()),
-        "expected at least {} fields, actual {}",
-        field_count(),
-        fields.size()
+            fields.size() >= int(field_count()), "expected at least {} fields, actual {}", field_count(), fields.size()
     );
 
     util::check(fields.ref_at(0) == field(0), "Field descriptor mismatch {} != {}", fields.ref_at(0), field(0));
@@ -163,13 +155,9 @@ TableIndex TableIndex::make_from_descriptor(const StreamDescriptor& desc) {
     return TableIndex(DefaultName);
 }
 
-const char* TableIndex::name() const {
-    return name_.c_str();
-}
+const char* TableIndex::name() const { return name_.c_str(); }
 
-RowCountIndex RowCountIndex::default_index() {
-    return RowCountIndex{};
-}
+RowCountIndex RowCountIndex::default_index() { return RowCountIndex{}; }
 
 IndexValue RowCountIndex::start_value_for_segment(const SegmentInMemory& segment) {
     return static_cast<timestamp>(segment.offset());
@@ -219,8 +207,9 @@ Index index_type_from_descriptor(const StreamDescriptor& desc) {
         return RowCountIndex{};
     default:
         util::raise_rte(
-            "Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand ({}).",
-            int(desc.index().type())
+                "Data obtained from storage refers to an index type that this build of ArcticDB doesn't understand "
+                "({}).",
+                int(desc.index().type())
         );
     }
 }
@@ -244,18 +233,13 @@ IndexDescriptor get_descriptor_from_index(const Index& index) {
     return util::variant_match(index, [](const auto& idx) { return static_cast<IndexDescriptorImpl>(idx); });
 }
 
-Index empty_index() {
-    return RowCountIndex::default_index();
-}
+Index empty_index() { return RowCountIndex::default_index(); }
 
 template class BaseIndex<TimeseriesIndex>;
 template class BaseIndex<TableIndex>;
 template class BaseIndex<RowCountIndex>;
 template class BaseIndex<EmptyIndex>;
 
-std::string mangled_name(std::string_view name) {
-    return fmt::format("__idx__{}", name);
-}
+std::string mangled_name(std::string_view name) { return fmt::format("__idx__{}", name); }
 
-
-}
+} // namespace arcticdb::stream

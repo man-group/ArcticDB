@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import traceback
 
 from arcticdb_ext.log import configure
@@ -53,7 +54,7 @@ logger_by_name = {
     "lock": _Logger(_LoggerId.LOCK),
     "schedule": _Logger(_LoggerId.SCHEDULE),
     "symbol": _Logger(_LoggerId.SYMBOL),
-    "snapshot": _Logger(_LoggerId.SNAPSHOT)
+    "snapshot": _Logger(_LoggerId.SNAPSHOT),
 }
 
 for key, value in logger_by_name.items():

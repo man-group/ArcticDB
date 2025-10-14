@@ -386,7 +386,9 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment, slicing):
     version_key_count = len(lib_tool.find_keys(KeyType.VERSION))
 
     if slicing == Slicing.RowSlicing:
-        assert sorted([(dkey.start_index, dkey.end_index) for dkey in data_keys]) == [(i, i+2) for i in range(0, len(sample_df), 2)]
+        assert sorted([(dkey.start_index, dkey.end_index) for dkey in data_keys]) == [
+            (i, i + 2) for i in range(0, len(sample_df), 2)
+        ]
     elif slicing == Slicing.NoSlicing:
         assert [(dkey.start_index, dkey.end_index) for dkey in data_keys] == [(0, len(sample_df))]
 
@@ -405,7 +407,7 @@ def test_write_segment_in_memory(lmdb_version_store_tiny_segment, slicing):
 
     assert version_id == 4
     assert_frame_equal(dataframe, sample_df)
-    
+
 
 def test_read_segment_in_memory_to_dataframe(lmdb_version_store_v1):
     df = sample_dataframe()

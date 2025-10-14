@@ -10,6 +10,7 @@ import copy
 import datetime
 import io
 import sys
+
 if sys.version_info >= (3, 9):
     import zoneinfo
 from datetime import timedelta
@@ -23,7 +24,8 @@ import pandas as pd
 import pickle
 from abc import ABCMeta, abstractmethod
 
-from arcticdb.dependencies import pyarrow as pa
+from arcticdb.dependencies import _PYARROW_AVAILABLE, pyarrow as pa
+from arcticdb.preconditions import check
 from arcticdb_ext import get_config_string
 from pandas.api.types import is_integer_dtype
 from arcticc.pb2.descriptors_pb2 import UserDefinedMetadata, NormalizationMetadata, MsgPackSerialization
@@ -37,7 +39,7 @@ from arcticdb.exceptions import (
 )
 from arcticdb.supported_types import DateRangeInput, time_types as supported_time_types
 from arcticdb.util._versions import IS_PANDAS_TWO, IS_PANDAS_ZERO
-from arcticdb_ext.version_store import SortedValue as _SortedValue
+from arcticdb_ext.version_store import RecordBatchData, SortedValue as _SortedValue
 from pandas.core.internals import make_block
 
 from pandas import DataFrame, MultiIndex, Series, DatetimeIndex, Index, RangeIndex
@@ -84,7 +86,7 @@ NPDDataFrame = NamedTuple(
 NormalizedInput = NamedTuple("NormalizedInput", [("item", NPDDataFrame), ("metadata", NormalizationMetadata)])
 
 
-_PICKLED_METADATA_LOGLEVEL = None # set lazily with function below
+_PICKLED_METADATA_LOGLEVEL = None  # set lazily with function below
 
 
 def get_pickled_metadata_loglevel():
@@ -96,7 +98,9 @@ def get_pickled_metadata_loglevel():
     expected_settings = ("DEBUG", "INFO", "WARN", "ERROR")
     if log_level:
         if log_level.upper() not in expected_settings:
-            log.warn(f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}")
+            log.warn(
+                f"Expected PickledMetadata.LogLevel setting to be in {expected_settings} or absent but was {log_level}"
+            )
             _PICKLED_METADATA_LOGLEVEL = LogLevel.WARN
         else:
             _PICKLED_METADATA_LOGLEVEL = getattr(LogLevel, log_level.upper())
@@ -108,7 +112,16 @@ def get_pickled_metadata_loglevel():
 
 # To simplify unit testing of serialization logic. This maps the cpp _FrameData exposed object
 class FrameData(
-    NamedTuple("FrameData", [("data", List[np.ndarray]), ("names", List[str]), ("index_columns", List[str]), ("row_count", int), ("offset", int)])
+    NamedTuple(
+        "FrameData",
+        [
+            ("data", List[np.ndarray]),
+            ("names", List[str]),
+            ("index_columns", List[str]),
+            ("row_count", int),
+            ("offset", int),
+        ],
+    )
 ):
     @staticmethod
     def from_npd_df(df):
@@ -349,10 +362,7 @@ def _normalize_single_index(
         return [], []
     elif isinstance(index, RangeIndex):
         if index.name:
-            if not isinstance(index.name, int) and not isinstance(index.name, str):
-                raise NormalizationException(
-                    f"Index name must be a string or an int, received {index.name} of type {type(index.name)}"
-                )
+            _check_valid_name(index.name)
             if isinstance(index.name, int):
                 index_norm.is_int = True
             index_norm.name = str(index.name)
@@ -388,10 +398,7 @@ def _normalize_single_index(
         if index_tz is not None:
             index_norm.tz = _ensure_str_timezone(index_tz)
 
-        if not isinstance(index_names[0], int) and not isinstance(index_names[0], str):
-            raise NormalizationException(
-                f"Index name must be a string or an int, received {index_names[0]} of type {type(index_names[0])}"
-            )
+        _check_valid_name(index_names[0])
         # Currently, we only support a single index column
         # when we support multi-index, we will need to implement a similar logic to the one in _normalize_columns_names
         # in the mean time, we will cast all other index names to string, so we don't crash in the cpp layer
@@ -486,6 +493,14 @@ def _denormalize_columns(item, norm_meta, idx_type, n_indexes):
     return columns, denormed_columns, data
 
 
+def _check_valid_name(name):
+    # bools are a subclass of int, so we need to check for them explicitly
+    if isinstance(name, bool) or not isinstance(name, (str, int)):
+        raise NormalizationException(
+            f"Column and index names must be of type str or int, received {name} of type {type(name)}"
+        )
+
+
 def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_schema=False):
     counter = Counter(columns_names)
     for idx in range(len(columns_names)):
@@ -498,10 +513,7 @@ def _normalize_columns_names(columns_names, index_names, norm_meta, dynamic_sche
             columns_names[idx] = new_name
             continue
 
-        if not isinstance(col, str) and not isinstance(col, int):
-            raise NormalizationException(
-                f"Column names must be of type str or int, received {col} of type {type(col)} on column number {idx}"
-            )
+        _check_valid_name(col)
 
         col_str = str(col)
         columns_names[idx] = col_str
@@ -602,7 +614,8 @@ class ArrowNormalizationOperations(NamedTuple):
     renames_for_pandas_metadata: Mapping[int, Union[int, str, None]]
         Column renames which can only be applied to pandas_metadata. E.g. renaming a column to an int
     """
-    renames_for_table : Mapping[int, str]
+
+    renames_for_table: Mapping[int, str]
     timezones: Mapping[int, str]
     range_index: Optional[Dict[str, Any]]
     pandas_indexes: Optional[int]
@@ -610,12 +623,12 @@ class ArrowNormalizationOperations(NamedTuple):
 
 
 class ArrowTableNormalizer(Normalizer):
-    def construct_pandas_metadata(self, fields, op : ArrowNormalizationOperations) -> Dict[str, Any]:
+    def construct_pandas_metadata(self, fields, op: ArrowNormalizationOperations) -> Dict[str, Any]:
         # Construct index_columns metadata
         if op.range_index is not None:
             index_columns = [dict(op.range_index, kind="range")]
         elif op.pandas_indexes is not None:
-            index_columns = [field.name for field in fields[:op.pandas_indexes]]
+            index_columns = [field.name for field in fields[: op.pandas_indexes]]
         else:
             index_columns = []
 
@@ -642,23 +655,27 @@ class ArrowTableNormalizer(Normalizer):
                     pandas_type = "datetimetz"
                     metadata = {"timezone": str(field.type.tz)}
 
-            pandas_columns.append({
-                "name": name,
-                "field_name": field.name,
-                "pandas_type": pandas_type,
-                "numpy_type": numpy_type,
-                "metadata": metadata,
-            })
+            pandas_columns.append(
+                {
+                    "name": name,
+                    "field_name": field.name,
+                    "pandas_type": pandas_type,
+                    "numpy_type": numpy_type,
+                    "metadata": metadata,
+                }
+            )
 
         # Construct column_index metadata
         column_index = {
             "name": None,
             "field_name": None,
-            "pandas_type": 'unicode',
-            "numpy_type": 'object',
-            "metadata": {'encoding': 'UTF-8'}
+            "pandas_type": "unicode",
+            "numpy_type": "object",
+            "metadata": {"encoding": "UTF-8"},
         }
-        renames_to_ints = len([new_name for new_name in op.renames_for_pandas_metadata.values() if isinstance(new_name, int)])
+        renames_to_ints = len(
+            [new_name for new_name in op.renames_for_pandas_metadata.values() if isinstance(new_name, int)]
+        )
         if renames_to_ints == len(fields):
             column_index["pandas_type"] = "int64"
             column_index["numpy_type"] = "int64"
@@ -667,20 +684,17 @@ class ArrowTableNormalizer(Normalizer):
             column_index["pandas_type"] = "mixed-integer"
             column_index["metadata"] = None
 
-        return {
-            "index_columns": index_columns,
-            "column_indexes": [column_index],
-            "columns": pandas_columns
-        }
-
+        return {"index_columns": index_columns, "column_indexes": [column_index], "columns": pandas_columns}
 
     def apply_pyarrow_operations(self, table, op: ArrowNormalizationOperations):
         # type: (pa.Table, ArrowNormalizationOperations) -> pa.Table
-        if (len(op.renames_for_table) == 0 and
-            len(op.timezones) == 0 and
-            op.range_index is None and
-            op.pandas_indexes is None and
-            len(op.renames_for_pandas_metadata) == 0):
+        if (
+            len(op.renames_for_table) == 0
+            and len(op.timezones) == 0
+            and op.range_index is None
+            and op.pandas_indexes is None
+            and len(op.renames_for_pandas_metadata) == 0
+        ):
             return table
 
         new_columns = []
@@ -702,19 +716,30 @@ class ArrowTableNormalizer(Normalizer):
         pandas_metadata = self.construct_pandas_metadata(new_fields, op)
 
         return pa.Table.from_arrays(
-            new_columns,
-            schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
+            new_columns, schema=pa.schema(new_fields).with_metadata({b"pandas": json.dumps(pandas_metadata)})
         )
-    def normalize(self, item, **kwargs):
-        raise NotImplementedError("Arrow write is not yet implemented")
+
+    def normalize(self, table, **kwargs):
+        pa_record_batches = table.to_batches()
+        arcticdb_record_batches = []
+        for pa_record_batch in pa_record_batches:
+            arcticdb_record_batch = RecordBatchData()
+            pa_record_batch._export_to_c(arcticdb_record_batch.array(), arcticdb_record_batch.schema())
+            arcticdb_record_batches.append(arcticdb_record_batch)
+        norm_metadata = NormalizationMetadata()
+        index_column = kwargs.get("index_column", None)
+        if index_column is None:
+            norm_metadata.experimental_arrow.has_index = False
+        else:
+            check(isinstance(index_column, str), "Arrow index column specifier must be a string")
+            norm_metadata.experimental_arrow.has_index = True
+            norm_metadata.experimental_arrow.index_column_name = index_column
+            # It would be cleaner if the index column position finding happened here. However, finding a column by name
+            # is O(n), and we have to iterate through the columns in the C++ layer anyway
+        return arcticdb_record_batches, norm_metadata
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
-        renames_for_table = {}
-        timezones = {}
-        range_index = None
-        pandas_indexes = None
-        renames_for_pandas_metadata = {}
 
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
@@ -723,13 +748,32 @@ class ArrowTableNormalizer(Normalizer):
             # For pandas series we always return a dataframe (to not lose the index information).
             # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
+        elif input_type == "experimental_arrow":
+            if norm_meta.experimental_arrow.has_index:
+                index_column_position = norm_meta.experimental_arrow.index_column_position
+                if index_column_position != 0 and index_column_position < item.num_columns:
+                    # Verified experimentally that this is zero-copy as the docs do not specify
+                    item = item.select(
+                        list(range(1, index_column_position + 1))
+                        + [0]
+                        + list(range(index_column_position + 1, item.num_columns))
+                    )
+            return item
         else:
             raise ArcticNativeException(f"Expected dataframe or series input, actual: {input_type}")
+
+        renames_for_table = {}
+        timezones = {}
+        range_index = None
+        pandas_indexes = None
+        renames_for_pandas_metadata = {}
 
         index_type = pandas_meta.WhichOneof("index_type")
         if index_type == "index":
             index_meta = pandas_meta.index
-            if index_meta.is_physically_stored:
+            # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
+            is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
+            if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
                 pandas_indexes = 1
                 if index_meta.tz:
                     timezones[0] = index_meta.tz
@@ -743,14 +787,14 @@ class ArrowTableNormalizer(Normalizer):
                     "name": index_name,
                     "start": index_meta.start,
                     "step": index_meta.step,
-                    "stop": index_meta.start + len(item)*index_meta.step,
+                    "stop": index_meta.start + len(item) * index_meta.step,
                 }
         else:
             multi_index_meta = pandas_meta.multi_index
-            pandas_indexes = multi_index_meta.field_count+1
+            pandas_indexes = multi_index_meta.field_count + 1
             fake_field_pos = set(multi_index_meta.fake_field_pos)
             for index_col_idx in range(pandas_indexes):
-                if index_col_idx==0:
+                if index_col_idx == 0:
                     tz = multi_index_meta.tz
                 else:
                     tz = multi_index_meta.timezone.get(index_col_idx, "")
@@ -759,7 +803,7 @@ class ArrowTableNormalizer(Normalizer):
 
                 if index_col_idx in fake_field_pos:
                     renames_for_pandas_metadata[index_col_idx] = None
-                elif index_col_idx==0:
+                elif index_col_idx == 0:
                     renames_for_table[0] = multi_index_meta.name
                 else:
                     new_name = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
@@ -784,7 +828,9 @@ class ArrowTableNormalizer(Normalizer):
                 elif col_data.original_name != col:
                     renames_for_pandas_metadata[i] = col_data.original_name
 
-        op = ArrowNormalizationOperations(renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata)
+        op = ArrowNormalizationOperations(
+            renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata
+        )
         item = self.apply_pyarrow_operations(item, op)
         return item
 
@@ -949,7 +995,6 @@ class DataFrameNormalizer(_PandasNormalizer):
         else:
             self._skip_df_consolidation = False
 
-
     def df_without_consolidation(self, columns, index, item, n_indexes, data):
         """
         This is a hack that allows us to monkey-patch the DataFrame Block Manager so it doesn't do any
@@ -992,9 +1037,24 @@ class DataFrameNormalizer(_PandasNormalizer):
 
         return df_from_arrays(item.data, columns, index, n_indexes)
 
+    def _pandas_norm_meta_from_arrow_norm_meta(
+        self, arrow_table: NormalizationMetadata.ExperimentalArrow
+    ) -> NormalizationMetadata.PandasDataFrame:
+        res = NormalizationMetadata.PandasDataFrame()
+        if arrow_table.has_index:
+            res.common.index.is_physically_stored = True
+            res.common.index.name = arrow_table.index_column_name
+            # Handle timezones, issue number 9929831600
+        else:
+            res.common.index.step = 1
+        return res
+
     # @profile
     def denormalize(self, item, norm_meta):
         # type: (_FrameData, NormalizationMetadata.PandaDataFrame)->DataFrame
+
+        if isinstance(norm_meta, NormalizationMetadata.ExperimentalArrow):
+            norm_meta = self._pandas_norm_meta_from_arrow_norm_meta(norm_meta)
 
         if norm_meta.HasField("multi_columns"):
             raise ArcticDbNotYetImplemented(
@@ -1379,6 +1439,7 @@ class CompositeNormalizer(Normalizer):
         self.series = SeriesNormalizer()
         self.tf = TimeFrameNormalizer()
         self.np = NdArrayNormalizer()
+        self.pa = ArrowTableNormalizer()
 
         if use_norm_failure_handler_known_types and fallback_normalizer is not None:
             self.df = KnownTypeFallbackOnError(self.df, fallback_normalizer)
@@ -1389,14 +1450,22 @@ class CompositeNormalizer(Normalizer):
         self.msg_pack_denorm = MsgPackNormalizer()  # must exist for deserialization
         self.fallback_normalizer = fallback_normalizer
 
-
     def set_skip_df_consolidation(self):
         self.df.set_skip_df_consolidation()
 
+    # Can remove allow_arrow_input once Arrow writes fully supported, but need it to be opt-in initially in case anyone is pickling pyarrow Tables already
     def _normalize(
-        self, item, string_max_len=None, dynamic_strings=False, coerce_columns=None, empty_types=False, **kwargs
+        self,
+        item,
+        string_max_len=None,
+        dynamic_strings=False,
+        coerce_columns=None,
+        empty_types=False,
+        index_column=None,
+        allow_arrow_input=False,
+        **kwargs,
     ):
-        normalizer = self.get_normalizer_for_type(item)
+        normalizer = self.get_normalizer_for_type(item, allow_arrow_input)
 
         if not normalizer:
             return item, None
@@ -1408,10 +1477,11 @@ class CompositeNormalizer(Normalizer):
             dynamic_strings=dynamic_strings,
             coerce_columns=coerce_columns,
             empty_types=empty_types,
+            index_column=index_column,
             **kwargs,
         )
 
-    def get_normalizer_for_type(self, item):
+    def get_normalizer_for_type(self, item, allow_arrow_input=False):
         # TODO: this should use customcompositenormalizer as well.
         if isinstance(item, DataFrame):
             if (
@@ -1437,6 +1507,9 @@ class CompositeNormalizer(Normalizer):
 
         if isinstance(item, np.ndarray):
             return self.np.normalize
+
+        if _PYARROW_AVAILABLE and isinstance(item, pa.Table) and allow_arrow_input:
+            return self.pa.normalize
 
         if self.fallback_normalizer is not None:
             # Msgpack normalize if everything else fails.
@@ -1490,6 +1563,8 @@ class CompositeNormalizer(Normalizer):
                 return self.tf.denormalize(item, norm_meta.ts)
             elif input_type == "np":
                 return self.np.denormalize(item, norm_meta.np)
+            elif input_type == "experimental_arrow":
+                return self.df.denormalize(item, norm_meta.experimental_arrow)
             elif input_type == "msg_pack":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 
@@ -1590,7 +1665,9 @@ def normalize_dataframe(df, **kwargs):
 T = TypeVar("T", bound=Union[pd.DataFrame, pd.Series])
 
 
-def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestamp) -> T:
+def restrict_data_to_date_range_only(
+    data: T, *, start: Timestamp, end: Timestamp, index_column: Optional[str] = None
+) -> T:
     """Return a copy of `data` filtered so that its contents lie between `start` and `end` (inclusive).
 
     `data` must be time-indexed.
@@ -1614,11 +1691,20 @@ def restrict_data_to_date_range_only(data: T, *, start: Timestamp, end: Timestam
             # of duplicating exception messages.
             raise SortingException("E_UNSORTED_DATA When calling update, the input data must be sorted.")
         data = data.loc[pd.to_datetime(start) : pd.to_datetime(end)]
+    elif _PYARROW_AVAILABLE and isinstance(data, pa.Table):
+        check(index_column is not None, "Cannot update with pyarrow Table without specifying index column")
+        col = data.column(index_column)
+        start, end = _strip_tz(start, end)
+        check(
+            start <= col[0].as_py().tz_localize(None) and end >= col[-1].as_py().tz_localize(None),
+            "update with date_range and pyarrow Table not yet supported with date_range overlapping the data",
+        )
     else:  # non-Pandas, try to slice it anyway
         if not getattr(data, "timezone", None):
             start, end = _strip_tz(start, end)
         data = data[
-            start.to_pydatetime(warn=False) - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
+            start.to_pydatetime(warn=False)
+            - timedelta(microseconds=1) : end.to_pydatetime(warn=False)
             + timedelta(microseconds=1)
         ]
     return data

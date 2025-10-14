@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
@@ -30,22 +31,15 @@ struct LmdbKeepalive {
     std::shared_ptr<LmdbInstance> instance_;
     std::shared_ptr<::lmdb::txn> transaction_;
 
-    LmdbKeepalive(
-        std::shared_ptr<LmdbInstance> instance,
-        std::shared_ptr<::lmdb::txn> transaction
-    ) :
+    LmdbKeepalive(std::shared_ptr<LmdbInstance> instance, std::shared_ptr<::lmdb::txn> transaction) :
         instance_(std::move(instance)),
-        transaction_(std::move(transaction)) {
-    }
+        transaction_(std::move(transaction)) {}
 };
 
 static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& object_name) {
     auto error_code = e.code();
 
-    auto error_message_suffix = fmt::format("LMDBError#{}: {} for object {}",
-                                            error_code,
-                                            e.what(),
-                                            object_name);
+    auto error_message_suffix = fmt::format("LMDBError#{}: {} for object {}", error_code, e.what(), object_name);
 
     if (error_code == MDB_NOTFOUND) {
         throw KeyNotFoundException(fmt::format("Key Not Found Error: {}", error_message_suffix));
@@ -64,15 +58,19 @@ static void raise_lmdb_exception(const ::lmdb::error& e, const std::string& obje
 
 ::lmdb::env& LmdbStorage::env() {
     storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-        lmdb_instance_,
-        "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library has been deleted");
+            lmdb_instance_,
+            "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library "
+            "has been deleted"
+    );
     return lmdb_instance_->env_;
 }
 
 ::lmdb::dbi& LmdbStorage::get_dbi(const std::string& db_name) {
     storage::check<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-        lmdb_instance_,
-        "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library has been deleted");
+            lmdb_instance_,
+            "Unexpected LMDB Error: Invalid operation: LMDB environment has been removed. Possibly because the library "
+            "has been deleted"
+    );
     return *(lmdb_instance_->dbi_by_key_type_.at(db_name));
 }
 
@@ -96,9 +94,7 @@ void LmdbStorage::do_write_internal(KeySegmentPair& key_seg, ::lmdb::txn& txn) {
     }
 }
 
-std::string LmdbStorage::name() const {
-    return fmt::format("lmdb_storage-{}", lib_dir_.string());
-}
+std::string LmdbStorage::name() const { return fmt::format("lmdb_storage-{}", lib_dir_.string()); }
 
 void LmdbStorage::do_write(KeySegmentPair& key_seg) {
     ARCTICDB_SAMPLE(LmdbStorageWrite, 0)
@@ -124,7 +120,8 @@ void LmdbStorage::do_update(KeySegmentPair& key_seg, UpdateOpts opts) {
     if (!failed_deletes.empty()) {
         ARCTICDB_SUBSAMPLE(LmdbStorageCommit, 0)
         txn.commit();
-        std::string err_message = fmt::format("do_update called with upsert=false on non-existent key(s): {}", failed_deletes);
+        std::string err_message =
+                fmt::format("do_update called with upsert=false on non-existent key(s): {}", failed_deletes);
         throw KeyNotFoundException(failed_deletes, err_message);
     }
     do_write_internal(key_seg, txn);
@@ -147,7 +144,13 @@ KeySegmentPair LmdbStorage::do_read(VariantKey&& variant_key, ReadKeyOpts) {
         if (segment.has_value()) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
             segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
-            ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data",variant_key_type(variant_key), variant_key_view(variant_key), segment->size());
+            ARCTICDB_DEBUG(
+                    log::storage(),
+                    "Read key {}: {}, with {} bytes of data",
+                    variant_key_type(variant_key),
+                    variant_key_view(variant_key),
+                    segment->size()
+            );
             return {VariantKey{variant_key}, std::move(*segment)};
         } else {
             ARCTICDB_DEBUG(log::storage(), "Failed to find segment for key {}", variant_key_view(variant_key));
@@ -177,7 +180,13 @@ void LmdbStorage::do_read(VariantKey&& key, const ReadVisitor& visitor, storage:
         if (segment.has_value()) {
             ARCTICDB_SUBSAMPLE(LmdbStorageVisitSegment, 0)
             segment->set_keepalive(std::any{LmdbKeepalive{lmdb_instance_, std::move(txn)}});
-            ARCTICDB_DEBUG(log::storage(), "Read key {}: {}, with {} bytes of data",variant_key_type(key), variant_key_view(key), segment->size());
+            ARCTICDB_DEBUG(
+                    log::storage(),
+                    "Read key {}: {}, with {} bytes of data",
+                    variant_key_type(key),
+                    variant_key_view(key),
+                    segment->size()
+            );
             visitor(key, std::move(*segment));
         } else {
             ARCTICDB_DEBUG(log::storage(), "Failed to find segment for key {}", variant_key_view(key));
@@ -213,11 +222,13 @@ bool LmdbStorage::do_key_exists(const VariantKey& key) {
     return false;
 }
 
-boost::container::small_vector<VariantKey, 1> LmdbStorage::do_remove_internal(std::span<VariantKey> variant_keys, ::lmdb::txn& txn, RemoveOpts opts) {
+boost::container::small_vector<VariantKey, 1> LmdbStorage::do_remove_internal(
+        std::span<VariantKey> variant_keys, ::lmdb::txn& txn, RemoveOpts opts
+) {
     boost::container::small_vector<VariantKey, 1> failed_deletes;
 
     ARCTICDB_DEBUG_THROW(5)
-    for(auto&& key : variant_keys) {
+    for (auto&& key : variant_keys) {
         auto db_name = fmt::format("{}", variant_key_type(key));
         ARCTICDB_SUBSAMPLE(LmdbStorageOpenDb, 0)
         try {
@@ -300,9 +311,9 @@ bool LmdbStorage::do_fast_delete() {
     return true;
 }
 
-bool LmdbStorage::do_iterate_type_until_match(KeyType key_type,
-                                              const IterateTypePredicate& visitor,
-                                              const std::string& prefix) {
+bool LmdbStorage::do_iterate_type_until_match(
+        KeyType key_type, const IterateTypePredicate& visitor, const std::string& prefix
+) {
     ARCTICDB_SAMPLE(LmdbStorageItType, 0)
     auto txn = ::lmdb::txn::begin(env(), nullptr, MDB_RDONLY); // scoped abort on
     std::string type_db = fmt::format("{}", key_type);
@@ -325,8 +336,8 @@ bool LmdbStorage::do_iterate_type_until_match(KeyType key_type,
 bool LmdbStorage::do_is_path_valid(std::string_view path ARCTICDB_UNUSED) const {
 #ifdef _WIN32
     // Note that \ and / are valid characters as they will create subdirectories which are expected to work.
-    // The filenames such as COM1, LPT1, AUX, CON etc. are reserved but not strictly disallowed by Windows as directory names.
-    // Therefore, paths with these names are allowed.
+    // The filenames such as COM1, LPT1, AUX, CON etc. are reserved but not strictly disallowed by Windows as directory
+    // names. Therefore, paths with these names are allowed.
     std::string_view invalid_win32_chars = "<>:\"|?*";
     auto found = path.find_first_of(invalid_win32_chars);
     if (found != std::string::npos) {
@@ -350,9 +361,11 @@ void remove_db_files(const fs::path& lib_path) {
                 fs::remove(file_path);
             }
         } catch (const std::filesystem::filesystem_error& e) {
-            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-                fmt::format("Unexpected LMDB Error: Failed to remove LMDB file at path: {} error: {}",
-                            file_path.string(), e.what()));
+            raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(fmt::format(
+                    "Unexpected LMDB Error: Failed to remove LMDB file at path: {} error: {}",
+                    file_path.string(),
+                    e.what()
+            ));
         }
     }
 
@@ -364,9 +377,9 @@ void remove_db_files(const fs::path& lib_path) {
             try {
                 fs::remove_all(lib_path);
             } catch (const fs::filesystem_error& e) {
-                raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(
-                    fmt::format("Unexpected LMDB Error: Failed to remove directory: {} error: {}",
-                                lib_path.string(), e.what()));
+                raise<ErrorCode::E_UNEXPECTED_LMDB_ERROR>(fmt::format(
+                        "Unexpected LMDB Error: Failed to remove directory: {} error: {}", lib_path.string(), e.what()
+                ));
             }
         }
     }
@@ -382,7 +395,7 @@ template<class T>
 T or_else(T val, T or_else_val, T def = T()) {
     return val == def ? or_else_val : val;
 }
-} // anonymous
+} // namespace
 
 LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const Config& conf) :
     Storage(library_path, mode) {
@@ -401,8 +414,13 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     warn_if_lmdb_already_open();
 
     if (!fs::exists(lib_dir_)) {
-        util::check_arg(mode > OpenMode::READ, "Missing dir {} for lib={}. mode={}",
-                        lib_dir_.generic_string(), lib_path_str, mode);
+        util::check_arg(
+                mode > OpenMode::READ,
+                "Missing dir {} for lib={}. mode={}",
+                lib_dir_.generic_string(),
+                lib_path_str,
+                mode
+        );
 
         fs::create_directories(lib_dir_);
     }
@@ -415,12 +433,11 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
     }
 
     const bool is_read_only = ((conf.flags() & MDB_RDONLY) != 0);
-    util::check_arg(is_read_only || mode != OpenMode::READ,
-                    "Flags {} and operating mode {} are conflicting",
-                    conf.flags(), mode
+    util::check_arg(
+            is_read_only || mode != OpenMode::READ, "Flags {} and operating mode {} are conflicting", conf.flags(), mode
     );
-    // Windows needs a sensible size as it allocates disk for the whole file even before any writes. Linux just gets an arbitrarily large size
-    // that it probably won't ever reach.
+    // Windows needs a sensible size as it allocates disk for the whole file even before any writes. Linux just gets an
+    // arbitrarily large size that it probably won't ever reach.
 #ifdef _WIN32
     // At least enough for 300 cols and 1M rows
     constexpr uint64_t default_map_size = 2ULL * (1ULL << 30); /* 2 GiB */
@@ -447,29 +464,31 @@ LmdbStorage::LmdbStorage(const LibraryPath& library_path, OpenMode mode, const C
 
     txn.commit();
 
-    ARCTICDB_DEBUG(log::storage(),
-                   "Opened lmdb storage at {} with map size {}",
-                   lib_dir_.string(),
-                   format_bytes(mapsize));
+    ARCTICDB_DEBUG(
+            log::storage(), "Opened lmdb storage at {} with map size {}", lib_dir_.string(), format_bytes(mapsize)
+    );
 }
 
 void LmdbStorage::warn_if_lmdb_already_open() {
     uint64_t& count_for_pid = ++times_path_opened[lib_dir_.string()];
-    // Only warn for the "base" config library to avoid spamming users with more warnings if they decide to ignore it and continue
+    // Only warn for the "base" config library to avoid spamming users with more warnings if they decide to ignore it
+    // and continue
     if (count_for_pid != 1 && lib_dir_.string().find(CONFIG_LIBRARY_NAME) != std::string::npos) {
         std::filesystem::path user_facing_path = lib_dir_;
         // Strip magic name from warning as it will confuse users
         user_facing_path.remove_filename();
         log::storage().warn(fmt::format(
-            "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
-            "You should only open a single Arctic instance over a given LMDB path. "
-            "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
-            "process and then try again. Current process ID=[{}]",
-            user_facing_path.string(), getpid()));
+                "LMDB path at {} has already been opened in this process which is not supported by LMDB. "
+                "You should only open a single Arctic instance over a given LMDB path. "
+                "To continue safely, you should delete this Arctic instance and any others over the LMDB path in this "
+                "process and then try again. Current process ID=[{}]",
+                user_facing_path.string(),
+                getpid()
+        ));
     }
 }
 
-LmdbStorage::LmdbStorage(LmdbStorage&& other) noexcept:
+LmdbStorage::LmdbStorage(LmdbStorage&& other) noexcept :
     Storage(std::move(static_cast<Storage&>(other))),
     write_mutex_(std::move(other.write_mutex_)),
     lmdb_instance_(std::move(other.lmdb_instance_)),
@@ -484,8 +503,6 @@ LmdbStorage::~LmdbStorage() {
     }
 }
 
-void LmdbStorage::reset_warning_counter() {
-    times_path_opened = std::unordered_map<std::string, uint64_t>{};
-}
+void LmdbStorage::reset_warning_counter() { times_path_opened = std::unordered_map<std::string, uint64_t>{}; }
 
 } // namespace arcticdb::storage::lmdb

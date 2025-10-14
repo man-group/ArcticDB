@@ -35,7 +35,7 @@ dependencies:
   - openssl
   - libcurl
   - bitmagic
-  - sparrow >=1
+  - sparrow-devel==1.2.0
   - spdlog
   - azure-core-cpp
   - azure-identity-cpp

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -29,24 +30,13 @@ using BitIndex = bm::bvector<>::rs_index_type;
 }
 } // namespace util
 
-constexpr bm::bvector<>::size_type bv_size(uint64_t val) {
-    return static_cast<bm::bvector<>::size_type>(val);
-}
+constexpr bm::bvector<>::size_type bv_size(uint64_t val) { return static_cast<bm::bvector<>::size_type>(val); }
 
 // The number of bytes needed to hold num_bits in a packed bitset
-constexpr size_t bitset_packed_size_bytes(size_t num_bits) {
-    return (num_bits + 7) / 8;
-}
+constexpr size_t bitset_packed_size_bytes(size_t num_bits) { return (num_bits + 7) / 8; }
 
-inline void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr) {
-    std::memset(dest_ptr, 0, bitset_packed_size_bytes(bv.size()));
-    auto last = bv.end();
-    for (auto en = bv.first(); en != last; ++en) {
-        size_t bit_pos = *en;
-        size_t byte_idx = bit_pos / 8;
-        size_t bit_idx = bit_pos % 8;
-        dest_ptr[byte_idx] |= (uint8_t(1) << bit_idx);
-    }
-}
+void bitset_to_packed_bits(const bm::bvector<>& bv, uint8_t* dest_ptr);
 
-}
+void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t offset, uint8_t* dest_ptr);
+
+} // namespace arcticdb

@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -16,21 +17,20 @@ using namespace arcticdb::pipelines::index;
 struct TestSegment {
     TestSegment() :
         start_(TypeDescriptor{DataType::UINT64, Dimension::Dim0}, Sparsity::NOT_PERMITTED),
-        end_(TypeDescriptor{DataType::UINT64, Dimension::Dim0}, Sparsity::NOT_PERMITTED) {
-    }
+        end_(TypeDescriptor{DataType::UINT64, Dimension::Dim0}, Sparsity::NOT_PERMITTED) {}
 
     Column start_;
     Column end_;
     position_t row_ = 0;
 
     const Column& column(position_t pos) const {
-        switch(pos) {
+        switch (pos) {
         case int(pipelines::index::Fields::start_index):
             return start_;
-            case int(pipelines::index::Fields::end_index):
-                return end_;
-                default:
-                    util::raise_rte("Unknown index");
+        case int(pipelines::index::Fields::end_index):
+            return end_;
+        default:
+            util::raise_rte("Unknown index");
         }
     }
 
@@ -44,17 +44,10 @@ struct TestSegment {
 struct TestContainer {
     mutable TestSegment seg_;
 
-    TestSegment& seg() const {
-        return seg_;
-    }
+    TestSegment& seg() const { return seg_; }
 
-    size_t size() const {
-        return seg_.end_.row_count();
-    }
+    size_t size() const { return seg_.end_.row_count(); }
 
-    bool empty() const {
-        return seg_.end_.row_count() == 0;
-    }
+    bool empty() const { return seg_.end_.row_count() == 0; }
 };
-} //namespace arcticdb
-
+} // namespace arcticdb

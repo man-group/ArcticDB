@@ -16,7 +16,8 @@ import pytest
 from arcticdb.exceptions import (
     SortingException,
     SchemaException,
-    UserInputException, ArcticDbNotYetImplemented,
+    UserInputException,
+    ArcticDbNotYetImplemented,
 )
 from arcticdb.util.test import (
     assert_frame_equal,
@@ -78,7 +79,7 @@ def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
     if lib.get_backing_store() == "mongo_storage":
         with pytest.raises(ArcticDbNotYetImplemented):
             arctic_library_v1._dev_tools.remove_incompletes(["sym"])
-        return # remove_incompletes not implemented on Mongo 8784267430
+        return  # remove_incompletes not implemented on Mongo 8784267430
 
     with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
         lib_tool = lib.library_tool()
@@ -86,9 +87,12 @@ def test_remove_incomplete(arctic_library_v1, batch, batch_size, lib_name):
         assert lib.list_symbols_with_incomplete_data() == []
 
         if batch:
+
             def remove(sym):
                 arctic_library_v1._dev_tools.remove_incompletes([sym])
+
         else:
+
             def remove(sym):
                 lib.remove_incomplete(sym)
 
@@ -129,7 +133,7 @@ def test_remove_incompletes(arctic_library_v1, batch_size):
     if arctic_library_v1._nvs.get_backing_store() == "mongo_storage":
         with pytest.raises(ArcticDbNotYetImplemented):
             arctic_library_v1._dev_tools.remove_incompletes(["sym"])
-        return # remove_incompletes not implemented on Mongo 8784267430
+        return  # remove_incompletes not implemented on Mongo 8784267430
 
     with config_context_multi({"Storage.DeleteBatchSize": batch_size, "S3Storage.DeleteBatchSize": 2 * batch_size}):
         lib = arctic_library_v1
@@ -189,18 +193,20 @@ def test_remove_incompletes_no_common_prefix(basic_store):
     assert sorted(lib.get_staged_symbols()) == ["tzm"]
 
 
-@pytest.mark.parametrize("num_segments_live_during_compaction, num_io_threads, num_cpu_threads", [
-    (1, 1, 1),
-    (10, 1, 1),
-    (1, 10, 1),
-    (None, None, None)
-])
+@pytest.mark.parametrize(
+    "num_segments_live_during_compaction, num_io_threads, num_cpu_threads",
+    [(1, 1, 1), (10, 1, 1), (1, 10, 1), (None, None, None)],
+)
 @pytest.mark.storage
 def test_parallel_write(basic_store_tiny_segment, num_segments_live_during_compaction, num_io_threads, num_cpu_threads):
     try:
-        with config_context_multi({"VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
-                                   "VersionStore.NumIOThreads": num_io_threads,
-                                   "VersionStore.NumCPUThreads": num_cpu_threads}):
+        with config_context_multi(
+            {
+                "VersionStore.NumSegmentsLiveDuringCompaction": num_segments_live_during_compaction,
+                "VersionStore.NumIOThreads": num_io_threads,
+                "VersionStore.NumCPUThreads": num_cpu_threads,
+            }
+        ):
             adb_async.reinit_task_scheduler()
             if num_io_threads:
                 assert adb_async.io_thread_count() == num_io_threads
@@ -1543,31 +1549,44 @@ def test_staging_in_chunks_default_settings(lmdb_storage, lib_name):
     assert_frame_equal(df, data)
     assert df.index.is_monotonic_increasing
 
+
 class TestConvertIntToFloat:
     @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
     @pytest.mark.parametrize("version_store", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
     def test_write_convert_same_types(self, version_store, dtype, request):
         lib = request.getfixturevalue(version_store)
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
-        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        df1 = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
+        df2 = pd.DataFrame(
+            {"a": np.array([4, 5, 6], dtype=dtype)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns")
+        )
         lib.write(sym, df1, parallel=True)
         lib.write(sym, df2, parallel=True)
         lib.compact_incomplete(sym, append=False, convert_int_to_float=True)
         # convert_int_to_float is applied only to integer dtypes and it always converts the dtype to np.float64
         # If the dtype is np.float32 it should not be changed
         expected_dtype = np.float32 if dtype == np.float32 else np.float64
-        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        expected = pd.DataFrame(
+            {"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns")
+        )
         assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
 
     @pytest.mark.parametrize("dtype1", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
     @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
     @pytest.mark.parametrize("append", [True, False])
-    def test_write_convert_different_types_dynamic_schema(self, lmdb_version_store_dynamic_schema_v1, dtype1, dtype2, append):
+    def test_write_convert_different_types_dynamic_schema(
+        self, lmdb_version_store_dynamic_schema_v1, dtype1, dtype2, append
+    ):
         lib = lmdb_version_store_dynamic_schema_v1
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype1)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
-        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        df1 = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=dtype1)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
+        df2 = pd.DataFrame(
+            {"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns")
+        )
         lib.write(sym, df1, parallel=True)
         lib.write(sym, df2, parallel=True)
         lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
@@ -1575,7 +1594,9 @@ class TestConvertIntToFloat:
         # the other is of integer type, the integer column will be promoted to float64 and then the float32 will
         # be promoted to float64.
         expected_dtype = np.float32 if dtype1 == dtype2 == np.float32 else np.float64
-        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        expected = pd.DataFrame(
+            {"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns")
+        )
         assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
 
     @pytest.mark.parametrize("dtype1", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64, np.float32])
@@ -1584,8 +1605,12 @@ class TestConvertIntToFloat:
     def test_write_convert_different_types_static_schema(self, lmdb_version_store_v1, dtype1, dtype2, append):
         lib = lmdb_version_store_v1
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype1)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
-        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        df1 = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=dtype1)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
+        df2 = pd.DataFrame(
+            {"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns")
+        )
         lib.write(sym, df1, parallel=True)
         lib.write(sym, df2, parallel=True)
         # Convert int to float should not affect columns of float32 type. However, if one column is of float32 type and
@@ -1600,7 +1625,9 @@ class TestConvertIntToFloat:
         else:
             lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
             expected_dtype = np.float32 if dtype1 == dtype2 == np.float32 else np.float64
-            expected = pd.DataFrame({"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+            expected = pd.DataFrame(
+                {"a": np.arange(1, 7, dtype=expected_dtype)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns")
+            )
             assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
 
     @pytest.mark.parametrize("dtype2", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
@@ -1608,19 +1635,30 @@ class TestConvertIntToFloat:
     def test_append_to_existing_convert_different_types(self, version_store, dtype2, request):
         lib = request.getfixturevalue(version_store)
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
-        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        df1 = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
+        df2 = pd.DataFrame(
+            {"a": np.array([4, 5, 6], dtype=dtype2)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns")
+        )
         lib.write(sym, df1)
         lib.write(sym, df2, parallel=True)
         lib.compact_incomplete(sym, append=True, convert_int_to_float=True)
-        expected = pd.DataFrame({"a": np.arange(1, 7, dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns"))
+        expected = pd.DataFrame(
+            {"a": np.arange(1, 7, dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=6, freq="ns")
+        )
         assert_frame_equal(expected, lib.read(sym).data, check_dtype=True)
+
     @pytest.mark.parametrize("dtype", [np.int32, np.uint16, np.int8, np.int64, np.uint64, np.float64])
     def test_float32_is_not_converted_write(self, lmdb_version_store_v1, dtype):
         lib = lmdb_version_store_v1
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
-        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=np.float32)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        df1 = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
+        df2 = pd.DataFrame(
+            {"a": np.array([4, 5, 6], dtype=np.float32)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns")
+        )
         lib.write(sym, df1, parallel=True)
         lib.write(sym, df2, parallel=True)
         with pytest.raises(SchemaException) as exception_info:
@@ -1631,8 +1669,12 @@ class TestConvertIntToFloat:
     def test_float32_is_not_converted_append(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
-        df2 = pd.DataFrame({"a": np.array([4, 5, 6], dtype=np.float32)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns"))
+        df1 = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=np.double)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
+        df2 = pd.DataFrame(
+            {"a": np.array([4, 5, 6], dtype=np.float32)}, index=pd.date_range(pd.Timestamp(3), periods=3, freq="ns")
+        )
         lib.write(sym, df1)
         lib.write(sym, df2, parallel=True)
         with pytest.raises(SchemaException) as exception_info:
@@ -1640,12 +1682,16 @@ class TestConvertIntToFloat:
         assert "FLOAT32" in str(exception_info.value)
         assert "FLOAT64" in str(exception_info.value)
 
-    @pytest.mark.parametrize("data_dtype", [("string_value", object), (pd.Timestamp(0), "datetime64[ns]"), (3.14, np.float32)])
+    @pytest.mark.parametrize(
+        "data_dtype", [("string_value", object), (pd.Timestamp(0), "datetime64[ns]"), (3.14, np.float32)]
+    )
     @pytest.mark.parametrize("append", [True, False])
     def test_non_int_columns_are_not_affected(self, lmdb_version_store_v1, data_dtype, append):
         lib = lmdb_version_store_v1
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([data_dtype[0]], dtype=data_dtype[1])}, index=pd.DatetimeIndex([pd.Timestamp(0)]))
+        df1 = pd.DataFrame(
+            {"a": np.array([data_dtype[0]], dtype=data_dtype[1])}, index=pd.DatetimeIndex([pd.Timestamp(0)])
+        )
         lib.write(sym, df1, parallel=True)
         lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
         assert_frame_equal(lib.read(sym).data, df1, check_dtype=True)
@@ -1656,11 +1702,16 @@ class TestConvertIntToFloat:
     def test_single_segment(self, version_store, dtype, request, append):
         lib = request.getfixturevalue(version_store)
         sym = "sym"
-        df1 = pd.DataFrame({"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        df1 = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=dtype)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
         lib.write(sym, df1, parallel=True)
         lib.compact_incomplete(sym, append=append, convert_int_to_float=True)
-        expected = pd.DataFrame({"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns"))
+        expected = pd.DataFrame(
+            {"a": np.array([1, 2, 3], dtype=np.float64)}, index=pd.date_range(pd.Timestamp(0), periods=3, freq="ns")
+        )
         assert_frame_equal(lib.read(sym).data, expected, check_dtype=True)
+
 
 class TestEmptyDataFrames:
     """
@@ -1672,6 +1723,7 @@ class TestEmptyDataFrames:
     Note with introduction of empty index and empty types (feature flagged at the moment) the tests might have to be
     changed. Refer to TestEmptyIndexPreservesIndexNames class comment in python/tests/unit/arcticdb/version_store/test_empty_writes.py
     """
+
     def test_append_to_empty(self, lmdb_version_store_v1):
         lib = lmdb_version_store_v1
         symbol = "symbol"
@@ -1699,8 +1751,8 @@ class TestEmptyDataFrames:
         "to_append",
         [
             pd.DataFrame({"wrong_col": [1]}, pd.DatetimeIndex([pd.Timestamp(0)])),
-            pd.DataFrame({"a": [1], "wrong_col": [2]}, pd.DatetimeIndex([pd.Timestamp(0)]))
-        ]
+            pd.DataFrame({"a": [1], "wrong_col": [2]}, pd.DatetimeIndex([pd.Timestamp(0)])),
+        ],
     )
     def test_appending_to_empty_with_differing_columns_fails(self, lmdb_version_store_v1, to_append):
         lib = lmdb_version_store_v1

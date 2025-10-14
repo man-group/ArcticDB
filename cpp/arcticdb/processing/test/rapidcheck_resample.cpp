@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <algorithm>
@@ -18,9 +19,9 @@
 using namespace arcticdb;
 
 auto generate_bucket_boundaries(std::vector<timestamp>&& bucket_boundaries) {
-    return [bucket_boundaries = std::move(bucket_boundaries)](timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin) mutable {
-        return bucket_boundaries;
-    };
+    return [bucket_boundaries = std::move(bucket_boundaries)](
+                   timestamp, timestamp, std::string_view, ResampleBoundary, timestamp, ResampleOrigin
+           ) mutable { return bucket_boundaries; };
 }
 
 RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
@@ -51,7 +52,8 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
         RowRange row_range{row_range_start, row_range_end};
         auto start_idx_value = index_values[row_range_start];
         auto end_idx_value = index_values[row_range_end - 1] + 1;
-        auto key = AtomKeyBuilder().start_index(start_idx_value).end_index(end_idx_value).build<KeyType::TABLE_DATA>(sym);
+        auto key =
+                AtomKeyBuilder().start_index(start_idx_value).end_index(end_idx_value).build<KeyType::TABLE_DATA>(sym);
         sorted_ranges_and_keys.emplace_back(row_range, col_range, key);
     }
     auto ranges_and_keys = sorted_ranges_and_keys;
@@ -83,8 +85,8 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
 
     // Map from bucket_id to indexes in sorted_ranges_and_keys of row-slices needed for this bucket
     std::vector<std::vector<size_t>> bucket_to_row_range_map(bucket_boundary_pairs.size(), std::vector<size_t>());
-    for (const auto& [bucket_id, bucket_boundary_pair]: folly::enumerate(bucket_boundary_pairs)) {
-        for (const auto& [idx, range]: folly::enumerate(sorted_ranges_and_keys)) {
+    for (const auto& [bucket_id, bucket_boundary_pair] : folly::enumerate(bucket_boundary_pairs)) {
+        for (const auto& [idx, range] : folly::enumerate(sorted_ranges_and_keys)) {
             if (range.key_.start_time() <= bucket_boundary_pair.second &&
                 range.key_.end_time() > bucket_boundary_pair.first) {
                 bucket_to_row_range_map[bucket_id].emplace_back(idx);
@@ -94,13 +96,13 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
 
     std::vector<std::vector<size_t>> expected_result;
     std::optional<size_t> current_range_idx;
-    for (const auto& row_range_ids: bucket_to_row_range_map) {
+    for (const auto& row_range_ids : bucket_to_row_range_map) {
         if (!row_range_ids.empty()) {
             if (current_range_idx.has_value() && row_range_ids.front() == *current_range_idx) {
                 if (row_range_ids.front() != expected_result.back().front()) {
                     expected_result.emplace_back(row_range_ids);
                 } else {
-                    for (const auto &id: row_range_ids) {
+                    for (const auto& id : row_range_ids) {
                         if (id > expected_result.back().back()) {
                             expected_result.back().emplace_back(id);
                         }
@@ -115,12 +117,16 @@ RC_GTEST_PROP(Resample, StructureForProcessing, ()) {
 
     ProcessingConfig processing_config{false, index_values.size(), IndexDescriptor::Type::TIMESTAMP};
     if (left_boundary_closed) {
-        ResampleClause<ResampleBoundary::LEFT> resample_clause{"dummy", ResampleBoundary::LEFT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0};
+        ResampleClause<ResampleBoundary::LEFT> resample_clause{
+                "dummy", ResampleBoundary::LEFT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0
+        };
         resample_clause.set_processing_config(processing_config);
         auto result = resample_clause.structure_for_processing(ranges_and_keys);
         RC_ASSERT(expected_result == result);
     } else {
-        ResampleClause<ResampleBoundary::RIGHT> resample_clause{"dummy", ResampleBoundary::RIGHT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0};
+        ResampleClause<ResampleBoundary::RIGHT> resample_clause{
+                "dummy", ResampleBoundary::RIGHT, generate_bucket_boundaries(std::move(bucket_boundaries)), 0, 0
+        };
         resample_clause.set_processing_config(processing_config);
         auto result = resample_clause.structure_for_processing(ranges_and_keys);
         RC_ASSERT(expected_result == result);

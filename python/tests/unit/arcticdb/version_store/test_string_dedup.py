@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import gc
 import random
 import sys
@@ -16,6 +17,9 @@ import pytest
 from datetime import datetime as dt
 
 from arcticdb.util.test import random_ascii_strings
+from tests.conftest import Marks
+
+pytestmark = Marks.dedup.mark
 
 
 def generate_dataframe(columns, number_of_rows, strings, index_start="2000-1-1"):

@@ -27,14 +27,21 @@ from arcticdb.exceptions import (
     ArcticDbNotYetImplemented,
     InternalException,
     UserInputException,
+    ArcticException,
 )
 from arcticdb import QueryBuilder
 from arcticdb.flattener import Flattener
+from arcticdb.util.utils import generate_random_numpy_array, generate_random_series
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._store import VersionedItem
 from arcticdb_ext.exceptions import _ArcticLegacyCompatibilityException, StorageException
 from arcticdb_ext.storage import KeyType, NoDataFoundException
-from arcticdb_ext.version_store import NoSuchVersionException, StreamDescriptorMismatch, ManualClockVersionStore
+from arcticdb_ext.version_store import (
+    NoSuchVersionException,
+    StreamDescriptorMismatch,
+    ManualClockVersionStore,
+    DataError,
+)
 from arcticdb.util.test import (
     sample_dataframe,
     sample_dataframe_only_strings,
@@ -44,10 +51,12 @@ from arcticdb.util.test import (
     config_context,
     distinct_timestamps,
 )
+from tests.conftest import Marks
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
 from tests.util.mark import MACOS, MACOS_WHEEL_BUILD, xfail_azure_chars
+from tests.util.marking import marks
 
 
 @pytest.fixture()
@@ -718,6 +727,22 @@ def test_prune_previous_versions_append_batch(basic_store):
     assert len(lib_tool.find_keys(KeyType.SYMBOL_LIST)) == 6
 
 
+def test_batch_append_after_delete_upsert(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    lib.write("sym", 1)
+    lib.write("sym1", 1)
+    lib.write("sym1", 1)
+    lib.batch_delete_symbols(["sym", "sym1"])
+
+    df = sample_dataframe()
+    df1 = sample_dataframe()
+    results = lib.batch_append(["sym", "sym1"], [df, df1])
+    assert results[0].version == 1
+    assert results[1].version == 2
+    assert_frame_equal(lib.read("sym").data, df)
+    assert_frame_equal(lib.read("sym1").data, df1)
+
+
 @pytest.mark.storage
 def test_deleting_unknown_symbol(basic_store, symbol):
     df = sample_dataframe()
@@ -822,9 +847,8 @@ def test_range_index(basic_store, sym):
     assert_equal(expected, vit.data)
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range(basic_store, use_date_range_clause):
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
@@ -871,9 +895,8 @@ def test_date_range(basic_store, use_date_range_clause):
     assert data_closed[data_closed.columns[0]][-1] == end_offset
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range_none(basic_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
@@ -891,9 +914,8 @@ def test_date_range_none(basic_store, use_date_range_clause):
     assert len(data) == rows
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range_start_equals_end(basic_store, use_date_range_clause):
     sym = "date_test2"
     rows = 100
@@ -914,9 +936,8 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause):
     assert data[data.columns[0]][0] == start_offset
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
     lib = basic_store_tiny_segment
     sym = "test_date_range_row_sliced"
@@ -993,7 +1014,7 @@ def test_get_info_series_multiindex(basic_store, index_name):
     info = basic_store.get_info(sym)
     assert int(info["rows"]) == 10
     assert info["type"] == "pandasseries"
-    assert info["col_names"]["columns"] == ['index', '__fkidx__1', 'col1'] if index_name else ["col1"]
+    assert info["col_names"]["columns"] == ["index", "__fkidx__1", "col1"] if index_name else ["col1"]
     assert info["col_names"]["index"] == []
     assert info["index_type"] == "NA"
 
@@ -1141,7 +1162,41 @@ def test_update_times(basic_store):
 
 
 @pytest.mark.storage
-@pytest.mark.parametrize("index_names", [("blah", None), (None, None), (None, "blah"), ("blah1", "blah2"), ("col1", "col2"), ("col1", "col1")])
+def test_update_time(basic_store):
+    lib: NativeVersionStore = basic_store
+
+    nparr = generate_random_numpy_array(50, np.float32, seed=None)
+    series = generate_random_series(np.uint64, 50, "numbers")
+    df = pd.DataFrame(data={"col1": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
+    lib.write("sym1", nparr)
+    lib.write("sym1", series)
+    lib.snapshot("snap")
+    lib.write("sym1", df)
+
+    # Negative number for as_of works as expected (dataframes)
+    assert lib.update_time("sym1") == lib.update_time("sym1", -1) == lib.update_time("sym1", 2)
+    # Snapshots are accepted (series)
+    assert lib.update_time("sym1", 1) == lib.update_time("sym1", -2) == lib.update_time("sym1", "snap")
+    # and now check for np array
+    assert lib.update_time("sym1", 0) == lib.update_time("sym1", -3)
+
+    # Times are ordered
+    assert lib.update_time("sym1") > lib.update_time("sym1", 1) > lib.update_time("sym1", 0)
+
+    # Correct exception thrown if symbol does not exist
+    with pytest.raises(NoDataFoundException):
+        lib.update_time("sym12")
+
+    # Correct exception thrown if version does not exist
+    with pytest.raises(NoDataFoundException):
+        lib.update_time("sym1", 11)
+
+
+@pytest.mark.storage
+@pytest.mark.parametrize(
+    "index_names",
+    [("blah", None), (None, None), (None, "blah"), ("blah1", "blah2"), ("col1", "col2"), ("col1", "col1")],
+)
 def test_get_info_multi_index(basic_store, index_names):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=3)
     vals = np.arange(3, dtype=np.uint32)
@@ -1650,7 +1705,7 @@ def test_batch_write_then_list_symbol_without_cache(basic_store_factory):
         assert set(lib.list_symbols()) == set(symbols)
 
 
-@pytest.mark.storage
+@marks([Marks.storage, Marks.dedup])
 def test_batch_write_missing_keys_dedup(basic_store_factory):
     """When there is duplicate data to reuse for the current write, we need to access the index key of the previous
     versions in order to refer to the corresponding keys for the deduplicated data."""
@@ -2210,6 +2265,26 @@ def test_batch_read_meta_multiple_versions(object_version_store):
     assert results_dict["sym3"][0].metadata == {"meta3": 1}
     assert results_dict["sym2"][3].metadata == {"meta2": 4}
 
+    # We can supply only an array of symbols, including repeating symbols
+    results_dict = lib.batch_read_metadata_multi(["sym1", "sym2", "sym1", "sym3", "sym2", "sym1", "sym1"])
+    assert results_dict["sym1"][2].metadata == {"meta1": 3}
+    assert len(results_dict["sym1"]) == 1
+    assert results_dict["sym2"][3].metadata == {"meta2": 4}
+    assert results_dict["sym3"][0].metadata == {"meta3": 1}
+
+    # The lists are of different sizr
+    with pytest.raises(ArcticException):
+        results_dict = lib.batch_read_metadata_multi(["sym1", "sym2"], [0, 0, -2])
+
+    # With negative number we can go back from current versions
+    assert lib.batch_read_metadata_multi(["sym1", "sym1"], [-1, -2]) == lib.batch_read_metadata_multi(
+        ["sym1", "sym1"], [2, 1]
+    )
+
+    # Check DataError is thrown when requesting non-existing version
+    with pytest.raises(TypeError):  # Not a good error though - issue 10070002655
+        results_dict = lib.batch_read_metadata_multi(["sym1"], [10])
+
 
 @pytest.mark.storage
 def test_list_symbols(basic_store):
@@ -2513,6 +2588,7 @@ def test_batch_restore_version_mixed_as_ofs(lmdb_version_store):
     second_ts = pd.Timestamp(2000)
     ManualClockVersionStore.time = second_ts.value
     lib.batch_write(syms, second_data, second_metadata)
+    lib.snapshot("snap")
 
     third_ts = pd.Timestamp(3000)
     ManualClockVersionStore.time = third_ts.value
@@ -2541,6 +2617,32 @@ def test_batch_restore_version_mixed_as_ofs(lmdb_version_store):
     assert_equal(latest["s2"].data, second_data[1])
     assert_equal(latest["s3"].data, first_data[2])
     assert latest["s1"].metadata == "s1-3"
+    assert latest["s2"].metadata == "s2-2"
+    assert latest["s3"].metadata == "s3-1"
+
+    # check restore from snapshot and negative ver number
+    res = lib.batch_restore_version(syms, [-3, "snap", -1])
+
+    # check returned data
+    assert res[0].symbol == "s1"
+    assert res[1].symbol == "s2"
+    assert res[2].symbol == "s3"
+    assert res[0].version == 3
+    assert res[1].version == 4
+    assert res[2].version == 3  # We restored last version (-1 is last)
+    assert res[0].metadata == "s1-1"
+    assert res[1].metadata == "s2-2"
+    assert res[2].metadata == "s3-1"
+
+    # check latest version of symbols from the read
+    latest = lib.batch_read(syms)
+    assert latest["s1"].version == 3
+    assert latest["s2"].version == 4
+    assert latest["s3"].version == 3
+    assert_equal(latest["s1"].data, first_data[0])
+    assert_equal(latest["s2"].data, second_data[1])
+    assert_equal(latest["s3"].data, first_data[2])
+    assert latest["s1"].metadata == "s1-1"
     assert latest["s2"].metadata == "s2-2"
     assert latest["s3"].metadata == "s3-1"
 
@@ -2683,6 +2785,15 @@ def test_batch_restore_version(basic_store_tombstone):
 
 
 @pytest.mark.storage
+def test_name_method(basic_store_factory):
+
+    for lib_name in ["my name", "1243"]:
+        lib: NativeVersionStore = basic_store_factory(name=lib_name)
+        assert lib_name == lib.name()
+        lib.version_store.clear()
+
+
+@pytest.mark.storage
 def test_batch_append(basic_store_tombstone, three_col_df):
     lmdb_version_store = basic_store_tombstone
     multi_data = {"sym1": three_col_df(), "sym2": three_col_df(1), "sym3": three_col_df(2)}
@@ -2719,9 +2830,8 @@ def test_batch_append_with_throw_exception(basic_store, three_col_df):
         )
 
 
-@pytest.mark.pipeline
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
-@pytest.mark.storage
+@marks([Marks.pipeline, Marks.storage])
 def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
     symbols = []
@@ -2762,6 +2872,7 @@ def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_
 
 
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
+@marks([Marks.pipeline])
 def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
     lib = lmdb_version_store_v1
     num_symbols = 5
@@ -2958,29 +3069,52 @@ def test_dynamic_schema_column_hash(basic_store_column_buckets):
     read_df = lib.read("symbol", columns=["a", "c"]).data
     assert_equal(df[["a", "c"]], read_df)
 
-def subset_permutations(input_data):
-    return (p for r in range(1, len(input_data)+1) for p in itertools.permutations(input_data, r))
 
-@pytest.mark.parametrize("bucketize_dynamic", [pytest.param(True, marks=pytest.mark.xfail(reason="Bucketize dynamic is not used in production. There are bugs")), False])
+def subset_permutations(input_data):
+    return (p for r in range(1, len(input_data) + 1) for p in itertools.permutations(input_data, r))
+
+
+@pytest.mark.parametrize(
+    "bucketize_dynamic",
+    [
+        pytest.param(
+            True, marks=pytest.mark.xfail(reason="Bucketize dynamic is not used in production. There are bugs")
+        ),
+        False,
+    ],
+)
 def test_dynamic_schema_read_columns(version_store_factory, lib_name, bucketize_dynamic):
     column_data = {"a": [1.0], "b": [2.0], "c": [3.0], "d": [4.0]}
     append_column_data = {"a": [5.0], "b": [6.0], "c": [7.0], "d": [8.0]}
-    lmdb_lib = version_store_factory(lib_name, dynamic_schema=True, column_group_size=2, bucketize_dynamic=bucketize_dynamic)
+    lmdb_lib = version_store_factory(
+        lib_name, dynamic_schema=True, column_group_size=2, bucketize_dynamic=bucketize_dynamic
+    )
     columns = ("a", "b", "c", "d")
     subset_perm = subset_permutations(columns)
-    input_data = [(pd.DataFrame({c: column_data[c] for c in v1}), pd.DataFrame({c: append_column_data[c] for c in v2})) for v1 in subset_perm for v2 in subset_perm]
+    input_data = [
+        (pd.DataFrame({c: column_data[c] for c in v1}), pd.DataFrame({c: append_column_data[c] for c in v2}))
+        for v1 in subset_perm
+        for v2 in subset_perm
+    ]
     for to_write, to_append in input_data:
         lmdb_lib.write("test", to_write)
         lmdb_lib.append("test", to_append)
         columns = set(list(to_write.columns) + list(to_append.columns))
         for read_columns in subset_permutations(list(columns)):
             data = lmdb_lib.read("test", columns=read_columns).data
-            expected = pd.DataFrame({c: [column_data[c][0] if c in to_write else np.nan, append_column_data[c][0] if c in to_append else np.nan] for c in read_columns})
+            expected = pd.DataFrame(
+                {
+                    c: [
+                        column_data[c][0] if c in to_write else np.nan,
+                        append_column_data[c][0] if c in to_append else np.nan,
+                    ]
+                    for c in read_columns
+                }
+            )
             data.sort_index(inplace=True, axis=1)
             expected.sort_index(inplace=True, axis=1)
             assert_frame_equal(data, expected)
         lmdb_lib.delete("test")
-
 
 
 @pytest.mark.storage

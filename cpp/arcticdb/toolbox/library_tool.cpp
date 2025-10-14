@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #include <arcticdb/toolbox/library_tool.hpp>
@@ -24,21 +25,19 @@ namespace arcticdb::toolbox::apy {
 
 using namespace arcticdb::entity;
 
-LibraryTool::LibraryTool(std::shared_ptr<storage::Library> lib): engine_(lib, util::SysClock()) {}
+LibraryTool::LibraryTool(std::shared_ptr<storage::Library> lib) : engine_(lib, util::SysClock()) {}
 
-std::shared_ptr<Store> LibraryTool::store() {
-    return engine_._test_get_store();
-}
+std::shared_ptr<Store> LibraryTool::store() { return engine_._test_get_store(); }
 
-async::AsyncStore<>& LibraryTool::async_store() {
-    return dynamic_cast<async::AsyncStore<>&>(*store());
-}
+async::AsyncStore<>& LibraryTool::async_store() { return dynamic_cast<async::AsyncStore<>&>(*store()); }
 
-ReadResult LibraryTool::segment_in_memory_to_read_result(arcticdb::SegmentInMemory& segment, std::any& handler_data, OutputFormat output_format) {
-    std::pair<std::any &, OutputFormat> handler{handler_data, output_format};
+ReadResult LibraryTool::segment_in_memory_to_read_result(
+        arcticdb::SegmentInMemory& segment, std::any& handler_data, OutputFormat output_format
+) {
+    std::pair<std::any&, OutputFormat> handler{handler_data, output_format};
 
-    //This is a dummy atom key needed to construct the read result, otherwise not important
-    const auto &atom_key = AtomKeyBuilder().build<KeyType::VERSION_REF>(segment.descriptor().id());
+    // This is a dummy atom key needed to construct the read result, otherwise not important
+    const auto& atom_key = AtomKeyBuilder().build<KeyType::VERSION_REF>(segment.descriptor().id());
     auto frame_and_descriptor = frame_and_descriptor_from_segment(std::move(segment));
 
     return pipelines::read_result_from_single_frame(frame_and_descriptor, atom_key, handler_data, output_format);
@@ -50,16 +49,16 @@ Segment LibraryTool::read_to_segment(const VariantKey& key) {
     return kv.segment().clone();
 }
 
-std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key){
+std::optional<google::protobuf::Any> LibraryTool::read_metadata(const VariantKey& key) {
     return store()->read_metadata(key, storage::ReadKeyOpts{}).get().second;
 }
 
-StreamDescriptor LibraryTool::read_descriptor(const VariantKey& key){
+StreamDescriptor LibraryTool::read_descriptor(const VariantKey& key) {
     auto metadata_and_descriptor = store()->read_metadata_and_descriptor(key, storage::ReadKeyOpts{}).get();
     return std::get<StreamDescriptor>(metadata_and_descriptor);
 }
 
-TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& key){
+TimeseriesDescriptor LibraryTool::read_timeseries_descriptor(const VariantKey& key) {
     return store()->read_timeseries_descriptor(key).get().second;
 }
 
@@ -69,71 +68,63 @@ void LibraryTool::write(VariantKey key, Segment& segment) {
 }
 
 void LibraryTool::overwrite_segment_in_memory(VariantKey key, SegmentInMemory& segment_in_memory) {
-    auto segment = encode_dispatch(std::move(segment_in_memory), *(async_store().codec_), async_store().encoding_version_);
+    auto segment =
+            encode_dispatch(std::move(segment_in_memory), *(async_store().codec_), async_store().encoding_version_);
     remove(key);
     write(key, segment);
 }
 
 SegmentInMemory LibraryTool::item_to_segment_in_memory(
-        const StreamId &stream_id,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object &user_meta,
-        std::optional<AtomKey> next_key) {
-    auto frame = convert::py_ndf_to_frame(stream_id, item, norm, user_meta, engine_.cfg().write_options().empty_types());
-    auto segment_in_memory = incomplete_segment_from_frame(frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse());
+        const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,
+        std::optional<AtomKey> next_key
+) {
+    auto frame =
+            convert::py_ndf_to_frame(stream_id, item, norm, user_meta, engine_.cfg().write_options().empty_types());
+    auto segment_in_memory = incomplete_segment_from_tensor_frame(
+            frame, 0, std::move(next_key), engine_.cfg().write_options().allow_sparse()
+    );
     return segment_in_memory;
 }
 
 SegmentInMemory LibraryTool::overwrite_append_data(
-        VariantKey key,
-        const py::tuple &item,
-        const py::object &norm,
-        const py::object & user_meta) {
+        VariantKey key, const py::tuple& item, const py::object& norm, const py::object& user_meta
+) {
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-        std::holds_alternative<AtomKey>(key) && std::get<AtomKey>(key).type() == KeyType::APPEND_DATA,
-        "Can only override APPEND_DATA keys. Received: {}", key);
+            std::holds_alternative<AtomKey>(key) && std::get<AtomKey>(key).type() == KeyType::APPEND_DATA,
+            "Can only override APPEND_DATA keys. Received: {}",
+            key
+    );
     auto old_segment = read_to_segment(key);
     auto old_segment_in_memory = decode_segment(old_segment);
     const auto& tsd = old_segment_in_memory.index_descriptor();
     std::optional<AtomKey> next_key = std::nullopt;
-    if (tsd.proto().has_next_key()){
+    if (tsd.proto().has_next_key()) {
         next_key = key_from_proto(tsd.proto().next_key());
     }
 
-    auto stream_id = util::variant_match(key, [](const auto& key){return key.id();});
+    auto stream_id = util::variant_match(key, [](const auto& key) { return key.id(); });
     auto segment_in_memory = item_to_segment_in_memory(stream_id, item, norm, user_meta, next_key);
     overwrite_segment_in_memory(key, segment_in_memory);
     return old_segment_in_memory;
 }
 
-bool LibraryTool::key_exists(const VariantKey& key) {
-    return store()->key_exists_sync(key);
-}
+bool LibraryTool::key_exists(const VariantKey& key) { return store()->key_exists_sync(key); }
 
-void LibraryTool::remove(VariantKey key) {
-    store()->remove_key_sync(std::move(key), storage::RemoveOpts{});
-}
+void LibraryTool::remove(VariantKey key) { store()->remove_key_sync(std::move(key), storage::RemoveOpts{}); }
 
-void LibraryTool::clear_ref_keys() {
-    delete_all_keys_of_type(KeyType::SNAPSHOT_REF, store(), false);
-}
+void LibraryTool::clear_ref_keys() { delete_all_keys_of_type(KeyType::SNAPSHOT_REF, store(), false); }
 
 std::vector<VariantKey> LibraryTool::find_keys(entity::KeyType kt) {
     std::vector<VariantKey> res;
 
-    store()->iterate_type(kt, [&](VariantKey &&found_key) {
-        res.emplace_back(found_key);
-    }, "");
+    store()->iterate_type(kt, [&](VariantKey&& found_key) { res.emplace_back(found_key); }, "");
     return res;
 }
 
 int LibraryTool::count_keys(entity::KeyType kt) {
     int count = 0;
 
-    const IterateTypeVisitor& visitor = [&](VariantKey &&) {
-        count++;
-    };
+    const IterateTypeVisitor& visitor = [&](VariantKey&&) { count++; };
 
     store()->iterate_type(kt, visitor, "");
     return count;
@@ -144,13 +135,13 @@ std::vector<bool> LibraryTool::batch_key_exists(const std::vector<VariantKey>& k
     return folly::collect(key_exists_fut).get();
 }
 
-std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const StreamId &stream_id) {
+std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const StreamId& stream_id) {
     util::check(std::holds_alternative<StringId>(stream_id), "keys for id only implemented for string ids");
 
     std::vector<VariantKey> res;
-    const auto &string_id = std::get<StringId>(stream_id);
+    const auto& string_id = std::get<StringId>(stream_id);
 
-    const IterateTypeVisitor& visitor = [&](VariantKey &&found_key) {
+    const IterateTypeVisitor& visitor = [&](VariantKey&& found_key) {
         // Only S3 handles the prefix in iterate_type, the others just return everything, thus the additional check.
         if (variant_key_id(found_key) == stream_id) {
             res.emplace_back(found_key);
@@ -161,19 +152,17 @@ std::vector<VariantKey> LibraryTool::find_keys_for_id(entity::KeyType kt, const 
     return res;
 }
 
-std::string LibraryTool::get_key_path(const VariantKey& key) {
-    return async_store().key_path(key);
-}
+std::string LibraryTool::get_key_path(const VariantKey& key) { return async_store().key_path(key); }
 
-std::optional<std::string> LibraryTool::inspect_env_variable(std::string name){
+std::optional<std::string> LibraryTool::inspect_env_variable(std::string name) {
     auto value = getenv(name.c_str());
-    if (value == nullptr) return std::nullopt;
+    if (value == nullptr)
+        return std::nullopt;
     return std::string(value);
 }
 
 py::object LibraryTool::read_unaltered_lib_cfg(const storage::LibraryManager& lib_manager, std::string lib_name) {
     return lib_manager.get_unaltered_library_config(storage::LibraryPath{lib_name, '.'});
 }
-
 
 } // namespace arcticdb::toolbox::apy

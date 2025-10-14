@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 #include <gtest/gtest.h>
 #include <arcticdb/codec/segment_header.hpp>
@@ -21,7 +22,7 @@ TEST(SegmentHeader, WriteAndReadFields) {
     const auto& read_string_pool = header.string_pool_field();
     auto& read_values1 = read_string_pool.values(0);
     ASSERT_EQ(read_values1.in_bytes(), 23);
-    auto&read_values2 = read_string_pool.values(1);
+    auto& read_values2 = read_string_pool.values(1);
     ASSERT_EQ(read_values2.in_bytes(), 47);
 }
 
@@ -60,11 +61,11 @@ TEST(SegmentHeader, SerializeUnserializeV1) {
     using namespace arcticdb;
     SegmentHeader header{EncodingVersion::V1};
     auto& string_pool_field = header.mutable_string_pool_field(10);
-    for(auto i = 0U; i < 5; ++i) {
-        auto *shapes = string_pool_field.mutable_ndarray()->add_shapes();
+    for (auto i = 0U; i < 5; ++i) {
+        auto* shapes = string_pool_field.mutable_ndarray()->add_shapes();
         shapes->set_in_bytes(i + 1);
         shapes->mutable_codec()->mutable_lz4()->acceleration_ = 1;
-        auto *values = string_pool_field.mutable_ndarray()->add_values(EncodingVersion::V1);
+        auto* values = string_pool_field.mutable_ndarray()->add_values(EncodingVersion::V1);
         values->set_in_bytes(i + 1);
         values->mutable_codec()->mutable_lz4()->acceleration_ = 1;
     }
@@ -76,14 +77,14 @@ TEST(SegmentHeader, SerializeUnserializeV1) {
     std::vector<uint8_t> vec(header_size);
     auto read_header = decode_protobuf_header(vec.data(), header_size);
 
-    const auto& string_pool =  read_header.proto().string_pool_field();
+    const auto& string_pool = read_header.proto().string_pool_field();
     auto expected = 1U;
-    for(const auto& value : string_pool.ndarray().values()) {
+    for (const auto& value : string_pool.ndarray().values()) {
         ASSERT_EQ(value.in_bytes(), expected++);
     }
 
     expected = 1U;
-    for(const auto& shape : string_pool.ndarray().shapes()) {
+    for (const auto& shape : string_pool.ndarray().shapes()) {
         ASSERT_EQ(shape.in_bytes(), expected++);
     }
 }

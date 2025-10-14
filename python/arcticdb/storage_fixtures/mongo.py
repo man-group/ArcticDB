@@ -117,17 +117,21 @@ class ManagedMongoDBServer(StorageFixtureFactory):
 
     def __init__(self, data_dir: Optional[str] = None, port=0, executable="mongod"):
         self._data_dir = data_dir or tempfile.mkdtemp("ManagedMongoDBServer")
-        self._port = port or get_ephemeral_port(5)
+        self._port = port or get_ephemeral_port(7)
         self._executable = executable
         self._client = None
 
     def _safe_enter(self):
         cmd = [self._executable, "--port", str(self._port), "--dbpath", self._data_dir]
         self.mongo_uri = f"mongodb://localhost:{self._port}"
-        self._p = GracefulProcessUtils.start_with_retry(url=f"http://localhost:{self._port}", 
-                                                        service_name="mongod", num_retries=2, timeout=240,
-                                                        process_start_cmd=cmd)                
-            
+        self._p = GracefulProcessUtils.start_with_retry(
+            url=f"http://localhost:{self._port}",
+            service_name="mongod",
+            num_retries=2,
+            timeout=240,
+            process_start_cmd=cmd,
+        )
+
         self._client = get_mongo_client(self.mongo_uri)
 
     def __exit__(self, exc_type, exc_value, traceback):

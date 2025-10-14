@@ -13,6 +13,7 @@ import os
 import re
 import sys
 import platform
+import pprint
 from tempfile import mkdtemp
 from urllib.parse import urlparse
 import boto3
@@ -178,9 +179,10 @@ class S3Bucket(StorageFixture):
         for key in self.iter_underlying_object_names():
             dest.copy({"Bucket": self.bucket, "Key": key}, key, SourceClient=source_client)
 
-    def check_bucket(self, assert_on_fail = True):
-        s3_tool = S3Tool(self.bucket, self.factory.default_key.id, 
-                        self.factory.default_key.secret, self.factory.endpoint)
+    def check_bucket(self, assert_on_fail=True):
+        s3_tool = S3Tool(
+            self.bucket, self.factory.default_key.id, self.factory.default_key.secret, self.factory.endpoint
+        )
         content = s3_tool.list_bucket(self.bucket)
 
         logger.warning(f"Total objects left: {len(content)}")
@@ -188,11 +190,12 @@ class S3Bucket(StorageFixture):
         logger.warning(f"BUCKET: {self.bucket}")
         left_from = set()
         for key in content:
-            library_name = key.split("/")[1] # get the name from object
+            library_name = key.split("/")[1]  # get the name from object
             left_from.add(library_name)
         logger.warning(f"Left overs from libraries: {left_from}")
-        if assert_on_fail: 
+        if assert_on_fail:
             assert len(content) < 1
+
 
 class NfsS3Bucket(S3Bucket):
     def create_test_cfg(self, lib_name: str) -> EnvironmentConfigsMap:
@@ -686,6 +689,11 @@ class HostDispatcherApplication(DomainDispatcherApplication):
             else:
                 self._reqs_till_rate_limit -= 1
 
+            # Lets add ability to identify type as S3
+            if "/whoami" in path_info:
+                start_response("200 OK", [("Content-Type", "text/plain")])
+                return [b"Moto AWS S3"]
+
         return super().__call__(environ, start_response)
 
 
@@ -693,6 +701,8 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
     """GCP's S3 implementation does not have batch delete."""
 
     def __call__(self, environ, start_response):
+        path_info: bytes = environ.get("PATH_INFO", "")
+
         if environ["REQUEST_METHOD"] == "POST" and environ["QUERY_STRING"] == "delete":
             response_body = (
                 b'<?xml version="1.0" encoding="UTF-8"?>'
@@ -706,6 +716,12 @@ class GcpHostDispatcherApplication(HostDispatcherApplication):
                 "501 Not Implemented", [("Content-Type", "text/xml"), ("Content-Length", str(len(response_body)))]
             )
             return [response_body]
+
+        # Lets add ability to identify type as GCP
+        if "/whoami" in path_info:
+            start_response("200 OK", [("Content-Type", "text/plain")])
+            return [b"Moto GCP"]
+
         return super().__call__(environ, start_response)
 
 
@@ -729,6 +745,20 @@ def run_gcp_server(port, key_file, cert_file):
     )
 
 
+def is_server_type(url: str, server_type: str):
+    """Check if a server is of certain type.
+
+    /whoami url is added to Moto* objects to identify GCP or S3"""
+    try:
+        response = requests.get(url, verify=False)
+        if response.status_code == 200 and server_type in response.text:
+            return True
+    except Exception as e:
+        logger.error(f"Error during server type check: {e}")
+    logger.error(f"Was not of expected type: status code {response.status_code}, text: {response.text}")
+    return False
+
+
 def create_bucket(s3_client, bucket_name, max_retries=15):
     for i in range(max_retries):
         try:
@@ -739,6 +769,9 @@ def create_bucket(s3_client, bucket_name, max_retries=15):
                 raise
             logger.warning(f"S3 create bucket failed. Retry {1}/{max_retries}")
             time.sleep(1)
+        except Exception as e:
+            logger.error(f"create_bucket - Error: {e.response['Error']['Message']}")
+            pprint.pprint(e.response)
 
 
 class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
@@ -789,10 +822,19 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # We need the unique_id because we have tests that are creating the factory directly
         # and not using the fixtures
         # so this guarantees a unique bucket name
-        return f"test_{bucket_type}_bucket_{self.unique_id}_{self._bucket_id}"
+        return f"test-{bucket_type}-bucket-{self.unique_id}-{self._bucket_id}"
 
-    def _start_server(self):
-        port = self.port = get_ephemeral_port(2)
+    def is_server_type(url: str, server_type: str):
+        try:
+            response = requests.get(url, verify=False)
+            if response.status_code == 200 and server_type in response.text:
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _start_server(self, seed=2):
+        port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
@@ -824,17 +866,22 @@ class MotoS3StorageFixtureFactory(BaseS3StorageFixtureFactory):
         # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
         # Due to this, we need to wait for the server to come up for a longer time
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
+        assert is_server_type(self.endpoint + "/whoami", "S3"), "The server has not identified as S3"
 
     def _safe_enter(self):
-        for _ in range(3):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
+        for i in range(5):  # For unknown reason, Moto, when running in pytest-xdist, will randomly fail to start
             try:
-                self._start_server()
+                logger.info(f"Attempt to start server - {i}")
+                self._start_server(2 + i)
+                self._s3_admin = self._boto(service="s3", key=self.default_key)
+                logger.info(f"Moto S3 STARTED!!! on port {self.port}")
                 break
             except AssertionError as e:  # Thrown by wait_for_server_to_come_up
                 sys.stderr.write(repr(e))
                 GracefulProcessUtils.terminate(self._p)
+            except Exception as e:
+                logger.error(f"Error during startup of Moto S3. Trying again. Error: {e}")
 
-        self._s3_admin = self._boto(service="s3", key=self.default_key)
         return self
 
     def __exit__(self, exc_type, exc_value, traceback):
@@ -926,8 +973,8 @@ class MotoNfsBackedS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
 
 
 class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
-    def _start_server(self):
-        port = self.port = get_ephemeral_port(3)
+    def _start_server(self, seed=20):
+        port = self.port = get_ephemeral_port(seed)
         self.endpoint = f"{self.http_protocol}://{self.host}:{port}"
         self.working_dir = mkdtemp(suffix="MotoGcpS3StorageFixtureFactory")
         self._iam_endpoint = f"{self.http_protocol}://localhost:{port}"
@@ -959,6 +1006,7 @@ class MotoGcpS3StorageFixtureFactory(MotoS3StorageFixtureFactory):
         # There is a problem with the performance of the socket module in the MacOS 15 GH runners - https://github.com/actions/runner-images/issues/12162
         # Due to this, we need to wait for the server to come up for a longer time
         wait_for_server_to_come_up(self.endpoint, "moto", self._p, timeout=240)
+        assert is_server_type(self.endpoint + "/whoami", "GCP"), "The server has not identified as GCP"
 
     def create_fixture(self) -> GcpS3Bucket:
         bucket = self.bucket_name("gcp")

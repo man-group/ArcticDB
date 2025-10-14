@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import datetime
@@ -13,13 +14,17 @@ import sys
 
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import UserInputException
-from arcticdb.util.test import assert_frame_equal, assert_series_equal
+import arcticdb.toolbox.query_stats as qs
+from arcticdb.util.test import assert_frame_equal, assert_series_equal, config_context_multi
 from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
+import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
+from tests.conftest import Marks
 from tests.util.date import DateRange
 from tests.util.mark import MACOS_WHEEL_BUILD
+from tests.util.marking import marks
 
 
 @pytest.mark.storage
@@ -215,24 +220,27 @@ def test_batch_write_unicode_strings(lmdb_version_store):
         lib.batch_append(syms, data)
 
 
-@pytest.mark.parametrize("PandasType, assert_pandas_container_equal", [
-    (pd.Series, assert_series_equal),
-    (pd.DataFrame, assert_frame_equal),
-])
-def test_update_with_empty_series_or_dataframe(lmdb_version_store_empty_types_v1, PandasType, assert_pandas_container_equal):
+@pytest.mark.parametrize(
+    "PandasType, assert_pandas_container_equal",
+    [
+        (pd.Series, assert_series_equal),
+        (pd.DataFrame, assert_frame_equal),
+    ],
+)
+def test_update_with_empty_series_or_dataframe(
+    lmdb_version_store_empty_types_v1, PandasType, assert_pandas_container_equal
+):
     # Non-regression test for https://github.com/man-group/ArcticDB/issues/892
     lib = lmdb_version_store_empty_types_v1
 
-    kwargs = { "name": "a" } if PandasType == pd.Series else { "columns": ["a"] }
+    kwargs = {"name": "a"} if PandasType == pd.Series else {"columns": ["a"]}
     data = np.array([1.0]) if PandasType == pd.Series else np.array([[1.0]])
 
     empty = PandasType(data=[], dtype=float, index=pd.DatetimeIndex([]), **kwargs)
     one_row = PandasType(
         data=data,
         dtype=float,
-        index=pd.DatetimeIndex([
-            datetime.datetime(2019, 4, 9, 10, 5, 2, 1)
-        ]),
+        index=pd.DatetimeIndex([datetime.datetime(2019, 4, 9, 10, 5, 2, 1)]),
         **kwargs,
     )
 
@@ -306,15 +314,12 @@ def test_date_range_multi_index(lmdb_version_store):
         {"col": pd.Series([], dtype=np.int64)},
         index=pd.MultiIndex.from_arrays([pd.DatetimeIndex([]), []], names=["dt_level", "str_level"]),
     )
-    result_df = lib.read(
-        sym, date_range=DateRange(pd.Timestamp("2099-01-01"), pd.Timestamp("2099-01-02"))
-    ).data
+    result_df = lib.read(sym, date_range=DateRange(pd.Timestamp("2099-01-01"), pd.Timestamp("2099-01-02"))).data
     assert_frame_equal(result_df, expected_df)
 
 
 @pytest.mark.parametrize(
-    "method",
-    ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
+    "method", ("write", "append", "update", "write_metadata", "batch_write", "batch_append", "batch_write_metadata")
 )
 @pytest.mark.parametrize("lib_config", (True, False))
 @pytest.mark.parametrize("env_var", (True, False))
@@ -425,7 +430,9 @@ def test_update_index_overlap_corner_cases(lmdb_version_store_tiny_segment, inde
     index = [pd.Timestamp(index_start), pd.Timestamp(index_start + 1)]
 
     # Gap of 2 nanoseconds so we can insert inbetween the 2 tiny segments
-    initial_df = pd.DataFrame({"col": [1, 2, 3, 4]}, index=[pd.Timestamp(2), pd.Timestamp(3), pd.Timestamp(6), pd.Timestamp(7)])
+    initial_df = pd.DataFrame(
+        {"col": [1, 2, 3, 4]}, index=[pd.Timestamp(2), pd.Timestamp(3), pd.Timestamp(6), pd.Timestamp(7)]
+    )
     update_df = pd.DataFrame({"col": [100, 200]}, index=index)
     lib.write(sym, initial_df)
     lib.update(sym, update_df)
@@ -449,16 +456,22 @@ def test_delete_snapshot_regression(nfs_clean_bucket):
     assert "snap" not in lib.list_snapshots()
 
 
+@marks([Marks.pipeline])
 def test_resampling_non_timeseries(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_resampling_non_timeseries"
 
     df = pd.DataFrame({"col": np.arange(10)})
     lib.write(sym, df)
-    q = QueryBuilder().resample('1min').agg({"col": "sum"})
+    q = QueryBuilder().resample("1min").agg({"col": "sum"})
     with pytest.raises(UserInputException):
         lib.read(sym, query_builder=q)
-    q = QueryBuilder().date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01"))).resample('1min').agg({"col": "sum"})
+    q = (
+        QueryBuilder()
+        .date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-02-01")))
+        .resample("1min")
+        .agg({"col": "sum"})
+    )
     with pytest.raises(UserInputException) as e:
         lib.read(sym, query_builder=q)
     assert "std::length_error(vector::reserve)" not in str(e.value)
@@ -489,3 +502,36 @@ def test_use_norm_failure_handler_known_types(lmdb_version_store_allows_pickling
     # is set in Library.__init__, hence why this test stresses the correct codepath
     nvs = lmdb_version_store_allows_pickling
     Library("dummy", nvs)
+
+
+def test_all_snapshots_not_loaded_for_tombstoned_as_of(s3_version_store_v1):
+    # Prior to https://github.com/man-group/ArcticDB/pull/2699 if a version was requested as_of a version number that
+    # had been tombstoned, we would load all of the snapshots into memory, and then search for the specified index key.
+    # The new implementation:
+    # 1. Loads snapshots in parallel (windowed on the number of IO threads)
+    # 2. Short-circuits and stops reading snapshot keys when the required index key has been found
+    lib = s3_version_store_v1
+    sym = "test_all_snapshots_not_loaded_for_tombstoned_as_of_sym"
+    try:
+        with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
+            adb_async.reinit_task_scheduler()
+            assert adb_async.io_thread_count() == 1
+            assert adb_async.cpu_thread_count() == 1
+            lib.write(sym, 1)
+            for idx in range(10):
+                lib.snapshot(f"snap_{idx}")
+            lib.delete(sym)
+            # Version 0 of sym will be tombstoned, and present in all 10 snapshots. With a single IO thread, we should
+            # only read one of these snapshots
+            with qs.query_stats():
+                received = lib.read(sym, as_of=0).data
+                stats = qs.get_query_stats()
+            qs.reset_stats()
+            assert received == 1
+            # There should be exactly 1 listing of snapshot ref keys, 1 listing of the legacy snapshot keys, and 1 GET
+            # of a snapshot ref key
+            assert stats["storage_operations"]["S3_ListObjectsV2"]["SNAPSHOT_REF"]["count"] == 1
+            assert stats["storage_operations"]["S3_ListObjectsV2"]["SNAPSHOT"]["count"] == 1
+            assert stats["storage_operations"]["S3_GetObject"]["SNAPSHOT_REF"]["count"] == 1
+    finally:
+        adb_async.reinit_task_scheduler()

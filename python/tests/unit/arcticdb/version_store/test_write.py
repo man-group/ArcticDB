@@ -5,10 +5,11 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb.exceptions import SortingException
+from arcticdb_ext.exceptions import SortingException, ArcticException as ArcticNativeException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 from pandas import MultiIndex
@@ -134,6 +135,7 @@ def test_write_non_timestamp_index(lmdb_version_store, index_type, sorted, valid
     info = lib.get_info(symbol)
     assert info["sorted"] == "UNKNOWN"
 
+
 class TestMissingStringPlaceholders:
     @pytest.mark.parametrize("dtype", [None, object, np.float32, np.double])
     def test_write_with_nan_none(self, lmdb_version_store, dtype):
@@ -158,3 +160,52 @@ class TestMissingStringPlaceholders:
         lib.write(sym, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
         data = lib.read(sym).data
         assert_frame_equal(data, pd.DataFrame({"a": [np.nan]}, dtype=dtype))
+
+
+def test_write_bool_named_columns(lmdb_version_store):
+    symbol = "bad_write"
+    ts = pd.Timestamp("2020-01-01")
+
+    df = pd.DataFrame({True: [1, 2, 3]}, index=pd.date_range(ts, periods=3))
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, df)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False
+
+
+@pytest.mark.parametrize(
+    "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
+)
+def test_write_bool_named_index(lmdb_version_store, idx):
+    symbol = "bad_write"
+
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
+    df.index.name = True
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, df)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False
+
+
+@pytest.mark.parametrize(
+    "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
+)
+@pytest.mark.parametrize("idx_names", [["index", True], [True, "index"]])
+def test_write_bool_named_multi_index(lmdb_version_store, idx, idx_names):
+    symbol = "bad_write"
+
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=pd.MultiIndex.from_arrays([idx, idx], names=idx_names))
+
+    lmdb_version_store.write(symbol, df)
+
+    # We do allow for the boolean index names in multiindex and they get normalized to strings
+    # so this just tests the current behaviour and that we can read back the data correctly
+    df.index.names = [str(n) for n in idx_names]
+
+    assert_frame_equal(lmdb_version_store.read(symbol).data, df)

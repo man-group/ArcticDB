@@ -31,6 +31,7 @@ from arcticdb.version_store.library import Library, ReadRequest
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions
+from tests.conftest import Marks
 from tests.util.mark import (
     LINUX,
     MACOS,
@@ -41,6 +42,7 @@ from tests.util.mark import (
     MEMRAY_TESTS_MARK,
     SKIP_CONDA_MARK,
 )
+from tests.util.marking import marks
 
 
 logging.basicConfig(level=logging.INFO)
@@ -156,12 +158,12 @@ def check_process_memory_leaks(
         print(f"  Maximum growth so far: {nice_bytes_str(max(mem_growth_each_iter))}")
         print(f"  Number of times there was 50% drop in memory: {count_drops(mem_growth_each_iter, 0.5)}")
 
-        assert max_total_mem_lost_threshold_bytes >= process_growth, (
-            f"Memory of the process grew more than defined threshold: {nice_bytes_str(process_growth)} (specified: {nice_bytes_str(max_total_mem_lost_threshold_bytes)} )"
-        )
-        assert max_machine_memory_percentage >= mem_per, (
-            f"Machine utilized more memory than specified threshold :{mem_per}% (specified {max_machine_memory_percentage}%)"
-        )
+        assert (
+            max_total_mem_lost_threshold_bytes >= process_growth
+        ), f"Memory of the process grew more than defined threshold: {nice_bytes_str(process_growth)} (specified: {nice_bytes_str(max_total_mem_lost_threshold_bytes)} )"
+        assert (
+            max_machine_memory_percentage >= mem_per
+        ), f"Machine utilized more memory than specified threshold :{mem_per}% (specified {max_machine_memory_percentage}%)"
 
     print(
         "The process assessment finished within expectations. Total consumed additional mem is bellow threshold: ",
@@ -338,7 +340,7 @@ def gen_random_date(start: pd.Timestamp, end: pd.Timestamp):
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
-@pytest.mark.skip(reason = "Will become ASV tests")
+@pytest.mark.skip(reason="Will become ASV tests")
 def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     lib: adb.Library = arctic_library_lmdb_100gb
 
@@ -374,7 +376,7 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
     """
     # Must be closely examined at 520 MB!!
     # Now increasing the number so that it still runs until we create ASV test for it
-    max_mem_bytes = 420_000_000 # Was 348_623_040 # Initial values was 295_623_040
+    max_mem_bytes = 420_000_000  # Was 348_623_040 # Initial values was 295_623_040
 
     check_process_memory_leaks(proc_to_examine, 20, max_mem_bytes, 80.0)
 
@@ -385,7 +387,8 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 )
 @pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
-@pytest.mark.skip(reason = "Will become ASV tests")
+@pytest.mark.skip(reason="Will become ASV tests")
+@marks([Marks.pipeline])
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
     """
     This test uses old approach with iterations.
@@ -425,7 +428,7 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
 
     # Must be closely examined at 1 GB!!
     # Now increasing the number so that it still runs until we create ASV test for it
-    max_mem_bytes = 750_000_000 #Was 650_000_000 #Started at: 550_623_040
+    max_mem_bytes = 750_000_000  # Was 650_000_000 #Started at: 550_623_040
 
     check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
@@ -630,7 +633,8 @@ if MEMRAY_SUPPORTED:
 
             if "folly::CPUThreadPoolExecutor::CPUTask" in frame_info_str:
                 logger.warning(f"Frame excluded : {frame_info_str}")
-                logger.warning(f"""Explanation    : These are on purpose, and they come from the interaction of 
+                logger.warning(
+                    f"""Explanation    : These are on purpose, and they come from the interaction of 
                                multi-threading and forking. When Python forks, the task-scheduler has a linked-list 
                                of tasks to execute, but there is a global lock held that protects the thread-local state.
                                We can't free the list without accessing the global thread-local storage singleton, 
@@ -647,7 +651,8 @@ if MEMRAY_SUPPORTED:
                                find something better
 
                                Great that it is catching this, as it's the one case in the whole project where I know 
-                               for certain that it does leak memory (and only because there's no alternative""")
+                               for certain that it does leak memory (and only because there's no alternative"""
+                )
                 return False
 
             pass
@@ -661,7 +666,8 @@ if MEMRAY_SUPPORTED:
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8078461031
-    # @pytest.mark.skip(reason = "read() memory leaks Monday#8078461031")
+    @pytest.mark.skip(reason="read() memory leaks Monday#8078461031")
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -682,7 +688,8 @@ if MEMRAY_SUPPORTED:
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
-    # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    @pytest.mark.skip(reason="read() memory leaks Monday#8067881190")
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -703,7 +710,8 @@ if MEMRAY_SUPPORTED:
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
-    # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    @pytest.mark.skip(reason="read() memory leaks Monday#8067881190")
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -719,6 +727,7 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_leaks(location_limit="25 KB", filter_fn=is_relevant)
+    @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
         """
         Test to capture memory leaks >= of specified number
@@ -873,6 +882,7 @@ if MEMRAY_SUPPORTED:
         ],
         indirect=True,
     )
+    @marks([Marks.pipeline])
     def test_mem_leak_head_tail_memray(prepare_head_tails_symbol):
         """
         This test aims to test `head` and `tail` functions if they do leak memory.

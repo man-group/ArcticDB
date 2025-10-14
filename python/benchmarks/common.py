@@ -25,6 +25,7 @@ from arcticdb.util.logger import get_logger
 ## (see finalized_staged_data.py)
 SLOW_TESTS = os.getenv("ARCTICDB_SLOW_TESTS") == "1"
 
+
 def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
     """
     Generates a Data Frame with 2 columns (timestamp and value) and N rows
@@ -38,6 +39,7 @@ def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
     # Create dataframe
     df = pd.DataFrame({"value": values})
     df.index = timestamps
+    df.index.name = "ts"
     return df
 
 
@@ -84,8 +86,8 @@ def generate_benchmark_df(n, freq="min", end_timestamp="1/1/2023"):
 
 def get_prewritten_lib_name(rows):
     return f"prewritten_{rows}"
-    
-    
+
+
 def get_filename_from_url(url):
     parsed_url = urllib.parse.urlparse(url)
     return os.path.basename(parsed_url.path)
@@ -93,9 +95,9 @@ def get_filename_from_url(url):
 
 def download_file(url: str) -> str:
     """
-        Downloads file from specific location and then saves
-        it under same name at current directory. 
-        Returns the name of file just saved
+    Downloads file from specific location and then saves
+    it under same name at current directory.
+    Returns the name of file just saved
     """
     print("Downloading file from: ", url)
     name = get_filename_from_url(url)
@@ -103,52 +105,53 @@ def download_file(url: str) -> str:
     print("File downloaded: ", name)
     return name
 
-def download_and_process_city_to_parquet(save_to_file:str) -> pd.DataFrame :
-    '''
-        Downloads CSV from a location then saves it in gziped parqet
-    '''
+
+def download_and_process_city_to_parquet(save_to_file: str) -> pd.DataFrame:
+    """
+    Downloads CSV from a location then saves it in gziped parqet
+    """
     name = download_file("http://www.cwi.nl/~boncz/PublicBIbenchmark/CityMaxCapita/CityMaxCapita_1.csv.bz2")
     name = decompress_bz2_file(name)
-    df : pd.DataFrame = read_city(name)
+    df: pd.DataFrame = read_city(name)
     location = os.path.join(save_to_file)
     directory = os.path.dirname(location)
     if not os.path.exists(directory):
         os.makedirs(directory)
-    print("Saving dataframe to gzip/parquet file: " ,location)
-    df.to_parquet(location,
-                compression='gzip',
-                index=True)
+    print("Saving dataframe to gzip/parquet file: ", location)
+    df.to_parquet(location, compression="gzip", index=True)
     return df
+
 
 def decompress_bz2_file(name: str) -> str:
     """
-        Decompresses a bz2 file and saves content in
-        a text file having same name (without bz.2 extensions)
-        in current directory.
-        Returns the name of the saved file
+    Decompresses a bz2 file and saves content in
+    a text file having same name (without bz.2 extensions)
+    in current directory.
+    Returns the name of the saved file
     """
     print("Decompressing file: ", name)
     nn = name.replace(".bz2", "")
     new_name = os.path.basename(nn)
 
-    with bz2.open(name, 'rb') as input_file:
+    with bz2.open(name, "rb") as input_file:
         decompressed_data = input_file.read()
 
-    with open(new_name, 'wb') as output_file:
+    with open(new_name, "wb") as output_file:
         output_file.write(decompressed_data)
 
     print("Decompressed file: ", new_name)
 
     return new_name
 
-def read_city(file1:str):
-    """
-        Data source:
-            https://github.com/cwida/public_bi_benchmark/blob/master/benchmark/CityMaxCapita/queries/11.sql
 
-        As CSV file contains nulls in int and float we fix those programatically
+def read_city(file1: str):
     """
-    columns =[
+    Data source:
+        https://github.com/cwida/public_bi_benchmark/blob/master/benchmark/CityMaxCapita/queries/11.sql
+
+    As CSV file contains nulls in int and float we fix those programatically
+    """
+    columns = [
         "City/Admin",
         "City/State",
         "City",
@@ -179,57 +182,60 @@ def read_city(file1:str):
         "User Bio",
         "User Loc",
         "Username 1",
-        "Username" 
+        "Username",
     ]
     types = {
-        "City/Admin" : str,
-        "City/State" : str,
-        "City" : str,
-        "Created Date/Time" : np.float64,
-        "Date Joined" : np.float64,
-        "FF Ratio" : np.float64,
-        "Favorites" : np.int32,
-        "First Link in Tweet" : str,
-        "Followers" : np.int32,
-        "Following" : np.int32,
-        "Gender" : str,
-        "Influencer?" : pd.Int32Dtype(),
-        "Keyword" : str,
-        "LPF" : np.float64,
-        "Language" : str,
-        "Lat" : np.float64,
-        "Listed Number" : pd.Int32Dtype(),
-        "Long Domain" : str,
-        "Long" : np.float64,
-        "Number of Records" : np.int32,
-        "Region" : str,
-        "Short Domain" : str,
-        "State/Country" : str,
-        "State" : str,
-        "Tweet Text" : str,
-        "Tweets" : np.int32,
-        "Twitter Client" : str,
-        "User Bio" : str,
-        "User Loc" : str,
-        "Username 1" : str,
-        "Username" : str   
+        "City/Admin": str,
+        "City/State": str,
+        "City": str,
+        "Created Date/Time": np.float64,
+        "Date Joined": np.float64,
+        "FF Ratio": np.float64,
+        "Favorites": np.int32,
+        "First Link in Tweet": str,
+        "Followers": np.int32,
+        "Following": np.int32,
+        "Gender": str,
+        "Influencer?": pd.Int32Dtype(),
+        "Keyword": str,
+        "LPF": np.float64,
+        "Language": str,
+        "Lat": np.float64,
+        "Listed Number": pd.Int32Dtype(),
+        "Long Domain": str,
+        "Long": np.float64,
+        "Number of Records": np.int32,
+        "Region": str,
+        "Short Domain": str,
+        "State/Country": str,
+        "State": str,
+        "Tweet Text": str,
+        "Tweets": np.int32,
+        "Twitter Client": str,
+        "User Bio": str,
+        "User Loc": str,
+        "Username 1": str,
+        "Username": str,
     }
 
-    df = pd.read_csv(file1, sep="|", 
-                        header=None,
-                        dtype=types, 
-                        names=columns,
-                        )
-    
-    df["Influencer?"]=df["Influencer?"].fillna(0).astype(np.int32)
-    df["Listed Number"]=df["Listed Number"].fillna(0).astype(np.int32)
-        
+    df = pd.read_csv(
+        file1,
+        sep="|",
+        header=None,
+        dtype=types,
+        names=columns,
+    )
+
+    df["Influencer?"] = df["Influencer?"].fillna(0).astype(np.int32)
+    df["Listed Number"] = df["Listed Number"].fillna(0).astype(np.int32)
+
     return df
 
-def process_city(fileloc:str) -> pd.DataFrame :
+
+def process_city(fileloc: str) -> pd.DataFrame:
     # read data from bz.2 file
     name = decompress_bz2_file(fileloc)
-    df : pd.DataFrame = read_city(name)
+    df: pd.DataFrame = read_city(name)
     return df
 
 
@@ -237,15 +243,14 @@ class AsvBase(ABC):
     """
     Abstract base class for all benchmarks with real storage backing
     """
-    
+
     def get_logger(self) -> Logger:
-        return get_logger(self)    
-    
+        return get_logger(self)
+
     @abstractmethod
     def get_library_manager(self) -> TestLibraryManager:
         pass
-    
+
     @abstractmethod
     def get_population_policy(self) -> LibraryPopulationPolicy:
         pass
-    

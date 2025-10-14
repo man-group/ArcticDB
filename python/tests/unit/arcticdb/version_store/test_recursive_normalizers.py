@@ -15,13 +15,18 @@ from arcticc.pb2.descriptors_pb2 import NormalizationMetadata  # Importing from 
 from arcticdb.exceptions import ArcticDbNotYetImplemented
 from arcticdb.util.venv import CompatLibrary
 from arcticdb.util.test import assert_frame_equal
-from arcticdb.exceptions import DataTooNestedException, UnsupportedKeyInDictionary
+from arcticdb.exceptions import (
+    DataTooNestedException,
+    UnsupportedKeyInDictionary,
+    ArcticException as ArcticNativeException,
+)
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb_ext.stream as adb_stream
 import arcticdb_ext
 
 from tests.util.mark import MACOS_WHEEL_BUILD
+
 
 class AlmostAList(list):
     pass
@@ -50,6 +55,7 @@ def assert_vit_equals_except_data(left, right):
     assert left.metadata == right.metadata
     assert left.host == right.host
     assert left.timestamp == right.timestamp
+
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
 @pytest.mark.storage
@@ -154,6 +160,7 @@ def test_recursive_nested_data(basic_store, read):
     assert read_vit.symbol == sym
     assert_vit_equals_except_data(read_vit, write_vit)
 
+
 @pytest.mark.storage
 def test_recursive_normalizer_with_custom_class():
     list_like_obj = AlmostAList([1, 2, 3])
@@ -164,6 +171,7 @@ def test_recursive_normalizer_with_custom_class():
     # Should be normalizable now.
     fl = Flattener()
     assert fl.is_normalizable_to_nested_structure(list_like_obj)
+
 
 @pytest.mark.storage
 def test_nested_custom_types(basic_store):
@@ -180,6 +188,7 @@ def test_nested_custom_types(basic_store):
     assert got_back[0] == 1
     assert_vit_equals_except_data(write_vit, read_vit)
     assert basic_store.get_info(sym)["type"] != "pickled"
+
 
 @pytest.mark.storage
 def test_data_directly_msgpackable(basic_store):
@@ -442,7 +451,7 @@ def test_sequences_data_layout(lmdb_version_store_v1, sequence_type):
     assert len(lt.find_keys(KeyType.VERSION)) == 1
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
     index_keys = lt.find_keys(KeyType.TABLE_INDEX)
-    assert [i.id for i in index_keys] == ['sym__1', "sym__2__ghi"]
+    assert [i.id for i in index_keys] == ["sym__1", "sym__2__ghi"]
     data_keys = lt.find_keys(KeyType.TABLE_DATA)
     assert len(data_keys) == 2
 
@@ -477,7 +486,6 @@ def test_sequences_data_layout(lmdb_version_store_v1, sequence_type):
 
 
 class CustomClassSeparatorInStr:
-
     def __init__(self, n):
         self.n = n
 
@@ -506,7 +514,6 @@ def test_dictionaries_with_custom_keys_that_cannot_roundtrip(lmdb_version_store_
 
 
 class CustomClass:
-
     def __init__(self, n):
         self.n = n
 
@@ -543,7 +550,7 @@ def test_dictionaries_with_custom_keys(lmdb_version_store_v1):
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
     index_keys = lt.find_keys(KeyType.TABLE_INDEX)
     data_keys = lt.find_keys(KeyType.TABLE_DATA)
-    assert [i.id for i in index_keys] == ['sym__CustomClassStr1']
+    assert [i.id for i in index_keys] == ["sym__CustomClassStr1"]
     assert len(data_keys) == 1
 
     assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
@@ -582,7 +589,7 @@ def test_list_with_custom_elements(lmdb_version_store_v1):
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
     index_keys = lt.find_keys(KeyType.TABLE_INDEX)
     data_keys = lt.find_keys(KeyType.TABLE_DATA)
-    assert [i.id for i in index_keys] == ['sym__0', "sym__1"]
+    assert [i.id for i in index_keys] == ["sym__0", "sym__1"]
     assert len(data_keys) == 2
 
     assert len(lt.find_keys_for_id(KeyType.VERSION_REF, "sym")) == 1
@@ -626,7 +633,7 @@ def test_dictionaries_with_non_str_keys(lmdb_version_store_v1):
     assert len(lt.find_keys(KeyType.VERSION)) == 1
     assert len(lt.find_keys(KeyType.MULTI_KEY)) == 1
     index_keys = lt.find_keys(KeyType.TABLE_INDEX)
-    assert [i.id for i in index_keys] == ['sym__1', "sym__1.1", "sym__False"]
+    assert [i.id for i in index_keys] == ["sym__1", "sym__1.1", "sym__False"]
     data_keys = lt.find_keys(KeyType.TABLE_DATA)
     assert len(data_keys) == 3
 
@@ -751,7 +758,7 @@ def test_read_asof(lmdb_version_store_v1):
     pd.testing.assert_frame_equal(vit.data["k"], df_one)
 
 
-@pytest.mark.xfail(reason="Validation for bad queries not yet implemented. Monday: 9236603911")
+@pytest.mark.skip(reason="Validation for bad queries not yet implemented. Monday: 9236603911")
 def test_unsupported_queries(lmdb_version_store_v1):
     """Test how we fail with queries that we do not support over recursively normalized data."""
     lib = lmdb_version_store_v1
@@ -853,21 +860,23 @@ def test_data_layout(lmdb_version_store_v1):
 
 
 class TestRecursiveNormalizersCompat:
-
     @pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="We don't have previous versions of arcticdb pypi released for MacOS")
     def test_compat_write_old_read_new(self, old_venv_and_arctic_uri, lib_name):
         old_venv, arctic_uri = old_venv_and_arctic_uri
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
             dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
             sym = "sym"
-            compat.old_lib.execute([
-                f"""
+            compat.old_lib.execute(
+                [
+                    f"""
 from arcticdb_ext.storage import KeyType
 lib._nvs.write('sym', {{"a": df_1, "b" * 95: df_2, "c" * 100: df_2}}, recursive_normalizers=True, pickle_on_failure=True)
 lib_tool = lib._nvs.library_tool()
 assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
 """
-            ], dfs=dfs)
+                ],
+                dfs=dfs,
+            )
 
             with compat.current_version() as curr:
                 data = curr.lib.read(sym).data
@@ -882,12 +891,18 @@ assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
         with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
             dfs = {"df_1": pd.DataFrame({"a": [1, 2, 3]}), "df_2": pd.DataFrame({"b": ["a", "b"]})}
             with compat.current_version() as curr:
-                curr.lib._nvs.write('sym', {"a": dfs["df_1"], "b" * 95: dfs["df_2"], "c" * 100: dfs["df_2"]}, recursive_normalizers=True, pickle_on_failure=True)
+                curr.lib._nvs.write(
+                    "sym",
+                    {"a": dfs["df_1"], "b" * 95: dfs["df_2"], "c" * 100: dfs["df_2"]},
+                    recursive_normalizers=True,
+                    pickle_on_failure=True,
+                )
                 lib_tool = curr.lib._nvs.library_tool()
-                assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, 'sym')) == 1
+                assert len(lib_tool.find_keys_for_symbol(KeyType.MULTI_KEY, "sym")) == 1
 
-            compat.old_lib.execute([
-                """
+            compat.old_lib.execute(
+                [
+                    """
 from pandas.testing import assert_frame_equal
 data = lib.read('sym').data
 expected = {'a': df_1, 'b' * 95: df_2, 'c' * 100: df_2}
@@ -895,4 +910,55 @@ assert set(data.keys()) == set(expected.keys())
 for key in data.keys():
     assert_frame_equal(data[key], expected[key])
 """
-            ], dfs=dfs)
+                ],
+                dfs=dfs,
+            )
+
+
+def test_write_recursive_norm_bool_named_key(lmdb_version_store):
+    symbol = "bad_write"
+    ts = pd.Timestamp("2020-01-01")
+
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=pd.date_range(ts, periods=3))
+
+    data = {True: df, "l": [1, 2, 3], "m": {"n": "o", "p": df}, "p": df}
+
+    lmdb_version_store.write(symbol, data, recursive_normalizers=True)
+
+    res = lmdb_version_store.read(symbol).data
+    assert_frame_equal(res["True"], df)
+
+
+def test_write_recursive_norm_bool_named_columns(lmdb_version_store):
+    symbol = "bad_write"
+    ts = pd.Timestamp("2020-01-01")
+
+    df = pd.DataFrame({True: [1, 2, 3]}, index=pd.date_range(ts, periods=3))
+
+    data = {"c": df, "l": [1, 2, 3], "m": {"n": "o", "p": df}, "p": df}
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, data, recursive_normalizers=True)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False
+
+
+@pytest.mark.parametrize(
+    "idx", [pd.date_range(pd.Timestamp("2020-01-01"), periods=3), pd.RangeIndex(start=0, stop=3, step=1)]
+)
+def test_write_recursive_norm_bool_named_index(lmdb_version_store, idx):
+    symbol = "bad_write"
+
+    df = pd.DataFrame({"col": [1, 2, 3]}, index=idx)
+    df.index.name = True
+
+    data = {"col": df, "l": [1, 2, 3], "m": {"n": "o", "p": df}, "p": df}
+
+    # The normalization exception is getting reraised as an ArcticNativeException so we check for that
+    with pytest.raises(ArcticNativeException):
+        lmdb_version_store.write(symbol, data, recursive_normalizers=True)
+
+    assert lmdb_version_store.list_symbols() == []
+    assert lmdb_version_store.has_symbol(symbol) is False

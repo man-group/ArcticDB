@@ -5,6 +5,7 @@ Use of this software is governed by the Business Source License 1.1 included in 
 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
+
 import copy
 import os
 from contextlib import contextmanager
@@ -46,6 +47,7 @@ from arcticdb_ext import (
     unset_config_string,
 )
 from packaging.version import Version
+
 
 def create_df(start=0, columns=1) -> pd.DataFrame:
     data = {}
@@ -213,14 +215,15 @@ assert_series_equal = maybe_not_check_freq(pd.testing.assert_series_equal)
 def assert_series_equal_pandas_1(expected: pd.Series, actual: pd.Series, **kwargs):
     """For Pandas 1 type of empty series will be float64 when returned by arctic"""
     if IS_PANDAS_ONE:
-        if (
-            (np.issubdtype(expected.dtype, np.object_) and np.issubdtype(actual.dtype, np.floating)) or
-            (np.issubdtype(expected.dtype, np.floating) and np.issubdtype(actual.dtype, np.object_))
-            ):
+        if (np.issubdtype(expected.dtype, np.object_) and np.issubdtype(actual.dtype, np.floating)) or (
+            np.issubdtype(expected.dtype, np.floating) and np.issubdtype(actual.dtype, np.object_)
+        ):
             if (expected.size == 0) and (actual.size == 0):
                 assert expected.name == actual.name
                 # Compare the indexes as indexes without the frequency which can be None sometimes for some types (str)
-                assert pd.Index(expected.index).equals(pd.Index(actual.index)), f"Investigate why {expected.index} == {actual.index}"
+                assert pd.Index(expected.index).equals(
+                    pd.Index(actual.index)
+                ), f"Investigate why {expected.index} == {actual.index}"
                 return
     assert_series_equal(expected, actual, **kwargs)
 
@@ -256,6 +259,7 @@ def convert_arrow_to_pandas_for_tests(table):
             new_table = new_table.set_column(i, name, new_col)
     return new_table.to_pandas()
 
+
 def assert_frame_equal_with_arrow(left, right, **kwargs):
     if isinstance(left, pa.Table):
         left = convert_arrow_to_pandas_for_tests(left)
@@ -264,7 +268,7 @@ def assert_frame_equal_with_arrow(left, right, **kwargs):
     assert_frame_equal(left, right, **kwargs)
 
 
-unicode_symbol = "\u00A0"  # start of latin extensions
+unicode_symbol = "\u00a0"  # start of latin extensions
 unicode_symbols = "".join([chr(ord(unicode_symbol) + i) for i in range(100)])
 
 
@@ -395,8 +399,10 @@ class TestCustomNormalizer(CustomNormalizer):
     def denormalize(self, item: Any, norm_meta: NormalizationMetadata.CustomNormalizerMeta) -> Any:
         return CustomThing(custom_index=item.index, custom_columns=item.columns, custom_values=item.values)
 
+
 class CustomDict(dict):
     pass
+
 
 class CustomDictNormalizer(CustomNormalizer):
     NESTED_STRUCTURE = True
@@ -408,6 +414,7 @@ class CustomDictNormalizer(CustomNormalizer):
 
     def denormalize(self, item, norm_meta):
         return CustomDict(item)
+
 
 def sample_dataframe(size=1000, seed=0):
     return get_sample_dataframe(size, seed)
@@ -458,6 +465,7 @@ def get_wide_dataframe(size=10000, seed=0):
             "bool": np.random.randn(size) > 0,
         }
     )
+
 
 def get_pickle():
     return (
@@ -868,8 +876,10 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
 def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
     return df[~df.isin([np.nan, np.inf, -np.inf]).any(axis=1)]
 
+
 def drop_inf(df):
     return df[~df.isin([np.inf, -np.inf]).any(axis=1)]
+
 
 def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame, check_dtype=False):
     """
@@ -895,12 +905,15 @@ def assert_dfs_approximate(left: pd.DataFrame, right: pd.DataFrame, check_dtype=
     if PANDAS_VERSION >= Version("1.2"):
         check_equals_flags["check_flags"] = False
     for col in left_no_inf.columns:
-        if pd.api.types.is_integer_dtype(left_no_inf[col].dtype) and pd.api.types.is_integer_dtype(right_no_inf[col].dtype):
+        if pd.api.types.is_integer_dtype(left_no_inf[col].dtype) and pd.api.types.is_integer_dtype(
+            right_no_inf[col].dtype
+        ):
             pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
         else:
             if PANDAS_VERSION >= Version("1.1"):
                 check_equals_flags["rtol"] = 3e-4
             pd.testing.assert_series_equal(left_no_inf[col], right_no_inf[col], **check_equals_flags)
+
 
 def create_resampler(data, rule, closed, label, offset=None, origin=None):
     if PANDAS_VERSION >= Version("1.1.0"):
@@ -912,6 +925,7 @@ def create_resampler(data, rule, closed, label, offset=None, origin=None):
         return data.resample(rule, closed=closed, label=label, **resample_args)
     else:
         return data.resample(rule, closed=closed, label=label)
+
 
 def expected_pandas_resample_generic(
     original_data,
@@ -944,8 +958,11 @@ def expected_pandas_resample_generic(
             else:
                 _expected_types = None
             expected = pd.DataFrame(
-                {col_name: np.array([], dtype=_expected_types[col_name] if _expected_types else None) for col_name in pandas_aggregations},
-                index=pd.DatetimeIndex([])
+                {
+                    col_name: np.array([], dtype=_expected_types[col_name] if _expected_types else None)
+                    for col_name in pandas_aggregations
+                },
+                index=pd.DatetimeIndex([]),
             )
         else:
             raise
@@ -962,6 +979,7 @@ def expected_pandas_resample_generic(
         expected = expected.astype(expected_types)
     return expected
 
+
 def assert_resampled_dataframes_are_equal(resampled_by_arcticdb, resampled_by_pandas, check_dtype=False):
     has_float_column = any(pd.api.types.is_float_dtype(col_type) for col_type in list(resampled_by_pandas.dtypes))
     if has_float_column:
@@ -969,19 +987,20 @@ def assert_resampled_dataframes_are_equal(resampled_by_arcticdb, resampled_by_pa
     else:
         assert_frame_equal(resampled_by_pandas, resampled_by_arcticdb, check_dtype=check_dtype)
 
+
 def generic_resample_test(
-        lib,
-        sym,
-        rule,
-        aggregations,
-        data,
-        date_range=None,
-        closed=None,
-        label=None,
-        offset=None,
-        origin=None,
-        drop_empty_buckets_for=None,
-        expected_types=None,
+    lib,
+    sym,
+    rule,
+    aggregations,
+    data,
+    date_range=None,
+    closed=None,
+    label=None,
+    offset=None,
+    origin=None,
+    drop_empty_buckets_for=None,
+    expected_types=None,
 ):
     """
     Perform a resampling in ArcticDB and compare it against the same query in Pandas.
@@ -993,7 +1012,7 @@ def generic_resample_test(
     but it cannot take parameters such as origin and offset.
     """
     # Pandas doesn't have a good date_range equivalent in resample, so just use read for that
-    original_data = data if date_range is None else data.loc[date_range[0]:date_range[-1]]
+    original_data = data if date_range is None else data.loc[date_range[0] : date_range[-1]]
     # Pandas 1.X needs None as the first argument to agg with named aggregators
 
     q = QueryBuilder()
@@ -1005,15 +1024,7 @@ def generic_resample_test(
     received = received.reindex(columns=sorted(received.columns))
 
     expected = expected_pandas_resample_generic(
-        original_data,
-        rule,
-        aggregations,
-        closed,
-        label,
-        offset,
-        origin,
-        drop_empty_buckets_for,
-        expected_types
+        original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
     )
 
     check_dtype = expected_types is not None
@@ -1036,15 +1047,7 @@ def generic_resample_test(
                 raise
             original_data = original_data.tail(len(original_data) - rows_to_pop)
             expected = expected_pandas_resample_generic(
-                original_data,
-                rule,
-                aggregations,
-                closed,
-                label,
-                offset,
-                origin,
-                drop_empty_buckets_for,
-                expected_types
+                original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
             )
             assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
         else:
@@ -1064,6 +1067,9 @@ def equals(x, y):
     elif isinstance(x, np.ndarray):
         assert isinstance(y, np.ndarray)
         assert np.allclose(x, y)
+    elif isinstance(x, pd.DataFrame):
+        assert isinstance(y, pd.DataFrame)
+        assert_frame_equal(x, y)
     else:
         assert x == y
 
@@ -1078,13 +1084,15 @@ def common_sum_aggregation_dtype(left, right):
         return np.int64
     elif pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right):
         return np.uint64
-    elif ((pd.api.types.is_signed_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right)) or
-          (pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_signed_integer_dtype(right))):
+    elif (pd.api.types.is_signed_integer_dtype(left) and pd.api.types.is_unsigned_integer_dtype(right)) or (
+        pd.api.types.is_unsigned_integer_dtype(left) and pd.api.types.is_signed_integer_dtype(right)
+    ):
         return np.int64
     elif pd.api.types.is_bool_dtype(left) and pd.api.types.is_bool_dtype(right):
         return np.uint64
     else:
         return np.float64
+
 
 def largest_numeric_type(dtype):
     """
@@ -1099,8 +1107,10 @@ def largest_numeric_type(dtype):
         return np.uint64
     return dtype
 
+
 def is_numeric_type(dtype):
     return pd.api.types.is_integer_dtype(dtype) or pd.api.types.is_float_dtype(dtype)
+
 
 def valid_common_type(left, right):
     """
@@ -1154,6 +1164,7 @@ def valid_common_type(left, right):
         raise Exception(f"Unexpected right dtype: {right}")
     raise Exception(f"Unexpected left dtype: {left}")
 
+
 def expected_aggregation_type(aggregation, df_list, column_name):
     common_types = compute_common_type_for_columns_in_df_list(df_list)
     if aggregation == "count":
@@ -1178,6 +1189,7 @@ def compute_common_type_for_columns_in_df_list(df_list):
             else:
                 common_types[col] = valid_common_type(common_types[col], np.dtype(df[col].dtype))
     return common_types
+
 
 def compute_common_type_for_columns(segment_columns: List[dict]):
     """

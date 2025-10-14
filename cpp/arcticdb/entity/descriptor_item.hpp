@@ -2,7 +2,8 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
@@ -11,20 +12,17 @@
 #include <fmt/format.h>
 #include <string>
 
-
 namespace arcticdb {
 struct DescriptorItem {
     DescriptorItem(
-        entity::AtomKey &&key,
-        std::optional<timestamp> start_index,
-        std::optional<timestamp> end_index,
-        std::optional<TimeseriesDescriptor> timeseries_descriptor) :
+            entity::AtomKey&& key, std::optional<timestamp> start_index, std::optional<timestamp> end_index,
+            std::optional<TimeseriesDescriptor> timeseries_descriptor
+    ) :
 
         key_(std::move(key)),
         start_index_(start_index),
         end_index_(end_index),
-        timeseries_descriptor_(std::move(timeseries_descriptor)) {
-    }
+        timeseries_descriptor_(std::move(timeseries_descriptor)) {}
 
     DescriptorItem() = delete;
 
@@ -40,4 +38,4 @@ struct DescriptorItem {
     std::optional<timestamp> end_index() const { return end_index_; }
     std::optional<TimeseriesDescriptor> timeseries_descriptor() const { return timeseries_descriptor_; }
 };
-}
+} // namespace arcticdb

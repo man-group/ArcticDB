@@ -2,12 +2,13 @@
  *
  * Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
  *
- * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
+ * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
+ * will be governed by the Apache License, version 2.0.
  */
 
 #pragma once
 
-#include<memory>
+#include <memory>
 #include <optional>
 #include <vector>
 
@@ -19,26 +20,35 @@
 
 namespace arcticdb {
 
-enum class ResampleBoundary {
-    LEFT,
-    RIGHT
-};
+enum class ResampleBoundary { LEFT, RIGHT };
 
 struct ISortedAggregator {
     template<class Base>
     struct Interface : Base {
         [[nodiscard]] ColumnName get_input_column_name() const { return folly::poly_call<0>(*this); };
         [[nodiscard]] ColumnName get_output_column_name() const { return folly::poly_call<1>(*this); };
-        [[nodiscard]] std::optional<Column> aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                                       const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
-                                       const std::vector<timestamp>& bucket_boundaries,
-                                       const Column& output_index_column,
-                                       StringPool& string_pool,
-                                       ResampleBoundary label) const {
-            return folly::poly_call<2>(*this, input_index_columns, input_agg_columns, bucket_boundaries, output_index_column, string_pool, label);
+        [[nodiscard]] std::optional<Column> aggregate(
+                const std::vector<std::shared_ptr<Column>>& input_index_columns,
+                const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+                const std::vector<timestamp>& bucket_boundaries, const Column& output_index_column,
+                StringPool& string_pool, ResampleBoundary label
+        ) const {
+            return folly::poly_call<2>(
+                    *this,
+                    input_index_columns,
+                    input_agg_columns,
+                    bucket_boundaries,
+                    output_index_column,
+                    string_pool,
+                    label
+            );
         }
-        void check_aggregator_supported_with_data_type(DataType data_type) const { folly::poly_call<3>(*this, data_type); };
-        [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const { return folly::poly_call<4>(*this, common_input_data_type); };
+        void check_aggregator_supported_with_data_type(DataType data_type) const {
+            folly::poly_call<3>(*this, data_type);
+        };
+        [[nodiscard]] DataType generate_output_data_type(DataType common_input_data_type) const {
+            return folly::poly_call<4>(*this, common_input_data_type);
+        };
         [[nodiscard]] std::optional<Value> get_default_value(DataType common_input_data_type) const {
             return folly::poly_call<5>(*this, common_input_data_type);
         }
@@ -46,21 +56,16 @@ struct ISortedAggregator {
 
     template<class T>
     using Members = folly::PolyMembers<
-        &T::get_input_column_name,
-        &T::get_output_column_name,
-        &T::aggregate,
-        &T::check_aggregator_supported_with_data_type,
-        &T::generate_output_data_type,
-        &T::get_default_value>;
+            &T::get_input_column_name, &T::get_output_column_name, &T::aggregate,
+            &T::check_aggregator_supported_with_data_type, &T::generate_output_data_type, &T::get_default_value>;
 };
 
 using SortedAggregatorInterface = folly::Poly<ISortedAggregator>;
 
 template<ResampleBoundary closed_boundary>
 class Bucket {
-public:
-    Bucket(timestamp start, timestamp end):
-            start_(start), end_(end){}
+  public:
+    Bucket(timestamp start, timestamp end) : start_(start), end_(end) {}
 
     void set_boundaries(timestamp start, timestamp end) {
         start_ = start;
@@ -75,31 +80,20 @@ public:
             return ts > start_ && ts <= end_;
         }
     }
-    [[nodiscard]] timestamp start() const {
-        return start_;
-    }
+    [[nodiscard]] timestamp start() const { return start_; }
 
-    [[nodiscard]]timestamp end() const {
-        return end_;
-    }
-private:
+    [[nodiscard]] timestamp end() const { return end_; }
+
+  private:
     timestamp start_;
     timestamp end_;
 };
 
-enum class AggregationOperator {
-    SUM,
-    MEAN,
-    MIN,
-    MAX,
-    FIRST,
-    LAST,
-    COUNT
-};
+enum class AggregationOperator { SUM, MEAN, MIN, MAX, FIRST, LAST, COUNT };
 
 template<typename T>
 class SumAggregatorSorted {
-public:
+  public:
     void push(T value) {
         if constexpr (std::is_floating_point_v<T>) {
             if (ARCTICDB_LIKELY(!std::isnan(value))) {
@@ -115,13 +109,14 @@ public:
         sum_ = 0;
         return res;
     }
-private:
+
+  private:
     T sum_{0};
 };
 
 template<typename T, bool TimeType = false>
 class MeanAggregatorSorted {
-public:
+  public:
     void push(T value) {
         if constexpr (std::is_floating_point_v<T>) {
             if (ARCTICDB_LIKELY(!std::isnan(value))) {
@@ -162,14 +157,15 @@ public:
             return res;
         }
     }
-private:
+
+  private:
     double sum_{0};
     uint64_t count_{0};
 };
 
 template<typename T, bool TimeType = false>
 class MinAggregatorSorted {
-public:
+  public:
     MinAggregatorSorted() {
         if constexpr (!std::is_floating_point_v<T> && !TimeType) {
             min_ = std::numeric_limits<T>::max();
@@ -204,14 +200,15 @@ public:
         }
         return res;
     }
-private:
+
+  private:
     // Floats and timestamps need a special case for when only nan/nat values are pushed
-    std::conditional_t<std::is_floating_point_v<T> || TimeType, std::optional<T>,T> min_;
+    std::conditional_t<std::is_floating_point_v<T> || TimeType, std::optional<T>, T> min_;
 };
 
 template<typename T, bool TimeType = false>
 class MaxAggregatorSorted {
-public:
+  public:
     MaxAggregatorSorted() {
         if constexpr (!std::is_floating_point_v<T> && !TimeType) {
             max_ = std::numeric_limits<T>::lowest();
@@ -246,14 +243,15 @@ public:
         }
         return res;
     }
-private:
+
+  private:
     // Floats and timestamps need a special case for when only nan/nat values are pushed
-    std::conditional_t<std::is_floating_point_v<T> || TimeType, std::optional<T>,T> max_;
+    std::conditional_t<std::is_floating_point_v<T> || TimeType, std::optional<T>, T> max_;
 };
 
 template<typename T, bool TimeType = false>
 class FirstAggregatorSorted {
-public:
+  public:
     void push(T value) {
         if constexpr (std::is_same_v<T, std::optional<std::string_view>>) {
             if (ARCTICDB_UNLIKELY(!first_.has_value() || !(*first_).has_value())) {
@@ -278,22 +276,25 @@ public:
         T res;
         if constexpr (std::is_floating_point_v<T>) {
             res = first_.value_or(std::numeric_limits<T>::quiet_NaN());
-        } else if constexpr(std::is_same_v<T, timestamp> && TimeType) {
+        } else if constexpr (std::is_same_v<T, timestamp> && TimeType) {
             res = first_.value_or(NaT);
         } else {
-            debug::check<ErrorCode::E_ASSERTION_FAILURE>(first_.has_value(), "FirstBucketAggregator::finalize called with no values pushed");
+            debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    first_.has_value(), "FirstBucketAggregator::finalize called with no values pushed"
+            );
             res = *first_;
         }
         first_.reset();
         return res;
     }
-private:
+
+  private:
     std::optional<T> first_;
 };
 
 template<typename T, bool TimeType = false>
 class LastAggregatorSorted {
-public:
+  public:
     void push(T value) {
         if constexpr (std::is_same_v<T, std::optional<std::string_view>>) {
             if (ARCTICDB_LIKELY(!last_.has_value() || value.has_value())) {
@@ -316,22 +317,25 @@ public:
         T res;
         if constexpr (std::is_floating_point_v<T>) {
             res = last_.value_or(std::numeric_limits<T>::quiet_NaN());
-        } else if constexpr(std::is_same_v<T, timestamp> && TimeType) {
+        } else if constexpr (std::is_same_v<T, timestamp> && TimeType) {
             res = last_.value_or(NaT);
         } else {
-            debug::check<ErrorCode::E_ASSERTION_FAILURE>(last_.has_value(), "LastBucketAggregator::finalize called with no values pushed");
+            debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    last_.has_value(), "LastBucketAggregator::finalize called with no values pushed"
+            );
             res = *last_;
         }
         last_.reset();
         return res;
     }
-private:
+
+  private:
     std::optional<T> last_;
 };
 
 class CountAggregatorSorted {
-public:
-    template<typename T, bool TimeType=false>
+  public:
+    template<typename T, bool TimeType = false>
     void push(T value) {
         if constexpr (std::is_same_v<T, std::optional<std::string_view>>) {
             if (ARCTICDB_LIKELY(value.has_value())) {
@@ -355,7 +359,8 @@ public:
         count_ = 0;
         return res;
     }
-private:
+
+  private:
     uint64_t count_{0};
 };
 
@@ -366,42 +371,44 @@ struct SortedAggregatorOutputColumnInfo {
 
 template<AggregationOperator aggregation_operator, ResampleBoundary closed_boundary>
 class SortedAggregator {
-public:
-
+  public:
     static constexpr ResampleBoundary closed = closed_boundary;
 
-    explicit SortedAggregator(ColumnName input_column_name, ColumnName output_column_name)
-            : input_column_name_(std::move(input_column_name))
-            , output_column_name_(std::move(output_column_name))
-    {}
+    explicit SortedAggregator(ColumnName input_column_name, ColumnName output_column_name) :
+        input_column_name_(std::move(input_column_name)),
+        output_column_name_(std::move(output_column_name)) {}
     ARCTICDB_MOVE_COPY_DEFAULT(SortedAggregator)
 
     [[nodiscard]] ColumnName get_input_column_name() const { return input_column_name_; }
     [[nodiscard]] ColumnName get_output_column_name() const { return output_column_name_; }
 
-    [[nodiscard]] std::optional<Column> aggregate(const std::vector<std::shared_ptr<Column>>& input_index_columns,
-                                   const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
-                                   const std::vector<timestamp>& bucket_boundaries,
-                                   const Column& output_index_column,
-                                   StringPool& string_pool,
-                                   ResampleBoundary label) const;
+    [[nodiscard]] std::optional<Column> aggregate(
+            const std::vector<std::shared_ptr<Column>>& input_index_columns,
+            const std::vector<std::optional<ColumnWithStrings>>& input_agg_columns,
+            const std::vector<timestamp>& bucket_boundaries, const Column& output_index_column, StringPool& string_pool,
+            ResampleBoundary label
+    ) const;
 
     void check_aggregator_supported_with_data_type(DataType data_type) const;
     [[nodiscard]] std::optional<Value> get_default_value(DataType common_input_data_type) const;
     [[nodiscard]] DataType generate_output_data_type(const DataType common_input_data_type) const;
     [[nodiscard]] std::optional<Column> generate_resampling_output_column(
-        const std::span<const std::shared_ptr<Column>> input_index_columns,
-        const std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
-        const Column& output_index_column,
-        const ResampleBoundary label) const;
+            const std::span<const std::shared_ptr<Column>> input_index_columns,
+            const std::span<const std::optional<ColumnWithStrings>> input_agg_columns,
+            const Column& output_index_column, const ResampleBoundary label
+    ) const;
 
-private:
-    [[nodiscard]] SortedAggregatorOutputColumnInfo generate_common_input_type(std::span<const std::optional<ColumnWithStrings>>) const;
+  private:
+    [[nodiscard]] SortedAggregatorOutputColumnInfo generate_common_input_type(std::span<
+                                                                              const std::optional<ColumnWithStrings>>)
+            const;
     [[nodiscard]] bool index_value_past_end_of_bucket(timestamp index_value, timestamp bucket_end) const;
 
     template<DataType input_data_type, typename Aggregator, typename T>
-    void push_to_aggregator(Aggregator& bucket_aggregator, T value, ARCTICDB_UNUSED const ColumnWithStrings& column_with_strings) const {
-        if constexpr(is_time_type(input_data_type) && aggregation_operator == AggregationOperator::COUNT) {
+    void push_to_aggregator(
+            Aggregator& bucket_aggregator, T value, ARCTICDB_UNUSED const ColumnWithStrings& column_with_strings
+    ) const {
+        if constexpr (is_time_type(input_data_type) && aggregation_operator == AggregationOperator::COUNT) {
             bucket_aggregator.template push<timestamp, true>(value);
         } else if constexpr (is_numeric_type(input_data_type) || is_bool_type(input_data_type)) {
             bucket_aggregator.push(value);
@@ -413,8 +420,10 @@ private:
     }
 
     template<DataType output_data_type, typename Aggregator>
-    [[nodiscard]] auto finalize_aggregator(Aggregator& bucket_aggregator, ARCTICDB_UNUSED StringPool& string_pool) const {
-        if constexpr (is_numeric_type(output_data_type) || is_bool_type(output_data_type) || aggregation_operator == AggregationOperator::COUNT) {
+    [[nodiscard]] auto finalize_aggregator(Aggregator& bucket_aggregator, ARCTICDB_UNUSED StringPool& string_pool)
+            const {
+        if constexpr (is_numeric_type(output_data_type) || is_bool_type(output_data_type) ||
+                      aggregation_operator == AggregationOperator::COUNT) {
             return bucket_aggregator.finalize();
         } else if constexpr (is_sequence_type(output_data_type)) {
             auto opt_string_view = bucket_aggregator.finalize();
@@ -456,7 +465,8 @@ private:
         } else if constexpr (aggregation_operator == AggregationOperator::FIRST) {
             if constexpr (is_time_type(scalar_type_info::data_type)) {
                 return FirstAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
+            } else if constexpr (is_numeric_type(scalar_type_info::data_type) ||
+                                 is_bool_type(scalar_type_info::data_type)) {
                 return FirstAggregatorSorted<typename scalar_type_info::RawType>();
             } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
                 return FirstAggregatorSorted<std::optional<std::string_view>>();
@@ -464,7 +474,8 @@ private:
         } else if constexpr (aggregation_operator == AggregationOperator::LAST) {
             if constexpr (is_time_type(scalar_type_info::data_type)) {
                 return LastAggregatorSorted<typename scalar_type_info::RawType, true>();
-            } else if constexpr (is_numeric_type(scalar_type_info::data_type) || is_bool_type(scalar_type_info::data_type)) {
+            } else if constexpr (is_numeric_type(scalar_type_info::data_type) ||
+                                 is_bool_type(scalar_type_info::data_type)) {
                 return LastAggregatorSorted<typename scalar_type_info::RawType>();
             } else if constexpr (is_sequence_type(scalar_type_info::data_type)) {
                 return LastAggregatorSorted<std::optional<std::string_view>>();
@@ -484,27 +495,29 @@ namespace fmt {
 template<>
 struct formatter<arcticdb::AggregationOperator> {
     template<typename ParseContext>
-    constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
 
     template<typename FormatContext>
-    auto format(const arcticdb::AggregationOperator& agg, FormatContext &ctx) const {
-        switch(agg) {
-            case arcticdb::AggregationOperator::SUM:
-                return fmt::format_to(ctx.out(), "SUM");
-            case arcticdb::AggregationOperator::MEAN:
-                return fmt::format_to(ctx.out(), "MEAN");
-            case arcticdb::AggregationOperator::MIN:
-                return fmt::format_to(ctx.out(), "MIN");
-            case arcticdb::AggregationOperator::MAX:
-                return fmt::format_to(ctx.out(), "MAX");
-            case arcticdb::AggregationOperator::FIRST:
-                return fmt::format_to(ctx.out(), "FIRST");
-            case arcticdb::AggregationOperator::LAST:
-                return fmt::format_to(ctx.out(), "LAST");
-            case arcticdb::AggregationOperator::COUNT:
-            default:
-                return fmt::format_to(ctx.out(), "COUNT");
+    auto format(const arcticdb::AggregationOperator& agg, FormatContext& ctx) const {
+        switch (agg) {
+        case arcticdb::AggregationOperator::SUM:
+            return fmt::format_to(ctx.out(), "SUM");
+        case arcticdb::AggregationOperator::MEAN:
+            return fmt::format_to(ctx.out(), "MEAN");
+        case arcticdb::AggregationOperator::MIN:
+            return fmt::format_to(ctx.out(), "MIN");
+        case arcticdb::AggregationOperator::MAX:
+            return fmt::format_to(ctx.out(), "MAX");
+        case arcticdb::AggregationOperator::FIRST:
+            return fmt::format_to(ctx.out(), "FIRST");
+        case arcticdb::AggregationOperator::LAST:
+            return fmt::format_to(ctx.out(), "LAST");
+        case arcticdb::AggregationOperator::COUNT:
+        default:
+            return fmt::format_to(ctx.out(), "COUNT");
         }
     }
 };
-} //namespace fmt
+} // namespace fmt
