@@ -9,3 +9,4 @@ runs:
         tar -xzf mongodb-linux-x86_64-rhel80-7.0.0.tgz
         cp mongodb-linux-x86_64-rhel80-7.0.0/bin/* /usr/local/bin/
         mongod --version
+        rm -rf mongodb-linux-x86_64-rhel80-7.0.0.tgz
