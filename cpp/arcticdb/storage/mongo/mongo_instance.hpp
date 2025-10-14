@@ -51,7 +51,7 @@ class logger final : public mongocxx::logger {
 };
 
 class MongoInstance {
-    mongocxx::instance api_instance_{std::make_unique<logger>()};
+    mongocxx::instance api_instance_;
 
   public:
     static std::shared_ptr<MongoInstance> instance_;
