@@ -135,14 +135,18 @@ std::pair<std::vector<bucket_id>, std::vector<uint64_t>> get_buckets(
     using TDT = typename Grouper::GrouperDescriptor;
 
     if (col.column_->is_sparse()) {
-        arcticdb::for_each_enumerated<TDT>(*col.column_, [&](auto enumerating_it) {
-            auto opt_group = grouper.group(enumerating_it.value(), col.string_pool_);
-            if (ARCTICDB_LIKELY(opt_group.has_value())) {
-                auto bucket = bucketizer.bucket(*opt_group);
-                row_to_bucket[enumerating_it.idx()] = bucket;
-                ++bucket_counts[bucket];
-            }
-        });
+        arcticdb::for_each_enumerated<TDT>(
+                *col.column_,
+                [&] ARCTICDB_LAMBDA_INLINE_PRE(auto enumerating_it)
+                        ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
+                            auto opt_group = grouper.group(enumerating_it.value(), col.string_pool_);
+                            if (ARCTICDB_LIKELY(opt_group.has_value())) {
+                                auto bucket = bucketizer.bucket(*opt_group);
+                                row_to_bucket[enumerating_it.idx()] = bucket;
+                                ++bucket_counts[bucket];
+                            }
+                        }
+        );
     } else {
         arcticdb::for_each<TDT>(*col.column_, [&](auto val) {
             auto opt_group = grouper.group(val, col.string_pool_);
