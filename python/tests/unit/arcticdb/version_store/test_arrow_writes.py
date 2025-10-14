@@ -760,10 +760,10 @@ def test_arrow_writes_hypothesis(
 def test_basic_write_strings(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_basic_write_strings"
-    table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], pa.large_string())})
+    table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], pa.string())})
     lib.write(sym, table)
     received = lib.read(sym).data
-    received = stringify_dictionary_encoded_columns(received, string_type=pa.large_string())
+    received = stringify_dictionary_encoded_columns(received, string_type=pa.string())
     assert table.equals(received)
 
 
