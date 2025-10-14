@@ -297,6 +297,8 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
         return DataType::NANOSECONDS_UTC64;
     case sparrow::data_type::STRING:
         return DataType::UTF_DYNAMIC32;
+    case sparrow::data_type::LARGE_STRING:
+        return DataType::UTF_DYNAMIC64;
     default:
         schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                 "Unsupported Arrow data type provided `{}`", sparrow::data_type_to_format(arrow_type)
@@ -379,6 +381,16 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             } else if (is_sequence_type(data_type)) {
                 // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer represents
                 // offsets into this buffer
+                data += arrow_array->offset * get_type_size(data_type);
+                // We deliberately omit the last value from the offsets buffer as it will be inferred from the length
+                // of the associated STRINGS buffer at this offset. This keeps our indexing into the column's
+                // ChunkedBuffer accurate
+                const auto bytes = array.size() * get_type_size(data_type);
+                column.buffer().add_external_block(data, bytes);
+                ChunkedBuffer strings_buffer;
+                const auto string_bytes = arrow_array_buffers[2].size();
+                strings_buffer.add_external_block(arrow_array_buffers[2].data<uint8_t>(), string_bytes);
+                column.set_extra_buffer(start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer));
             } else {
                 data += arrow_array->offset * get_type_size(data_type);
                 const auto bytes = array.size() * get_type_size(data_type);
@@ -395,12 +407,16 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     }
     for (size_t idx = 0; idx < column_names.size(); ++idx) {
         if (!index_column_position.has_value() || idx != *index_column_position) {
+            if (!is_sequence_type(data_types[idx])) {
+                // String columns data buffers are empty at the moment, and so would get marked as sparse with this call
+                columns[idx].set_row_data(static_cast<ssize_t>(total_rows) - 1);
+            }
             seg.add_column(
                     scalar_field(data_types[idx], column_names[idx]), std::make_shared<Column>(std::move(columns[idx]))
             );
         }
     }
-    seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);
+    seg.set_row_id(static_cast<ssize_t>(total_rows) - 1);
     return {seg, index_column_position};
 }
 

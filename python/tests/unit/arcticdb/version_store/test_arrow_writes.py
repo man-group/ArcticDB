@@ -14,7 +14,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, stringify_dictionary_encoded_columns
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
@@ -760,7 +760,21 @@ def test_arrow_writes_hypothesis(
 def test_basic_write_strings(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_basic_write_strings"
-    table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], pa.string())})
+    table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], pa.large_string())})
     lib.write(sym, table)
-    received = lib.read(sym)
-    assert table.equals(received.data)
+    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(received, string_type=pa.large_string())
+    assert table.equals(received)
+
+
+def test_basic_write_strings_2(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_basic_write_strings_2"
+    table_0 = pa.table({"col": pa.array(["hello", "cats"], pa.large_string())})
+    table_1 = pa.table({"col": pa.array(["dog", "bats", "on"], pa.large_string())})
+    table = pa.concat_tables([table_0, table_1])
+    view = table.slice(1, 2)
+    lib.write(sym, view)
+    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(received, string_type=pa.large_string())
+    assert view.equals(received)
