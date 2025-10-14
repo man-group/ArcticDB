@@ -382,9 +382,8 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer represents
                 // offsets into this buffer
                 data += arrow_array->offset * get_type_size(data_type);
-                // We deliberately omit the last value from the offsets buffer as it will be inferred from the length
-                // of the associated STRINGS buffer at this offset. This keeps our indexing into the column's
-                // ChunkedBuffer accurate
+                // We deliberately omit the last value from the offsets buffer to keep our indexing into the column's
+                // ChunkedBuffer accurate. See corresponding comment in WriteToSegmentTask::slice_column
                 const auto bytes = array.size() * get_type_size(data_type);
                 column.buffer().add_external_block(data, bytes);
                 ChunkedBuffer strings_buffer;

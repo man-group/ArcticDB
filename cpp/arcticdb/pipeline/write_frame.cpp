@@ -104,7 +104,10 @@ Column WriteToSegmentTask::slice_column(
             auto size = ptr_and_size.second / sizeof(int64_t);
             for (size_t idx = 0; idx < size; ++idx, ++ptr) {
                 auto strings_buffer_offset = *ptr;
-                auto next_strings_buffer_offset = idx == size - 1 ? strings_buffer.bytes() : *(ptr + 1);
+                // Note that in arrow_data_to_segment we omitted the last value from the offsets buffer to keep our
+                // indexing into the chunked buffer accurate. So when idx == size - 1, (ptr + 1) is still within the
+                // memory owned by the input Arrow structure
+                auto next_strings_buffer_offset = *(ptr + 1);
                 auto string_length = next_strings_buffer_offset - strings_buffer_offset;
                 std::string_view str(
                         reinterpret_cast<const char*>(strings_buffer.bytes_at(strings_buffer_offset, string_length)),
