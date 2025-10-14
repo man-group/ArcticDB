@@ -157,7 +157,7 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
 
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
-    int64_t write_window = 3; // test: write_window_size();
+    int64_t write_window = write_window_size();
     auto window = folly::window(
             std::move(slice_and_rowcount),
             [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
@@ -191,7 +191,9 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
     return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
             .via(&async::cpu_executor())
-            .thenValue([sink](auto&& ks) { return rollback_on_quota_exceeded(std::move(ks), sink); })
+            .thenValue([sink](std::vector<folly::Try<SliceAndKey>>&& ks) {
+                return rollback_on_quota_exceeded(std::move(ks), sink);
+            })
             .via(&async::io_executor());
 }
 
@@ -306,7 +308,7 @@ folly::Future<SliceAndKey> async_rewrite_partial_segment(
                                 partial_rewrite_row_range(segment, index_range, affected_part);
                         const auto num_rows = int64_t(affected_row_range.end() - affected_row_range.start());
                         if (num_rows <= 0) {
-                            return folly::Try<SliceAndKey>{};
+                            return folly::Try<SliceAndKey>{}; // Empty future
                         }
                         SegmentInMemory output =
                                 segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
@@ -364,7 +366,7 @@ folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_key
             std::make_move_iterator(std::begin(slices)),
             std::make_move_iterator(std::end(slices)),
             std::back_inserter(keys),
-            [](const auto& key) { return key.key(); }
+            [](SliceAndKey&& key) { return std::move(key).key(); }
     );
     return sink.remove_keys(std::move(keys));
 };
@@ -379,8 +381,6 @@ folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
     for (auto& k : vec) {
         if (k.hasException()) {
             if (!exception.has_value()) {
-                // Q: Should we immediately throw on non-quota exception or wait for possible rollback
-                // first?. If
                 exception = k.exception();
             }
 
@@ -394,8 +394,10 @@ folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
     }
 
     if (has_quota_limit_exceeded) {
-        remove_slice_and_keys(std::move(succeeded), *sink).thenValue([exception](auto&&) {
-            return folly::makeSemiFuture<std::vector<SliceAndKey>>(*exception);
+        return remove_slice_and_keys(std::move(succeeded), *sink).thenValue([exception](auto&&) {
+            return folly::makeSemiFuture<std::vector<SliceAndKey>>(
+                    QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
+            );
         });
     }
 

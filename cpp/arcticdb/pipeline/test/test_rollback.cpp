@@ -13,26 +13,83 @@
 
 using namespace arcticdb;
 
-static StorageFailureSimulator::ParamActionSequence make_fault_sequence(
-        std::initializer_list<double> fault_probabilities
+namespace {
+
+TestTensorFrame write_version_frame_with_three_segments(
+        version_store::PythonVersionStore& store, const StreamId& stream_id
 ) {
+    auto frame = get_test_timeseries_frame(stream_id, 30, 0); // 30 rows -> 3 segments
+    store.write_versioned_dataframe_internal(stream_id, frame.frame_, false, false, false);
+    return frame;
+}
+
+auto get_keys(version_store::PythonVersionStore& store) {
+    auto mock_store = store._test_get_store();
+    std::vector<RefKey> version_ref_keys;
+    mock_store->iterate_type(KeyType::VERSION_REF, [&](VariantKey&& vk) {
+        version_ref_keys.emplace_back(std::get<RefKey>(std::move(vk)));
+    });
+
+    std::vector<AtomKeyImpl> version_keys;
+    mock_store->iterate_type(KeyType::VERSION, [&](VariantKey&& vk) {
+        version_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
+    });
+
+    std::vector<AtomKeyImpl> index_keys;
+    mock_store->iterate_type(KeyType::TABLE_INDEX, [&](VariantKey&& vk) {
+        index_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
+    });
+
+    std::vector<AtomKeyImpl> data_keys;
+    mock_store->iterate_type(KeyType::TABLE_DATA, [&](VariantKey&& vk) {
+        data_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
+    });
+
+    return std::make_tuple(version_ref_keys, version_keys, index_keys, data_keys);
+}
+
+TestTensorFrame update_with_three_segments(version_store::PythonVersionStore& store, const StreamId& stream_id) {
+    constexpr RowRange update_range{5, 28};
+    constexpr size_t update_val{1};
+    auto update_frame = get_test_frame<TimeseriesIndex>(
+            stream_id, get_test_timeseries_fields(), update_range.diff(), update_range.first, update_val
+    );
+    store.update_internal(stream_id, UpdateQuery{}, update_frame.frame_, false, false, false);
+    return update_frame;
+}
+
+} // namespace
+
+#include <optional>
+#include <type_traits>
+
+template<typename... Ts>
+static StorageFailureSimulator::ParamActionSequence make_fault_sequence() {
     StorageFailureSimulator::ParamActionSequence seq;
-    seq.reserve(fault_probabilities.size());
-    for (auto prob : fault_probabilities) {
-        seq.emplace_back(action_factories::fault<QuotaExceededException>(prob));
-    }
+    seq.reserve(sizeof...(Ts));
+
+    auto append = []<typename T>(StorageFailureSimulator::ParamActionSequence& s) {
+        if constexpr (std::is_same_v<T, std::nullopt_t>) {
+            s.emplace_back(action_factories::no_op);
+        } else {
+            s.emplace_back(action_factories::fault<T>(1));
+        }
+    };
+
+    (append.template operator()<Ts>(seq), ...);
     return seq;
 }
 
 struct TestScenario {
     std::string name;
     StorageFailureSimulator::ParamActionSequence failures;
-    size_t expected_ref_keys{};
-    size_t expected_version_keys{};
-    size_t expected_index_keys{};
-    size_t expected_data_keys{};
+    size_t expected_written_ref_keys{};
+    size_t expected_written_version_keys{};
+    size_t expected_written_index_keys{};
+    bool check_data_keys{true};
+    size_t expected_written_data_keys{};
     size_t num_writes{};
-    std::vector<bool> write_should_throw;
+    std::vector<bool> write_should_throw_quota_exception;
 };
 
 class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
@@ -51,36 +108,6 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
 
     void TearDown() override { StorageFailureSimulator::instance()->reset(); }
 
-    void write_version_frame_with_three_segments() {
-        auto frame = get_test_timeseries_frame(stream_id_, 30, 0).frame_; // 30 rows -> 3 segments
-        version_store_->write_versioned_dataframe_internal(stream_id_, std::move(frame), false, false, false);
-    }
-
-    auto get_keys() {
-        auto mock_store = version_store_->_test_get_store();
-        std::vector<RefKey> version_ref_keys;
-        mock_store->iterate_type(KeyType::VERSION_REF, [&](VariantKey&& vk) {
-            version_ref_keys.emplace_back(std::get<RefKey>(std::move(vk)));
-        });
-
-        std::vector<AtomKeyImpl> version_keys;
-        mock_store->iterate_type(KeyType::VERSION, [&](VariantKey&& vk) {
-            version_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
-        });
-
-        std::vector<AtomKeyImpl> index_keys;
-        mock_store->iterate_type(KeyType::TABLE_INDEX, [&](VariantKey&& vk) {
-            index_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
-        });
-
-        std::vector<AtomKeyImpl> data_keys;
-        mock_store->iterate_type(KeyType::TABLE_DATA, [&](VariantKey&& vk) {
-            data_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
-        });
-
-        return std::make_tuple(version_ref_keys, version_keys, index_keys, data_keys);
-    }
-
     std::unique_ptr<version_store::PythonVersionStore> version_store_;
     StreamId stream_id_{"sym"};
 };
@@ -94,147 +121,216 @@ class RollbackOnQuotaExceededUpdate : public RollbackOnQuotaExceeded {
         version_store_cfg.mutable_write_options()->set_segment_row_size(10);
         auto [version_store, _] = python_version_store_in_memory(version_store_cfg);
         version_store_ = std::make_unique<version_store::PythonVersionStore>(std::move(version_store));
-        write_version_frame_with_three_segments();
+        initial_frame_ =
+                std::make_unique<TestTensorFrame>(write_version_frame_with_three_segments(*version_store_, stream_id_));
 
         const auto& scenario = GetParam();
         StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.failures}});
 
-        auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys();
+        auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
 
         ASSERT_EQ(version_ref_keys.size(), 1);
         ASSERT_EQ(version_keys.size(), 1);
         ASSERT_EQ(index_keys.size(), 1);
         ASSERT_EQ(data_keys.size(), 3);
     }
-
-    void update_with_three_segments() {
-        auto frame = get_test_timeseries_frame(stream_id_, 30, 0).frame_; // 30 rows -> 3 segments
-        version_store_->update_internal(stream_id_, UpdateQuery{}, std::move(frame), false, false, false);
-    }
+    std::unique_ptr<TestTensorFrame> initial_frame_;
 };
 
-const auto TEST_DATA = ::testing::Values(
+using QUOTA = QuotaExceededException;
+using OTHER = StorageException;
+using NONE = std::nullopt_t;
+const auto TEST_DATA_WRITE = ::testing::Values(
         TestScenario{
                 .name = "Every_second_write_fails",
-                .failures = make_fault_sequence({0, 1}),
-                .expected_ref_keys = 0,
-                .expected_version_keys = 0,
-                .expected_index_keys = 0,
-                .expected_data_keys = 0,
+                .failures = make_fault_sequence<NONE, QUOTA, NONE, QUOTA, NONE, QUOTA>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
                 .num_writes = 2,
-                .write_should_throw = {true, true},
+                .write_should_throw_quota_exception = {true, true},
         },
         TestScenario{
                 .name = "All_writes_fail",
-                .failures = make_fault_sequence({1}),
-                .expected_ref_keys = 0,
-                .expected_version_keys = 0,
-                .expected_index_keys = 0,
-                .expected_data_keys = 0,
-                .num_writes = 2,
-                .write_should_throw = {true, true},
+                .failures = make_fault_sequence<QUOTA>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_should_throw_quota_exception = {true, true},
         },
         TestScenario{
                 .name = "Only_third_segment_write_fails",
-                .failures = make_fault_sequence({0, 0, 1, 0, 0, 0}),
-                .expected_ref_keys = 1,
-                .expected_version_keys = 1,
-                .expected_index_keys = 1,
-                .expected_data_keys = 3,
+                .failures = make_fault_sequence<NONE, NONE, QUOTA, NONE, NONE, NONE>(),
+                .expected_written_ref_keys = 1,
+                .expected_written_version_keys = 1,
+                .expected_written_index_keys = 1,
+                .expected_written_data_keys = 3,
                 .num_writes = 2,
-                .write_should_throw = {true, false},
+                .write_should_throw_quota_exception = {true, false},
         },
         TestScenario{
                 .name = "All_succeed",
-                .failures = make_fault_sequence({0}),
-                .expected_ref_keys = 1,
-                .expected_version_keys = 2,
-                .expected_index_keys = 2,
-                .expected_data_keys = 6,
+                .failures = make_fault_sequence<NONE>(),
+                .expected_written_ref_keys = 1,
+                .expected_written_version_keys = 2,
+                .expected_written_index_keys = 2,
+                .expected_written_data_keys = 6,
                 .num_writes = 2,
-                .write_should_throw = {false, false},
+                .write_should_throw_quota_exception = {false, false},
         }
 );
 
-const auto TEST_DATA_UPDATE_ONLY = ::testing::Values(
+const auto TEST_DATA_UPDATE = ::testing::Values(
         TestScenario{
-                .name = "Update_succeeds_initial_write_then_fails_on_rewrite",
-                .failures = make_fault_sequence({0, 0, 0, 1}),
-                .expected_ref_keys = 0,
-                .expected_version_keys = 0,
-                .expected_index_keys = 0,
-                .expected_data_keys = 0,
+                .name = "All_succeed",
+                .failures = make_fault_sequence<NONE>(),
+                .expected_written_ref_keys = 1,
+                .expected_written_version_keys = 1,
+                .expected_written_index_keys = 1,
+                .expected_written_data_keys = 5, // Three for the update segments, two rewritten before and after
                 .num_writes = 1,
-                .write_should_throw = {true}
+                .write_should_throw_quota_exception = {false},
         },
         TestScenario{
-                .name = "Update_fails_inital_write_then_no_rewrite",
-                .failures = make_fault_sequence({0, 1, 0, 0}),
-                .expected_ref_keys = 0,
-                .expected_version_keys = 0,
-                .expected_index_keys = 0,
-                .expected_data_keys = 0,
+                .name = "Update_succeeds_initial_write_then_fails_on_only_one_rewrite",
+                .failures = make_fault_sequence<NONE, NONE, NONE, QUOTA, NONE>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_should_throw = {true}
-        }
+                .write_should_throw_quota_exception = {true}
+        },
+        TestScenario{
+                .name = "Update_succeeds_initial_write_then_fails_on_every_rewrite",
+                .failures = make_fault_sequence<NONE, NONE, NONE, QUOTA, QUOTA>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_should_throw_quota_exception = {true}
+        },
+        TestScenario{
+                .name = "Update_succeeds_initial_write_then_fails_with_different_exceptions_on_rewrite",
+                .failures = make_fault_sequence<NONE, NONE, NONE, OTHER, QUOTA>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_should_throw_quota_exception = {true}
+        },
+        TestScenario{
+                .name = "Update_fails_initial_write_then_no_rewrite",
+                .failures = make_fault_sequence<NONE, QUOTA, NONE, NONE, NONE>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_should_throw_quota_exception = {true}
+        },
+        TestScenario{
+                .name = "Update_fails_with_another_exception_initially",
+                .failures = make_fault_sequence<NONE, OTHER, NONE, NONE, NONE>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .check_data_keys = false, // Some writes may have succeeded and data is left orphaned.
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_should_throw_quota_exception = {false}
+        },
+        TestScenario{
+                .name = "Update_fails_with_another_exception_on_rewrite",
+                .failures = make_fault_sequence<NONE, NONE, NONE, OTHER, NONE>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 3,
+                .num_writes = 1,
+                .write_should_throw_quota_exception = {false}
+        },
+        TestScenario{
+                .name = "Update_fails_with_different_exceptions_on_initial",
+                .failures = make_fault_sequence<NONE, QUOTA, OTHER, NONE, NONE>(),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0, // Quota exception should prevail and delete the keys
+                .num_writes = 1,
+                .write_should_throw_quota_exception = {true}
+        } // TODO: Add test that throws exception on rollback
 );
 
-INSTANTIATE_TEST_SUITE_P(, RollbackOnQuotaExceeded, TEST_DATA, [](const testing::TestParamInfo<TestScenario>& info) {
-    return info.param.name;
-});
+INSTANTIATE_TEST_SUITE_P(
+        RollbackWrite, RollbackOnQuotaExceeded, TEST_DATA_WRITE,
+        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
+);
 
 TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
     const auto& scenario = GetParam();
 
     for (size_t i = 0; i < scenario.num_writes; ++i) {
-        if (scenario.write_should_throw[i]) {
-            EXPECT_THROW(write_version_frame_with_three_segments(), QuotaExceededException);
+        if (scenario.write_should_throw_quota_exception[i]) {
+            EXPECT_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
         } else {
-            EXPECT_NO_THROW(write_version_frame_with_three_segments());
+            EXPECT_NO_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_));
         }
     }
 
-    auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys();
+    auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
 
-    ASSERT_EQ(version_ref_keys.size(), scenario.expected_ref_keys);
-    ASSERT_EQ(version_keys.size(), scenario.expected_version_keys);
-    ASSERT_EQ(index_keys.size(), scenario.expected_index_keys);
-    ASSERT_EQ(data_keys.size(), scenario.expected_data_keys);
+    ASSERT_EQ(version_ref_keys.size(), scenario.expected_written_ref_keys);
+    ASSERT_EQ(version_keys.size(), scenario.expected_written_version_keys);
+    ASSERT_EQ(index_keys.size(), scenario.expected_written_index_keys);
+    ASSERT_EQ(data_keys.size(), scenario.expected_written_data_keys);
 }
 
 TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
     const auto& scenario = GetParam();
 
-    auto initial_keys = get_keys();
+    auto initial_keys = get_keys(*version_store_);
 
     for (size_t i = 0; i < scenario.num_writes; ++i) {
-        if (scenario.write_should_throw[i]) {
-            EXPECT_THROW(update_with_three_segments(), QuotaExceededException);
+        if (scenario.write_should_throw_quota_exception[i]) {
+            EXPECT_THROW(update_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
         } else {
-            EXPECT_NO_THROW(update_with_three_segments());
+            try {
+                update_with_three_segments(*version_store_, stream_id_);
+            } catch (...) {
+            }
         }
     }
 
-    auto keys = get_keys();
-    auto [version_ref_keys, version_keys, index_keys, data_keys] = keys;
-    if (scenario.expected_ref_keys == 0) {
-        // Nothing should have changed
-        ASSERT_EQ(keys, initial_keys);
+    auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
+    if (scenario.expected_written_ref_keys == 0) {
+        ASSERT_EQ(version_ref_keys, std::get<0>(initial_keys));
+    }
+    if (scenario.expected_written_version_keys == 0) {
+        ASSERT_EQ(version_keys, std::get<1>(initial_keys));
+    }
+    if (scenario.expected_written_index_keys == 0) {
+        ASSERT_EQ(index_keys, std::get<2>(initial_keys));
+    }
+    if (scenario.expected_written_data_keys == 0 && scenario.check_data_keys) {
+        ASSERT_EQ(data_keys, std::get<3>(initial_keys));
     }
 
     // Excluding the initial write
     ASSERT_EQ(version_ref_keys.size(), 1);
-    ASSERT_EQ(version_keys.size(), scenario.expected_version_keys + 1);
-    ASSERT_EQ(index_keys.size(), scenario.expected_index_keys + 1);
-    ASSERT_EQ(data_keys.size(), scenario.expected_data_keys + 3);
+    ASSERT_EQ(version_keys.size(), scenario.expected_written_version_keys + 1);
+    ASSERT_EQ(index_keys.size(), scenario.expected_written_index_keys + 1);
+    if (scenario.check_data_keys) {
+        ASSERT_EQ(data_keys.size(), scenario.expected_written_data_keys + 3);
+    }
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        RollbackUpdateCommon, RollbackOnQuotaExceededUpdate, TEST_DATA,
-        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
-);
-
-INSTANTIATE_TEST_SUITE_P(
-        RollbackUpdate, RollbackOnQuotaExceededUpdate, TEST_DATA_UPDATE_ONLY,
+        RollbackUpdate, RollbackOnQuotaExceededUpdate, TEST_DATA_UPDATE,
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
