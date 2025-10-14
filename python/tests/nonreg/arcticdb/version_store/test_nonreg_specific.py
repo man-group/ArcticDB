@@ -14,9 +14,11 @@ import sys
 
 from arcticdb import QueryBuilder
 from arcticdb.exceptions import UserInputException
-from arcticdb.util.test import assert_frame_equal, assert_series_equal
+import arcticdb.toolbox.query_stats as qs
+from arcticdb.util.test import assert_frame_equal, assert_series_equal, config_context_multi
 from arcticdb.version_store.library import Library
 from arcticdb_ext import set_config_int
+import arcticdb_ext.cpp_async as adb_async
 from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.conftest import Marks
@@ -500,3 +502,36 @@ def test_use_norm_failure_handler_known_types(lmdb_version_store_allows_pickling
     # is set in Library.__init__, hence why this test stresses the correct codepath
     nvs = lmdb_version_store_allows_pickling
     Library("dummy", nvs)
+
+
+def test_all_snapshots_not_loaded_for_tombstoned_as_of(s3_version_store_v1):
+    # Prior to https://github.com/man-group/ArcticDB/pull/2699 if a version was requested as_of a version number that
+    # had been tombstoned, we would load all of the snapshots into memory, and then search for the specified index key.
+    # The new implementation:
+    # 1. Loads snapshots in parallel (windowed on the number of IO threads)
+    # 2. Short-circuits and stops reading snapshot keys when the required index key has been found
+    lib = s3_version_store_v1
+    sym = "test_all_snapshots_not_loaded_for_tombstoned_as_of_sym"
+    try:
+        with config_context_multi({"VersionStore.NumIOThreads": 1, "VersionStore.NumCPUThreads": 1}):
+            adb_async.reinit_task_scheduler()
+            assert adb_async.io_thread_count() == 1
+            assert adb_async.cpu_thread_count() == 1
+            lib.write(sym, 1)
+            for idx in range(10):
+                lib.snapshot(f"snap_{idx}")
+            lib.delete(sym)
+            # Version 0 of sym will be tombstoned, and present in all 10 snapshots. With a single IO thread, we should
+            # only read one of these snapshots
+            with qs.query_stats():
+                received = lib.read(sym, as_of=0).data
+                stats = qs.get_query_stats()
+            qs.reset_stats()
+            assert received == 1
+            # There should be exactly 1 listing of snapshot ref keys, 1 listing of the legacy snapshot keys, and 1 GET
+            # of a snapshot ref key
+            assert stats["storage_operations"]["S3_ListObjectsV2"]["SNAPSHOT_REF"]["count"] == 1
+            assert stats["storage_operations"]["S3_ListObjectsV2"]["SNAPSHOT"]["count"] == 1
+            assert stats["storage_operations"]["S3_GetObject"]["SNAPSHOT_REF"]["count"] == 1
+    finally:
+        adb_async.reinit_task_scheduler()
