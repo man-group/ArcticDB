@@ -467,43 +467,42 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 
                 arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *col.column_,
-                        [&] ARCTICDB_LAMBDA_INLINE_PRE(auto enumerating_it)
-                                ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                    typename col_type_info::RawType val;
-                                    if constexpr (is_sequence_type(col_type_info::data_type)) {
-                                        auto offset = enumerating_it.value();
-                                        if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
-                                            val = it->second;
-                                        } else {
-                                            std::optional<std::string_view> str = col.string_at_offset(offset);
-                                            if (str.has_value()) {
-                                                val = string_pool->get(*str, true).offset();
-                                            } else {
-                                                val = offset;
-                                            }
-                                            typename col_type_info::RawType val_copy(val);
-                                            offset_to_group.emplace(offset, val_copy);
-                                        }
+                        [&] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
+                            typename col_type_info::RawType val;
+                            if constexpr (is_sequence_type(col_type_info::data_type)) {
+                                auto offset = enumerating_it.value();
+                                if (auto it = offset_to_group.find(offset); it != offset_to_group.end()) {
+                                    val = it->second;
+                                } else {
+                                    std::optional<std::string_view> str = col.string_at_offset(offset);
+                                    if (str.has_value()) {
+                                        val = string_pool->get(*str, true).offset();
                                     } else {
-                                        val = enumerating_it.value();
+                                        val = offset;
                                     }
-
-                                    if (is_sparse) {
-                                        for (auto j = previous_value_index; j != enumerating_it.idx(); ++j) {
-                                            static constexpr size_t missing_value_group_id = 0;
-                                            *row_to_group_ptr++ = missing_value_group_id;
-                                        }
-                                        previous_value_index = enumerating_it.idx() + 1;
-                                    }
-
-                                    if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
-                                        *row_to_group_ptr++ = next_group_id;
-                                        auto group_id = next_group_id++;
-                                        hash_to_group->emplace(val, group_id);
-                                    } else {
-                                        *row_to_group_ptr++ = it->second;
-                                    }
+                                    typename col_type_info::RawType val_copy(val);
+                                    offset_to_group.emplace(offset, val_copy);
                                 }
+                            } else {
+                                val = enumerating_it.value();
+                            }
+
+                            if (is_sparse) {
+                                for (auto j = previous_value_index; j != enumerating_it.idx(); ++j) {
+                                    static constexpr size_t missing_value_group_id = 0;
+                                    *row_to_group_ptr++ = missing_value_group_id;
+                                }
+                                previous_value_index = enumerating_it.idx() + 1;
+                            }
+
+                            if (auto it = hash_to_group->find(val); it == hash_to_group->end()) {
+                                *row_to_group_ptr++ = next_group_id;
+                                auto group_id = next_group_id++;
+                                hash_to_group->emplace(val, group_id);
+                            } else {
+                                *row_to_group_ptr++ = it->second;
+                            }
+                        }
                 );
 
                 num_unique = next_group_id;

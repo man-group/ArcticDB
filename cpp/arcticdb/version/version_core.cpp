@@ -1601,11 +1601,10 @@ void copy_frame_data_to_buffer(
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
                 arcticdb::for_each_enumerated<typename src_type_info::TDT>(
                         src_column,
-                        [typed_dst_ptr] ARCTICDB_LAMBDA_INLINE_PRE(auto enumerating_it)
-                                ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                    typed_dst_ptr[enumerating_it.idx()] =
-                                            static_cast<typename dst_type_info::RawType>(enumerating_it.value());
-                                }
+                        [typed_dst_ptr] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
+                            typed_dst_ptr[enumerating_it.idx()] =
+                                    static_cast<typename dst_type_info::RawType>(enumerating_it.value());
+                        }
                 );
             });
         });
@@ -1630,13 +1629,9 @@ void copy_frame_data_to_buffer(
                         default_value
                 );
                 SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
-                arcticdb::for_each_enumerated<SourceTDT>(
-                        src_column,
-                        [&] ARCTICDB_LAMBDA_INLINE_PRE(const auto& row)
-                                ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                    typed_dst_ptr[row.idx()] = row.value();
-                                }
-                );
+                arcticdb::for_each_enumerated<SourceTDT>(src_column, [&] ARCTICDB_LAMBDA_INLINE(const auto& row) {
+                    typed_dst_ptr[row.idx()] = row.value();
+                });
             }
         });
     } else if (is_valid_type_promotion_to_target(
@@ -1681,10 +1676,7 @@ void copy_frame_data_to_buffer(
                         );
                         arcticdb::for_each_enumerated<typename source_type_info::TDT>(
                                 src_column,
-                                [&] ARCTICDB_LAMBDA_INLINE_PRE(const auto& row)
-                                        ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                            typed_dst_ptr[row.idx()] = row.value();
-                                        }
+                                [&] ARCTICDB_LAMBDA_INLINE(const auto& row) { typed_dst_ptr[row.idx()] = row.value(); }
                         );
                     } else {
                         arcticdb::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {

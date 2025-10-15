@@ -75,27 +75,24 @@ void ArrowStringHandler::convert_type(
     // Benchmarks in benchmark_arrow_reads.cpp show a 20% speedup with this approach for a dense string column with few
     // unique strings.
     bool populate_inverted_bitset = !source_column.opt_sparse_map().has_value();
-    for_each_enumerated<ArcticStringColumnTag>(
-            source_column,
-            [&] ARCTICDB_LAMBDA_INLINE_PRE(const auto& en) ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                if (is_a_string(en.value())) {
-                    auto [entry, is_emplaced] = unique_offsets.try_emplace(
-                            en.value(), DictEntry{unique_offset_count, bytes, string_pool->get_const_view(en.value())}
-                    );
-                    if (is_emplaced) {
-                        bytes += entry->second.strv.size();
-                        unique_offsets_in_order.push_back(en.value());
-                        ++unique_offset_count;
-                    }
-                    dest_ptr[en.idx()] = entry->second.offset_buffer_pos_;
-                    if (!populate_inverted_bitset) {
-                        inserter = en.idx();
-                    }
-                } else if (populate_inverted_bitset) {
-                    inserter = en.idx();
-                }
+    for_each_enumerated<ArcticStringColumnTag>(source_column, [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+        if (is_a_string(en.value())) {
+            auto [entry, is_emplaced] = unique_offsets.try_emplace(
+                    en.value(), DictEntry{unique_offset_count, bytes, string_pool->get_const_view(en.value())}
+            );
+            if (is_emplaced) {
+                bytes += entry->second.strv.size();
+                unique_offsets_in_order.push_back(en.value());
+                ++unique_offset_count;
             }
-    );
+            dest_ptr[en.idx()] = entry->second.offset_buffer_pos_;
+            if (!populate_inverted_bitset) {
+                inserter = en.idx();
+            }
+        } else if (populate_inverted_bitset) {
+            inserter = en.idx();
+        }
+    });
     inserter.flush();
     if (populate_inverted_bitset) {
         // For dense columns at this point bitset has ones where the source column is missing values.

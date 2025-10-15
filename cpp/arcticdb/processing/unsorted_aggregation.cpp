@@ -200,16 +200,15 @@ void SumAggregatorData::aggregate(
                 if constexpr (!is_sequence_type(col_type_info::data_type)) {
                     arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                             *input_column.column_,
-                            [&out, &groups] ARCTICDB_LAMBDA_INLINE_PRE(auto enumerating_it)
-                                    ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                        if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                                            if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                                                out[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
-                                            }
-                                        } else {
-                                            out[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
-                                        }
+                            [&out, &groups] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
+                                if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                                    if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                        out[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
                                     }
+                                } else {
+                                    out[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
+                                }
+                            }
                     );
                 } else {
                     util::raise_rte("String aggregations not currently supported");
@@ -300,23 +299,22 @@ void aggregate_impl(
                     if constexpr (!is_sequence_type(col_type_info::data_type)) {
                         arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                                 *input_column->column_,
-                                [&] ARCTICDB_LAMBDA_INLINE_PRE(auto row)
-                                        ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                            auto& group_entry = out[row_to_group[row.idx()]];
-                                            const auto& current_value = GlobalRawType(row.value());
-                                            if constexpr (std::is_floating_point_v<ColRawType>) {
-                                                if (!sparse_map[row_to_group[row.idx()]] ||
-                                                    std::isnan(static_cast<ColRawType>(group_entry))) {
-                                                    group_entry = current_value;
-                                                    sparse_map.set(row_to_group[row.idx()]);
-                                                } else if (!std::isnan(static_cast<ColRawType>(current_value))) {
-                                                    group_entry = apply_extremum<T>(group_entry, current_value);
-                                                }
-                                            } else {
-                                                group_entry = apply_extremum<T>(group_entry, current_value);
-                                                sparse_map.set(row_to_group[row.idx()]);
-                                            }
+                                [&] ARCTICDB_LAMBDA_INLINE(auto row) {
+                                    auto& group_entry = out[row_to_group[row.idx()]];
+                                    const auto& current_value = GlobalRawType(row.value());
+                                    if constexpr (std::is_floating_point_v<ColRawType>) {
+                                        if (!sparse_map[row_to_group[row.idx()]] ||
+                                            std::isnan(static_cast<ColRawType>(group_entry))) {
+                                            group_entry = current_value;
+                                            sparse_map.set(row_to_group[row.idx()]);
+                                        } else if (!std::isnan(static_cast<ColRawType>(current_value))) {
+                                            group_entry = apply_extremum<T>(group_entry, current_value);
                                         }
+                                    } else {
+                                        group_entry = apply_extremum<T>(group_entry, current_value);
+                                        sparse_map.set(row_to_group[row.idx()]);
+                                    }
+                                }
                         );
                     } else {
                         util::raise_rte("String aggregations not currently supported");
@@ -343,12 +341,9 @@ SegmentInMemory finalize_impl(
             const std::span<const RawType> group_values{
                     reinterpret_cast<const RawType*>(aggregated.data()), aggregated.size() / sizeof(RawType)
             };
-            arcticdb::for_each_enumerated<typename col_type_info::TDT>(
-                    *col,
-                    [&] ARCTICDB_LAMBDA_INLINE_PRE(auto row) ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                        row.value() = group_values[row.idx()];
-                    }
-            );
+            arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
+                row.value() = group_values[row.idx()];
+            });
         });
         res.add_column(scalar_field(col->type().data_type(), output_column_name.value), std::move(col));
     }
@@ -451,21 +446,20 @@ void MeanAggregatorData::aggregate(
                 }
                 arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *input_column.column_,
-                        [&groups, &inserter, this] ARCTICDB_LAMBDA_INLINE_PRE(auto enumerating_it)
-                                ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                    auto& fraction = fractions_[groups[enumerating_it.idx()]];
-                                    if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
-                                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                                            fraction.numerator_ += static_cast<double>(enumerating_it.value());
-                                            ++fraction.denominator_;
-                                            inserter = groups[enumerating_it.idx()];
-                                        }
-                                    } else {
-                                        fraction.numerator_ += static_cast<double>(enumerating_it.value());
-                                        ++fraction.denominator_;
-                                        inserter = groups[enumerating_it.idx()];
-                                    }
+                        [&groups, &inserter, this] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
+                            auto& fraction = fractions_[groups[enumerating_it.idx()]];
+                            if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
+                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                    fraction.numerator_ += static_cast<double>(enumerating_it.value());
+                                    ++fraction.denominator_;
+                                    inserter = groups[enumerating_it.idx()];
                                 }
+                            } else {
+                                fraction.numerator_ += static_cast<double>(enumerating_it.value());
+                                ++fraction.denominator_;
+                                inserter = groups[enumerating_it.idx()];
+                            }
+                        }
                 );
             }
     );
@@ -490,14 +484,9 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
                 using OutputDataTypeTag =
                         std::conditional_t<is_time_type(TypeTag::data_type), TypeTag, DataTypeTag<DataType::FLOAT64>>;
                 using OutputTypeDescriptor = typename ScalarTypeInfo<OutputDataTypeTag>::TDT;
-                arcticdb::for_each_enumerated<OutputTypeDescriptor>(
-                        *col,
-                        [&] ARCTICDB_LAMBDA_INLINE_PRE(auto row
-                        ) ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                            row.value(
-                            ) = static_cast<typename OutputDataTypeTag::raw_type>(fractions_[row.idx()].to_double());
-                        }
-                );
+                arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
+                    row.value() = static_cast<typename OutputDataTypeTag::raw_type>(fractions_[row.idx()].to_double());
+                });
             });
         }
         res.add_column(scalar_field(get_output_data_type(), output_column_name.value), std::move(col));
@@ -527,20 +516,19 @@ void CountAggregatorData::aggregate(
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *input_column.column_,
-                        [&groups, &inserter, this] ARCTICDB_LAMBDA_INLINE_PRE(auto enumerating_it)
-                                ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                    if constexpr (is_floating_point_type(col_type_info::data_type)) {
-                                        if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
-                                            auto& val = aggregated_[groups[enumerating_it.idx()]];
-                                            ++val;
-                                            inserter = groups[enumerating_it.idx()];
-                                        }
-                                    } else {
-                                        auto& val = aggregated_[groups[enumerating_it.idx()]];
-                                        ++val;
-                                        inserter = groups[enumerating_it.idx()];
-                                    }
+                        [&groups, &inserter, this] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
+                            if constexpr (is_floating_point_type(col_type_info::data_type)) {
+                                if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
+                                    auto& val = aggregated_[groups[enumerating_it.idx()]];
+                                    ++val;
+                                    inserter = groups[enumerating_it.idx()];
                                 }
+                            } else {
+                                auto& val = aggregated_[groups[enumerating_it.idx()]];
+                                ++val;
+                                inserter = groups[enumerating_it.idx()];
+                            }
+                        }
                 );
             }
     );
@@ -560,12 +548,9 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
             memcpy(ptr, aggregated_.data(), sizeof(uint64_t) * unique_values);
         } else {
             using OutputTypeDescriptor = typename ScalarTypeInfo<DataTypeTag<DataType::UINT64>>::TDT;
-            arcticdb::for_each_enumerated<OutputTypeDescriptor>(
-                    *col,
-                    [&] ARCTICDB_LAMBDA_INLINE_PRE(auto row) ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                        row.value() = aggregated_[row.idx()];
-                    }
-            );
+            arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
+                row.value() = aggregated_[row.idx()];
+            });
         }
         res.add_column(scalar_field(get_output_data_type(), output_column_name.value), std::move(col));
     }
@@ -644,13 +629,9 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
                 const std::span<const RawType> group_values{
                         reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
                 };
-                arcticdb::for_each_enumerated<typename col_type_info::TDT>(
-                        *col,
-                        [&] ARCTICDB_LAMBDA_INLINE_PRE(auto row)
-                                ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                    row.value() = group_values[row.idx()];
-                                }
-                );
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
+                    row.value() = group_values[row.idx()];
+                });
             }
             res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
         });
@@ -729,13 +710,9 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
                 const std::span<const RawType> group_values{
                         reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
                 };
-                arcticdb::for_each_enumerated<typename col_type_info::TDT>(
-                        *col,
-                        [&] ARCTICDB_LAMBDA_INLINE_PRE(auto row)
-                                ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                                    row.value() = group_values[row.idx()];
-                                }
-                );
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
+                    row.value() = group_values[row.idx()];
+                });
             }
             res.add_column(scalar_field(data_type_.value(), output_column_name.value), col);
         });

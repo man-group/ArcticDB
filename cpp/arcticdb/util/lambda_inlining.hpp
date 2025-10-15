@@ -2,26 +2,32 @@
 
 #if defined(__clang__)
 // Inlining for clang
-#define ARCTICDB_LAMBDA_INLINE_MID __attribute__((always_inline))
+#define ARCTICDB_LAMBDA_INLINE(...) (__VA_ARGS__) __attribute__((always_inline))
+#define ARCTICDB_LAMBDA_INLINE_1(m1, ...) (__VA_ARGS__) __attribute__((always_inline)) m1
+#define ARCTICDB_LAMBDA_INLINE_2(m1, m2, ...) (__VA_ARGS__) __attribute__((always_inline)) m1 m2
 #elif defined(__GNUC__)
 // Inlining for recent versions of gcc
-#define ARCTICDB_LAMBDA_INLINE_PRE [[gnu::always_inline]]
+#define ARCTICDB_LAMBDA_INLINE(...) [[gnu::always_inline]] (__VA_ARGS__)
+#define ARCTICDB_LAMBDA_INLINE_1(m1, ...) [[gnu::always_inline]] (__VA_ARGS__) m1
+#define ARCTICDB_LAMBDA_INLINE_2(m1, m2, ...) [[gnu::always_inline]] (__VA_ARGS__) m1 m2
 #elif defined(_MSC_VER) && _MSC_VER >= 1927 && __cplusplus >= 202002L
 // MSVC 16.7 and newer specific syntax, requires C++20 language standard to be enabled
-#define ARCTICDB_LAMBDA_INLINE_POST [[msvc::forceinline]]
+#define ARCTICDB_LAMBDA_INLINE(...) (__VA_ARGS__) [[msvc::forceinline]]
+#define ARCTICDB_LAMBDA_INLINE_1(m1, ...) (__VA_ARGS__) m1 [[msvc::forceinline]]
+#define ARCTICDB_LAMBDA_INLINE_2(m1, m2, ...) (__VA_ARGS__) m1 m2 [[msvc::forceinline]]
+#else
+#define ARCTICDB_LAMBDA_INLINE(...) (__VA_ARGS__)
+#define ARCTICDB_LAMBDA_INLINE_1(m1, ...) (__VA_ARGS__) m1
+#define ARCTICDB_LAMBDA_INLINE_2(m1, m2, ...) (__VA_ARGS__) m1 m2
 #endif
 
-#ifndef ARCTICDB_LAMBDA_INLINE_PRE
-#define ARCTICDB_LAMBDA_INLINE_PRE
-#endif
-#ifndef ARCTICDB_LAMBDA_INLINE_MID
-#define ARCTICDB_LAMBDA_INLINE_MID
-#endif
-#ifndef ARCTICDB_LAMBDA_INLINE_POST
-#define ARCTICDB_LAMBDA_INLINE_POST
-#endif
-
-// Example usage of inlining a lambda looks like:
-// [&] ARCTICDB_LAMBDA_INLINE_PRE (int arg) ARCTICDB_LAMBDA_INLINE_MID noexcept ARCTICDB_LAMBDA_INLINE_POST -> int {
+// Example usages of inlining a lambda looks like:
+// [&] ARCTICDB_LAMBDA_INLINE(int arg1, int arg2) -> int {
+//     return arg+5;
+// }
+// [&] ARCTICDB_LAMBDA_INLINE_1(noexcept, int arg1, int arg2) -> int {
+//     return arg+5;
+// }
+// [&] ARCTICDB_LAMBDA_INLINE_2(static, noexcept, int arg1, int arg2) -> int {
 //     return arg+5;
 // }

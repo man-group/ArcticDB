@@ -149,12 +149,11 @@ static void transform(
     util::BitSet::bulk_insert_iterator inserter(output_bitset);
     arcticdb::for_each_enumerated<input_tdt>(
             input_column,
-            [&inserter, f = std::forward<functor>(f)] ARCTICDB_LAMBDA_INLINE_PRE(auto enumerated_it)
-                    ARCTICDB_LAMBDA_INLINE_MID ARCTICDB_LAMBDA_INLINE_POST {
-                        if (f(enumerated_it.value())) {
-                            inserter = enumerated_it.idx();
-                        }
-                    }
+            [&inserter, f = std::forward<functor>(f)] ARCTICDB_LAMBDA_INLINE(auto enumerated_it) {
+                if (f(enumerated_it.value())) {
+                    inserter = enumerated_it.idx();
+                }
+            }
     );
     inserter.flush();
 }
