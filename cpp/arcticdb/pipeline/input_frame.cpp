@@ -131,7 +131,7 @@ const SegmentInMemory& InputFrame::segment() const {
 
 void InputFrame::normalize_types() {
     if (has_segment()) {
-        for (auto& field: desc().fields()) {
+        for (auto& field : desc().fields()) {
             if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
                 field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
             }
