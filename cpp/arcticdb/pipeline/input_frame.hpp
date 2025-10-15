@@ -49,6 +49,7 @@ struct InputFrame {
     const std::optional<entity::NativeTensor>& opt_index_tensor() const;
     const std::vector<entity::NativeTensor>& field_tensors() const;
     const SegmentInMemory& segment() const;
+    void normalize_types();
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
