@@ -25,24 +25,24 @@ TestTensorFrame write_version_frame_with_three_segments(
 
 auto get_keys(version_store::PythonVersionStore& store) {
     auto mock_store = store._test_get_store();
-    std::vector<RefKey> version_ref_keys;
+    std::unordered_set<RefKey> version_ref_keys;
     mock_store->iterate_type(KeyType::VERSION_REF, [&](VariantKey&& vk) {
-        version_ref_keys.emplace_back(std::get<RefKey>(std::move(vk)));
+        version_ref_keys.emplace(std::get<RefKey>(std::move(vk)));
     });
 
-    std::vector<AtomKeyImpl> version_keys;
+    std::unordered_set<AtomKeyImpl> version_keys;
     mock_store->iterate_type(KeyType::VERSION, [&](VariantKey&& vk) {
-        version_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
+        version_keys.emplace(std::get<AtomKeyImpl>(std::move(vk)));
     });
 
-    std::vector<AtomKeyImpl> index_keys;
+    std::unordered_set<AtomKeyImpl> index_keys;
     mock_store->iterate_type(KeyType::TABLE_INDEX, [&](VariantKey&& vk) {
-        index_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
+        index_keys.emplace(std::get<AtomKeyImpl>(std::move(vk)));
     });
 
-    std::vector<AtomKeyImpl> data_keys;
+    std::unordered_set<AtomKeyImpl> data_keys;
     mock_store->iterate_type(KeyType::TABLE_DATA, [&](VariantKey&& vk) {
-        data_keys.emplace_back(std::get<AtomKeyImpl>(std::move(vk)));
+        data_keys.emplace(std::get<AtomKeyImpl>(std::move(vk)));
     });
 
     return std::make_tuple(version_ref_keys, version_keys, index_keys, data_keys);
@@ -315,7 +315,7 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        RollbackWrite, RollbackOnQuotaExceeded, TEST_DATA_WRITE,
+        , RollbackOnQuotaExceeded, TEST_DATA_WRITE,
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
 
@@ -394,6 +394,6 @@ TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        RollbackUpdate, RollbackOnQuotaExceededUpdate, TEST_DATA_UPDATE,
+        , RollbackOnQuotaExceededUpdate, TEST_DATA_UPDATE,
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
