@@ -682,18 +682,23 @@ def test_staging_with_sorting_strings(version_store_factory):
 def test_recursive_normalizers(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_recursive_normalizers"
-    table_0 = pa.table({"col0": pa.array([0, 1], pa.int8())})
+    table_0 = pa.table({"col0": pa.array(["hello", "there"], pa.string())})
     df_1 = pd.DataFrame({"col1": [2, 3, 4]})
-    table_2 = pa.table({"col2": pa.array([5, 6, 7, 8], pa.int32())})
+    table_2 = pa.table(
+        {
+            "col2": pa.array([5, 6, 7, 8], pa.int32()),
+            "col3": pa.array(["five", "six", "seven", "eight"], pa.large_string()),
+        }
+    )
     list_data = [table_0, df_1, table_2]
     lib.write(sym, list_data, recursive_normalizers=True)
 
     assert not lib.is_symbol_pickled(sym)
     received = lib.read(sym).data
     assert len(received) == 3
-    assert table_0.equals(received[0])
+    assert table_0.equals(stringify_dictionary_encoded_columns(received[0], pa.string()))
     assert_frame_equal_with_arrow(df_1, received[1])
-    assert table_2.equals(received[2])
+    assert table_2.equals(stringify_dictionary_encoded_columns(received[2], pa.large_string()))
 
     dict_data = {
         "a": table_0,
@@ -708,11 +713,11 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
     received = lib.read(sym).data
     assert isinstance(received, dict)
     assert "a" in received.keys() and "b" in received.keys()
-    assert table_0.equals(received["a"])
+    assert table_0.equals(stringify_dictionary_encoded_columns(received["a"], pa.string()))
     assert "c" in received["b"].keys() and "d" in received["b"].keys()
     assert isinstance(received["b"]["c"], list) and len(received["b"]["c"]) == 1
     assert_frame_equal_with_arrow(df_1, received["b"]["c"][0])
-    assert table_2.equals(received["b"]["d"])
+    assert table_2.equals(stringify_dictionary_encoded_columns(received["b"]["d"], pa.large_string()))
 
 
 def test_batch_write(lmdb_version_store_arrow):
