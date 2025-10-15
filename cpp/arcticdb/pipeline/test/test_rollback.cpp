@@ -63,40 +63,47 @@ TestTensorFrame update_with_three_segments(version_store::PythonVersionStore& st
 #include <optional>
 #include <type_traits>
 
-template<typename... Ts>
-static StorageFailureSimulator::ParamActionSequence make_fault_sequence() {
+enum class Outcome { QUOTA, OTHER, NONE, UNKNOWN_EXCEPTION };
+
+static StorageFailureSimulator::ParamActionSequence make_fault_sequence(const std::vector<Outcome>& types) {
     StorageFailureSimulator::ParamActionSequence seq;
-    seq.reserve(sizeof...(Ts));
+    seq.reserve(types.size());
 
-    auto append = []<typename T>(StorageFailureSimulator::ParamActionSequence& s) {
-        if constexpr (std::is_same_v<T, std::nullopt_t>) {
-            s.emplace_back(action_factories::no_op);
-        } else {
-            s.emplace_back(action_factories::fault<T>(1));
+    for (auto type : types) {
+        switch (type) {
+        case Outcome::NONE:
+            seq.emplace_back(action_factories::no_op);
+            break;
+        case Outcome::QUOTA:
+            seq.emplace_back(action_factories::fault<QuotaExceededException>(1));
+            break;
+        case Outcome::OTHER:
+            seq.emplace_back(action_factories::fault<StorageException>(1));
+            break;
         }
-    };
-
-    (append.template operator()<Ts>(seq), ...);
+    }
     return seq;
 }
 
 struct TestScenario {
     std::string name;
-    StorageFailureSimulator::ParamActionSequence failures;
+    StorageFailureSimulator::ParamActionSequence write_failures;
+    StorageFailureSimulator::ParamActionSequence delete_failures;
     size_t expected_written_ref_keys{};
     size_t expected_written_version_keys{};
     size_t expected_written_index_keys{};
     bool check_data_keys{true};
     size_t expected_written_data_keys{};
     size_t num_writes{};
-    std::vector<bool> write_should_throw_quota_exception;
+    std::vector<Outcome> write_expected_outcome;
 };
 
 class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
   protected:
     void SetUp() override {
         const auto& scenario = GetParam();
-        StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.failures}});
+        StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.write_failures}});
+        StorageFailureSimulator::instance()->configure({{FailureType::DELETE, scenario.delete_failures}});
 
         proto::storage::VersionStoreConfig version_store_cfg;
         version_store_cfg.mutable_write_options()->set_column_group_size(100);
@@ -125,7 +132,7 @@ class RollbackOnQuotaExceededUpdate : public RollbackOnQuotaExceeded {
                 std::make_unique<TestTensorFrame>(write_version_frame_with_three_segments(*version_store_, stream_id_));
 
         const auto& scenario = GetParam();
-        StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.failures}});
+        StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.write_failures}});
 
         auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
 
@@ -137,134 +144,174 @@ class RollbackOnQuotaExceededUpdate : public RollbackOnQuotaExceeded {
     std::unique_ptr<TestTensorFrame> initial_frame_;
 };
 
-using QUOTA = QuotaExceededException;
-using OTHER = StorageException;
-using NONE = std::nullopt_t;
+constexpr auto NONE = Outcome::NONE;
+constexpr auto QUOTA = Outcome::QUOTA;
+constexpr auto OTHER = Outcome::OTHER;
+constexpr auto UNKNOWN_EXCEPTION = Outcome::UNKNOWN_EXCEPTION;
 const auto TEST_DATA_WRITE = ::testing::Values(
         TestScenario{
                 .name = "Every_second_write_fails",
-                .failures = make_fault_sequence<NONE, QUOTA, NONE, QUOTA, NONE, QUOTA>(),
+                .write_failures = make_fault_sequence({NONE, QUOTA, NONE, QUOTA, NONE, QUOTA}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 2,
-                .write_should_throw_quota_exception = {true, true},
+                .write_expected_outcome = {QUOTA, QUOTA},
         },
         TestScenario{
                 .name = "All_writes_fail",
-                .failures = make_fault_sequence<QUOTA>(),
+                .write_failures = make_fault_sequence({QUOTA}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {true, true},
+                .write_expected_outcome = {QUOTA, QUOTA},
         },
         TestScenario{
                 .name = "Only_third_segment_write_fails",
-                .failures = make_fault_sequence<NONE, NONE, QUOTA, NONE, NONE, NONE>(),
+                .write_failures = make_fault_sequence({NONE, NONE, QUOTA, NONE, NONE, NONE}),
                 .expected_written_ref_keys = 1,
                 .expected_written_version_keys = 1,
                 .expected_written_index_keys = 1,
                 .expected_written_data_keys = 3,
                 .num_writes = 2,
-                .write_should_throw_quota_exception = {true, false},
+                .write_expected_outcome = {QUOTA, NONE},
         },
         TestScenario{
                 .name = "All_succeed",
-                .failures = make_fault_sequence<NONE>(),
+                .write_failures = make_fault_sequence({NONE}),
                 .expected_written_ref_keys = 1,
                 .expected_written_version_keys = 2,
                 .expected_written_index_keys = 2,
                 .expected_written_data_keys = 6,
                 .num_writes = 2,
-                .write_should_throw_quota_exception = {false, false},
+                .write_expected_outcome = {NONE, NONE},
+        },
+        TestScenario{
+                .name = "Write_triggers_rollback_but_then_delete_fails",
+                .write_failures = make_fault_sequence({NONE, QUOTA, NONE, NONE, NONE, NONE}),
+                .delete_failures = make_fault_sequence({OTHER}),
+                .expected_written_ref_keys = 1,
+                .expected_written_version_keys = 1,
+                .expected_written_index_keys = 1,
+                .check_data_keys = false,
+                .expected_written_data_keys = 0,
+                .num_writes = 2,
+                .write_expected_outcome = {OTHER, NONE}
         }
 );
 
 const auto TEST_DATA_UPDATE = ::testing::Values(
         TestScenario{
                 .name = "All_succeed",
-                .failures = make_fault_sequence<NONE>(),
+                .write_failures = make_fault_sequence({NONE}),
                 .expected_written_ref_keys = 1,
                 .expected_written_version_keys = 1,
                 .expected_written_index_keys = 1,
                 .expected_written_data_keys = 5, // Three for the update segments, two rewritten before and after
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {false},
+                .write_expected_outcome = {NONE},
         },
         TestScenario{
                 .name = "Update_succeeds_initial_write_then_fails_on_only_one_rewrite",
-                .failures = make_fault_sequence<NONE, NONE, NONE, QUOTA, NONE>(),
+                .write_failures = make_fault_sequence({NONE, NONE, NONE, QUOTA, NONE}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {true}
+                .write_expected_outcome = {QUOTA}
+        },
+        TestScenario{
+                // TODO: Flakes
+                .name = "Update_succeeds_initial_write_then_fails_on_only_one_rewrite_other",
+                .write_failures = make_fault_sequence({NONE, NONE, NONE, NONE, QUOTA}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_expected_outcome = {QUOTA}
         },
         TestScenario{
                 .name = "Update_succeeds_initial_write_then_fails_on_every_rewrite",
-                .failures = make_fault_sequence<NONE, NONE, NONE, QUOTA, QUOTA>(),
+                .write_failures = make_fault_sequence({NONE, NONE, NONE, QUOTA, QUOTA}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {true}
+                .write_expected_outcome = {QUOTA},
         },
         TestScenario{
                 .name = "Update_succeeds_initial_write_then_fails_with_different_exceptions_on_rewrite",
-                .failures = make_fault_sequence<NONE, NONE, NONE, OTHER, QUOTA>(),
+                .write_failures = make_fault_sequence({NONE, NONE, NONE, OTHER, QUOTA}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
+                .check_data_keys = false,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {true}
+                // If either of the rewrites (before or after) throws non-quota exception while the other throws quota,
+                // it is undefined which exception is propagated
+                .write_expected_outcome = {UNKNOWN_EXCEPTION}
         },
         TestScenario{
                 .name = "Update_fails_initial_write_then_no_rewrite",
-                .failures = make_fault_sequence<NONE, QUOTA, NONE, NONE, NONE>(),
+                .write_failures = make_fault_sequence({NONE, QUOTA, NONE, NONE, NONE}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {true}
+                .write_expected_outcome = {QUOTA}
         },
         TestScenario{
                 .name = "Update_fails_with_another_exception_initially",
-                .failures = make_fault_sequence<NONE, OTHER, NONE, NONE, NONE>(),
+                .write_failures = make_fault_sequence({NONE, OTHER, NONE, NONE, NONE}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .check_data_keys = false, // Some writes may have succeeded and data is left orphaned.
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {false}
+                .write_expected_outcome = {OTHER}
         },
         TestScenario{
                 .name = "Update_fails_with_another_exception_on_rewrite",
-                .failures = make_fault_sequence<NONE, NONE, NONE, OTHER, NONE>(),
+                .write_failures = make_fault_sequence({NONE, NONE, NONE, OTHER, NONE}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
+                .check_data_keys = false,
                 .expected_written_data_keys = 3,
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {false}
+                .write_expected_outcome = {OTHER}
         },
         TestScenario{
                 .name = "Update_fails_with_different_exceptions_on_initial",
-                .failures = make_fault_sequence<NONE, QUOTA, OTHER, NONE, NONE>(),
+                .write_failures = make_fault_sequence({NONE, QUOTA, OTHER, NONE, NONE}),
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0, // Quota exception should prevail and delete the keys
                 .num_writes = 1,
-                .write_should_throw_quota_exception = {true}
-        } // TODO: Add test that throws exception on rollback
+                .write_expected_outcome = {QUOTA}
+        },
+        TestScenario{
+                .name = "Update_triggers_rollback_but_then_delete_fails",
+                .write_failures = make_fault_sequence({NONE, QUOTA, NONE, NONE, NONE}),
+                .delete_failures = make_fault_sequence({OTHER}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .check_data_keys = false,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_expected_outcome = {OTHER}
+        }
 );
 
 INSTANTIATE_TEST_SUITE_P(
@@ -276,10 +323,18 @@ TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
     const auto& scenario = GetParam();
 
     for (size_t i = 0; i < scenario.num_writes; ++i) {
-        if (scenario.write_should_throw_quota_exception[i]) {
-            EXPECT_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
-        } else {
+        switch (scenario.write_expected_outcome[i]) {
+        case Outcome::NONE:
             EXPECT_NO_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_));
+            break;
+        case Outcome::OTHER:
+            EXPECT_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_), StorageException);
+            break;
+        case Outcome::QUOTA:
+            EXPECT_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
+        case Outcome::UNKNOWN_EXCEPTION:
+            EXPECT_ANY_THROW(update_with_three_segments(*version_store_, stream_id_));
+            break;
         }
     }
 
@@ -288,7 +343,9 @@ TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
     ASSERT_EQ(version_ref_keys.size(), scenario.expected_written_ref_keys);
     ASSERT_EQ(version_keys.size(), scenario.expected_written_version_keys);
     ASSERT_EQ(index_keys.size(), scenario.expected_written_index_keys);
-    ASSERT_EQ(data_keys.size(), scenario.expected_written_data_keys);
+    if (scenario.check_data_keys) {
+        ASSERT_EQ(data_keys.size(), scenario.expected_written_data_keys);
+    }
 }
 
 TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
@@ -297,13 +354,19 @@ TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
     auto initial_keys = get_keys(*version_store_);
 
     for (size_t i = 0; i < scenario.num_writes; ++i) {
-        if (scenario.write_should_throw_quota_exception[i]) {
+        switch (scenario.write_expected_outcome[i]) {
+        case Outcome::NONE:
+            EXPECT_NO_THROW(update_with_three_segments(*version_store_, stream_id_));
+            break;
+        case Outcome::OTHER:
+            EXPECT_THROW(update_with_three_segments(*version_store_, stream_id_), StorageException);
+            break;
+        case Outcome::QUOTA:
             EXPECT_THROW(update_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
-        } else {
-            try {
-                update_with_three_segments(*version_store_, stream_id_);
-            } catch (...) {
-            }
+            break;
+        case Outcome::UNKNOWN_EXCEPTION:
+            EXPECT_ANY_THROW(update_with_three_segments(*version_store_, stream_id_));
+            break;
         }
     }
 

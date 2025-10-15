@@ -259,13 +259,13 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
                            })
     )
             .via(&async::io_executor())
-            .thenValue([store](auto&& val) -> folly::Future<IntersectingSegments> {
-                auto [try_intersect_before, try_intersect_after] = val;
+            .thenValue([store](auto&& try_before_and_after) -> folly::Future<IntersectingSegments> {
+                auto [try_intersect_before, try_intersect_after] = try_before_and_after;
 
                 if (try_intersect_before.template hasException<QuotaExceededException>() &&
                     !try_intersect_after.hasException()) {
                     return remove_slice_and_keys(std::move(try_intersect_after.value()), *store)
-                            .thenValueInline([](auto&& val) {
+                            .thenValueInline([](auto&&) {
                                 return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
                                 );
                             });
@@ -274,7 +274,7 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
                 if (try_intersect_after.template hasException<QuotaExceededException>() &&
                     !try_intersect_before.hasException()) {
                     return remove_slice_and_keys(std::move(try_intersect_before.value()), *store)
-                            .thenValueInline([](auto&& val) {
+                            .thenValueInline([](auto&&) {
                                 return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
                                 );
                             });
