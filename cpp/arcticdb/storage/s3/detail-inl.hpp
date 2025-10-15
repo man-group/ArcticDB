@@ -396,16 +396,14 @@ void do_remove_no_batching_impl(
             auto s3_object_name = object_path(bucketizer.bucketize(key_type_dir, k), k);
             auto bad_key_name = s3_object_name.substr(key_type_dir.size(), std::string::npos);
             auto error_message = error.GetMessage();
-            failed_deletes.push_back(
-                    FailedDelete{
-                            variant_key_from_bytes(
-                                    reinterpret_cast<const uint8_t*>(bad_key_name.data()),
-                                    bad_key_name.size(),
-                                    variant_key_type(k)
-                            ),
-                            std::move(error_message)
-                    }
-            );
+            failed_deletes.push_back(FailedDelete{
+                    variant_key_from_bytes(
+                            reinterpret_cast<const uint8_t*>(bad_key_name.data()),
+                            bad_key_name.size(),
+                            variant_key_type(k)
+                    ),
+                    std::move(error_message)
+            });
         } else {
             ARCTICDB_RUNTIME_DEBUG(
                     log::storage(), "Acceptable error when deleting object with key '{}'", variant_key_view(k)
