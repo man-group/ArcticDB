@@ -373,7 +373,6 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 // WriteToSegmentTask
                 if (record_batch == record_batches.cbegin()) {
                     column.buffer() = ChunkedBuffer::presized(total_rows);
-                    ;
                 }
                 packed_bits_to_buffer(
                         data, array.size(), arrow_array->offset, column.buffer().bytes_at(start_row, array.size())
@@ -402,6 +401,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     }
     if (index_column_position.has_value()) {
         auto idx = *index_column_position;
+        columns[idx].set_row_data(static_cast<ssize_t>(total_rows) - 1);
         seg.add_column(
                 scalar_field(data_types[idx], column_names[idx]), std::make_shared<Column>(std::move(columns[idx]))
         );

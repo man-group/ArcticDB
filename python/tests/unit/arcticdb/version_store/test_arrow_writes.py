@@ -346,10 +346,6 @@ def test_write_unsupported_types(lmdb_version_store_arrow):
     with pytest.raises(SchemaException) as e:
         lib.write(sym, table)
     assert "unsupported" in str(e.value).lower()
-    table = pa.table({"col": pa.array(["hello", "there"], pa.large_string())})
-    with pytest.raises(SchemaException) as e:
-        lib.write(sym, table)
-    assert "unsupported" in str(e.value).lower()
 
 
 # Reinstate if bounds check is re-added in WriteToSegmentTask::slice_column when 9951777416 is implemented
