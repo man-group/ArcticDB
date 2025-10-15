@@ -68,8 +68,6 @@ class MongoClientWrapper {
             const std::optional<std::string>& prefix
     ) = 0;
 
-    virtual void ensure_collection(std::string_view database_name, std::string_view collection_name) = 0;
-
     virtual void drop_collection(std::string database_name, std::string collection_name) = 0;
 
     virtual bool key_exists(
