@@ -40,9 +40,9 @@ class LibraryTool {
 
     [[nodiscard]] TimeseriesDescriptor read_timeseries_descriptor(const VariantKey& key);
 
-    void write(VariantKey key, Segment& segment);
+    void write(VariantKey key, const Segment& segment);
 
-    void overwrite_segment_in_memory(VariantKey key, SegmentInMemory& segment_in_memory);
+    void overwrite_segment_in_memory(VariantKey key, const SegmentInMemory& segment_in_memory);
 
     SegmentInMemory item_to_segment_in_memory(
             const StreamId& stream_id, const py::tuple& item, const py::object& norm, const py::object& user_meta,

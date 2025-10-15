@@ -101,6 +101,8 @@ struct StreamSink {
 
     virtual void write_compressed_sync(storage::KeySegmentPair ks) = 0;
 
+    virtual void update_compressed_sync(storage::KeySegmentPair ks, storage::UpdateOpts opts) = 0;
+
     [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
             const std::shared_ptr<DeDupMap>& de_dup_map

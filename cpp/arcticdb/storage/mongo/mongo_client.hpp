@@ -7,6 +7,9 @@
  */
 
 #pragma once
+#include <mongocxx/exception/server_error_code.hpp>
+#include <mongocxx/exception/operation_exception.hpp>
+
 #include <arcticdb/storage/mongo/mongo_client_interface.hpp>
 #include <arcticdb/entity/protobufs.hpp>
 
@@ -46,8 +49,6 @@ class MongoClient : public MongoClientWrapper {
             const std::optional<std::string>& prefix
     ) override;
 
-    void ensure_collection(std::string_view database_name, std::string_view collection_name) override;
-
     void drop_collection(std::string database_name, std::string collection_name) override;
 
     bool key_exists(const std::string& database_name, const std::string& collection_name, const entity::VariantKey& key)
@@ -56,5 +57,9 @@ class MongoClient : public MongoClientWrapper {
   private:
     MongoClientImpl* client_;
 };
+
+std::string get_mongo_error_suffix(const mongocxx::operation_exception& e, std::string_view object_name);
+
+void raise_mongo_server_exception(const mongocxx::operation_exception& e, std::string_view object_name);
 
 } // namespace arcticdb::storage::mongo

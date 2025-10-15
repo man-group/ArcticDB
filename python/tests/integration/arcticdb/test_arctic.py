@@ -20,9 +20,9 @@ from typing import List
 from enum import Enum
 import multiprocessing
 
-from arcticdb_ext import get_config_int
+from arcticdb_ext import get_config_int, set_config_int
 from arcticdb_ext.exceptions import InternalException, SortingException, UserInputException
-from arcticdb_ext.storage import NoDataFoundException
+from arcticdb_ext.storage import NoDataFoundException, KeyType
 from arcticdb.exceptions import ArcticDbNotYetImplemented, NoSuchVersionException
 from arcticdb.adapters.mongo_library_adapter import MongoLibraryAdapter
 from arcticdb.arctic import Arctic
@@ -30,6 +30,7 @@ from arcticdb.options import LibraryOptions
 from arcticdb import QueryBuilder
 from arcticdb.storage_fixtures.api import StorageFixture, ArcticUriFields, StorageFixtureFactory
 from arcticdb.storage_fixtures.mongo import MongoDatabase
+from arcticdb.storage_fixtures.utils import GracefulProcessUtils
 from arcticdb.util.test import assert_frame_equal, sample_dataframe, config_context
 from arcticdb.storage_fixtures.s3 import S3Bucket
 from arcticdb.config import Defaults
@@ -1565,3 +1566,32 @@ def test_backing_store(lmdb_version_store_v1, s3_version_store_v1):
         new_lib_cfg, env=Defaults.ENV, open_mode=OpenMode.DELETE
     )
     assert lib_with_s3.get_backing_store() == "lmdb_storage"
+
+
+@SLOW_TESTS_MARK
+@MONGO_TESTS_MARK
+def test_mongo_retryable_network_error(mongo_server_fn_scope, sym):
+    with config_context("VersionMap.MaxReadRefTrials", 0):
+        ac = Arctic(mongo_server_fn_scope.mongo_uri)
+        lib = ac.get_library("test", create_if_missing=True)
+        lt = lib._nvs.library_tool()
+
+        lib._nvs.write(sym, 1)
+        key = lt.find_keys(KeyType.TABLE_DATA)[0]
+        segment = lt.read_to_segment(key)
+        segment_in_memory = lt.dataframe_to_segment_in_memory(sym, pd.DataFrame({"a": [1, 2, 3]}))
+        GracefulProcessUtils.terminate(mongo_server_fn_scope._p)
+
+        operations = [
+            ("write", lambda: lt.write(key, segment)),
+            ("find_keys", lambda: lt.find_keys(KeyType.TABLE_DATA)),
+            ("read_to_keys", lambda: lt.read_to_keys(key)),
+            ("remove", lambda: lt.remove(key)),
+            ("key_exists", lambda: lt.key_exists(key)),
+            ("update", lambda: lt.overwrite_segment_in_memory(key, segment_in_memory)),
+        ]
+
+        for operation_name, operation_func in operations:
+            with pytest.raises(InternalException) as exception_info:
+                operation_func()
+            assert "E_MONGO_RETRYABLE" in str(exception_info.value), f"Failed for operation: {operation_name}"

@@ -168,9 +168,7 @@ jobs:
                 vcpkg_packages_dir: ""
                 symbols: "*.gz" # Please update publish.yml when changing this!!
                 do_not_archive: ["*.so", "*.[ao]", "vcpkg_installed"]
-                test_services:
-                  mongodb:
-                    image: "mongo:4.4"
+                test_services: {}
                 container:
                   image: ghcr.io/man-group/${{inputs.dev_image_tag || 'arcticdb-dev-clang:latest'}}
                   volumes:
