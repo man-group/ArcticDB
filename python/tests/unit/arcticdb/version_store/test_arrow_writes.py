@@ -647,6 +647,7 @@ def test_staging_with_sorting(version_store_factory):
     assert expected.equals(received)
 
 
+# Merge with test_staging_with_sorting when 18190648152 is done
 @pytest.mark.xfail(reason="Not implemented yet, see issue 18190648152")
 def test_staging_with_sorting_strings(version_store_factory):
     lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
