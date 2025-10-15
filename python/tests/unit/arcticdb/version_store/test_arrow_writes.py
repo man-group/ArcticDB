@@ -55,6 +55,17 @@ def test_basic_write(lmdb_version_store_arrow, type):
     assert received.metadata == metadata
 
 
+@pytest.mark.parametrize("type", [pa.string(), pa.large_string()])
+def test_basic_write_strings(lmdb_version_store_arrow, type):
+    lib = lmdb_version_store_arrow
+    sym = "test_basic_write_strings"
+    table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], type)})
+    lib.write(sym, table)
+    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(received, type)
+    assert table.equals(received)
+
+
 @pytest.mark.skip(reason="Not implemented yet 9951777416")
 @pytest.mark.parametrize("type", [pa.timestamp("us"), pa.timestamp("ms"), pa.timestamp("s")])
 @pytest.mark.parametrize("index_column", [None, "ts"])
@@ -72,18 +83,31 @@ def test_write_with_non_nanosecond_time_types(lmdb_version_store_arrow, type, in
     assert table.equals(received)
 
 
-@pytest.mark.parametrize("type", [pa.int64(), pa.bool_()])
+@pytest.mark.parametrize("type", [pa.int64(), pa.bool_(), pa.string(), pa.large_string()])
 def test_write_multiple_record_batches(lmdb_version_store_arrow, type):
     lib = lmdb_version_store_arrow
     sym = "test_write_multiple_record_batches"
-    rb0 = pa.RecordBatch.from_arrays([[0, 1] if type == pa.int64() else [True, False]], names=["col"])
-    rb1 = pa.RecordBatch.from_arrays([[2, 3, 4] if type == pa.int64() else [True, False, False]], names=["col"])
-    rb2 = pa.RecordBatch.from_arrays(
-        [[5, 6, 7, 8] if type == pa.int64() else [False, False, False, False]], names=["col"]
-    )
+    if type == pa.int64():
+        arr0 = pa.array([0, 1], type)
+        arr1 = pa.array([2, 3, 4], type)
+        arr2 = pa.array([5, 6, 7, 8], type)
+    elif type == pa.bool_():
+        arr0 = pa.array([True, False], type)
+        arr1 = pa.array([True, False, False], type)
+        arr2 = pa.array([False, False, False, False], type)
+    else:
+        # String type
+        arr0 = pa.array(["1", "22"], type)
+        arr1 = pa.array(["333", "4444", "55555"], type)
+        arr2 = pa.array(["666666", "7777777", "88888888", "999999999"], type)
+    rb0 = pa.RecordBatch.from_arrays([arr0], names=["col"])
+    rb1 = pa.RecordBatch.from_arrays([arr1], names=["col"])
+    rb2 = pa.RecordBatch.from_arrays([arr2], names=["col"])
     table = pa.Table.from_batches([rb0, rb1, rb2])
     lib.write(sym, table)
     received = lib.read(sym).data
+    if type in {pa.string(), pa.large_string()}:
+        received = stringify_dictionary_encoded_columns(received, type)
     assert table.equals(received)
 
 
@@ -94,13 +118,14 @@ def test_write_with_index(lmdb_version_store_arrow, index_col_position):
     table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
-            "col": pa.array([0, 1], pa.int64()),
+            "col0": pa.array([0, 1], pa.int64()),
+            "col1": pa.array(["hello", "bonjour"], pa.string()),
         }
     )
     if index_col_position == 1:
-        table = table.select([1, 0])
+        table = table.select([1, 0, 2])
     lib.write(sym, table, index_column="ts")
-    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
     assert table.equals(received)
 
 
@@ -111,26 +136,29 @@ def test_write_multiple_record_batches_indexed(lmdb_version_store_arrow):
         [
             pa.Array.from_pandas(pd.date_range("2025-01-01", periods=2), type=pa.timestamp("ns")),
             pa.array([0, 1], pa.int32()),
+            pa.array(["a", "bb"], pa.large_string()),
         ],
-        names=["ts", "col"],
+        names=["ts", "col0", "col1"],
     )
     rb1 = pa.RecordBatch.from_arrays(
         [
             pa.Array.from_pandas(pd.date_range("2025-01-03", periods=3), type=pa.timestamp("ns")),
             pa.array([2, 3, 4], pa.int32()),
+            pa.array(["ccc", "dd", "e"], pa.large_string()),
         ],
-        names=["ts", "col"],
+        names=["ts", "col0", "col1"],
     )
     rb2 = pa.RecordBatch.from_arrays(
         [
             pa.Array.from_pandas(pd.date_range("2025-01-06", periods=4), type=pa.timestamp("ns")),
             pa.array([5, 6, 7, 8], pa.int32()),
+            pa.array(["f", "gg", "hh", "i"], pa.large_string()),
         ],
-        names=["ts", "col"],
+        names=["ts", "col0", "col1"],
     )
     table = pa.Table.from_batches([rb0, rb1, rb2])
     lib.write(sym, table)
-    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data)
     assert table.equals(received)
 
 
@@ -143,12 +171,16 @@ def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
     sym = "test_write_sliced"
     table = pa.table(
         {
-            f"col{idx}": pa.array(np.arange(idx * num_rows, (idx + 1) * num_rows, dtype=np.uint32), pa.uint32())
+            f"col{idx}": (
+                pa.array(np.arange(idx * num_rows, (idx + 1) * num_rows, dtype=np.uint32), pa.uint32())
+                if idx % 2 == 0
+                else pa.array([f"{row}" for row in range(num_rows)], pa.string())
+            )
             for idx in range(num_cols)
         }
     )
     lib.write(sym, table)
-    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
     assert table.equals(received)
 
 
@@ -231,12 +263,13 @@ def test_many_record_batches_many_slices(version_store_factory, rows_per_slice):
                     "int32": pa.array(rng.integers(0, 1_000_000, length, dtype=np.int32), pa.int32()),
                     "float64": pa.array(rng.random(length), pa.float64()),
                     "bool": pa.array(rng.choice([True, False], length), pa.bool_()),
+                    "string": pa.array([f"{i}" for i in range(length)], pa.string()),
                 }
             )
         )
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
     assert table.equals(received)
 
 
@@ -256,6 +289,20 @@ def test_write_view(lmdb_version_store_arrow):
         {"numeric": pa.array([3, 4, 5], pa.uint16()), "bool": pa.array([False, True, False], pa.bool_())}
     )
     assert expected.equals(received)
+
+
+@pytest.mark.parametrize("type", [pa.string(), pa.large_string()])
+def test_write_view_strings(lmdb_version_store_arrow, type):
+    lib = lmdb_version_store_arrow
+    sym = "test_write_view_strings"
+    table_0 = pa.table({"col": pa.array(["hello", "bonjour", "gutentag"], type)})
+    table_1 = pa.table({"col": pa.array(["dog", "bats", "on"], type)})
+    table = pa.concat_tables([table_0, table_1])
+    view = table.slice(1, 4)
+    lib.write(sym, view)
+    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(received, type)
+    assert view.equals(received)
 
 
 def test_write_owned_and_non_owned_buffers(lmdb_version_store_tiny_segment):
@@ -370,12 +417,12 @@ def test_append(lmdb_version_store_arrow, existing_data):
     lib = lmdb_version_store_arrow
     sym = "test_append"
     if existing_data:
-        write_table = pa.table({"col": pa.array([0, 1], pa.int64())})
+        write_table = pa.table({"col0": pa.array([0, 1], pa.int64()), "col1": pa.array(["a", "bb"], pa.string())})
         lib.write(sym, write_table)
-    append_table = pa.table({"col": pa.array([2, 3], pa.int64())})
+    append_table = pa.table({"col0": pa.array([2, 3], pa.int64()), "col1": pa.array(["ccc", "dddd"], pa.string())})
     lib.append(sym, append_table)
 
-    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
     expected = pa.concat_tables([write_table, append_table]) if existing_data else append_table
     assert expected.equals(received)
 
@@ -434,24 +481,27 @@ def test_update(lmdb_version_store_arrow, existing_data):
         write_table = pa.table(
             {
                 "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
-                "col": pa.array([0, 1, 2, 3], pa.int64()),
+                "col0": pa.array([0, 1, 2, 3], pa.int64()),
+                "col1": pa.array(["zero", "one", "two", "three"], pa.string()),
             }
         )
         lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
-            "col": pa.array([4, 5], pa.int64()),
+            "col0": pa.array([4, 5], pa.int64()),
+            "col1": pa.array(["four", "five"], pa.string()),
         }
     )
     lib.update(sym, update_table, upsert=not existing_data, index_column="ts")
 
-    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
     if existing_data:
         expected = pa.table(
             {
                 "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
-                "col": pa.array([0, 4, 5, 3], pa.int64()),
+                "col0": pa.array([0, 4, 5, 3], pa.int64()),
+                "col1": pa.array(["zero", "four", "five", "three"], pa.string()),
             }
         )
     else:
@@ -533,6 +583,7 @@ def test_staging_without_sorting(version_store_factory, method):
             "col0": pa.array([0, 1, 2], pa.uint16()),
             "col1": pa.array([10, 11, 12], pa.uint8()),
             "col2": pa.array([20, 21, 22], pa.uint32()),
+            "col3": pa.array(["zero", "one", "two"], pa.string()),
         }
     )
     table_1 = pa.table(
@@ -541,6 +592,7 @@ def test_staging_without_sorting(version_store_factory, method):
             "col0": pa.array([3, 4, 5], pa.uint16()),
             "col1": pa.array([13, 14, 15], pa.uint8()),
             "col2": pa.array([23, 24, 25], pa.uint32()),
+            "col3": pa.array(["three", "four", "five"], pa.string()),
         }
     )
     if method == "write_parallel":
@@ -559,7 +611,7 @@ def test_staging_without_sorting(version_store_factory, method):
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1])
-    received = lib.read(sym).data
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
     assert expected.equals(received)
 
 
@@ -592,6 +644,35 @@ def test_staging_with_sorting(version_store_factory):
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
     received = lib.read(sym).data
+    assert expected.equals(received)
+
+
+@pytest.mark.xfail(reason="Not implemented yet, see issue 18190648152")
+def test_staging_with_sorting_strings(version_store_factory):
+    lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
+    lib_tool = lib.library_tool()
+    lib.set_output_format("experimental_arrow")
+    lib._set_allow_arrow_input()
+    sym = "test_staging_with_sorting_strings"
+    table_0 = pa.table(
+        {
+            "ts": pa.array([3, 1, 2], pa.timestamp("ns")),
+            "col": pa.array(["three", "one", "two"], pa.string()),
+        }
+    )
+    table_1 = pa.table(
+        {
+            "ts": pa.array([4, 6, 5], pa.timestamp("ns")),
+            "col": pa.array(["four", "six", "five"], pa.string()),
+        }
+    )
+    lib.stage(sym, table_0, sort_on_index=True, index_column="ts")
+    lib.stage(sym, table_1, sort_on_index=True, index_column="ts")
+
+    assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
+    lib.compact_incomplete(sym, False, False)
+    expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
     assert expected.equals(received)
 
 
@@ -690,6 +771,8 @@ supported_types = [
     pa.int64(),
     pa.float32(),
     pa.float64(),
+    pa.string(),
+    pa.large_string(),
     pa.timestamp("ns"),
 ]
 num_supported_types = len(supported_types)
@@ -730,7 +813,12 @@ def test_arrow_writes_hypothesis(
             data["ts"] = pa.Array.from_pandas(
                 pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
             )
-        data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)
+        if supported_type in {pa.string(), pa.large_string()}:
+            data[str(supported_type)] = pa.array(
+                [f"str{i}" for i in rng.integers(0, 100, size=df_length)], supported_type
+            )
+        else:
+            data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)
     if index_position == num_supported_types:
         data["ts"] = pa.Array.from_pandas(
             pd.date_range("2025-01-01", freq="s", periods=df_length), type=pa.timestamp("ns")
@@ -750,27 +838,9 @@ def test_arrow_writes_hypothesis(
     lib.append(sym, table.slice((2 * df_length) // 3), index_column="ts")
     lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)), index_column="ts")
     received = lib.read(sym).data
+    for i, name in enumerate(received.column_names):
+        if pa.types.is_dictionary(received.column(i).type):
+            received = received.set_column(
+                i, name, received.column(name).cast(pa.string() if name == str(pa.string()) else pa.large_string())
+            )
     assert table.equals(received)
-
-
-def test_basic_write_strings(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
-    sym = "test_basic_write_strings"
-    table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], pa.string())})
-    lib.write(sym, table)
-    received = lib.read(sym).data
-    received = stringify_dictionary_encoded_columns(received, string_type=pa.string())
-    assert table.equals(received)
-
-
-def test_basic_write_strings_2(lmdb_version_store_arrow):
-    lib = lmdb_version_store_arrow
-    sym = "test_basic_write_strings_2"
-    table_0 = pa.table({"col": pa.array(["hello", "cats"], pa.large_string())})
-    table_1 = pa.table({"col": pa.array(["dog", "bats", "on"], pa.large_string())})
-    table = pa.concat_tables([table_0, table_1])
-    view = table.slice(1, 2)
-    lib.write(sym, view)
-    received = lib.read(sym).data
-    received = stringify_dictionary_encoded_columns(received, string_type=pa.large_string())
-    assert view.equals(received)

@@ -350,6 +350,7 @@ folly::Future<entity::AtomKey> append_frame(
                 std::make_move_iterator(std::end(slice_and_keys_to_append))
         );
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
+        frame->normalize_types();
         auto tsd = index::get_merged_tsd(
                 frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame
         );
