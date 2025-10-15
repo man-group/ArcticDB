@@ -740,37 +740,35 @@ std::shared_ptr<std::vector<folly::Future<std::vector<EntityId>>>> schedule_firs
             );
         }
 
-        futures->emplace_back(
-                folly::collect(local_futs)
-                        .via(&async::io_executor()
-                        ) // Stay on the same executor as the read so that we can inline if possible
-                        .thenValueInline([component_manager,
-                                          segment_fetch_counts,
-                                          id_to_pos,
-                                          slice_added_mtx,
-                                          slice_added,
-                                          clauses,
-                                          entity_ids = std::move(entity_ids)](
-                                                 std::vector<pipelines::SegmentAndSlice>&& segment_and_slices
-                                         ) mutable {
-                            for (auto&& [idx, segment_and_slice] : folly::enumerate(segment_and_slices)) {
-                                auto entity_id = entity_ids[idx];
-                                auto pos = id_to_pos->at(entity_id);
-                                std::lock_guard lock{slice_added_mtx->at(pos)};
-                                if (!(*slice_added)[pos]) {
-                                    ARCTICDB_DEBUG(log::version(), "Adding entity {}", entity_id);
-                                    add_slice_to_component_manager(
-                                            entity_id,
-                                            segment_and_slice,
-                                            component_manager,
-                                            segment_fetch_counts->at(pos)
-                                    );
-                                    (*slice_added)[pos] = true;
-                                }
-                            }
-                            return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
-                        })
-        );
+        futures->emplace_back(folly::collect(local_futs)
+                                      .via(&async::io_executor()
+                                      ) // Stay on the same executor as the read so that we can inline if possible
+                                      .thenValueInline([component_manager,
+                                                        segment_fetch_counts,
+                                                        id_to_pos,
+                                                        slice_added_mtx,
+                                                        slice_added,
+                                                        clauses,
+                                                        entity_ids = std::move(entity_ids
+                                                        )](std::vector<pipelines::SegmentAndSlice>&& segment_and_slices
+                                                       ) mutable {
+                                          for (auto&& [idx, segment_and_slice] : folly::enumerate(segment_and_slices)) {
+                                              auto entity_id = entity_ids[idx];
+                                              auto pos = id_to_pos->at(entity_id);
+                                              std::lock_guard lock{slice_added_mtx->at(pos)};
+                                              if (!(*slice_added)[pos]) {
+                                                  ARCTICDB_DEBUG(log::version(), "Adding entity {}", entity_id);
+                                                  add_slice_to_component_manager(
+                                                          entity_id,
+                                                          segment_and_slice,
+                                                          component_manager,
+                                                          segment_fetch_counts->at(pos)
+                                                  );
+                                                  (*slice_added)[pos] = true;
+                                              }
+                                          }
+                                          return async::MemSegmentProcessingTask(*clauses, std::move(entity_ids))();
+                                      }));
     }
     return futures;
 }
@@ -807,11 +805,9 @@ folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
                                 ARCTICDB_RUNTIME_DEBUG(
                                         log::memory(), "Scheduling work for entity ids: {}", unit_of_work
                                 );
-                                work_futures.emplace_back(
-                                        async::submit_cpu_task(
-                                                async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}
-                                        )
-                                );
+                                work_futures.emplace_back(async::submit_cpu_task(
+                                        async::MemSegmentProcessingTask{*clauses, std::move(unit_of_work)}
+                                ));
                             }
 
                             return folly::collect(work_futures).via(&async::io_executor());
@@ -1020,20 +1016,17 @@ std::vector<folly::Future<pipelines::SegmentAndSlice>> add_schema_check(
         auto&& fut = segment_and_slice_futures.at(i);
         const bool is_incomplete = incomplete_bitset[i];
         if (is_incomplete) {
-            res.push_back(
-                    std::move(fut).thenValueInline([pipeline_desc = pipeline_context->descriptor(),
-                                                    processing_config](SegmentAndSlice&& read_result) {
-                        if (!processing_config.dynamic_schema_) {
-                            auto check = check_schema_matches_incomplete(
-                                    read_result.segment_in_memory_.descriptor(), pipeline_desc
-                            );
-                            if (std::holds_alternative<Error>(check)) {
-                                std::get<Error>(check).throw_error();
-                            }
-                        }
-                        return std::move(read_result);
-                    })
-            );
+            res.push_back(std::move(fut).thenValueInline([pipeline_desc = pipeline_context->descriptor(),
+                                                          processing_config](SegmentAndSlice&& read_result) {
+                if (!processing_config.dynamic_schema_) {
+                    auto check =
+                            check_schema_matches_incomplete(read_result.segment_in_memory_.descriptor(), pipeline_desc);
+                    if (std::holds_alternative<Error>(check)) {
+                        std::get<Error>(check).throw_error();
+                    }
+                }
+                return std::move(read_result);
+            }));
         } else {
             res.push_back(std::move(fut));
         }
@@ -1105,12 +1098,10 @@ static OutputSchema generate_output_schema(PipelineContext& pipeline_context, st
             }
         }
         pipeline_context.filter_columns_set_ = std::move(selected_columns);
-        output_schema.set_stream_descriptor(
-                StreamDescriptor{
-                        output_schema.stream_descriptor().data_ptr(),
-                        std::make_shared<FieldCollection>(std::move(fields_to_use))
-                }
-        );
+        output_schema.set_stream_descriptor(StreamDescriptor{
+                output_schema.stream_descriptor().data_ptr(),
+                std::make_shared<FieldCollection>(std::move(fields_to_use))
+        });
     }
     return output_schema;
 }
@@ -1222,15 +1213,13 @@ std::optional<index::IndexSegmentReader> get_index_segment_reader(
             return store.read_sync(version_info.key_);
         } catch (const std::exception& ex) {
             ARCTICDB_DEBUG(log::version(), "Key not found from versioned item {}: {}", version_info.key_, ex.what());
-            throw storage::NoDataFoundException(
-                    fmt::format(
-                            "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
-                            version_info.version(),
-                            version_info.symbol(),
-                            version_info.key_,
-                            ex.what()
-                    )
-            );
+            throw storage::NoDataFoundException(fmt::format(
+                    "When trying to read version {} of symbol `{}`, failed to read key {}: {}",
+                    version_info.version(),
+                    version_info.symbol(),
+                    version_info.key_,
+                    ex.what()
+            ));
         }
     }();
 
@@ -1836,20 +1825,16 @@ folly::Future<folly::Unit> copy_segments_to_frame(
     for (auto context_row : folly::enumerate(*pipeline_context)) {
         auto& slice_and_key = context_row->slice_and_key();
 
-        copy_tasks.emplace_back(
-                async::submit_cpu_task(
-                        CopyToBufferTask{
-                                slice_and_key.release_segment(store),
-                                frame,
-                                context_row->slice_and_key().slice(),
-                                required_fields_count,
-                                shared_data,
-                                handler_data,
-                                output_format,
-                                pipeline_context
-                        }
-                )
-        );
+        copy_tasks.emplace_back(async::submit_cpu_task(CopyToBufferTask{
+                slice_and_key.release_segment(store),
+                frame,
+                context_row->slice_and_key().slice(),
+                required_fields_count,
+                shared_data,
+                handler_data,
+                output_format,
+                pipeline_context
+        }));
     }
     return folly::collect(copy_tasks).via(&async::cpu_executor()).unit();
 }
@@ -2241,22 +2226,18 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
     util::variant_match(
             index,
             [&](const stream::TimeseriesIndex& timeseries_index) {
-                read_query.clauses_.emplace_back(
-                        std::make_shared<Clause>(
-                                SortClause{timeseries_index.name(), pipeline_context->incompletes_after()}
-                        )
-                );
+                read_query.clauses_.emplace_back(std::make_shared<Clause>(
+                        SortClause{timeseries_index.name(), pipeline_context->incompletes_after()}
+                ));
                 read_query.clauses_.emplace_back(std::make_shared<Clause>(RemoveColumnPartitioningClause{}));
 
-                read_query.clauses_.emplace_back(
-                        std::make_shared<Clause>(MergeClause{
-                                timeseries_index,
-                                SparseColumnPolicy{},
-                                stream_id,
-                                pipeline_context->descriptor(),
-                                write_options.dynamic_schema
-                        })
-                );
+                read_query.clauses_.emplace_back(std::make_shared<Clause>(MergeClause{
+                        timeseries_index,
+                        SparseColumnPolicy{},
+                        stream_id,
+                        pipeline_context->descriptor(),
+                        write_options.dynamic_schema
+                }));
                 ReadOptions read_options;
                 read_options.set_dynamic_schema(write_options.dynamic_schema);
                 auto segments = read_process_and_collect(
@@ -2544,11 +2525,9 @@ VersionedItem defragment_symbol_data_impl(
             [&slices, &store, &options, &pre_defragmentation_info, segment_size = segment_size](
                     auto&& idx, auto&& schema
             ) {
-                pre_defragmentation_info.read_query->clauses_.emplace_back(
-                        std::make_shared<Clause>(
-                                RemoveColumnPartitioningClause{pre_defragmentation_info.append_after.value()}
-                        )
-                );
+                pre_defragmentation_info.read_query->clauses_.emplace_back(std::make_shared<Clause>(
+                        RemoveColumnPartitioningClause{pre_defragmentation_info.append_after.value()}
+                ));
                 auto segments = read_process_and_collect(
                                         store,
                                         pre_defragmentation_info.pipeline_context,
@@ -2660,11 +2639,9 @@ VersionedItem generate_result_versioned_item(const std::variant<VersionedItem, S
         // This at least gets the symbol attribute of VersionedItem correct. The creation timestamp will be zero, which
         // corresponds to 1970, and so with this obviously ridiculous version ID, it should be clear to users that these
         // values are meaningless before an indexed version exists.
-        versioned_item = VersionedItem(
-                AtomKeyBuilder()
-                        .version_id(std::numeric_limits<VersionId>::max())
-                        .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info))
-        );
+        versioned_item = VersionedItem(AtomKeyBuilder()
+                                               .version_id(std::numeric_limits<VersionId>::max())
+                                               .build<KeyType::TABLE_INDEX>(std::get<StreamId>(version_info)));
     } else {
         versioned_item = std::get<VersionedItem>(version_info);
     }

@@ -1,8 +1,6 @@
 
 #pragma once
 
-#include "storage/failure_simulation.hpp"
-
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/pb_util.hpp>
 #include <arcticdb/log/log.hpp>
