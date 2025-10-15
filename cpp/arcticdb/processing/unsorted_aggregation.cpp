@@ -200,7 +200,7 @@ void SumAggregatorData::aggregate(
                 if constexpr (!is_sequence_type(col_type_info::data_type)) {
                     arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                             *input_column.column_,
-                            [&out, &groups](auto enumerating_it) {
+                            [&out, &groups] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
                                 if constexpr (is_floating_point_type(col_type_info::data_type)) {
                                     if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
                                         out[groups[enumerating_it.idx()]] += RawType(enumerating_it.value());
@@ -299,7 +299,7 @@ void aggregate_impl(
                     if constexpr (!is_sequence_type(col_type_info::data_type)) {
                         arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                                 *input_column->column_,
-                                [&](auto row) {
+                                [&] ARCTICDB_LAMBDA_INLINE(auto row) {
                                     auto& group_entry = out[row_to_group[row.idx()]];
                                     const auto& current_value = GlobalRawType(row.value());
                                     if constexpr (std::is_floating_point_v<ColRawType>) {
@@ -341,7 +341,7 @@ SegmentInMemory finalize_impl(
             const std::span<const RawType> group_values{
                     reinterpret_cast<const RawType*>(aggregated.data()), aggregated.size() / sizeof(RawType)
             };
-            arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+            arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
                 row.value() = group_values[row.idx()];
             });
         });
@@ -446,7 +446,7 @@ void MeanAggregatorData::aggregate(
                 }
                 arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *input_column.column_,
-                        [&groups, &inserter, this](auto enumerating_it) {
+                        [&groups, &inserter, this] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
                             auto& fraction = fractions_[groups[enumerating_it.idx()]];
                             if constexpr ((is_floating_point_type(col_type_info ::data_type))) {
                                 if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
@@ -484,7 +484,7 @@ SegmentInMemory MeanAggregatorData::finalize(const ColumnName& output_column_nam
                 using OutputDataTypeTag =
                         std::conditional_t<is_time_type(TypeTag::data_type), TypeTag, DataTypeTag<DataType::FLOAT64>>;
                 using OutputTypeDescriptor = typename ScalarTypeInfo<OutputDataTypeTag>::TDT;
-                arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
+                arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
                     row.value() = static_cast<typename OutputDataTypeTag::raw_type>(fractions_[row.idx()].to_double());
                 });
             });
@@ -516,7 +516,7 @@ void CountAggregatorData::aggregate(
                 using col_type_info = ScalarTypeInfo<decltype(col_tag)>;
                 arcticdb::for_each_enumerated<typename col_type_info::TDT>(
                         *input_column.column_,
-                        [&groups, &inserter, this](auto enumerating_it) {
+                        [&groups, &inserter, this] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
                             if constexpr (is_floating_point_type(col_type_info::data_type)) {
                                 if (ARCTICDB_LIKELY(!std::isnan(enumerating_it.value()))) {
                                     auto& val = aggregated_[groups[enumerating_it.idx()]];
@@ -548,7 +548,7 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
             memcpy(ptr, aggregated_.data(), sizeof(uint64_t) * unique_values);
         } else {
             using OutputTypeDescriptor = typename ScalarTypeInfo<DataTypeTag<DataType::UINT64>>::TDT;
-            arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&](auto row) {
+            arcticdb::for_each_enumerated<OutputTypeDescriptor>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
                 row.value() = aggregated_[row.idx()];
             });
         }
@@ -629,7 +629,7 @@ SegmentInMemory FirstAggregatorData::finalize(const ColumnName& output_column_na
                 const std::span<const RawType> group_values{
                         reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
                 };
-                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
                     row.value() = group_values[row.idx()];
                 });
             }
@@ -710,7 +710,7 @@ SegmentInMemory LastAggregatorData::finalize(const ColumnName& output_column_nam
                 const std::span<const RawType> group_values{
                         reinterpret_cast<const RawType*>(aggregated_.data()), aggregated_.size() / sizeof(RawType)
                 };
-                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&](auto row) {
+                arcticdb::for_each_enumerated<typename col_type_info::TDT>(*col, [&] ARCTICDB_LAMBDA_INLINE(auto row) {
                     row.value() = group_values[row.idx()];
                 });
             }

@@ -9,6 +9,7 @@
 #include <arcticdb/codec/encoding_sizes.hpp>
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
+#include <arcticdb/util/lambda_inlining.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
@@ -74,7 +75,7 @@ void ArrowStringHandler::convert_type(
     // Benchmarks in benchmark_arrow_reads.cpp show a 20% speedup with this approach for a dense string column with few
     // unique strings.
     bool populate_inverted_bitset = !source_column.opt_sparse_map().has_value();
-    for_each_enumerated<ArcticStringColumnTag>(source_column, [&](const auto& en) {
+    for_each_enumerated<ArcticStringColumnTag>(source_column, [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
         if (is_a_string(en.value())) {
             auto [entry, is_emplaced] = unique_offsets.try_emplace(
                     en.value(), DictEntry{unique_offset_count, bytes, string_pool->get_const_view(en.value())}
