@@ -296,7 +296,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.linux_matrix)}}
-            pytest_xdist_mode: "-n logical --dist worksteal"
+            pytest_xdist_mode: "-n 0"
           - python3: 8
             python_deps_ids: ["", -compat38]
             matrix_override:
@@ -375,7 +375,7 @@ jobs:
       # When scheduled job persistence storage will be AWS
       # When not triggered via workflow_dispatch always assume local tests to run only
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
-      pytest_xdist_mode: "-n logical --dist worksteal"
+      pytest_xdist_mode: "-n 0"
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
       DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}
@@ -455,7 +455,7 @@ jobs:
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
-            pytest_xdist_mode: "-n logical --dist worksteal"
+            pytest_xdist_mode: "-n 0"
     name: 3.${{matrix.python3}} macOS
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
