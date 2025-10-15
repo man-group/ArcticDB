@@ -58,6 +58,15 @@ TestTensorFrame update_with_three_segments(version_store::PythonVersionStore& st
     return update_frame;
 }
 
+TestTensorFrame append_with_three_segments(version_store::PythonVersionStore& store, const StreamId& stream_id) {
+    static size_t start_index = 40;
+    constexpr size_t update_val{1};
+    auto append_frame =
+            get_test_frame<TimeseriesIndex>(stream_id, get_test_timeseries_fields(), 30, start_index, update_val);
+    store.append_internal(stream_id, append_frame.frame_, false, false, false);
+    start_index += 30; // To avoid sameappends
+    return append_frame;
+}
 } // namespace
 
 #include <optional>
@@ -85,6 +94,8 @@ static StorageFailureSimulator::ParamActionSequence make_fault_sequence(const st
     return seq;
 }
 
+enum class Operation { WRITE, UPDATE, APPEND };
+
 struct TestScenario {
     std::string name;
     StorageFailureSimulator::ParamActionSequence write_failures;
@@ -96,6 +107,7 @@ struct TestScenario {
     size_t expected_written_data_keys{};
     size_t num_writes{};
     std::vector<Outcome> write_expected_outcome;
+    Operation operation{Operation::WRITE};
 };
 
 class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
@@ -119,7 +131,7 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
     StreamId stream_id_{"sym"};
 };
 
-class RollbackOnQuotaExceededUpdate : public RollbackOnQuotaExceeded {
+class RollbackOnQuotaExceededUpdateOrAppend : public RollbackOnQuotaExceeded {
   protected:
     void SetUp() override {
         // Write some data (successfully) before the updates which may fail.
@@ -142,6 +154,7 @@ class RollbackOnQuotaExceededUpdate : public RollbackOnQuotaExceeded {
         ASSERT_EQ(data_keys.size(), 3);
     }
     std::unique_ptr<TestTensorFrame> initial_frame_;
+    Operation operation{Operation::UPDATE};
 };
 
 constexpr auto NONE = Outcome::NONE;
@@ -213,6 +226,7 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .expected_written_data_keys = 5, // Three for the update segments, two rewritten before and after
                 .num_writes = 1,
                 .write_expected_outcome = {NONE},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_succeeds_initial_write_then_fails_on_only_one_rewrite",
@@ -222,10 +236,10 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_expected_outcome = {QUOTA}
+                .write_expected_outcome = {QUOTA},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
-                // TODO: Flakes
                 .name = "Update_succeeds_initial_write_then_fails_on_only_one_rewrite_other",
                 .write_failures = make_fault_sequence({NONE, NONE, NONE, NONE, QUOTA}),
                 .expected_written_ref_keys = 0,
@@ -233,7 +247,8 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_expected_outcome = {QUOTA}
+                .write_expected_outcome = {QUOTA},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_succeeds_initial_write_then_fails_on_every_rewrite",
@@ -244,6 +259,7 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
                 .write_expected_outcome = {QUOTA},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_succeeds_initial_write_then_fails_with_different_exceptions_on_rewrite",
@@ -256,7 +272,8 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .num_writes = 1,
                 // If either of the rewrites (before or after) throws non-quota exception while the other throws quota,
                 // it is undefined which exception is propagated
-                .write_expected_outcome = {UNKNOWN_EXCEPTION}
+                .write_expected_outcome = {UNKNOWN_EXCEPTION},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_fails_initial_write_then_no_rewrite",
@@ -266,7 +283,8 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_expected_outcome = {QUOTA}
+                .write_expected_outcome = {QUOTA},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_fails_with_another_exception_initially",
@@ -277,7 +295,8 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .check_data_keys = false, // Some writes may have succeeded and data is left orphaned.
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_expected_outcome = {OTHER}
+                .write_expected_outcome = {OTHER},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_fails_with_another_exception_on_rewrite",
@@ -288,7 +307,8 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .check_data_keys = false,
                 .expected_written_data_keys = 3,
                 .num_writes = 1,
-                .write_expected_outcome = {OTHER}
+                .write_expected_outcome = {OTHER},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_fails_with_different_exceptions_on_initial",
@@ -298,7 +318,8 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0, // Quota exception should prevail and delete the keys
                 .num_writes = 1,
-                .write_expected_outcome = {QUOTA}
+                .write_expected_outcome = {QUOTA},
+                .operation = Operation::UPDATE,
         },
         TestScenario{
                 .name = "Update_triggers_rollback_but_then_delete_fails",
@@ -310,7 +331,8 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .check_data_keys = false,
                 .expected_written_data_keys = 0,
                 .num_writes = 1,
-                .write_expected_outcome = {OTHER}
+                .write_expected_outcome = {OTHER},
+                .operation = Operation::UPDATE,
         }
 );
 
@@ -348,24 +370,25 @@ TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
     }
 }
 
-TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
+TEST_P(RollbackOnQuotaExceededUpdateOrAppend, BasicUpdateOrAppend) {
     const auto& scenario = GetParam();
 
     auto initial_keys = get_keys(*version_store_);
 
+    auto func = scenario.operation == Operation::UPDATE ? &update_with_three_segments : &append_with_three_segments;
     for (size_t i = 0; i < scenario.num_writes; ++i) {
         switch (scenario.write_expected_outcome[i]) {
         case Outcome::NONE:
-            EXPECT_NO_THROW(update_with_three_segments(*version_store_, stream_id_));
+            EXPECT_NO_THROW(func(*version_store_, stream_id_));
             break;
         case Outcome::OTHER:
-            EXPECT_THROW(update_with_three_segments(*version_store_, stream_id_), StorageException);
+            EXPECT_THROW(func(*version_store_, stream_id_), StorageException);
             break;
         case Outcome::QUOTA:
-            EXPECT_THROW(update_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
+            EXPECT_THROW(func(*version_store_, stream_id_), QuotaExceededException);
             break;
         case Outcome::UNKNOWN_EXCEPTION:
-            EXPECT_ANY_THROW(update_with_three_segments(*version_store_, stream_id_));
+            EXPECT_ANY_THROW(func(*version_store_, stream_id_));
             break;
         }
     }
@@ -394,6 +417,11 @@ TEST_P(RollbackOnQuotaExceededUpdate, BasicUpdate) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        , RollbackOnQuotaExceededUpdate, TEST_DATA_UPDATE,
+        Update, RollbackOnQuotaExceededUpdateOrAppend, TEST_DATA_UPDATE,
+        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        Append, RollbackOnQuotaExceededUpdateOrAppend, TEST_DATA_WRITE,
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
