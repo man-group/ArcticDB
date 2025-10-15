@@ -555,14 +555,16 @@ def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, dat
     write_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=6), type=pa.timestamp("ns")),
-            "col": pa.array([0, 1, 2, 3, 4, 5], pa.int64()),
+            "col0": pa.array([0, 1, 2, 3, 4, 5], pa.int64()),
+            "col1": pa.array(["zero", "one", "two", "three", "four", "five"], pa.string()),
         }
     )
     lib.write(sym, write_table, index_column="ts")
     update_table = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-03", periods=2), type=pa.timestamp("ns")),
-            "col": pa.array([6, 7], pa.int64()),
+            "col0": pa.array([6, 7], pa.int64()),
+            "col1": pa.array(["six", "seven"], pa.string()),
         }
     )
     # TODO: Fold these parametrizations into above test when working
