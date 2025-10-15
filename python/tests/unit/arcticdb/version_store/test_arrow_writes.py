@@ -12,12 +12,14 @@ import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
+import random
 
 from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, stringify_dictionary_encoded_columns
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
 from arcticdb_ext.storage import KeyType
+from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
 def test_record_batches_roundtrip():
@@ -815,6 +817,7 @@ def test_arrow_writes_hypothesis(
     lib.lib_cfg().lib_desc.version.write_options.column_group_size = cols_per_slice
     lib.set_output_format("experimental_arrow")
     lib._set_allow_arrow_input()
+    naughty_strings = read_big_list_of_naughty_strings()
     data = {}
     for idx, supported_type in enumerate(supported_types):
         if idx == index_position:
@@ -823,7 +826,7 @@ def test_arrow_writes_hypothesis(
             )
         if supported_type in {pa.string(), pa.large_string()}:
             data[str(supported_type)] = pa.array(
-                [f"str{i}" for i in rng.integers(0, 100, size=df_length)], supported_type
+                [random.choice(naughty_strings) for _ in range(df_length)], supported_type
             )
         else:
             data[str(supported_type)] = pa.array(rng.integers(0, 100, size=df_length), supported_type)

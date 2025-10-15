@@ -1,5 +1,4 @@
 import copy
-import os
 
 import pytest
 from pandas.testing import assert_frame_equal
@@ -10,17 +9,7 @@ from arcticdb.dependencies import pyarrow as pa
 from arcticdb.options import OutputFormat
 from arcticdb.util.test import stringify_dictionary_encoded_columns
 from arcticdb import QueryBuilder
-
-
-def read_strings():
-    script_directory = os.path.dirname(os.path.abspath(__file__))
-    file_path = "{}/blns.txt".format(script_directory)
-
-    with open(file_path, "r", errors="ignore") as file:
-        lines = file.readlines()
-
-    filtered_lines = [line.strip() for line in lines if line.strip() and not line.strip().startswith("#")]
-    return filtered_lines
+from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
 
 def create_dataframe(strings):
@@ -35,7 +24,7 @@ def create_dataframe(strings):
 
 def test_write_blns(lmdb_version_store):
     lib = lmdb_version_store
-    strings = read_strings()
+    strings = read_big_list_of_naughty_strings()
     symbol = "blns_write"
     # Pandas
     df = create_dataframe(strings)
@@ -54,7 +43,7 @@ def test_write_blns(lmdb_version_store):
 
 def test_append_blns(lmdb_version_store):
     lib = lmdb_version_store
-    strings = read_strings()
+    strings = read_big_list_of_naughty_strings()
     symbol = "blns_append"
     # Pandas
     df = create_dataframe(strings)
@@ -80,7 +69,7 @@ def test_append_blns(lmdb_version_store):
 
 def test_update_blns(lmdb_version_store):
     lib = lmdb_version_store
-    strings = read_strings()
+    strings = read_big_list_of_naughty_strings()
     symbol = "blns_update"
     # Pandas
     df = create_dataframe(strings)
@@ -109,7 +98,7 @@ def test_update_blns(lmdb_version_store):
 
 def test_batch_read_blns(lmdb_version_store):
     lib = lmdb_version_store
-    strings = read_strings()
+    strings = read_big_list_of_naughty_strings()
     num_symbols = 10
     symbols = [f"blns_batch_read_{idx}" for idx in range(num_symbols)]
     q = QueryBuilder()
@@ -146,7 +135,7 @@ def assert_dicts_of_dfs_equal(dict1, dict2):
 
 def test_recursive_normalizers_blns(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
-    strings = read_strings()
+    strings = read_big_list_of_naughty_strings()
     symbol = "blnd_recursive"
     keys = ["a", "b", "c", "d"]
     # Pandas
@@ -169,7 +158,7 @@ def test_recursive_normalizers_blns(lmdb_version_store_v1):
 @pytest.mark.skip(reason="These do not roundtrip properly. Monday: 9256783357")
 def test_recursive_normalizers_blns_in_keys(lmdb_version_store):
     lib = lmdb_version_store
-    strings = read_strings()
+    strings = read_big_list_of_naughty_strings()
     symbol = "blnd_recursive_in_keys"
     df = pd.DataFrame({"a": [1, 2, 3]})
 
