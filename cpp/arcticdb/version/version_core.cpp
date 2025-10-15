@@ -1601,7 +1601,7 @@ void copy_frame_data_to_buffer(
                 using src_type_info = ScalarTypeInfo<decltype(src_tag)>;
                 arcticdb::for_each_enumerated<typename src_type_info::TDT>(
                         src_column,
-                        [typed_dst_ptr](auto enumerating_it) {
+                        [typed_dst_ptr] ARCTICDB_LAMBDA_INLINE(auto enumerating_it) {
                             typed_dst_ptr[enumerating_it.idx()] =
                                     static_cast<typename dst_type_info::RawType>(enumerating_it.value());
                         }
@@ -1629,7 +1629,7 @@ void copy_frame_data_to_buffer(
                         default_value
                 );
                 SourceType* typed_dst_ptr = reinterpret_cast<SourceType*>(dst_ptr);
-                arcticdb::for_each_enumerated<SourceTDT>(src_column, [&](const auto& row) {
+                arcticdb::for_each_enumerated<SourceTDT>(src_column, [&] ARCTICDB_LAMBDA_INLINE(const auto& row) {
                     typed_dst_ptr[row.idx()] = row.value();
                 });
             }
@@ -1674,9 +1674,10 @@ void copy_frame_data_to_buffer(
                                 src_column.opt_sparse_map(),
                                 default_value
                         );
-                        arcticdb::for_each_enumerated<typename source_type_info::TDT>(src_column, [&](const auto& row) {
-                            typed_dst_ptr[row.idx()] = row.value();
-                        });
+                        arcticdb::for_each_enumerated<typename source_type_info::TDT>(
+                                src_column,
+                                [&] ARCTICDB_LAMBDA_INLINE(const auto& row) { typed_dst_ptr[row.idx()] = row.value(); }
+                        );
                     } else {
                         arcticdb::for_each<typename source_type_info::TDT>(src_column, [&](const auto& value) {
                             *typed_dst_ptr = value;

@@ -532,6 +532,7 @@ set(arcticdb_srcs
         util/decimal.cpp
         util/error_code.cpp
         util/global_lifetimes.cpp
+        util/lambda_inlining.hpp
         util/memory_mapped_file.hpp
         util/name_validation.cpp
         util/offset_string.cpp
@@ -553,7 +554,7 @@ set(arcticdb_srcs
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
         storage/s3/ec2_utils.cpp
-        )
+)
 
 add_library(arcticdb_core_object OBJECT ${arcticdb_srcs})
 
