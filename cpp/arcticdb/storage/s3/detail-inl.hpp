@@ -77,9 +77,6 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
         raise<ErrorCode::E_PERMISSION>(fmt::format("Permission error: {}", error_message_suffix));
     }
 
-    // if type == sth
-    // raise<ErrorCode::E_QUOTA_EXCEEDED>("Quota exceeded!");
-
     if (type == Aws::S3::S3Errors::UNKNOWN) {
         // Unknown is a catchall which can contain several different important exception types which we want to identify
         if (err.GetResponseCode() == Aws::Http::HttpResponseCode::PRECONDITION_FAILED) {
@@ -158,10 +155,6 @@ void do_write_impl(
             query_stats::add_task_count_and_time(query_stats::TaskType::S3_PutObject, key_type);
     auto put_object_result = s3_client.put_object(s3_object_name, *seg, bucket_name);
 
-    // action_factories::maybe_execute(0.5, [](FailureType type) {
-    //     raise<ErrorCode::E_QUOTA_EXCEEDED>("Quota exceeded!");
-    // })(FailureType::WRITE);
-    //
     if (put_object_result.is_success()) {
         query_stats::add(
                 query_stats::TaskType::S3_PutObject, key_type, query_stats::StatType::SIZE_BYTES, segment_size

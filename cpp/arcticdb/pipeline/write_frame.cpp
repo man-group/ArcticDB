@@ -357,7 +357,6 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
     return output;
 }
 
-// TODO: Probably move these two somewhere else.
 folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(
         std::vector<SliceAndKey>&& slices, StreamSink& sink
 ) {

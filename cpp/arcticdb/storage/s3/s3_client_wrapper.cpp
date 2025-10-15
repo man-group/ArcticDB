@@ -53,14 +53,11 @@ std::optional<Aws::S3::S3Error> S3ClientTestWrapper::has_failure_trigger(const s
     auto error_code = ConfigsMap::instance()->get_int(
             "S3ClientTestWrapper.ErrorCode", static_cast<int>(Aws::S3::S3Errors::NETWORK_CONNECTION)
     );
-
-    auto exception_name = ConfigsMap::instance()->get_string("S3ClientTestWrapper.ExceptionName", "SimulatedFailure");
-
     auto retryable = ConfigsMap::instance()->get_int("S3ClientTestWrapper.ErrorRetryable", 0) == 1;
 
     auto failure_error_ = Aws::S3::S3Error(Aws::Client::AWSError<Aws::S3::S3Errors>(
             static_cast<Aws::S3::S3Errors>(error_code),
-            exception_name,
+            "SimulatedFailure",
             "Simulated failure from environment variables",
             retryable
     ));
