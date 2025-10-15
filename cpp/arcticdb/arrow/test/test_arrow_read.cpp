@@ -8,37 +8,15 @@
 
 #include <gtest/gtest.h>
 
+#include <sparrow/record_batch.hpp>
+
 #include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/util/test/generators.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
+#include <arcticdb/arrow/test/arrow_test_utils.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
-#include <arcticdb/arrow/array_from_block.hpp>
 #include <arcticdb/arrow/arrow_handlers.hpp>
 
 using namespace arcticdb;
-
-template<typename RawType>
-void allocate_and_fill_chunked_column(
-        Column& column, size_t num_rows, size_t chunk_size, std::optional<std::span<RawType>> values = std::nullopt
-) {
-    // Allocate column in chunks
-    for (size_t row = 0; row < num_rows; row += chunk_size) {
-        auto data_size = data_type_size(column.type(), OutputFormat::ARROW, DataTypeMode::EXTERNAL);
-        auto current_block_size = std::min(chunk_size, num_rows - row);
-        auto bytes = current_block_size * data_size;
-        column.allocate_data(bytes);
-        column.advance_data(bytes);
-    }
-
-    // Actually fill the data
-    for (size_t row = 0; row < num_rows; ++row) {
-        if (values.has_value()) {
-            column.reference_at<RawType>(row) = values.value()[row];
-        } else {
-            column.reference_at<RawType>(row) = static_cast<RawType>(row);
-        }
-    }
-}
 
 SegmentInMemory get_detachable_segment(
         StreamId symbol, std::span<const FieldRef> fields, size_t num_rows, size_t chunk_size
@@ -50,7 +28,7 @@ SegmentInMemory get_detachable_segment(
 
     for (auto i = 0u; i < num_columns + 1; ++i) {
         auto& column = segment.column(i);
-        column.type().visit_tag([&column, &num_rows, &chunk_size](auto&& impl) {
+        details::visit_scalar(column.type(), [&column, &num_rows, &chunk_size](auto&& impl) {
             using TagType = std::decay_t<decltype(impl)>;
             using RawType = typename TagType::DataTypeTag::raw_type;
             allocate_and_fill_chunked_column<RawType>(column, num_rows, chunk_size);
@@ -104,7 +82,27 @@ void fill_chunked_string_column(
     }
 }
 
-TEST(Arrow, ColumnBasic) {
+TEST(ArrowRead, ZeroCopy) {
+    size_t num_rows{10};
+    uint8_t* data_ptr = std::allocator<uint8_t>().allocate(sizeof(uint64_t) * num_rows);
+    auto typed_ptr = reinterpret_cast<uint64_t*>(data_ptr);
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        typed_ptr[idx] = idx;
+    }
+    sparrow::u8_buffer<uint64_t> u8_buffer(typed_ptr, num_rows);
+    sparrow::primitive_array<uint64_t> primitive_array(std::move(u8_buffer), num_rows);
+    sparrow::array array{std::move(primitive_array)};
+    auto arrow_structures = sparrow::get_arrow_structures(array);
+    auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_structures.first, *arrow_structures.second);
+    const auto* roundtripped_ptr = reinterpret_cast<uint64_t*>(arrow_array_buffers.at(1).data<uint8_t>());
+    for (size_t idx = 0; idx < num_rows; ++idx) {
+        ASSERT_EQ(typed_ptr[idx], idx);
+        ASSERT_EQ(roundtripped_ptr[idx], idx);
+    }
+    ASSERT_EQ(roundtripped_ptr, typed_ptr);
+}
+
+TEST(ArrowRead, ColumnBasic) {
     const size_t num_rows = 100;
     const size_t chunk_size = 5;
     const size_t num_chunks = num_rows / chunk_size;
@@ -124,7 +122,7 @@ TEST(Arrow, ColumnBasic) {
     }
 }
 
-TEST(Arrow, ColumnString) {
+TEST(ArrowRead, ColumnString) {
     const size_t num_rows = 100;
     const size_t chunk_size = 5;
     const size_t num_chunks = num_rows / chunk_size;
@@ -184,7 +182,7 @@ TEST(Arrow, ColumnString) {
     }
 }
 
-TEST(Arrow, ConvertSegmentBasic) {
+TEST(ArrowRead, ConvertSegmentBasic) {
     const auto symbol = "symbol";
     const auto num_rows = 100u;
     const auto chunk_size = 10u;
@@ -230,7 +228,7 @@ void assert_arrow_string_array_as_expected(const sparrow::array& arr, const std:
     }
 }
 
-TEST(Arrow, ConvertSegmentMultipleStringColumns) {
+TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
     const auto symbol = "symbol";
     const auto num_rows = 100u;
     const auto chunk_size = 19u;

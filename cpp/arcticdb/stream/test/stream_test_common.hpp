@@ -12,7 +12,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/stream/stream_writer.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
-#include <arcticdb/pipeline/input_tensor_frame.hpp>
+#include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/storage/library.hpp>
 #include <arcticdb/storage/lmdb/lmdb_storage.hpp>
 #include <arcticdb/version/version_store_api.hpp>
@@ -185,43 +185,42 @@ struct TestTensorFrame {
     TestTensorFrame(StreamDescriptor desc, size_t num_rows) : segment_(std::move(desc), num_rows) {}
 
     SegmentInMemory segment_;
-    std::shared_ptr<arcticdb::pipelines::InputTensorFrame> frame_ =
-            std::make_shared<arcticdb::pipelines::InputTensorFrame>();
+    std::shared_ptr<arcticdb::pipelines::InputFrame> frame_ = std::make_shared<arcticdb::pipelines::InputFrame>();
 };
 
 template<class ContainerType, typename DTT>
-void fill_test_column(
-        arcticdb::pipelines::InputTensorFrame& frame, ContainerType& container, DTT data_type_tag, size_t num_rows,
-        size_t start_val, bool is_index
+NativeTensor fill_test_column(
+        ContainerType& container, DTT data_type_tag, size_t num_rows, size_t start_val, bool is_index
 ) {
     using RawType = typename decltype(data_type_tag)::raw_type;
     if (!is_index) {
         if constexpr (std::is_integral_v<RawType> || std::is_floating_point_v<RawType>)
-            frame.field_tensors.emplace_back(test_column(container, data_type_tag, num_rows, start_val, is_index));
+            return test_column(container, data_type_tag, num_rows, start_val, is_index);
         else
-            frame.field_tensors.emplace_back(test_string_column(container, data_type_tag, num_rows, start_val, is_index)
-            );
+            return test_string_column(container, data_type_tag, num_rows, start_val, is_index);
     } else {
-        if constexpr (std::is_integral_v<RawType>)
-            frame.index_tensor = std::make_optional<NativeTensor>(
-                    test_column(container, data_type_tag, num_rows, start_val, is_index)
-            );
-        else
+        if constexpr (std::is_integral_v<RawType>) {
+            return test_column(container, data_type_tag, num_rows, start_val, is_index);
+        } else
             util::raise_rte("Unexpected type in index column");
     }
 }
 
 inline void fill_test_frame(
-        SegmentInMemory& segment, arcticdb::pipelines::InputTensorFrame& frame, size_t num_rows, size_t start_val,
+        SegmentInMemory& segment, arcticdb::pipelines::InputFrame& frame, size_t num_rows, size_t start_val,
         size_t opt_row_offset
 ) {
     util::check(!segment.descriptor().empty(), "Can't construct test frame with empty descriptor");
 
     auto field = segment.descriptor().begin();
+    auto desc = frame.desc().clone();
+    std::vector<entity::NativeTensor> field_tensors;
+    std::optional<entity::NativeTensor> index_tensor;
+
     if (frame.has_index()) {
         visit_field(*field, [&](auto type_desc_tag) {
             using DTT = typename decltype(type_desc_tag)::DataTypeTag;
-            fill_test_column(frame, segment.column(0), DTT{}, num_rows, start_val, true);
+            index_tensor = fill_test_column(segment.column(0), DTT{}, num_rows, start_val, true);
         });
         std::advance(field, 1);
     }
@@ -229,16 +228,16 @@ inline void fill_test_frame(
     for (; field != segment.descriptor().end(); ++field) {
         visit_field(*field, [&](auto type_desc_tag) {
             using DTT = typename decltype(type_desc_tag)::DataTypeTag;
-            fill_test_column(
-                    frame,
+            field_tensors.emplace_back(fill_test_column(
                     segment.column(std::distance(segment.descriptor().begin(), field)),
                     DTT{},
                     num_rows,
                     start_val + opt_row_offset,
                     false
-            );
+            ));
         });
     }
+    frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(index_tensor));
     segment.set_row_data(num_rows - 1);
 }
 
@@ -255,10 +254,10 @@ TestTensorFrame get_test_frame(
     using namespace arcticdb::pipelines;
     TestTensorFrame output(get_test_descriptor<IndexType>(id, fields), num_rows);
 
-    output.frame_->desc = get_test_descriptor<IndexType>(id, fields);
-    output.frame_->index = index_type_from_descriptor(output.frame_->desc);
+    output.frame_->desc() = get_test_descriptor<IndexType>(id, fields);
+    output.frame_->index = index_type_from_descriptor(output.frame_->desc());
     output.frame_->num_rows = num_rows;
-    output.frame_->desc.set_sorted(SortedValue::ASCENDING);
+    output.frame_->desc().set_sorted(SortedValue::ASCENDING);
 
     fill_test_frame(output.segment_, *output.frame_, num_rows, start_val, opt_row_offset);
 

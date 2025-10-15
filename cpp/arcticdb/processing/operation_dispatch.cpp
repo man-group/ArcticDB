@@ -9,6 +9,7 @@
 
 #include <arcticdb/processing/operation_dispatch.hpp>
 #include <arcticdb/column_store/column.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 
 namespace arcticdb {
@@ -55,7 +56,7 @@ VariantData transform_to_bitset(const VariantData& data) {
                                 [&column_with_strings, &output_bitset](auto col_tag) {
                                     using type_info = ScalarTypeInfo<decltype(col_tag)>;
                                     if constexpr (is_bool_type(type_info::data_type)) {
-                                        Column::transform<typename type_info::TDT>(
+                                        arcticdb::transform<typename type_info::TDT>(
                                                 *column_with_strings.column_,
                                                 output_bitset,
                                                 false,

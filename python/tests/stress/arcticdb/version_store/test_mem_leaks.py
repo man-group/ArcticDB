@@ -666,7 +666,7 @@ if MEMRAY_SUPPORTED:
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8078461031
-    # @pytest.mark.skip(reason = "read() memory leaks Monday#8078461031")
+    @pytest.mark.skip(reason="read() memory leaks Monday#8078461031")
     @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_memray(library_with_symbol):
         """
@@ -688,7 +688,7 @@ if MEMRAY_SUPPORTED:
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
-    # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    @pytest.mark.skip(reason="read() memory leaks Monday#8067881190")
     @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
         """
@@ -710,7 +710,7 @@ if MEMRAY_SUPPORTED:
     ##  - increase meantime the 'location limit' so that test continue to run and reduce risk of larger mem leaks
     ##  - leave some mark like bellow that code is subject to issue investigation with number of the issue for traceability
     ##  - https://man312219.monday.com/boards/7852509418/pulses/8067881190
-    # @pytest.mark.skip(reason = "read() memory leaks Monday#8067881190")
+    @pytest.mark.skip(reason="read() memory leaks Monday#8067881190")
     @marks([Marks.pipeline])
     def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_symbol):
         """

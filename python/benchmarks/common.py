@@ -39,6 +39,7 @@ def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
     # Create dataframe
     df = pd.DataFrame({"value": values})
     df.index = timestamps
+    df.index.name = "ts"
     return df
 
 

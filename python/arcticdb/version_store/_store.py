@@ -31,7 +31,7 @@ import time
 
 from arcticdb.dependencies import pyarrow as pa
 from arcticc.pb2.descriptors_pb2 import IndexDescriptor, TypeDescriptor
-from arcticdb_ext.version_store import SortedValue, StageResult
+from arcticdb_ext.version_store import RecordBatchData, SortedValue, StageResult
 from arcticc.pb2.storage_pb2 import LibraryConfig, EnvironmentConfigsMap
 from arcticdb.preconditions import check
 from arcticdb.supported_types import DateRangeInput, ExplicitlySupportedDates
@@ -354,11 +354,16 @@ class NativeVersionStore:
         self._open_mode = open_mode
         self._native_cfg = native_cfg
         self._runtime_options = runtime_options
+        # Do not make this a runtime option, as it is only temporary until Arrow writes are fully supported
+        self._allow_arrow_input = False
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         if self._runtime_options is None:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_output_format(output_format)
+
+    def _set_allow_arrow_input(self, allow_arrow_input: bool = True):
+        self._allow_arrow_input = allow_arrow_input
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
@@ -459,6 +464,7 @@ class NativeVersionStore:
         dynamic_strings,
         coerce_columns,
         norm_failure_options_msg="",
+        index_column=None,
         **kwargs,
     ):
         dynamic_schema = resolve_defaults(
@@ -473,7 +479,6 @@ class NativeVersionStore:
                 item, norm_meta = self._normalizer.normalize(item)
                 norm_meta.custom.CopyFrom(custom_norm_meta)
             else:
-                # TODO: just for pandas dataframes for now.
                 item, norm_meta = self._normalizer.normalize(
                     dataframe,
                     pickle_on_failure=pickle_on_failure,
@@ -481,6 +486,8 @@ class NativeVersionStore:
                     coerce_columns=coerce_columns,
                     dynamic_schema=dynamic_schema,
                     empty_types=empty_types,
+                    index_column=index_column,
+                    allow_arrow_input=self._allow_arrow_input,
                     **kwargs,
                 )
         except ArcticDbNotYetImplemented as ex:
@@ -542,6 +549,12 @@ class NativeVersionStore:
             )
 
     @staticmethod
+    def _valid_item_type(item):
+        return isinstance(item, NPDDataFrame) or (
+            isinstance(item, list) and all(isinstance(el, RecordBatchData) for el in item)
+        )
+
+    @staticmethod
     def resolve_defaults(param_name, proto_cfg, global_default, existing_value=None, uppercase=True, **kwargs):
         return resolve_defaults(param_name, proto_cfg, global_default, existing_value, uppercase, **kwargs)
 
@@ -568,6 +581,7 @@ class NativeVersionStore:
         validate_index: bool = False,
         sort_on_index: bool = False,
         sort_columns: List[str] = None,
+        index_column: Optional[str] = None,
         **kwargs,
     ):
         norm_failure_options_msg = kwargs.get("norm_failure_options_msg", self.norm_failure_options_msg_write)
@@ -580,8 +594,9 @@ class NativeVersionStore:
             dynamic_strings=True,
             coerce_columns=None,
             norm_failure_options_msg=norm_failure_options_msg,
+            index_column=index_column,
         )
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             return self.version_store.write_parallel(
                 symbol, item, norm_meta, validate_index, sort_on_index, sort_columns
             )
@@ -597,6 +612,7 @@ class NativeVersionStore:
         prune_previous_version: Optional[bool] = None,
         pickle_on_failure: Optional[bool] = None,
         validate_index: bool = False,
+        index_column: Optional[str] = None,
         **kwargs,
     ) -> Optional[VersionedItem]:
         """
@@ -635,7 +651,10 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that the index of `data` supports date range searches and update operations. This in effect tests that the data is sorted in ascending order.
             ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the
-            data to be sorted
+            data to be sorted. Note that no checks are performed for Arrow input data.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
         kwargs :
             passed through to the write handler
 
@@ -710,8 +729,9 @@ class NativeVersionStore:
             dynamic_strings,
             coerce_columns,
             norm_failure_options_msg,
+            index_column,
         )
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             if parallel or incomplete:
                 warn(
                     "Staging data with write() is deprecated. Use stage() instead.",
@@ -752,6 +772,7 @@ class NativeVersionStore:
         incomplete: bool = False,
         prune_previous_version: Optional[bool] = None,
         validate_index: bool = False,
+        index_column: Optional[str] = None,
         **kwargs,
     ) -> Optional[VersionedItem]:
         # FUTURE: use @overload and Literal for the existence of the return value once we ditch Python 3.6
@@ -777,7 +798,10 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If True, will verify that resulting symbol will support date range searches and update operations. This in effect tests that the previous version of the
             data and `data` are both sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing
-            on your input DataFrame to see if Pandas believes the data to be sorted
+            on your input DataFrame to see if Pandas believes the data to be sorted.  Note that no checks are performed for Arrow input data.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
         kwargs :
             passed through to the write handler
 
@@ -839,11 +863,12 @@ class NativeVersionStore:
             dynamic_strings,
             coerce_columns,
             self.norm_failure_options_msg_append,
+            index_column=index_column,
         )
 
         write_if_missing = kwargs.get("write_if_missing", True)
 
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 if incomplete:
                     warn(
@@ -875,6 +900,7 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         upsert: bool = False,
         prune_previous_version: Optional[bool] = None,
+        index_column: Optional[str] = None,
         **kwargs,
     ) -> VersionedItem:
         """
@@ -905,6 +931,9 @@ class NativeVersionStore:
             If True, will write the data even if the symbol does not exist.
         prune_previous_version
             Removes previous (non-snapshotted) versions from the database.
+        index_column: Optional[str], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
 
         Returns
         -------
@@ -945,7 +974,7 @@ class NativeVersionStore:
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
 
-        data = self._apply_date_range_to_update_query(data, date_range, update_query)
+        data = self._apply_date_range_to_update_query(data, date_range, update_query, index_column)
         _handle_categorical_columns(symbol, data)
 
         udm, item, norm_meta = self._try_normalize(
@@ -956,9 +985,10 @@ class NativeVersionStore:
             dynamic_strings,
             coerce_columns,
             self.norm_failure_options_msg_update,
+            index_column=index_column,
         )
 
-        if isinstance(item, NPDDataFrame):
+        if self._valid_item_type(item):
             with _diff_long_stream_descriptor_mismatch(self):
                 call_time = time.time_ns()
                 vit = self.version_store.update(
@@ -974,7 +1004,11 @@ class NativeVersionStore:
             return self._convert_thin_cxx_item_to_python(vit, metadata)
 
     def _apply_date_range_to_update_query(
-        self, data: TimeSeriesType, date_range: Optional[DateRangeInput], update_query: _PythonVersionStoreUpdateQuery
+        self,
+        data: TimeSeriesType,
+        date_range: Optional[DateRangeInput],
+        update_query: _PythonVersionStoreUpdateQuery,
+        index_column: Optional[str] = None,
     ) -> TimeSeriesType:
         """
         Parameters
@@ -993,7 +1027,7 @@ class NativeVersionStore:
         if date_range is not None:
             start, end = normalize_dt_range_to_ts(date_range)
             update_query.row_filter = _IndexRange(start.value, end.value)
-            return restrict_data_to_date_range_only(data, start=start, end=end)
+            return restrict_data_to_date_range_only(data, start=start, end=end, index_column=index_column)
         return data
 
     def _batch_update_internal(
@@ -1004,6 +1038,7 @@ class NativeVersionStore:
         date_range_vector: List[Optional[Tuple[Optional[Timestamp], Optional[Timestamp]]]],
         prune_previous_version: bool = None,
         upsert: bool = False,
+        index_column_vector: Optional[List[str]] = None,
     ):
         update_queries = [_PythonVersionStoreUpdateQuery() for _ in range(len(symbols))]
         for i in range(len(data_vector)):
@@ -1017,7 +1052,13 @@ class NativeVersionStore:
         # Batch update is available only via V2 Library API. Dynamic Strings are always on in it
         dynamic_strings = True
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
-            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_update
+            symbols,
+            data_vector,
+            metadata_vector,
+            dynamic_strings,
+            False,
+            self.norm_failure_options_msg_update,
+            index_column_vector=index_column_vector,
         )
         call_time = time.time_ns()
         cxx_versioned_items = self.version_store.batch_update(
@@ -1129,8 +1170,8 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
 
-    def _batch_read_keys(self, atom_keys):
-        for result in self.version_store.batch_read_keys(atom_keys):
+    def _batch_read_keys(self, atom_keys, read_options):
+        for result in self.version_store.batch_read_keys(atom_keys, read_options):
             read_result = ReadResult(*result)
             vitem = self._adapt_read_res(read_result)
             yield vitem
@@ -1233,7 +1274,7 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
-                vitem = self._post_process_dataframe(read_result, read_query, implement_read_index)
+                vitem = self._post_process_dataframe(read_result, read_query, read_options, implement_read_index)
                 versioned_items.append(vitem)
         return versioned_items
 
@@ -1500,6 +1541,7 @@ class NativeVersionStore:
         prune_previous_version=None,
         pickle_on_failure=None,
         validate_index: bool = False,
+        index_column_vector: Optional[List[Optional[str]]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1526,7 +1568,12 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
-            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
+            Note that no checks are performed for Arrow input data.
+        index_column_vector: Optional[List[Optional[str]]], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
+            i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
 
@@ -1559,6 +1606,7 @@ class NativeVersionStore:
             pickle_on_failure,
             validate_index,
             throw_on_error,
+            index_column_vector,
             **kwargs,
         )
 
@@ -1571,12 +1619,16 @@ class NativeVersionStore:
         pickle_on_failure: bool,
         norm_failure_msg: str,
         operation_supports_categoricals: bool = False,
+        index_column_vector: Optional[List[Optional[str]]] = None,
     ) -> Tuple[List, List, List, List]:
         # metadata_vector used to be type-hinted as an Iterable, so handle this case in case anyone is relying on it
         if metadata_vector is None:
             metadata_vector = len(symbols) * [None]
         else:
             metadata_vector = list(metadata_vector)
+
+        if index_column_vector is None:
+            index_column_vector = len(symbols) * [None]
 
         for idx in range(len(symbols)):
             _handle_categorical_columns(
@@ -1595,6 +1647,7 @@ class NativeVersionStore:
                 dynamic_strings,
                 None,
                 norm_failure_msg,
+                index_column_vector[idx],
             )
             udms.append(udm)
             items.append(item)
@@ -1610,6 +1663,7 @@ class NativeVersionStore:
         pickle_on_failure=None,
         validate_index: bool = False,
         throw_on_error: bool = True,
+        index_column_vector: Optional[List[Optional[str]]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1630,6 +1684,7 @@ class NativeVersionStore:
             pickle_on_failure,
             norm_failure_options_msg,
             operation_supports_categoricals=True,
+            index_column_vector=index_column_vector,
         )
         for idx, dataframe in enumerate(data_vector):
             _log_warning_on_writing_empty_dataframe(dataframe, symbols[idx])
@@ -1697,6 +1752,7 @@ class NativeVersionStore:
         metadata_vector: Optional[List[Any]] = None,
         prune_previous_version=None,
         validate_index: bool = False,
+        index_column_vector: Optional[List[Optional[str]]] = None,
         **kwargs,
     ) -> List[VersionedItem]:
         """
@@ -1721,7 +1777,12 @@ class NativeVersionStore:
         validate_index: bool, default=False
             If set to True, it will verify for each entry in the batch whether the index of the data supports date range searches and update operations.
             This in effect tests that the data is sorted in ascending order. ArcticDB relies on Pandas to detect if data is sorted -
-            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted
+            you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted.
+            Note that no checks are performed for Arrow input data.
+        index_column_vector: Optional[List[Optional[str]]], default=None
+            Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
+            table.
+            i-th entry corresponds to i-th element of `symbols`.
         kwargs :
             passed through to the write handler
 
@@ -1745,6 +1806,7 @@ class NativeVersionStore:
             prune_previous_version,
             validate_index,
             throw_on_error,
+            index_column_vector,
             **kwargs,
         )
 
@@ -1756,6 +1818,7 @@ class NativeVersionStore:
         prune_previous_version,
         validate_index,
         throw_on_error,
+        index_column_vector,
         **kwargs,
     ):
         proto_cfg = self._lib_cfg.lib_desc.version.write_options
@@ -1764,7 +1827,13 @@ class NativeVersionStore:
         )
         dynamic_strings = self._resolve_dynamic_strings(kwargs)
         udms, items, norm_metas, metadata_vector = self._generate_batch_vectors_for_modifying_operations(
-            symbols, data_vector, metadata_vector, dynamic_strings, False, self.norm_failure_options_msg_append
+            symbols,
+            data_vector,
+            metadata_vector,
+            dynamic_strings,
+            False,
+            self.norm_failure_options_msg_append,
+            index_column_vector=index_column_vector,
         )
         write_if_missing = kwargs.get("write_if_missing", True)
         call_time = time.time_ns()
@@ -2085,7 +2154,7 @@ class NativeVersionStore:
         )
 
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, implement_read_index)
+        return self._post_process_dataframe(read_result, read_query, read_options, implement_read_index)
 
     def head(
         self,
@@ -2122,7 +2191,7 @@ class NativeVersionStore:
             as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, implement_read_index, head=n)
+        return self._post_process_dataframe(read_result, read_query, read_options, implement_read_index, head=n)
 
     def tail(
         self, symbol: str, n: int = 5, as_of: VersionQueryInput = None, columns: Optional[List[str]] = None, **kwargs
@@ -2155,45 +2224,46 @@ class NativeVersionStore:
             as_of=as_of, date_range=None, row_range=None, columns=columns, query_builder=q, **kwargs
         )
         read_result = self._read_dataframe(symbol, version_query, read_query, read_options)
-        return self._post_process_dataframe(read_result, read_query, implement_read_index, tail=n)
+        return self._post_process_dataframe(read_result, read_query, read_options, implement_read_index, tail=n)
 
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
-    def _post_process_dataframe(self, read_result, read_query, implement_read_index=False, head=None, tail=None):
-        if isinstance(read_result.frame_data, ArrowOutputFrame):
-            # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
-            return self._adapt_read_res(read_result)
-        index_type = read_result.norm.df.common.WhichOneof("index_type")
-        index_is_rowcount = (
-            index_type == "index"
-            and not read_result.norm.df.common.index.is_physically_stored
-            and len(read_result.frame_data.index_columns) == 0
-        )
-        if implement_read_index and read_query.columns == [] and index_is_rowcount:
-            row_range = None
-            if head:
-                row_range = (0, head)
-            elif tail:
-                row_range = (-tail, None)
-            elif read_query.row_filter is not None:
-                row_range = self._compute_filter_start_end_row(read_result, read_query)
-            return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
-
-        if read_query.row_filter is not None and read_query.needs_post_processing:
-            # post filter
-            start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
-            data = []
-            for c in read_result.frame_data.data:
-                data.append(c[start_idx:end_idx])
-            row_count = len(data[0]) if len(data) else 0
-            read_result.frame_data = FrameData(
-                data,
-                read_result.frame_data.names,
-                read_result.frame_data.index_columns,
-                row_count,
-                read_result.frame_data.offset,
+    def _post_process_dataframe(
+        self, read_result, read_query, read_options, implement_read_index=False, head=None, tail=None
+    ):
+        # Range filters for arrow are processed inside C++ layer. So we skip the post-processing in this case.
+        if not isinstance(read_result.frame_data, ArrowOutputFrame):
+            index_type = read_result.norm.df.common.WhichOneof("index_type")
+            index_is_rowcount = (
+                index_type == "index"
+                and not read_result.norm.df.common.index.is_physically_stored
+                and len(read_result.frame_data.index_columns) == 0
             )
+            if implement_read_index and read_query.columns == [] and index_is_rowcount:
+                row_range = None
+                if head:
+                    row_range = (0, head)
+                elif tail:
+                    row_range = (-tail, None)
+                elif read_query.row_filter is not None:
+                    row_range = self._compute_filter_start_end_row(read_result, read_query)
+                return self._postprocess_df_with_only_rowcount_idx(read_result, row_range)
+
+            if read_query.row_filter is not None and read_query.needs_post_processing:
+                # post filter
+                start_idx, end_idx = self._compute_filter_start_end_row(read_result, read_query)
+                data = []
+                for c in read_result.frame_data.data:
+                    data.append(c[start_idx:end_idx])
+                row_count = len(data[0]) if len(data) else 0
+                read_result.frame_data = FrameData(
+                    data,
+                    read_result.frame_data.names,
+                    read_result.frame_data.index_columns,
+                    row_count,
+                    read_result.frame_data.offset,
+                )
 
         vitem = self._adapt_read_res(read_result)
 
@@ -2201,7 +2271,7 @@ class NativeVersionStore:
         if len(read_result.keys) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
 
-            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys)}
+            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys, read_options)}
             original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
 
             return VersionedItem(
@@ -2356,6 +2426,7 @@ class NativeVersionStore:
             If True, will verify that the index of the symbol after this operation supports date range searches and
             update operations. This requires that the indexes of the incomplete segments are non-overlapping with each
             other, and, in the case of append=True, fall after the last index value in the previous version.
+            Note that no checks are performed for Arrow input data.
         delete_staged_data_on_failure : bool, default=False
             Determines the handling of staged data when an exception occurs during the execution of the
             ``compact_incomplete`` function.
@@ -2432,7 +2503,11 @@ class NativeVersionStore:
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
-            table = pa.Table.from_batches(record_batches)
+            if len(record_batches) == 0:
+                # We get an empty list of record batches when output has no columns
+                table = pa.Table.from_arrays([])
+            else:
+                table = pa.Table.from_batches(record_batches)
             data = self._arrow_normalizer.denormalize(table, read_result.norm)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)

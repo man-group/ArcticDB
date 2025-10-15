@@ -1064,6 +1064,7 @@ def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore
 def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     store = lmdb_version_store_v1
     store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    store._set_allow_arrow_input()
     return store
 
 
@@ -1120,6 +1121,14 @@ def lmdb_version_store_dynamic_schema(
         return lmdb_version_store_dynamic_schema_v2
     else:
         raise ValueError(f"Unexpected encoding version: {encoding_version}")
+
+
+@pytest.fixture
+def lmdb_version_store_dynamic_schema_arrow(lmdb_version_store_dynamic_schema_v1) -> NativeVersionStore:
+    store = lmdb_version_store_dynamic_schema_v1
+    store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    store._set_allow_arrow_input()
+    return store
 
 
 @pytest.fixture

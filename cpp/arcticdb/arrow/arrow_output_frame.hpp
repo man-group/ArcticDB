@@ -7,14 +7,23 @@
  */
 #pragma once
 
-#include <sparrow/record_batch.hpp>
-#include <vector>
 #include <memory>
+#include <vector>
+
+#include <sparrow/c_interface.hpp>
+
+// Anything that transitively includes sparrow.array.hpp takes ages to build the (unused by us) std::format impl
+// So avoid including sparrow in headers where possible until this is resolved
+namespace sparrow {
+class record_batch;
+}
 
 namespace arcticdb {
 
 // C arrow representation of a record batch. Can be converted to a pyarrow.RecordBatch zero copy.
 struct RecordBatchData {
+    RecordBatchData() = default;
+
     RecordBatchData(ArrowArray array, ArrowSchema schema) : array_(array), schema_(schema) {}
 
     ArrowArray array_;
