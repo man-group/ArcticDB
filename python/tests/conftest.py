@@ -22,6 +22,8 @@ import re
 import time
 import requests
 import uuid
+import sys
+import multiprocessing
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
@@ -101,6 +103,18 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
 
+
+# Ensure pytest-xdist uses 'fork' start method on macOS
+@pytest.fixture(scope="session", autouse=True)
+def _set_multiprocessing_start_method_for_macos():
+    if platform.system() == "Darwin":
+        # Improve stability with forking on macOS when native libs are loaded
+        os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
+        try:
+            multiprocessing.set_start_method("fork", force=True)
+        except RuntimeError:
+            # Start method was already set by Python or another plugin
+            pass
 
 # silence warnings about custom markers
 def pytest_configure(config):
