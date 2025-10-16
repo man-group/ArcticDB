@@ -1031,9 +1031,9 @@ def generic_resample_test(
     try:
         assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
     except AssertionError:
-        if origin == "end_day" and closed == "right":
+        if origin in ["end_day", "end"] and closed == "right":
             # Pandas has a bug https://github.com/pandas-dev/pandas/issues/62154
-            # When end_day is used with right closed, and the first rows lie on the bucket, Pandas includes them in the
+            # When end_day or end is used with right closed, and the first rows lie on the bucket, Pandas includes them in the
             # bucket, which is wrong since closed is right. We remove the first rows from the dataframe and run the
             # resampling again.
 
