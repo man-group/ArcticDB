@@ -7,7 +7,7 @@ from arcticdb.util.test import sample_dataframe, config_context_multi
 from arcticdb_ext.storage import KeyType
 import arcticdb_ext.cpp_async as adb_async
 
-from tests.util.mark import REAL_S3_TESTS_MARK
+from tests.util.mark import MACOS, REAL_S3_TESTS_MARK
 
 
 @pytest.mark.storage
@@ -250,6 +250,7 @@ def write_repeatedly(version_store):
         version_store.write("sym", [1, 2, 3], prune_previous_version=True)
 
 
+@pytest.mark.skipif(MACOS, reason="Flaky stuck")
 def test_symbol_sizes_concurrent(reader_store, writer_store):
     """We should still return (possibly approximate) symbol sizes even when the keys we scan are being deleted by
     another process."""
