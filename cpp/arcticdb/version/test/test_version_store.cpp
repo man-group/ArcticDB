@@ -1081,7 +1081,7 @@ TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
     pipeline_context->stream_id_ = stream_id;
     auto get_staged_keys = [store]() {
         std::unordered_set<AtomKey> res;
-        store->iterate_type(KeyType::APPEND_DATA, [&](VariantKey&& found_key) { res.emplace(to_atom(found_key)); } );
+        store->iterate_type(KeyType::APPEND_DATA, [&](VariantKey&& found_key) { res.emplace(to_atom(found_key)); });
         return res;
     };
     auto wrapper1 = get_test_simple_frame(stream_id, 15, 2);
@@ -1102,13 +1102,14 @@ TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
 
     std::vector<AtomKey> staged_key_frame3;
     for (auto& key : staged_keys) {
-        if (std::find(staged_key_frame1_and_2.begin(), staged_key_frame1_and_2.end(), key) == staged_key_frame1_and_2.end()) {
+        if (std::find(staged_key_frame1_and_2.begin(), staged_key_frame1_and_2.end(), key) ==
+            staged_key_frame1_and_2.end()) {
             staged_key_frame3.emplace_back(key);
         }
     }
     ASSERT_EQ(staged_key_frame3.size(), 1);
 
-    StageResult result{ staged_key_frame3 };
+    StageResult result{staged_key_frame3};
     std::optional<std::vector<StageResult>> stage_results;
     stage_results = std::make_optional(std::vector{std::move(result)});
 

@@ -183,7 +183,8 @@ folly::Future<SymbolProcessingResult> read_and_process(
 class DeleteIncompleteKeysOnExit {
   public:
     DeleteIncompleteKeysOnExit(
-            std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration, std::optional<std::vector<StageResult>> stage_results
+            std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration,
+            std::optional<std::vector<StageResult>> stage_results
     );
 
     ARCTICDB_NO_MOVE_OR_COPY(DeleteIncompleteKeysOnExit)
