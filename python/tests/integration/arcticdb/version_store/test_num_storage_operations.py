@@ -14,7 +14,8 @@ from arcticdb.util.test import (
 )
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
-from python.tests.util.mark import MACOS_WHEEL_BUILD
+
+from tests.util.mark import MACOS_WHEEL_BUILD
 
 
 def sum_operations(stats):
