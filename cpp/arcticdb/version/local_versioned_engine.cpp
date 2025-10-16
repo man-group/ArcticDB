@@ -418,6 +418,15 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
     return read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
 }
 
+VersionedItem LocalVersionedEngine::read_modify_write_internal(
+        [[maybe_unused]] const StreamId& stream_id, [[maybe_unused]] const StreamId& target_stream,
+        [[maybe_unused]] const VersionQuery& version_query,
+        [[maybe_unused]] const std::shared_ptr<ReadQuery>& read_query, [[maybe_unused]] const ReadOptions& read_options
+) {
+    py::gil_scoped_release release_gil;
+    return {};
+}
+
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) {
     const auto key = std::move(k);
     return store()->read(key).thenValue([](auto&& key_seg_pair) -> DescriptorItem {
