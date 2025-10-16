@@ -100,8 +100,8 @@ enum class Operation { WRITE, UPDATE, APPEND };
 
 struct TestScenario {
     std::string name;
-    StorageFailureSimulator::ParamActionSequence write_failures;
-    StorageFailureSimulator::ParamActionSequence delete_failures;
+    StorageFailureSimulator::ParamActionSequence write_failures{};
+    StorageFailureSimulator::ParamActionSequence delete_failures{};
     size_t expected_written_ref_keys{};
     size_t expected_written_version_keys{};
     size_t expected_written_index_keys{};
