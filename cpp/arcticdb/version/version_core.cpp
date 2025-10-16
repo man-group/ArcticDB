@@ -531,7 +531,6 @@ folly::Future<AtomKey> async_update_impl(
                                                 std::move(intersecting_segments),
                                                 std::move(new_slice_and_keys)
                                         );
-                                        frame->normalize_types();
                                         auto tsd = index::get_merged_tsd(
                                                 row_count, dynamic_schema, index_segment_reader.tsd(), frame
                                         );

@@ -55,6 +55,22 @@ StreamDescriptor& InputFrame::desc() {
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
+const StreamDescriptor& InputFrame::tsd_desc() {
+    if (has_segment()) {
+        std::call_once(tsd_desc_flag, [this]() {
+            opt_tsd_desc = desc().clone();
+            for (auto& field : opt_tsd_desc->fields()) {
+                if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
+                    field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
+                }
+            }
+        });
+        return *opt_tsd_desc;
+    } else {
+        return desc();
+    }
+}
+
 void InputFrame::set_offset(ssize_t off) const { offset = off; }
 
 void InputFrame::set_sorted(SortedValue sorted) { desc().set_sorted(sorted); }
@@ -127,16 +143,6 @@ const std::vector<entity::NativeTensor>& InputFrame::field_tensors() const {
 const SegmentInMemory& InputFrame::segment() const {
     util::check(has_segment(), "InputFrame segment requested but holds InputTensors");
     return std::get<SegmentInMemory>(input_data);
-}
-
-void InputFrame::normalize_types() {
-    if (has_segment()) {
-        for (auto& field : desc().fields()) {
-            if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
-                field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
-            }
-        }
-    }
 }
 
 } // namespace arcticdb::pipelines

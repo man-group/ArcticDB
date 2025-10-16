@@ -303,7 +303,6 @@ folly::Future<entity::AtomKey> write_frame(
     ARCTICDB_SUBSAMPLE_DEFAULT(WriteIndex)
     return std::move(fut_slice_keys)
             .thenValue([frame = frame, key = std::move(key), &store](auto&& slice_keys) mutable {
-                frame->normalize_types();
                 return index::write_index(frame, std::forward<decltype(slice_keys)>(slice_keys), key, store);
             });
 }
@@ -348,7 +347,6 @@ folly::Future<entity::AtomKey> append_frame(
                 std::make_move_iterator(std::end(slice_and_keys_to_append))
         );
         std::sort(std::begin(slices_to_write), std::end(slices_to_write));
-        frame->normalize_types();
         auto tsd = index::get_merged_tsd(
                 frame->num_rows + frame->offset, dynamic_schema, index_segment_reader.tsd(), frame
         );

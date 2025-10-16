@@ -37,6 +37,9 @@ struct InputFrame {
 
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
+    // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow
+    // at least if there are string columns, and potentially in other cases as more type support is added
+    const StreamDescriptor& tsd_desc();
     void set_offset(ssize_t off) const;
     void set_sorted(SortedValue sorted);
     bool has_index() const;
@@ -49,7 +52,6 @@ struct InputFrame {
     const std::optional<entity::NativeTensor>& opt_index_tensor() const;
     const std::vector<entity::NativeTensor>& field_tensors() const;
     const SegmentInMemory& segment() const;
-    void normalize_types();
 
     mutable arcticdb::proto::descriptors::NormalizationMetadata norm_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata user_meta;
@@ -67,6 +69,8 @@ struct InputFrame {
         StreamDescriptor desc;
     };
     std::variant<InputTensors, SegmentInMemory> input_data;
+    std::optional<StreamDescriptor> opt_tsd_desc;
+    std::once_flag tsd_desc_flag;
 };
 
 } // namespace arcticdb::pipelines
