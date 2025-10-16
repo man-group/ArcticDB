@@ -89,6 +89,8 @@ static StorageFailureSimulator::ParamActionSequence make_fault_sequence(const st
         case Outcome::OTHER:
             seq.emplace_back(action_factories::fault<StorageException>(1));
             break;
+        case Outcome::UNKNOWN_EXCEPTION:
+            break;
         }
     }
     return seq;
@@ -354,6 +356,7 @@ TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
             break;
         case Outcome::QUOTA:
             EXPECT_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
+            break;
         case Outcome::UNKNOWN_EXCEPTION:
             EXPECT_ANY_THROW(update_with_three_segments(*version_store_, stream_id_));
             break;

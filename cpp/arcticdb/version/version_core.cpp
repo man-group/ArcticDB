@@ -519,9 +519,8 @@ folly::Future<AtomKey> async_update_impl(
                                     query,
                                     frame,
                                     dynamic_schema,
-                                    index_segment_reader = std::move(index_segment_reader)](
-                                           std::vector<SliceAndKey>&& new_slice_and_keys
-                                   ) mutable {
+                                    index_segment_reader = std::move(index_segment_reader
+                                    )](std::vector<SliceAndKey>&& new_slice_and_keys) mutable {
                             std::sort(std::begin(new_slice_and_keys), std::end(new_slice_and_keys));
                             auto affected_keys =
                                     get_keys_affected_by_update(index_segment_reader, *frame, query, dynamic_schema);
