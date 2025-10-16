@@ -1070,3 +1070,62 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     ASSERT_EQ(next_key, key);
     ASSERT_EQ(total_rows, num_rows);
 }
+
+TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
+    using namespace arcticdb;
+
+    auto version_store = get_test_engine<version_store::PythonVersionStore>();
+    auto store = version_store._test_get_store();
+    std::string stream_id{"sym"};
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->stream_id_ = stream_id;
+    auto get_staged_keys = [store]() {
+        std::unordered_set<AtomKey> res;
+        store->iterate_type(KeyType::APPEND_DATA, [&](VariantKey&& found_key) { res.emplace(to_atom(found_key)); } );
+        return res;
+    };
+    auto wrapper1 = get_test_simple_frame(stream_id, 15, 2);
+    auto& frame1 = wrapper1.frame_;
+    auto wrapper2 = get_test_simple_frame(stream_id, 15, 2);
+    auto& frame2 = wrapper2.frame_;
+    version_store.append_incomplete_frame(stream_id, frame1, true);
+    version_store.append_incomplete_frame(stream_id, frame2, true);
+    const auto staged_key_frame1_and_2 = get_staged_keys();
+    ASSERT_EQ(staged_key_frame1_and_2.size(), 2);
+
+    auto wrapper3 = get_test_simple_frame(stream_id, 15, 2);
+    auto& frame3 = wrapper3.frame_;
+    version_store.append_incomplete_frame(stream_id, frame3, true);
+
+    const auto staged_keys = get_staged_keys();
+    ASSERT_EQ(staged_keys.size(), 3);
+
+    std::vector<AtomKey> staged_key_frame3;
+    for (auto& key : staged_keys) {
+        if (std::find(staged_key_frame1_and_2.begin(), staged_key_frame1_and_2.end(), key) == staged_key_frame1_and_2.end()) {
+            staged_key_frame3.emplace_back(key);
+        }
+    }
+    ASSERT_EQ(staged_key_frame3.size(), 1);
+
+    StageResult result{ staged_key_frame3 };
+    std::optional<std::vector<StageResult>> stage_results;
+    stage_results = std::make_optional(std::vector{std::move(result)});
+
+    CompactIncompleteParameters params;
+    params.delete_staged_data_on_failure_ = true;
+    params.stage_results = stage_results;
+    version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+
+    // Doesn't touch the other keys when staged result is provided
+    ASSERT_EQ(get_staged_keys(), staged_key_frame1_and_2);
+
+    // Providing a non-existent key is fine
+    version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    ASSERT_EQ(get_staged_keys(), staged_key_frame1_and_2);
+
+    // Providing no stage result deletes everything
+    params.stage_results = std::nullopt;
+    version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    ASSERT_EQ(get_staged_keys().size(), 0);
+}
