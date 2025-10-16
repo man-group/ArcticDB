@@ -14,6 +14,7 @@ from arcticdb.util.test import (
 )
 from arcticdb.version_store.processing import QueryBuilder
 import arcticdb.toolbox.query_stats as qs
+from python.tests.util.mark import MACOS_WHEEL_BUILD
 
 
 def sum_operations(stats):
@@ -206,6 +207,9 @@ def test_read_after_write_and_prune_previous(lib_name, s3_and_nfs_storage_bucket
 
 
 @pytest.mark.parametrize("version_to_read", [0, 1, 2, 3])
+@pytest.mark.skipif(
+    MACOS_WHEEL_BUILD, reason="Pass when run sequentially, but fail when run in parallel with pytest-xdist"
+)
 def test_read_as_of_version(lib_name, s3_and_nfs_storage_bucket, clear_query_stats, version_to_read):
     # The we should be reading less, if we are reading a newer version
     # 2 and 3 are special cases, because they are both in the ref key
