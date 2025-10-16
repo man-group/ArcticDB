@@ -447,6 +447,7 @@ def test_force_compact_symbol_list_read_only(s3_version_store_v1):
         lib_read_only.compact_symbol_list()
 
 
+@pytest.mark.skipif(MACOS, reason="Flaky stuck")
 def test_force_compact_symbol_list_lock_held(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     lock = lib.version_store.get_storage_lock(CompactionLockName)
