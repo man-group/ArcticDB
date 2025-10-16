@@ -407,9 +407,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
     if (index_column_position.has_value()) {
         auto idx = *index_column_position;
         columns[idx].set_row_data(static_cast<ssize_t>(total_rows) - 1);
-        seg.add_column(
-                scalar_field(data_types[idx], column_names[idx]), std::make_shared<Column>(std::move(columns[idx]))
-        );
+        seg.add_column(column_names[idx], std::make_shared<Column>(std::move(columns[idx])));
     }
     for (size_t idx = 0; idx < column_names.size(); ++idx) {
         if (!index_column_position.has_value() || idx != *index_column_position) {
@@ -417,9 +415,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 // String columns data buffers are empty at the moment, and so would get marked as sparse with this call
                 columns[idx].set_row_data(static_cast<ssize_t>(total_rows) - 1);
             }
-            seg.add_column(
-                    scalar_field(data_types[idx], column_names[idx]), std::make_shared<Column>(std::move(columns[idx]))
-            );
+            seg.add_column(column_names[idx], std::make_shared<Column>(std::move(columns[idx])));
         }
     }
     seg.set_row_id(static_cast<ssize_t>(total_rows) - 1);

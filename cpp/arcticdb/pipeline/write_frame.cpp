@@ -63,18 +63,16 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
     }
     for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
-        FieldRef field{frame.field(col_idx).type(), frame.field(col_idx).name()};
-        if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
-            field.type_ = make_scalar_type(DataType::UTF_DYNAMIC64);
-        }
-        seg.add_column(field, std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool())));
+        seg.add_column(
+                frame.field(col_idx).name(),
+                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
-        FieldRef field{frame.field(col_idx).type(), frame.field(col_idx).name()};
-        if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
-            field.type_ = make_scalar_type(DataType::UTF_DYNAMIC64);
-        }
-        seg.add_column(field, std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool())));
+        seg.add_column(
+                frame.field(col_idx).name(),
+                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
     return seg;
