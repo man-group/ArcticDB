@@ -2273,6 +2273,32 @@ class NativeVersionStore:
     def _read_dataframe(self, symbol, version_query, read_query, read_options):
         return ReadResult(*self.version_store.read_dataframe_version(symbol, version_query, read_query, read_options))
 
+    def _read_modify_write(
+        self,
+        source_symbol: str,
+        query_builder: QueryBuilder,
+        target_symbol: Optional[str] = None,
+        as_of: Optional[VersionQueryInput] = None,
+        date_range: Optional[DateRangeInput] = None,
+        row_range: Optional[Tuple[int, int]] = None,
+        columns: Optional[List[str]] = None,
+        **kwargs,
+    ):
+        if target_symbol is None:
+            target_symbol = source_symbol
+        query_builder = copy.deepcopy(query_builder)
+        version_query, read_options, read_query = self._get_queries(
+            as_of=as_of,
+            date_range=date_range,
+            row_range=row_range,
+            columns=columns,
+            query_builder=query_builder,
+            **kwargs,
+        )
+        return self.version_store.read_modify_write(
+            source_symbol, target_symbol, version_query, read_query, read_options
+        )
+
     def _post_process_dataframe(
         self, read_result, read_query, read_options, implement_read_index=False, head=None, tail=None
     ):
