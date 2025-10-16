@@ -66,7 +66,6 @@ def test_parallel_reads(local_object_version_store):
 
 
 @pytest.mark.parametrize("storage_name", ["s3_storage", "gcp_storage"])
-@pytest.mark.skipif(MACOS_WHEEL_BUILD, reason="This test times out on macOS (the reason is unknown)")
 @SKIP_CONDA_MARK
 def test_parallel_reads_arctic(storage_name, request, lib_name):
     storage = request.getfixturevalue(storage_name)
