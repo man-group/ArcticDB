@@ -269,8 +269,13 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
     return output;
 }
 
-DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
-    switch (arrow_type) {
+DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
+    // TODO: Remove const-cast when get_arrow_array has a const variant
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            sparrow::get_arrow_array(const_cast<sparrow::array&>(array))->dictionary == nullptr,
+            "Dictionary-encoded Arrow data unsupported"
+    );
+    switch (array.data_type()) {
     case sparrow::data_type::BOOL:
         return DataType::BOOL8;
     case sparrow::data_type::UINT8:
@@ -301,7 +306,7 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
         return DataType::UTF_DYNAMIC64;
     default:
         schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                "Unsupported Arrow data type provided `{}`", sparrow::data_type_to_format(arrow_type)
+                "Unsupported Arrow data type provided `{}`", sparrow::data_type_to_format(array.data_type())
         );
         return DataType::UNKNOWN; // Prevent "control reaches end of non-void function"
     }
@@ -317,7 +322,7 @@ std::pair<std::vector<DataType>, std::optional<size_t>> find_data_types_and_inde
         if (index_name.has_value() && record_batch.get_column_name(idx) == *index_name) {
             index_column_position = idx;
         }
-        data_types.emplace_back(arcticdb_type_from_arrow_type(record_batch.get_column(idx).data_type()));
+        data_types.emplace_back(arcticdb_type_from_arrow_array(record_batch.get_column(idx)));
     }
     if (index_name.has_value()) {
         schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
