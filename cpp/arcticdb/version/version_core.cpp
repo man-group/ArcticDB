@@ -2060,24 +2060,36 @@ void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store) {
 }
 
 DeleteIncompleteKeysOnExit::DeleteIncompleteKeysOnExit(
-        std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration
+        std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration, std::optional<std::vector<StageResult>> stage_results
 ) :
     context_(std::move(pipeline_context)),
     store_(std::move(store)),
-    via_iteration_(via_iteration) {}
+    via_iteration_(via_iteration),
+    stage_results_(std::move(stage_results)){}
 
 DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
     if (released_)
         return;
 
     try {
+        storage::RemoveOpts opts { .ignores_missing_key_ = true };
         if (context_->incompletes_after_) {
             delete_incomplete_keys(*context_, *store_);
         } else {
             // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
             // context thus they must be read manually.
-            auto entries = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
-            store_->remove_keys(entries).get();
+            std::vector<VariantKey> keys_to_delete;
+            if (stage_results_) {
+                auto keys_to_delete_view =
+                    *stage_results_
+                    | std::views::transform(&StageResult::staged_segments)
+                    | std::views::join;
+                keys_to_delete = std::vector<VariantKey>(keys_to_delete_view.begin(), keys_to_delete_view.end());
+            }
+            else {
+                keys_to_delete = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
+            }
+            store_->remove_keys(keys_to_delete, opts).get();
         }
     } catch (const std::exception& e) {
         // Don't emit exceptions from destructor
@@ -2089,10 +2101,10 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
         const std::shared_ptr<PipelineContext>& pipeline_context, const std::shared_ptr<Store>& store,
         const CompactIncompleteParameters& parameters
 ) {
-    if (parameters.delete_staged_data_on_failure_)
-        return std::make_optional<DeleteIncompleteKeysOnExit>(pipeline_context, store, parameters.via_iteration_);
-    else
-        return std::nullopt;
+    if (parameters.delete_staged_data_on_failure_) {
+        return std::make_optional<DeleteIncompleteKeysOnExit>(pipeline_context, store, parameters.via_iteration_, parameters.stage_results);
+    }
+    return std::nullopt;
 }
 
 static void read_indexed_keys_for_compaction(
