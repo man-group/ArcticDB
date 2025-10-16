@@ -228,7 +228,6 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
                     raise
 
 
-@reproduce_failure("6.72.4", b"AXicY2QAghPJDIwgmoGJ4dgxIAvEYWGEioG4MBaYwwAAb0wCxw==")
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(df_list=dynamic_schema_column_list(), rule=rule(), origin=origin(), offset=offset())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
