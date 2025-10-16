@@ -88,7 +88,6 @@ class Library {
         if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
-
         storages_->write(key_seg);
     }
 
