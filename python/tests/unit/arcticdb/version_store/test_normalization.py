@@ -1326,3 +1326,22 @@ def test_digit_columns(lmdb_version_store_v1):
     result_df = lib.read("sym").data
     # Both column contents and column names are broken
     assert_frame_equal(result_df, df)
+
+
+@pytest.mark.skip(reason="Monday ref: 18197986461")
+def test_groupby_timeseries_column_with_timezone(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    timezone_times = pd.date_range(pd.Timestamp(2025, 1, 1, tz="America/New_York"), periods=5)
+    non_timezone_times = pd.date_range(pd.Timestamp(2025, 1, 1), periods=5)
+    df = pd.DataFrame({
+        "time": non_timezone_times,
+        "ints": np.arange(5)
+    }, index=timezone_times)
+    lib.write(sym, df)
+    q = QueryBuilder().groupby("time").agg({"ints": "sum"})
+    result = lib.read(sym, query_builder=q).data
+    expected = df
+    expected.reset_index(drop=True, inplace=True)
+    expected.set_index("time", inplace=True)
+    assert_frame_equal(result, expected)

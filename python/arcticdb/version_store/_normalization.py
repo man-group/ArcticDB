@@ -775,7 +775,7 @@ class ArrowTableNormalizer(Normalizer):
             is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
             if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
                 pandas_indexes = 1
-                if index_meta.tz:
+                if index_meta.tz and len(item.columns) > 0 and pa.types.is_timestamp(item.columns[0].type):
                     timezones[0] = index_meta.tz
                 if index_meta.name:
                     renames_for_table[0] = index_meta.name
