@@ -37,9 +37,10 @@ pytestmark = pytest.mark.pipeline
         ],
     ),
 )
-def test_aggregation_numeric(lmdb_version_store_v1, df):
+def test_aggregation_numeric(lmdb_version_store_v1, any_output_format, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregation_numeric"
     lib.write(symbol, df)
 
@@ -71,9 +72,10 @@ def test_aggregation_numeric(lmdb_version_store_v1, df):
         ],
     ),
 )
-def test_aggregation_strings(lmdb_version_store_v1, df):
+def test_aggregation_strings(lmdb_version_store_v1, any_output_format, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregation_strings"
     lib.write(symbol, df)
 
@@ -116,12 +118,13 @@ def aggregation_dataframe_list_strategy(draw):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(dfs=aggregation_dataframe_list_strategy())
-def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
+def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, dfs):
     agg_column_dtypes = [df["agg_column"].dtype for df in dfs if "agg_column" in df.columns]
     common_agg_type = functools.reduce(valid_common_type, agg_column_dtypes) if len(agg_column_dtypes) > 0 else None
     assume(any("grouping_column" in df.columns for df in dfs) and common_agg_type is not None)
 
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregation_numeric_dynamic"
     lib.delete(symbol)
     for df in dfs:
@@ -160,9 +163,10 @@ def test_aggregation_numeric_dynamic(lmdb_version_store_dynamic_schema_v1, dfs):
         ],
     ),
 )
-def test_aggregation_strings_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+def test_aggregation_strings_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregation_strings_dynamic"
     lib.delete(symbol)
     slices = [

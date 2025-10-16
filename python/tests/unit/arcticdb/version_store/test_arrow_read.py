@@ -6,7 +6,8 @@ from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
 from hypothesis.extra.pandas import columns, data_frames
 
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, stringify_dictionary_encoded_columns
+from arcticdb.util.arrow import stringify_dictionary_encoded_columns
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder, where
 from arcticdb.options import OutputFormat
