@@ -429,6 +429,21 @@ def test_append(lmdb_version_store_arrow, existing_data):
     assert expected.equals(received)
 
 
+@pytest.mark.parametrize("first_type", [pa.string(), pa.large_string()])
+def test_append_mix_strings_and_large_strings(lmdb_version_store_arrow, first_type):
+    lib = lmdb_version_store_arrow
+    sym = "test_append_mix_strings_and_large_strings"
+    write_table = pa.table({"col": pa.array(["a", "bb"], first_type)})
+    lib.write(sym, write_table)
+    second_type = pa.large_string() if first_type == pa.string() else pa.string()
+    append_table = pa.table({"col": pa.array(["ccc", "dddd"], second_type)})
+    lib.append(sym, append_table)
+
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.large_string())
+    expected = pa.concat_tables([write_table, append_table], promote_options="permissive")
+    assert expected.equals(received)
+
+
 @pytest.mark.parametrize("existing_data", [True, False])
 def test_append_with_index(lmdb_version_store_arrow, existing_data):
     lib = lmdb_version_store_arrow
@@ -508,6 +523,36 @@ def test_update(lmdb_version_store_arrow, existing_data):
         )
     else:
         expected = update_table
+    assert expected.equals(received)
+
+
+@pytest.mark.parametrize("first_type", [pa.string(), pa.large_string()])
+def test_update_mix_strings_and_large_strings(lmdb_version_store_arrow, first_type):
+    lib = lmdb_version_store_arrow
+    sym = "test_update_mix_strings_and_large_strings"
+    write_table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+            "col": pa.array(["a", "bb", "ccc", "dddd"], first_type),
+        }
+    )
+    lib.write(sym, write_table, index_column="ts")
+    second_type = pa.large_string() if first_type == pa.string() else pa.string()
+    update_table = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-02", periods=2), type=pa.timestamp("ns")),
+            "col": pa.array(["eeeee", "ffffff"], second_type),
+        }
+    )
+    lib.update(sym, update_table, index_column="ts")
+
+    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    expected = pa.table(
+        {
+            "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
+            "col": pa.array(["a", "eeeee", "ffffff", "dddd"], pa.string()),
+        }
+    )
     assert expected.equals(received)
 
 
