@@ -68,9 +68,14 @@ struct InputFrame {
         std::vector<entity::NativeTensor> field_tensors;
         StreamDescriptor desc;
     };
-    std::variant<InputTensors, SegmentInMemory> input_data;
-    std::optional<StreamDescriptor> opt_tsd_desc;
-    std::once_flag tsd_desc_flag;
+    struct InputSegment {
+        SegmentInMemory seg;
+        std::optional<StreamDescriptor> opt_tsd_desc;
+        std::once_flag tsd_desc_flag;
+
+        explicit InputSegment(SegmentInMemory&& segment) : seg(std::move(segment)) {}
+    };
+    std::variant<InputTensors, InputSegment> input_data;
 };
 
 } // namespace arcticdb::pipelines
