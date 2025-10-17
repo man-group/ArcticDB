@@ -230,7 +230,7 @@ jobs:
       - name: Install test dependencies
         if: ${{ env.USE_SANITIZER != '' }}
         run: |
-          pip install -e .[Testing]
+          ARCTIC_CMAKE_PRESET=skip pip install -e .[Testing]
 
       - name: Run Pytest Sanitizers tests
         if: ${{ env.USE_SANITIZER != '' }}
@@ -241,7 +241,7 @@ jobs:
         env:
           ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}  
 
-          
+
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
         if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
