@@ -82,11 +82,14 @@ Column WriteToSegmentTask::slice_column(
         const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
 ) const {
     const auto& source_column = frame.column(col_idx);
+    const auto type_size = get_type_size(source_column.type().data_type());
+    const auto first_byte = (slice_.rows().first - offset) * type_size;
+    const auto bytes = ((slice_.rows().second - offset) * type_size) - first_byte;
+    // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
+    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
+    // multiples of the type size
+    const auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
     if (is_sequence_type(source_column.type().data_type())) {
-        auto type_size = get_type_size(source_column.type().data_type());
-        const auto first_byte = (slice_.rows().first - offset) * type_size;
-        const auto bytes = ((slice_.rows().second - offset) * type_size) - first_byte;
-        auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
         const auto& block_offsets = source_column.data().buffer().block_offsets();
         auto first_block_offset = source_column.data().buffer().block_and_offset(first_byte).block_index_;
         auto block_offsets_it = block_offsets.cbegin() + first_block_offset;
@@ -103,39 +106,30 @@ Column WriteToSegmentTask::slice_column(
         details::visit_type(source_column.type().data_type(), [&](auto tag) {
             using type_info = ScalarTypeInfo<decltype(tag)>;
             using Rawtype = type_info::RawType;
+            // Already checked the data type above, this is just to reduce code generation
             if constexpr (is_sequence_type(type_info::data_type)) {
-                for (const auto& ptr_and_size : byte_blocks_at) {
-                    const auto& strings_buffer =
-                            source_column.get_extra_buffer(*block_offsets_it++, ExtraBufferType::STRING);
-                    auto ptr = reinterpret_cast<const Rawtype*>(ptr_and_size.first);
-                    auto size = ptr_and_size.second / sizeof(Rawtype);
-                    for (size_t idx = 0; idx < size; ++idx, ++ptr) {
-                        auto strings_buffer_offset = *ptr;
+                for (const auto& offset_ptr_and_size : byte_blocks_at) {
+                    // The extra string buffer is always one block by construction, so use a raw pointer into it to
+                    // avoid block_and_offset calculations
+                    char* string_data = reinterpret_cast<char*>(
+                            source_column.get_extra_buffer(*block_offsets_it++, ExtraBufferType::STRING).data()
+                    );
+                    auto offset_ptr = reinterpret_cast<const Rawtype*>(offset_ptr_and_size.first);
+                    auto num_elements = offset_ptr_and_size.second / sizeof(Rawtype);
+                    for (size_t idx = 0; idx < num_elements; ++idx, ++offset_ptr) {
+                        auto strings_buffer_offset = *offset_ptr;
                         // Note that in arrow_data_to_segment we omitted the last value from the offsets buffer to keep
                         // our indexing into the chunked buffer accurate. So when idx == size - 1, (ptr + 1) is still
                         // within the memory owned by the input Arrow structure
-                        auto next_strings_buffer_offset = *(ptr + 1);
-                        auto string_length = next_strings_buffer_offset - strings_buffer_offset;
-                        std::string_view str(
-                                reinterpret_cast<const char*>(
-                                        strings_buffer.bytes_at(strings_buffer_offset, string_length)
-                                ),
-                                string_length
-                        );
+                        auto string_length = *(offset_ptr + 1) - strings_buffer_offset;
+                        std::string_view str(&string_data[strings_buffer_offset], string_length);
                         *col_it++ = string_pool.get(str).offset();
                     }
                 }
             }
         });
         return res;
-    } else {
-        const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
-        const auto bytes =
-                ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
-        // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
-        // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
-        // multiples of the type size
-        auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
+    } else { // Numeric and bool types
         ChunkedBuffer chunked_buffer;
         if (byte_blocks_at.size() == 1) {
             // All required bytes lie within a single block, so we can avoid a copy by adding an external block
