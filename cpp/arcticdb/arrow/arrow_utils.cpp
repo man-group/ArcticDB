@@ -384,26 +384,24 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 packed_bits_to_buffer(
                         data, array.size(), arrow_array->offset, column.buffer().bytes_at(start_row, array.size())
                 );
-            } else if (is_sequence_type(data_type)) {
-                // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer represents
-                // offsets into this buffer
+            } else { // Numeric and string types
                 // Remove use of arrow_array here when https://github.com/man-group/sparrow/issues/589 is released
                 data += arrow_array->offset * get_type_size(data_type);
-                // We deliberately omit the last value from the offsets buffer to keep our indexing into the column's
-                // ChunkedBuffer accurate. See corresponding comment in WriteToSegmentTask::slice_column
+                // For string columns, we deliberately omit the last value from the offsets buffer to keep our indexing
+                // into the column's ChunkedBuffer accurate. See corresponding comment in
+                // WriteToSegmentTask::slice_column
                 const auto bytes = array.size() * get_type_size(data_type);
                 column.buffer().add_external_block(data, bytes);
-                ChunkedBuffer strings_buffer;
-                const auto string_bytes = arrow_array_buffers[2].size();
-                strings_buffer.add_external_block(arrow_array_buffers[2].data<uint8_t>(), string_bytes);
-                column.set_extra_buffer(
-                        start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
-                );
-            } else {
-                // Remove use of arrow_array here when https://github.com/man-group/sparrow/issues/589 is released
-                data += arrow_array->offset * get_type_size(data_type);
-                const auto bytes = array.size() * get_type_size(data_type);
-                column.buffer().add_external_block(data, bytes);
+                if (is_sequence_type(data_type)) {
+                    // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer
+                    // represents offsets into this buffer
+                    ChunkedBuffer strings_buffer;
+                    const auto string_bytes = arrow_array_buffers[2].size();
+                    strings_buffer.add_external_block(arrow_array_buffers[2].data<uint8_t>(), string_bytes);
+                    column.set_extra_buffer(
+                            start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
+                    );
+                }
             }
         }
         start_row += record_batch->nb_rows();
