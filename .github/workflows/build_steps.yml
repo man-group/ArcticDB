@@ -174,10 +174,11 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
+          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DUSE_SANITIZER=${{env.USE_SANITIZER || ''}}']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
+          USE_SANITIZER: ${{env.USE_SANITIZER || ''}}
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
