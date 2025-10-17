@@ -59,7 +59,6 @@ from .util.mark import (
     EXTENDED_MARKS,
     LMDB_TESTS_MARK,
     LOCAL_STORAGE_TESTS_ENABLED,
-    MACOS_WHEEL_BUILD,
     MEM_TESTS_MARK,
     REAL_AZURE_TESTS_MARK,
     SIM_GCP_TESTS_MARK,
@@ -76,6 +75,7 @@ from .util.mark import (
     VENV_COMPAT_TESTS_MARK,
     PANDAS_2_COMPAT_TESTS_MARK,
     MACOS,
+    ARM64,
     ARCTICDB_USING_CONDA,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
@@ -721,7 +721,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
     # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or (MACOS and ARM64)))
 
 
 @pytest.fixture
