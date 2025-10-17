@@ -270,7 +270,8 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
 }
 
 DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
-    // TODO: Remove const-cast when get_arrow_array has a const variant
+    // Remove const-cast once https://github.com/man-group/sparrow/issues/587 is released
+    // Remove use of get_arrow_array completely when https://github.com/man-group/sparrow/issues/588 is released
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
             sparrow::get_arrow_array(const_cast<sparrow::array&>(array))->dictionary == nullptr,
             "Dictionary-encoded Arrow data unsupported"
@@ -363,6 +364,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             const auto& data_type = data_types[idx];
             const auto& array = record_batch->get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
+            // Remove use of arrow_array here when https://github.com/man-group/sparrow/issues/589 is released
             schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
                     arrow_array->null_count == 0,
                     "Column '{}' contains null values, which are not currently supported",
@@ -385,6 +387,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             } else if (is_sequence_type(data_type)) {
                 // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer represents
                 // offsets into this buffer
+                // Remove use of arrow_array here when https://github.com/man-group/sparrow/issues/589 is released
                 data += arrow_array->offset * get_type_size(data_type);
                 // We deliberately omit the last value from the offsets buffer to keep our indexing into the column's
                 // ChunkedBuffer accurate. See corresponding comment in WriteToSegmentTask::slice_column
@@ -397,6 +400,7 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                         start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
                 );
             } else {
+                // Remove use of arrow_array here when https://github.com/man-group/sparrow/issues/589 is released
                 data += arrow_array->offset * get_type_size(data_type);
                 const auto bytes = array.size() * get_type_size(data_type);
                 column.buffer().add_external_block(data, bytes);
