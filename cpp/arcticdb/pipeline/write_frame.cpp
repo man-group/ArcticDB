@@ -79,7 +79,7 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
 }
 
 Column WriteToSegmentTask::slice_column(
-        const SegmentInMemory& frame, size_t col_idx, size_t offset, ARCTICDB_UNUSED StringPool& string_pool
+        const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
 ) const {
     const auto& source_column = frame.column(col_idx);
     if (is_sequence_type(source_column.type().data_type())) {

@@ -72,7 +72,6 @@ struct InputFrame {
         SegmentInMemory seg;
         std::optional<StreamDescriptor> opt_tsd_desc;
         std::once_flag tsd_desc_flag;
-
         explicit InputSegment(SegmentInMemory&& segment) : seg(std::move(segment)) {}
     };
     std::variant<InputTensors, InputSegment> input_data;
