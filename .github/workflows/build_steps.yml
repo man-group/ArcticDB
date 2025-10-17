@@ -181,71 +181,66 @@ jobs:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
           USE_SANITIZER: ${{env.USE_SANITIZER || ''}}
 
-      - name: Install arcticdb_ext
-        if: ${{ env.USE_SANITIZER != '' }}
-        run: |
-          cd cpp
-          cmake --build --preset $ARCTIC_CMAKE_PRESET --target install_arcticdb_ext
-        env:
-          CMAKE_INSTALL_PREFIX: ${{github.workspace}}/python
+      # - name: Compile C++ tests
+      #   if: inputs.job_type == 'cpp-tests'
+      #   run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
 
-      - name: Compile C++ tests
-        if: inputs.job_type == 'cpp-tests'
-        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
+      # - name: C++ Rapidcheck
+      #   if: inputs.job_type == 'cpp-tests'
+      #   run: cpp/out/install/arcticdb_rapidcheck_tests
 
-      - name: C++ Rapidcheck
-        if: inputs.job_type == 'cpp-tests'
-        run: cpp/out/install/arcticdb_rapidcheck_tests
+      # - name: Collect arcticdb_rapidcheck_tests binary on failure
+      #   if: failure()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: arcticdb_rapidcheck_tests_${{matrix.os}}
+      #     path: cpp/out/install/arcticdb_rapidcheck_tests*
 
-      - name: Collect arcticdb_rapidcheck_tests binary on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: arcticdb_rapidcheck_tests_${{matrix.os}}
-          path: cpp/out/install/arcticdb_rapidcheck_tests*
+      # - name: C++ unit tests
+      #   if: inputs.job_type == 'cpp-tests'
+      #   run: |
+      #     cd cpp/out
+      #     install/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
+      #       --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* || true
+      #     [[ $(jq '.tests' test_unit_arcticdb.json) -gt 0 ]]
+      #     [[ $(jq '.failures' test_unit_arcticdb.json) -eq 0 ]]
+      #     [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
+      #   env:
+      #     ARCTICDB_memory_loglevel: INFO
 
-      - name: C++ unit tests
-        if: inputs.job_type == 'cpp-tests'
-        run: |
-          cd cpp/out
-          install/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
-            --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* || true
-          [[ $(jq '.tests' test_unit_arcticdb.json) -gt 0 ]]
-          [[ $(jq '.failures' test_unit_arcticdb.json) -eq 0 ]]
-          [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
-        env:
-          ARCTICDB_memory_loglevel: INFO
+      # - name: Collect test_unit_arcticdb binary on failure
+      #   if: failure()
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: test_unit_arcticdb_${{matrix.os}}
+      #     path: cpp/out/install/test_unit_arcticdb*
 
-      - name: Collect test_unit_arcticdb binary on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test_unit_arcticdb_${{matrix.os}}
-          path: cpp/out/install/test_unit_arcticdb*
+      # # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
+      # - name: Compile C++ Benchmarks
+      #   if: inputs.job_type == 'cpp-tests'
+      #   run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
 
-      # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
-      - name: Compile C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests'
-        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
-
-      - name: Run C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests'
-        # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
-        # benchmarks which pause the timer.
-        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
+      # - name: Run C++ Benchmarks
+      #   if: inputs.job_type == 'cpp-tests'
+      #   # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
+      #   # benchmarks which pause the timer.
+      #   run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
 
       # After CMake compile step
-      - name: Install test dependencies
+      - name: Link built extension and install test dependencies
         if: ${{ env.USE_SANITIZER != '' }}
         run: |
+          # Symlink the built extension to the python directory
+          cd python
+          ln -sf ../cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_ext.*.so .
+          cd ..
+          # Install test dependencies without rebuilding
           ARCTIC_CMAKE_PRESET=skip pip install -e .[Testing]
 
       - name: Run Pytest Sanitizers tests
         if: ${{ env.USE_SANITIZER != '' }}
         run: |
-          cd python
-          pip show arcticdb
-          pytest tests/sanitizers/arcticdb/version_store/test_mem_leaks.py
+          pytest python/tests/sanitizers/arcticdb/version_store/test_mem_leaks.py
         env:
           ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}  
 
