@@ -240,7 +240,7 @@ jobs:
       - name: Run Pytest Sanitizers tests
         if: ${{ env.USE_SANITIZER != '' }}
         run: |
-          pytest python/tests/sanitizers/arcticdb/version_store/test_mem_leaks.py
+          pytest python/tests/sanitizers
         env:
           ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}  
 
