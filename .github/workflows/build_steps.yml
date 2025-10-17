@@ -226,13 +226,18 @@ jobs:
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
 
+      # After CMake compile step
+      - name: Install test dependencies
+        if: ${{ env.USE_SANITIZER != '' }}
+        run: |
+          pip install -e .[Testing]
+
       - name: Run Pytest Sanitizers tests
         if: ${{ env.USE_SANITIZER != '' }}
         run: |
           pytest python/tests/sanitizers/arcticdb/version_store/test_mem_leaks.py
         env:
-          ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}
-
+          ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}  
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
         if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
