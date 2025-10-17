@@ -181,6 +181,14 @@ jobs:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
           USE_SANITIZER: ${{env.USE_SANITIZER || ''}}
 
+      - name: Install arcticdb_ext
+        if: ${{ env.USE_SANITIZER != '' }}
+        run: |
+          cd cpp
+          cmake --build --preset $ARCTIC_CMAKE_PRESET --target install_arcticdb_ext
+        env:
+          CMAKE_INSTALL_PREFIX: ${{github.workspace}}/python
+
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
