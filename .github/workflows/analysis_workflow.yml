@@ -215,7 +215,7 @@ jobs:
 
   # ========================= Sanitizers ========================
   sanitizer-address-leak-undefined:
-    name: C++ Tests with ASan+LSan+UBSan
+    name: Tests with ASan+LSan+UBSan
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
     permissions: {packages: write}
@@ -225,7 +225,7 @@ jobs:
       matrix: '[{"os": "linux", "distro": "ubuntu-22.04", "container": {"image": "ghcr.io/man-group/arcticdb-dev-clang:latest"}, "cmake_preset_prefix": "linux", "cibw_build_suffix": "manylinux_x86_64", "build_dir": "/tmp/cpp_build_asan", "vcpkg_installed_dir": "/tmp/vcpkg_installed_asan", "vcpkg_packages_dir": "/tmp/vcpkg_packages_asan", "symbols": "*.pdb", "do_not_archive": ["*.o", "*.obj", "*.a", "*.lib"], "test_services": {}, "envs": "USE_SANITIZER=address,leak,undefined"}]'
 
   sanitizer-thread:
-    name: C++ Tests with TSan
+    name: Tests with TSan
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
     permissions: {packages: write}
