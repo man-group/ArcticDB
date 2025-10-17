@@ -1620,6 +1620,7 @@ class Marks:
     unit = Mark("unit")
     stress = Mark("stress")
     nonreg = Mark("nonreg")
+    sanitizers = Mark("sanitizers")
     hypothesis = Mark("hypothesis")
     arcticdb = Mark("arcticdb")
     version_store = Mark("version_store")
@@ -1641,7 +1642,6 @@ def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
     :param rules: dict of mark_name -> list[str | regex]
     """
     for mark_name, patterns in rules.items():
-
         # Deduplication guard
         if item.get_closest_marker(mark_name):
             continue

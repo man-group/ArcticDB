@@ -226,6 +226,13 @@ jobs:
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
 
+      - name: Run Pytest Sanitizers tests
+        if: ${{ env.USE_SANITIZER != '' }}
+        run: |
+          pytest python/tests/sanitizers/arcticdb/version_store/test_mem_leaks.py
+        env:
+          ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}
+
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
         if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
@@ -265,11 +272,11 @@ jobs:
         run: |
           if [ ${{inputs.python3}} -gt 8 ]
           then
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
           else
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
           fi
 
       # ========================= Common =========================
@@ -288,7 +295,7 @@ jobs:
         env:
           _exclusion: "\n!${{matrix.build_dir}}/**/"
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}-${{env.USE_SANITIZER || ''}}
           retention-days: ${{inputs.job_type == 'cpp-tests' && 7 || 90}}
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
