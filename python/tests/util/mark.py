@@ -236,12 +236,6 @@ PYARROW_POST_PROCESSING = pytest.mark.skipif(
     WINDOWS, reason="pyarrow 21.0.0 doesn't correctly apply fill_null: https://github.com/apache/arrow/issues/47234"
 )
 
-## MEMRAY supports linux and macos and python 3.8 and above
-MEMRAY_SUPPORTED = MACOS or LINUX
-MEMRAY_TESTS_MARK = pytest.mark.skipif(
-    not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
-)
-
 ZONE_INFO_MARK = pytest.mark.skipif(sys.version_info < (3, 9), reason="zoneinfo module was introduced in Python 3.9")
 
 SSL_TESTS_MARK = pytest.mark.skipif(

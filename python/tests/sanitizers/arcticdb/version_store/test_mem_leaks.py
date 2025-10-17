@@ -97,7 +97,7 @@ def generate_big_dataframe(rows: int = 1000000, num_exp_time_growth: int = 5) ->
 
 # endregion
 
-# region HELPER functions for memray tests
+# region HELPER functions for memory leak tests
 
 
 def construct_df_querybuilder_tests(size: int) -> pd.DataFrame:
@@ -243,12 +243,6 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 @SANITIZER_TESTS_MARK
 @marks([Marks.pipeline])
 def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
-    """
-    This test uses old approach with iterations.
-    It is created for comparison with the new approach
-    with memray
-    (If memray is good in future we could drop the old approach)
-    """
     lib: Library = arctic_library_lmdb_100gb
 
     df = construct_df_querybuilder_tests(size=2000000)
@@ -400,7 +394,7 @@ def test_mem_leak_queries_correctness_precheck(library_with_tiny_symbol):
 
 @SANITIZER_TESTS_MARK
 @marks([Marks.pipeline])
-def test_mem_leak_querybuilder_read_memray(library_with_symbol):
+def test_mem_leak_querybuilder_read(library_with_symbol):
     """
     Test to capture memory leaks >= of specified number
 
@@ -415,7 +409,7 @@ def test_mem_leak_querybuilder_read_memray(library_with_symbol):
 
 @SANITIZER_TESTS_MARK
 @marks([Marks.pipeline])
-def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol):
+def test_mem_leak_querybuilder_read_manyrepeats(library_with_tiny_symbol):
     """
     Test to capture memory leaks >= of specified number
 
@@ -430,7 +424,7 @@ def test_mem_leak_querybuilder_read_manyrepeats_memray(library_with_tiny_symbol)
 
 @SANITIZER_TESTS_MARK
 @marks([Marks.pipeline])
-def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_symbol):
+def test_mem_leak_querybuilder_read_batch_manyrepeats(library_with_tiny_symbol):
     """
     Test to capture memory leaks >= of specified number
 
@@ -445,30 +439,25 @@ def test_mem_leak_querybuilder_read_batch_manyrepeats_memray(library_with_tiny_s
 
 @SANITIZER_TESTS_MARK
 @marks([Marks.pipeline])
-def test_mem_leak_querybuilder_read_batch_memray(library_with_symbol):
+def test_mem_leak_querybuilder_read_batch(library_with_symbol):
     (lib, df, symbol) = library_with_symbol
     mem_query(lib, df, read_batch=True)
 
 
 @SANITIZER_TESTS_MARK
-def test_mem_limit_querybuilder_read_memray(library_with_symbol):
+def test_mem_limit_querybuilder_read(library_with_symbol):
     (lib, df, symbol) = library_with_symbol
     mem_query(lib, df)
 
 
 @SANITIZER_TESTS_MARK
-def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
+def test_mem_limit_querybuilder_read_batch(library_with_symbol):
     (lib, df, symbol) = library_with_symbol
     mem_query(lib, df, True)
 
 
 @pytest.fixture
 def library_with_big_symbol_(arctic_library_lmdb) -> Generator[Tuple[Library, str], None, None]:
-    """
-    As memray instruments memory, we need to take out
-    everything not relevant from mem leak measurement out of
-    test, so it works as less as possible
-    """
     lib: Library = arctic_library_lmdb
     symbol = "symbol"
     df: pd.DataFrame = generate_big_dataframe(300000)
@@ -478,7 +467,7 @@ def library_with_big_symbol_(arctic_library_lmdb) -> Generator[Tuple[Library, st
 
 
 @SANITIZER_TESTS_MARK
-def test_mem_leak_read_all_arctic_lib_memray(library_with_big_symbol_):
+def test_mem_leak_read_all_arctic_lib(library_with_big_symbol_):
     lib: Library = None
     (lib, symbol) = library_with_big_symbol_
     logger.info("Test starting")
