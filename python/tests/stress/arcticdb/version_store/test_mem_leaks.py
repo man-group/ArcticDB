@@ -370,8 +370,8 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
          and you can take the max mem growth number add 20 percent safety margin and you will
          arrive at reasonable  max_mem
 
-         Then put for number of iterations 3x or 5x and this mem limit and 
-         run the test from command line again to assure it runs ok before commit 
+         Then put for number of iterations 3x or 5x and this mem limit and
+         run the test from command line again to assure it runs ok before commit
 
     """
     # Must be closely examined at 520 MB!!
@@ -385,7 +385,6 @@ def test_mem_leak_read_all_arctic_lib(arctic_library_lmdb_100gb):
 @pytest.mark.skipif(
     WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
 )
-@pytest.mark.skipif(MACOS, reason="Problem on MacOs most probably similar to WINDOWS")
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
 @pytest.mark.skip(reason="Will become ASV tests")
 @marks([Marks.pipeline])
@@ -450,11 +449,12 @@ def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     df = lib.read(symbol).data
     del df
 
-    """ 
+    """
     See comment in previous test
     """
-    max_mem_bytes = 1_240_192_384 if MACOS_WHEEL_BUILD else 608_662_528  # On macOs ARM the memory required is more
-    # see https://github.com/man-group/ArcticDB/actions/runs/16048431365/job/45285477028
+    # macOS ARM64 builds empirically have shown to require more memory than the x86_64 builds.
+    # See: https://github.com/man-group/ArcticDB/actions/runs/17648315790/job/50153297343?pr=2645
+    max_mem_bytes = 3_000_000_000 if MACOS_WHEEL_BUILD else 608_662_528
 
     check_process_memory_leaks(proc_to_examine, 5, max_mem_bytes, 80.0)
 
@@ -634,23 +634,23 @@ if MEMRAY_SUPPORTED:
             if "folly::CPUThreadPoolExecutor::CPUTask" in frame_info_str:
                 logger.warning(f"Frame excluded : {frame_info_str}")
                 logger.warning(
-                    f"""Explanation    : These are on purpose, and they come from the interaction of 
-                               multi-threading and forking. When Python forks, the task-scheduler has a linked-list 
+                    f"""Explanation    : These are on purpose, and they come from the interaction of
+                               multi-threading and forking. When Python forks, the task-scheduler has a linked-list
                                of tasks to execute, but there is a global lock held that protects the thread-local state.
-                               We can't free the list without accessing the global thread-local storage singleton, 
-                               and that is protected by a lock which is now held be a thread that is in a different 
-                               process, so it will never be unlocked in the child. As a work-around we intentionally 
-                               leak the task-scheduler and replace it with a new one, in this method: 
+                               We can't free the list without accessing the global thread-local storage singleton,
+                               and that is protected by a lock which is now held be a thread that is in a different
+                               process, so it will never be unlocked in the child. As a work-around we intentionally
+                               leak the task-scheduler and replace it with a new one, in this method:
                                https://github.com/man-group/ArcticDB/blob/master/cpp/arcticdb/async/task_scheduler.cpp#L34
 
-                               It's actually due to a bug in folly, because the lock around the thread-local 
-                               storage manager has a compile-time token that should be used to differentiate it 
-                               from other locks, but it has been constructed with type void as have other locks. 
-                               It's possible they might fix it at some point in which case we can free the memory. 
-                               Or we do have a vague intention to move away from folly for async if we 
+                               It's actually due to a bug in folly, because the lock around the thread-local
+                               storage manager has a compile-time token that should be used to differentiate it
+                               from other locks, but it has been constructed with type void as have other locks.
+                               It's possible they might fix it at some point in which case we can free the memory.
+                               Or we do have a vague intention to move away from folly for async if we
                                find something better
 
-                               Great that it is catching this, as it's the one case in the whole project where I know 
+                               Great that it is catching this, as it's the one case in the whole project where I know
                                for certain that it does leak memory (and only because there's no alternative"""
                 )
                 return False
@@ -743,7 +743,6 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
-    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we
@@ -758,7 +757,6 @@ if MEMRAY_SUPPORTED:
     @SLOW_TESTS_MARK
     @MEMRAY_TESTS_MARK
     @pytest.mark.limit_memory("600 MB")
-    @pytest.mark.skipif(MACOS, reason="Mac OS mem usage is harder to predicts than WINDOWS")
     def test_mem_limit_querybuilder_read_batch_memray(library_with_symbol):
         """
         The fact that we do not leak memory does not mean that we
