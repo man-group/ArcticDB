@@ -135,6 +135,7 @@ jobs:
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
+        continue-on-error: true
 
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
@@ -174,10 +175,11 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
+          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DUSE_SANITIZER=${{env.USE_SANITIZER || ''}}']"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
+          USE_SANITIZER: ${{env.USE_SANITIZER || ''}}
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
@@ -224,6 +226,25 @@ jobs:
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
 
+      # After CMake compile step
+      - name: Link built extension and install test dependencies
+        if: ${{ env.USE_SANITIZER != '' }}
+        run: |
+          # Symlink the built extension to the python directory
+          cd python
+          ln -sf ../cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_ext.*.so .
+          cd ..
+          # Install test dependencies without rebuilding
+          ARCTIC_CMAKE_PRESET=skip pip install -e .[Testing]
+
+      - name: Run Pytest Sanitizers tests
+        if: ${{ env.USE_SANITIZER != '' }}
+        run: |
+          pytest python/tests/sanitizers
+        env:
+          ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}  
+
+
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
         if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
@@ -263,11 +284,11 @@ jobs:
         run: |
           if [ ${{inputs.python3}} -gt 8 ]
           then
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
           else
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
           fi
 
       # ========================= Common =========================
@@ -286,7 +307,7 @@ jobs:
         env:
           _exclusion: "\n!${{matrix.build_dir}}/**/"
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}-${{env.USE_SANITIZER || ''}}
           retention-days: ${{inputs.job_type == 'cpp-tests' && 7 || 90}}
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
