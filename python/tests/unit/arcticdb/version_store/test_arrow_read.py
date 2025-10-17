@@ -6,7 +6,8 @@ from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
 from hypothesis.extra.pandas import columns, data_frames
 
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, stringify_dictionary_encoded_columns
+from arcticdb.util.arrow import stringify_dictionary_encoded_columns
+from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder, where
 from arcticdb.options import OutputFormat
@@ -926,46 +927,6 @@ def test_resample_empty_slices(lmdb_version_store_dynamic_schema_arrow):
     assert pc.count(table.column("max_col"), mode="only_null").as_py() == 4
     assert pc.count(table.column("count_col"), mode="only_null").as_py() == 4
     expected = lib.read(sym, query_builder=q, output_format=OutputFormat.PANDAS).data
-    assert_frame_equal_with_arrow(table, expected)
-
-
-def test_resample_row_slice_responsible_for_no_buckets(lmdb_version_store_tiny_segment):
-    # Closely mimics test_resampling_row_slice_responsible_for_no_buckets with arrow from test_resample.py
-    # TODO: Remove this test if we enable pipeline tests with arrow
-    lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
-    sym = "sym"
-    df = pd.DataFrame(
-        {
-            "to_sum": [1, 2, 3, 4],
-        },
-        index=[pd.Timestamp(0), pd.Timestamp(100), pd.Timestamp(200), pd.Timestamp(3000)],
-    )
-    lib.write(sym, df)
-
-    q = QueryBuilder().resample("us").agg({"to_sum": ("to_sum", "sum")})
-    date_range = (pd.Timestamp(0), pd.Timestamp(1500))
-    table = lib.read(sym, date_range=date_range, query_builder=q).data
-    expected = pd.DataFrame({"to_sum": [6]}, index=[pd.Timestamp(0)])
-    assert_frame_equal_with_arrow(table, expected)
-
-
-@pytest.mark.skipif(IS_PANDAS_ONE, reason="Different empty frame handling in pandas 1.x")
-def test_symbol_concat_empty_intersection(lmdb_version_store_arrow):
-    # Tests a failing subset of test_symbol_concat_empty_column_intersection
-    # TODO: Remove this test if we enable pipeline tests with arrow
-    lib = lmdb_version_store_arrow
-    sym_0 = "sym_0"
-    sym_1 = "sym_1"
-    df_0 = pd.DataFrame({"col_0": [0]})
-    df_1 = pd.DataFrame({"col_1": [1]})
-    lib.write(sym_0, df_0)
-    lib.write(sym_1, df_1)
-    q = QueryBuilder().concat("inner")
-    table = lib.batch_read_and_join([sym_0, sym_1], query_builder=q).data
-    assert table.column_names == []
-    assert table.shape == (0, 0)
-    expected = pd.DataFrame()
     assert_frame_equal_with_arrow(table, expected)
 
 

@@ -181,11 +181,12 @@ def dynamic_schema_column_list(draw):
     origin=origin(),
     offset=offset(),
 )
-def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
+def test_resample(lmdb_version_store_v1, any_output_format, df, rule, origin, offset):
     # The assumption below is to avoid OOM-ing the GitHub runners.
     assume(dense_row_count_in_resampled_dataframe([df], rule) < 150000)
 
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym"
     logger = get_logger()
     logger.info(f"Data frame generated has {df.shape[0]} rows")
@@ -231,12 +232,15 @@ def test_resample(lmdb_version_store_v1, df, rule, origin, offset):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @given(df_list=dynamic_schema_column_list(), rule=rule(), origin=origin(), offset=offset())
 @settings(deadline=None, suppress_health_check=[HealthCheck.data_too_large])
-def test_resample_dynamic_schema(lmdb_version_store_dynamic_schema_v1, df_list, rule, origin, offset):
+def test_resample_dynamic_schema(
+    lmdb_version_store_dynamic_schema_v1, any_output_format, df_list, rule, origin, offset
+):
     # The assumption below is to avoid OOM-ing the GitHub runners.
     assume(dense_row_count_in_resampled_dataframe(df_list, rule) < 150000)
 
     common_column_types = compute_common_type_for_columns_in_df_list(df_list)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     lib.version_store.clear()
     sym = "sym"
     agg = {f"{name}_{op}": (name, op) for name in common_column_types for op in ALL_AGGREGATIONS}

@@ -24,8 +24,9 @@ from arcticdb.util.test import (
 pytestmark = pytest.mark.pipeline
 
 
-def test_group_on_float_column_with_nans(lmdb_version_store_v1):
+def test_group_on_float_column_with_nans(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_on_float_column_with_nans"
     df = pd.DataFrame({"grouping_column": [1.0, 2.0, np.nan, 1.0, 2.0, 2.0], "agg_column": [1, 2, 3, 4, 5, 6]})
     lib.write(symbol, df)
@@ -34,8 +35,9 @@ def test_group_on_float_column_with_nans(lmdb_version_store_v1):
 
 # TODO: Add first and last once un-feature flagged
 @pytest.mark.parametrize("aggregator", ("sum", "min", "max", "mean", "count"))
-def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
+def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, any_output_format, aggregator):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregate_float_columns_with_nans"
     df = pd.DataFrame(
         {
@@ -47,8 +49,9 @@ def test_aggregate_float_columns_with_nans(lmdb_version_store_v1, aggregator):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"agg_column": aggregator})
 
 
-def test_count_aggregation(lmdb_version_store_v1):
+def test_count_aggregation(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_count_aggregation"
     df = DataFrame(
         {
@@ -62,8 +65,9 @@ def test_count_aggregation(lmdb_version_store_v1):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_aggregation(lmdb_version_store_v1):
+def test_first_aggregation(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_first_aggregation"
     df = DataFrame(
         {
@@ -77,8 +81,9 @@ def test_first_aggregation(lmdb_version_store_v1):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_first_agg_with_append(lmdb_version_store_v1):
+def test_first_agg_with_append(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_first_agg_with_append"
     df_0 = pd.DataFrame({"grouping_column": [0], "to_first": [10.0]})
     df_1 = pd.DataFrame({"grouping_column": [1], "to_first": [30.0]})
@@ -90,8 +95,9 @@ def test_first_agg_with_append(lmdb_version_store_v1):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_aggregation(lmdb_version_store_v1):
+def test_last_aggregation(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_last_aggregation"
     df = DataFrame(
         {
@@ -115,8 +121,9 @@ def test_last_aggregation(lmdb_version_store_v1):
 
 
 @pytest.mark.skip(reason="Feature flagged off until working with string columns and dynamic schema")
-def test_last_agg_with_append(lmdb_version_store_v1):
+def test_last_agg_with_append(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_last_agg_with_append"
     df_0 = pd.DataFrame({"grouping_column": [0], "to_last": [10.0]})
     df_1 = pd.DataFrame({"grouping_column": [1], "to_last": [30.0]})
@@ -127,8 +134,9 @@ def test_last_agg_with_append(lmdb_version_store_v1):
     generic_aggregation_test(lib, symbol, pd.concat([df_0, df_1, df_2]), "grouping_column", {"to_last": "last"})
 
 
-def test_sum_aggregation(lmdb_version_store_v1):
+def test_sum_aggregation(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_sum_aggregation"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
@@ -138,8 +146,9 @@ def test_sum_aggregation(lmdb_version_store_v1):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
-def test_sum_aggregation_bool(lmdb_version_store_v1):
+def test_sum_aggregation_bool(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_sum_aggregation"
     df = DataFrame(
         {
@@ -152,8 +161,9 @@ def test_sum_aggregation_bool(lmdb_version_store_v1):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
-def test_mean_aggregation(lmdb_version_store_v1):
+def test_mean_aggregation(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_mean_aggregation"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_mean": [1, 1, 2, 2, 2]},
@@ -163,8 +173,9 @@ def test_mean_aggregation(lmdb_version_store_v1):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
 
 
-def test_mean_aggregation_float(lmdb_version_store_v1):
+def test_mean_aggregation_float(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_mean_aggregation_float"
     df = DataFrame(
         {
@@ -177,8 +188,9 @@ def test_mean_aggregation_float(lmdb_version_store_v1):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
 
 
-def test_mean_aggregation_timestamp(lmdb_version_store_v1):
+def test_mean_aggregation_timestamp(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_mean_aggregation_float"
     df = DataFrame(
         {
@@ -206,8 +218,9 @@ def test_mean_aggregation_timestamp(lmdb_version_store_v1):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_mean": "mean"})
 
 
-def test_named_agg(lmdb_version_store_tiny_segment):
+def test_named_agg(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_named_agg"
     gen = np.random.default_rng()
     df = DataFrame({"grouping_column": [1, 1, 1, 2, 3, 4], "agg_column": gen.random(6)})
@@ -235,16 +248,18 @@ def test_named_agg(lmdb_version_store_tiny_segment):
     assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_max_minus_one(lmdb_version_store_v1):
+def test_max_minus_one(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_max_minus_one"
     df = pd.DataFrame({"grouping_column": ["thing"], "to_max": [-1]})
     lib.write(symbol, df)
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_max": "max"})
 
 
-def test_group_empty_dataframe(lmdb_version_store_v1):
+def test_group_empty_dataframe(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_empty_dataframe"
     df = DataFrame({"grouping_column": [], "to_mean": []})
     lib.write(symbol, df)
@@ -253,8 +268,9 @@ def test_group_empty_dataframe(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_group_pickled_symbol(lmdb_version_store_v1):
+def test_group_pickled_symbol(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_pickled_symbol"
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
@@ -263,8 +279,9 @@ def test_group_pickled_symbol(lmdb_version_store_v1):
         _ = lib.read(symbol, query_builder=q)
 
 
-def test_group_column_not_present(lmdb_version_store_v1):
+def test_group_column_not_present(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_column_not_present"
     df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
     lib.write(symbol, df)
@@ -273,8 +290,9 @@ def test_group_column_not_present(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_group_column_splitting(lmdb_version_store_tiny_segment):
+def test_group_column_splitting(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_column_splitting"
     df = DataFrame(
         {
@@ -295,8 +313,9 @@ def test_group_column_splitting(lmdb_version_store_tiny_segment):
     )
 
 
-def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
+def test_group_column_splitting_strings(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_column_splitting"
     df = DataFrame(
         {
@@ -317,8 +336,9 @@ def test_group_column_splitting_strings(lmdb_version_store_tiny_segment):
     )
 
 
-def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory):
+def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store_factory, any_output_format):
     lib = version_store_factory(column_group_size=2, segment_row_size=2, dynamic_strings=True)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregation_with_nones_and_nans_in_string_grouping_column"
     # Structured so that the row-slices of the grouping column contain:
     # 1 - All strings
@@ -351,8 +371,9 @@ def test_aggregation_with_nones_and_nans_in_string_grouping_column(version_store
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
-def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1):
+def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = DataFrame({"grouping_column": ["group_1", "group_1", "group_1"], "to_max": [1, 5, 4]}, index=np.arange(3))
     q = QueryBuilder()
     q = q.groupby("grouping_column").agg({"to_max": "max"})
@@ -364,8 +385,9 @@ def test_doctring_example_query_builder_groupby_max(lmdb_version_store_v1):
     assert_frame_equal(res.data, df)
 
 
-def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store_v1):
+def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1"], "to_mean": [1.1, 1.4, 2.5], "to_max": [1.1, 1.4, 2.5]},
         index=np.arange(3),
@@ -387,8 +409,9 @@ def test_docstring_example_query_builder_groupby_max_and_mean(lmdb_version_store
 ##################################
 
 
-def test_count_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_count_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_count_aggregation_dynamic"
     df = DataFrame(
         {
@@ -404,8 +427,9 @@ def test_count_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
 
 
 @pytest.mark.xfail(reason="Not supported yet")
-def test_first_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_first_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_first_aggregation_dynamic"
     df = DataFrame(
         {
@@ -421,8 +445,9 @@ def test_first_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
 
 
 @pytest.mark.xfail(reason="Not supported yet")
-def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_last_aggregation_dynamic"
     df = DataFrame(
         {
@@ -447,8 +472,9 @@ def test_last_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_last": "last"})
 
 
-def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_sum_aggregation_dynamic"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]},
@@ -460,8 +486,11 @@ def test_sum_aggregation_dynamic(lmdb_version_store_dynamic_schema_v1):
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
-def test_sum_aggregation_dynamic_bool_missing_aggregated_column(lmdb_version_store_dynamic_schema_v1):
+def test_sum_aggregation_dynamic_bool_missing_aggregated_column(
+    lmdb_version_store_dynamic_schema_v1, any_output_format
+):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_sum_aggregation_dynamic"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_2"], "to_sum": [True, False]},
@@ -472,8 +501,9 @@ def test_sum_aggregation_dynamic_bool_missing_aggregated_column(lmdb_version_sto
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
-def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_sum_aggregation_with_range_index_dynamic"
     df = DataFrame(
         {"grouping_column": ["group_1", "group_1", "group_1", "group_2", "group_2"], "to_sum": [1, 1, 2, 2, 2]}
@@ -484,8 +514,9 @@ def test_sum_aggregation_with_range_index_dynamic(lmdb_version_store_dynamic_sch
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
-def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_empty_dataframe_dynamic"
     df = DataFrame({"grouping_column": [], "to_mean": []})
     lib.write(symbol, df)
@@ -494,8 +525,9 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_pickled_symbol_dynamic"
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
@@ -504,8 +536,9 @@ def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_column_not_present_dynamic"
     df = DataFrame({"a": np.arange(2)}, index=np.arange(2))
     lib.write(symbol, df)
@@ -515,8 +548,9 @@ def test_group_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
 
 
 @pytest.mark.parametrize("agg", ("max", "min", "mean", "sum"))
-def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema_v1, agg):
+def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema_v1, agg, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_segment_without_aggregation_column"
     write_df = pd.DataFrame({"grouping_column": ["group_0"], "aggregation_column": [10330.0]})
     lib.write(symbol, write_df)
@@ -527,8 +561,9 @@ def test_segment_without_aggregation_column(lmdb_version_store_dynamic_schema_v1
     )
 
 
-def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema_v1):
+def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_minimal_repro_type_change"
     write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_sum": [np.uint8(1)]})
     lib.write(symbol, write_df)
@@ -537,8 +572,9 @@ def test_minimal_repro_type_change(lmdb_version_store_dynamic_schema_v1):
     generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_sum": "sum"})
 
 
-def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema_v1):
+def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_minimal_repro_type_change_max"
     write_df = pd.DataFrame({"grouping_column": ["group_1"], "to_max": [np.uint8(1)]})
     lib.write(symbol, write_df)
@@ -547,16 +583,18 @@ def test_minimal_repro_type_change_max(lmdb_version_store_dynamic_schema_v1):
     generic_aggregation_test(lib, symbol, pd.concat([write_df, append_df]), "grouping_column", {"to_max": "max"})
 
 
-def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_dynamic_schema_v1):
+def test_minimal_repro_type_sum_similar_string_group_values(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_minimal_repro_type_sum_similar_string_group_values"
     df = pd.DataFrame({"grouping_column": ["0", "000"], "to_sum": [1.0, 1.0]})
     lib.write(symbol, df)
     generic_aggregation_test(lib, symbol, df, "grouping_column", {"to_sum": "sum"})
 
 
-def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_dynamic_schema_v1):
+def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_aggregation_grouping_column_missing_from_row_group"
     write_df = DataFrame(
         {"to_sum": [1, 2], "grouping_column": ["group_1", "group_2"]},
@@ -582,7 +620,7 @@ def test_aggregation_grouping_column_missing_from_row_group(lmdb_version_store_d
 @pytest.mark.parametrize("first_group", ["0", "1"])
 @pytest.mark.parametrize("second_group", ["0", "1"])
 def test_sum_aggregation_type(
-    lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype, first_group, second_group
+    lmdb_version_store_dynamic_schema_v1, first_dtype, second_dtype, first_group, second_group, any_output_format
 ):
     """
     Sum aggregation promotes to the largest type of the respective category. int -> int64, uint -> uint64, float -> float64
@@ -591,6 +629,7 @@ def test_sum_aggregation_type(
     test we test all configurations of dtypes and grouping options (same group vs different group)
     """
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df1 = pd.DataFrame({"grouping_column": [first_group], "to_sum": np.array([1], first_dtype)})
     df2 = pd.DataFrame({"grouping_column": [second_group], "to_sum": np.array([1], second_dtype)})
     lib.write("sym", df1)
@@ -616,7 +655,7 @@ def test_sum_aggregation_type(
 @pytest.mark.parametrize("extremum", ["min", "max"])
 @pytest.mark.parametrize("dtype, default_value", [(np.int32, 0), (np.float32, np.nan), (bool, False)])
 def test_extremum_aggregation_with_missing_aggregation_column(
-    lmdb_version_store_dynamic_schema_v1, extremum, dtype, default_value
+    lmdb_version_store_dynamic_schema_v1, extremum, dtype, default_value, any_output_format
 ):
     """
     Test that a sparse column will be backfilled with the correct values.
@@ -624,6 +663,7 @@ def test_extremum_aggregation_with_missing_aggregation_column(
     because the aggregation column is missing, d2 will be the second row which will be dense and not backfilled.
     """
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym"
     df1 = pd.DataFrame({"agg_column": np.array([0, 0], dtype)})
     df2 = pd.DataFrame({"grouping_column": ["a"]})
@@ -640,8 +680,11 @@ def test_extremum_aggregation_with_missing_aggregation_column(
     assert_frame_equal(data, expected)
 
 
-def test_mean_timestamp_aggregation_with_missing_aggregation_column(lmdb_version_store_dynamic_schema_v1):
+def test_mean_timestamp_aggregation_with_missing_aggregation_column(
+    lmdb_version_store_dynamic_schema_v1, any_output_format
+):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym"
     df1 = pd.DataFrame({"agg": [pd.Timestamp(1)], "grouping": [0]})
     df2 = pd.DataFrame({"grouping": [0, 1, 2]})
