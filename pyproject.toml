@@ -65,6 +65,7 @@ markers = [
     "unit: Mark from physical folder",
     "stress: Mark from physical folder",
     "nonreg: Mark from physical folder",
+    "sanitizers: Mark from physical folder",
     "hypothesis: Mark from physical folder",
     "arcticdb: Mark from physical folder",
     "version_store: Mark from physical folder",

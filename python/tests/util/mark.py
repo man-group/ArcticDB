@@ -139,6 +139,9 @@ SKIP_CONDA_MARK = pytest.mark.skipif(
     ARCTICDB_USING_CONDA,
     reason="Those tests are skipped on conda",
 )
+SANITIZER_TESTS_MARK = pytest.mark.skipif(
+    os.getenv("ARCTICDB_USE_SANITIZER", "") == "", reason="Tests are skipped when no sanitizers are enabled"
+)
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
 # This is to avoid the risk of the name becoming out of sync with the actual condition.
 SLOW_TESTS_MARK = pytest.mark.skipif(
@@ -289,7 +292,6 @@ def param_dict(fields, cases=None):
 
 
 def xfail_azure_chars(nvs, symbol_name):
-
     def contains_problem_chars(text: str) -> list:
         target_chars = [chr(c) for c in range(0, 32)] + [chr(126), chr(127), chr(140), chr(142), chr(143), chr(156)]
         found = [(ord(char), repr(char)) for char in text if char in target_chars]
