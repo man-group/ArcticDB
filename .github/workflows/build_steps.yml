@@ -135,7 +135,7 @@ jobs:
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
-        ignore-error: true
+        continue-on-error: true
 
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
