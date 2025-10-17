@@ -18,11 +18,11 @@ from arcticdb.util.test import assert_frame_equal
 def test_write_arrow_read_pandas_no_index(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_arrow_read_pandas_no_index"
-    table = pa.table({"col": pa.array([0, 1], pa.int64())})
+    table = pa.table({"col0": pa.array([0, 1], pa.int64()), "col1": pa.array(["a", "bb"], pa.string())})
     lib.write(sym, table)
     received = lib.read(sym, output_format="pandas").data
     assert isinstance(received, pd.DataFrame)
-    expected = pd.DataFrame({"col": np.arange(2, dtype=np.int64)})
+    expected = pd.DataFrame({"col0": np.arange(2, dtype=np.int64), "col1": ["a", "bb"]})
     assert_frame_equal(expected, received)
 
 
