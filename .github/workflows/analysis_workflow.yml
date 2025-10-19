@@ -31,7 +31,7 @@ on:
   schedule: # Schedule the job to run at 12 a.m. daily
     - cron: '0 0 * * *'
 
-  pull_request_target:
+  pull_request:
     paths-ignore:
     - "**/*.md"
 

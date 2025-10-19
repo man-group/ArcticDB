@@ -177,7 +177,7 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "${{matrix.cmake_extra_args && format('[{0}, ''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'']', matrix.cmake_extra_args) || format('['''{0}''']', '-DVCPKG_INSTALL_OPTIONS=--clean-after-build')}}"
+          configurePresetAdditionalArgs: "${{matrix.cmake_extra_args != '' && format('[{0}, ''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'']', matrix.cmake_extra_args) || '[''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'']'}}"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
