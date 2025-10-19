@@ -16,6 +16,7 @@ on:
       run_full_matrix_of_persistent_tests: {default: false, type: boolean, description: if true - persistent tests will run for all python versions else only for 12 }
       DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
       DEBUG_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
+      cmake_extra_args:  {default: "", type: string, required: false, description: 'Additional CMake arguments to pass during configuration'}
 jobs:
   compile:
     strategy:
@@ -25,6 +26,7 @@ jobs:
         cmake_preset_prefix: [0]
         cibw_build_suffix: [0]
         envs: [0]
+        cmake_extra_args: [0]
         build_dir: [0] # Must be an absolute path
         vcpkg_installed_dir: [0]
         vcpkg_packages_dir: [0]
@@ -175,11 +177,10 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build', '-DUSE_SANITIZER=${{env.USE_SANITIZER || ''}}']"
+          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build'${{matrix.cmake_extra_args && format(', ''{0}''', matrix.cmake_extra_args) || ''}}]"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
-          USE_SANITIZER: ${{env.USE_SANITIZER || ''}}
 
       - name: Compile C++ tests
         if: inputs.job_type == 'cpp-tests'
@@ -228,7 +229,7 @@ jobs:
 
       # After CMake compile step
       - name: Link built extension and install test dependencies
-        if: ${{ env.USE_SANITIZER != '' }}
+        if: ${{ env.ARCTICDB_USE_SANITIZER != '' }}
         run: |
           # Symlink the built extension to the python directory
           cd python
@@ -238,11 +239,11 @@ jobs:
           ARCTIC_CMAKE_PRESET=skip pip install -e .[Testing]
 
       - name: Run Pytest Sanitizers tests
-        if: ${{ env.USE_SANITIZER != '' }}
+        if: ${{ env.ARCTICDB_USE_SANITIZER != '' }}
         run: |
           pytest python/tests/sanitizers
         env:
-          ARCTICDB_USE_SANITIZER: ${{env.USE_SANITIZER}}  
+          ARCTICDB_USE_SANITIZER: ${{env.ARCTICDB_USE_SANITIZER}}  
 
 
       # ========================= build-python-wheels (CIBW) steps =========================
@@ -307,7 +308,7 @@ jobs:
         env:
           _exclusion: "\n!${{matrix.build_dir}}/**/"
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}-${{env.USE_SANITIZER || ''}}
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}-${{env.ARCTICDB_USE_SANITIZER || ''}}
           retention-days: ${{inputs.job_type == 'cpp-tests' && 7 || 90}}
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
