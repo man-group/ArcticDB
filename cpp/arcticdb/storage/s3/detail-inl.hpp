@@ -88,7 +88,7 @@ inline bool is_not_found_error(const Aws::S3::S3Errors& error) {
             );
         }
 
-        if (err.GetExceptionName().find("InsufficientCapacity") != std::string::npos) {
+        if (err.GetResponseCode() == Aws::Http::HttpResponseCode::INSUFFICIENT_STORAGE) {
             raise<ErrorCode::E_QUOTA_EXCEEDED>(fmt::format("Quota exceeded: {}", error_message_suffix));
         }
 
