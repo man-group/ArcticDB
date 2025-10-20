@@ -46,7 +46,7 @@ class StringBlock {
 
     #pragma pack(push)
     #pragma pack(1)
-    struct alignas(4) StringHead {
+    struct StringHead {
         StringHead() = default;
 
         ARCTICDB_NO_MOVE_OR_COPY(StringHead)
@@ -55,17 +55,23 @@ class StringBlock {
         static size_t calc_size(size_t size) { return std::max(sizeof(size_) + size, sizeof(StringHead)); }
 
         void copy(const char* str, size_t size) {
-            size_ = static_cast<uint32_t>(size);
+            uint32_t sz = static_cast<uint32_t>(size);
+            std::memcpy(&size_, &sz, sizeof(uint32_t));  // Safe write
             memset(data_, 0, DataBytes);
             memcpy(data(), str, size);
         }
 
-        [[nodiscard]] size_t size() const { return static_cast<size_t>(size_); }
+        [[nodiscard]] size_t size() const {
+            uint32_t sz;
+            std::memcpy(&sz, &size_, sizeof(uint32_t));  // Safe read
+            return static_cast<size_t>(sz);
+        }
+
         char* data() { return data_; }
         [[nodiscard]] const char* data() const { return data_; }
 
       private:
-        uint32_t size_ = 0;
+        uint32_t size_ = 0;  // Still packed, but accessed via memcpy
         char data_[DataBytes] = {};
     };
     #pragma pack(pop)

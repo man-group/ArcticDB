@@ -73,7 +73,6 @@ jobs:
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       NODE_OPTIONS: --openssl-legacy-provider
-      TSAN_OPTIONS: suppressions=../../../../tsan_suppressions.supp
     defaults:
       run: {shell: bash}
     steps:
@@ -190,6 +189,12 @@ jobs:
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
+      - name: Copy TSAN suppressions file to build directory
+        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
+        run: |
+          cp ${{github.workspace}}/tsan_suppressions.supp ${{matrix.build_dir}}/tsan_suppressions.supp
+          echo "TSAN_OPTIONS=suppressions=${{matrix.build_dir}}/tsan_suppressions.supp" >> $GITHUB_ENV
+
       - name: Compile C++ core library only
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target arcticdb_core_static -j $CMAKE_BUILD_PARALLEL_LEVEL
@@ -249,11 +254,11 @@ jobs:
 
       # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
       - name: Compile C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests'
+        if: inputs.job_type == 'cpp-tests' and ${{ env.ARCTICDB_USE_SANITIZER == '' }}
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: Run C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests'
+        if: inputs.job_type == 'cpp-tests' and ${{ env.ARCTICDB_USE_SANITIZER == '' }}
         # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
