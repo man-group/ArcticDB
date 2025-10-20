@@ -44,6 +44,8 @@ class StringBlock {
 
     ~StringBlock() = default;
 
+    #pragma pack(push)
+    #pragma pack(1)
     struct alignas(4) StringHead {
         StringHead() = default;
 
@@ -66,6 +68,7 @@ class StringBlock {
         uint32_t size_ = 0;
         char data_[DataBytes] = {};
     };
+    #pragma pack(pop)
 
   public:
     StringBlock() = default;

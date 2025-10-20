@@ -506,7 +506,7 @@ class ChunkedBufferImpl {
             block_offsets_.clear();
         }
         block->abandon();
-        delete block;
+        free_block(block);
     }
 
     void truncate_first_block(size_t bytes) {

@@ -1,0 +1,5 @@
+# Suppress data race reports in folly's CoreBase destructor (common false positive in futures/promises)
+race:folly::futures::detail::CoreBase::~CoreBase
+
+# Suppress data race reports in std::__shared_count destructor (potential libstdc++ artifact)
+race:std::__shared_count::~__shared_count
