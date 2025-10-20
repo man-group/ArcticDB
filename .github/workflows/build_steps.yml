@@ -173,8 +173,7 @@ jobs:
       - name: Install LLD linker for sanitizers
         if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
         run: |
-          apt-get update
-          apt-get install -y lld
+          yum install -y lld
           clang++ -fuse-ld=lld -Wl,--version || echo "LLD installation verification failed"
 
       - name: CMake compile
