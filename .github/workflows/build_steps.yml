@@ -73,7 +73,7 @@ jobs:
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       NODE_OPTIONS: --openssl-legacy-provider
-      TSAN_OPTIONS: suppressions=$GITHUB_WORKSPACE/tsan_suppressions.supp
+      TSAN_OPTIONS: suppressions=${{github.workspace}}/tsan_suppressions.supp
     defaults:
       run: {shell: bash}
     steps:
