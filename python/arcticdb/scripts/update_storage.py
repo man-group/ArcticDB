@@ -18,12 +18,13 @@ root.addHandler(handler)
 def repair_library_if_necessary(ac, lib_name: str, run: bool) -> bool:
     """Returns True if library required repair."""
     storage_override = ac._library_adapter.get_storage_override()
+    lib_with_config = ac._library_manager.get_library(
+        lib_name, storage_override, native_storage_config=ac._library_adapter.native_config()
+    )
     lib = NativeVersionStore(
-        ac._library_manager.get_library(
-            lib_name, storage_override, native_storage_config=ac._library_adapter.native_config()
-        ),
+        lib_with_config.library,
         repr(ac._library_adapter),
-        lib_cfg=ac._library_manager.get_library_config(lib_name, storage_override),
+        lib_cfg=lib_with_config.config,
     )
     if ac._library_manager.is_library_config_ok(lib_name, throw_on_failure=False):
         return False

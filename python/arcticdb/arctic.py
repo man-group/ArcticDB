@@ -18,7 +18,7 @@ from arcticdb.options import (
     OutputFormat,
 )
 from arcticdb_ext.storage import LibraryManager
-from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions, StorageException
+from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions, KeyNotFoundException
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
@@ -134,7 +134,7 @@ class Arctic:
                 native_cfg=self._library_adapter.native_config(),
                 runtime_options=runtime_options,
             )
-        except StorageException as ex:
+        except KeyNotFoundException as ex:
             raise LibraryNotFound(name) from ex
 
         if self._accessed_libs is not None:

@@ -219,7 +219,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
 
     static py::exception<InternalException> internal_exception(m, "InternalException", compat_exception.ptr());
     static py::exception<StorageException> storage_exception(m, "StorageException", compat_exception.ptr());
-    static py::exception<LMDBMapFullException> lmdb_map_full_exception(m, "LmdbMapFullError", storage_exception.ptr());
+    static py::exception<LMDBMapFullException> lmdb_map_full_exception(m, "LmdbMapFullError", storage_exception.ptr()); 
     static py::exception<UserInputException> user_input_exception(m, "UserInputException", compat_exception.ptr());
 
     py::register_exception_translator([](std::exception_ptr p) {
@@ -255,6 +255,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     });
 
     py::register_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
+    py::register_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.ptr());
     py::register_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
 
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
