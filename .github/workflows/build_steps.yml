@@ -73,6 +73,7 @@ jobs:
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
       NODE_OPTIONS: --openssl-legacy-provider
+      TSAN_OPTIONS: suppressions=tsan_suppressions.supp
     defaults:
       run: {shell: bash}
     steps:
@@ -200,8 +201,6 @@ jobs:
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_rapidcheck_tests
-        env:
-          TSAN_OPTIONS: suppressions=${{github.workspace}}/tsan_suppressions.supp
 
       - name: Collect arcticdb_rapidcheck_tests binary on failure
         if: failure()
@@ -232,7 +231,6 @@ jobs:
           [[ $(jq '.errors' test_unit_arcticdb.json) -eq 0 ]]
         env:
           ARCTICDB_memory_loglevel: INFO
-          TSAN_OPTIONS: suppressions=${{github.workspace}}/tsan_suppressions.supp
 
       - name: Collect test_unit_arcticdb binary on failure
         if: failure()
@@ -259,8 +257,6 @@ jobs:
         # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
-        env:
-          TSAN_OPTIONS: suppressions=${{github.workspace}}/tsan_suppressions.supp
 
       - name: Clean up benchmark test and build artifacts
         if: inputs.job_type == 'cpp-tests'
