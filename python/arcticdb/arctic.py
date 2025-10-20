@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import logging
+from re import L
 from typing import List, Optional, Any, Union
 
 from arcticdb.options import (
@@ -17,7 +18,7 @@ from arcticdb.options import (
     OutputFormat,
 )
 from arcticdb_ext.storage import LibraryManager
-from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions, StorageException
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
@@ -114,8 +115,6 @@ class Arctic:
 
     def _get_library(self, name: str, output_format: Optional[Union[OutputFormat, str]] = None) -> Library:
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
-        if not self._library_manager.has_library(lib_mgr_name):
-            raise LibraryNotFound(name)
 
         storage_override = self._library_adapter.get_storage_override()
 
@@ -124,15 +123,21 @@ class Arctic:
         else:
             runtime_options = self._runtime_options
 
-        lib = NativeVersionStore(
-            self._library_manager.get_library(
+        try:
+            lib_in_storage = self._library_manager.get_library(
                 lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()
-            ),
-            repr(self._library_adapter),
-            lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
-            native_cfg=self._library_adapter.native_config(),
-            runtime_options=runtime_options,
-        )
+            )
+            cfg = lib_in_storage.config
+            lib = NativeVersionStore(
+                lib_in_storage,
+                repr(self._library_adapter),
+                lib_cfg=cfg,
+                native_cfg=self._library_adapter.native_config(),
+                runtime_options=runtime_options,
+            )
+        except StorageException as ex:
+            raise LibraryNotFound(name) from ex
+
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
         return Library(repr(self), lib)
