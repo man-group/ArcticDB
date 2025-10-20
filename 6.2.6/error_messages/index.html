@@ -1,0 +1,2515 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+        <link rel="canonical" href="https://docs.arcticdb.io/6.2.6/error_messages/">
+      
+      
+        <link rel="prev" href="../runtime_config/">
+      
+      
+        <link rel="next" href="../notebooks/ArcticDB_demo_lmdb/">
+      
+      
+      <link rel="icon" href="../images/ArcticDB Logo.svg">
+      <meta name="generator" content="mkdocs-1.6.1, mkdocs-material-9.6.22">
+    
+    
+      
+        <title>Error Messages - ArcticDB</title>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/stylesheets/main.84d31ad4.min.css">
+      
+        
+        <link rel="stylesheet" href="../assets/stylesheets/palette.06af60db.min.css">
+      
+      
+
+
+    
+    
+      
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Aspekta:300,300i,400,400i,700,700i%7CGeist+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Aspekta";--md-code-font:"Geist Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../stylesheets/extra.css">
+    
+      <link rel="stylesheet" href="../stylesheets/material.css">
+    
+      <link rel="stylesheet" href="../stylesheets/mkdocstrings-python.css">
+    
+    <script>__md_scope=new URL("..",location),__md_hash=e=>[...e].reduce(((e,_)=>(e<<5)-e+_.charCodeAt(0)),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="arcticdb" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#error-messages" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+      <div data-md-color-scheme="default" data-md-component="outdated" hidden>
+        
+          <aside class="md-banner md-banner--warning">
+            <div class="md-banner__inner md-grid md-typeset">
+              
+  You're not viewing the latest version.
+  <a href="../..">
+    <strong>Click here to go to latest.</strong>
+  </a>
+
+            </div>
+            <script>var el=document.querySelector("[data-md-component=outdated]"),base=new URL(".."),outdated=__md_get("__outdated",sessionStorage,base);!0===outdated&&el&&(el.hidden=!1)</script>
+          </aside>
+        
+      </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href=".." title="ArcticDB" class="md-header__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../images/ArcticDB Logo.svg" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3zm0 5h18v2H3zm0 5h18v2H3z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            ArcticDB
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Error Messages
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+    
+    
+    
+    
+      
+      
+        <label class="md-header__button md-icon" for="__search">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        </label>
+        <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.52 6.52 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5"/></svg>
+        
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" tabindex="0" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+      
+    
+    
+      <div class="md-header__source">
+        <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+      </div>
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href=".." class="md-tabs__link">
+          
+  
+  
+  Home
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+    
+  
+  
+    
+    
+      
+  
+  
+  
+    
+  
+  
+    
+    
+      <li class="md-tabs__item md-tabs__item--active">
+        <a href="../tutorials/fundamentals/" class="md-tabs__link">
+          
+  
+  
+  Guides
+
+        </a>
+      </li>
+    
+  
+
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../notebooks/ArcticDB_demo_lmdb/" class="md-tabs__link">
+          
+  
+  
+  Notebooks
+
+        </a>
+      </li>
+    
+  
+
+      
+        
+  
+  
+  
+  
+    
+    
+      <li class="md-tabs__item">
+        <a href="../api/" class="md-tabs__link">
+          
+  
+  
+  Python API Reference
+
+        </a>
+      </li>
+    
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+
+  
+
+
+  
+
+<nav class="md-nav md-nav--primary md-nav--lifted md-nav--integrated" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href=".." title="ArcticDB" class="md-nav__button md-logo" aria-label="ArcticDB" data-md-component="logo">
+      
+  <img src="../images/ArcticDB Logo.svg" alt="logo">
+
+    </a>
+    ArcticDB
+  </label>
+  
+    <div class="md-nav__source">
+      <a href="https://github.com/man-group/ArcticDB" title="Go to repository" class="md-source" data-md-component="source">
+  <div class="md-source__icon md-icon">
+    
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><!--! Font Awesome Free 7.1.0 by @fontawesome - https://fontawesome.com License - https://fontawesome.com/license/free (Icons: CC BY 4.0, Fonts: SIL OFL 1.1, Code: MIT License) Copyright 2025 Fonticons, Inc.--><path d="M439.6 236.1 244 40.5c-5.4-5.5-12.8-8.5-20.4-8.5s-15 3-20.4 8.4L162.5 81l51.5 51.5c27.1-9.1 52.7 16.8 43.4 43.7l49.7 49.7c34.2-11.8 61.2 31 35.5 56.7-26.5 26.5-70.2-2.9-56-37.3L240.3 199v121.9c25.3 12.5 22.3 41.8 9.1 55-6.4 6.4-15.2 10.1-24.3 10.1s-17.8-3.6-24.3-10.1c-17.6-17.6-11.1-46.9 11.2-56v-123c-20.8-8.5-24.6-30.7-18.6-45L142.6 101 8.5 235.1C3 240.6 0 247.9 0 255.5s3 15 8.5 20.4l195.6 195.7c5.4 5.4 12.7 8.4 20.4 8.4s15-3 20.4-8.4l194.7-194.7c5.4-5.4 8.4-12.8 8.4-20.4s-3-15-8.4-20.4"/></svg>
+  </div>
+  <div class="md-source__repository">
+    man-group/ArcticDB
+  </div>
+</a>
+    </div>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_1" id="__nav_1_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Home
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_1">
+            <span class="md-nav__icon md-icon"></span>
+            Home
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href=".." class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introduction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../history/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    History of ArcticDB
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../faq/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Frequently Asked Questions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../licensing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Licensing FAQs
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+        
+        
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2" id="__nav_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Guides
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_2_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2">
+            <span class="md-nav__icon md-icon"></span>
+            Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_1" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_1" id="__nav_2_1_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Tutorials
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_1_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_1">
+            <span class="md-nav__icon md-icon"></span>
+            Tutorials
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/fundamentals/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Fundamentals
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/parallel_writes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Parallel Writes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/snapshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Snapshots
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/metadata/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Metadata
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/lmdb_and_in_memory/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    In-memory Backends
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/data_organisation/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Data Organisation Guide
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/library_sizes/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Library Sizes
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../tutorials/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Statistics
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_2" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_2" id="__nav_2_2_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Storage Guides
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_2_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_2">
+            <span class="md-nav__icon md-icon"></span>
+            Storage Guides
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aws/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting started with AWS S3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../aws_permissions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Library Permissions with AWS S3
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../azure/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Getting started with Azure Blob Storage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_2_3" id="__nav_2_3_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Technical Information
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_2_3">
+            <span class="md-nav__icon md-icon"></span>
+            Technical Information
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/architecture/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Architecture
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/on_disk_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    On-Disk Storage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/migration/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Arctic Migration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/contributing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Contributing
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../technical/upgrade_storage/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Upgrade Storage
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+          
+          
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--section md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_2_4" checked>
+        
+          
+          <label class="md-nav__link" for="__nav_2_4" id="__nav_2_4_label" tabindex="">
+            
+  
+  
+  <span class="md-ellipsis">
+    Configuration
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_2_4_label" aria-expanded="true">
+          <label class="md-nav__title" for="__nav_2_4">
+            <span class="md-nav__icon md-icon"></span>
+            Configuration
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../lib_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Library Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../runtime_config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Runtime Configuration
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+    
+  
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          
+  
+  
+  <span class="md-ellipsis">
+    Error Messages
+    
+  </span>
+  
+
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        
+  
+  
+  <span class="md-ellipsis">
+    Error Messages
+    
+  </span>
+  
+
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#errors-with-numeric-error-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Errors with numeric error codes
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Errors with numeric error codes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#internal-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Internal Errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#normalization-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Normalization Errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#missing-data-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Missing Data Errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#schema-error" class="md-nav__link">
+    <span class="md-ellipsis">
+      Schema Error
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#storage-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Storage Errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#sorting-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Sorting Errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#user-input-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      User Input Errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#compatibility-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Compatibility Errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#errors-without-numeric-error-codes" class="md-nav__link">
+    <span class="md-ellipsis">
+      Errors without numeric error codes
+    </span>
+  </a>
+  
+    <nav class="md-nav" aria-label="Errors without numeric error codes">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#pickling-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Pickling errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#snapshot-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Snapshot errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#require-live-version-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Require live version errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#date-range-related-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Date-range related errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#processing-pipeline-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Processing pipeline errors
+    </span>
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#encoding-errors" class="md-nav__link">
+    <span class="md-ellipsis">
+      Encoding errors
+    </span>
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#exception-hierarchy" class="md-nav__link">
+    <span class="md-ellipsis">
+      Exception Hierarchy
+    </span>
+  </a>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_3" >
+        
+          
+          <label class="md-nav__link" for="__nav_3" id="__nav_3_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Notebooks
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_3_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_3">
+            <span class="md-nav__icon md-icon"></span>
+            Notebooks
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_lmdb/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Intro Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_lazydataframe/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    LazyDataFrame Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_querybuilder/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Querybuilder Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_resample/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Resample Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_concat/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Symbol Concat Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_aws_public_blockchain/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    AWS Blockchain Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_snapshots/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Snapshots Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_equity_analytics/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Equity Analytics Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_demo_equity_options/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Equity Options Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_billion_row_challenge/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    1 Billion Row Challenge Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../notebooks/ArcticDB_pythagorean_won_loss_formula_notebook/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Pythagorean Won Loss Formula Notebook
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+      
+      
+  
+  
+  
+  
+    
+    
+    
+    
+      
+      
+        
+      
+    
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+        
+        
+        <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_4" >
+        
+          
+          <label class="md-nav__link" for="__nav_4" id="__nav_4_label" tabindex="0">
+            
+  
+  
+  <span class="md-ellipsis">
+    Python API Reference
+    
+  </span>
+  
+
+            <span class="md-nav__icon md-icon"></span>
+          </label>
+        
+        <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_4_label" aria-expanded="false">
+          <label class="md-nav__title" for="__nav_4">
+            <span class="md-nav__icon md-icon"></span>
+            Python API Reference
+          </label>
+          <ul class="md-nav__list" data-md-scrollfix>
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Introduction
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/arctic/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Arctic
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/arctic_uri/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Arctic URI
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/library/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Library
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/library_types/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Library Related Objects
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/processing/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    DataFrame Processing Operations API
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/exceptions/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Exceptions
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/config/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Config
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/admin_tools/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Admin Tools
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+              
+                
+  
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../api/query_stats/" class="md-nav__link">
+        
+  
+  
+  <span class="md-ellipsis">
+    Query Stats
+    
+  </span>
+  
+
+      </a>
+    </li>
+  
+
+              
+            
+          </ul>
+        </nav>
+      
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+
+
+
+                  
+
+
+  
+  
+
+
+<h1 id="error-messages">Error Messages<a class="headerlink" href="#error-messages" title="Permanent link">&para;</a></h1>
+<p>This page details the exceptions and associated error messages users are most likely to encounter,
+what they mean, and what (if anything) can be done to resolve the issue.</p>
+<p>For legacy reasons, the terms <code>symbol</code>, <code>stream</code>, and <code>stream ID</code> are used interchangeably.</p>
+<h2 id="errors-with-numeric-error-codes">Errors with numeric error codes<a class="headerlink" href="#errors-with-numeric-error-codes" title="Permanent link">&para;</a></h2>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>We are in the process of adding error codes to all user-facing errors. As a result, this section will expand as error codes are added to existing errors.</p>
+</div>
+<h3 id="internal-errors">Internal Errors<a class="headerlink" href="#internal-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1000</td>
+<td>An invalid date range has been passed in.</td>
+<td>ArcticDB date ranges must be in increasing order. Ensure the requested range is sorted.</td>
+</tr>
+<tr>
+<td>1001</td>
+<td>Invalid Argument</td>
+<td>An invalid argument has been passed in. This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.</td>
+</tr>
+<tr>
+<td>1002</td>
+<td>An internal ArcticDB assertion has failed.</td>
+<td>This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.</td>
+</tr>
+<tr>
+<td>1003</td>
+<td>ArcticDB has encountered an internal error.</td>
+<td>This error is an internal error and not expected to be exposed to the user - please create an issue on the GitHub repository.</td>
+</tr>
+<tr>
+<td>1004</td>
+<td>Unsupported config found in storage</td>
+<td>Follow the instructions in the error message to repair configuration within your Arctic instance.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="normalization-errors">Normalization Errors<a class="headerlink" href="#normalization-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2000</td>
+<td>Attempting to update or append an existing type with an incompatible object type</td>
+<td>NumPy arrays or Pandas DataFrames can only be mutated by a matching type. Read the latest version of the symbol and update/append with the corresponding type.</td>
+</tr>
+<tr>
+<td>2001</td>
+<td>Input type cannot be converted to an ArcticDB type.</td>
+<td>Please ensure all input types match supported <a href="https://github.com/man-group/ArcticDB/blob/master/python/arcticdb/version_store/library.py#L25">ArcticDB types</a>.</td>
+</tr>
+<tr>
+<td>2003</td>
+<td>A write of an incompatible index type has been attempted.</td>
+<td>ArcticDB only supports defined Pandas index types. Please see the documentation for more information on what types are supported.</td>
+</tr>
+<tr>
+<td>2004</td>
+<td>A NumPy append is attempting to change the shape of the previous version.</td>
+<td>When storing NumPy arrays, append operations must have the same shape as the previous version.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="missing-data-errors">Missing Data Errors<a class="headerlink" href="#missing-data-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3000</td>
+<td>A missing version has been requested of a symbol.</td>
+<td>Please request a valid version - see the documentation for the <code>list_versions</code> method to enumerate existing versions.</td>
+</tr>
+<tr>
+<td>3001</td>
+<td>A symbol from an incomplete library without any versions was requested and no incomplete segments were found.</td>
+<td>Append incomplete data to the symbol.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="schema-error">Schema Error<a class="headerlink" href="#schema-error" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>4000</td>
+<td>The number, type, or name of the columns has been changed.</td>
+<td>Ensure that the type and order of the columns has not changed when appending or updating the previous version. This restriction only applies when <code>Dynamic Schema</code> is disabled - if you require the columns sets to change, please enable the <code>Dynamic Schema</code> option on your library.</td>
+</tr>
+<tr>
+<td>4001</td>
+<td>The specified column does not exist.</td>
+<td>Please specify a valid column - use the <code>get_description</code> method to see all of the columns associated with a given symbol.</td>
+</tr>
+<tr>
+<td>4002</td>
+<td>The requested operation is not supported with the type of column provided.</td>
+<td>Certain operations are not supported over all column types e.g. arithmetic in the processing pipeline over string columns - use the <code>get_description</code> method to see all of the columns associated with a given symbol, along with their types.</td>
+</tr>
+<tr>
+<td>4003</td>
+<td>The requested operation is not supported with the index type of the symbol provided.</td>
+<td>Certain operations are not supported over all index types e.g. column statistics generation with a string index - use the <code>get_description</code> method to see the index(es) associated with a given symbol, along with their types.</td>
+</tr>
+<tr>
+<td>4004</td>
+<td>The requested operation is not supported with pickled data.</td>
+<td>Certain operations are not supported with pickled data e.g. <code>date_range</code> filtering. If such operations are required, you must ensure that the data is of a normalizable type, such that it can be written using the <code>write</code> method, and does not require the <code>write_pickle</code> method.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="storage-errors">Storage Errors<a class="headerlink" href="#storage-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>5000</td>
+<td>A missing key has been requested.</td>
+<td>ArcticDB has requested a key that does not exist in storage. Ensure that you have requested a <code>symbol</code>, <code>snapshot</code>, <code>version</code>, or column statistic that exists.</td>
+</tr>
+<tr>
+<td>5001</td>
+<td>ArcticDB is attempting to write to an already-existing key in storage.</td>
+<td>This error is unexpected - please ensure that no other tools are writing data the same storage location that may conflict with ArcticDB.</td>
+</tr>
+<tr>
+<td>5002</td>
+<td>The symbol being worked on does not exist.</td>
+<td>ArcticDB has requested a key that does not exist in storage. Ensure that the symbol exists.</td>
+</tr>
+<tr>
+<td>5003</td>
+<td>Don't have permissions to carry out the operation.</td>
+<td>Ensure that you have the permissions to perform the requested operation on the given key.</td>
+</tr>
+<tr>
+<td>5010</td>
+<td>The LMDB map is full.</td>
+<td>Close and reopen your LMDB backed Arctic instance with a larger map size. For example to open <code>/tmp/a/b/</code> with a map size of 5GB, use <code>adb.Arctic("lmdb:///tmp/a/b?map_size=5GB")</code>. Also see the <a href="http://www.lmdb.tech/doc/group__mdb.html#gaa2506ec8dab3d969b0e609cd82e619e5">LMDB documentation</a>.</td>
+</tr>
+<tr>
+<td>5011</td>
+<td>An unexpected LMDB error occurred. e.g. File corruption, Environment version mismatch, Page type mismatch etc.</td>
+<td>Varies depending on the type of failure. Read more on <a href="http://www.lmdb.tech/doc/group__errors.html">LMDB: return codes</a></td>
+</tr>
+<tr>
+<td>5020</td>
+<td>An unexpected S3 error occurred. e.g. Network error, Service not available, Throttling failure etc.</td>
+<td>Varies depending on the type of failure.</td>
+</tr>
+<tr>
+<td>5021</td>
+<td>An unexpected S3 error occurred which is retryable.</td>
+<td>Varies depending on the type of failure.</td>
+</tr>
+<tr>
+<td>5030</td>
+<td>An unexpected Azure error occurred with a given status code and error code.</td>
+<td>Varies depending on the type of failure. Read more on <a href="https://learn.microsoft.com/en-us/rest/api/storageservices/blob-service-error-codes">Azure Blob Storage error code docs</a>.</td>
+</tr>
+<tr>
+<td>5050</td>
+<td>Mongo didn't acknowledge the operation. This means that the mongo apis didn't confirm whether the operation was successful.</td>
+<td>Retry running the previous operation.</td>
+</tr>
+<tr>
+<td>5051</td>
+<td>An unexpected Mongo error occurred with a given error code.</td>
+<td>Varies depending on the type of failure. Check <a href="https://www.mongodb.com/docs/manual/reference/error-codes/">MongoDB error codes</a>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="sorting-errors">Sorting Errors<a class="headerlink" href="#sorting-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6000</td>
+<td>Data should be sorted for this operation.</td>
+<td>The requested operation requires data to be sorted. If this is a modification operation such as update, sort the input data. ArcticDB relies on Pandas to detect if data is sorted - you can call DataFrame.index.is_monotonic_increasing on your input DataFrame to see if Pandas believes the data to be sorted</td>
+</tr>
+</tbody>
+</table>
+<h3 id="user-input-errors">User Input Errors<a class="headerlink" href="#user-input-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>7000</td>
+<td>The input provided by the user is invalid in some fashion.</td>
+<td>The resolution will depend on the nature of the incorrect input, and should be explained in the associated error message.</td>
+</tr>
+<tr>
+<td>7001</td>
+<td>The input was expected to be a valid decimal string but it is not a valid decimal string.</td>
+<td>Pass a valid decimal string.</td>
+</tr>
+<tr>
+<td>7002</td>
+<td>An unsupported character was found in a symbol or library name.</td>
+<td>We support only the ASCII characters between 32-127 inclusive and exclude <code>&lt;</code>, <code>&gt;</code> and <code>*</code> specifically. Change your name so it contains only valid characters. <strong>If you want to bypass this check for symbol names, you can define an environment variable called - ARCTICDB_VersionStore_NoStrictSymbolCheck_int=1</strong>.</td>
+</tr>
+<tr>
+<td>7003</td>
+<td>The library or symbol name was too long.</td>
+<td>We currently only support names up to 255 characters long. Change your name so it not longer than 255 characters.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="compatibility-errors">Compatibility Errors<a class="headerlink" href="#compatibility-errors" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>Error Code</th>
+<th>Cause</th>
+<th>Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8000</td>
+<td>The version of ArcticDB being used to read the column statistics does not understand the statistics format.</td>
+<td>Update ArcticDB to (at least) the same version as that being used to create the column statistics.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="errors-without-numeric-error-codes">Errors without numeric error codes<a class="headerlink" href="#errors-without-numeric-error-codes" title="Permanent link">&para;</a></h2>
+<h3 id="pickling-errors">Pickling errors<a class="headerlink" href="#pickling-errors" title="Permanent link">&para;</a></h3>
+<p>These errors relate to data being pickled, which limits the operations available. Internally, pickled symbols are stored as opaque, serialised binary blobs in the <a href="../technical/on_disk_storage/#data-layer">data layer</a>. No index or column information is maintained in this serialised object which is in contrast to non-pickled data, where this information is stored in the <a href="../technical/on_disk_storage/#index-layer">index layer</a>.</p>
+<p>Furthermore, it is not possible to partially read/update/append the data using the ArcticDB API or use the processing pipeline with pickled symbols. </p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Error messages</th>
+<th style="text-align: left;">Cause</th>
+<th style="text-align: left;">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Cannot append to pickled data <br><br> Cannot update pickled data</td>
+<td style="text-align: left;">A symbol has been created with the <code>write_pickle</code> method, and now <code>append</code>/<code>update</code> has been called on this symbol.</td>
+<td style="text-align: left;">Pickled data cannot be appended to or updated, due to the lack of indexing or column information in the index layer as explained above. If appending is required, the symbol must be created with <code>write</code>, and must therefore only contain normalizeable data types.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Cannot delete date range of pickled data <br><br> Cannot use head/tail/row_range with pickled data, use plain read instead <br><br> Cannot filter pickled data <br> <br> The data for this symbol is pickled and does not support date_range, row_range, or column queries</td>
+<td style="text-align: left;">A symbol has been created with the <code>write_pickle</code> method, and now <code>delete_data_in_range</code>/<code>head</code>/<code>tail</code>/<code>read</code> with a <code>QueryBuilder argument</code> has been called on this symbol.</td>
+<td style="text-align: left;">For reading operations, unpickling is inherently a Python-layer process. Therefore any operation that would cut down the amount of data returned to a user compared to a call to <code>read</code> with no optional parameters cannot be performed in the C++ layer, and would be no faster than calling <code>read</code> and then filtering the result down in Python.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="snapshot-errors">Snapshot errors<a class="headerlink" href="#snapshot-errors" title="Permanent link">&para;</a></h3>
+<p>Errors that can be encountered when creating  and deleting snapshots, or trying to read data from a specific snapshot.</p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Error messages</th>
+<th style="text-align: left;">Cause</th>
+<th style="text-align: left;">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Snapshot with name &lt;name&gt; already exists</td>
+<td style="text-align: left;">The <code>snapshot</code> method was called, but a snapshot with the specified name already exists.</td>
+<td style="text-align: left;">The old snapshot must first be deleted with <code>delete_snapshot</code>.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Cannot snapshot version(s) that have been deleted...</td>
+<td style="text-align: left;">A <code>versions</code> dictionary was provided to the <code>snapshot</code> method, but one of the symbol-version pairs specified does not exist.</td>
+<td style="text-align: left;">The <code>list_versions</code> method can be used to see which versions of which symbols are in which snapshots.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Only one of skip_symbols and versions can be set</td>
+<td style="text-align: left;">The <code>snapshot</code> method was called with both the <code>skip_symbols</code> and <code>versions</code> optional arguments set.</td>
+<td style="text-align: left;">Just specify <code>versions</code> on its own in this case.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="require-live-version-errors">Require live version errors<a class="headerlink" href="#require-live-version-errors" title="Permanent link">&para;</a></h3>
+<p>A select few operations with ArcticDB require the symbol to exist and have at least one live version. These errors occur when this is not the case.</p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Error messages</th>
+<th style="text-align: left;">Cause</th>
+<th style="text-align: left;">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Cannot update non-existent stream &lt;symbol&gt;</td>
+<td style="text-align: left;">The <code>update</code> method was called with the optional <code>upsert</code> defaulted or set to <code>False</code>, but this symbol has no live versions.</td>
+<td style="text-align: left;">If the symbol is expected to have a live version, then this is a genuine error. Otherwise, set <code>upsert</code> to <code>True</code>.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="date-range-related-errors">Date-range related errors<a class="headerlink" href="#date-range-related-errors" title="Permanent link">&para;</a></h3>
+<p>All calls to <code>delete_data_in_range</code> and <code>update</code>, and calls to <code>read</code> using the <code>date_range</code> optional argument, require the existing data to have a <em>sorted</em> timestamp index. ArcticDB does not check this condition at write time.</p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Error messages</th>
+<th style="text-align: left;">Cause</th>
+<th style="text-align: left;">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Cannot apply date range filter to symbol with non-timestamp index</td>
+<td style="text-align: left;"><code>read</code> method called with the optional <code>date_range</code> argument specified, but the symbol does not have a timestamp index.</td>
+<td style="text-align: left;">None, the <code>date_range</code> parameter does not make sense without a timestamp index.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Non-contiguous rows, range search on unsorted data?...</td>
+<td style="text-align: left;"><code>read</code> method called with the optional <code>date_range</code> argument specified, and the symbol has a timestamp index, but it is not sorted.</td>
+<td style="text-align: left;">To use the <code>date_range</code> argument to <code>read</code>, the user must ensure the data is sorted on the index at write time.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Delete in range will not work as expected with a non-timeseries index</td>
+<td style="text-align: left;"><code>delete_data_in_range</code> method called, but the symbol does not have a timestamp index.</td>
+<td style="text-align: left;">None, the <code>delete_data_in_range</code> method does not make sense without a timestamp index.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="processing-pipeline-errors">Processing pipeline errors<a class="headerlink" href="#processing-pipeline-errors" title="Permanent link">&para;</a></h3>
+<p>Due to the client-only nature of ArcticDB, it is not possible to know if a processing operation applied to a <code>LazyDataFrame</code>, or provided to <code>read</code> with a <code>QueryBuilder</code> object, makes sense for the given symbol without interacting with the storage. In particular, we do not know:</p>
+<ul>
+<li>Whether a specified column exists</li>
+<li>What the type of the data held in a specified column is if it does exist</li>
+</ul>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Error messages</th>
+<th style="text-align: left;">Cause</th>
+<th style="text-align: left;">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Unexpected column name</td>
+<td style="text-align: left;">A column name was specified for a processing operation that does not exist for this symbol, and the library has dynamic schema disabled.</td>
+<td style="text-align: left;">Use <code>get_description</code> to ensure that column names provided in processing operations exist for the symbol.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Non-numeric type provided to binary operation: &lt;typename&gt;</td>
+<td style="text-align: left;">Error messages like this imply that an operation that ArcticDB does not support was provided in a processing operation e.g. adding two string columns together.</td>
+<td style="text-align: left;">The <code>get_description</code> method can be used to inspect the types of the columns. A full list of supported operations are provided in the <code>QueryBuilder</code> <a href="../api/processing/">API documentation</a>.</td>
+</tr>
+<tr>
+<td style="text-align: left;">Cannot compare &lt;typename 1&gt; to &lt;typename 2&gt; (possible categorical?)</td>
+<td style="text-align: left;">If <code>get_description</code> indicates that a column is of categorical type, and this categorical is being used to store string values, then comparisons to other strings will fail with an error message like this one.</td>
+<td style="text-align: left;">Categorical support in ArcticDB is <a href="../faq/#does-arcticdb-support-categorical-data">extremely limited</a>, but may be added in the future.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="encoding-errors">Encoding errors<a class="headerlink" href="#encoding-errors" title="Permanent link">&para;</a></h3>
+<p>These errors should be extremely rare, however it is possible that the encoding in the storage may change from time to time. Whilst the changes will always be backwards compatible (new clients can always read the old data), it's possible they may not be forward-compatible, and data that has been written by a new client cannot be read by an older one</p>
+<p>All of these errors are of type <code>arcticdb.exceptions.ArcticException</code>.</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: left;">Error messages</th>
+<th style="text-align: left;">Cause</th>
+<th style="text-align: left;">Resolution</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: left;">Error decoding</td>
+<td style="text-align: left;">A column was unable to be decoded by the compression algorithm.</td>
+<td style="text-align: left;">Upgrade to a later version of the client.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="exception-hierarchy">Exception Hierarchy<a class="headerlink" href="#exception-hierarchy" title="Permanent link">&para;</a></h2>
+<p>ArcticDB exceptions are exposed in <code>arcticdb.exceptions</code> and sit in a hierarchy:</p>
+<div class="highlight"><pre><span></span><code>RuntimeError
+└-- ArcticException
+    |-- ArcticDbNotYetImplemented
+    |-- MissingDataException
+    |-- NoDataFoundException
+    |-- NoSuchVersionException
+    |-- NormalizationException
+    |-- SchemaException
+    |-- SortingException
+    |   └-- UnsortedDataException
+    |-- StorageException
+    |   └-- LmdbMapFullError
+    |   └-- PermissionException
+    |   └-- DuplicateKeyException
+    |-- StreamDescriptorMismatch
+    └-- InternalException
+</code></pre></div>
+
+
+
+
+
+
+
+
+
+
+
+
+                
+
+              </article>
+            </div>
+          
+          
+<script>var target=document.getElementById(location.hash.slice(1));target&&target.name&&(target.checked=target.name.startsWith("__tabbed_"))</script>
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    
+    
+      
+      <script id="__config" type="application/json">{"base": "..", "features": ["navigation.tabs", "navigation.sections", "content.code.copy", "toc.integrate"], "search": "../assets/javascripts/workers/search.973d3a69.min.js", "tags": null, "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}, "version": {"default": "latest", "provider": "mike"}}</script>
+    
+    
+      <script src="../assets/javascripts/bundle.f55a23d4.min.js"></script>
+      
+    
+  </body>
+</html>
