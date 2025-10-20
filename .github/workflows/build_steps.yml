@@ -170,11 +170,12 @@ jobs:
       - name: Use cmake
         run: cmake --version
 
-      - name: Install LLD linker for sanitizers
+      - name: Install sanitizer runtime libraries
         if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
         run: |
-          yum install -y lld
-          clang++ -fuse-ld=lld -Wl,--version || echo "LLD installation verification failed"
+          yum install -y compiler-rt || yum install -y clang || echo "Could not install compiler-rt"
+          ldconfig
+          find /usr -name "libclang_rt.asan*.so*" 2>/dev/null || echo "ASan library not found in standard locations"
 
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
