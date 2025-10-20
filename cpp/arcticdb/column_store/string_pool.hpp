@@ -44,7 +44,7 @@ class StringBlock {
 
     ~StringBlock() = default;
 
-    struct StringHead {
+    struct alignas(4) StringHead {
         StringHead() = default;
 
         ARCTICDB_NO_MOVE_OR_COPY(StringHead)
