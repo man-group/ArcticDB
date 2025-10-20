@@ -259,7 +259,7 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
     )
             .via(&async::cpu_executor())
             .thenValue([store](auto&& try_before_and_after) -> folly::Future<IntersectingSegments> {
-                auto [try_intersect_before, try_intersect_after] = try_before_and_after;
+                auto& [try_intersect_before, try_intersect_after] = try_before_and_after;
 
                 if (try_intersect_before.template hasException<QuotaExceededException>() &&
                     !try_intersect_after.hasException()) {

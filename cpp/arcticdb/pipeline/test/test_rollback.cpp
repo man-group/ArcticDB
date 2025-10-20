@@ -7,9 +7,10 @@
  */
 
 #include <gtest/gtest.h>
-#include <pipeline/write_frame.hpp>
-
+#include <optional>
+#include <type_traits>
 #include <util/test/generators.hpp>
+#include <pipeline/write_frame.hpp>
 
 using namespace arcticdb;
 
@@ -69,9 +70,6 @@ TestTensorFrame append_with_three_segments(version_store::PythonVersionStore& st
 }
 } // namespace
 
-#include <optional>
-#include <type_traits>
-
 enum class Outcome { QUOTA, OTHER, NONE, UNKNOWN_EXCEPTION };
 
 static StorageFailureSimulator::ParamActionSequence make_fault_sequence(const std::vector<Outcome>& types) {
@@ -110,7 +108,15 @@ struct TestScenario {
     size_t num_writes{};
     std::vector<Outcome> write_expected_outcome;
     Operation operation{Operation::WRITE};
+    bool single_thread{false};
 };
+
+auto get_test_scenarios_single_thread(std::vector<TestScenario> test_scenarios) {
+    for (auto& scenario : test_scenarios) {
+        scenario.single_thread = true;
+    }
+    return test_scenarios;
+}
 
 class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
   protected:
@@ -119,6 +125,10 @@ class RollbackOnQuotaExceeded : public ::testing::TestWithParam<TestScenario> {
         StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.write_failures}});
         StorageFailureSimulator::instance()->configure({{FailureType::DELETE, scenario.delete_failures}});
 
+        if (scenario.single_thread) {
+            ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", 1);
+            ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", 1);
+        }
         proto::storage::VersionStoreConfig version_store_cfg;
         version_store_cfg.mutable_write_options()->set_column_group_size(100);
         version_store_cfg.mutable_write_options()->set_segment_row_size(10);
@@ -137,16 +147,21 @@ class RollbackOnQuotaExceededUpdateOrAppend : public RollbackOnQuotaExceeded {
   protected:
     void SetUp() override {
         // Write some data (successfully) before the updates which may fail.
+        const auto& scenario = GetParam();
         proto::storage::VersionStoreConfig version_store_cfg;
         version_store_cfg.mutable_write_options()->set_column_group_size(100);
         version_store_cfg.mutable_write_options()->set_segment_row_size(10);
+        if (scenario.single_thread) {
+            ConfigsMap::instance()->set_int("VersionStore.NumCPUThreads", 1);
+            ConfigsMap::instance()->set_int("VersionStore.NumIOThreads", 1);
+        }
         auto [version_store, _] = python_version_store_in_memory(version_store_cfg);
         version_store_ = std::make_unique<version_store::PythonVersionStore>(std::move(version_store));
         initial_frame_ =
                 std::make_unique<TestTensorFrame>(write_version_frame_with_three_segments(*version_store_, stream_id_));
 
-        const auto& scenario = GetParam();
         StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.write_failures}});
+        StorageFailureSimulator::instance()->configure({{FailureType::DELETE, scenario.delete_failures}});
 
         auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
 
@@ -163,7 +178,8 @@ constexpr auto NONE = Outcome::NONE;
 constexpr auto QUOTA = Outcome::QUOTA;
 constexpr auto OTHER = Outcome::OTHER;
 constexpr auto UNKNOWN_EXCEPTION = Outcome::UNKNOWN_EXCEPTION;
-const auto TEST_DATA_WRITE = ::testing::Values(
+
+const auto TEST_DATA_WRITE = {
         TestScenario{
                 .name = "Every_second_write_fails",
                 .write_failures = make_fault_sequence({NONE, QUOTA, NONE, QUOTA, NONE, QUOTA}),
@@ -211,14 +227,16 @@ const auto TEST_DATA_WRITE = ::testing::Values(
                 .expected_written_ref_keys = 1,
                 .expected_written_version_keys = 1,
                 .expected_written_index_keys = 1,
-                .check_data_keys = false,
-                .expected_written_data_keys = 0,
+                .check_data_keys = true,
+                .expected_written_data_keys = 5,
                 .num_writes = 2,
                 .write_expected_outcome = {OTHER, NONE}
         }
-);
+};
 
-const auto TEST_DATA_UPDATE = ::testing::Values(
+const auto TEST_DATA_WRITE_SINGLE_THREAD = get_test_scenarios_single_thread(TEST_DATA_WRITE);
+
+const auto TEST_DATA_UPDATE = {
         TestScenario{
                 .name = "All_succeed",
                 .write_failures = make_fault_sequence({NONE}),
@@ -330,16 +348,23 @@ const auto TEST_DATA_UPDATE = ::testing::Values(
                 .expected_written_ref_keys = 0,
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
-                .check_data_keys = false,
-                .expected_written_data_keys = 0,
+                .check_data_keys = true,
+                .expected_written_data_keys = 2,
                 .num_writes = 1,
                 .write_expected_outcome = {OTHER},
                 .operation = Operation::UPDATE,
         }
+};
+
+const auto TEST_DATA_UPDATE_SINGLE_THREAD = get_test_scenarios_single_thread(TEST_DATA_UPDATE);
+
+INSTANTIATE_TEST_SUITE_P(
+        Write, RollbackOnQuotaExceeded, ::testing::ValuesIn(TEST_DATA_WRITE),
+        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        , RollbackOnQuotaExceeded, TEST_DATA_WRITE,
+        WriteSingleThread, RollbackOnQuotaExceeded, ::testing::ValuesIn(TEST_DATA_WRITE_SINGLE_THREAD),
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
 
@@ -420,11 +445,21 @@ TEST_P(RollbackOnQuotaExceededUpdateOrAppend, BasicUpdateOrAppend) {
 }
 
 INSTANTIATE_TEST_SUITE_P(
-        Update, RollbackOnQuotaExceededUpdateOrAppend, TEST_DATA_UPDATE,
+        Update, RollbackOnQuotaExceededUpdateOrAppend, ::testing::ValuesIn(TEST_DATA_UPDATE),
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
 
 INSTANTIATE_TEST_SUITE_P(
-        Append, RollbackOnQuotaExceededUpdateOrAppend, TEST_DATA_WRITE,
+        UpdateSingleThread, RollbackOnQuotaExceededUpdateOrAppend, ::testing::ValuesIn(TEST_DATA_UPDATE_SINGLE_THREAD),
+        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        Append, RollbackOnQuotaExceededUpdateOrAppend, ::testing::ValuesIn(TEST_DATA_WRITE),
+        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
+);
+
+INSTANTIATE_TEST_SUITE_P(
+        AppendSingleThread, RollbackOnQuotaExceededUpdateOrAppend, ::testing::ValuesIn(TEST_DATA_WRITE_SINGLE_THREAD),
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );

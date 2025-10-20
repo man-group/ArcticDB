@@ -6,8 +6,6 @@
  * will be governed by the Apache License, version 2.0.
  */
 
-#include "async/tasks.hpp"
-
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
@@ -19,6 +17,7 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/format_date.hpp>
 
 #include <vector>
@@ -213,7 +212,9 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
                                                       frame->index,
                                                       sparsify_floats
                                               ))
-                        .then([sink, de_dup_map](auto&& ks) { return sink->async_write(ks, de_dup_map); });
+                        .then([sink, de_dup_map](auto&& ks) {
+                            return sink->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
+                        });
             },
             write_window
     );
@@ -407,29 +408,27 @@ folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_key
 };
 
 folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
-        std::vector<folly::Try<SliceAndKey>>&& vec, const std::shared_ptr<stream::StreamSink>& sink
+        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
 ) {
     std::vector<SliceAndKey> succeeded;
     std::optional<folly::exception_wrapper> exception;
     bool has_quota_limit_exceeded = false;
-    succeeded.reserve(vec.size());
-    for (auto& k : vec) {
-        if (k.hasException()) {
+    succeeded.reserve(try_slices.size());
+    for (auto& try_slice : try_slices) {
+        if (try_slice.hasException()) {
             if (!exception.has_value()) {
-                exception = k.exception();
+                exception = try_slice.exception();
             }
 
-            if (!has_quota_limit_exceeded && k.exception().template is_compatible_with<QuotaExceededException>()) {
-                has_quota_limit_exceeded = true;
-            }
-
-        } else if (k.hasValue()) {
-            succeeded.emplace_back(std::move(k.value()));
+            has_quota_limit_exceeded =
+                    has_quota_limit_exceeded || try_slice.exception().is_compatible_with<QuotaExceededException>();
+        } else if (try_slice.hasValue()) {
+            succeeded.emplace_back(std::move(try_slice.value()));
         }
     }
 
     if (has_quota_limit_exceeded) {
-        return remove_slice_and_keys(std::move(succeeded), *sink).thenValue([exception](auto&&) {
+        return remove_slice_and_keys(std::move(succeeded), *sink).thenValue([](auto&&) {
             return folly::makeSemiFuture<std::vector<SliceAndKey>>(
                     QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
             );

@@ -99,7 +99,7 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices);
 
 folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
-        std::vector<folly::Try<SliceAndKey>>&& vec, const std::shared_ptr<stream::StreamSink>& sink
+        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
 );
 
 folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(
