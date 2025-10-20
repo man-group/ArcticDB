@@ -209,12 +209,12 @@ jobs:
           name: arcticdb_rapidcheck_tests_${{matrix.os}}
           path: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_rapidcheck_tests*
 
-      - name: Clean up rapidcheck test and build artifacts
+      - name: Clean up rapidcheck test binaries only
         if: inputs.job_type == 'cpp-tests'
         run: |
-          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_rapidcheck_tests*
-          find cpp/out/${ARCTIC_CMAKE_PRESET}-build -name "*rapidcheck*" -type f -delete || true
-          find cpp/out/${ARCTIC_CMAKE_PRESET}-build -name "*.o" -path "*rapidcheck*" -delete || true
+          # Only delete the test binary and object files, NOT CMake files or vcpkg installation
+          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_rapidcheck_tests
+          find cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/CMakeFiles -name "*rapidcheck*.o" -delete 2>/dev/null || true
 
       - name: Compile C++ unit tests
         if: inputs.job_type == 'cpp-tests'
@@ -239,13 +239,13 @@ jobs:
           name: test_unit_arcticdb_${{matrix.os}}
           path: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/test_unit_arcticdb*
 
-      - name: Clean up unit test and build artifacts
+      - name: Clean up unit test binaries only
         if: inputs.job_type == 'cpp-tests'
         run: |
-          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/test_unit_arcticdb*
+          # Only delete the test binary and output files, NOT CMake configuration files
+          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/test_unit_arcticdb
           rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/test_unit_arcticdb.json
-          find cpp/out/${ARCTIC_CMAKE_PRESET}-build -name "*test_unit*" -type f -delete || true
-          find cpp/out/${ARCTIC_CMAKE_PRESET}-build -name "*.o" -path "*test_unit*" -delete || true
+          find cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/CMakeFiles -name "*test_unit*.o" -delete 2>/dev/null || true
 
       # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
       - name: Compile C++ Benchmarks
@@ -258,12 +258,12 @@ jobs:
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
 
-      - name: Clean up benchmark test and build artifacts
+      - name: Clean up benchmark binaries only
         if: inputs.job_type == 'cpp-tests'
         run: |
-          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks*
-          find cpp/out/${ARCTIC_CMAKE_PRESET}-build -name "*benchmark*" -type f -delete || true
-          find cpp/out/${ARCTIC_CMAKE_PRESET}-build -name "*.o" -path "*benchmark*" -delete || true
+          # Only delete the benchmark binary and object files, NOT CMake configuration files
+          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks
+          find cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/CMakeFiles -name "*benchmark*.o" -delete 2>/dev/null || true
 
       # After CMake compile step
       - name: Link built extension and install test dependencies
