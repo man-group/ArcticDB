@@ -124,14 +124,13 @@ class Arctic:
             runtime_options = self._runtime_options
 
         try:
-            lib_in_storage = self._library_manager.get_library(
+            lib_with_config = self._library_manager.get_library(
                 lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()
             )
-            cfg = lib_in_storage.config
             lib = NativeVersionStore(
-                lib_in_storage,
+                lib_with_config.library,
                 repr(self._library_adapter),
-                lib_cfg=cfg,
+                lib_cfg=lib_with_config.config,
                 native_cfg=self._library_adapter.native_config(),
                 runtime_options=runtime_options,
             )
@@ -370,16 +369,16 @@ class Arctic:
 
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(library.name)
         storage_override = self._library_adapter.get_storage_override()
-        new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
+        lib_with_config = self._library_manager.get_library(
+            lib_mgr_name,
+            storage_override,
+            ignore_cache=True,
+            native_storage_config=self._library_adapter.native_config(),
+        )
         library._nvs._initialize(
-            self._library_manager.get_library(
-                lib_mgr_name,
-                storage_override,
-                ignore_cache=True,
-                native_storage_config=self._library_adapter.native_config(),
-            ),
+            lib_with_config.library,
             library._nvs.env,
-            new_cfg,
+            lib_with_config.config,
             library._nvs._custom_normalizer,
             library._nvs._open_mode,
         )

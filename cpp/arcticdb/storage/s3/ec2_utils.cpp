@@ -72,7 +72,7 @@ bool is_running_inside_aws_fast() {
     for (auto name : std::initializer_list<const char*>{
                  "AWS_EC2_METADATA_DISABLED", "AWS_DEFAULT_REGION", "AWS_REGION", "AWS_EC2_METADATA_SERVICE_ENDPOINT"
          }) {
-        if (!Aws::Environment::GetEnv(name).empty()) {
+        if (std::getenv(name) != nullptr) {
             ARCTICDB_RUNTIME_DEBUG(
                     log::storage(), "Fast check determined we're running inside AWS because env var {} is set.", name
             );
