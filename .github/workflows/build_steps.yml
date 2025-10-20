@@ -170,6 +170,13 @@ jobs:
       - name: Use cmake
         run: cmake --version
 
+      - name: Install LLD linker for sanitizers
+        if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
+        run: |
+          apt-get update
+          apt-get install -y lld
+          clang++ -fuse-ld=lld -Wl,--version || echo "LLD installation verification failed"
+
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
         # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
