@@ -2282,10 +2282,13 @@ class NativeVersionStore:
         date_range: Optional[DateRangeInput] = None,
         row_range: Optional[Tuple[int, int]] = None,
         columns: Optional[List[str]] = None,
+        metadata: Optional[Any] = None,
+        prune_previous_versions: bool = False,
         **kwargs,
     ):
         if target_symbol is None:
             target_symbol = source_symbol
+        udm = normalize_metadata(metadata)
         query_builder = copy.deepcopy(query_builder)
         version_query, read_options, read_query = self._get_queries(
             as_of=as_of,
@@ -2296,7 +2299,7 @@ class NativeVersionStore:
             **kwargs,
         )
         return self.version_store.read_modify_write(
-            source_symbol, target_symbol, version_query, read_query, read_options
+            source_symbol, target_symbol, udm, version_query, read_query, read_options, prune_previous_versions
         )
 
     def _post_process_dataframe(

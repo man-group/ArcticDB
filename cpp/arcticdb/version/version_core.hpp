@@ -217,6 +217,13 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
 );
 
+VersionedItem read_modify_write_impl(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+);
+
 } // namespace arcticdb::version_store
 
 namespace arcticdb {
