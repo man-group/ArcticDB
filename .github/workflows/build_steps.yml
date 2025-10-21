@@ -347,10 +347,19 @@ jobs:
           echo "Using sanitizer library: $SANITIZER_LIB"
           
           # Run pytest with the sanitizer runtime preloaded
-          LD_PRELOAD="$SANITIZER_LIB" pytest -s -v python/tests/sanitizers
+          # Pipe through filter script to only report arcticdb-related leaks
+          LD_PRELOAD="$SANITIZER_LIB" pytest -s -v python/tests/sanitizers 2>&1 | python3 filter_sanitizer_leaks.py
         env:
           ARCTICDB_USE_SANITIZER: ${{env.ARCTICDB_USE_SANITIZER}}  
 
+      - name: Upload sanitizer output
+        if: always() && env.ARCTICDB_USE_SANITIZER != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-output-${{ matrix.os }}-${{ env.ARCTICDB_USE_SANITIZER }}
+          path: sanitizer_full_output.txt
+          retention-days: 30
+          if-no-files-found: warn
 
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
