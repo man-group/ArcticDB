@@ -129,9 +129,6 @@ def main():
     print(f"Non-ArcticDB leaks (filtered out): {non_arcticdb_leaks}", file=sys.stderr)
     print(f"{'=' * 80}\n", file=sys.stderr)
 
-    # Print the original output but with a summary
-    print(full_output)
-
     # If there are arcticdb leaks, print them at the end with highlighting
     if arcticdb_leaks:
         print("\n" + "=" * 80, file=sys.stderr)
