@@ -145,9 +145,9 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
     return desc;
 }
 template<IndexDescriptor::Type index_type>
-StreamSink::PartialKey generate_partial_key(const SliceAndKey& slice, const StreamId& id, const VersionId& version_id) {
+PartialKey generate_partial_key(const SliceAndKey& slice, const StreamId& id, const VersionId& version_id) {
     if constexpr (index_type == IndexDescriptor::Type::ROWCOUNT) {
-        return StreamSink::PartialKey{
+        return PartialKey{
                 .key_type = KeyType::TABLE_DATA,
                 .version_id = version_id,
                 .stream_id = id,
@@ -156,7 +156,7 @@ StreamSink::PartialKey generate_partial_key(const SliceAndKey& slice, const Stre
         };
     } else if constexpr (index_type == IndexDescriptor::Type::TIMESTAMP) {
         using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-        return StreamSink::PartialKey{
+        return PartialKey{
                 .key_type = KeyType::TABLE_DATA,
                 .version_id = version_id,
                 .stream_id = id,
@@ -173,7 +173,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
         const IndexDescriptor::Type index_type, const std::shared_ptr<DeDupMap>& de_dup_map,
         std::shared_ptr<Store> store
 ) {
-    std::vector<std::tuple<StreamSink::PartialKey, SegmentInMemory, FrameSlice>> write_input;
+    std::vector<std::tuple<PartialKey, SegmentInMemory, FrameSlice>> write_input;
     write_input.reserve(slices.size());
 
     switch (index_type) {
@@ -202,8 +202,7 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     const size_t write_batch_size = write_window_size();
     return folly::collect(folly::window(
                                   std::move(write_input),
-                                  [de_dup_map,
-                                   store](std::tuple<StreamSink::PartialKey, SegmentInMemory, FrameSlice>&& input) {
+                                  [de_dup_map, store](std::tuple<PartialKey, SegmentInMemory, FrameSlice>&& input) {
                                       return store->async_write(std::move(input), de_dup_map);
                                   },
                                   write_batch_size
@@ -2352,7 +2351,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                                 [pipeline_context, &fut_vec, &store, &semaphore](SegmentInMemory&& segment) {
                                     const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
                                     const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
-                                    stream::StreamSink::PartialKey pk{
+                                    const PartialKey pk{
                                             KeyType::TABLE_DATA,
                                             pipeline_context->version_id_,
                                             pipeline_context->stream_id_,

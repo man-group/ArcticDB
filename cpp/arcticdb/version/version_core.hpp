@@ -268,7 +268,7 @@ template<
             [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory&& segment) {
                 auto local_index_start = IndexType::start_value_for_segment(segment);
                 auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
-                stream::StreamSink::PartialKey pk{
+                const PartialKey pk{
                         KeyType::TABLE_DATA,
                         pipeline_context->version_id_,
                         pipeline_context->stream_id_,
