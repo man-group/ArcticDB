@@ -117,8 +117,9 @@ class LocalVersionedEngine : public VersionedEngine {
     ) override;
 
     VersionedItem read_modify_write_internal(
-            const StreamId& stream_id, const StreamId& target_stream, const VersionQuery& version_query,
-            const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options
+            const StreamId& stream_id, const StreamId& target_stream, const py::object& user_meta,
+            const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+            const ReadOptions& read_options, bool prune_previous_versions
     ) override;
 
     DescriptorItem read_descriptor_internal(const StreamId& stream_id, const VersionQuery& version_query);

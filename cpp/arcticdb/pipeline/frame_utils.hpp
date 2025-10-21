@@ -353,6 +353,7 @@ std::optional<convert::StringEncodingError> aggregator_set_data(
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);
 
+size_t adjust_slice_ranges(std::span<pipelines::SliceAndKey> slice_and_keys);
 void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context);
 
 size_t get_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys);

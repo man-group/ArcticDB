@@ -419,12 +419,49 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
 }
 
 VersionedItem LocalVersionedEngine::read_modify_write_internal(
-        [[maybe_unused]] const StreamId& stream_id, [[maybe_unused]] const StreamId& target_stream,
-        [[maybe_unused]] const VersionQuery& version_query,
-        [[maybe_unused]] const std::shared_ptr<ReadQuery>& read_query, [[maybe_unused]] const ReadOptions& read_options
+        const StreamId& source_stream, const StreamId& target_stream, [[maybe_unused]] const py::object& user_meta,
+        const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, [[maybe_unused]] bool prune_previous_versions
 ) {
     py::gil_scoped_release release_gil;
-    return {};
+
+    std::unique_ptr<proto::descriptors::UserDefinedMetadata> user_meta_proto{
+            [](const py::object& user_meta) -> proto::descriptors::UserDefinedMetadata* {
+                if (user_meta.is_none()) {
+                    return nullptr;
+                }
+                proto::descriptors::UserDefinedMetadata* user_meta_proto =
+                        new proto::descriptors::UserDefinedMetadata();
+                python_util::pb_from_python(user_meta, *user_meta_proto);
+                return user_meta_proto;
+            }(user_meta)
+    };
+
+    const auto source_version = get_version_to_read(source_stream, version_query);
+    const auto identifier = get_version_identifier(source_stream, version_query, read_options, source_version);
+
+    const WriteOptions write_options = get_write_options();
+    auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), target_stream);
+    const auto target_version = get_next_version_from_key(maybe_prev);
+    if (target_version == 0) {
+        if (auto check_outcome = verify_symbol_key(target_stream); std::holds_alternative<Error>(check_outcome)) {
+            std::get<Error>(check_outcome).throw_error();
+        }
+    }
+    VersionedItem versioned_item = read_modify_write_impl(
+            store(),
+            identifier,
+            std::move(user_meta_proto),
+            read_query,
+            read_options,
+            write_options,
+            IndexPartialKey{target_stream, target_version}
+    );
+    if (cfg().symbol_list())
+        symbol_list().add_symbol(store(), target_stream, versioned_item.key_.version_id());
+
+    write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, deleted ? std::nullopt : maybe_prev);
+    return versioned_item;
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) {
