@@ -347,7 +347,7 @@ jobs:
           echo "Using sanitizer library: $SANITIZER_LIB"
           
           # Run pytest with the sanitizer runtime preloaded
-          LD_PRELOAD="$SANITIZER_LIB" pytest python/tests/sanitizers
+          LD_PRELOAD="$SANITIZER_LIB" pytest -s -v python/tests/sanitizers
         env:
           ARCTICDB_USE_SANITIZER: ${{env.ARCTICDB_USE_SANITIZER}}  
 
