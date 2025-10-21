@@ -19,8 +19,9 @@ from arcticdb.util.test import assert_frame_equal, make_dynamic, regularize_data
 pytestmark = pytest.mark.pipeline
 
 
-def test_project_column_not_present(lmdb_version_store_v1):
+def test_project_column_not_present(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q.apply("new", q["b"] + 1)
@@ -30,8 +31,9 @@ def test_project_column_not_present(lmdb_version_store_v1):
         _ = lib.read(symbol, query_builder=q)
 
 
-def test_project_string_binary_arithmetic(lmdb_version_store_v1):
+def test_project_string_binary_arithmetic(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_string_arithmetic"
     lib.write(symbol, pd.DataFrame({"col_a": [0], "col_b": ["hello"], "col_c": ["bonjour"]}))
     operands = ["col_a", "col_b", "col_c", "0", 0]
@@ -53,8 +55,9 @@ def test_project_string_binary_arithmetic(lmdb_version_store_v1):
                 lib.read(symbol, query_builder=q)
 
 
-def test_project_string_unary_arithmetic(lmdb_version_store_v1):
+def test_project_string_unary_arithmetic(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_string_unary_arithmetic"
     lib.write(symbol, pd.DataFrame({"a": ["hello"]}))
     q = QueryBuilder()
@@ -69,8 +72,9 @@ def test_project_string_unary_arithmetic(lmdb_version_store_v1):
 
 @pytest.mark.parametrize("index", [None, pd.date_range("2025-01-01", periods=3)])
 @pytest.mark.parametrize("value", [5, "hello"])
-def test_project_fixed_value(lmdb_version_store_tiny_segment, index, value):
+def test_project_fixed_value(lmdb_version_store_tiny_segment, index, value, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_project_fixed_value"
     df = pd.DataFrame({"col1": [0, 1, 2], "col2": [3, 4, 5], "col3": [6, 7, 8]}, index=index)
     lib.write(sym, df)
@@ -85,8 +89,9 @@ def test_project_value_set():
         QueryBuilder().apply("new_col", [0, 1, 2])
 
 
-def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
+def test_docstring_example_query_builder_apply(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         {
             "VWAP": np.arange(0, 10, dtype=np.float64),
@@ -111,8 +116,9 @@ def test_docstring_example_query_builder_apply(lmdb_version_store_v1):
 ##################################
 
 
-def test_project_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_project_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_dynamic"
 
     df = pd.DataFrame(
@@ -138,8 +144,9 @@ def test_project_dynamic(lmdb_version_store_dynamic_schema_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_schema):
+def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_schema, any_output_format):
     lib = lmdb_version_store_dynamic_schema
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_column_types_changing_and_missing"
     # Floats
     expected = pd.DataFrame({"col_to_project": [0.5, 1.5], "data_col": [0, 1]}, index=np.arange(0, 2))
@@ -168,8 +175,9 @@ def test_project_column_types_changing_and_missing(lmdb_version_store_dynamic_sc
 
 @pytest.mark.parametrize("index", [None, "timeseries"])
 @pytest.mark.parametrize("value", [5, "hello"])
-def test_project_fixed_value_dynamic(lmdb_version_store_dynamic_schema_v1, index, value):
+def test_project_fixed_value_dynamic(lmdb_version_store_dynamic_schema_v1, index, value, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_project_fixed_value_dynamic"
     df0 = pd.DataFrame(
         {"col1": [0, 0.1, 0.2], "col2": [0.3, 0.4, 0.5]},

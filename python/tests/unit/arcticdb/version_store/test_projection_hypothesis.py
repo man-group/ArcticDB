@@ -37,9 +37,10 @@ pytestmark = pytest.mark.pipeline
     ),
     val=numeric_type_strategies(),
 )
-def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
+def test_project_numeric_binary_operation(lmdb_version_store_v1, any_output_format, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_binary_operation"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -80,9 +81,10 @@ def test_project_numeric_binary_operation(lmdb_version_store_v1, df, val):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes(), restrict_range=True)]))
-def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
+def test_project_numeric_unary_operation(lmdb_version_store_v1, any_output_format, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_unary_operation"
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -122,9 +124,10 @@ def test_project_numeric_unary_operation(lmdb_version_store_v1, df):
     ),
     val=numeric_type_strategies(),
 )
-def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
+def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_binary_operation_dynamic"
     lib.delete(symbol)
     slices = [
@@ -172,9 +175,10 @@ def test_project_numeric_binary_operation_dynamic(lmdb_version_store_dynamic_sch
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=dataframe_strategy([column_strategy("a", supported_floating_dtypes(), restrict_range=True)]))
-def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, df):
+def test_project_numeric_unary_operation_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_numeric_unary_operation_dynamic"
     lib.delete(symbol)
     slices = [

@@ -19,8 +19,9 @@ from arcticdb_ext.exceptions import InternalException, StorageException, UserInp
 pytestmark = pytest.mark.pipeline
 
 
-def test_filter_batch_one_query(lmdb_version_store_v1):
+def test_filter_batch_one_query(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -38,8 +39,9 @@ def test_filter_batch_one_query(lmdb_version_store_v1):
     assert np.array_equal(df2.query(pandas_query), res2)
 
 
-def test_filter_batch_multiple_queries(lmdb_version_store_v1):
+def test_filter_batch_multiple_queries(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -60,8 +62,9 @@ def test_filter_batch_multiple_queries(lmdb_version_store_v1):
     assert np.array_equal(df2.query(pandas_query2), res2)
 
 
-def test_filter_batch_multiple_queries_with_none(lmdb_version_store_v1):
+def test_filter_batch_multiple_queries_with_none(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -79,8 +82,9 @@ def test_filter_batch_multiple_queries_with_none(lmdb_version_store_v1):
     assert np.array_equal(df2.query(pandas_query2), res2)
 
 
-def test_filter_batch_incorrect_query_count(lmdb_version_store_v1):
+def test_filter_batch_incorrect_query_count(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -96,8 +100,9 @@ def test_filter_batch_incorrect_query_count(lmdb_version_store_v1):
         lib.batch_read([sym1, sym2], query_builder=[q, q, q])
 
 
-def test_filter_batch_symbol_doesnt_exist(lmdb_version_store_v1):
+def test_filter_batch_symbol_doesnt_exist(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -108,8 +113,9 @@ def test_filter_batch_symbol_doesnt_exist(lmdb_version_store_v1):
         lib.batch_read([sym1, sym2], query_builder=q)
 
 
-def test_filter_batch_version_doesnt_exist(lmdb_version_store_v1):
+def test_filter_batch_version_doesnt_exist(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym1 = "sym1"
     sym2 = "sym2"
     df1 = pd.DataFrame({"a": [1, 2]}, index=np.arange(2))
@@ -123,8 +129,9 @@ def test_filter_batch_version_doesnt_exist(lmdb_version_store_v1):
         lib.batch_read([sym1, sym2], as_ofs=[0, 1], query_builder=q)
 
 
-def test_filter_batch_missing_keys(lmdb_version_store_v1):
+def test_filter_batch_missing_keys(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
 
     df1 = pd.DataFrame({"a": [3, 5, 7]})
     df2 = pd.DataFrame({"a": [4, 6, 8]})

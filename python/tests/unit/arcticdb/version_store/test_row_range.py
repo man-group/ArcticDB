@@ -38,41 +38,49 @@ def generic_row_range_test(version_store, symbol, df, start_row, end_row):
     np.testing.assert_array_equal(expected_array, received_array_via_querybuilder)
 
 
-def test_row_range_start_row_greater_than_end_row(lmdb_version_store, one_col_df):
+def test_row_range_start_row_greater_than_end_row(lmdb_version_store, one_col_df, any_output_format):
+    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     generic_row_range_test(lmdb_version_store, "test_row_range_start_row_greater_than_end_row", one_col_df(), 3, 2)
 
 
-def test_row_range_zero_num_rows(lmdb_version_store, one_col_df):
+def test_row_range_zero_num_rows(lmdb_version_store, one_col_df, any_output_format):
+    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     generic_row_range_test(lmdb_version_store, "test_row_range_zero_num_rows", one_col_df(), 2, 2)
 
 
-def test_row_range_one_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+def test_row_range_one_num_rows(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     generic_row_range_test(lmdb_version_store_tiny_segment, "test_row_range_one_num_rows", one_col_df(), 2, 3)
 
 
-def test_row_range_segment_boundary_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+def test_row_range_segment_boundary_num_rows(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # lmdb_version_store_tiny_segment has segment_row_size set to 2
     generic_row_range_test(
         lmdb_version_store_tiny_segment, "test_row_range_segment_boundary_num_rows", one_col_df(), 2, 4
     )
 
 
-def test_row_range_multiple_segments(lmdb_version_store_tiny_segment, one_col_df):
+def test_row_range_multiple_segments(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # lmdb_version_store_tiny_segment has segment_row_size set to 2
     generic_row_range_test(lmdb_version_store_tiny_segment, "test_row_range_multiple_segments", one_col_df(), 3, 7)
 
 
-def test_row_range_all_rows(lmdb_version_store_tiny_segment, one_col_df):
+def test_row_range_all_rows(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # one_col_df generates a dataframe with 10 rows
     generic_row_range_test(lmdb_version_store_tiny_segment, "test_row_range_all_rows", one_col_df(), 0, 10)
 
 
-def test_row_range_past_end(lmdb_version_store_tiny_segment, one_col_df):
+def test_row_range_past_end(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # one_col_df generates a dataframe with 10 rows
     generic_row_range_test(lmdb_version_store_tiny_segment, "test_row_range_past_end", one_col_df(), 5, 15)
 
 
-def test_row_range_with_column_filter(lmdb_version_store_tiny_segment, three_col_df):
+def test_row_range_with_column_filter(lmdb_version_store_tiny_segment, three_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_row_range_with_column_filter"
     lmdb_version_store_tiny_segment.write(symbol, three_col_df())
     # lmdb_version_store_tiny_segment has column_group_size set to 2
@@ -86,7 +94,8 @@ def test_row_range_with_column_filter(lmdb_version_store_tiny_segment, three_col
     )
 
 
-def test_row_range_pickled_symbol(lmdb_version_store):
+def test_row_range_pickled_symbol(lmdb_version_store, any_output_format):
+    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_row_range_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)
@@ -108,7 +117,8 @@ def test_row_range_pickled_symbol(lmdb_version_store):
     ),
 )
 @pytest.mark.parametrize("api", ("query_builder", "read", "read_batch"))
-def test_row_range_open_ended(lmdb_version_store_v1, api, row_range, expected):
+def test_row_range_open_ended(lmdb_version_store_v1, api, row_range, expected, any_output_format):
+    lmdb_version_store_v1._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_row_range"
     df = pd.DataFrame({"a": np.arange(100)})
     lmdb_version_store_v1.write(symbol, df)

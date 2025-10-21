@@ -90,6 +90,8 @@ from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
 import arcticdb_ext as ae
 
+from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
+
 IS_WINDOWS = sys.platform == "win32"
 
 FlattenResult = namedtuple("FlattenResult", ["is_recursive_normalize_preferred", "metastruct", "to_write"])
@@ -356,6 +358,9 @@ class NativeVersionStore:
         self._runtime_options = runtime_options
         # Do not make this a runtime option, as it is only temporary until Arrow writes are fully supported
         self._allow_arrow_input = False
+        # Testing configuration to read as ARROW but directly convert back to PANDAS.
+        # This is useful to mass enable ARROW testing on existing PANDAS tests without much code changes
+        self._test_convert_arrow_back_to_pandas = False
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         if self._runtime_options is None:
@@ -364,6 +369,11 @@ class NativeVersionStore:
 
     def _set_allow_arrow_input(self, allow_arrow_input: bool = True):
         self._allow_arrow_input = allow_arrow_input
+
+    def _set_output_format_for_pipeline_tests(self, output_format):
+        self.set_output_format(output_format)
+        if output_format == OutputFormat.EXPERIMENTAL_ARROW:
+            self._test_convert_arrow_back_to_pandas = True
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
@@ -759,6 +769,10 @@ class NativeVersionStore:
                 log.debug(
                     "Windows only supports dynamic_strings=True, using dynamic strings despite configuration or kwarg"
                 )
+            dynamic_strings = True
+        if self._test_convert_arrow_back_to_pandas:
+            # Arrow output format doesn't support fixed width strings, so if we're testing arrow by converting to
+            # pandas, we always use dynamic strings
             dynamic_strings = True
         return dynamic_strings
 
@@ -2509,6 +2523,8 @@ class NativeVersionStore:
             else:
                 table = pa.Table.from_batches(record_batches)
             data = self._arrow_normalizer.denormalize(table, read_result.norm)
+            if self._test_convert_arrow_back_to_pandas:
+                data = convert_arrow_to_pandas_for_tests(data)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):

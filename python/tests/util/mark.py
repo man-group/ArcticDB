@@ -229,6 +229,10 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
+PYARROW_POST_PROCESSING = pytest.mark.skipif(
+    WINDOWS, reason="pyarrow 21.0.0 doesn't correctly apply fill_null: https://github.com/apache/arrow/issues/47234"
+)
+
 ## MEMRAY supports linux and macos and python 3.8 and above
 MEMRAY_SUPPORTED = MACOS or LINUX
 MEMRAY_TESTS_MARK = pytest.mark.skipif(
