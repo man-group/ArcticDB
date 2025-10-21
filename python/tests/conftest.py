@@ -77,6 +77,7 @@ from .util.mark import (
     PANDAS_2_COMPAT_TESTS_MARK,
     MACOS,
     ARCTICDB_USING_CONDA,
+    PYARROW_POST_PROCESSING,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
@@ -1074,7 +1075,10 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     return store
 
 
-@pytest.fixture(params=list(OutputFormat))
+# TODO: Revert to `params=list(OutputFormat)` once bug https://github.com/apache/arrow/issues/47234 is fixed
+@pytest.fixture(
+    params=[OutputFormat.PANDAS, pytest.param(OutputFormat.EXPERIMENTAL_ARROW, marks=PYARROW_POST_PROCESSING)]
+)
 def any_output_format(request) -> OutputFormat:
     return request.param
 
