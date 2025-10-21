@@ -353,8 +353,15 @@ jobs:
           fi
           
           # Run pytest with the sanitizer runtime preloaded
-          # Pipe through filter script to only report arcticdb-related leaks
+          # Pytest may exit 1 if ANY leaks are detected, but we only care about arcticdb leaks
+          # So we ignore pytest's exit code and rely on the filter script
+          set +e  # Don't exit on error
           LD_PRELOAD="$SANITIZER_LIB" pytest -s -v python/tests/sanitizers 2>&1 | python3 filter_sanitizer_leaks.py
+          FILTER_EXIT=$?
+          set -e
+          
+          # Exit with the filter's result (0 = no arcticdb leaks, 1 = arcticdb leaks found)
+          exit $FILTER_EXIT
         env:
           ARCTICDB_USE_SANITIZER: ${{env.ARCTICDB_USE_SANITIZER}}  
 
