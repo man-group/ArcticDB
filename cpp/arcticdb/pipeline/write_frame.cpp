@@ -31,8 +31,8 @@ namespace ranges = std::ranges;
 
 WriteToSegmentTask::WriteToSegmentTask(
         std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-        folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
-        size_t slice_num_for_column, Index index, bool sparsify_floats
+        folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
+        bool sparsify_floats
 ) :
     frame_(std::move(frame)),
     slice_(std::move(slice)),
@@ -44,7 +44,7 @@ WriteToSegmentTask::WriteToSegmentTask(
     slice_.check_magic();
 }
 
-std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator()() {
+std::tuple<PartialKey, SegmentInMemory, FrameSlice> WriteToSegmentTask::operator()() {
     ARCTICDB_SUBSAMPLE_AGG(WriteSliceCopyToSegment)
     slice_.check_magic();
     magic_.check();

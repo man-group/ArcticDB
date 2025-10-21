@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <arcticdb/pipeline/write_options.hpp>
+
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/expression_context.hpp>
@@ -19,6 +21,7 @@
 #include <arcticdb/processing/sorted_aggregation.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <folly/Poly.h>
+#include <arcticdb/pipeline/pipeline_common.hpp>
 #include <vector>
 #include <string>
 #include <variant>
@@ -30,6 +33,12 @@ using ResampleOrigin = std::variant<std::string, timestamp>;
 
 using RangesAndKey = pipelines::RangesAndKey;
 using SliceAndKey = pipelines::SliceAndKey;
+
+namespace stream {
+struct PartialKey;
+} // namespace stream
+
+class DeDupMap;
 
 struct IClause {
     template<class Base>
@@ -789,6 +798,44 @@ struct ConcatClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&& input_schemas) const;
 
     [[nodiscard]] std::string to_string() const;
+};
+
+struct WriteClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    WriteOptions write_options_;
+    IndexPartialKey index_partial_key_;
+    std::shared_ptr<DeDupMap> dedup_map_;
+    std::shared_ptr<Store> store_;
+
+    WriteClause(
+            const WriteOptions& write_options, const IndexPartialKey& index_partial_key,
+            std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+    );
+    ARCTICDB_MOVE_COPY_DEFAULT(WriteClause)
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    );
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const;
+
+    void set_processing_config(const ProcessingConfig&);
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+
+    [[nodiscard]] std::string to_string() const;
+
+  private:
+    stream::PartialKey create_partial_key(const StreamDescriptor& descriptor, const SegmentInMemory& segment) const;
 };
 
 } // namespace arcticdb

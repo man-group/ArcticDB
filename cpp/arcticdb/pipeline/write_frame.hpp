@@ -28,7 +28,7 @@ struct WriteToSegmentTask : public async::BaseTask {
     std::shared_ptr<InputFrame> frame_;
     const FrameSlice slice_;
     const SlicingPolicy slicing_;
-    folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)> partial_key_gen_;
+    folly::Function<PartialKey(const FrameSlice&)> partial_key_gen_;
     size_t slice_num_for_column_;
     Index index_;
     bool sparsify_floats_;
@@ -36,11 +36,11 @@ struct WriteToSegmentTask : public async::BaseTask {
 
     WriteToSegmentTask(
             std::shared_ptr<InputFrame> frame, FrameSlice slice, const SlicingPolicy& slicing,
-            folly::Function<stream::StreamSink::PartialKey(const FrameSlice&)>&& partial_key_gen,
-            size_t slice_num_for_column, Index index, bool sparsify_floats
+            folly::Function<PartialKey(const FrameSlice&)>&& partial_key_gen, size_t slice_num_for_column, Index index,
+            bool sparsify_floats
     );
 
-    std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice> operator()();
+    std::tuple<PartialKey, SegmentInMemory, FrameSlice> operator()();
 
   private:
     SegmentInMemory slice_tensors() const;

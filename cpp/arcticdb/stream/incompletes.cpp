@@ -333,9 +333,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                             }
                             const auto local_index_start = IdxType::start_value_for_segment(seg);
                             const auto local_index_end = IdxType::end_value_for_segment(seg);
-                            stream::StreamSink::PartialKey pk{
-                                    KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end
-                            };
+                            const PartialKey pk{KeyType::APPEND_DATA, 0, stream_id, local_index_start, local_index_end};
                             return store->write(pk, std::move(seg)).thenValueInline([](VariantKey&& res) {
                                 return to_atom(std::move(res));
                             });
@@ -441,10 +439,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                                                                      sparsify_floats
                                                              ))
                                        .thenValue([store, de_dup_map, bucketize_dynamic, desc, norm_meta, user_meta](
-                                                          std::tuple<
-                                                                  stream::StreamSink::PartialKey,
-                                                                  SegmentInMemory,
-                                                                  pipelines::FrameSlice>&& ks
+                                                          std::tuple<PartialKey, SegmentInMemory, FrameSlice>&& ks
                                                   ) {
                                            auto& seg = std::get<SegmentInMemory>(ks);
                                            auto norm_meta_copy = norm_meta;
@@ -461,10 +456,10 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                                            );
                                            seg.set_timeseries_descriptor(tsd);
 
-                                           // Just inherit sortedness from the overall frame for now. This is not
-                                           // mathematically correct when our slicing happens to break an unordered df
-                                           // up in to ordered chunks, but should be OK in practice since the user did
-                                           // stage unordered data.
+                                           // Just inherit sortedness from the overall frame for now. This is
+                                           // not mathematically correct when our slicing happens to break an
+                                           // unordered df up in to ordered chunks, but should be OK in practice
+                                           // since the user did stage unordered data.
                                            seg.descriptor().set_sorted(tsd.sorted());
 
                                            return std::move(ks);
