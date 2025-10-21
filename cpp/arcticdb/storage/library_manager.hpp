@@ -13,6 +13,7 @@
 #include <arcticdb/storage/library_path.hpp>
 #include <arcticdb/storage/storage_override.hpp>
 #include <arcticdb/util/lru_cache.hpp>
+#include <arcticdb/entity/protobufs.hpp>
 
 namespace arcticdb::storage {
 enum class ModifiableLibraryOption { DEDUP = 1, ROWS_PER_SEGMENT = 2, COLUMNS_PER_SEGMENT = 3 };
@@ -28,6 +29,11 @@ struct UnsupportedLibraryOptionValue : UserInputException {
 
 class LibraryManager {
   public:
+    struct LibraryWithConfig {
+        arcticdb::proto::storage::LibraryConfig config;
+        std::shared_ptr<Library> library;
+    };
+
     explicit LibraryManager(const std::shared_ptr<storage::Library>& library);
 
     ARCTICDB_NO_MOVE_OR_COPY(LibraryManager)
@@ -53,7 +59,7 @@ class LibraryManager {
 
     void remove_library_config(const LibraryPath& path) const;
 
-    [[nodiscard]] std::shared_ptr<Library> get_library(
+    [[nodiscard]] LibraryWithConfig get_library(
             const LibraryPath& path, const StorageOverride& storage_override, bool ignore_cache,
             const NativeVariantStorage& native_storage_config
     );
@@ -73,7 +79,7 @@ class LibraryManager {
     ) const;
 
     std::shared_ptr<Store> store_;
-    LRUCache<LibraryPath, std::shared_ptr<Library>> open_libraries_;
+    LRUCache<LibraryPath, LibraryWithConfig> open_libraries_;
     mutable std::mutex open_libraries_mutex_; // for open_libraries_
 };
 } // namespace arcticdb::storage

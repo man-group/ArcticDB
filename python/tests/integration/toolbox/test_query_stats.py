@@ -1,5 +1,7 @@
 import arcticdb.toolbox.query_stats as qs
+import pytest
 from arcticdb.util.test import config_context
+from arcticdb.arctic import Arctic
 
 import pandas as pd
 
@@ -646,3 +648,61 @@ def test_query_stats_staged_data(s3_version_store_v1, clear_query_stats, sym):
         stats_entry = put_object_ops[key]
         assert stats_entry["size_bytes"] > 0
         assert stats_entry["total_time_ms"] < 8000
+
+
+@pytest.mark.parametrize("one_op", [True, False])
+def test_query_stats_create_library(s3_storage, clear_query_stats, lib_name, one_op):
+    qs.enable()
+    if one_op:
+        Arctic(s3_storage.arctic_uri).create_library(lib_name)
+    else:
+        ac = Arctic(s3_storage.arctic_uri)
+        ac.create_library(lib_name)
+
+    stats = qs.get_query_stats()
+
+    assert stats["storage_operations"].keys() == {"S3_GetObject", "S3_HeadObject", "S3_PutObject"}
+    assert stats["storage_operations"]["S3_GetObject"].keys() == {"LIBRARY_CONFIG"}
+    assert stats["storage_operations"]["S3_GetObject"]["LIBRARY_CONFIG"]["count"] == 1
+    assert stats["storage_operations"]["S3_HeadObject"].keys() == {"LIBRARY_CONFIG"}
+    assert stats["storage_operations"]["S3_HeadObject"]["LIBRARY_CONFIG"]["count"] == 1
+    assert stats["storage_operations"]["S3_PutObject"].keys() == {"LIBRARY_CONFIG"}
+    assert stats["storage_operations"]["S3_PutObject"]["LIBRARY_CONFIG"]["count"] == 1
+
+
+@pytest.mark.parametrize("one_op", [True, False])
+def test_query_stats_get_library_exists(s3_storage, clear_query_stats, lib_name, one_op):
+    ac = Arctic(s3_storage.arctic_uri)
+    ac.create_library(lib_name)
+    del ac
+    qs.enable()
+    if one_op:
+        Arctic(s3_storage.arctic_uri).get_library(lib_name)
+    else:
+        ac = Arctic(s3_storage.arctic_uri)
+        ac.get_library(lib_name)
+
+    stats = qs.get_query_stats()
+    assert stats["storage_operations"].keys() == {"S3_GetObject"}
+    assert stats["storage_operations"]["S3_GetObject"].keys() == {"LIBRARY_CONFIG"}
+    assert stats["storage_operations"]["S3_GetObject"]["LIBRARY_CONFIG"]["count"] == 1
+
+
+@pytest.mark.parametrize("one_op", [True, False])
+def test_query_stats_get_library_create_if_missing(s3_storage, clear_query_stats, lib_name, one_op):
+    qs.enable()
+    if one_op:
+        Arctic(s3_storage.arctic_uri).get_library(lib_name, create_if_missing=True)
+    else:
+        ac = Arctic(s3_storage.arctic_uri)
+        ac.get_library(lib_name, create_if_missing=True)
+
+    stats = qs.get_query_stats()
+
+    assert stats["storage_operations"].keys() == {"S3_GetObject", "S3_HeadObject", "S3_PutObject"}
+    assert stats["storage_operations"]["S3_GetObject"].keys() == {"LIBRARY_CONFIG"}
+    assert stats["storage_operations"]["S3_GetObject"]["LIBRARY_CONFIG"]["count"] == 2
+    assert stats["storage_operations"]["S3_HeadObject"].keys() == {"LIBRARY_CONFIG"}
+    assert stats["storage_operations"]["S3_HeadObject"]["LIBRARY_CONFIG"]["count"] == 1
+    assert stats["storage_operations"]["S3_PutObject"].keys() == {"LIBRARY_CONFIG"}
+    assert stats["storage_operations"]["S3_PutObject"]["LIBRARY_CONFIG"]["count"] == 1
