@@ -49,7 +49,7 @@ struct NumpyBufferHolder {
                 }
             }
             // See comment on allocate_detachable_memory declaration for why this cannot just be a call to delete[]
-            free_detachable_memory(ptr_, row_count_ * type_.get_type_bytes());
+            free_detachable_memory(ptr_, allocated_bytes_);  
         }
     }
 };
