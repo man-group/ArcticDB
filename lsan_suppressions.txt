@@ -1,0 +1,24 @@
+# LeakSanitizer suppression file for ArcticDB
+# Suppress false positive leaks from pybind11 and Python C API
+
+# Pybind11 allocates function metadata (names, signatures) during module init
+# These are kept alive for the module's lifetime and freed during Python shutdown
+# LSAN checks before full Python teardown, so these appear as leaks
+leak:pybind11::cpp_function::strdup_guard
+leak:pybind11::cpp_function::make_function_record
+leak:pybind11::cpp_function::initialize
+
+# Python internal allocations that are cleaned up during interpreter shutdown
+leak:PyModule_ExecDef
+leak:_PyBytes_Resize
+
+# Python type system allocations kept alive for interpreter lifetime
+leak:PyType_Ready
+
+# Pybind11 class/method registration
+leak:pybind11::class_
+
+# General Python module initialization leaks (inevitable with C extensions)
+leak:pybind11_init_
+leak:pybind11_exec_
+

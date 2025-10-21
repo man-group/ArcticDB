@@ -346,6 +346,12 @@ jobs:
           
           echo "Using sanitizer library: $SANITIZER_LIB"
           
+          # Configure leak sanitizer suppressions
+          if [[ "$ARCTICDB_USE_SANITIZER" == *"address"* ]]; then
+            export LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt:print_suppressions=0"
+            echo "Leak Sanitizer suppressions enabled: $LSAN_OPTIONS"
+          fi
+          
           # Run pytest with the sanitizer runtime preloaded
           # Pipe through filter script to only report arcticdb-related leaks
           LD_PRELOAD="$SANITIZER_LIB" pytest -s -v python/tests/sanitizers 2>&1 | python3 filter_sanitizer_leaks.py
