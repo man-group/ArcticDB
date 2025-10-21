@@ -30,8 +30,9 @@ except ImportError:
     from pandas.core.computation.ops import UndefinedVariableError
 
 from arcticdb import QueryBuilder
+from arcticdb import OutputFormat
 from arcticdb.util._versions import IS_PANDAS_ONE, PANDAS_VERSION, CHECK_FREQ_VERSION
-from arcticdb.util.arrow import stringify_dictionary_encoded_columns
+from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
 from arcticdb.version_store import NativeVersionStore
 from arcticdb.version_store._custom_normalizers import CustomNormalizer
 from arcticc.pb2.descriptors_pb2 import NormalizationMetadata
@@ -243,21 +244,6 @@ def assert_frame_equal_rebuild_index_first(expected: pd.DataFrame, actual: pd.Da
     expected.reset_index(inplace=True, drop=True)
     actual.reset_index(inplace=True, drop=True)
     assert_frame_equal(left=expected, right=actual)
-
-
-def convert_arrow_to_pandas_for_tests(table):
-    """
-    Converts pa.Table outputted via `output_format=OutputFormat.EXPERIMENTAL_ARROW` to a pd.DataFrame so it would be
-    identical to the one outputted via `output_format=OutputFormat.PANDAS`. This requires two changes:
-    - Replaces dictionary encoded string columns with regular string columns.
-    - Fills null values in int colums with zeros.
-    """
-    new_table = stringify_dictionary_encoded_columns(table)
-    for i, name in enumerate(new_table.column_names):
-        if pa.types.is_integer(new_table.column(i).type):
-            new_col = new_table.column(i).fill_null(0)
-            new_table = new_table.set_column(i, name, new_col)
-    return new_table.to_pandas()
 
 
 def assert_frame_equal_with_arrow(left, right, **kwargs):
@@ -818,7 +804,7 @@ def generic_filter_test_strings_dynamic(lib, base_symbol, slices, arctic_query, 
 
 
 # TODO: Replace with np.array_equal with equal_nan argument (added in 1.19.0)
-def generic_filter_test_nans(lib, symbol, arctic_query, expected):
+def generic_filter_test_nans(lib, symbol, arctic_query, expected, output_format=OutputFormat.PANDAS):
     received = lib.read(symbol, query_builder=arctic_query).data
     assert expected.shape == received.shape
     for col in expected.columns:
@@ -831,7 +817,12 @@ def generic_filter_test_nans(lib, symbol, arctic_query, expected):
             elif expected_val is None:
                 assert received_val is None
             elif np.isnan(expected_val):
-                assert np.isnan(received_val)
+                if output_format == OutputFormat.PANDAS:
+                    assert np.isnan(received_val)
+                else:
+                    # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
+                    # which then is converted to pandas `None`s
+                    assert received_val is None
 
 
 def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):

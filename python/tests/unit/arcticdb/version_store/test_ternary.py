@@ -14,12 +14,11 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from arcticdb import QueryBuilder, where
+from arcticdb import QueryBuilder, where, OutputFormat
 from arcticdb_ext.exceptions import InternalException, SchemaException, UserInputException
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.util.test import assert_frame_equal
 from tests.util.mark import WINDOWS
-
 
 pytestmark = pytest.mark.pipeline
 
@@ -29,8 +28,9 @@ pytestmark = pytest.mark.pipeline
 # holding those particular types
 
 
-def test_project_ternary_condition_as_full_and_empty_result(lmdb_version_store_v1):
+def test_project_ternary_condition_as_full_and_empty_result(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_condition_as_full_and_empty_result"
     df = pd.DataFrame(
         {
@@ -59,8 +59,9 @@ def test_project_ternary_condition_as_full_and_empty_result(lmdb_version_store_v
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_column_column_numeric(lmdb_version_store_v1):
+def test_project_ternary_column_column_numeric(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_column_column_numeric"
     df = pd.DataFrame(
         {
@@ -108,8 +109,9 @@ def test_project_ternary_column_column_numeric(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1):
+def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_column_column_dynamic_strings"
     df = pd.DataFrame(
         {
@@ -131,6 +133,7 @@ def test_project_ternary_column_column_dynamic_strings(lmdb_version_store_v1):
 
 @pytest.mark.skipif(WINDOWS, reason="We do not support fixed-width strings on Windows")
 def test_project_ternary_fixed_width_strings(version_store_factory):
+    # Explicitly not tested with arrow because arrow doesn't support fixed width strings
     lib = version_store_factory(dynamic_strings=False)
     symbol = "test_project_ternary_fixed_width_strings"
     df = pd.DataFrame(
@@ -156,8 +159,9 @@ def test_project_ternary_fixed_width_strings(version_store_factory):
         lib.read(symbol, query_builder=q)
 
 
-def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
+def test_project_ternary_column_value_numeric(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_column_value_numeric"
     df = pd.DataFrame(
         {
@@ -183,8 +187,9 @@ def test_project_ternary_column_value_numeric(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_column_value_strings(lmdb_version_store_v1):
+def test_project_ternary_column_value_strings(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_column_value_strings"
     df = pd.DataFrame(
         {
@@ -210,8 +215,9 @@ def test_project_ternary_column_value_strings(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_value_value_numeric(lmdb_version_store_v1):
+def test_project_ternary_value_value_numeric(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_value_value_numeric"
     df = pd.DataFrame(
         {
@@ -230,8 +236,9 @@ def test_project_ternary_value_value_numeric(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_value_value_string(lmdb_version_store_v1):
+def test_project_ternary_value_value_string(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_value_value_string"
     df = pd.DataFrame(
         {
@@ -258,10 +265,11 @@ def test_project_ternary_value_value_string(lmdb_version_store_v1):
         ),
     ],
 )
-def test_project_ternary_column_sliced(version_store_factory, index):
+def test_project_ternary_column_sliced(version_store_factory, index, any_output_format):
     # Cannot use lmdb_version_store_tiny_segment as it has fixed-width strings, which are not supported with the ternary
     # operator
     lib = version_store_factory(dynamic_strings=True, column_group_size=2, segment_row_size=2)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_column_sliced_range_index"
     # This fixture has 2 columns per slice, so the column groups will be:
     # - ["conditional", num_1]
@@ -298,8 +306,9 @@ def test_project_ternary_column_sliced(version_store_factory, index):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1):
+def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_dynamic_missing_columns"
     all_columns_df = pd.DataFrame(
         {
@@ -415,8 +424,9 @@ def test_project_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_sche
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dynamic_schema_v1):
+def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_project_ternary_dynamic_missing_columns_strings"
     all_columns_df = pd.DataFrame(
         {
@@ -522,8 +532,9 @@ def test_project_ternary_dynamic_missing_columns_strings(lmdb_version_store_dyna
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_sparse_col_val(lmdb_version_store_v1):
+def test_project_ternary_sparse_col_val(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_project_ternary_sparse_col_val"
     df = pd.DataFrame(
         {
@@ -567,8 +578,9 @@ def test_project_ternary_sparse_col_val(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
+def test_project_ternary_sparse_col_col(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_project_ternary_sparse_col_col"
     df = pd.DataFrame(
         {
@@ -641,8 +653,9 @@ def test_project_ternary_sparse_col_col(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_project_ternary_condition_empty(lmdb_version_store_v1):
+def test_project_ternary_condition_empty(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_project_ternary_condition_empty"
     df = pd.DataFrame(
         {"condition": [0.0, 0.0, 0.0], "col1": [0.0, np.nan, np.nan], "col2": [0.0, np.nan, np.nan]},
@@ -657,8 +670,9 @@ def test_project_ternary_condition_empty(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bitset_bitset(lmdb_version_store_v1):
+def test_filter_ternary_bitset_bitset(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_bitset_bitset"
     df = pd.DataFrame(
         {
@@ -677,8 +691,9 @@ def test_filter_ternary_bitset_bitset(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bitset_column(lmdb_version_store_v1):
+def test_filter_ternary_bitset_column(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_bitset_column"
     df = pd.DataFrame(
         {
@@ -703,8 +718,9 @@ def test_filter_ternary_bitset_column(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bool_columns(lmdb_version_store_v1):
+def test_filter_ternary_bool_columns(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_bool_columns"
     df = pd.DataFrame(
         {
@@ -741,8 +757,9 @@ def test_filter_ternary_bool_columns(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bitset_value(lmdb_version_store_v1):
+def test_filter_ternary_bitset_value(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_bitset_value"
     df = pd.DataFrame(
         {
@@ -778,8 +795,9 @@ def test_filter_ternary_bitset_value(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_bitset_full_and_empty_results(lmdb_version_store_v1):
+def test_filter_ternary_bitset_full_and_empty_results(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_bitset_full_and_empty_results"
     df = pd.DataFrame(
         {
@@ -819,8 +837,9 @@ def test_filter_ternary_bitset_full_and_empty_results(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_column_full_and_empty_results(lmdb_version_store_v1):
+def test_filter_ternary_column_full_and_empty_results(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_column_full_and_empty_results"
     df = pd.DataFrame(
         {
@@ -862,8 +881,9 @@ def test_filter_ternary_column_full_and_empty_results(lmdb_version_store_v1):
 
 
 @pytest.mark.parametrize("value", [True, False])
-def test_filter_ternary_value_full_and_empty_results(lmdb_version_store_v1, value):
+def test_filter_ternary_value_full_and_empty_results(lmdb_version_store_v1, value, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_value_full_and_empty_results"
     df = pd.DataFrame(
         {
@@ -903,8 +923,9 @@ def test_filter_ternary_value_full_and_empty_results(lmdb_version_store_v1, valu
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_full_and_empty_results_squared(lmdb_version_store_v1):
+def test_filter_ternary_full_and_empty_results_squared(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_full_and_empty_results_squared"
     df = pd.DataFrame(
         {
@@ -946,8 +967,9 @@ def test_filter_ternary_full_and_empty_results_squared(lmdb_version_store_v1):
     assert_frame_equal(expected, received)
 
 
-def test_filter_ternary_invalid_conditions(lmdb_version_store_v1):
+def test_filter_ternary_invalid_conditions(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_invalid_conditions"
     # Non-bool column should throw if provided as condition
     df = pd.DataFrame({"conditional": [0]})
@@ -966,8 +988,9 @@ def test_filter_ternary_invalid_conditions(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_filter_ternary_invalid_arguments(lmdb_version_store_v1):
+def test_filter_ternary_invalid_arguments(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_invalid_arguments"
     df = pd.DataFrame(
         {"conditional": [True], "col1": [0], "col2": ["hello"]},
@@ -1021,8 +1044,9 @@ def test_filter_ternary_pythonic_syntax():
         q[q["col1"] if q["conditional"] else q["col2"]]
 
 
-def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1):
+def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_ternary_dynamic_missing_columns"
     all_columns_df = pd.DataFrame(
         {
@@ -1165,7 +1189,7 @@ def test_filter_ternary_dynamic_missing_columns(lmdb_version_store_dynamic_schem
         ),
     ),
 )
-def test_ternary_hypothesis(lmdb_version_store_v1, df):
+def test_ternary_hypothesis(lmdb_version_store_v1, df, any_output_format):
     assume(
         not df.empty
         and not df["condition"].isnull().all()
@@ -1173,6 +1197,7 @@ def test_ternary_hypothesis(lmdb_version_store_v1, df):
         and not df["col2"].isnull().all()
     )
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     dense_sym = "test_ternary_hypothesis_dense"
     sparse_sym = "test_ternary_hypothesis_sparse"
 
