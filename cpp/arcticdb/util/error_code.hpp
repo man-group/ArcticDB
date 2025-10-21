@@ -93,6 +93,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(5030, E_UNEXPECTED_AZURE_ERROR)                                                                         \
     ERROR_CODE(5050, E_MONGO_BULK_OP_NO_REPLY)                                                                         \
     ERROR_CODE(5051, E_UNEXPECTED_MONGO_ERROR)                                                                         \
+    ERROR_CODE(5052, E_MONGO_RETRYABLE)                                                                                \
     ERROR_CODE(5090, E_NON_INCREASING_INDEX_VERSION)                                                                   \
     ERROR_CODE(6000, E_UNSORTED_DATA)                                                                                  \
     ERROR_CODE(7000, E_INVALID_USER_ARGUMENT)                                                                          \
@@ -192,6 +193,7 @@ using S3RetryableException = ArcticSpecificException<ErrorCode::E_S3_RETRYABLE>;
 using UnexpectedAzureException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_AZURE_ERROR>;
 using MongoOperationNoReplyException = ArcticSpecificException<ErrorCode::E_MONGO_BULK_OP_NO_REPLY>;
 using UnexpectedMongoException = ArcticSpecificException<ErrorCode::E_UNEXPECTED_MONGO_ERROR>;
+using MongoRetryableException = ArcticSpecificException<ErrorCode::E_MONGO_RETRYABLE>;
 using NonIncreasingIndexVersionException = ArcticSpecificException<ErrorCode::E_NON_INCREASING_INDEX_VERSION>;
 using SortingException = ArcticCategorizedException<ErrorCategory::SORTING>;
 using UnsortedDataException = ArcticSpecificException<ErrorCode::E_UNSORTED_DATA>;
@@ -246,6 +248,11 @@ template<>
 template<>
 [[noreturn]] inline void throw_error<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(const std::string& msg) {
     throw ArcticSpecificException<ErrorCode::E_UNEXPECTED_MONGO_ERROR>(msg);
+}
+
+template<>
+[[noreturn]] inline void throw_error<ErrorCode::E_MONGO_RETRYABLE>(const std::string& msg) {
+    throw ArcticSpecificException<ErrorCode::E_MONGO_RETRYABLE>(msg);
 }
 
 template<>

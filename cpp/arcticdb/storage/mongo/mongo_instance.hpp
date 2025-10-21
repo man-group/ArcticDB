@@ -9,13 +9,49 @@
 #pragma once
 
 #include <mongocxx/instance.hpp>
+#include <mongocxx/logger.hpp>
 #include <mutex>
 #include <memory>
+#include <arcticdb/log/log.hpp>
 
 namespace arcticdb::storage::mongo {
 
+class logger final : public mongocxx::logger {
+  public:
+    void operator()(
+            mongocxx::log_level level, bsoncxx::stdx::string_view domain, bsoncxx::stdx::string_view message
+    ) noexcept override {
+        spdlog::level::level_enum spdlog_level;
+        switch (level) {
+        case mongocxx::log_level::k_error:
+            spdlog_level = spdlog::level::err;
+            break;
+        case mongocxx::log_level::k_critical:
+            spdlog_level = spdlog::level::critical;
+            break;
+        case mongocxx::log_level::k_warning:
+            spdlog_level = spdlog::level::warn;
+            break;
+        case mongocxx::log_level::k_message:
+        case mongocxx::log_level::k_info:
+            spdlog_level = spdlog::level::info;
+            break;
+        case mongocxx::log_level::k_debug:
+            spdlog_level = spdlog::level::debug;
+            break;
+        case mongocxx::log_level::k_trace:
+            spdlog_level = spdlog::level::trace;
+            break;
+        default:
+            spdlog_level = spdlog::level::info;
+            break;
+        }
+        log::storage().log(spdlog_level, "MONGO [{}@{}] {}", mongocxx::to_string(level), domain, message);
+    }
+};
+
 class MongoInstance {
-    mongocxx::instance api_instance_;
+    mongocxx::instance api_instance_{std::make_unique<logger>()};
 
   public:
     static std::shared_ptr<MongoInstance> instance_;

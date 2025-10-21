@@ -882,12 +882,14 @@ class Library:
         sort_on_index=False,
         sort_columns: List[str] = None,
         index_column: Optional[str] = None,
-    ) -> None:
+    ) -> StageResult:
         """
         Similar to ``write`` but the written segments are left in an "incomplete" state, unable to be read until they
         are finalized. This enables multiple writers to a single symbol - all writing staged data at the same time -
         with one process able to later finalize all staged data rendering the data readable by clients.
         To finalize staged data see ``finalize_staged_data`` or ``sort_and_finalize_staged_data``.
+
+        Check out the [demo notebook](https://docs.arcticdb.io/latest/notebooks/ArcticDB_staged_data_with_tokens/) for more info and examples.
 
         Parameters
         ----------
