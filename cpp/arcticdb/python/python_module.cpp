@@ -255,6 +255,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     });
 
     py::register_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
+    py::register_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.ptr());
     py::register_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
 
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
