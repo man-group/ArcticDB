@@ -260,11 +260,11 @@ jobs:
 
       # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
       - name: Compile C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests' and ${{ env.ARCTICDB_USE_SANITIZER == '' }}
+        if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: Run C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests' and ${{ env.ARCTICDB_USE_SANITIZER == '' }}
+        if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
         # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
