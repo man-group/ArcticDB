@@ -293,11 +293,15 @@ jobs:
           # Find and preload the appropriate sanitizer runtime library
           SANITIZER_LIB=""
           
-          if [[ "$ARCTICDB_USE_SANITIZER" == "address" ]]; then
+          # Check if address sanitizer is enabled (can be part of comma-separated list)
+          if [[ "$ARCTICDB_USE_SANITIZER" == *"address"* ]]; then
             # Try multiple methods to find the ASan library
-            # Method 1: Check compiler-rt locations
-            for path in /usr/lib64/clang/*/lib/linux/libclang_rt.asan-x86_64.so \
+            # Method 1: Check compiler-rt locations (including RedHat-style paths)
+            for path in /usr/lib/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.asan.so \
+                        /usr/lib64/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.asan.so \
                         /usr/lib/clang/*/lib/linux/libclang_rt.asan-x86_64.so \
+                        /usr/lib64/clang/*/lib/linux/libclang_rt.asan-x86_64.so \
+                        /usr/lib/gcc/x86_64-redhat-linux/*/libasan.so \
                         /usr/lib64/libasan.so* \
                         /usr/lib/x86_64-linux-gnu/libasan.so*; do
               if [[ -f "$path" ]]; then
@@ -308,13 +312,17 @@ jobs:
             
             # Method 2: Use ldconfig if available
             if [[ -z "$SANITIZER_LIB" ]]; then
-              SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.asan-x86_64.so|libasan.so' | head -n1 | awk '{print $NF}')
+              SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.asan|libasan.so' | head -n1 | awk '{print $NF}')
             fi
             
-          elif [[ "$ARCTICDB_USE_SANITIZER" == "thread" ]]; then
+          # Check if thread sanitizer is enabled
+          elif [[ "$ARCTICDB_USE_SANITIZER" == *"thread"* ]]; then
             # Try multiple methods to find the TSan library
-            for path in /usr/lib64/clang/*/lib/linux/libclang_rt.tsan-x86_64.so \
+            for path in /usr/lib/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.tsan.so \
+                        /usr/lib64/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.tsan.so \
                         /usr/lib/clang/*/lib/linux/libclang_rt.tsan-x86_64.so \
+                        /usr/lib64/clang/*/lib/linux/libclang_rt.tsan-x86_64.so \
+                        /usr/lib/gcc/x86_64-redhat-linux/*/libtsan.so \
                         /usr/lib64/libtsan.so* \
                         /usr/lib/x86_64-linux-gnu/libtsan.so*; do
               if [[ -f "$path" ]]; then
@@ -325,7 +333,7 @@ jobs:
             
             # Method 2: Use ldconfig if available
             if [[ -z "$SANITIZER_LIB" ]]; then
-              SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.tsan-x86_64.so|libtsan.so' | head -n1 | awk '{print $NF}')
+              SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.tsan|libtsan.so' | head -n1 | awk '{print $NF}')
             fi
           fi
           
