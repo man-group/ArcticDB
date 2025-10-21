@@ -1074,7 +1074,8 @@ TEST(VersionStore, TestWriteAppendMapHead) {
 TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
     using namespace arcticdb;
 
-    auto version_store = get_test_engine<version_store::PythonVersionStore>();
+    auto version_store_ptr = test_store("testlib");
+    auto version_store = *version_store_ptr;
     auto store = version_store._test_get_store();
     std::string stream_id{"sym"};
     auto pipeline_context = std::make_shared<PipelineContext>();
@@ -1116,13 +1117,17 @@ TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
     CompactIncompleteParameters params;
     params.delete_staged_data_on_failure_ = true;
     params.stage_results = stage_results;
-    version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    {
+        auto delete_tombstone_keys_on_exit = version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    }
 
     // Doesn't touch the other keys when staged result is provided
     ASSERT_EQ(get_staged_keys(), staged_key_frame1_and_2);
 
     // Providing a non-existent key is fine
-    version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    {
+        auto delete_tombstone_keys_on_exit = version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    }
     ASSERT_EQ(get_staged_keys(), staged_key_frame1_and_2);
 
     // Providing no stage result deletes everything
