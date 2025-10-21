@@ -20,7 +20,7 @@ struct PythonHandlerData {
     PythonHandlerData() :
         py_nan_(std::shared_ptr<py::handle>(create_py_nan(), [](py::handle* py_obj) {
             PyGILState_STATE gstate = PyGILState_Ensure();
-            delete py_obj;  // Calls ~handle(), which does dec_ref() with GIL held
+            delete py_obj; // Calls ~handle(), which does dec_ref() with GIL held
             PyGILState_Release(gstate);
         })) {}
 

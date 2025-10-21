@@ -9,6 +9,50 @@ import re
 from typing import List, Tuple
 
 
+def is_arcticdb_leak(leak_text: str) -> bool:
+    """
+    Determine if a leak is from ArcticDB code (not third-party libraries).
+
+    A leak is considered ArcticDB-related if:
+    - It has arcticdb in function names or namespaces (e.g., arcticdb::, arcticdb/)
+    - But NOT if it's only in:
+      - Third-party paths (pybind11, folly, arrow, etc.)
+      - Build paths (/__w/ArcticDB/ is the GitHub Actions workspace)
+      - Python interpreter paths
+    """
+    # Exclude third-party and Python internals
+    third_party_patterns = [
+        r"pybind11::",
+        r"third_party/pybind11",
+        r"PyModule_",
+        r"_PyBytes_",
+        r"PyType_",
+        r"/site-packages/",
+        r"libarrow",
+        r"folly::",
+        r"/python3\.",
+        r"libstdc\+\+",
+    ]
+
+    # If it matches third-party patterns, check if it's really arcticdb code
+    for pattern in third_party_patterns:
+        if re.search(pattern, leak_text):
+            # This is third-party, but check if there's actual arcticdb code in the stack
+            # Look for arcticdb namespace or source files (not just build paths)
+            if re.search(r"arcticdb::[a-zA-Z_]", leak_text) or re.search(r"/arcticdb/[a-z_]+/", leak_text):
+                # Has real arcticdb code in the stack, could be our leak
+                break
+            else:
+                # Only third-party code, not our leak
+                return False
+
+    # Check for arcticdb namespace or source paths
+    if re.search(r"arcticdb::", leak_text) or re.search(r"/cpp/arcticdb/(?!third_party)", leak_text):
+        return True
+
+    return False
+
+
 def parse_leaks(output: str) -> List[Tuple[str, bool]]:
     """
     Parse the output and extract leak reports.
@@ -30,7 +74,7 @@ def parse_leaks(output: str) -> List[Tuple[str, bool]]:
             # Save previous leak if exists
             if current_leak:
                 leak_text = "\n".join(current_leak)
-                is_arcticdb = "arcticdb" in leak_text.lower()
+                is_arcticdb = is_arcticdb_leak(leak_text)
                 leaks.append((leak_text, is_arcticdb))
 
             # Start new leak
@@ -43,7 +87,7 @@ def parse_leaks(output: str) -> List[Tuple[str, bool]]:
                 # End of current leak
                 if current_leak:
                     leak_text = "\n".join(current_leak)
-                    is_arcticdb = "arcticdb" in leak_text.lower()
+                    is_arcticdb = is_arcticdb_leak(leak_text)
                     leaks.append((leak_text, is_arcticdb))
                     current_leak = []
                 in_leak = False
@@ -53,7 +97,7 @@ def parse_leaks(output: str) -> List[Tuple[str, bool]]:
     # Don't forget the last leak if there was no trailing blank line
     if current_leak:
         leak_text = "\n".join(current_leak)
-        is_arcticdb = "arcticdb" in leak_text.lower()
+        is_arcticdb = is_arcticdb_leak(leak_text)
         leaks.append((leak_text, is_arcticdb))
 
     return leaks

@@ -44,8 +44,6 @@ class StringBlock {
 
     ~StringBlock() = default;
 
-    #pragma pack(push)
-    #pragma pack(1)
     struct StringHead {
         StringHead() = default;
 
@@ -55,26 +53,19 @@ class StringBlock {
         static size_t calc_size(size_t size) { return std::max(sizeof(size_) + size, sizeof(StringHead)); }
 
         void copy(const char* str, size_t size) {
-            uint32_t sz = static_cast<uint32_t>(size);
-            std::memcpy(&size_, &sz, sizeof(uint32_t));  // Safe write
+            size_ = static_cast<uint32_t>(size);
             memset(data_, 0, DataBytes);
             memcpy(data(), str, size);
         }
 
-        [[nodiscard]] size_t size() const {
-            uint32_t sz;
-            std::memcpy(&sz, &size_, sizeof(uint32_t));  // Safe read
-            return static_cast<size_t>(sz);
-        }
-
+        [[nodiscard]] size_t size() const { return static_cast<size_t>(size_); }
         char* data() { return data_; }
         [[nodiscard]] const char* data() const { return data_; }
 
       private:
-        uint32_t size_ = 0;  // Still packed, but accessed via memcpy
+        uint32_t size_ = 0;
         char data_[DataBytes] = {};
     };
-    #pragma pack(pop)
 
   public:
     StringBlock() = default;
