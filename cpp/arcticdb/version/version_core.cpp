@@ -135,6 +135,72 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
 
     return desc;
 }
+template<IndexDescriptor::Type index_type>
+StreamSink::PartialKey generate_partial_key(const SliceAndKey& slice, const StreamId& id, const VersionId& version_id) {
+    if constexpr (index_type == IndexDescriptor::Type::ROWCOUNT) {
+        return StreamSink::PartialKey{
+                .key_type = KeyType::TABLE_DATA,
+                .version_id = version_id,
+                .stream_id = id,
+                .start_index = safe_convert_to_numeric_index(slice.slice().row_range.first, "Rows"),
+                .end_index = safe_convert_to_numeric_index(slice.slice().row_range.second, "Rows"),
+        };
+    } else if constexpr (index_type == IndexDescriptor::Type::TIMESTAMP) {
+        using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
+        return StreamSink::PartialKey{
+                .key_type = KeyType::TABLE_DATA,
+                .version_id = version_id,
+                .stream_id = id,
+                .start_index = *slice.segment().column_data(0).begin<IndexType>(),
+                .end_index = end_index_generator(*(slice.segment().column_data(0).last<IndexType>()->end() - 1))
+        };
+    } else {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>("Read modify write supports only row range and date time indexes");
+    }
+}
+
+folly::Future<std::vector<SliceAndKey>> write_slices(
+        std::vector<SliceAndKey>&& slices, const StreamId& id, const VersionId& version_id,
+        const IndexDescriptor::Type index_type, const std::shared_ptr<DeDupMap>& de_dup_map,
+        std::shared_ptr<Store> store
+) {
+    std::vector<std::tuple<StreamSink::PartialKey, SegmentInMemory, FrameSlice>> write_input;
+    write_input.reserve(slices.size());
+
+    switch (index_type) {
+    case IndexDescriptor::Type::ROWCOUNT: {
+        ranges::transform(slices, std::back_inserter(write_input), [&](SliceAndKey& slice) {
+            return std::make_tuple(
+                    generate_partial_key<IndexDescriptor::Type::ROWCOUNT>(slice, id, version_id),
+                    std::move(slice).segment(),
+                    std::move(slice).slice()
+            );
+        });
+    } break;
+    case IndexDescriptor::Type::TIMESTAMP: {
+        ranges::transform(slices, std::back_inserter(write_input), [&](SliceAndKey& slice) {
+            return std::make_tuple(
+                    generate_partial_key<IndexDescriptor::Type::TIMESTAMP>(slice, id, version_id),
+                    std::move(slice).segment(),
+                    std::move(slice).slice()
+            );
+        });
+    } break;
+    default: {
+        internal::raise<ErrorCode::E_NOT_SUPPORTED>("Read modify write supports only row range and date time indexes");
+    }
+    }
+    const size_t write_batch_size = write_window_size();
+    return folly::collect(folly::window(
+                                  std::move(write_input),
+                                  [de_dup_map,
+                                   store](std::tuple<StreamSink::PartialKey, SegmentInMemory, FrameSlice>&& input) {
+                                      return store->async_write(std::move(input), de_dup_map);
+                                  },
+                                  write_batch_size
+                          ))
+            .via(&async::io_executor());
+}
 } // namespace
 
 void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader& index_segment_reader) {
@@ -2703,6 +2769,60 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
             });
 }
 
+VersionedItem read_modify_write_impl(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& source_version_info,
+        [[maybe_unused]] std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        [[maybe_unused]] const WriteOptions& write_options,
+        [[maybe_unused]] const IndexPartialKey& target_partial_index_key
+) {
+    const auto pipeline_context = setup_pipeline_context(store, source_version_info, *read_query, read_options);
+    internal::check<ErrorCode::E_NOT_SUPPORTED>(
+            !pipeline_context->multi_key_,
+            "Performing read modify write is not supported for data using recursive or custom normalizers"
+    );
+    return read_process_and_collect(store, pipeline_context, read_query, read_options)
+            .thenValue([&](std::vector<SliceAndKey>&& slices) {
+                adjust_slice_ranges(slices);
+                return write_slices(
+                        std::move(slices),
+                        target_partial_index_key.id,
+                        target_partial_index_key.version_id,
+                        pipeline_context->descriptor().index().type(),
+                        std::make_shared<DeDupMap>(),
+                        store
+                );
+            })
+            .thenValue([&](std::vector<SliceAndKey>&& slices) {
+                ranges::sort(slices, [](const SliceAndKey& a, const SliceAndKey& b) {
+                    if (a.slice().col_range < b.slice().col_range) {
+                        return true;
+                    } else if (a.slice().col_range == b.slice().col_range) {
+                        return a.slice().row_range < b.slice().row_range;
+                    }
+                    return false;
+                });
+                const size_t row_count = slices.back().slice().row_range.second - slices[0].slice().row_range.first;
+                const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                        row_count,
+                        pipeline_context->descriptor(),
+                        std::move(*pipeline_context->norm_meta_),
+                        user_meta ? std::make_optional(*std::move(user_meta)) : std::nullopt,
+                        std::nullopt,
+                        std::nullopt,
+                        write_options.bucketize_dynamic
+                );
+                return index::write_index(
+                        index_type_from_descriptor(pipeline_context->descriptor()),
+                        tsd,
+                        std::move(slices),
+                        target_partial_index_key,
+                        store
+                );
+            })
+            .get();
+}
+
 folly::Future<SymbolProcessingResult> read_and_process(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
@@ -2730,8 +2850,8 @@ folly::Future<SymbolProcessingResult> read_and_process(
             .thenValueInline([res_versioned_item = std::move(res_versioned_item),
                               pipeline_context,
                               output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
-                // Pipeline context user metadata is not populated in the case that only incomplete segments exist for a
-                // symbol, no indexed versions
+                // Pipeline context user metadata is not populated in the case that only incomplete segments exist
+                // for a symbol, no indexed versions
                 return SymbolProcessingResult{
                         std::move(res_versioned_item),
                         pipeline_context->user_meta_ ? std::move(*pipeline_context->user_meta_)
