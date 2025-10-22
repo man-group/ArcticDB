@@ -435,6 +435,9 @@ def test_mem_leak_querybuilder_standard(arctic_library_lmdb_100gb):
 
 @SLOW_TESTS_MARK
 @SKIP_CONDA_MARK  # Conda CI runner doesn't have enough storage to perform these stress tests
+@pytest.mark.skipif(
+    WINDOWS, reason="Not enough storage on Windows runners, due to large Win OS footprint and less free mem"
+)
 def test_mem_leak_read_all_native_store(lmdb_version_store_very_big_map):
     lib: NativeVersionStore = lmdb_version_store_very_big_map
 
@@ -481,7 +484,8 @@ def library_with_symbol(
     """
     lib: Library = arctic_library_lmdb
     symbol = "test"
-    df = construct_df_querybuilder_tests(size=2000000)
+    size = 500000 if WINDOWS else 2000000
+    df = construct_df_querybuilder_tests(size)
     lib.write(symbol, df)
     yield (lib, df, symbol)
 
