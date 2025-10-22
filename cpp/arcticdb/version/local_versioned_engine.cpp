@@ -419,9 +419,9 @@ ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
 }
 
 VersionedItem LocalVersionedEngine::read_modify_write_internal(
-        const StreamId& source_stream, const StreamId& target_stream, [[maybe_unused]] const py::object& user_meta,
+        const StreamId& source_stream, const StreamId& target_stream, const py::object& user_meta,
         const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
-        const ReadOptions& read_options, [[maybe_unused]] bool prune_previous_versions
+        const ReadOptions& read_options, bool prune_previous_versions
 ) {
     py::gil_scoped_release release_gil;
 

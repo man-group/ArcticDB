@@ -5,7 +5,7 @@ namespace arcticdb::pipelines {
 
 ReadQuery::ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses) : clauses_(std::move(clauses)) {}
 
-void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>& clauses) { clauses_ = clauses; }
+void ReadQuery::add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses) { clauses_ = std::move(clauses); }
 
 void ReadQuery::convert_to_positive_row_filter(int64_t total_rows) {
     if (!row_range) {
