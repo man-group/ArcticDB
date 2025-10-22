@@ -84,9 +84,18 @@ class ChunkedBufferImpl {
 
     ChunkedBufferImpl() = default;
 
-    explicit ChunkedBufferImpl(entity::AllocationType allocation_type) : allocation_type_(allocation_type) {}
+    explicit ChunkedBufferImpl(
+            entity::AllocationType allocation_type, std::optional<size_t> extra_bytes_per_block = std::nullopt
+    ) :
+        allocation_type_(allocation_type),
+        extra_bytes_per_block_(extra_bytes_per_block) {}
 
-    ChunkedBufferImpl(size_t size, entity::AllocationType allocation_type) : allocation_type_(allocation_type) {
+    ChunkedBufferImpl(
+            size_t size, entity::AllocationType allocation_type,
+            std::optional<size_t> extra_bytes_per_block = std::nullopt
+    ) :
+        allocation_type_(allocation_type),
+        extra_bytes_per_block_(extra_bytes_per_block) {
         if (allocation_type == entity::AllocationType::DETACHABLE) {
             add_detachable_block(size, 0UL);
             bytes_ = size;
@@ -556,6 +565,8 @@ class ChunkedBufferImpl {
 
     MemBlock* create_detachable_block(size_t capacity, size_t offset) const {
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
+        // TODO: Comment on extra bytes
+        capacity += extra_bytes_per_block_.value_or(0);
         auto* data = allocate_detachable_memory(capacity);
         new (ptr) MemBlock(data, capacity, offset, ts, true);
         return reinterpret_cast<BlockType*>(ptr);
@@ -614,6 +625,7 @@ class ChunkedBufferImpl {
     std::vector<size_t> block_offsets_;
 #endif
     entity::AllocationType allocation_type_ = entity::AllocationType::DYNAMIC;
+    std::optional<size_t> extra_bytes_per_block_ = std::nullopt;
 };
 
 constexpr size_t PageSize = 4096;

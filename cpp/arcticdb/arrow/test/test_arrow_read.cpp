@@ -78,7 +78,9 @@ void fill_chunked_string_column(
                 0
         );
 
-        handler.convert_type(source_column, column, column_mapping, DecodePathData{}, handler_data, string_pool);
+        handler.convert_type(
+                source_column, column, column_mapping, DecodePathData{}, handler_data, string_pool, ReadOptions{}
+        );
     }
 }
 

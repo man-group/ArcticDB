@@ -21,8 +21,11 @@ static PyObject** fill_with_none(ChunkedBuffer& buffer, size_t offset, size_t co
     return python_util::fill_with_none(dest, count, handler_data);
 }
 
-void PythonEmptyHandler::
-        handle_type(const uint8_t*& input, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& mapping, const DecodePathData&, std::any& handler_data, EncodingVersion encoding_version, const std::shared_ptr<StringPool>&) {
+void PythonEmptyHandler::handle_type(
+        const uint8_t*& input, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& mapping,
+        const DecodePathData&, std::any& handler_data, EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) {
     ARCTICDB_SAMPLE(HandleEmpty, 0)
     ARCTICDB_TRACE(
             log::version(),
@@ -47,11 +50,11 @@ void PythonEmptyHandler::
     } else {
         util::raise_rte("Unsupported encoding {}", field);
     }
-    convert_type({}, dest_column, mapping, {}, handler_data, {});
+    convert_type({}, dest_column, mapping, {}, handler_data, string_pool, read_options);
 }
 
 void PythonEmptyHandler::
-        convert_type(const Column&, Column& dest_column, const ColumnMapping& mapping, const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>&)
+        convert_type(const Column&, Column& dest_column, const ColumnMapping& mapping, const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>&, const ReadOptions&)
                 const {
     auto dest_data = dest_column.bytes_at(
             mapping.offset_bytes_, mapping.num_rows_ * get_type_size(mapping.dest_type_desc_.data_type())
@@ -82,8 +85,9 @@ void PythonEmptyHandler::
 
 int PythonEmptyHandler::type_size() const { return sizeof(PyObject*); }
 
-TypeDescriptor PythonEmptyHandler::output_type(const TypeDescriptor&) const {
-    return make_scalar_type(DataType::EMPTYVAL);
+std::pair<TypeDescriptor, std::optional<size_t>> PythonEmptyHandler::
+        output_type_and_extra_bytes(const TypeDescriptor&, const std::string_view&, const ReadOptions&) const {
+    return {make_scalar_type(DataType::EMPTYVAL), std::nullopt};
 }
 
 void PythonEmptyHandler::default_initialize(
@@ -93,8 +97,11 @@ void PythonEmptyHandler::default_initialize(
     fill_with_none(buffer, bytes_offset, byte_size / type_size(), handler_data);
 }
 
-void PythonBoolHandler::
-        handle_type(const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m, const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version, const std::shared_ptr<StringPool>&) {
+void PythonBoolHandler::handle_type(
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
+        const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) {
     ARCTICDB_SAMPLE(HandleBool, 0)
     util::check(field.has_ndarray(), "Bool handler expected array");
     ARCTICDB_DEBUG(log::version(), "Bool handler got encoded field: {}", field.DebugString());
@@ -109,11 +116,11 @@ void PythonBoolHandler::
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
 
-    convert_type(decoded_data, dest_column, m, shared_data, handler_data, {});
+    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
 
 void PythonBoolHandler::
-        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const arcticdb::DecodePathData&, std::any& any, const std::shared_ptr<StringPool>&)
+        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const arcticdb::DecodePathData&, std::any& any, const std::shared_ptr<StringPool>&, const ReadOptions&)
                 const {
     const auto& sparse_map = source_column.opt_sparse_map();
     const auto num_bools = sparse_map.has_value() ? sparse_map->count() : mapping.num_rows_;
@@ -142,8 +149,9 @@ void PythonBoolHandler::
 
 int PythonBoolHandler::type_size() const { return sizeof(PyObject*); }
 
-TypeDescriptor PythonBoolHandler::output_type(const TypeDescriptor&) const {
-    return make_scalar_type(DataType::BOOL_OBJECT8);
+std::pair<TypeDescriptor, std::optional<size_t>> PythonBoolHandler::
+        output_type_and_extra_bytes(const TypeDescriptor&, const std::string_view&, const ReadOptions&) const {
+    return {make_scalar_type(DataType::BOOL_OBJECT8), std::nullopt};
 }
 
 void PythonBoolHandler::default_initialize(
@@ -156,7 +164,7 @@ void PythonBoolHandler::default_initialize(
 void PythonStringHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-        const std::shared_ptr<StringPool>& string_pool
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE(PythonHandleString, 0)
     util::check(field.has_ndarray(), "String handler expected array");
@@ -186,14 +194,13 @@ void PythonStringHandler::handle_type(
     );
 
     if (is_dynamic_string_type(m.dest_type_desc_.data_type())) {
-        convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool);
+        convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
     }
 }
 
-void PythonStringHandler::convert_type(
-        const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
-        const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool
-) const {
+void PythonStringHandler::
+        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool, const ReadOptions&)
+                const {
     auto dest_data = dest_column.bytes_at(mapping.offset_bytes_, mapping.num_rows_ * sizeof(PyObject*));
     auto ptr_dest = reinterpret_cast<PyObject**>(dest_data);
     DynamicStringReducer string_reducer{shared_data, cast_handler_data(handler_data), ptr_dest, mapping.num_rows_};
@@ -210,7 +217,11 @@ void PythonStringHandler::convert_type(
 
 int PythonStringHandler::type_size() const { return sizeof(PyObject*); }
 
-TypeDescriptor PythonStringHandler::output_type(const TypeDescriptor& input_type) const { return input_type; }
+std::pair<TypeDescriptor, std::optional<size_t>> PythonStringHandler::
+        output_type_and_extra_bytes(const TypeDescriptor& input_type, const std::string_view&, const ReadOptions&)
+                const {
+    return {input_type, std::nullopt};
+}
 
 void PythonStringHandler::default_initialize(
         ChunkedBuffer& buffer, size_t bytes_offset, size_t byte_size, const DecodePathData&, std::any& any
@@ -226,14 +237,17 @@ void PythonStringHandler::default_initialize(
     return py::dtype{fmt::format("{}{:d}", get_dtype_specifier(td.data_type()), type_byte_size)};
 }
 
-void PythonArrayHandler::
-        handle_type(const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m, const DecodePathData& shared_data, std::any& any, EncodingVersion encoding_version, const std::shared_ptr<StringPool>&) {
+void PythonArrayHandler::handle_type(
+        const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
+        const DecodePathData& shared_data, std::any& any, EncodingVersion encoding_version,
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) {
     ARCTICDB_SAMPLE(HandleArray, 0)
     util::check(field.has_ndarray(), "Expected ndarray in array object handler");
     Column column{m.source_type_desc_, Sparsity::PERMITTED};
     data += decode_field(m.source_type_desc_, field, data, column, column.opt_sparse_map(), encoding_version);
 
-    convert_type(column, dest_column, m, shared_data, any, {});
+    convert_type(column, dest_column, m, shared_data, any, string_pool, read_options);
 }
 
 [[nodiscard]] static inline PyObject* initialize_array(
@@ -261,7 +275,8 @@ void PythonArrayHandler::convert_type(
     const ColumnMapping& mapping,
     const arcticdb::DecodePathData&,
     std::any& any,
-    const std::shared_ptr<StringPool> &) const { //TODO we don't handle string arrays at the moment
+    const std::shared_ptr<StringPool>&,
+    const ReadOptions&) const { //TODO we don't handle string arrays at the moment
     auto* ptr_dest =
             dest_column.ptr_cast<PyObject*>(mapping.offset_bytes_ / type_size(), mapping.num_rows_ * type_size());
     ARCTICDB_SUBSAMPLE(InitArrayAcquireGIL, 0)
@@ -309,7 +324,11 @@ void PythonArrayHandler::convert_type(
     );
 }
 
-TypeDescriptor PythonArrayHandler::output_type(const TypeDescriptor& input_type) const { return input_type; }
+std::pair<TypeDescriptor, std::optional<size_t>> PythonArrayHandler::
+        output_type_and_extra_bytes(const TypeDescriptor& input_type, const std::string_view&, const ReadOptions&)
+                const {
+    return {input_type, std::nullopt};
+}
 
 int PythonArrayHandler::type_size() const { return sizeof(PyObject*); }
 

@@ -216,8 +216,11 @@ Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffe
     type_(type),
     allow_sparse_(allow_sparse) {}
 
-Column::Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse) :
-    data_(expected_rows * entity::data_type_size(type), presize),
+Column::Column(
+        TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
+        std::optional<size_t> extra_bytes_per_block
+) :
+    data_(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block),
     type_(type),
     allow_sparse_(allow_sparse) {
     ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);

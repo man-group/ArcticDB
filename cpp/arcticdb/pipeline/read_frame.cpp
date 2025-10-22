@@ -41,32 +41,46 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(context->slice_and_keys_, true, context->incompletes_after_).value();
 }
 
-StreamDescriptor get_filtered_descriptor(
-        StreamDescriptor&& descriptor, OutputFormat output_format,
+std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_descriptor_and_extra_bytes_per_column(
+        StreamDescriptor&& descriptor, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
 ) {
     // We assume here that filter_columns_ will always contain the index.
 
     auto desc = std::move(descriptor);
     auto index = stream::index_type_from_descriptor(desc);
-    return util::variant_match(index, [&desc, &filter_columns, output_format](const auto& idx) {
-        const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
-        auto handlers = TypeHandlerRegistry::instance();
+    return util::variant_match(
+            index,
+            [&desc, &filter_columns, &read_options](const auto& idx
+            ) -> std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> {
+                const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
+                auto allocation_types = std::vector<std::optional<size_t>>();
+                allocation_types.reserve(fields->size());
+                auto handlers = TypeHandlerRegistry::instance();
 
-        for (auto& field : *fields) {
-            if (auto handler = handlers->get_handler(output_format, field.type())) {
-                auto output_type = handler->output_type(field.type());
-                if (output_type != field.type())
-                    field.mutable_type() = output_type;
+                for (auto& field : *fields) {
+                    if (auto handler = handlers->get_handler(read_options.output_format(), field.type())) {
+                        auto [output_type, extra_bytes] =
+                                handler->output_type_and_extra_bytes(field.type(), field.name(), read_options);
+                        allocation_types.emplace_back(extra_bytes);
+                        if (output_type != field.type())
+                            field.mutable_type() = output_type;
+                    } else {
+                        allocation_types.emplace_back(std::nullopt);
+                    }
+                }
+
+                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, allocation_types};
             }
-        }
-
-        return StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)};
-    });
+    );
 }
 
-StreamDescriptor get_filtered_descriptor(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
-    return get_filtered_descriptor(context->descriptor().clone(), output_format, context->filter_columns_);
+std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_descriptor_and_extra_bytes_per_column(
+        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
+) {
+    return get_filtered_descriptor_and_extra_bytes_per_column(
+            context->descriptor().clone(), read_options, context->filter_columns_
+    );
 }
 
 void handle_modified_descriptor(const std::shared_ptr<PipelineContext>& context, SegmentInMemory& output) {
@@ -92,13 +106,16 @@ void finalize_segment_setup(
     handle_modified_descriptor(context, output);
 }
 
-SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
+SegmentInMemory allocate_chunked_frame(
+        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
+) {
     ARCTICDB_SAMPLE_DEFAULT(AllocContiguousFrame)
     auto [offset, row_count] = offset_and_row_count(context);
     auto block_row_counts = output_block_row_counts(context);
     ARCTICDB_DEBUG(log::version(), "Allocated chunked frame with offset {} and row count {}", offset, row_count);
+    auto [desc, extra_bytes_per_column] = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options);
     SegmentInMemory output{
-            get_filtered_descriptor(context, output_format), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED
+            std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, extra_bytes_per_column
     };
     auto handlers = TypeHandlerRegistry::instance();
 
@@ -123,24 +140,23 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
     return output;
 }
 
-SegmentInMemory allocate_contiguous_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
+SegmentInMemory allocate_contiguous_frame(
+        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
+) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    SegmentInMemory output{
-            get_filtered_descriptor(context, output_format),
-            row_count,
-            AllocationType::DETACHABLE,
-            Sparsity::NOT_PERMITTED,
-    };
+    auto [desc, _] = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options);
+    // extra_bytes_per_column are not used for contiguous frame allocation
+    SegmentInMemory output{std::move(desc), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
 }
 
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
-    if (output_format == OutputFormat::ARROW)
-        return allocate_chunked_frame(context, output_format);
+SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options) {
+    if (read_options.output_format() == OutputFormat::ARROW)
+        return allocate_chunked_frame(context, read_options);
     else
-        return allocate_contiguous_frame(context, output_format);
+        return allocate_contiguous_frame(context, read_options);
 }
 
 size_t get_index_field_count(const SegmentInMemory& frame) { return frame.descriptor().index().field_count(); }
@@ -269,14 +285,22 @@ void decode_index_field(
 void decode_or_expand(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-        const ColumnMapping& mapping, const std::shared_ptr<StringPool>& string_pool, OutputFormat output_format
+        const ColumnMapping& mapping, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
     auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
-    if (auto handler = get_type_handler(output_format, source_type_desc, dest_type_desc); handler) {
+    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
         handler->handle_type(
-                data, dest_column, encoded_field_info, mapping, shared_data, handler_data, encoding_version, string_pool
+                data,
+                dest_column,
+                encoded_field_info,
+                mapping,
+                shared_data,
+                handler_data,
+                encoding_version,
+                string_pool,
+                read_options
         );
     } else {
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
@@ -289,10 +313,10 @@ void decode_or_expand(
             ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, output_format](auto tdt) {
+            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, &read_options](auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
-                if (output_format != OutputFormat::ARROW) {
+                if (read_options.output_format() != OutputFormat::ARROW) {
                     // Arrow doesn't care what values are at indices where the validity bitmap is zero
                     util::default_initialize<TagType>(dest, dest_bytes);
                 }
@@ -300,7 +324,7 @@ void decode_or_expand(
             });
 
             // For arrow we must apply the truncation to the bitmap and set it as an extra buffer.
-            if (output_format == OutputFormat::ARROW) {
+            if (read_options.output_format() == OutputFormat::ARROW) {
                 bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
                 handle_truncation(*bv, mapping.truncate_);
                 create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
@@ -621,7 +645,7 @@ void decode_into_frame_static(
                     encoding_version,
                     mapping,
                     context.string_pool_ptr(),
-                    read_options.output_format()
+                    read_options
             );
 
             ARCTICDB_TRACE(
@@ -758,7 +782,7 @@ void decode_into_frame_dynamic(
                     encoding_version,
                     mapping,
                     context.string_pool_ptr(),
-                    read_options.output_format()
+                    read_options
             );
 
             handle_type_promotion(mapping, shared_data, column);

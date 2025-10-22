@@ -225,7 +225,8 @@ class Column {
 
     Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes);
 
-    Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse);
+    Column(TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
+           std::optional<size_t> extra_bytes_per_block = std::nullopt);
 
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 
