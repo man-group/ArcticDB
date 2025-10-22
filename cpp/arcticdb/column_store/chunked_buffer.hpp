@@ -458,6 +458,10 @@ class ChunkedBufferImpl {
 
     [[nodiscard]] bool empty() const { return bytes_ == 0; }
 
+    [[nodiscard]] entity::AllocationType allocation_type() const { return allocation_type_; }
+
+    [[nodiscard]] std::optional<size_t> extra_bytes_per_block() const { return extra_bytes_per_block_; }
+
     void clear() {
         bytes_ = 0;
         for (auto block : blocks_)

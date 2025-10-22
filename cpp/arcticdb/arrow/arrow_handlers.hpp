@@ -34,6 +34,10 @@ struct ArrowStringHandler {
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
             std::any& handler_data
     ) const;
+
+    [[nodiscard]] ArrowOutputStringFormat output_string_format(
+            const std::string_view& column_name, const ReadOptions& read_options
+    ) const;
 };
 
 struct ArrowHandlerDataFactory : public TypeHandlerDataFactory {
