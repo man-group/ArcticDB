@@ -59,7 +59,9 @@ static void BM_arrow_string_handler(benchmark::State& state) {
         auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, sparsity);
         allocate_and_fill_chunked_column<int32_t>(dest_column, num_rows, num_rows);
         state.ResumeTiming();
-        handler.convert_type(source_column, dest_column, mapping, DecodePathData{}, handler_data, string_pool);
+        handler.convert_type(
+                source_column, dest_column, mapping, DecodePathData{}, handler_data, string_pool, ReadOptions{}
+        );
     }
 }
 

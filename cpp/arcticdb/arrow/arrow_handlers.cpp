@@ -19,7 +19,7 @@ namespace arcticdb {
 void ArrowStringHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-        const std::shared_ptr<StringPool>& string_pool
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE(ArrowHandleString, 0)
     util::check(field.has_ndarray(), "String handler expected array");
@@ -45,13 +45,12 @@ void ArrowStringHandler::handle_type(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
 
-    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool);
+    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
 
-void ArrowStringHandler::convert_type(
-        const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&,
-        std::any&, const std::shared_ptr<StringPool>& string_pool
-) const {
+void ArrowStringHandler::
+        convert_type(const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&, std::any&, const std::shared_ptr<StringPool>& string_pool, const ReadOptions&)
+                const {
     using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
     struct DictEntry {
         int32_t offset_buffer_pos_;
@@ -131,8 +130,9 @@ void ArrowStringHandler::convert_type(
     }
 }
 
-TypeDescriptor ArrowStringHandler::output_type(const TypeDescriptor&) const {
-    return make_scalar_type(DataType::UTF_DYNAMIC32);
+std::pair<TypeDescriptor, std::optional<size_t>> ArrowStringHandler::
+        output_type_and_extra_bytes(const TypeDescriptor&, const std::string_view&, const ReadOptions&) const {
+    return {make_scalar_type(DataType::UTF_DYNAMIC32), std::nullopt};
 }
 
 void ArrowStringHandler::default_initialize(

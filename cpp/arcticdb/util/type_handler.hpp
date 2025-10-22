@@ -12,6 +12,7 @@
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/codec/encoded_field.hpp>
+#include <arcticdb/pipeline/read_options.hpp>
 #include <folly/Poly.h>
 #include <memory>
 #include <mutex>
@@ -37,7 +38,8 @@ struct ITypeHandler {
         void handle_type(
                 const uint8_t*& source, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
                 const ColumnMapping& mapping, const DecodePathData& shared_data, std::any& handler_data,
-                EncodingVersion encoding_version, const std::shared_ptr<StringPool>& string_pool
+                EncodingVersion encoding_version, const std::shared_ptr<StringPool>& string_pool,
+                const ReadOptions& read_options
         ) {
             folly::poly_call<0>(
                     *this,
@@ -48,7 +50,8 @@ struct ITypeHandler {
                     shared_data,
                     handler_data,
                     encoding_version,
-                    string_pool
+                    string_pool,
+                    read_options
             );
         }
 
@@ -59,13 +62,18 @@ struct ITypeHandler {
         void convert_type(
                 const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
                 const DecodePathData& shared_data, std::any& handler_data,
-                const std::shared_ptr<StringPool>& string_pool
+                const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
         ) const {
-            folly::poly_call<1>(*this, source_column, dest_column, mapping, shared_data, handler_data, string_pool);
+            folly::poly_call<1>(
+                    *this, source_column, dest_column, mapping, shared_data, handler_data, string_pool, read_options
+            );
         }
 
-        entity::TypeDescriptor output_type(const entity::TypeDescriptor& input_type) const {
-            return folly::poly_call<2>(*this, input_type);
+        std::pair<entity::TypeDescriptor, std::optional<size_t>> output_type_and_extra_bytes(
+                const entity::TypeDescriptor& input_type, const std::string_view& column_name,
+                const ReadOptions& read_options
+        ) const {
+            return folly::poly_call<2>(*this, input_type, column_name, read_options);
         }
 
         void default_initialize(
@@ -77,7 +85,8 @@ struct ITypeHandler {
     };
 
     template<class T>
-    using Members = folly::PolyMembers<&T::handle_type, &T::convert_type, &T::output_type, &T::default_initialize>;
+    using Members = folly::PolyMembers<
+            &T::handle_type, &T::convert_type, &T::output_type_and_extra_bytes, &T::default_initialize>;
 };
 
 using TypeHandler = folly::Poly<ITypeHandler>;
