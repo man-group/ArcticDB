@@ -270,7 +270,8 @@ class SegmentInMemoryImpl {
     SegmentInMemoryImpl();
 
     SegmentInMemoryImpl(
-            const StreamDescriptor& desc, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse
+            const StreamDescriptor& desc, size_t expected_column_size, AllocationType allocation_type,
+            Sparsity allow_sparse
     );
 
     ~SegmentInMemoryImpl();
@@ -292,7 +293,7 @@ class SegmentInMemoryImpl {
     );
 
     size_t on_descriptor_change(
-            const StreamDescriptor& descriptor, size_t expected_column_size, AllocationType presize,
+            const StreamDescriptor& descriptor, size_t expected_column_size, AllocationType allocation_type,
             Sparsity allow_sparse
     );
 
