@@ -1588,7 +1588,7 @@ void copy_frame_data_to_buffer(
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
-    auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+    auto dst_rawtype_size = data_type_size(dst_column.type());
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
@@ -1603,7 +1603,7 @@ void copy_frame_data_to_buffer(
             destination.field(target_index).name()
     );
     if (auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
-        const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+        const auto type_size = data_type_size(dst_column.type());
         const ColumnMapping mapping{
                 src_column.type(),
                 dst_column.type(),

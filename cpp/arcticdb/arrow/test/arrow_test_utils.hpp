@@ -68,7 +68,7 @@ void allocate_and_fill_chunked_column(
 ) {
     // Allocate column in chunks
     for (size_t row = 0; row < num_rows; row += chunk_size) {
-        auto data_size = data_type_size(column.type(), OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+        auto data_size = data_type_size(column.type());
         auto current_block_size = std::min(chunk_size, num_rows - row);
         auto bytes = current_block_size * data_size;
         column.allocate_data(bytes);
