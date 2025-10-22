@@ -26,7 +26,7 @@ static void BM_arrow_string_handler(benchmark::State& state) {
     const double sparsity_ratio = num_sparse / num_rows;
     auto source_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
     auto dest_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC32, Dimension::Dim0};
-    auto dest_size = data_type_size(dest_type_desc, OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+    auto dest_size = data_type_size(dest_type_desc);
     auto sparsity = num_sparse == 0 ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
 
     // Fill up source column
