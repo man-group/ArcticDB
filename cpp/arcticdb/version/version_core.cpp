@@ -205,16 +205,6 @@ bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.s
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
 
-std::vector<SliceAndKey> filter_existing_slices(std::vector<std::optional<SliceAndKey>>&& maybe_slices) {
-    std::vector<SliceAndKey> result;
-    for (auto& maybe_slice : maybe_slices) {
-        if (maybe_slice.has_value()) {
-            result.push_back(std::move(*maybe_slice));
-        }
-    }
-    return result;
-}
-
 /// Represents all slices which are intersecting (but not overlapping) with range passed to update
 /// First member is a vector of all segments intersecting with the first row-slice of the update range
 /// Second member is a vector of all segments intersecting with the last row-slice of the update range
@@ -232,8 +222,8 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             "Both first and last index range of the update range must intersect with at least one of the slices in the "
             "dataframe"
     );
-    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_before_fut;
-    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_after_fut;
+    std::vector<folly::Future<SliceAndKey>> maybe_intersect_before_fut;
+    std::vector<folly::Future<SliceAndKey>> maybe_intersect_after_fut;
 
     for (const auto& affected_slice_and_key : *affected_keys) {
         const auto& affected_range = affected_slice_and_key.key().index_range();
@@ -251,11 +241,49 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             ));
         }
     }
-    return collect(collect(maybe_intersect_before_fut)
+    return collectAll(
+                   collectAll(maybe_intersect_before_fut)
                            .via(&async::io_executor())
-                           .thenValueInline(filter_existing_slices),
-                   collect(maybe_intersect_after_fut).via(&async::io_executor()).thenValueInline(filter_existing_slices)
+                           .thenValueInline([store](auto&& maybe_intersect_before) {
+                               return rollback_on_quota_exceeded(
+                                       std::move(maybe_intersect_before), std::static_pointer_cast<StreamSink>(store)
+                               );
+                           }),
+                   collectAll(maybe_intersect_after_fut)
+                           .via(&async::io_executor())
+                           .thenValueInline([store](auto&& maybe_intersect_after) {
+                               return rollback_on_quota_exceeded(
+                                       std::move(maybe_intersect_after), std::static_pointer_cast<StreamSink>(store)
+                               );
+                           })
     )
+            .via(&async::cpu_executor())
+            .thenValue([store](auto&& try_before_and_after) -> folly::Future<IntersectingSegments> {
+                auto& [try_intersect_before, try_intersect_after] = try_before_and_after;
+
+                if (try_intersect_before.template hasException<QuotaExceededException>() &&
+                    !try_intersect_after.hasException()) {
+                    return remove_slice_and_keys(std::move(try_intersect_after.value()), *store)
+                            .thenValueInline([](auto&&) {
+                                return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
+                                );
+                            });
+                }
+
+                if (try_intersect_after.template hasException<QuotaExceededException>() &&
+                    !try_intersect_before.hasException()) {
+                    return remove_slice_and_keys(std::move(try_intersect_before.value()), *store)
+                            .thenValueInline([](auto&&) {
+                                return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
+                                );
+                            });
+                }
+
+                // Return the tuple if all is okay, or throw any contained exception on .value().
+                return IntersectingSegments{
+                        std::move(try_intersect_before.value()), std::move(try_intersect_after.value())
+                };
+            })
             .via(&async::io_executor());
 }
 
@@ -500,7 +528,8 @@ folly::Future<AtomKey> async_update_impl(
                                     get_keys_not_affected_by_update(index_segment_reader, *affected_keys);
                             util::check(
                                     affected_keys->size() + unaffected_keys.size() == index_segment_reader.size(),
-                                    "The sum of affected keys and unaffected keys must be equal to the total number of "
+                                    "The sum of affected keys and unaffected keys must be "
+                                    "equal to the total number of "
                                     "keys {} + {} != {}",
                                     affected_keys->size(),
                                     unaffected_keys.size(),
@@ -508,6 +537,8 @@ folly::Future<AtomKey> async_update_impl(
                             );
                             const UpdateRanges update_ranges =
                                     compute_update_ranges(query.row_filter, *frame, new_slice_and_keys);
+                            auto new_slice_and_keys_ptr =
+                                    std::make_shared<std::vector<SliceAndKey>>(std::move(new_slice_and_keys));
                             return async_intersecting_segments(
                                            affected_keys,
                                            update_ranges.front,
@@ -515,7 +546,7 @@ folly::Future<AtomKey> async_update_impl(
                                            update_info.next_version_id_,
                                            store
                             )
-                                    .thenValue([new_slice_and_keys = std::move(new_slice_and_keys),
+                                    .thenValue([new_slice_and_keys_ptr,
                                                 update_ranges = update_ranges,
                                                 unaffected_keys = std::move(unaffected_keys),
                                                 affected_keys = std::move(affected_keys),
@@ -529,7 +560,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 unaffected_keys,
                                                 *affected_keys,
                                                 std::move(intersecting_segments),
-                                                std::move(new_slice_and_keys)
+                                                std::move(*new_slice_and_keys_ptr)
                                         );
                                         auto tsd = index::get_merged_tsd(
                                                 row_count, dynamic_schema, index_segment_reader.tsd(), frame
@@ -541,6 +572,16 @@ folly::Future<AtomKey> async_update_impl(
                                                 IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
                                                 store
                                         );
+                                    })
+                                    .thenError([store,
+                                                new_slice_and_keys_ptr](folly::exception_wrapper&& error) mutable {
+                                        if (error.template is_compatible_with<QuotaExceededException>()) {
+                                            return remove_slice_and_keys(std::move(*new_slice_and_keys_ptr), *store)
+                                                    .thenTry([error](auto&&) {
+                                                        return folly::makeSemiFuture<AtomKeyImpl>(error);
+                                                    });
+                                        }
+                                        return folly::makeFuture<AtomKeyImpl>(error);
                                     });
                         });
             });

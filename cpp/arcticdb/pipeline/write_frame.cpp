@@ -17,6 +17,7 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/format_date.hpp>
 
 #include <vector>
@@ -240,7 +241,7 @@ int64_t write_window_size() {
     );
 }
 
-folly::Future<std::vector<SliceAndKey>> write_slices(
+folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& key, const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
@@ -250,26 +251,25 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
     int64_t write_window = write_window_size();
-    return folly::collect(folly::window(
-                                  std::move(slice_and_rowcount),
-                                  [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice
-                                  ) {
-                                      return async::submit_cpu_task(WriteToSegmentTask(
-                                                                            frame,
-                                                                            slice.first,
-                                                                            slicing,
-                                                                            get_partial_key_gen(frame, key),
-                                                                            slice.second,
-                                                                            frame->index,
-                                                                            sparsify_floats
-                                                                    ))
-                                              .then([sink, de_dup_map](auto&& ks) {
-                                                  return sink->async_write(ks, de_dup_map);
-                                              });
-                                  },
-                                  write_window
-                          ))
-            .via(&async::io_executor());
+    auto window = folly::window(
+            std::move(slice_and_rowcount),
+            [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
+                return async::submit_cpu_task(WriteToSegmentTask(
+                                                      frame,
+                                                      slice.first,
+                                                      slicing,
+                                                      get_partial_key_gen(frame, key),
+                                                      slice.second,
+                                                      frame->index,
+                                                      sparsify_floats
+                                              ))
+                        .then([sink, de_dup_map](auto&& ks) {
+                            return sink->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
+                        });
+            },
+            write_window
+    );
+    return folly::collectAll(std::move(window));
 }
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
@@ -284,7 +284,12 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
-    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats);
+    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
+            .via(&async::cpu_executor())
+            .thenValue([sink](std::vector<folly::Try<SliceAndKey>>&& ks) {
+                return rollback_on_quota_exceeded(std::move(ks), sink);
+            })
+            .via(&async::io_executor());
 }
 
 folly::Future<entity::AtomKey> write_frame(
@@ -376,7 +381,7 @@ static RowRange partial_rewrite_row_range(
     }
 }
 
-folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
+folly::Future<SliceAndKey> async_rewrite_partial_segment(
         const SliceAndKey& existing, const IndexRange& index_range, VersionId version_id,
         AffectedSegmentPart affected_part, const std::shared_ptr<Store>& store
 ) {
@@ -384,15 +389,15 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
             .thenValueInline(
                     [existing, index_range, version_id, affected_part, store](
                             std::pair<VariantKey, SegmentInMemory>&& key_segment
-                    ) -> folly::Future<std::optional<SliceAndKey>> {
+                    ) -> folly::Future<SliceAndKey> {
                         const auto& key = existing.key();
                         const SegmentInMemory& segment = key_segment.second;
                         const RowRange affected_row_range =
                                 partial_rewrite_row_range(segment, index_range, affected_part);
                         const auto num_rows = int64_t(affected_row_range.end() - affected_row_range.start());
-                        if (num_rows <= 0)
-                            return std::nullopt;
-
+                        if (num_rows <= 0) {
+                            return folly::Try<SliceAndKey>{}; // Empty future
+                        }
                         SegmentInMemory output =
                                 segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
                         const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
@@ -408,7 +413,7 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
                         };
                         return store->write(key.type(), version_id, key.id(), start_ts, end_ts, std::move(output))
                                 .thenValueInline([new_slice = std::move(new_slice)](VariantKey&& k) {
-                                    return std::make_optional<SliceAndKey>(new_slice, std::get<AtomKey>(std::move(k)));
+                                    return SliceAndKey{new_slice, std::get<AtomKey>(std::move(k))};
                                 });
                     }
             );
@@ -438,6 +443,54 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
         global_count += (group_end - group_start);
     }
     return output;
+}
+
+folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(
+        std::vector<SliceAndKey>&& slices, StreamSink& sink
+) {
+    std::vector<VariantKey> keys;
+    std::transform(
+            std::make_move_iterator(std::begin(slices)),
+            std::make_move_iterator(std::end(slices)),
+            std::back_inserter(keys),
+            [](SliceAndKey&& key) { return std::move(key).key(); }
+    );
+    return sink.remove_keys(std::move(keys));
+};
+
+folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
+        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+) {
+    std::vector<SliceAndKey> succeeded;
+    std::optional<folly::exception_wrapper> exception;
+    bool has_quota_limit_exceeded = false;
+    succeeded.reserve(try_slices.size());
+    for (auto& try_slice : try_slices) {
+        if (try_slice.hasException()) {
+            if (!exception.has_value()) {
+                exception = try_slice.exception();
+            }
+
+            has_quota_limit_exceeded =
+                    has_quota_limit_exceeded || try_slice.exception().is_compatible_with<QuotaExceededException>();
+        } else if (try_slice.hasValue()) {
+            succeeded.emplace_back(std::move(try_slice.value()));
+        }
+    }
+
+    if (has_quota_limit_exceeded) {
+        return remove_slice_and_keys(std::move(succeeded), *sink).thenValue([](auto&&) {
+            return folly::makeSemiFuture<std::vector<SliceAndKey>>(
+                    QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
+            );
+        });
+    }
+
+    if (exception.has_value()) {
+        exception->throw_exception();
+    }
+
+    return succeeded;
 }
 
 } // namespace arcticdb::pipelines
