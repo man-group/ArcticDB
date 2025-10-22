@@ -56,7 +56,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
 int64_t write_window_size();
 
-folly::Future<std::vector<SliceAndKey>> write_slices(
+folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
@@ -76,7 +76,7 @@ folly::Future<entity::AtomKey> append_frame(
 
 enum class AffectedSegmentPart { START, END };
 
-folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
+folly::Future<SliceAndKey> async_rewrite_partial_segment(
         const SliceAndKey& existing, const IndexRange& index_range, VersionId version_id,
         AffectedSegmentPart affected_part, const std::shared_ptr<Store>& store
 );
@@ -97,5 +97,13 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
 );
 
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices);
+
+folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
+        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+);
+
+folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(
+        std::vector<SliceAndKey>&& slices, StreamSink& sink
+);
 
 } // namespace arcticdb::pipelines

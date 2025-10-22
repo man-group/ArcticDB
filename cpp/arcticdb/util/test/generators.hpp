@@ -418,8 +418,8 @@ inline VersionStoreType get_test_engine(
 /**
  * Similar to get_test_engine() but replaces the AsyncStore with InMemoryStore and returns it.
  */
-inline auto python_version_store_in_memory() {
-    auto pvs = get_test_engine<version_store::PythonVersionStore>();
+inline auto python_version_store_in_memory(storage::LibraryDescriptor::VariantStoreConfig cfg = {}) {
+    auto pvs = get_test_engine<version_store::PythonVersionStore>(std::move(cfg));
     auto replace_store = std::make_shared<InMemoryStore>();
     pvs._test_set_store(replace_store);
     return std::make_tuple(std::move(pvs), replace_store);
