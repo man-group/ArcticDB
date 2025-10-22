@@ -19,8 +19,6 @@ struct ArrowStringHandler {
             const std::shared_ptr<StringPool>& string_pool
     );
 
-    [[nodiscard]] int type_size() const;
-
     void convert_type(
             const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
             const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool

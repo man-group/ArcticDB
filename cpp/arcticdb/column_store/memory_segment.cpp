@@ -15,19 +15,14 @@ namespace arcticdb {
 SegmentInMemory::SegmentInMemory() : impl_(std::make_shared<SegmentInMemoryImpl>()) {}
 
 SegmentInMemory::SegmentInMemory(
-        const StreamDescriptor& tsd, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse,
-        OutputFormat output_format, DataTypeMode mode
+        const StreamDescriptor& tsd, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse
 ) :
-    impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse, output_format, mode)
-    ) {}
+    impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse)) {}
 
 SegmentInMemory::SegmentInMemory(
-        StreamDescriptor&& tsd, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse,
-        OutputFormat output_format, DataTypeMode mode
+        StreamDescriptor&& tsd, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse
 ) :
-    impl_(std::make_shared<SegmentInMemoryImpl>(
-            std::move(tsd), expected_column_size, presize, allow_sparse, output_format, mode
-    )) {}
+    impl_(std::make_shared<SegmentInMemoryImpl>(std::move(tsd), expected_column_size, presize, allow_sparse)) {}
 
 void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept { std::swap(left.impl_, right.impl_); }
 

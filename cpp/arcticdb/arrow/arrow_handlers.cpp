@@ -135,8 +135,6 @@ TypeDescriptor ArrowStringHandler::output_type(const TypeDescriptor&) const {
     return make_scalar_type(DataType::UTF_DYNAMIC32);
 }
 
-int ArrowStringHandler::type_size() const { return sizeof(uint32_t); }
-
 void ArrowStringHandler::default_initialize(
         ChunkedBuffer& /*buffer*/, size_t /*offset*/, size_t /*byte_size*/, const DecodePathData& /*shared_data*/,
         std::any& /*handler_data*/

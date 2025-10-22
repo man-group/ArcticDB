@@ -35,14 +35,7 @@ inline void apply_type_handlers(SegmentInMemory seg, std::any& handler_data, Out
                     "Only Pandas output format is supported for read_result_from_single_frame"
             );
             ColumnMapping mapping{column.type(), column.type(), seg.field(i), 0, seg.row_count(), 0, 0, 0, i};
-            Column dest_column(
-                    column.type(),
-                    seg.row_count(),
-                    AllocationType::DETACHABLE,
-                    Sparsity::PERMITTED,
-                    output_format,
-                    DataTypeMode::EXTERNAL
-            );
+            Column dest_column(column.type(), seg.row_count(), AllocationType::DETACHABLE, Sparsity::PERMITTED);
             handler->convert_type(column, dest_column, mapping, shared_data, handler_data, seg.string_pool_ptr());
             std::swap(column, dest_column);
             // dest_column now holds the original column. This was allocated with detachable blocks, which should be

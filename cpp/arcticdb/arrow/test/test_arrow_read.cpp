@@ -64,7 +64,7 @@ void fill_chunked_string_column(
             source_column.push_back(string_pool_offsets[global_row]);
         }
 
-        auto dest_size = data_type_size(dest_type_desc, OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+        auto dest_size = data_type_size(dest_type_desc);
         auto handler_data = std::any{};
         auto column_mapping = ColumnMapping(
                 source_type_desc,
@@ -143,7 +143,7 @@ TEST(ArrowRead, ColumnString) {
 
     // Verify applying the string handler sets the correct external buffers
     for (auto chunk = 0u; chunk < num_chunks; ++chunk) {
-        auto dest_size = data_type_size(type_desc, OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+        auto dest_size = data_type_size(type_desc);
         EXPECT_EQ(dest_size, 4); // We should be using 32-bit integer keys for arrow
 
         // We should have attached offsets and string buffers to the corresponding offsets.

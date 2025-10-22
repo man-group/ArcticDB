@@ -227,9 +227,6 @@ class Column {
 
     Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse);
 
-    Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse,
-           OutputFormat output_format, DataTypeMode mode);
-
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 
     friend bool operator==(const Column& left, const Column& right);

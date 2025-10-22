@@ -30,14 +30,12 @@ class SegmentInMemory {
 
     explicit SegmentInMemory(
             const StreamDescriptor& tsd, size_t expected_column_size = 0,
-            AllocationType presize = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-            OutputFormat output_format = OutputFormat::NATIVE, DataTypeMode mode = DataTypeMode::INTERNAL
+            AllocationType presize = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED
     );
 
     explicit SegmentInMemory(
             StreamDescriptor&& tsd, size_t expected_column_size = 0, AllocationType presize = AllocationType::DYNAMIC,
-            Sparsity allow_sparse = Sparsity::NOT_PERMITTED, OutputFormat output_format = OutputFormat::NATIVE,
-            DataTypeMode mode = DataTypeMode::INTERNAL
+            Sparsity allow_sparse = Sparsity::NOT_PERMITTED
     );
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept;
