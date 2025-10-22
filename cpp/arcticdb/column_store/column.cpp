@@ -69,26 +69,26 @@ std::size_t ExtraBufferIndexHash::operator()(const ExtraBufferIndex& index) cons
 ChunkedBuffer& ExtraBufferContainer::create_buffer(
         size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type
 ) {
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
     auto inserted = buffers_.try_emplace(ExtraBufferIndex{offset, type}, ChunkedBuffer{size, allocation_type});
     util::check(inserted.second, "Failed to insert additional chunked buffer at position {}", offset);
     return inserted.first->second;
 }
 
 void ExtraBufferContainer::set_buffer(size_t offset, ExtraBufferType type, ChunkedBuffer&& buffer) {
-    std::lock_guard lock(mutex_);
+    std::unique_lock lock(mutex_);
     buffers_.try_emplace(ExtraBufferIndex{offset, type}, std::move(buffer));
 }
 
 ChunkedBuffer& ExtraBufferContainer::get_buffer(size_t offset, ExtraBufferType type) const {
-    std::lock_guard lock(mutex_);
+    std::shared_lock lock(mutex_);
     auto it = buffers_.find(ExtraBufferIndex{offset, type});
     util::check(it != buffers_.end(), "Failed to find additional chunked buffer at position {}", offset);
     return const_cast<ChunkedBuffer&>(it->second);
 }
 
 bool ExtraBufferContainer::has_buffer(size_t offset, ExtraBufferType type) const {
-    std::lock_guard lock(mutex_);
+    std::shared_lock lock(mutex_);
     auto it = buffers_.find(ExtraBufferIndex{offset, type});
     return it != buffers_.end();
 }

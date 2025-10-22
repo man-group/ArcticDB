@@ -30,34 +30,41 @@ void InputFrame::set_segment(SegmentInMemory&& seg) {
         );
         seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         index = stream::TimeseriesIndex{std::string(seg.descriptor().field(0).name())};
+        seg.descriptor().set_sorted(SortedValue::ASCENDING);
     } else {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         index = stream::RowCountIndex{};
+        seg.descriptor().set_sorted(SortedValue::UNKNOWN);
     }
-    input_data = std::move(seg);
-    set_sorted(SortedValue::ASCENDING);
+    input_data.emplace<InputSegment>(std::move(seg));
 }
 
 void InputFrame::set_from_tensors(
         StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
         std::optional<entity::NativeTensor>&& index_tensor
 ) {
-    input_data = InputTensors{std::move(index_tensor), std::move(field_tensors), std::move(desc)};
+    input_data.emplace<InputTensors>(std::move(index_tensor), std::move(field_tensors), std::move(desc));
 }
 
 StreamDescriptor& InputFrame::desc() {
     if (has_tensors()) {
         return std::get<InputTensors>(input_data).desc;
     } else {
-        return std::get<SegmentInMemory>(input_data).descriptor();
+        return std::get<InputSegment>(input_data).seg.descriptor();
     }
 }
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
-void InputFrame::set_offset(ssize_t off) const { offset = off; }
+const StreamDescriptor& InputFrame::desc_for_tsd() {
+    if (has_segment()) {
+        return std::get<InputSegment>(input_data).desc_for_tsd;
+    } else {
+        return desc();
+    }
+}
 
-void InputFrame::set_sorted(SortedValue sorted) { desc().set_sorted(sorted); }
+void InputFrame::set_offset(ssize_t off) const { offset = off; }
 
 bool InputFrame::has_index() const { return desc().index().field_count() != 0ULL; }
 
@@ -67,10 +74,11 @@ timestamp InputFrame::index_value_at(size_t row) {
     util::check(has_index(), "InputFrame::index_value_at should only be called on timeseries data");
     return util::variant_match(
             input_data,
-            [row](SegmentInMemory& seg) {
+            [row](InputSegment& input_segment) {
+                const auto& seg = input_segment.seg;
                 util::check(
                         row < seg.row_count(),
-                        "Out of range row {} requsted in InputFrame::index_value_at with segment of length",
+                        "Out of range row {} requested in InputFrame::index_value_at with segment of length",
                         row,
                         seg.row_count()
                 );
@@ -110,7 +118,7 @@ void InputFrame::set_index_range() {
 
 void InputFrame::set_bucketize_dynamic(bool bucketize) { bucketize_dynamic = bucketize; }
 
-bool InputFrame::has_segment() const { return std::holds_alternative<SegmentInMemory>(input_data); }
+bool InputFrame::has_segment() const { return std::holds_alternative<InputSegment>(input_data); }
 
 bool InputFrame::has_tensors() const { return std::holds_alternative<InputTensors>(input_data); }
 
@@ -126,7 +134,7 @@ const std::vector<entity::NativeTensor>& InputFrame::field_tensors() const {
 
 const SegmentInMemory& InputFrame::segment() const {
     util::check(has_segment(), "InputFrame segment requested but holds InputTensors");
-    return std::get<SegmentInMemory>(input_data);
+    return std::get<InputSegment>(input_data).seg;
 }
 
 } // namespace arcticdb::pipelines

@@ -940,6 +940,10 @@ position_t SegmentInMemoryImpl::add_column(const Field& field, const std::shared
     return add_column(FieldRef{field.type(), field.name()}, column);
 }
 
+position_t SegmentInMemoryImpl::add_column(std::string_view name, const std::shared_ptr<Column>& column) {
+    return add_column(FieldRef{column->type(), name}, column);
+}
+
 void SegmentInMemoryImpl::change_schema(StreamDescriptor descriptor) {
     //util::check(vector_is_unique(descriptor.fields()), "Non-unique fields in descriptor: {}", descriptor.fields());
     init_column_map();

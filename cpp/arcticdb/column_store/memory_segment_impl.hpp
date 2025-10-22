@@ -415,6 +415,8 @@ class SegmentInMemoryImpl {
 
     position_t add_column(FieldRef field, size_t num_rows, AllocationType presize);
 
+    position_t add_column(std::string_view name, const std::shared_ptr<Column>& column);
+
     position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
 
     void change_schema(StreamDescriptor descriptor);

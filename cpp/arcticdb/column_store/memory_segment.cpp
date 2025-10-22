@@ -108,6 +108,10 @@ position_t SegmentInMemory::add_column(FieldRef field_ref, const std::shared_ptr
     return impl_->add_column(field_ref, column);
 }
 
+position_t SegmentInMemory::add_column(std::string_view name, const std::shared_ptr<Column>& column) {
+    return impl_->add_column(name, column);
+}
+
 position_t SegmentInMemory::add_column(FieldRef field_ref, size_t num_rows, AllocationType presize) {
     return impl_->add_column(field_ref, num_rows, presize);
 }
