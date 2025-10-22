@@ -62,18 +62,14 @@ inline sparrow::record_batch create_record_batch(const std::vector<std::pair<std
     return record_batch;
 }
 
+void allocate_chunked_column(Column& column, size_t num_rows, size_t chunk_size);
+
 template<typename RawType>
 void allocate_and_fill_chunked_column(
         Column& column, size_t num_rows, size_t chunk_size, std::optional<std::span<RawType>> values = std::nullopt
 ) {
     // Allocate column in chunks
-    for (size_t row = 0; row < num_rows; row += chunk_size) {
-        auto data_size = data_type_size(column.type());
-        auto current_block_size = std::min(chunk_size, num_rows - row);
-        auto bytes = current_block_size * data_size;
-        column.allocate_data(bytes);
-        column.advance_data(bytes);
-    }
+    allocate_chunked_column(column, num_rows, chunk_size);
 
     // Actually fill the data
     for (size_t row = 0; row < num_rows; ++row) {

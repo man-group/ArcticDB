@@ -88,7 +88,12 @@ class ChunkedBufferImpl {
             entity::AllocationType allocation_type, std::optional<size_t> extra_bytes_per_block = std::nullopt
     ) :
         allocation_type_(allocation_type),
-        extra_bytes_per_block_(extra_bytes_per_block) {}
+        extra_bytes_per_block_(extra_bytes_per_block) {
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE || !extra_bytes_per_block_.has_value(),
+                "Only detachable allocation type can be used with extra bytes"
+        );
+    }
 
     ChunkedBufferImpl(
             size_t size, entity::AllocationType allocation_type,
@@ -96,6 +101,10 @@ class ChunkedBufferImpl {
     ) :
         allocation_type_(allocation_type),
         extra_bytes_per_block_(extra_bytes_per_block) {
+        util::check(
+                allocation_type_ == entity::AllocationType::DETACHABLE || !extra_bytes_per_block_.has_value(),
+                "Only detachable allocation type can be used with extra bytes"
+        );
         if (allocation_type == entity::AllocationType::DETACHABLE) {
             add_detachable_block(size, 0UL);
             bytes_ = size;
@@ -124,6 +133,7 @@ class ChunkedBufferImpl {
         ChunkedBufferImpl output;
         output.bytes_ = bytes_;
         output.regular_sized_until_ = regular_sized_until_;
+        output.extra_bytes_per_block_ = extra_bytes_per_block_;
 
         for (auto block : blocks_) {
             output.add_block(block->capacity_, block->offset_);
@@ -233,7 +243,9 @@ class ChunkedBufferImpl {
                 add_block(std::max(DefaultBlockSize, extra_size), last_off);
             }
             res = last_block().end();
-            last_block().bytes_ = extra_size;
+            if (allocation_type_ != entity::AllocationType::DETACHABLE) {
+                last_block().bytes_ = extra_size;
+            }
         }
         bytes_ += extra_size;
         return res;
@@ -391,13 +403,15 @@ class ChunkedBufferImpl {
 
     // Returns a vector of continuous buffers, each designated by a pointer and size
     // Similar to `bytes_at` but will work if the requested range spans multiple continuous blocks.
+    // If buffer has extra_bytes_per_block, the extra bytes are NOT counted towards the required bytes
     std::vector<std::pair<uint8_t*, size_t>> byte_blocks_at(size_t pos_bytes, size_t required_bytes) {
         check_bytes(pos_bytes, required_bytes);
         std::vector<std::pair<uint8_t*, size_t>> result;
         auto [block, pos, block_index] = block_and_offset(pos_bytes);
         while (required_bytes > 0) {
             block = blocks_[block_index];
-            const auto size_to_write = std::min(required_bytes, block->bytes() - pos);
+            const auto size_to_write =
+                    std::min(required_bytes, block->bytes() - extra_bytes_per_block().value_or(0) - pos);
             result.push_back({block->data() + pos, size_to_write});
             required_bytes -= size_to_write;
             ++block_index;
@@ -458,6 +472,10 @@ class ChunkedBufferImpl {
 
     [[nodiscard]] bool empty() const { return bytes_ == 0; }
 
+    [[nodiscard]] entity::AllocationType allocation_type() const { return allocation_type_; }
+
+    [[nodiscard]] std::optional<size_t> extra_bytes_per_block() const { return extra_bytes_per_block_; }
+
     void clear() {
         bytes_ = 0;
         for (auto block : blocks_)
@@ -497,6 +515,8 @@ class ChunkedBufferImpl {
                 start_offset
         );
         util::check(blocks_.size() == 1, "Truncate single block expects buffer with only one block");
+        // If buffer has extra bytes per block we want to preserve this during truncation
+        end_offset += extra_bytes_per_block_.value_or(0);
         auto [block, offset, ts] = block_and_offset(start_offset);
         const auto removed_bytes = block->bytes() - (end_offset - start_offset);
         util::check(
@@ -506,8 +526,9 @@ class ChunkedBufferImpl {
                 block->bytes()
         );
         auto remaining_bytes = block->bytes() - removed_bytes;
-        if (remaining_bytes > 0) {
-            auto new_block = create_block(remaining_bytes, 0);
+        auto remaining_bytes_without_extra = remaining_bytes - extra_bytes_per_block_.value_or(0);
+        if (remaining_bytes_without_extra > 0) {
+            auto new_block = create_block(remaining_bytes_without_extra, 0);
             new_block->copy_from(block->data() + start_offset, remaining_bytes, 0);
             blocks_[0] = new_block;
         } else {
@@ -529,7 +550,8 @@ class ChunkedBufferImpl {
         // (i.e. bytes == block->bytes())
         util::check(bytes <= block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
         auto remaining_bytes = block->bytes() - bytes;
-        auto new_block = create_block(remaining_bytes, block->offset_);
+        auto remaining_bytes_without_extra = remaining_bytes - extra_bytes_per_block_.value_or(0);
+        auto new_block = create_block(remaining_bytes_without_extra, block->offset_);
         new_block->copy_from(block->data() + bytes, remaining_bytes, 0);
         blocks_[0] = new_block;
         block->abandon();
@@ -542,7 +564,8 @@ class ChunkedBufferImpl {
         util::check(block == *blocks_.rbegin(), "Truncate last block position {} not within last block", bytes);
         util::check(bytes < block->bytes(), "Can't truncate {} bytes from a {} byte block", bytes, block->bytes());
         auto remaining_bytes = block->bytes() - bytes;
-        auto new_block = create_block(remaining_bytes, block->offset_);
+        auto remaining_bytes_without_extra = remaining_bytes - extra_bytes_per_block_.value_or(0);
+        auto new_block = create_block(remaining_bytes_without_extra, block->offset_);
         new_block->copy_from(block->data(), remaining_bytes, 0);
         *blocks_.rbegin() = new_block;
         block->abandon();
@@ -565,7 +588,8 @@ class ChunkedBufferImpl {
 
     MemBlock* create_detachable_block(size_t capacity, size_t offset) const {
         auto [ptr, ts] = Allocator::aligned_alloc(sizeof(MemBlock));
-        // TODO: Comment on extra bytes
+        // When producing a string column for arrow with variable length format we need an extra value for the final
+        // offset. Thus, we add the extra bytes when allocating new detachable blocks.
         capacity += extra_bytes_per_block_.value_or(0);
         auto* data = allocate_detachable_memory(capacity);
         new (ptr) MemBlock(data, capacity, offset, ts, true);

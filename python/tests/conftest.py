@@ -83,7 +83,7 @@ from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
 import arcticdb.toolbox.query_stats as query_stats
-from arcticdb.options import OutputFormat
+from arcticdb.options import OutputFormat, ArrowOutputStringFormat
 from arcticdb.version_store._custom_normalizers import (
     register_normalizer,
     clear_registered_normalizers,
@@ -1083,6 +1083,11 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     params=[OutputFormat.PANDAS, pytest.param(OutputFormat.EXPERIMENTAL_ARROW, marks=PYARROW_POST_PROCESSING)]
 )
 def any_output_format(request) -> OutputFormat:
+    return request.param
+
+
+@pytest.fixture(params=list(ArrowOutputStringFormat))
+def any_arrow_string_format(request) -> ArrowOutputStringFormat:
     return request.param
 
 

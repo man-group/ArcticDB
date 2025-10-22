@@ -17,6 +17,8 @@ from arcticdb.util.test import random_strings_of_length
 
 from benchmarks.common import generate_pseudo_random_dataframe
 
+from python.arcticdb.options import ArrowOutputStringFormat
+
 
 class ArrowNumeric:
     number = 5
@@ -100,8 +102,8 @@ class ArrowStrings:
     connection_string = "lmdb://arrow_strings?map_size=20GB"
     lib_name_prewritten = "arrow_strings_prewritten"
     lib_name_fresh = "arrow_strings_fresh"
-    params = ([10_000, 1_000_000], [None, "middle"], [1, 100, 100_000])
-    param_names = ["rows", "date_range", "unique_string_count"]
+    params = ([10_000, 1_000_000], [None, "middle"], [1, 100, 100_000], list(ArrowOutputStringFormat))
+    param_names = ["rows", "date_range", "unique_string_count", "arrow_string_format"]
     num_cols = 10
 
     def symbol_name(self, num_rows: int, unique_strings: int):
@@ -127,7 +129,7 @@ class ArrowStrings:
 
     def _setup_cache(self):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
-        num_rows, date_ranges, unique_string_counts = self.params
+        num_rows, date_ranges, unique_string_counts, arrow_string_format = self.params
         self.ac.delete_library(self.lib_name_prewritten)
         self.ac.create_library(self.lib_name_prewritten)
         lib = self.ac.get_library(self.lib_name_prewritten)
@@ -161,18 +163,26 @@ class ArrowStrings:
         self.ac.delete_library(self.lib_name_fresh)
         return self.ac.create_library(self.lib_name_fresh)
 
-    def time_write(self, rows, date_range, unique_string_count):
-        # No point in running with and without date range
-        if date_range is None:
+    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
+        # No point in running with all read time options
+        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
 
-    def peakmem_write(self, rows, date_range, unique_string_count):
-        # No point in running with and without date range
-        if date_range is None:
+    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
+        # No point in running with all read time options
+        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
 
-    def time_read(self, rows, date_range, unique_string_count):
-        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)
+    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):
+        self.lib.read(
+            self.symbol_name(rows, unique_string_count),
+            date_range=self.date_range,
+            arrow_string_format_default=arrow_string_format,
+        )
 
-    def peakmem_read(self, rows, date_range, unique_string_count):
-        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)
+    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):
+        self.lib.read(
+            self.symbol_name(rows, unique_string_count),
+            date_range=self.date_range,
+            arrow_string_format_default=arrow_string_format,
+        )
