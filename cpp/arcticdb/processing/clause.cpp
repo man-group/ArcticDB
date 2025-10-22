@@ -1671,23 +1671,24 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
     if (entity_ids.empty()) {
         return {};
     }
-    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>>(*component_manager_, std::move(entity_ids));
-    const StreamDescriptor& stream_desc = ((*proc.segments_)[0])->descriptor();
-    if (stream_desc.index().type() == IndexDescriptor::Type::EMPTY) {
-        return {};
-    }
-    const stream::PartialKey& partial_key = create_partial_key(stream_desc, *((*proc.segments_)[0]));
-    std::vector<folly::Future<SliceAndKey>> data_segments_to_write;
+    const auto proc =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager_, std::move(entity_ids)
+            );
+
+    std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> data_segments_to_write;
     data_segments_to_write.reserve(proc.segments_->size());
-    ranges::transform(
-            *proc.segments_,
-            std::back_inserter(data_segments_to_write),
-            [&partial_key, this](const std::shared_ptr<SegmentInMemory>& segment) {
-                return store_->async_write(std::make_tuple(partial_key, *segment, FrameSlice{}), dedup_map_);
-            }
-    );
-    folly::collectAll(data_segments_to_write).get();
-    return entity_ids;
+
+    for (size_t i = 0; i < proc.segments_->size(); ++i) {
+        const SegmentInMemory& segment = *(*proc.segments_)[i];
+        const RowRange& row_range = *(*proc.row_ranges_)[i];
+        const ColRange& col_range = *(*proc.col_ranges_)[i];
+        stream::PartialKey partial_key = create_partial_key(segment.descriptor(), segment);
+        data_segments_to_write.push_back(std::make_shared<folly::Future<SliceAndKey>>(store_->async_write(
+                std::make_tuple(std::move(partial_key), segment, FrameSlice(col_range, row_range)), dedup_map_
+        )));
+    }
+    return component_manager_->add_entities(std::move(data_segments_to_write));
 }
 
 stream::PartialKey WriteClause::create_partial_key(const StreamDescriptor& stream_desc, const SegmentInMemory& segment)
