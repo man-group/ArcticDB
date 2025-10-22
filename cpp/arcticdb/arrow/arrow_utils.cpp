@@ -95,18 +95,61 @@ sparrow::dictionary_encoded_array<T> create_dict_array(
     }
 }
 
-// TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
+sparrow::u8_buffer<char> minimal_string_buffer() { return sparrow::u8_buffer<char>(nullptr, 0); }
+
+// TODO: This is super hacky. If our string column return type is dictionary encoded, and this should be
 //  consistent when there are zero rows or the validity bitmap is all zeros. But sparrow (or possibly Arrow) requires at
 //  least one key-value pair in the dictionary, even if there are zero rows
-sparrow::big_string_array minimal_strings_dict() {
-    std::unique_ptr<int64_t[]> offset_ptr(new int64_t[2]);
-    offset_ptr[0] = 0;
-    offset_ptr[1] = 1;
-    sparrow::u8_buffer<int64_t> offsets_buffer(offset_ptr.release(), 2);
-    std::unique_ptr<char[]> strings_ptr(new char[1]);
-    strings_ptr[0] = 'a';
-    sparrow::u8_buffer<char> strings_buffer(strings_ptr.release(), 1);
-    return {std::move(strings_buffer), std::move(offsets_buffer)};
+sparrow::big_string_array minimal_strings_for_dict() {
+    return sparrow::big_string_array(std::vector<std::string>{"a"});
+}
+
+template<typename OffsetType>
+sparrow::array minimal_strings_array() {
+    return sparrow::array(sparrow::string_array_impl<OffsetType>(std::vector<std::string>()));
+}
+
+template<typename TagType>
+sparrow::array string_array_from_block(
+        TypedBlockData<TagType>& block, const Column& column, std::string_view name,
+        std::optional<sparrow::validity_bitmap>&& maybe_bitmap
+) {
+    using DataTagType = typename TagType::DataTypeTag;
+    using RawType = typename DataTagType::raw_type;
+    // Arrow spec expects signed integers as offsets even though all of them are unsigned
+    using SignedType = std::make_signed_t<RawType>;
+    auto offset = block.offset();
+    auto block_size = block.row_count();
+    util::check(
+            block.mem_block()->bytes() == (block_size + 1) * sizeof(SignedType),
+            "Expected memory block for variable length strings to have size {} due to extra bytes but got a memory "
+            "block with size {}",
+            (block_size + 1) * sizeof(SignedType),
+            block.mem_block()->bytes()
+    );
+    sparrow::u8_buffer<SignedType> offset_buffer(reinterpret_cast<SignedType*>(block.release()), block_size + 1);
+    const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
+    auto strings_buffer = [&]() {
+        if (!has_string_buffer) {
+            return minimal_string_buffer();
+        }
+        auto& strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
+        const auto strings_buffer_size = strings.block(0)->bytes();
+        return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size);
+    }();
+    auto arr = [&]() {
+        if (maybe_bitmap.has_value()) {
+            return sparrow::array(sparrow::string_array_impl<SignedType>(
+                    std::move(strings_buffer), std::move(offset_buffer), std::move(maybe_bitmap.value())
+            ));
+        } else {
+            return sparrow::array(
+                    sparrow::string_array_impl<SignedType>(std::move(strings_buffer), std::move(offset_buffer))
+            );
+        }
+    }();
+    arr.set_name(name);
+    return arr;
 }
 
 template<typename TagType>
@@ -143,7 +186,7 @@ sparrow::array string_dict_from_block(
             );
             return {std::move(strings_buffer), std::move(offsets_buffer)};
         } else if (!has_offset_buffer && !has_string_buffer) {
-            return minimal_strings_dict();
+            return minimal_strings_for_dict();
         } else {
             util::raise_rte("Arrow output string creation expected either both or neither of OFFSET and STRING buffers "
                             "to be present");
@@ -180,20 +223,25 @@ sparrow::array arrow_array_from_block(
     return arr;
 }
 
-sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::string_view name) {
-    auto res = details::visit_scalar(type, [](auto&& tdt) {
+sparrow::array empty_arrow_array_for_column(const Column& column, std::string_view name) {
+    auto res = details::visit_scalar(column.type(), [&](auto&& tdt) {
         using TagType = std::decay_t<decltype(tdt)>;
         using DataTagType = typename TagType::DataTypeTag;
         using RawType = typename DataTagType::raw_type;
         std::optional<sparrow::validity_bitmap> validity_bitmap;
         if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-            sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
-            auto dict_values_array = minimal_strings_dict();
-            return sparrow::array{create_dict_array<int32_t>(
-                    sparrow::array{std::move(dict_values_array)},
-                    std::move(dict_keys_buffer),
-                    std::move(validity_bitmap)
-            )};
+            using SignedType = std::make_signed_t<RawType>;
+            if (column.data().buffer().extra_bytes_per_block().has_value()) {
+                return minimal_strings_array<SignedType>();
+            } else {
+                sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
+                auto dict_values_array = minimal_strings_for_dict();
+                return sparrow::array{create_dict_array<int32_t>(
+                        sparrow::array{std::move(dict_values_array)},
+                        std::move(dict_keys_buffer),
+                        std::move(validity_bitmap)
+                )};
+            }
         } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
             return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
         } else {
@@ -212,12 +260,16 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
         using TagType = std::decay_t<decltype(impl)>;
         if (column_data.num_blocks() == 0) {
             // For empty columns we want to return one empty array instead of no arrays.
-            vec.emplace_back(empty_arrow_array_from_type(column.type(), name));
+            vec.emplace_back(empty_arrow_array_for_column(column, name));
         }
         while (auto block = column_data.next<TagType>()) {
             auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-                vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                if (column_data.buffer().extra_bytes_per_block().has_value()) {
+                    vec.emplace_back(string_array_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                } else {
+                    vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                }
             } else {
                 vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
             }

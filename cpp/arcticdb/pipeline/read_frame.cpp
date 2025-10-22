@@ -931,42 +931,30 @@ struct ReduceColumnTask : async::BaseTask {
         }();
 
         if (dynamic_schema && column_data == slice_map_->columns_.end()) {
-            if (const std::shared_ptr<TypeHandler>& handler =
-                        get_type_handler(read_options_.output_format(), column.type());
-                handler) {
-                handler->default_initialize(
-                        column.buffer(),
-                        0,
-                        frame_.row_count() * data_type_size(column.type()),
-                        shared_data_,
-                        handler_data_
-                );
+            if (is_fixed_string_type(field_type)) {
+                // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
+                // where this column was not present in any of the read row-slices)
+                // All other column types are allocated in the output frame as detachable by default since we know
+                // we will be handing them off to Python to free. This is not the case for fixed-width string
+                // columns, since the buffer still contains string pool offsets at this point, and so will usually
+                // be swapped out with the inflated strings buffer. However, if there are no strings to inflate, we
+                // still need to make this buffer detachable and full of nulls of the correct length
+                auto buffer_size = frame_.row_count() * (field_type == DataType::UTF_FIXED64 ? 4 : 1);
+                ChunkedBuffer new_buffer(buffer_size, AllocationType::DETACHABLE);
+                memset(new_buffer.data(), 0, buffer_size);
+                auto& prev_buffer = column.buffer();
+                swap(prev_buffer, new_buffer);
             } else {
-                if (is_fixed_string_type(field_type)) {
-                    // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
-                    // where this column was not present in any of the read row-slices)
-                    // All other column types are allocated in the output frame as detachable by default since we know
-                    // we will be handing them off to Python to free. This is not the case for fixed-width string
-                    // columns, since the buffer still contains string pool offsets at this point, and so will usually
-                    // be swapped out with the inflated strings buffer. However, if there are no strings to inflate, we
-                    // still need to make this buffer detachable and full of nulls of the correct length
-                    auto buffer_size = frame_.row_count() * (field_type == DataType::UTF_FIXED64 ? 4 : 1);
-                    ChunkedBuffer new_buffer(buffer_size, AllocationType::DETACHABLE);
-                    memset(new_buffer.data(), 0, buffer_size);
-                    auto& prev_buffer = column.buffer();
-                    swap(prev_buffer, new_buffer);
-                } else {
-                    NullValueReducer null_reducer{
-                            column,
-                            context_,
-                            frame_,
-                            shared_data_,
-                            handler_data_,
-                            read_options_.output_format(),
-                            default_value
-                    };
-                    null_reducer.finalize();
-                }
+                NullValueReducer null_reducer{
+                        column,
+                        context_,
+                        frame_,
+                        shared_data_,
+                        handler_data_,
+                        read_options_.output_format(),
+                        default_value
+                };
+                null_reducer.finalize();
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if (dynamic_schema) {

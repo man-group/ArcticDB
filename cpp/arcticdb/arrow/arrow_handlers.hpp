@@ -34,6 +34,10 @@ struct ArrowStringHandler {
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
             std::any& handler_data
     ) const;
+
+    [[nodiscard]] ArrowOutputStringFormat output_string_format(
+            const std::string_view& column_name, const ReadOptions& read_options
+    ) const;
 };
 
 struct ArrowHandlerDataFactory : public TypeHandlerDataFactory {
@@ -46,9 +50,10 @@ inline void register_arrow_handler_data_factory() {
 
 inline void register_arrow_string_types() {
     using namespace arcticdb;
-    constexpr std::array<entity::DataType, 4> dynamic_string_data_types = {
+    constexpr std::array<entity::DataType, 5> dynamic_string_data_types = {
             entity::DataType::ASCII_DYNAMIC64,
             entity::DataType::UTF_DYNAMIC64,
+            entity::DataType::UTF_DYNAMIC32,
             entity::DataType::ASCII_FIXED64,
             entity::DataType::UTF_FIXED64
     };

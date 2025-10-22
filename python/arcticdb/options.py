@@ -12,7 +12,7 @@ from enum import Enum
 from arcticdb.dependencies import _PYARROW_AVAILABLE
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
-from arcticdb_ext.version_store import InternalOutputFormat
+from arcticdb_ext.version_store import InternalOutputFormat, InternalArrowOutputStringFormat
 
 
 DEFAULT_ENCODING_VERSION = EncodingVersion.V1
@@ -167,16 +167,40 @@ def output_format_to_internal(output_format: Union[OutputFormat, str]) -> Intern
         raise ValueError(f"Unknown OutputFormat: {output_format}")
 
 
+class ArrowOutputStringFormat(str, Enum):
+    CATEGORICAL = "CATEGORICAL"
+    LARGE_STRING = "LARGE_STRING"
+    SMALL_STRING = "SMALL_STRING"
+
+
+def arrow_output_string_format_to_internal(
+    arrow_string_format: ArrowOutputStringFormat,
+) -> InternalArrowOutputStringFormat:
+    if arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
+        return InternalArrowOutputStringFormat.CATEGORICAL
+    elif arrow_string_format == ArrowOutputStringFormat.LARGE_STRING:
+        return InternalArrowOutputStringFormat.LARGE_STRING
+    elif arrow_string_format == ArrowOutputStringFormat.SMALL_STRING:
+        return InternalArrowOutputStringFormat.SMALL_STRING
+    else:
+        raise ValueError(f"Unkown ArrowOutputStringFormat: {arrow_string_format}")
+
+
 class RuntimeOptions:
     def __init__(
         self,
         *,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
+        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING,
     ):
         self.output_format = output_format
+        self.arrow_string_format_default = arrow_string_format_default
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         self.output_format = output_format
+
+    def set_arrow_string_format_default(self, arrow_string_format_default: ArrowOutputStringFormat):
+        self.arrow_string_format_default = arrow_string_format_default
 
 
 class EnterpriseLibraryOptions:

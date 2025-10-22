@@ -241,6 +241,11 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .value("PANDAS", OutputFormat::PANDAS)
             .value("ARROW", OutputFormat::ARROW);
 
+    py::enum_<ArrowOutputStringFormat>(version, "InternalArrowOutputStringFormat")
+            .value("CATEGORICAL", ArrowOutputStringFormat::CATEGORICAL)
+            .value("LARGE_STRING", ArrowOutputStringFormat::LARGE_STRING)
+            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING);
+
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
             .def(py::init())
             .def("set_force_strings_to_object", &ReadOptions::set_force_strings_to_object)
@@ -251,6 +256,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
             .def("set_batch_throw_on_error", &ReadOptions::set_batch_throw_on_error)
             .def("set_output_format", &ReadOptions::set_output_format)
+            .def("set_arrow_output_default_string_format", &ReadOptions::set_arrow_output_default_string_format)
+            .def("set_arrow_output_per_column_string_format", &ReadOptions::set_arrow_output_per_column_string_format)
             .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
             .def_property_readonly("output_format", &ReadOptions::output_format);
 

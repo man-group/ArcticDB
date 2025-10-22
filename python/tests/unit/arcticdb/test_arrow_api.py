@@ -4,7 +4,7 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import LazyDataFrame, DataError, concat
-from arcticdb.options import OutputFormat
+from arcticdb.options import OutputFormat, ArrowOutputStringFormat
 from arcticdb.util.test import assert_frame_equal_with_arrow, sample_dataframe
 
 from arcticdb.version_store.library import ArcticUnsupportedDataTypeException, WritePayload, UpdatePayload
@@ -283,3 +283,44 @@ def test_stage(lmdb_library, allow_arrow_input):
     else:
         with pytest.raises(ArcticUnsupportedDataTypeException):
             lib.stage(sym, table_0, index_column="ts")
+
+
+arrow_string_formats = list(ArrowOutputStringFormat)
+arrow_string_formats_with_none = arrow_string_formats + [None]
+
+
+@pytest.mark.parametrize("arctic_str_format", arrow_string_formats)
+@pytest.mark.parametrize("library_str_format", arrow_string_formats_with_none)
+@pytest.mark.parametrize("read_str_format_default", arrow_string_formats_with_none)
+@pytest.mark.parametrize("read_str_format_per_column", arrow_string_formats_with_none)
+def test_read_arctic_strings(
+    lmdb_storage, lib_name, arctic_str_format, library_str_format, read_str_format_default, read_str_format_per_column
+):
+    ac = lmdb_storage.create_arctic(
+        output_format=OutputFormat.EXPERIMENTAL_ARROW, arrow_string_format_default=arctic_str_format
+    )
+    lib = ac.create_library(lib_name, arrow_string_format_default=library_str_format)
+    sym = "sym"
+    df = pd.DataFrame({"col": ["some", "strings", "in", "this", "column"]})
+    lib.write(sym, df)
+    arrow_string_format_per_column = {}
+    if read_str_format_per_column is not None:
+        arrow_string_format_per_column["col"] = read_str_format_per_column
+    result = lib.read(
+        sym,
+        arrow_string_format_default=read_str_format_default,
+        arrow_string_format_per_column=arrow_string_format_per_column,
+    ).data
+    expected_str_format = (
+        read_str_format_per_column
+        or read_str_format_default
+        or library_str_format
+        or arctic_str_format
+        or ArrowOutputStringFormat.LARGE_STRING
+    )
+    if expected_str_format == ArrowOutputStringFormat.CATEGORICAL:
+        assert pa.types.is_dictionary(result.column(0).type)
+    if expected_str_format == ArrowOutputStringFormat.LARGE_STRING:
+        assert pa.types.is_large_string(result.column(0).type)
+    if expected_str_format == ArrowOutputStringFormat.SMALL_STRING:
+        assert pa.types.is_string(result.column(0).type)
