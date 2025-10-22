@@ -189,18 +189,6 @@ jobs:
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
-      - name: Create TSAN suppressions file in build directory
-        if: inputs.job_type == 'cpp-tests' && matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
-        run: |
-          cat > ${{matrix.build_dir}}/tsan_suppressions.supp << 'EOF'
-          # Suppress data race reports in folly's CoreBase destructor (common false positive in futures/promises)
-          race:folly::futures::detail::CoreBase::~CoreBase
-          
-          # Suppress data race reports in std::__shared_count destructor (potential libstdc++ artifact)
-          race:std::__shared_count::~__shared_count
-          EOF
-          echo "TSAN_OPTIONS=suppressions=${{matrix.build_dir}}/tsan_suppressions.supp" >> $GITHUB_ENV
-
       - name: Compile C++ core library only
         if: inputs.job_type == 'cpp-tests'
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target arcticdb_core_static -j $CMAKE_BUILD_PARALLEL_LEVEL
