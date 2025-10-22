@@ -492,7 +492,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         _clauses.emplace_back(std::make_shared<Clause>(*clause));
                     });
                 }
-                self.add_clauses(_clauses);
+                self.add_clauses(std::move(_clauses));
             });
 
     py::enum_<OperationType>(version, "OperationType")
