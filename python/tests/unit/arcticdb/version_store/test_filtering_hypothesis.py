@@ -36,11 +36,16 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
+from arcticdb.util._versions import IS_NUMPY_ONE
 
 
 pytestmark = pytest.mark.pipeline
 
 
+@pytest.mark.skipif(
+    IS_NUMPY_ONE,
+    reason="numpy==1.x has bugs with comparing int64 and uint64 (e.g. here https://github.com/numpy/numpy/issues/12525)",
+)
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -330,6 +335,10 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
 ##################################
 
 
+@pytest.mark.skipif(
+    IS_NUMPY_ONE,
+    reason="numpy==1.x has bugs with comparing int64 and uint64 (e.g. here https://github.com/numpy/numpy/issues/12525)",
+)
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
