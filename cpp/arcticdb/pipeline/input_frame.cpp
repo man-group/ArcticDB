@@ -30,12 +30,13 @@ void InputFrame::set_segment(SegmentInMemory&& seg) {
         );
         seg.descriptor().set_index({IndexDescriptorImpl::Type::TIMESTAMP, 1});
         index = stream::TimeseriesIndex{std::string(seg.descriptor().field(0).name())};
+        seg.descriptor().set_sorted(SortedValue::ASCENDING);
     } else {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
         index = stream::RowCountIndex{};
+        seg.descriptor().set_sorted(SortedValue::UNKNOWN);
     }
     input_data.emplace<InputSegment>(std::move(seg));
-    set_sorted(SortedValue::ASCENDING);
 }
 
 void InputFrame::set_from_tensors(
@@ -55,26 +56,15 @@ StreamDescriptor& InputFrame::desc() {
 
 const StreamDescriptor& InputFrame::desc() const { return const_cast<InputFrame*>(this)->desc(); }
 
-const StreamDescriptor& InputFrame::tsd_desc() {
+const StreamDescriptor& InputFrame::desc_for_tsd() {
     if (has_segment()) {
-        auto& input_segment = std::get<InputSegment>(input_data);
-        std::call_once(input_segment.tsd_desc_flag, [this, &input_segment]() {
-            input_segment.opt_tsd_desc = desc().clone();
-            for (auto& field : input_segment.opt_tsd_desc->fields()) {
-                if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
-                    field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
-                }
-            }
-        });
-        return *input_segment.opt_tsd_desc;
+        return std::get<InputSegment>(input_data).desc_for_tsd;
     } else {
         return desc();
     }
 }
 
 void InputFrame::set_offset(ssize_t off) const { offset = off; }
-
-void InputFrame::set_sorted(SortedValue sorted) { desc().set_sorted(sorted); }
 
 bool InputFrame::has_index() const { return desc().index().field_count() != 0ULL; }
 
@@ -88,7 +78,7 @@ timestamp InputFrame::index_value_at(size_t row) {
                 const auto& seg = input_segment.seg;
                 util::check(
                         row < seg.row_count(),
-                        "Out of range row {} requsted in InputFrame::index_value_at with segment of length",
+                        "Out of range row {} requested in InputFrame::index_value_at with segment of length",
                         row,
                         seg.row_count()
                 );

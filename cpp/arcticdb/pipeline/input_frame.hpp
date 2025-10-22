@@ -39,9 +39,8 @@ struct InputFrame {
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow
     // at least if there are string columns, and potentially in other cases as more type support is added
-    const StreamDescriptor& tsd_desc();
+    const StreamDescriptor& desc_for_tsd();
     void set_offset(ssize_t off) const;
-    void set_sorted(SortedValue sorted);
     bool has_index() const;
     bool empty() const;
     timestamp index_value_at(size_t row);
@@ -70,9 +69,15 @@ struct InputFrame {
     };
     struct InputSegment {
         SegmentInMemory seg;
-        std::optional<StreamDescriptor> opt_tsd_desc;
-        std::once_flag tsd_desc_flag;
-        explicit InputSegment(SegmentInMemory&& segment) : seg(std::move(segment)) {}
+        StreamDescriptor desc_for_tsd;
+        explicit InputSegment(SegmentInMemory&& segment) : seg(std::move(segment)) {
+            desc_for_tsd = seg.descriptor().clone();
+            for (auto& field : desc_for_tsd.fields()) {
+                if (field.type().data_type() == DataType::UTF_DYNAMIC32) {
+                    field.mutable_type() = TypeDescriptor(DataType::UTF_DYNAMIC64, field.type().dimension());
+                }
+            }
+        }
     };
     std::variant<InputTensors, InputSegment> input_data;
 };

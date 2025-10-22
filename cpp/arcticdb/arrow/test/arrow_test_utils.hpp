@@ -32,16 +32,16 @@ sparrow::array create_array(const std::vector<T>& data) {
     } else { // Strings
         auto offsets_buffer = new int32_t[data.size() + 1];
         size_t idx{0};
-        offsets_buffer[idx++] = 0;
+        offsets_buffer[idx] = 0;
         auto strings_buffer_size =
                 std::accumulate(data.cbegin(), data.cend(), size_t(0), [](const size_t& accum, const std::string& str) {
                     return accum + str.size();
                 });
         auto strings_buffer = new char[strings_buffer_size];
         size_t str_idx{0};
-        ;
         for (const auto& str : data) {
-            offsets_buffer[idx++] = str.size();
+            offsets_buffer[idx + 1] = offsets_buffer[idx] + str.size();
+            ++idx;
             for (auto c : str) {
                 strings_buffer[str_idx++] = c;
             }
