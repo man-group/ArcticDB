@@ -560,7 +560,8 @@ VersionedItem update_impl(
 }
 
 folly::Future<ReadVersionOutput> read_multi_key(
-        const std::shared_ptr<Store>& store, const SegmentInMemory& index_key_seg, std::any& handler_data, AtomKey&& key
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
+        std::any& handler_data, AtomKey&& key
 ) {
     std::vector<AtomKey> keys;
     keys.reserve(index_key_seg.row_count());
@@ -572,7 +573,7 @@ folly::Future<ReadVersionOutput> read_multi_key(
     VersionedItem versioned_item{std::move(dup)};
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
 
-    return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
+    return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), read_options, handler_data)
             .thenValue([multi_key_desc = std::move(multi_key_desc),
                         keys = std::move(keys),
                         key = std::move(key)](ReadVersionOutput&& read_version_output) mutable {
@@ -2620,7 +2621,9 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         if (read_query) {
             check_can_be_filtered(pipeline_context, *read_query);
         }
-        return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
+        return read_multi_key(
+                store, read_options, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_)
+        );
     }
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
     DecodePathData shared_data;

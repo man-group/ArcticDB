@@ -117,7 +117,8 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
 ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 
 folly::Future<ReadVersionOutput> read_multi_key(
-        const std::shared_ptr<Store>& store, const SegmentInMemory& index_key_seg, std::any& handler_data
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
+        std::any& handler_data
 );
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(

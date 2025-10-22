@@ -127,6 +127,8 @@ class SegmentInMemory {
 
     position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
 
+    position_t add_column(std::string_view name, const std::shared_ptr<Column>& column);
+
     position_t add_column(FieldRef field_ref, size_t num_rows, AllocationType presize);
 
     [[nodiscard]] size_t num_blocks() const;

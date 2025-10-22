@@ -63,32 +63,83 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
     }
     for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
-        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset)));
+        seg.add_column(
+                frame.field(col_idx).name(),
+                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
-        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset)));
+        seg.add_column(
+                frame.field(col_idx).name(),
+                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
     return seg;
 }
 
-Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset) const {
+Column WriteToSegmentTask::slice_column(
+        const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
+) const {
     const auto& source_column = frame.column(col_idx);
-    const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
-    const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
+    const auto type_size = get_type_size(source_column.type().data_type());
+    const auto first_byte = (slice_.rows().first - offset) * type_size;
+    const auto bytes = ((slice_.rows().second - offset) * type_size) - first_byte;
     // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
-    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to multiples
-    // of the type size
-    auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
-    ChunkedBuffer chunked_buffer;
-    if (byte_blocks_at.size() == 1) {
-        // All required bytes lie within a single block, so we can avoid a copy by adding an external block
-        chunked_buffer.add_external_block(byte_blocks_at.front().first, bytes);
-    } else {
-        // Required bytes span multiple blocks, so we need to memcpy them into a single block for encoding
-        chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
+    // multiples of the type size
+    const auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
+    if (is_sequence_type(source_column.type().data_type())) {
+        const auto& block_offsets = source_column.data().buffer().block_offsets();
+        auto first_block_offset = source_column.data().buffer().block_and_offset(first_byte).block_index_;
+        auto block_offsets_it = block_offsets.cbegin() + first_block_offset;
+        Column res(
+                make_scalar_type(DataType::UTF_DYNAMIC64),
+                slice_.rows().diff(),
+                AllocationType::PRESIZED,
+                Sparsity::NOT_PERMITTED
+        );
+        res.set_row_data(slice_.rows().diff() - 1);
+        auto col_data = res.data();
+        // String columns use int64_t as the offsets
+        auto col_it = col_data.begin<ScalarTagType<DataTypeTag<DataType::INT64>>>();
+        details::visit_type(source_column.type().data_type(), [&](auto tag) {
+            using type_info = ScalarTypeInfo<decltype(tag)>;
+            using Rawtype = type_info::RawType;
+            // Already checked the data type above, this is just to reduce code generation
+            if constexpr (is_sequence_type(type_info::data_type)) {
+                for (const auto& offset_ptr_and_size : byte_blocks_at) {
+                    // The extra string buffer is always one block by construction, so use a raw pointer into it to
+                    // avoid block_and_offset calculations
+                    char* string_data = reinterpret_cast<char*>(
+                            source_column.get_extra_buffer(*block_offsets_it++, ExtraBufferType::STRING).data()
+                    );
+                    auto offset_ptr = reinterpret_cast<const Rawtype*>(offset_ptr_and_size.first);
+                    auto num_elements = offset_ptr_and_size.second / sizeof(Rawtype);
+                    for (size_t idx = 0; idx < num_elements; ++idx, ++offset_ptr) {
+                        auto strings_buffer_offset = *offset_ptr;
+                        // Note that in arrow_data_to_segment we omitted the last value from the offsets buffer to keep
+                        // our indexing into the chunked buffer accurate. So when idx == size - 1, (ptr + 1) is still
+                        // within the memory owned by the input Arrow structure
+                        auto string_length = *(offset_ptr + 1) - strings_buffer_offset;
+                        std::string_view str(&string_data[strings_buffer_offset], string_length);
+                        *col_it++ = string_pool.get(str).offset();
+                    }
+                }
+            }
+        });
+        return res;
+    } else { // Numeric and bool types
+        ChunkedBuffer chunked_buffer;
+        if (byte_blocks_at.size() == 1) {
+            // All required bytes lie within a single block, so we can avoid a copy by adding an external block
+            chunked_buffer.add_external_block(byte_blocks_at.front().first, bytes);
+        } else {
+            // Required bytes span multiple blocks, so we need to memcpy them into a single block for encoding
+            chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+        }
+        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
     }
-    return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
 }
 
 SegmentInMemory WriteToSegmentTask::slice_tensors() const {
