@@ -31,21 +31,22 @@ def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
 
+
 def cleanup_vcpkg_artifacts():
     cpp_dir = Path("cpp")
     if not cpp_dir.exists():
         return
-    
+
     vcpkg_dir = cpp_dir / "vcpkg"
     if not vcpkg_dir.exists():
         return
-    
+
     def safe_remove_directory(dir_path):
         # To handle Windows symbolic links
         if not dir_path.exists():
             print(f"Directory not found (skipping): {dir_path}")
             return
-        
+
         try:
             if os.path.islink(str(dir_path)):
                 target = os.readlink(str(dir_path))
@@ -53,10 +54,10 @@ def cleanup_vcpkg_artifacts():
                     target_path = Path(target)
                 else:
                     target_path = dir_path.parent / target
-                
+
                 os.unlink(str(dir_path))
                 print(f"Removed symbolic link: {dir_path}")
-                
+
                 if target_path.exists() and target_path.is_dir():
                     shutil.rmtree(str(target_path))
                     print(f"Removed target directory: {target_path}")
@@ -65,7 +66,7 @@ def cleanup_vcpkg_artifacts():
                 print(f"Removed: {dir_path}")
         except Exception as e:
             print(f"Warning: Could not remove {dir_path}: {e}")
-    
+
     safe_remove_directory(vcpkg_dir / "buildtrees")
     safe_remove_directory(vcpkg_dir / "downloads")
     safe_remove_directory(vcpkg_dir / "packages")
@@ -203,8 +204,12 @@ class CMakeBuild(build_ext):
         if vcpkg_installed_dir:
             cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 
+        # Add vcpkg debug options if environment variable is set
+        if os.getenv("VCPKG_FEATURE_FLAGS"):
+            cmd.append("-DVCPKG_INSTALL_OPTIONS=--debug;--debug-env")
+
         _log_and_run(*cmd, cwd="cpp")
-        
+
         cleanup_vcpkg_artifacts()
 
         search = f"cpp/out/{preset}-build"

@@ -66,6 +66,7 @@ jobs:
         CMAKE_C_COMPILER_LAUNCHER CMAKE_CXX_COMPILER_LAUNCHER CMAKE_BUILD_PARALLEL_LEVEL ARCTIC_CMAKE_PRESET
         ARCTICDB_BUILD_DIR TEST_OUTPUT_DIR ARCTICDB_VCPKG_INSTALLED_DIR ARCTICDB_VCPKG_PACKAGES_DIR
         SCCACHE_BUCKET SCCACHE_ENDPOINT AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY SCCACHE_REGION SCCACHE_S3_USE_SSL
+        VCPKG_FEATURE_FLAGS
       ARCTICDB_DEBUG_FIND_PYTHON: ${{vars.ARCTICDB_DEBUG_FIND_PYTHON}}
       python_impl_name: ${{inputs.python3 > 0 && format('cp3{0}', inputs.python3) || 'default'}}
       CIBW_BUILD: ${{format('cp3{0}-{1}', inputs.python3, matrix.cibw_build_suffix)}}
@@ -238,6 +239,23 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Debug compiler detection
+        if: inputs.job_type == 'build-python-wheels' && matrix.os == 'linux'
+        run: |
+          echo "=== Compiler detection debug ==="
+          which gcc || echo "gcc not found in PATH"
+          which g++ || echo "g++ not found in PATH"
+          which cc || echo "cc not found in PATH"
+          which c++ || echo "c++ not found in PATH"
+          echo "PATH=$PATH"
+          echo "CC=${CC:-not set}"
+          echo "CXX=${CXX:-not set}"
+          gcc --version || echo "gcc command failed"
+          g++ --version || echo "g++ command failed"
+          cmake --version
+          echo "CMAKE_C_COMPILER_LAUNCHER=${CMAKE_C_COMPILER_LAUNCHER:-not set}"
+          echo "CMAKE_CXX_COMPILER_LAUNCHER=${CMAKE_CXX_COMPILER_LAUNCHER:-not set}"
+
       - name: Build wheel
         if: inputs.job_type == 'build-python-wheels'
         run: |
@@ -248,6 +266,7 @@ jobs:
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
           CIBW_ARCHS_MACOS: "arm64"
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
+          VCPKG_FEATURE_FLAGS: manifests,binarycaching,registries
 
       - name: Store wheel artifact
         if: inputs.job_type == 'build-python-wheels'
