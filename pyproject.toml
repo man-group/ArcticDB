@@ -14,8 +14,13 @@ test-extras = "Testing"
 before-all = """
 [[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
     openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel libcurl-devel ninja-build ; }
-# Create symlink so cmake/vcpkg can find ninja
-ln -sf /usr/bin/ninja-build /usr/bin/ninja || true
+# Create symlink so cmake/vcpkg can find ninja as 'ninja' not just 'ninja-build'
+if [ ! -e /usr/bin/ninja ]; then
+  ln -s /usr/bin/ninja-build /usr/bin/ninja
+  echo "Created symlink /usr/bin/ninja -> /usr/bin/ninja-build"
+fi
+# Verify ninja is accessible
+which ninja && ninja --version || echo "WARNING: ninja not found after symlink creation"
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
@@ -29,7 +34,7 @@ cmake --version
 echo "VCPKG_FORCE_SYSTEM_BINARIES=${VCPKG_FORCE_SYSTEM_BINARIES:-not set}"
 ls -la /usr/bin/ninja* || true
 """
-environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:$LD_LIBRARY_PATH", CMAKE_MAKE_PROGRAM="/usr/bin/ninja-build", VCPKG_FORCE_SYSTEM_BINARIES="1"}
+environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:$LD_LIBRARY_PATH", CMAKE_MAKE_PROGRAM="/usr/bin/ninja", VCPKG_FORCE_SYSTEM_BINARIES="1", PATH="/usr/bin:$PATH"}
 build-verbosity = 3
 build = "cp*-manylinux_x86_64"
 manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
