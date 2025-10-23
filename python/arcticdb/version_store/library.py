@@ -1653,6 +1653,7 @@ class Library:
             ``finalize_staged_data`` function.
 
             - If set to True, all staged data for the specified symbol will be deleted if an exception occurs.
+               If ``stage_results`` is provided, only the provided ones will be deleted.
             - If set to False, the staged data will be retained and will be used in subsequent calls to
               ``finalize_staged_data``.
 
