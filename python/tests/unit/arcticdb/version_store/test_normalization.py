@@ -678,7 +678,6 @@ def test_series_read_column_names(lmdb_version_store, sym):
     lib = lmdb_version_store
     series = pd.Series(np.arange(366), name="test", index=pd.date_range("2020-01-01", "2020-12-31"))
     lib.write(sym, series)
-    raise Exception(lib.get_info(sym))
     assert_series_equal(series, lib.read(sym, columns=["test"]).data)
 
 
