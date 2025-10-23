@@ -30,7 +30,7 @@ elseif(CMAKE_HOST_SYSTEM_NAME STREQUAL "Linux")
         set(download_urls "https://github.com/ninja-build/ninja/releases/download/v${program_version}/ninja-linux.zip")
         set(tool_subdirectory "${program_version}-linux")
         set(paths_to_search "${DOWNLOADS}/tools/ninja-${program_version}-linux")
-        set(download_sha512 763464859c7ef2ea3a0a10f4df40d2025d3bb9438fcb1228404640410c0ec48d04148489ad5ac4c82fdeb6a8a8fd875f3a68e03b1a0f3137ee57e5398cb6f3e5)
+        set(download_sha512 93e802e9c17fb59636cddde4bad1ddaadad624f4ecfee00d5c78790330a4e9d433180e795718cda27da57215ce643c3929cf72c85337ee019d868c56f2deeef3)
     elseif(HOST_ARCH MATCHES "arm64|aarch64|ARM64|AARCH64")
         # No official aarch64 build for 1.10.2, fall back to system ninja
         if(DEFINED ENV{VCPKG_FORCE_SYSTEM_BINARIES})
