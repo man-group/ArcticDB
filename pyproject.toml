@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [tool.cibuildwheel]
 environment-pass = """ARCTIC_CMAKE_PRESET CMAKE_BUILD_PARALLEL_LEVEL\
     VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN\
-    VCPKG_FEATURE_FLAGS VCPKG_FORCE_SYSTEM_BINARIES"""
+    VCPKG_FEATURE_FLAGS"""
 build-frontend = "build"
 test-extras = "Testing"
 
@@ -13,28 +13,25 @@ test-extras = "Testing"
 # See also build_many_linux_image.sh
 before-all = """
 [[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
-    openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel libcurl-devel ninja-build ; }
-# Create symlink so cmake/vcpkg can find ninja as 'ninja' not just 'ninja-build'
-if [ ! -e /usr/bin/ninja ]; then
-  ln -s /usr/bin/ninja-build /usr/bin/ninja
-  echo "Created symlink /usr/bin/ninja -> /usr/bin/ninja-build"
-fi
-# Verify ninja is accessible
-which ninja && ninja --version || echo "WARNING: ninja not found after symlink creation"
+    openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel devtoolset-11-libstdc++-devel libcurl-devel ; }
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
 before-build = """
 echo "=== Build environment inside container ==="
-which gcc && gcc --version || echo "gcc not found"
-which g++ && g++ --version || echo "g++ not found"
-which ninja && ninja --version || echo "ninja not found"
-which ninja-build && ninja-build --version || echo "ninja-build not found"
+echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-not set}"
+gcc --version
 cmake --version
-echo "VCPKG_FORCE_SYSTEM_BINARIES=${VCPKG_FORCE_SYSTEM_BINARIES:-not set}"
-ls -la /usr/bin/ninja* || true
+echo "=== Checking for libstdc++.so.6 ==="
+ls -la /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so* || echo "ERROR: devtoolset-11 libstdc++ not found!"
+if [ -f /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so.6 ]; then
+  echo "Found devtoolset-11 libstdc++.so.6, checking versions:"
+  strings /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so.6 | grep -E "GLIBCXX_3.4.(2[01])|CXXABI_1.3.[89]"
+else
+  echo "ERROR: /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so.6 not found!"
+fi
 """
-environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:$LD_LIBRARY_PATH", CMAKE_MAKE_PROGRAM="/usr/bin/ninja", VCPKG_FORCE_SYSTEM_BINARIES="1", PATH="/usr/bin:$PATH"}
+environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst"}
 build-verbosity = 3
 build = "cp*-manylinux_x86_64"
 manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
