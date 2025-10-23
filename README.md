@@ -45,7 +45,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 
 ### Prebuilt binary availability
 
-|                       | PyPI (Python 3.8 - 3.13) | conda-forge (Python 3.9 - 3.13) |
+|                       | PyPI (Python 3.8 - 3.14) | conda-forge (Python 3.9 - 3.14) |
 | --------------------- | - | - |
 | Linux (Intel/AMD)     | ✔️ | ✔️ |
 | Windows (Intel/AMD)   | ✔️ | ➖ |
