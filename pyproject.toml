@@ -14,20 +14,20 @@ test-extras = "Testing"
 before-all = """
 [[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
     openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel libcurl-devel ninja-build ; }
+# Create symlink so cmake/vcpkg can find ninja
+ln -sf /usr/bin/ninja-build /usr/bin/ninja || true
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
 before-build = """
 echo "=== Build environment inside container ==="
-which gcc || echo "gcc not found"
-which g++ || echo "g++ not found"
-which ninja || echo "ninja not found"
-which ninja-build || echo "ninja-build not found"
-echo "VCPKG_FORCE_SYSTEM_BINARIES=${VCPKG_FORCE_SYSTEM_BINARIES:-not set}"
-gcc --version || echo "gcc failed"
-g++ --version || echo "g++ failed"
+which gcc && gcc --version || echo "gcc not found"
+which g++ && g++ --version || echo "g++ not found"
+which ninja && ninja --version || echo "ninja not found"
+which ninja-build && ninja-build --version || echo "ninja-build not found"
 cmake --version
-ninja --version 2>/dev/null || ninja-build --version 2>/dev/null || echo "No ninja version found"
+echo "VCPKG_FORCE_SYSTEM_BINARIES=${VCPKG_FORCE_SYSTEM_BINARIES:-not set}"
+ls -la /usr/bin/ninja* || true
 """
 environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:$LD_LIBRARY_PATH", CMAKE_MAKE_PROGRAM="/usr/bin/ninja-build", VCPKG_FORCE_SYSTEM_BINARIES="1"}
 build-verbosity = 3
