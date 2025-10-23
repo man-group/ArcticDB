@@ -83,7 +83,6 @@ def read_data(lib, sym, done, error):
     ),
 )
 @pytest.mark.parametrize("interval", [1, 10_000_000_000_000])
-@pytest.mark.skipif(True, reason="Test without this")
 def test_stress_version_map_compact(object_version_store, sym, interval):
     done = Value("b", 0)
     error = Value("b", 0)

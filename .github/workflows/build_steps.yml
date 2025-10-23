@@ -600,7 +600,7 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
-          PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
+          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 2 --dist worksteal' || inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)
