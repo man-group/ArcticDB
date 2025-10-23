@@ -681,6 +681,17 @@ def test_series_read_column_names(lmdb_version_store, sym):
     assert_series_equal(series, lib.read(sym, columns=["test"]).data)
 
 
+def test_series_read_column_empty(lmdb_library_static_dynamic, sym):
+    lib = lmdb_library_static_dynamic
+    series = pd.Series(np.arange(366), name="test", index=pd.date_range("2020-01-01", "2020-12-31"))
+    lib.write(sym, series)
+    res = lib.read(sym, columns=[]).data
+    assert res.empty
+    # This is not the case for series because pandas doesn't support series with index and no columns.
+    # To be addressed in #2728
+    # assert res.index.equals(pd.date_range("2020-01-01", "2020-12-31"))
+
+
 def test_columns_names_series(lmdb_version_store, sym):
     dr = pd.date_range("2020-01-01", "2020-12-31", name="date")
     date_series = pd.Series(dr, index=dr)
