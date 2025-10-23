@@ -18,20 +18,21 @@ before-all = """
 {project}/build_tooling/vcpkg_caching.sh
 """
 before-build = """
-echo "=== Compiler detection inside container ==="
+echo "=== Compiler and library detection inside container ==="
 which gcc || echo "gcc not found"
 which g++ || echo "g++ not found"
-which cc || echo "cc not found"
-which c++ || echo "c++ not found"
 echo "PATH=$PATH"
+echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-not set}"
 echo "CC=${CC:-not set}"
 echo "CXX=${CXX:-not set}"
 gcc --version || echo "gcc failed"
 g++ --version || echo "g++ failed"
 cmake --version
-env | grep -i compiler || true
-env | grep -i cmake || true
+echo "Checking libstdc++ versions available:"
+strings /lib64/libstdc++.so.6 | grep GLIBCXX || true
+strings /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so.6 | grep GLIBCXX | tail -5 || true
 """
+environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:$LD_LIBRARY_PATH"}
 build-verbosity = 3
 build = "cp*-manylinux_x86_64"
 manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
