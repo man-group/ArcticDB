@@ -13,7 +13,7 @@ test-extras = "Testing"
 # See also build_many_linux_image.sh
 before-all = """
 [[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
-    openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel libcurl-devel ; }
+    openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel libcurl-devel ninja-build ; }
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
@@ -21,6 +21,8 @@ before-build = """
 echo "=== Compiler and library detection inside container ==="
 which gcc || echo "gcc not found"
 which g++ || echo "g++ not found"
+which ninja || echo "ninja not found"
+which ninja-build || echo "ninja-build not found"
 echo "PATH=$PATH"
 echo "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-not set}"
 echo "CC=${CC:-not set}"
@@ -28,11 +30,20 @@ echo "CXX=${CXX:-not set}"
 gcc --version || echo "gcc failed"
 g++ --version || echo "g++ failed"
 cmake --version
-echo "Checking libstdc++ versions available:"
-strings /lib64/libstdc++.so.6 | grep GLIBCXX || true
-strings /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so.6 | grep GLIBCXX | tail -5 || true
+ninja --version 2>/dev/null || ninja-build --version 2>/dev/null || echo "No ninja version found"
+echo "Checking libstdc++ locations and versions:"
+ls -la /lib64/libstdc++.so* || true
+ls -la /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so* || true
+echo "System libstdc++ versions (last 5):"
+strings /lib64/libstdc++.so.6 | grep GLIBCXX | tail -5 || true
+echo "Devtoolset-11 libstdc++ versions (last 5):"
+if [ -f /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so.6 ]; then
+  strings /opt/rh/devtoolset-11/root/usr/lib64/libstdc++.so.6 | grep GLIBCXX | tail -5
+else
+  echo "Devtoolset-11 libstdc++.so.6 not found"
+fi
 """
-environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:$LD_LIBRARY_PATH"}
+environment = {LD_LIBRARY_PATH="/opt/rh/devtoolset-11/root/usr/lib64:/opt/rh/devtoolset-11/root/usr/lib:/opt/rh/devtoolset-11/root/usr/lib64/dyninst:$LD_LIBRARY_PATH", CMAKE_MAKE_PROGRAM="/usr/bin/ninja-build"}
 build-verbosity = 3
 build = "cp*-manylinux_x86_64"
 manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
