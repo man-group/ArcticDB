@@ -1089,32 +1089,26 @@ TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
     auto& frame1 = wrapper1.frame_;
     auto wrapper2 = get_test_simple_frame(stream_id, 15, 2);
     auto& frame2 = wrapper2.frame_;
-    version_store.append_incomplete_frame(stream_id, frame1, true);
-    version_store.append_incomplete_frame(stream_id, frame2, true);
-    const auto staged_key_frame1_and_2 = get_staged_keys();
-    ASSERT_EQ(staged_key_frame1_and_2.size(), 2);
+    auto staged_keys_1 =
+            version_store.write_parallel_frame(stream_id, frame1, true, false, std::nullopt).staged_segments;
+    auto staged_keys_2 =
+            version_store.write_parallel_frame(stream_id, frame2, true, false, std::nullopt).staged_segments;
+    ASSERT_EQ(staged_keys_1.size(), 1);
+    ASSERT_EQ(staged_keys_2.size(), 1);
 
     auto wrapper3 = get_test_simple_frame(stream_id, 15, 2);
     auto& frame3 = wrapper3.frame_;
-    version_store.append_incomplete_frame(stream_id, frame3, true);
+    auto staged_result_3 = version_store.write_parallel_frame(stream_id, frame3, true, false, std::nullopt);
+    const auto& staged_keys_3 = staged_result_3.staged_segments;
+    ASSERT_EQ(staged_keys_3.size(), 1);
 
     const auto staged_keys = get_staged_keys();
     ASSERT_EQ(staged_keys.size(), 3);
 
-    std::vector<AtomKey> staged_key_frame3;
-    for (auto& key : staged_keys) {
-        if (std::find(staged_key_frame1_and_2.begin(), staged_key_frame1_and_2.end(), key) ==
-            staged_key_frame1_and_2.end()) {
-            staged_key_frame3.emplace_back(key);
-        }
-    }
-    ASSERT_EQ(staged_key_frame3.size(), 1);
-
-    StageResult result{staged_key_frame3};
-    std::optional<std::vector<StageResult>> stage_results;
-    stage_results = std::make_optional(std::vector{std::move(result)});
+    auto stage_results = std::make_optional(std::vector{staged_result_3});
 
     CompactIncompleteParameters params;
+    params.via_iteration_ = true;
     params.delete_staged_data_on_failure_ = true;
     params.stage_results = stage_results;
     {
@@ -1122,16 +1116,20 @@ TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
     }
 
     // Doesn't touch the other keys when staged result is provided
-    ASSERT_EQ(get_staged_keys(), staged_key_frame1_and_2);
+    auto staged_keys_1_and_2 = std::unordered_set{staged_keys_1[0], staged_keys_2[0]};
+    ASSERT_EQ(get_staged_keys(), staged_keys_1_and_2);
 
     // Providing a non-existent key is fine
     {
         auto delete_tombstone_keys_on_exit = version_store::get_delete_keys_on_failure(pipeline_context, store, params);
     }
-    ASSERT_EQ(get_staged_keys(), staged_key_frame1_and_2);
+    ASSERT_EQ(get_staged_keys(), staged_keys_1_and_2);
 
     // Providing no stage result deletes everything
     params.stage_results = std::nullopt;
-    version_store::get_delete_keys_on_failure(pipeline_context, store, params);
-    ASSERT_EQ(get_staged_keys().size(), 0);
+    {
+        auto delete_tombstone_keys_on_exit = version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    }
+    auto staged_keys_final = get_staged_keys();
+    ASSERT_EQ(staged_keys_final.size(), 0);
 }
