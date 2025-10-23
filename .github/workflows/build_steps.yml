@@ -164,6 +164,8 @@ jobs:
 
       - name: Setup cmake
         uses: jwlawson/actions-setup-cmake@v2
+        with:
+          cmake-version: '3.30.1'  # Specify your desired version here
 
       - name: Use cmake
         run: cmake --version
