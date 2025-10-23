@@ -674,6 +674,14 @@ def test_roundtrip_index_name(lmdb_version_store_v1, name):
     assert_frame_equal(df, lib.read(sym).data)
 
 
+def test_series_read_column_names(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    series = pd.Series(np.arange(366), name="test", index=pd.date_range("2020-01-01", "2020-12-31"))
+    lib.write(sym, series)
+    raise Exception(lib.get_info(sym))
+    assert_series_equal(series, lib.read(sym, columns=["test"]).data)
+
+
 def test_columns_names_series(lmdb_version_store, sym):
     dr = pd.date_range("2020-01-01", "2020-12-31", name="date")
     date_series = pd.Series(dr, index=dr)
@@ -688,6 +696,19 @@ def test_columns_names_series_dynamic(lmdb_version_store_dynamic_schema, sym):
 
     lmdb_version_store_dynamic_schema.write(sym + "dynamic_schema", date_series)
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym + "dynamic_schema").data, date_series)
+
+
+@pytest.mark.parametrize("with_columns", [True, False])
+@pytest.mark.parametrize("index_names", [None, ["level_0", "level_1"], ["date", "value"]])
+def test_series_with_multiindex(lmdb_version_store, sym, index_names, with_columns):
+    lib = lmdb_version_store
+    dtidx = pd.date_range("2020-01-01", periods=10)
+    vals = np.arange(10, dtype=np.uint32)[::-1]
+    multiindex = pd.MultiIndex.from_arrays([dtidx, vals], names=index_names)
+    series = pd.Series(np.arange(10, dtype=np.float64), name="data", index=multiindex)
+    lib.write(sym, series)
+    result = lib.read(sym, columns=["data"] if with_columns else None).data
+    assert_series_equal(series, result)
 
 
 @pytest.mark.skipif(not IS_PANDAS_TWO, reason="pandas 2.0-specific test")
