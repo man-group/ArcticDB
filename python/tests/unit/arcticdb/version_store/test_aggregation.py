@@ -264,8 +264,11 @@ def test_group_empty_dataframe(lmdb_version_store_v1, any_output_format):
     df = DataFrame({"grouping_column": [], "to_mean": []})
     lib.write(symbol, df)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(SchemaException):
-        lib.read(symbol, query_builder=q)
+    received = lib.read(symbol, query_builder=q).data
+    assert not len(received)
+    assert received.index.name == "grouping_column"
+    assert len(received.columns) == 1
+    assert "to_mean" in received.columns
 
 
 def test_group_pickled_symbol(lmdb_version_store_v1, any_output_format):
@@ -521,8 +524,11 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1, any
     df = DataFrame({"grouping_column": [], "to_mean": []})
     lib.write(symbol, df)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(SchemaException):
-        lib.read(symbol, query_builder=q)
+    received = lib.read(symbol, query_builder=q).data
+    assert not len(received)
+    assert received.index.name == "grouping_column"
+    assert len(received.columns) == 1
+    assert "to_mean" in received.columns
 
 
 def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):

@@ -445,6 +445,30 @@ def test_querybuilder_date_range_then_groupby(
     assert_frame_equal(expected, received)
 
 
+def test_querybuilder_empty_date_range_then_groupby(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_empty_date_range_then_groupby"
+    df = pd.DataFrame(
+        {
+            "col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"],
+            "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4],
+        },
+        index=pd.date_range("2000-01-01", periods=10),
+    )
+    lib.write(symbol, df)
+
+    date_range = (pd.Timestamp("2000-01-04 12:00:00"), pd.Timestamp("2000-01-04 13:00:00"))
+
+    q = QueryBuilder().date_range(date_range).groupby("col1").agg({"col2": "sum"})
+
+    received = lib.read(symbol, query_builder=q).data
+    assert not len(received)
+    assert received.index.name == "col1"
+    assert len(received.columns) == 1
+    assert "col2" in received.columns
+
+
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
 def test_querybuilder_row_range(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
