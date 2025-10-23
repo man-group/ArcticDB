@@ -261,11 +261,14 @@ def test_group_empty_dataframe(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_empty_dataframe"
-    df = DataFrame({"grouping_column": [], "to_mean": []})
+    df = DataFrame({"grouping_column": [], "to_count": []})
     lib.write(symbol, df)
-    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(SchemaException):
-        lib.read(symbol, query_builder=q)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_count": "count"})
+    received = lib.read(symbol, query_builder=q).data
+    assert not len(received)
+    assert received.index.name == "grouping_column"
+    assert len(received.columns) == 1
+    assert "to_count" in received.columns
 
 
 def test_group_pickled_symbol(lmdb_version_store_v1, any_output_format):
@@ -518,11 +521,14 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1, any
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_empty_dataframe_dynamic"
-    df = DataFrame({"grouping_column": [], "to_mean": []})
+    df = DataFrame({"grouping_column": [], "to_count": []})
     lib.write(symbol, df)
-    q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
-    with pytest.raises(SchemaException):
-        lib.read(symbol, query_builder=q)
+    q = QueryBuilder().groupby("grouping_column").agg({"to_count": "count"})
+    received = lib.read(symbol, query_builder=q).data
+    assert not len(received)
+    assert received.index.name == "grouping_column"
+    assert len(received.columns) == 1
+    assert "to_count" in received.columns
 
 
 def test_group_pickled_symbol_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):

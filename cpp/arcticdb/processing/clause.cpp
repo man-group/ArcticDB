@@ -339,14 +339,6 @@ AggregationClause::AggregationClause(
 std::vector<std::vector<EntityId>> AggregationClause::structure_for_processing(
         std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
-            ranges::any_of(
-                    std::as_const(entity_ids_vec),
-                    [](const std::vector<EntityId>& entity_ids) { return !entity_ids.empty(); }
-            ),
-            "Grouping column {} does not exist or is empty",
-            grouping_column_
-    );
     // Some could be empty, so actual number may be lower
     auto max_num_buckets = ConfigsMap::instance()->get_int(
             "Partition.NumBuckets", async::TaskScheduler::instance()->cpu_thread_count()
