@@ -32,6 +32,7 @@ cmake --version
 env | grep -i compiler || true
 env | grep -i cmake || true
 """
+build-verbosity = 3
 build = "cp*-manylinux_x86_64"
 manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
 

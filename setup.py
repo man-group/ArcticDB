@@ -209,7 +209,7 @@ class CMakeBuild(build_ext):
         if os.getenv("VCPKG_FEATURE_FLAGS"):
             vcpkg_install_opts.extend(["--debug", "--debug-env"])
 
-        # Disable compiler tracking to avoid issues with CMAKE_C/CXX_COMPILER_LAUNCHER
+        # # Disable compiler tracking to avoid issues with CMAKE_C/CXX_COMPILER_LAUNCHER
         # vcpkg_install_opts.append("--feature-flags=-compilertracking")
 
         if vcpkg_install_opts:
@@ -217,26 +217,59 @@ class CMakeBuild(build_ext):
 
         try:
             _log_and_run(*cmd, cwd="cpp")
-        except subprocess.CalledProcessError as e:
-            print("\n" + "=" * 80)
-            print("CMAKE CONFIGURATION FAILED - Attempting to show vcpkg error logs")
-            print("=" * 80 + "\n")
+        except subprocess.CalledProcessError:
+            print("\n" + "=" * 80, flush=True)
+            print("CMAKE CONFIGURATION FAILED - Attempting to show vcpkg error logs", flush=True)
+            print("=" * 80 + "\n", flush=True)
 
             # Try to find and print vcpkg error logs
             vcpkg_log_patterns = [
+                "cpp/vcpkg/buildtrees/detect_compiler/*.log",
                 "cpp/vcpkg/buildtrees/detect_compiler/*-err.log",
                 "cpp/vcpkg/buildtrees/detect_compiler/*-out.log",
+                "cpp/vcpkg/buildtrees/detect_compiler/*-CMakeCache.txt.log",
                 "cpp/out/*/vcpkg-manifest-install.log",
+                "cpp/vcpkg/buildtrees/*/*.log",
             ]
+
+            print(f"Current working directory: {os.getcwd()}", flush=True)
+            print("Searching for vcpkg logs...", flush=True)
+
+            found_any = False
             for pattern in vcpkg_log_patterns:
-                for log_file in glob.glob(pattern):
-                    print(f"\n--- Contents of {log_file} ---")
-                    try:
-                        with open(log_file, "r") as f:
-                            print(f.read())
-                    except Exception as read_err:
-                        print(f"Could not read log file: {read_err}")
-                    print(f"--- End of {log_file} ---\n")
+                matches = glob.glob(pattern)
+                if matches:
+                    for log_file in matches:
+                        found_any = True
+                        print(f"\n{'=' * 80}", flush=True)
+                        print(f"Contents of {log_file}", flush=True)
+                        print(f"{'=' * 80}", flush=True)
+                        try:
+                            with open(log_file, "r") as f:
+                                content = f.read()
+                                print(content, flush=True)
+                        except Exception as read_err:
+                            print(f"Could not read log file: {read_err}", flush=True)
+                        print(f"{'=' * 80}\n", flush=True)
+
+            if not found_any:
+                print("No vcpkg log files found. Checking if directories exist:", flush=True)
+                check_dirs = [
+                    "cpp/vcpkg/buildtrees",
+                    "cpp/vcpkg/buildtrees/detect_compiler",
+                    "cpp/out",
+                ]
+                for dir_path in check_dirs:
+                    if os.path.exists(dir_path):
+                        print(f"  {dir_path} exists", flush=True)
+                        try:
+                            contents = os.listdir(dir_path)
+                            print(f"    Contents: {contents}", flush=True)
+                        except Exception as e:
+                            print(f"    Could not list: {e}", flush=True)
+                    else:
+                        print(f"  {dir_path} does NOT exist", flush=True)
+
             raise
 
         cleanup_vcpkg_artifacts()
