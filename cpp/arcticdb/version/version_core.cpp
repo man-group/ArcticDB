@@ -2715,7 +2715,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
 VersionedItem read_modify_write_impl(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& source_version_info,
-        [[maybe_unused]] std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
 ) {
@@ -2748,15 +2748,28 @@ VersionedItem read_modify_write_impl(
                 return folly::collect(std::move(write_segments_futures));
             })
             .thenValue([&](std::vector<SliceAndKey>&& slices) {
-                adjust_slice_ranges(slices);
                 ranges::sort(slices, [](const SliceAndKey& a, const SliceAndKey& b) {
-                    if (a.slice().col_range < b.slice().col_range) {
+                    if (a.slice().col_range.first < b.slice().col_range.first) {
                         return true;
-                    } else if (a.slice().col_range == b.slice().col_range) {
-                        return a.slice().row_range < b.slice().row_range;
+                    } else if (a.slice().col_range.first == b.slice().col_range.first) {
+                        return a.slice().row_range.first < b.slice().row_range.first;
                     }
                     return false;
                 });
+
+                size_t current_compacted_row = 0;
+                size_t previous_uncompacted_end = slices.empty() ? 0 : slices.front().slice().row_range.end();
+                for (SliceAndKey& slice : slices) {
+                    if (slice.slice().row_range.start() < previous_uncompacted_end) {
+                        current_compacted_row = 0;
+                    }
+                    previous_uncompacted_end = slice.slice().row_range.end();
+                    const size_t rows_in_slice = slice.slice().row_range.diff();
+                    slice.slice().row_range.first = current_compacted_row;
+                    slice.slice().row_range.second = current_compacted_row + rows_in_slice;
+                    current_compacted_row += rows_in_slice;
+                }
+
                 const size_t row_count =
                         slices.empty() ? 0 : slices.back().slice().row_range.second - slices[0].slice().row_range.first;
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
