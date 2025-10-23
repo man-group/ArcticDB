@@ -210,7 +210,7 @@ class CMakeBuild(build_ext):
             vcpkg_install_opts.extend(["--debug", "--debug-env"])
 
         # Disable compiler tracking to avoid issues with CMAKE_C/CXX_COMPILER_LAUNCHER
-        vcpkg_install_opts.append("--feature-flags=-compilertracking")
+        # vcpkg_install_opts.append("--feature-flags=-compilertracking")
 
         if vcpkg_install_opts:
             cmd.append(f"-DVCPKG_INSTALL_OPTIONS={';'.join(vcpkg_install_opts)}")
