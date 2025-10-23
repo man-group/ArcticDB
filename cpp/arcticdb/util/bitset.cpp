@@ -27,7 +27,8 @@ void packed_bits_to_buffer(const uint8_t* packed_bits, size_t num_bits, size_t o
     auto initial_bits = shift == 0 ? 0 : std::min(8 - shift, num_bits);
     if (initial_bits > 0) {
         uint8_t byte = *packed_bits++;
-        for (size_t bit = shift; bit < 8; ++bit) {
+
+        for (size_t bit = shift; bit < shift + initial_bits; ++bit) {
             *dest_ptr++ = (byte >> bit) & 1;
         }
     }

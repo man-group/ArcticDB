@@ -16,19 +16,23 @@ struct NumpyBufferHolder {
     TypeDescriptor type_{make_scalar_type(DataType::UNKNOWN)};
     uint8_t* ptr_{nullptr};
     size_t row_count_{0};
+    size_t allocated_bytes_{0};
 
-    NumpyBufferHolder(TypeDescriptor type, uint8_t* ptr, size_t row_count) :
+    NumpyBufferHolder(TypeDescriptor type, uint8_t* ptr, size_t row_count, size_t allocated_bytes) :
         type_(type),
         ptr_(ptr),
-        row_count_(row_count) {}
+        row_count_(row_count),
+        allocated_bytes_(allocated_bytes) {}
 
-    explicit NumpyBufferHolder(NumpyBufferHolder&& other) {
-        type_ = other.type_;
-        ptr_ = other.ptr_;
-        row_count_ = other.row_count_;
+    explicit NumpyBufferHolder(NumpyBufferHolder&& other) :
+        type_(other.type_),
+        ptr_(other.ptr_),
+        row_count_(other.row_count_),
+        allocated_bytes_(other.allocated_bytes_) {
         other.type_ = make_scalar_type(DataType::UNKNOWN);
         other.ptr_ = nullptr;
         other.row_count_ = 0;
+        other.allocated_bytes_ = 0;
     }
 
     ~NumpyBufferHolder() {
@@ -49,7 +53,7 @@ struct NumpyBufferHolder {
                 }
             }
             // See comment on allocate_detachable_memory declaration for why this cannot just be a call to delete[]
-            free_detachable_memory(ptr_, row_count_ * type_.get_type_bytes());
+            free_detachable_memory(ptr_, allocated_bytes_);
         }
     }
 };

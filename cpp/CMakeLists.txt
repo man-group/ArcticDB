@@ -30,7 +30,8 @@ option(ARCTICDB_COUNT_ALLOCATION "Override new and delete to count allocations."
 
 set(ARCTICDB_SANITIZER_FLAGS)
 if(${ARCTICDB_USING_ADDRESS_SANITIZER})
-    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=address;-shared-libasan")
+    # Note: -shared-libasan is not needed for sanitizers to work correctly.
+    list(APPEND ARCTICDB_SANITIZER_FLAGS "-fsanitize=address")
     link_libraries(atomic)
     message(STATUS "Building ArcticDB with Address Sanitizer")
 endif()

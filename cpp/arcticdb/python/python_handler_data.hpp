@@ -19,8 +19,9 @@ inline py::handle* create_py_nan() {
 struct PythonHandlerData {
     PythonHandlerData() :
         py_nan_(std::shared_ptr<py::handle>(create_py_nan(), [](py::handle* py_obj) {
-            util::check(PyGILState_Check() != 0, "Expected GIL to be held when deallocating Python nan");
-            py_obj->dec_ref();
+            PyGILState_STATE gstate = PyGILState_Ensure();
+            delete py_obj; // Calls ~handle(), which does dec_ref() with GIL held
+            PyGILState_Release(gstate);
         })) {}
 
     void increment_none_refcount(size_t increment) { none_refcount_->increment(increment); }

@@ -16,6 +16,7 @@ on:
       run_full_matrix_of_persistent_tests: {default: false, type: boolean, description: if true - persistent tests will run for all python versions else only for 12 }
       DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
       DEBUG_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
+      cmake_extra_args:  {default: "", type: string, required: false, description: 'Additional CMake arguments to pass during configuration'}
 jobs:
   compile:
     strategy:
@@ -25,6 +26,7 @@ jobs:
         cmake_preset_prefix: [0]
         cibw_build_suffix: [0]
         envs: [0]
+        cmake_extra_args: [0]
         build_dir: [0] # Must be an absolute path
         vcpkg_installed_dir: [0]
         vcpkg_packages_dir: [0]
@@ -135,6 +137,7 @@ jobs:
         run: |
           du -m /mnt/usr/local/lib/ | sort -n | tail -n 50
           nohup rm -rf /mnt/usr/local/lib/android &
+        continue-on-error: true
 
       - name: Find and remove ccache # See PR: #945
         if: matrix.os == 'windows'
@@ -167,6 +170,13 @@ jobs:
       - name: Use cmake
         run: cmake --version
 
+      - name: Install sanitizer runtime libraries
+        if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
+        run: |
+          yum install -y compiler-rt clang lld
+          ldconfig
+          find /usr -name "libclang_rt.asan*.so*" 2>/dev/null || echo "ASan library not found in standard locations"
+
       - name: CMake compile
         if: inputs.job_type != 'build-python-wheels'
         # We are pinning the version to 10.6 because >= 10.7, use node20 which is not supported in the container
@@ -174,31 +184,46 @@ jobs:
         with:
           cmakeListsTxtPath: ${{github.workspace}}/cpp/CMakeLists.txt
           configurePreset: ${{env.ARCTIC_CMAKE_PRESET}}
-          configurePresetAdditionalArgs: "['-DVCPKG_INSTALL_OPTIONS=--clean-after-build']"
+          configurePresetAdditionalArgs: "${{inputs.job_type == 'cpp-tests' && (matrix.cmake_extra_args != '' && format('[{0}, ''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'', ''-DTEST=ON'']', matrix.cmake_extra_args) || '[''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'', ''-DTEST=ON'']') || (matrix.cmake_extra_args != '' && format('[{0}, ''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'']', matrix.cmake_extra_args) || '[''-DVCPKG_INSTALL_OPTIONS=--clean-after-build'']')}}"
           buildPreset: ${{env.ARCTIC_CMAKE_PRESET}}
         env:
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
-      - name: Compile C++ tests
+      - name: Compile C++ core library only
         if: inputs.job_type == 'cpp-tests'
-        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target install
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target arcticdb_core_static -j $CMAKE_BUILD_PARALLEL_LEVEL
+
+      - name: Compile C++ rapidcheck tests
+        if: inputs.job_type == 'cpp-tests'
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target arcticdb_rapidcheck_tests -j $CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: C++ Rapidcheck
         if: inputs.job_type == 'cpp-tests'
-        run: cpp/out/install/arcticdb_rapidcheck_tests
+        run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_rapidcheck_tests
 
       - name: Collect arcticdb_rapidcheck_tests binary on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
           name: arcticdb_rapidcheck_tests_${{matrix.os}}
-          path: cpp/out/install/arcticdb_rapidcheck_tests*
+          path: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_rapidcheck_tests*
+
+      - name: Clean up rapidcheck test binaries only
+        if: inputs.job_type == 'cpp-tests'
+        run: |
+          # Only delete the test binary and object files, NOT CMake files or vcpkg installation
+          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_rapidcheck_tests
+          find cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/CMakeFiles -name "*rapidcheck*.o" -delete 2>/dev/null || true
+
+      - name: Compile C++ unit tests
+        if: inputs.job_type == 'cpp-tests'
+        run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target test_unit_arcticdb -j $CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: C++ unit tests
         if: inputs.job_type == 'cpp-tests'
         run: |
-          cd cpp/out
-          install/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
+          cd cpp/out/${ARCTIC_CMAKE_PRESET}-build
+          arcticdb/test_unit_arcticdb --gtest_output=json:test_unit_arcticdb.json \
             --gtest_filter=-TestNfsBackedStorage.*:TestS3Storage.* || true
           [[ $(jq '.tests' test_unit_arcticdb.json) -gt 0 ]]
           [[ $(jq '.failures' test_unit_arcticdb.json) -eq 0 ]]
@@ -211,18 +236,135 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test_unit_arcticdb_${{matrix.os}}
-          path: cpp/out/install/test_unit_arcticdb*
+          path: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/test_unit_arcticdb*
+
+      - name: Clean up unit test binaries only
+        if: inputs.job_type == 'cpp-tests'
+        run: |
+          # Only delete the test binary and output files, NOT CMake configuration files
+          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/test_unit_arcticdb
+          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/test_unit_arcticdb.json
+          find cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/CMakeFiles -name "*test_unit*.o" -delete 2>/dev/null || true
 
       # We don't do anything with the benchmarks automatically yet, but check that they at least compile and run.
       - name: Compile C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests'
+        if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
         run: cd cpp; cmake --build --preset $ARCTIC_CMAKE_PRESET --target benchmarks -j $CMAKE_BUILD_PARALLEL_LEVEL
 
       - name: Run C++ Benchmarks
-        if: inputs.job_type == 'cpp-tests'
+        if: inputs.job_type == 'cpp-tests' && env.ARCTICDB_USE_SANITIZER == ''
         # We set a benchmark_min_time=20x because running until a time limit is reached can take a lot of time on
         # benchmarks which pause the timer.
         run: cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks --benchmark_time_unit=ms --benchmark_min_time=20x
+
+      - name: Clean up benchmark binaries only
+        if: inputs.job_type == 'cpp-tests'
+        run: |
+          # Only delete the benchmark binary and object files, NOT CMake configuration files
+          rm -f cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/benchmarks
+          find cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/CMakeFiles -name "*benchmark*.o" -delete 2>/dev/null || true
+
+      # After CMake compile step
+      - name: Link built extension and install test dependencies
+        if: ${{ env.ARCTICDB_USE_SANITIZER != '' }}
+        run: |
+          # Symlink the built extension to the python directory
+          cd python
+          ln -sf ../cpp/out/${ARCTIC_CMAKE_PRESET}-build/arcticdb/arcticdb_ext.*.so .
+          cd ..
+          # Install test dependencies without rebuilding
+          ARCTIC_CMAKE_PRESET=skip pip install -e .[Testing]
+
+      - name: Run Pytest Sanitizers tests
+        if: ${{ env.ARCTICDB_USE_SANITIZER != '' }}
+        run: |
+          # Find and preload the appropriate sanitizer runtime library
+          SANITIZER_LIB=""
+          
+          # Check if address sanitizer is enabled (can be part of comma-separated list)
+          if [[ "$ARCTICDB_USE_SANITIZER" == *"address"* ]]; then
+            # Try multiple methods to find the ASan library
+            # Method 1: Check compiler-rt locations (including RedHat-style paths)
+            for path in /usr/lib/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.asan.so \
+                        /usr/lib64/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.asan.so \
+                        /usr/lib/clang/*/lib/linux/libclang_rt.asan-x86_64.so \
+                        /usr/lib64/clang/*/lib/linux/libclang_rt.asan-x86_64.so \
+                        /usr/lib/gcc/x86_64-redhat-linux/*/libasan.so \
+                        /usr/lib64/libasan.so* \
+                        /usr/lib/x86_64-linux-gnu/libasan.so*; do
+              if [[ -f "$path" ]]; then
+                SANITIZER_LIB="$path"
+                break
+              fi
+            done
+            
+            # Method 2: Use ldconfig if available
+            if [[ -z "$SANITIZER_LIB" ]]; then
+              SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.asan|libasan.so' | head -n1 | awk '{print $NF}')
+            fi
+            
+          # Check if thread sanitizer is enabled
+          elif [[ "$ARCTICDB_USE_SANITIZER" == *"thread"* ]]; then
+            # Try multiple methods to find the TSan library
+            for path in /usr/lib/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.tsan.so \
+                        /usr/lib64/clang/*/lib/x86_64-redhat-linux-gnu/libclang_rt.tsan.so \
+                        /usr/lib/clang/*/lib/linux/libclang_rt.tsan-x86_64.so \
+                        /usr/lib64/clang/*/lib/linux/libclang_rt.tsan-x86_64.so \
+                        /usr/lib/gcc/x86_64-redhat-linux/*/libtsan.so \
+                        /usr/lib64/libtsan.so* \
+                        /usr/lib/x86_64-linux-gnu/libtsan.so*; do
+              if [[ -f "$path" ]]; then
+                SANITIZER_LIB="$path"
+                break
+              fi
+            done
+            
+            # Method 2: Use ldconfig if available
+            if [[ -z "$SANITIZER_LIB" ]]; then
+              SANITIZER_LIB=$(ldconfig -p | grep -E 'libclang_rt.tsan|libtsan.so' | head -n1 | awk '{print $NF}')
+            fi
+          fi
+          
+          if [[ -z "$SANITIZER_LIB" ]]; then
+            echo "ERROR: Could not find sanitizer library for $ARCTICDB_USE_SANITIZER"
+            echo "Available libraries:"
+            find /usr -name "*san*.so*" 2>/dev/null || echo "No sanitizer libraries found"
+            exit 1
+          fi
+          
+          echo "Using sanitizer library: $SANITIZER_LIB"
+          
+          # Configure leak sanitizer suppressions
+          if [[ "$ARCTICDB_USE_SANITIZER" == *"address"* ]]; then
+            export LSAN_OPTIONS="suppressions=$(pwd)/lsan_suppressions.txt:print_suppressions=0"
+            echo "Leak Sanitizer suppressions enabled: $LSAN_OPTIONS"
+          fi
+          
+          # Run pytest with the sanitizer runtime preloaded
+          # Pytest may exit 1 if ANY leaks are detected, but we only care about arcticdb leaks
+          # Disable pipefail so pipeline exit code comes from filter, not pytest
+          set +e          # Don't exit on error
+          set +o pipefail # Don't fail on first error in pipeline
+          
+          LD_PRELOAD="$SANITIZER_LIB" pytest -s -v python/tests/sanitizers 2>&1 | python3 filter_sanitizer_leaks.py
+          FILTER_EXIT=$?
+          
+          set -e          # Re-enable exit on error
+          set -o pipefail # Re-enable pipefail
+          
+          # Exit with the filter's result (0 = no arcticdb leaks, 1 = arcticdb leaks found)
+          exit $FILTER_EXIT
+        env:
+          ARCTICDB_USE_SANITIZER: ${{env.ARCTICDB_USE_SANITIZER}}  
+
+      - name: Upload sanitizer output
+        if: always() && env.ARCTICDB_USE_SANITIZER != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: sanitizer-output-${{ matrix.os }}-${{ env.ARCTICDB_USE_SANITIZER }}
+          path: sanitizer_full_output.txt
+          retention-days: 30
+          if-no-files-found: warn
 
       # ========================= build-python-wheels (CIBW) steps =========================
       - name: Get CIBuildWheel image & metadata
@@ -263,11 +405,11 @@ jobs:
         run: |
           if [ ${{inputs.python3}} -gt 8 ]
           then
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
           else
-            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" \) -exec basename {} \; | tr '\n' ',' |
-              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts}"/' | tee -a $GITHUB_ENV
+            find python/tests/* -maxdepth 0 -type d -not \( -name "__pycache__" -o -name "util" -o -name "nonreg" -o -name "scripts" -o -name "compat" -o -name "sanitizers" \) -exec basename {} \; | tr '\n' ',' |
+              sed 's/^/test_dirs=["/ ; s/,$/"]/ ; s/,/","/g ; s/"hypothesis"/"{hypothesis,nonreg,scripts,sanitizers}"/' | tee -a $GITHUB_ENV
           fi
 
       # ========================= Common =========================
@@ -286,7 +428,7 @@ jobs:
         env:
           _exclusion: "\n!${{matrix.build_dir}}/**/"
         with:
-          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}
+          name: build-metadata-${{inputs.job_type}}-${{matrix.os}}-${{env.python_impl_name}}-${{env.ARCTICDB_USE_SANITIZER || ''}}
           retention-days: ${{inputs.job_type == 'cpp-tests' && 7 || 90}}
           # On Windows, exclusions like "!**/*.ext" are prefixed with a drive letter (D:\) of the current working dir
           # before matching. This breaks since we moved the build_dir to C:. Work around by templating exclusions:
@@ -458,7 +600,7 @@ jobs:
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
           HYPOTHESIS_PROFILE: ci_${{matrix.os}}
-          PYTEST_XDIST_MODE: ${{inputs.pytest_xdist_mode}}
+          PYTEST_XDIST_MODE: ${{matrix.type == 'stress' && '-n 2 --dist worksteal' || inputs.pytest_xdist_mode}}
           ARCTICDB_PYTEST_ARGS: ${{inputs.pytest_args}}
           STORAGE_TYPE: ${{ env.real_tests_storage_type }}
           # Testing with 0(no version cache) and -1(will use default timeout)

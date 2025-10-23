@@ -65,8 +65,10 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
         auto column_data = frame.column(col_pos).data();
         const auto& buffer = column_data.buffer();
         util::check(buffer.num_blocks() == 1, "Expected 1 block when creating ndarray, got {}", buffer.num_blocks());
-        uint8_t* ptr = buffer.blocks().at(0)->release();
-        NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, frame.row_count());
+        auto* block = buffer.blocks().at(0);
+        size_t allocated_bytes = block->bytes();
+        uint8_t* ptr = block->release();
+        NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, frame.row_count(), allocated_bytes);
         auto base_obj = pybind11::cast(std::move(numpy_buffer_holder));
         std::string dtype;
         ssize_t esize = get_type_size(data_type);

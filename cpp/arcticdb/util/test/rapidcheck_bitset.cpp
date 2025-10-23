@@ -37,6 +37,6 @@ RC_GTEST_PROP(BitSet, PackedBitsToBuffer, (const std::vector<bool>& input)) {
     packed_bits_to_buffer(packed_bits.data(), num_bits, offset, dest.data());
 
     for (size_t idx = 0; idx < num_bits; ++idx) {
-        RC_ASSERT(*reinterpret_cast<bool*>(&dest.data()[idx]) == input.at(idx + offset));
+        RC_ASSERT(dest[idx] == (input.at(idx + offset) ? 1u : 0u));
     }
 }
