@@ -2757,7 +2757,8 @@ VersionedItem read_modify_write_impl(
                     }
                     return false;
                 });
-                const size_t row_count = slices.back().slice().row_range.second - slices[0].slice().row_range.first;
+                const size_t row_count =
+                        slices.empty() ? 0 : slices.back().slice().row_range.second - slices[0].slice().row_range.first;
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(
                         row_count,
                         pipeline_context->descriptor(),

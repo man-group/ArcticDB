@@ -746,15 +746,31 @@ DYNAMIC_STRINGS_SUFFIX = "dynamic_strings"
 FIXED_STRINGS_SUFFIX = "fixed_strings"
 
 
+def read_modify_write_data(lib, symbol, query):
+    dest_symbol = f"{symbol}_modified"
+    lib._read_modify_write(symbol, query, dest_symbol)
+    return lib.read(dest_symbol).data
+
+
+def get_query_processing_functions(lib, symbol, arctic_query):
+    test_read_modify_write = os.getenv("ARCTICDB_TEST_READ_MODIFY_WRITE", "0") == "1"
+    processing_functions = [lambda: lib.read(symbol, query_builder=arctic_query).data]
+    if test_read_modify_write:
+        processing_functions.append(lambda: read_modify_write_data(lib, symbol, arctic_query))
+    return processing_functions
+
+
 def generic_filter_test(lib, symbol, arctic_query, expected):
-    received = lib.read(symbol, query_builder=arctic_query).data
-    if not np.array_equal(expected, received):
-        original_df = lib.read(symbol).data
-        print(
-            f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
-            f"""\nPandas result:\n{expected}\nArcticDB result:\n{received}"""
-        )
-        assert False
+    query_processing_functions = get_query_processing_functions(lib, symbol, arctic_query)
+    for processing in query_processing_functions:
+        received = processing()
+        if not np.array_equal(expected, received):
+            original_df = lib.read(symbol).data
+            print(
+                f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
+                f"""\nPandas result:\n{expected}\nArcticDB result:\n{received}"""
+            )
+            assert False
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
