@@ -22,6 +22,10 @@ on:
         description: Specify regular expression for specific tests to be executed
         type: string
         default: ''
+      run_sanitizers:
+        description: Run C++ tests with sanitizers enabled
+        type: boolean
+        default: false
   
 
   schedule: # Schedule the job to run at 12 a.m. daily
@@ -208,6 +212,28 @@ jobs:
         if: always()
         run: du -m . | sort -n | tail -n 50 || true; df -h
         continue-on-error: true
+
+  # ========================= Sanitizers ========================
+  sanitizer-address-leak-undefined:
+    name: Tests with ASan+LSan+UBSan
+    uses: ./.github/workflows/build_steps.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: cpp-tests
+      cmake_preset_type: debug
+      matrix: '[{"os": "linux", "distro": "ubuntu-22.04", "container": {"image": "ghcr.io/man-group/arcticdb-dev-clang:latest"}, "cmake_preset_prefix": "linux", "cibw_build_suffix": "manylinux_x86_64", "build_dir": "/tmp/cpp_build_asan", "vcpkg_installed_dir": "/tmp/vcpkg_installed_asan", "vcpkg_packages_dir": "/tmp/vcpkg_packages_asan", "symbols": "*.pdb", "do_not_archive": ["*.o", "*.obj", "*.a", "*.lib"], "test_services": {}, "cmake_extra_args": "''-DARCTICDB_USING_ADDRESS_SANITIZER=ON'', ''-DARCTICDB_USING_UB_SANITIZER=ON''", "envs": "ARCTICDB_USE_SANITIZER=address,leak,undefined"}]'
+
+  # Temporarily disabled due to too many issues that need to suppressed
+  # sanitizer-thread:
+  #   name: Tests with TSan
+  #   uses: ./.github/workflows/build_steps.yml
+  #   secrets: inherit
+  #   permissions: {packages: write}
+  #   with:
+  #     job_type: cpp-tests
+  #     cmake_preset_type: debug
+  #     matrix: '[{"os": "linux", "distro": "ubuntu-22.04", "container": {"image": "ghcr.io/man-group/arcticdb-dev-clang:latest"}, "cmake_preset_prefix": "linux", "cibw_build_suffix": "manylinux_x86_64", "build_dir": "/tmp/cpp_build_tsan", "vcpkg_installed_dir": "/tmp/vcpkg_installed_tsan", "vcpkg_packages_dir": "/tmp/vcpkg_packages_tsan", "symbols": "*.pdb", "do_not_archive": ["*.o", "*.obj", "*.a", "*.lib"], "test_services": {}, "cmake_extra_args": "''-DARCTICDB_USING_THREAD_SANITIZER=ON''", "envs": "ARCTICDB_USE_SANITIZER=thread"}]'
 
   # code_coverage:
   #   runs-on: "ubuntu-22.04"
