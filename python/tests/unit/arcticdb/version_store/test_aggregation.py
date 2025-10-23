@@ -261,7 +261,7 @@ def test_group_empty_dataframe(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_empty_dataframe"
-    df = DataFrame({"grouping_column": [], "to_mean": []})
+    df = DataFrame({"grouping_column": [], "to_mean": np.array([], dtype=np.float64)})
     lib.write(symbol, df)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
     received = lib.read(symbol, query_builder=q).data
@@ -521,7 +521,7 @@ def test_group_empty_dataframe_dynamic(lmdb_version_store_dynamic_schema_v1, any
     lib = lmdb_version_store_dynamic_schema_v1
     lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_group_empty_dataframe_dynamic"
-    df = DataFrame({"grouping_column": [], "to_mean": []})
+    df = DataFrame({"grouping_column": [], "to_mean": np.array([], dtype=np.float64)})
     lib.write(symbol, df)
     q = QueryBuilder().groupby("grouping_column").agg({"to_mean": "mean"})
     received = lib.read(symbol, query_builder=q).data
