@@ -15,8 +15,8 @@ before-all = """
 [[ -e /etc/arcticdb_deps_installed ]] || { yum update -y && yum install -y zip \
     openssl-devel cyrus-sasl-devel devtoolset-11 devtoolset-11-libatomic-devel libcurl-devel ; }
 # Override vcpkg ninja to use older version (1.10.2) compatible with GLIBCXX_3.4.19
-cp {project}/cpp/third_party/vcpkg_overlays/ninja/vcpkg_find_acquire_program\(NINJA\).cmake \
-   {project}/cpp/vcpkg/scripts/cmake/vcpkg_find_acquire_program\(NINJA\).cmake
+cp '{project}/cpp/third_party/vcpkg_overlays/ninja/vcpkg_find_acquire_program(NINJA).cmake' \
+   '{project}/cpp/vcpkg/scripts/cmake/vcpkg_find_acquire_program(NINJA).cmake'
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
@@ -25,7 +25,7 @@ echo "=== Build environment inside container ==="
 gcc --version
 cmake --version
 echo "=== Verifying ninja override ==="
-if grep -q "1.10.2" {project}/cpp/vcpkg/scripts/cmake/vcpkg_find_acquire_program\(NINJA\).cmake; then
+if grep -q "1.10.2" '{project}/cpp/vcpkg/scripts/cmake/vcpkg_find_acquire_program(NINJA).cmake'; then
   echo "SUCCESS: Ninja override applied - will use v1.10.2"
 else
   echo "WARNING: Ninja override may not be applied"
