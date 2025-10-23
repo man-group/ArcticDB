@@ -205,10 +205,39 @@ class CMakeBuild(build_ext):
             cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 
         # Add vcpkg debug options if environment variable is set
+        vcpkg_install_opts = []
         if os.getenv("VCPKG_FEATURE_FLAGS"):
-            cmd.append("-DVCPKG_INSTALL_OPTIONS=--debug;--debug-env")
+            vcpkg_install_opts.extend(["--debug", "--debug-env"])
 
-        _log_and_run(*cmd, cwd="cpp")
+        # Disable compiler tracking to avoid issues with CMAKE_C/CXX_COMPILER_LAUNCHER
+        vcpkg_install_opts.append("--feature-flags=-compilertracking")
+
+        if vcpkg_install_opts:
+            cmd.append(f"-DVCPKG_INSTALL_OPTIONS={';'.join(vcpkg_install_opts)}")
+
+        try:
+            _log_and_run(*cmd, cwd="cpp")
+        except subprocess.CalledProcessError as e:
+            print("\n" + "=" * 80)
+            print("CMAKE CONFIGURATION FAILED - Attempting to show vcpkg error logs")
+            print("=" * 80 + "\n")
+
+            # Try to find and print vcpkg error logs
+            vcpkg_log_patterns = [
+                "cpp/vcpkg/buildtrees/detect_compiler/*-err.log",
+                "cpp/vcpkg/buildtrees/detect_compiler/*-out.log",
+                "cpp/out/*/vcpkg-manifest-install.log",
+            ]
+            for pattern in vcpkg_log_patterns:
+                for log_file in glob.glob(pattern):
+                    print(f"\n--- Contents of {log_file} ---")
+                    try:
+                        with open(log_file, "r") as f:
+                            print(f.read())
+                    except Exception as read_err:
+                        print(f"Could not read log file: {read_err}")
+                    print(f"--- End of {log_file} ---\n")
+            raise
 
         cleanup_vcpkg_artifacts()
 

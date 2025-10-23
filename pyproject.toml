@@ -17,7 +17,21 @@ before-all = """
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
-before-build = "env"
+before-build = """
+echo "=== Compiler detection inside container ==="
+which gcc || echo "gcc not found"
+which g++ || echo "g++ not found"
+which cc || echo "cc not found"
+which c++ || echo "c++ not found"
+echo "PATH=$PATH"
+echo "CC=${CC:-not set}"
+echo "CXX=${CXX:-not set}"
+gcc --version || echo "gcc failed"
+g++ --version || echo "g++ failed"
+cmake --version
+env | grep -i compiler || true
+env | grep -i cmake || true
+"""
 build = "cp*-manylinux_x86_64"
 manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
 
