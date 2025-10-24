@@ -1084,10 +1084,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     [](PythonVersionStore& v,
                        const std::optional<StreamId>& s_id,
                        const std::optional<SnapshotId>& snap_id,
-                       const std::optional<bool>& latest,
-                       const std::optional<bool>& skip_snapshots) {
-                        return v.list_versions(s_id, snap_id, latest, skip_snapshots);
-                    },
+                       bool latest_only,
+                       bool skip_snapshots) { return v.list_versions(s_id, snap_id, latest_only, skip_snapshots); },
                     py::call_guard<SingleThreadMutexHolder>(),
                     "List all the version ids for this store."
             )

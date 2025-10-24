@@ -382,22 +382,32 @@ std::vector<AtomKey> get_versions_from_segment(const SegmentInMemory& snapshot_s
     return res;
 }
 
-std::vector<AtomKey> get_versions_from_snapshot(const std::shared_ptr<Store>& store, const VariantKey& vk) {
-
-    auto snapshot_segment = store->read_sync(vk).second;
-    return get_versions_from_segment(snapshot_segment);
-}
-
 SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store) {
     ARCTICDB_SAMPLE(GetVersionsFromSnapshot, 0)
-    SnapshotMap res;
-
-    iterate_snapshots(store, [&res, &store](const VariantKey& vk) {
-        SnapshotId snapshot_id{fmt::format("{}", variant_key_id(vk))};
-        res[snapshot_id] = get_versions_from_snapshot(store, vk);
+    SnapshotMap snapshot_map;
+    std::vector<VariantKey> snapshot_keys;
+    iterate_snapshots(store, [&snapshot_map, &snapshot_keys](auto&& snapshot_key) {
+        SnapshotId snapshot_id{fmt::format("{}", variant_key_id(snapshot_key))};
+        snapshot_map.emplace(std::move(snapshot_id), std::vector<AtomKey>{});
+        snapshot_keys.emplace_back(std::move(snapshot_key));
     });
-
-    return res;
+    const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+    auto futures = folly::window(
+            std::move(snapshot_keys),
+            [store, &snapshot_map](const VariantKey& snapshot_key) {
+                return store->read(snapshot_key).thenValueInline([&snapshot_map](auto&& key_seg) {
+                    auto snapshot_key = std::move(key_seg.first);
+                    auto snapshot_segment = std::move(key_seg.second);
+                    SnapshotId snapshot_id{fmt::format("{}", variant_key_id(snapshot_key))};
+                    snapshot_map[snapshot_id] = get_versions_from_segment(snapshot_segment);
+                    return folly::Unit{};
+                });
+            },
+            window_size
+    );
+    // Need collectAll in case snapshot keys were deleted since the listing operation
+    folly::collectAll(futures).get();
+    return snapshot_map;
 }
 
 MasterSnapshotMap get_master_snapshots_map(
