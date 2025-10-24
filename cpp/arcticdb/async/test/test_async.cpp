@@ -91,20 +91,10 @@ TEST(Async, DeDupTest) {
     aa::AsyncStore store(lib, *codec_opt, EncodingVersion::V2);
     auto seg = SegmentInMemory();
 
-    std::vector<std::pair<ast::StreamSink::PartialKey, SegmentInMemory>> key_segments;
+    std::vector<std::pair<PartialKey, SegmentInMemory>> key_segments;
 
-    key_segments.emplace_back(
-            ast::StreamSink::PartialKey{
-                    entity::KeyType::TABLE_DATA, 1, "", entity::NumericIndex{0}, entity::NumericIndex{1}
-            },
-            seg
-    );
-    key_segments.emplace_back(
-            ast::StreamSink::PartialKey{
-                    entity::KeyType::TABLE_DATA, 2, "", entity::NumericIndex{1}, entity::NumericIndex{2}
-            },
-            seg
-    );
+    key_segments.emplace_back(PartialKey{KeyType::TABLE_DATA, 1, "", NumericIndex{0}, NumericIndex{1}}, seg);
+    key_segments.emplace_back(PartialKey{KeyType::TABLE_DATA, 2, "", NumericIndex{1}, NumericIndex{2}}, seg);
 
     HashAccum h;
     auto default_content_hash = h.digest();
@@ -121,9 +111,7 @@ TEST(Async, DeDupTest) {
 
     std::vector<folly::Future<arcticdb::pipelines::SliceAndKey>> slice_key_futures;
     for (auto& [key, segment] : key_segments) {
-        auto input = std::make_tuple<ast::StreamSink::PartialKey, SegmentInMemory, ap::FrameSlice>(
-                std::move(key), std::move(segment), {}
-        );
+        auto input = std::make_tuple<PartialKey, SegmentInMemory, FrameSlice>(std::move(key), std::move(segment), {});
         auto fut = folly::makeFuture(std::move(input));
         slice_key_futures.emplace_back(store.async_write(std::move(fut), de_dup_map));
     }
