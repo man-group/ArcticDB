@@ -270,11 +270,8 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
 }
 
 DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
-    // Remove const-cast once https://github.com/man-group/sparrow/issues/587 is released
-    // Remove use of get_arrow_array completely when https://github.com/man-group/sparrow/issues/588 is released
     schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-            sparrow::get_arrow_array(const_cast<sparrow::array&>(array))->dictionary == nullptr,
-            "Dictionary-encoded Arrow data unsupported"
+            !array.dictionary().has_value(), "Dictionary-encoded Arrow data unsupported"
     );
     switch (array.data_type()) {
     case sparrow::data_type::BOOL:
@@ -364,9 +361,8 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
             const auto& data_type = data_types[idx];
             const auto& array = record_batch->get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
-            // Remove use of arrow_array here when https://github.com/man-group/sparrow/issues/589 is released
             schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    arrow_array->null_count == 0,
+                    array.null_count() == 0,
                     "Column '{}' contains null values, which are not currently supported",
                     record_batch->names()[idx]
             );
@@ -382,11 +378,10 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                     column.buffer() = ChunkedBuffer::presized(total_rows);
                 }
                 packed_bits_to_buffer(
-                        data, array.size(), arrow_array->offset, column.buffer().bytes_at(start_row, array.size())
+                        data, array.size(), array.offset(), column.buffer().bytes_at(start_row, array.size())
                 );
             } else { // Numeric and string types
-                // Remove use of arrow_array here when https://github.com/man-group/sparrow/issues/589 is released
-                data += arrow_array->offset * get_type_size(data_type);
+                data += array.offset() * get_type_size(data_type);
                 // For string columns, we deliberately omit the last value from the offsets buffer to keep our indexing
                 // into the column's ChunkedBuffer accurate. See corresponding comment in
                 // WriteToSegmentTask::slice_column
