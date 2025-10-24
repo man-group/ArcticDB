@@ -753,9 +753,15 @@ def read_modify_write_data(lib, symbol, query):
 
 
 def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
+    """
+    This added to ease testing of read_modify_write. It returns a list of functions which perform processing
+    One is the standard read with a query builder, the other is a read_modify_write followed by a read of the newly
+    created symbol. Functions that test the QueryBuilder such as generic_filter_test, generic_aggregation_test, etc...
+    can iterate on the result array and test both methods for processing.
+    """
     qb = copy.deepcopy(arctic_query)
     test_read_modify_write = os.getenv("ARCTICDB_TEST_READ_MODIFY_WRITE", "0") == "1"
-    processing_functions = []  # [lambda: lib.read(symbol, query_builder=qb).data]
+    processing_functions = [lambda: lib.read(symbol, query_builder=qb).data]
     if test_read_modify_write:
         if date_range is not None:
             qb.prepend(QueryBuilder().date_range(date_range))
@@ -854,7 +860,6 @@ def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
     query_processing_functions = get_query_processing_functions(lib, symbol, q)
     for proccessing_function in query_processing_functions:
-        print(expected)
         received = proccessing_function()
         received = received.reindex(columns=sorted(received.columns))
         received.sort_index(inplace=True)
