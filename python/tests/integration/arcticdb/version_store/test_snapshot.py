@@ -922,14 +922,18 @@ def test_read_as_of_tombstoned_version_alive_in_snapshot(lmdb_version_store_v1):
 def test_list_versions_latest_only(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "test_list_versions_latest_only"
-    snap = "test_list_versions_latest_only_snap"
     lib.write(sym, 0)
+    lib.snapshot("snap0")
     lib.write(sym, 1)
-    lib.snapshot(snap)
+    lib.snapshot("snap1")
     lib.delete_version(sym, 1)
-    versions = lib.list_versions(sym, latest_only=True)
-    assert len(versions) == 1
-    assert not versions[0]["deleted"]
-    assert versions[0]["version"] == 0
-    skip_snapshot_versions = lib.list_versions(sym, latest_only=True, skip_snapshots=True)
-    assert skip_snapshot_versions == versions
+    versions_with_snapshots = lib.list_versions(sym, latest_only=True, skip_snapshots=False)
+    assert len(versions_with_snapshots) == 1
+    assert not versions_with_snapshots[0]["deleted"]
+    assert versions_with_snapshots[0]["version"] == 0
+    assert versions_with_snapshots[0]["snapshots"] == ["snap0"]
+    versions_without_snapshots = lib.list_versions(sym, latest_only=True, skip_snapshots=True)
+    assert len(versions_without_snapshots) == 1
+    assert not versions_without_snapshots[0]["deleted"]
+    assert versions_without_snapshots[0]["version"] == 0
+    assert versions_without_snapshots[0]["snapshots"] == []
