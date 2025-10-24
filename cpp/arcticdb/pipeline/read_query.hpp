@@ -28,7 +28,7 @@ struct ReadQuery {
 
     explicit ReadQuery(std::vector<std::shared_ptr<Clause>>&& clauses);
 
-    void add_clauses(std::vector<std::shared_ptr<Clause>>& clauses);
+    void add_clauses(std::vector<std::shared_ptr<Clause>>&& clauses);
 
     void convert_to_positive_row_filter(int64_t total_rows);
 };

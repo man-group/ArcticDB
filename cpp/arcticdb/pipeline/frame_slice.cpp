@@ -27,6 +27,10 @@ SegmentInMemory& SliceAndKey::segment(const std::shared_ptr<Store>& store) {
     return *segment_;
 }
 
+const SegmentInMemory& SliceAndKey::segment() const& { return *segment_; }
+
+SegmentInMemory&& SliceAndKey::segment() && { return std::move(*segment_); }
+
 SegmentInMemory&& SliceAndKey::release_segment(const std::shared_ptr<Store>& store) const {
     ensure_segment(store);
     return std::move(*segment_);

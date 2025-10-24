@@ -240,6 +240,10 @@ struct SliceAndKey {
 
     SegmentInMemory& segment(const std::shared_ptr<Store>& store);
 
+    const SegmentInMemory& segment() const&;
+
+    SegmentInMemory&& segment() &&;
+
     SegmentInMemory&& release_segment(const std::shared_ptr<Store>& store) const;
 
     const SegmentInMemory& segment(const std::shared_ptr<Store>& store) const;
@@ -250,9 +254,11 @@ struct SliceAndKey {
         return c(*segment_, slice_, key_);
     }
 
-    const FrameSlice& slice() const { return slice_; }
+    const FrameSlice& slice() const& { return slice_; }
 
-    FrameSlice& slice() { return slice_; }
+    FrameSlice& slice() & { return slice_; }
+
+    FrameSlice&& slice() && { return std::move(slice_); }
 
     bool invalid() const { return (!segment_ && !key_) || (segment_ && segment_->is_null()); }
 
