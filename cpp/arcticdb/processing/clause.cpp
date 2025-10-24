@@ -547,12 +547,9 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
         );
 
         auto column_data = index_col->data();
-        std::transform(
-                elements.cbegin(),
-                elements.cend(),
-                column_data.begin<typename col_type_info::TDT>(),
-                [](const auto& element) { return element.first; }
-        );
+        ranges::transform(elements, column_data.begin<typename col_type_info::TDT>(), [](const auto& element) {
+            return element.first;
+        });
     });
     index_col->set_row_data(grouping_map.size() - 1);
 
