@@ -791,3 +791,46 @@ def test_symbol_concat_docstring_example(lmdb_library, any_output_format):
     lazy_df = lazy_df.resample("10min").agg({"col": "sum"})
     received = lazy_df.collect().data
     assert_frame_equal(pd.DataFrame({"col": [14]}, index=[pd.Timestamp("2025-01-01")]), received)
+
+
+def test_tmp(lmdb_library):
+    lib = lmdb_library
+    sym0 = "test_tmp_0"
+    sym1 = "test_tmp_1"
+    df0 = pd.DataFrame(
+        {
+            "BAHD_KEY_NAME": ["blah"],
+            "KEY_SEQUENCE_NUMBER": np.arange(1, dtype=np.int64),
+            "EVENT_TIME": [pd.Timestamp("2025-01-01")],
+            "ENUM_TP_TICK_TYPE_STRING": ["BID"],
+            "EVENT_PRICE": [0.1],
+            "EVENT_SIZE": np.arange(1, 2, dtype=np.int64),
+            "EVENT_CC_NUMBER_CC": ["blah blah"],
+        },
+        index=pd.date_range("2025-01-01", periods=1),
+    )
+    df0.index.name = "datetime"
+    df1 = pd.DataFrame(
+        {
+            "BAHD_KEY_NAME": ["blah blah blah"],
+            "KEY_SEQUENCE_NUMBER": np.arange(2, 3, dtype=np.int64),
+            "EVENT_TIME": [pd.Timestamp("2025-01-02")],
+            "ENUM_TP_TICK_TYPE_STRING": ["ASK"],
+            "EVENT_PRICE": [0.2],
+            "EVENT_SIZE": np.arange(3, 4, dtype=np.int64),
+            "EVENT_CC_NUMBER_CC": ["blah blah blah blah"],
+        },
+        index=pd.date_range("2025-01-02", periods=1),
+    )
+    df1.index.name = "datetime"
+    lib.write(sym0, df0)
+    lib.write(sym1, df1)
+    lazy_df0 = lib.read(sym0, lazy=True)
+    lazy_df1 = lib.read(sym1, lazy=True)
+    lazy_df0 = lazy_df0.date_range((pd.Timestamp("2025-01-01"), pd.Timestamp("2025-01-02")))
+    lazy_df0 = lazy_df0[lazy_df0["EVENT_SIZE"] == 1]
+    lazy_df1 = lazy_df1.date_range((pd.Timestamp("2025-01-03"), pd.Timestamp("2025-01-04")))
+    lazy_df1 = lazy_df1[lazy_df1["EVENT_SIZE"] == 1]
+    lazy_df = concat([lazy_df0, lazy_df1])
+    res = lazy_df.collect().data
+    print("fin")
