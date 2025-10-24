@@ -135,6 +135,32 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
 
     return desc;
 }
+
+/// When segments are produced by the processing pipeline some rows might be missing. Imagine a filter with the middle
+/// rows filtered out. These slices cannot be put in an index key as the row slices in the index key must be contiguous.
+/// This function adjusts the row slices so that there are no gaps.
+/// @note This expects the slices to be sorted by colum slice i.e. first are all row in the first column slice, then
+///     are the row slices in the second column slice, etc...
+void compact_row_slices(std::span<SliceAndKey> slices) {
+    size_t current_compacted_row = 0;
+    size_t previous_uncompacted_end = slices.empty() ? 0 : slices.front().slice().row_range.end();
+    size_t previous_col_slice_end = slices.empty() ? 0 : slices.front().slice().col_range.end();
+    for (SliceAndKey& slice : slices) {
+        // Aggregation clause performs aggregations in parallel for each group. Thus it can produce several slices with
+        // the exact row_range and column_range. The ordering doesnt matter but this must be taken into account so that
+        // the row slices are always increasing. The second condition in the if takes care of this scenario.
+        if (slice.slice().row_range.start() < previous_uncompacted_end &&
+            slice.slice().col_range.start() > previous_col_slice_end) {
+            current_compacted_row = 0;
+        }
+        previous_uncompacted_end = slice.slice().row_range.end();
+        const size_t rows_in_slice = slice.slice().row_range.diff();
+        slice.slice().row_range.first = current_compacted_row;
+        slice.slice().row_range.second = current_compacted_row + rows_in_slice;
+        current_compacted_row += rows_in_slice;
+        previous_col_slice_end = slice.slice().col_range.end();
+    }
+}
 } // namespace
 
 void sorted_data_check_append(const InputFrame& frame, index::IndexSegmentReader& index_segment_reader) {
@@ -2735,21 +2761,11 @@ VersionedItem read_modify_write_impl(
                                 processed_entity_ids
                         )),
                         std::back_inserter(write_segments_futures),
-                        [](std::shared_ptr<folly::Future<SliceAndKey>>& fut) {
-                            folly::Future<SliceAndKey> res = std::move(*fut);
-                            fut.reset();
-                            return res;
-                        }
+                        [](const std::shared_ptr<folly::Future<SliceAndKey>>& fut) { return std::move(*fut); }
                 );
                 return folly::collect(std::move(write_segments_futures));
             })
             .thenValue([&](std::vector<SliceAndKey>&& slices) {
-                for (auto& slice : slices) {
-                    std::cout << fmt::format(
-                            "Row slice: {}, Col slice: {}\n", slice.slice().row_range, slice.slice().col_range
-                    );
-                }
-                std::cout << "==========================\n";
                 ranges::sort(slices, [](const SliceAndKey& a, const SliceAndKey& b) {
                     if (a.slice().col_range.first < b.slice().col_range.first) {
                         return true;
@@ -2758,26 +2774,7 @@ VersionedItem read_modify_write_impl(
                     }
                     return false;
                 });
-
-                size_t current_compacted_row = 0;
-                size_t previous_uncompacted_end = slices.empty() ? 0 : slices.front().slice().row_range.end();
-                for (SliceAndKey& slice : slices) {
-                    if (slice.slice().row_range.start() < previous_uncompacted_end) {
-                        current_compacted_row = 0;
-                    }
-                    previous_uncompacted_end = slice.slice().row_range.end();
-                    const size_t rows_in_slice = slice.slice().row_range.diff();
-                    slice.slice().row_range.first = current_compacted_row;
-                    slice.slice().row_range.second = current_compacted_row + rows_in_slice;
-                    current_compacted_row += rows_in_slice;
-                }
-
-                for (auto& slice : slices) {
-                    std::cout << fmt::format(
-                            "Row slice: {}, Col slice: {}\n", slice.slice().row_range, slice.slice().col_range
-                    );
-                }
-
+                compact_row_slices(slices);
                 const size_t row_count =
                         slices.empty() ? 0 : slices.back().slice().row_range.second - slices[0].slice().row_range.first;
                 const TimeseriesDescriptor tsd = make_timeseries_descriptor(

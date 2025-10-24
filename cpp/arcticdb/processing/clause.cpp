@@ -561,7 +561,6 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
 }
 
