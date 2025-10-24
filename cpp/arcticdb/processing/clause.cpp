@@ -548,8 +548,8 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 
         auto column_data = index_col->data();
         std::transform(
-                elements.begin(),
-                elements.begin(),
+                elements.cbegin(),
+                elements.cend(),
                 column_data.begin<typename col_type_info::TDT>(),
                 [](const auto& element) { return element.first; }
         );
