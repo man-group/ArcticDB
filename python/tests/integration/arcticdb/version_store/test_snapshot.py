@@ -919,7 +919,8 @@ def test_read_as_of_tombstoned_version_alive_in_snapshot(lmdb_version_store_v1):
                     lib.read(sym, version_idx)
 
 
-def test_list_versions_latest_only(lmdb_version_store_v1):
+@pytest.mark.parametrize("skip_snapshots", [True, False])
+def test_list_versions_latest_only(lmdb_version_store_v1, skip_snapshots):
     lib = lmdb_version_store_v1
     sym = "test_list_versions_latest_only"
     lib.write(sym, 0)
@@ -927,13 +928,26 @@ def test_list_versions_latest_only(lmdb_version_store_v1):
     lib.write(sym, 1)
     lib.snapshot("snap1")
     lib.delete_version(sym, 1)
-    versions_with_snapshots = lib.list_versions(sym, latest_only=True, skip_snapshots=False)
-    assert len(versions_with_snapshots) == 1
-    assert not versions_with_snapshots[0]["deleted"]
-    assert versions_with_snapshots[0]["version"] == 0
-    assert versions_with_snapshots[0]["snapshots"] == ["snap0"]
-    versions_without_snapshots = lib.list_versions(sym, latest_only=True, skip_snapshots=True)
-    assert len(versions_without_snapshots) == 1
-    assert not versions_without_snapshots[0]["deleted"]
-    assert versions_without_snapshots[0]["version"] == 0
-    assert versions_without_snapshots[0]["snapshots"] == []
+    versions = lib.list_versions(sym, latest_only=True, skip_snapshots=skip_snapshots)
+    assert len(versions) == 1
+    assert not versions[0]["deleted"]
+    assert versions[0]["version"] == 0
+    assert versions[0]["snapshots"] == [] if skip_snapshots else ["snap0"]
+
+
+@pytest.mark.parametrize("skip_snapshots", [True, False])
+def test_list_versions_specific_snapshot(lmdb_version_store_v1, skip_snapshots):
+    lib = lmdb_version_store_v1
+    sym = "test_list_versions_specific_snapshot"
+    lib.write(sym, 0)
+    lib.snapshot("snap0")
+    lib.snapshot("snap1")
+    lib.write(sym, 1)
+    lib.snapshot("snap2")
+    versions = lib.list_versions(sym, snapshot="snap0", skip_snapshots=skip_snapshots)
+    assert len(versions) == 1
+    assert not versions[0]["deleted"]
+    assert versions[0]["version"] == 0
+    # This is the correct behaviour, see issue 18262322490
+    # assert versions[0]["snapshots"] == [] if skip_snapshots else ["snap0", "snap1"]
+    assert versions[0]["snapshots"] == ["snap0", "snap1"]
