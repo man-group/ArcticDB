@@ -197,7 +197,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::tuple<StreamId, VersionId, timestamp, std::vector<SnapshotId>, bool>> list_versions(
             const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name,
-            const std::optional<bool>& latest_only, const std::optional<bool>& skip_snapshots
+            bool latest_only, bool skip_snapshots
     );
 
     // Batch methods

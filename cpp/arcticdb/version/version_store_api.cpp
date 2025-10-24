@@ -233,7 +233,7 @@ VersionResultVector get_all_versions_for_symbols(
 
 VersionResultVector PythonVersionStore::list_versions(
         const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name,
-        const std::optional<bool>& latest_only, const std::optional<bool>& skip_snapshots
+        bool latest_only, bool skip_snapshots
 ) {
     ARCTICDB_SAMPLE(ListVersions, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
@@ -245,7 +245,7 @@ VersionResultVector PythonVersionStore::list_versions(
         stream_ids = list_streams(snap_name);
     }
 
-    const bool do_snapshots = !opt_false(skip_snapshots) || snap_name;
+    const bool do_snapshots = !skip_snapshots || snap_name;
 
     SymbolVersionToSnapshotMap snapshots_for_symbol;
     SymbolVersionTimestampMap creation_ts_for_version_symbol;
@@ -259,7 +259,7 @@ VersionResultVector PythonVersionStore::list_versions(
             return list_versions_for_snapshot(stream_ids, snap_name, *versions_for_snapshots, snapshots_for_symbol);
     }
 
-    if (opt_false(latest_only))
+    if (latest_only)
         return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
     else
         return get_all_versions_for_symbols(
