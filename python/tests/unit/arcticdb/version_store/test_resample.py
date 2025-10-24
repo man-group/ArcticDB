@@ -30,7 +30,7 @@ import itertools
 pytestmark = pytest.mark.pipeline
 
 
-ALL_AGGREGATIONS = ["sum"]
+ALL_AGGREGATIONS = ["sum", "mean", "min", "max", "first", "last", "count"]
 
 
 def all_aggregations_dict(col):
