@@ -1,11 +1,10 @@
 [build-system]
-requires = ["setuptools", "wheel", "pip", "cmake==3.30.1"]
+requires = ["setuptools", "wheel", "pip"]
 build-backend = "setuptools.build_meta"
 
 [tool.cibuildwheel]
 environment-pass = """ARCTIC_CMAKE_PRESET CMAKE_BUILD_PARALLEL_LEVEL\
-    VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN\
-    VCPKG_FEATURE_FLAGS"""
+    VCPKG_BINARY_SOURCES VCPKG_NUGET_USER VCPKG_NUGET_TOKEN VCPKG_MAN_NUGET_USER VCPKG_MAN_NUGET_TOKEN"""
 build-frontend = "build"
 test-extras = "Testing"
 
@@ -20,19 +19,7 @@ cp '{project}/cpp/third_party/vcpkg_overlays/ninja/vcpkg_find_acquire_program(NI
 {project}/build_tooling/prep_cpp_build.sh
 {project}/build_tooling/vcpkg_caching.sh
 """
-before-build = """
-echo "=== Build environment inside container ==="
-gcc --version
-cmake --version
-echo "=== Verifying ninja override ==="
-if grep -q "1.10.2" '{project}/cpp/vcpkg/scripts/cmake/vcpkg_find_acquire_program(NINJA).cmake'; then
-  echo "SUCCESS: Ninja override applied - will use v1.10.2"
-else
-  echo "WARNING: Ninja override may not be applied"
-fi
-"""
-# No additional environment needed - using compatible ninja 1.10.2
-build-verbosity = 3
+before-build = "env"
 build = "cp*-manylinux_x86_64"
 manylinux-x86_64-image = "ghcr.io/man-group/cibuildwheel_manylinux:latest"
 

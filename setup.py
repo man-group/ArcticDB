@@ -31,22 +31,21 @@ def _log_and_run(*cmd, **kwargs):
     print("Running " + " ".join(cmd))
     subprocess.check_call(cmd, **kwargs)
 
-
 def cleanup_vcpkg_artifacts():
     cpp_dir = Path("cpp")
     if not cpp_dir.exists():
         return
-
+    
     vcpkg_dir = cpp_dir / "vcpkg"
     if not vcpkg_dir.exists():
         return
-
+    
     def safe_remove_directory(dir_path):
         # To handle Windows symbolic links
         if not dir_path.exists():
             print(f"Directory not found (skipping): {dir_path}")
             return
-
+        
         try:
             if os.path.islink(str(dir_path)):
                 target = os.readlink(str(dir_path))
@@ -54,10 +53,10 @@ def cleanup_vcpkg_artifacts():
                     target_path = Path(target)
                 else:
                     target_path = dir_path.parent / target
-
+                
                 os.unlink(str(dir_path))
                 print(f"Removed symbolic link: {dir_path}")
-
+                
                 if target_path.exists() and target_path.is_dir():
                     shutil.rmtree(str(target_path))
                     print(f"Removed target directory: {target_path}")
@@ -66,7 +65,7 @@ def cleanup_vcpkg_artifacts():
                 print(f"Removed: {dir_path}")
         except Exception as e:
             print(f"Warning: Could not remove {dir_path}: {e}")
-
+    
     safe_remove_directory(vcpkg_dir / "buildtrees")
     safe_remove_directory(vcpkg_dir / "downloads")
     safe_remove_directory(vcpkg_dir / "packages")
@@ -204,74 +203,8 @@ class CMakeBuild(build_ext):
         if vcpkg_installed_dir:
             cmd.append(f"-DVCPKG_INSTALLED_DIR={vcpkg_installed_dir}")
 
-        # Add vcpkg debug options if environment variable is set
-        vcpkg_install_opts = []
-        if os.getenv("VCPKG_FEATURE_FLAGS"):
-            vcpkg_install_opts.extend(["--debug", "--debug-env"])
-
-        # # Disable compiler tracking to avoid issues with CMAKE_C/CXX_COMPILER_LAUNCHER
-        # vcpkg_install_opts.append("--feature-flags=-compilertracking")
-
-        if vcpkg_install_opts:
-            cmd.append(f"-DVCPKG_INSTALL_OPTIONS={';'.join(vcpkg_install_opts)}")
-
-        try:
-            _log_and_run(*cmd, cwd="cpp")
-        except subprocess.CalledProcessError:
-            print("\n" + "=" * 80, flush=True)
-            print("CMAKE CONFIGURATION FAILED - Attempting to show vcpkg error logs", flush=True)
-            print("=" * 80 + "\n", flush=True)
-
-            # Try to find and print vcpkg error logs
-            vcpkg_log_patterns = [
-                "cpp/vcpkg/buildtrees/detect_compiler/*.log",
-                "cpp/vcpkg/buildtrees/detect_compiler/*-err.log",
-                "cpp/vcpkg/buildtrees/detect_compiler/*-out.log",
-                "cpp/vcpkg/buildtrees/detect_compiler/*-CMakeCache.txt.log",
-                "cpp/out/*/vcpkg-manifest-install.log",
-                "cpp/vcpkg/buildtrees/*/*.log",
-            ]
-
-            print(f"Current working directory: {os.getcwd()}", flush=True)
-            print("Searching for vcpkg logs...", flush=True)
-
-            found_any = False
-            for pattern in vcpkg_log_patterns:
-                matches = glob.glob(pattern)
-                if matches:
-                    for log_file in matches:
-                        found_any = True
-                        print(f"\n{'=' * 80}", flush=True)
-                        print(f"Contents of {log_file}", flush=True)
-                        print(f"{'=' * 80}", flush=True)
-                        try:
-                            with open(log_file, "r") as f:
-                                content = f.read()
-                                print(content, flush=True)
-                        except Exception as read_err:
-                            print(f"Could not read log file: {read_err}", flush=True)
-                        print(f"{'=' * 80}\n", flush=True)
-
-            if not found_any:
-                print("No vcpkg log files found. Checking if directories exist:", flush=True)
-                check_dirs = [
-                    "cpp/vcpkg/buildtrees",
-                    "cpp/vcpkg/buildtrees/detect_compiler",
-                    "cpp/out",
-                ]
-                for dir_path in check_dirs:
-                    if os.path.exists(dir_path):
-                        print(f"  {dir_path} exists", flush=True)
-                        try:
-                            contents = os.listdir(dir_path)
-                            print(f"    Contents: {contents}", flush=True)
-                        except Exception as e:
-                            print(f"    Could not list: {e}", flush=True)
-                    else:
-                        print(f"  {dir_path} does NOT exist", flush=True)
-
-            raise
-
+        _log_and_run(*cmd, cwd="cpp")
+        
         cleanup_vcpkg_artifacts()
 
         search = f"cpp/out/{preset}-build"
