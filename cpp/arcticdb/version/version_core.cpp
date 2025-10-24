@@ -2748,6 +2748,12 @@ VersionedItem read_modify_write_impl(
                 return folly::collect(std::move(write_segments_futures));
             })
             .thenValue([&](std::vector<SliceAndKey>&& slices) {
+                for (auto& slice : slices) {
+                    std::cout << fmt::format(
+                            "Row slice: {}, Col slice: {}\n", slice.slice().row_range, slice.slice().col_range
+                    );
+                }
+                std::cout << "==========================\n";
                 ranges::sort(slices, [](const SliceAndKey& a, const SliceAndKey& b) {
                     if (a.slice().col_range.first < b.slice().col_range.first) {
                         return true;
@@ -2768,6 +2774,12 @@ VersionedItem read_modify_write_impl(
                     slice.slice().row_range.first = current_compacted_row;
                     slice.slice().row_range.second = current_compacted_row + rows_in_slice;
                     current_compacted_row += rows_in_slice;
+                }
+
+                for (auto& slice : slices) {
+                    std::cout << fmt::format(
+                            "Row slice: {}, Col slice: {}\n", slice.slice().row_range, slice.slice().col_range
+                    );
                 }
 
                 const size_t row_count =
