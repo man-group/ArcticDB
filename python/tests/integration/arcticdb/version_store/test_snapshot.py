@@ -917,3 +917,19 @@ def test_read_as_of_tombstoned_version_alive_in_snapshot(lmdb_version_store_v1):
             else:
                 with pytest.raises(NoSuchVersionException):
                     lib.read(sym, version_idx)
+
+
+def test_list_versions_latest_only(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_list_versions_latest_only"
+    snap = "test_list_versions_latest_only_snap"
+    lib.write(sym, 0)
+    lib.write(sym, 1)
+    lib.snapshot(snap)
+    lib.delete_version(sym, 1)
+    versions = lib.list_versions(sym, latest_only=True)
+    assert len(versions) == 1
+    assert not versions[0]["deleted"]
+    assert versions[0]["version"] == 0
+    skip_snapshot_versions = lib.list_versions(sym, latest_only=True, skip_snapshots=True)
+    assert skip_snapshot_versions == versions
