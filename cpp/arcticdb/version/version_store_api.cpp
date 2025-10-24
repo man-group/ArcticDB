@@ -232,8 +232,8 @@ VersionResultVector get_all_versions_for_symbols(
 }
 
 VersionResultVector PythonVersionStore::list_versions(
-        const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name,
-        bool latest_only, bool skip_snapshots
+        const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name, bool latest_only,
+        bool skip_snapshots
 ) {
     ARCTICDB_SAMPLE(ListVersions, 0)
     ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: list_versions");
