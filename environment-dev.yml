@@ -59,7 +59,7 @@ dependencies:
   # Build dependencies for tests
   - libarrow
   # Python dependences
-  - python >=3.12,<3.14
+  - python >=3.12,<3.15
   - packaging
   - numpy
   - pandas
