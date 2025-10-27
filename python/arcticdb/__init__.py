@@ -30,4 +30,4 @@ from arcticdb.version_store.admin_tools import KeyType, Size
 
 set_config_from_env_vars(_os.environ)
 
-__version__ = "dev"
+__version__ = "6.3.1+man0"
