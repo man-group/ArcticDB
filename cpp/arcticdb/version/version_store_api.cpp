@@ -162,12 +162,12 @@ VersionResultVector list_versions_for_snapshot(
 
 void get_snapshot_version_info(
         const std::shared_ptr<Store>& store, SymbolVersionToSnapshotInfoMap& snapshots_for_symbol,
-        std::optional<SnapshotMap>& versions_for_snapshots
+        std::optional<SnapshotMap>& versions_for_snapshots, const std::optional<StreamId>& stream_id
 ) {
     // We will need to construct this map even if we are getting symbols for one snapshot
     // The symbols might appear in more than 1 snapshot and "snapshots" needs to be populated
     // After SNAPSHOT_REF key introduction, this operation is no longer slow
-    versions_for_snapshots = get_versions_from_snapshots(store);
+    versions_for_snapshots = get_versions_from_snapshots(store, stream_id);
 
     for (const auto& [snap_id, index_keys] : *versions_for_snapshots) {
         for (const auto& index_key : index_keys) {
@@ -258,7 +258,7 @@ VersionResultVector PythonVersionStore::list_versions(
     SymbolVersionToSnapshotInfoMap snapshots_for_symbol;
     std::optional<SnapshotMap> versions_for_snapshots;
     if (do_snapshots) {
-        get_snapshot_version_info(store(), snapshots_for_symbol, versions_for_snapshots);
+        get_snapshot_version_info(store(), snapshots_for_symbol, versions_for_snapshots, stream_id);
 
         if (snap_name)
             return list_versions_for_snapshot(

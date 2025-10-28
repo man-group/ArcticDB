@@ -373,16 +373,20 @@ std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store,
     return res;
 }
 
-std::vector<AtomKey> get_versions_from_segment(const SegmentInMemory& snapshot_segment) {
+std::vector<AtomKey> get_versions_from_segment(
+        const SegmentInMemory& snapshot_segment, const std::optional<StreamId>& stream_id
+) {
     std::vector<AtomKey> res;
     for (size_t idx = 0; idx < snapshot_segment.row_count(); idx++) {
         auto stream_index = read_key_row(snapshot_segment, static_cast<ssize_t>(idx));
-        res.push_back(stream_index);
+        if (!stream_id.has_value() || *stream_id == stream_index.id()) {
+            res.push_back(std::move(stream_index));
+        }
     }
     return res;
 }
 
-SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store) {
+SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store, const std::optional<StreamId>& stream_id) {
     ARCTICDB_SAMPLE(GetVersionsFromSnapshot, 0)
     SnapshotMap snapshot_map;
     std::vector<VariantKey> snapshot_keys;
@@ -394,12 +398,12 @@ SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store) {
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
     auto futures = folly::window(
             std::move(snapshot_keys),
-            [store, &snapshot_map](const VariantKey& snapshot_key) {
-                return store->read(snapshot_key).thenValueInline([&snapshot_map](auto&& key_seg) {
+            [store, &snapshot_map, &stream_id](const VariantKey& snapshot_key) {
+                return store->read(snapshot_key).thenValueInline([&snapshot_map, &stream_id](auto&& key_seg) {
                     auto snapshot_key = std::move(key_seg.first);
                     auto snapshot_segment = std::move(key_seg.second);
                     SnapshotId snapshot_id{fmt::format("{}", variant_key_id(snapshot_key))};
-                    snapshot_map[snapshot_id] = get_versions_from_segment(snapshot_segment);
+                    snapshot_map[snapshot_id] = get_versions_from_segment(snapshot_segment, stream_id);
                     return folly::Unit{};
                 });
             },
