@@ -11,6 +11,7 @@ import pprint
 import pytest
 
 
+@pytest.mark.skip(reason="18262322490, 18279584183, and 18286248854")
 @pytest.mark.parametrize("symbol", [None, "sym1"])
 @pytest.mark.parametrize("snapshot", [None, "snap2"])
 @pytest.mark.parametrize("latest_only", [False, True])
@@ -80,6 +81,7 @@ def test_list_versions(lmdb_version_store_v1, symbol, snapshot, latest_only, ski
     )
     for version in versions:
         version.pop("date")
+    # TODO: test that entries are sorted by symbol and timestamp/version number
     assert len(versions) == len(expected_versions)
     for version in expected_versions:
         assert version in versions

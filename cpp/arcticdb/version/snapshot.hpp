@@ -62,7 +62,7 @@ std::optional<std::pair<VariantKey, SegmentInMemory>> get_snapshot(
 
 std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store, const SnapshotId& snap_name);
 
-using SnapshotMap = std::unordered_map<SnapshotId, std::vector<AtomKey>>;
+using SnapshotMap = std::map<SnapshotId, std::vector<AtomKey>>;
 
 SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store);
 
