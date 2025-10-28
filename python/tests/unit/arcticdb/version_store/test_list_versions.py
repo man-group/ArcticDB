@@ -52,10 +52,45 @@ def populate_library(lib):
     return all_versions, snapshots
 
 
-def strip_date(versions):
+def filter_for_symbol(versions, symbol):
+    res = []
+    for version in versions:
+        if version["symbol"] == symbol:
+            res.append(version)
+    return res
+
+
+def filter_for_snapshot(versions, snapshot_versions):
+    # snapshot_versions is a map from symbol to version number in a given snapshot
+    res = []
+    for version in versions:
+        if snapshot_versions.get(version["symbol"], None) == version["version"]:
+            res.append(version)
+    return res
+
+
+def filter_for_latest_only(versions):
+    res = []
+    for version in versions:
+        sym_idx = int(version["symbol"][-1])
+        if not version["deleted"] and version["version"] == (sym_idx - 1) + (sym_idx % 2):
+            res.append(version)
+    return res
+
+
+def filter_for_skip_snapshots(versions):
+    res = []
+    for version in versions:
+        version["snapshots"] = []
+        if not version["deleted"]:
+            res.append(version)
+    return res
+
+
+def assert_versions_equal(expected_versions, versions):
     for version in versions:
         version.pop("date")
-    return versions
+    assert expected_versions == versions
 
 
 # Zero arguments
@@ -69,9 +104,7 @@ def test_list_versions_default_args(lmdb_version_store_v1):
     # kept alive in snapshots. Remove following line once resolved
     expected_versions = expected_versions[:-1]
     # end remove
-    versions = lib.list_versions()
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions())
 
 
 # 1 argument
@@ -81,58 +114,35 @@ def test_list_versions_default_args(lmdb_version_store_v1):
 def test_list_versions_symbol(lmdb_version_store_v1, symbol):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = []
-    for version in all_versions:
-        if version["symbol"] == symbol:
-            expected_versions.append(version)
-    versions = lib.list_versions(symbol=symbol)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    expected_versions = filter_for_symbol(all_versions, symbol)
+    assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol))
 
 
 @pytest.mark.parametrize("snapshot", ["snap0", "snap1", "snap2"])
 def test_list_versions_snapshot(lmdb_version_store_v1, snapshot):
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
-    expected_versions = []
-    snapshot_versions = snapshots[snapshot]
-    for version in all_versions:
-        if snapshot_versions.get(version["symbol"], None) == version["version"]:
-            expected_versions.append(version)
+    expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
     # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
     # lines once resolved
     for version in expected_versions:
         version["deleted"] = False
     # end remove
-    versions = lib.list_versions(snapshot=snapshot)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions(snapshot=snapshot))
 
 
 def test_list_versions_latest_only(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = []
-    for version in all_versions:
-        sym_idx = int(version["symbol"][-1])
-        if not version["deleted"] and version["version"] == (sym_idx - 1) + (sym_idx % 2):
-            expected_versions.append(version)
-    versions = lib.list_versions(latest_only=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    expected_versions = filter_for_latest_only(all_versions)
+    assert_versions_equal(expected_versions, lib.list_versions(latest_only=True))
 
 
 def test_list_versions_skip_snapshots(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = []
-    for version in all_versions:
-        version["snapshots"] = []
-        if not version["deleted"]:
-            expected_versions.append(version)
-    versions = lib.list_versions(skip_snapshots=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    expected_versions = filter_for_skip_snapshots(all_versions)
+    assert_versions_equal(expected_versions, lib.list_versions(skip_snapshots=True))
 
 
 # 2 arguments
@@ -142,64 +152,33 @@ def test_list_versions_skip_snapshots(lmdb_version_store_v1):
 @pytest.mark.parametrize("snapshot", ["snap0", "snap1", "snap2"])
 def test_list_versions_symbol_and_snapshot(lmdb_version_store_v1, symbol, snapshot):
     lib = lmdb_version_store_v1
-    expected_versions, snapshots = populate_library(lib)
-    tmp = []
-    for version in expected_versions:
-        if version["symbol"] == symbol:
-            tmp.append(version)
-    expected_versions = tmp
-    tmp = []
-    snapshot_versions = snapshots[snapshot]
-    for version in expected_versions:
-        if snapshot_versions.get(version["symbol"], None) == version["version"]:
-            tmp.append(version)
-    expected_versions = tmp
+    all_versions, snapshots = populate_library(lib)
+    expected_versions = filter_for_symbol(all_versions, symbol)
+    expected_versions = filter_for_snapshot(expected_versions, snapshots[snapshot])
     # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
     # lines once resolved
     for version in expected_versions:
         version["deleted"] = False
     # end remove
-    versions = lib.list_versions(symbol=symbol, snapshot=snapshot)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, snapshot=snapshot))
 
 
 @pytest.mark.parametrize("symbol", ["sym0", "sym1", "sym2"])
 def test_list_versions_symbol_and_latest_only(lmdb_version_store_v1, symbol):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = []
-    for version in all_versions:
-        if version["symbol"] == symbol:
-            expected_versions.append(version)
-    tmp = []
-    for version in expected_versions:
-        sym_idx = int(version["symbol"][-1])
-        if not version["deleted"] and version["version"] == (sym_idx - 1) + (sym_idx % 2):
-            tmp.append(version)
-    expected_versions = tmp
-    versions = lib.list_versions(symbol=symbol, latest_only=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    expected_versions = filter_for_symbol(all_versions, symbol)
+    expected_versions = filter_for_latest_only(expected_versions)
+    assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, latest_only=True))
 
 
 @pytest.mark.parametrize("symbol", ["sym0", "sym1", "sym2"])
 def test_list_versions_symbol_and_skip_snapshots(lmdb_version_store_v1, symbol):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = []
-    for version in all_versions:
-        if version["symbol"] == symbol:
-            expected_versions.append(version)
-    tmp = []
-    for version in expected_versions:
-        version["snapshots"] = []
-        if not version["deleted"]:
-            tmp.append(version)
-    expected_versions = tmp
-    versions = lib.list_versions(symbol=symbol, skip_snapshots=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    expected_versions = filter_for_symbol(all_versions, symbol)
+    expected_versions = filter_for_skip_snapshots(expected_versions)
+    assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, skip_snapshots=True))
 
 
 # Same as test_list_versions_snapshot as latest_only has no effect when snapshot also specified
@@ -207,58 +186,38 @@ def test_list_versions_symbol_and_skip_snapshots(lmdb_version_store_v1, symbol):
 def test_list_versions_snapshot_and_latest_only(lmdb_version_store_v1, snapshot):
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
-    expected_versions = []
-    snapshot_versions = snapshots[snapshot]
-    for version in all_versions:
-        if snapshot_versions.get(version["symbol"], None) == version["version"]:
-            expected_versions.append(version)
+    expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
     # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
     # lines once resolved
     for version in expected_versions:
         version["deleted"] = False
     # end remove
-    versions = lib.list_versions(snapshot=snapshot, latest_only=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions(snapshot=snapshot, latest_only=True))
 
 
 @pytest.mark.parametrize("snapshot", ["snap0", "snap1", "snap2"])
 def test_list_versions_snapshot_and_skip_snapshots(lmdb_version_store_v1, snapshot):
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
-    expected_versions = []
-    snapshot_versions = snapshots[snapshot]
-    for version in all_versions:
-        if snapshot_versions.get(version["symbol"], None) == version["version"]:
-            expected_versions.append(version)
+    expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
     # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
     # lines once resolved
     for version in expected_versions:
         version["deleted"] = False
     # end remove
     # Bug 18262322490: list_versions does not respect skip_snapshots argument when snapshot is specified. Add in
-    # following lines once resolved
-    # for version in expected_versions:
-    #     version["snapshots"] = []
+    # following line once resolved
+    # expected_versions = filter_for_skip_snapshots(expected_versions)
     # end add
-    versions = lib.list_versions(snapshot=snapshot, skip_snapshots=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions(snapshot=snapshot, skip_snapshots=True))
 
 
 def test_list_versions_latest_only_and_skip_snapshots(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = []
-    for version in all_versions:
-        sym_idx = int(version["symbol"][-1])
-        if not version["deleted"] and version["version"] == (sym_idx - 1) + (sym_idx % 2):
-            expected_versions.append(version)
-    for version in expected_versions:
-        version["snapshots"] = []
-    versions = lib.list_versions(latest_only=True, skip_snapshots=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    expected_versions = filter_for_latest_only(all_versions)
+    expected_versions = filter_for_skip_snapshots(expected_versions)
+    assert_versions_equal(expected_versions, lib.list_versions(latest_only=True, skip_snapshots=True))
 
 
 # 3 arguments
@@ -269,78 +228,45 @@ def test_list_versions_latest_only_and_skip_snapshots(lmdb_version_store_v1):
 @pytest.mark.parametrize("snapshot", ["snap0", "snap1", "snap2"])
 def test_list_versions_symbol_and_snapshot_and_latest_only(lmdb_version_store_v1, symbol, snapshot):
     lib = lmdb_version_store_v1
-    expected_versions, snapshots = populate_library(lib)
-    tmp = []
-    for version in expected_versions:
-        if version["symbol"] == symbol:
-            tmp.append(version)
-    expected_versions = tmp
-    tmp = []
-    snapshot_versions = snapshots[snapshot]
-    for version in expected_versions:
-        if snapshot_versions.get(version["symbol"], None) == version["version"]:
-            tmp.append(version)
-    expected_versions = tmp
+    all_versions, snapshots = populate_library(lib)
+    expected_versions = filter_for_symbol(all_versions, symbol)
+    expected_versions = filter_for_snapshot(expected_versions, snapshots[snapshot])
     # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
     # lines once resolved
     for version in expected_versions:
         version["deleted"] = False
     # end remove
-    versions = lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=True))
 
 
 @pytest.mark.parametrize("symbol", ["sym0", "sym1", "sym2"])
 @pytest.mark.parametrize("snapshot", ["snap0", "snap1", "snap2"])
 def test_list_versions_symbol_and_snapshot_and_skip_snapshots(lmdb_version_store_v1, symbol, snapshot):
     lib = lmdb_version_store_v1
-    expected_versions, snapshots = populate_library(lib)
-    tmp = []
-    for version in expected_versions:
-        if version["symbol"] == symbol:
-            tmp.append(version)
-    expected_versions = tmp
-    tmp = []
-    snapshot_versions = snapshots[snapshot]
-    for version in expected_versions:
-        if snapshot_versions.get(version["symbol"], None) == version["version"]:
-            tmp.append(version)
-    expected_versions = tmp
+    all_versions, snapshots = populate_library(lib)
+    expected_versions = filter_for_symbol(all_versions, symbol)
+    expected_versions = filter_for_snapshot(expected_versions, snapshots[snapshot])
     # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
     # lines once resolved
     for version in expected_versions:
         version["deleted"] = False
     # end remove
     # Bug 18262322490: list_versions does not respect skip_snapshots argument when snapshot is specified. Add in
-    # following lines once resolved
-    # for version in expected_versions:
-    #     version["snapshots"] = []
+    # following line once resolved
+    # expected_versions = filter_for_skip_snapshots(expected_versions)
     # end add
-    versions = lib.list_versions(symbol=symbol, snapshot=snapshot, skip_snapshots=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, snapshot=snapshot, skip_snapshots=True))
 
 
 @pytest.mark.parametrize("symbol", ["sym0", "sym1", "sym2"])
 def test_list_versions_symbol_and_latest_only_and_skip_snapshots(lmdb_version_store_v1, symbol):
     lib = lmdb_version_store_v1
     all_versions, _ = populate_library(lib)
-    expected_versions = []
-    for version in all_versions:
-        if version["symbol"] == symbol:
-            expected_versions.append(version)
-    tmp = []
-    for version in expected_versions:
-        sym_idx = int(version["symbol"][-1])
-        if not version["deleted"] and version["version"] == (sym_idx - 1) + (sym_idx % 2):
-            tmp.append(version)
-    expected_versions = tmp
+    expected_versions = filter_for_symbol(all_versions, symbol)
+    expected_versions = filter_for_latest_only(expected_versions)
     for version in expected_versions:
         version["snapshots"] = []
-    versions = lib.list_versions(symbol=symbol, latest_only=True, skip_snapshots=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(expected_versions, lib.list_versions(symbol=symbol, latest_only=True, skip_snapshots=True))
 
 
 # Same as test_list_versions_snapshot_and_skip_snapshots as latest_only has no effect when snapshot also specified
@@ -348,21 +274,16 @@ def test_list_versions_symbol_and_latest_only_and_skip_snapshots(lmdb_version_st
 def test_list_versions_snapshot_and_latest_only_and_skip_snapshots(lmdb_version_store_v1, snapshot):
     lib = lmdb_version_store_v1
     all_versions, snapshots = populate_library(lib)
-    expected_versions = []
-    snapshot_versions = snapshots[snapshot]
-    for version in all_versions:
-        if snapshot_versions.get(version["symbol"], None) == version["version"]:
-            expected_versions.append(version)
+    expected_versions = filter_for_snapshot(all_versions, snapshots[snapshot])
     # Bug 18286248854: list_versions has deleted=False for all elements when snapshot is specified. Remove following
     # lines once resolved
     for version in expected_versions:
         version["deleted"] = False
     # end remove
     # Bug 18262322490: list_versions does not respect skip_snapshots argument when snapshot is specified. Add in
-    # following lines once resolved
-    # for version in expected_versions:
-    #     version["snapshots"] = []
+    # following line once resolved
+    # expected_versions = filter_for_skip_snapshots(expected_versions)
     # end add
-    versions = lib.list_versions(snapshot=snapshot, latest_only=True, skip_snapshots=True)
-    versions = strip_date(versions)
-    assert versions == expected_versions
+    assert_versions_equal(
+        expected_versions, lib.list_versions(snapshot=snapshot, latest_only=True, skip_snapshots=True)
+    )
