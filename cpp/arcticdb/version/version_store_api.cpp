@@ -128,8 +128,8 @@ using SymbolVersionToSnapshotInfoMap = std::unordered_map<std::pair<StreamId, Ve
 using VersionResultVector = std::vector<VersionResult>;
 
 VersionResultVector list_versions_for_snapshot(
-        const std::set<StreamId>& stream_ids, std::optional<SnapshotId> snap_name, SnapshotMap& versions_for_snapshots,
-        SymbolVersionToSnapshotInfoMap& snapshots_for_symbol
+        const std::set<StreamId>& stream_ids, std::optional<SnapshotId> snap_name, SnapshotMap&& versions_for_snapshots,
+        SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
 
     VersionResultVector res;
@@ -151,7 +151,7 @@ VersionResultVector list_versions_for_snapshot(
                 s_id,
                 version_key.version_id(),
                 version_key.creation_ts(),
-                snapshots_for_symbol[{s_id, version_key.version_id()}].snapshots,
+                std::move(snapshots_for_symbol[{s_id, version_key.version_id()}].snapshots),
                 false
         );
     }
@@ -183,7 +183,7 @@ void get_snapshot_version_info(
 
 VersionResultVector get_latest_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap& snapshots_for_symbol
+        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
     VersionResultVector res;
     for (auto& s_id : stream_ids) {
@@ -193,7 +193,7 @@ VersionResultVector get_latest_versions_for_symbols(
                     s_id,
                     opt_version_key->version_id(),
                     opt_version_key->creation_ts(),
-                    snapshots_for_symbol[{s_id, opt_version_key->version_id()}].snapshots,
+                    std::move(snapshots_for_symbol[{s_id, opt_version_key->version_id()}].snapshots),
                     false
             );
         }
@@ -204,7 +204,7 @@ VersionResultVector get_latest_versions_for_symbols(
 
 VersionResultVector get_all_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap& snapshots_for_symbol
+        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
     VersionResultVector res;
     std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
@@ -217,16 +217,20 @@ VersionResultVector get_all_versions_for_symbols(
                     s_id,
                     entry.version_id(),
                     entry.creation_ts(),
-                    snapshots_for_symbol[{s_id, entry.version_id()}].snapshots,
+                    std::move(snapshots_for_symbol[{s_id, entry.version_id()}].snapshots),
                     false
             );
         }
-        for (const auto& [sym_version, snapshot_info] : snapshots_for_symbol) {
+        for (auto& [sym_version, snapshot_info] : snapshots_for_symbol) {
             // For all symbol, version combinations in snapshots, check if they have been pruned, and if so
             // use the information from the snapshot indexes and set deleted to true.
             if (sym_version.first == s_id && unpruned_versions.find(sym_version) == std::end(unpruned_versions)) {
                 res.emplace_back(
-                        sym_version.first, sym_version.second, snapshot_info.ts, snapshot_info.snapshots, true
+                        sym_version.first,
+                        sym_version.second,
+                        snapshot_info.ts,
+                        std::move(snapshot_info.snapshots),
+                        true
                 );
             }
         }
@@ -257,13 +261,15 @@ VersionResultVector PythonVersionStore::list_versions(
         get_snapshot_version_info(store(), snapshots_for_symbol, versions_for_snapshots);
 
         if (snap_name)
-            return list_versions_for_snapshot(stream_ids, snap_name, *versions_for_snapshots, snapshots_for_symbol);
+            return list_versions_for_snapshot(
+                    stream_ids, snap_name, std::move(*versions_for_snapshots), std::move(snapshots_for_symbol)
+            );
     }
 
     if (latest_only)
-        return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
+        return get_latest_versions_for_symbols(store(), version_map(), stream_ids, std::move(snapshots_for_symbol));
     else
-        return get_all_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
+        return get_all_versions_for_symbols(store(), version_map(), stream_ids, std::move(snapshots_for_symbol));
 }
 
 namespace {
