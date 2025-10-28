@@ -118,19 +118,18 @@ struct VersionComp {
     }
 };
 
-struct Tmp {
+struct SnapshotInfo {
     std::vector<SnapshotId> snapshots;
     timestamp ts;
 };
 
-using SymbolVersionToSnapshotMap = std::unordered_map<std::pair<StreamId, VersionId>, Tmp>;
-// using SymbolVersionTimestampMap = std::unordered_map<std::pair<StreamId, VersionId>, timestamp>;
+using SymbolVersionToSnapshotInfoMap = std::unordered_map<std::pair<StreamId, VersionId>, SnapshotInfo>;
 
 using VersionResultVector = std::vector<VersionResult>;
 
 VersionResultVector list_versions_for_snapshot(
         const std::set<StreamId>& stream_ids, std::optional<SnapshotId> snap_name, SnapshotMap& versions_for_snapshots,
-        SymbolVersionToSnapshotMap& snapshots_for_symbol
+        SymbolVersionToSnapshotInfoMap& snapshots_for_symbol
 ) {
 
     VersionResultVector res;
@@ -162,7 +161,7 @@ VersionResultVector list_versions_for_snapshot(
 }
 
 void get_snapshot_version_info(
-        const std::shared_ptr<Store>& store, SymbolVersionToSnapshotMap& snapshots_for_symbol,
+        const std::shared_ptr<Store>& store, SymbolVersionToSnapshotInfoMap& snapshots_for_symbol,
         std::optional<SnapshotMap>& versions_for_snapshots
 ) {
     // We will need to construct this map even if we are getting symbols for one snapshot
@@ -172,16 +171,19 @@ void get_snapshot_version_info(
 
     for (const auto& [snap_id, index_keys] : *versions_for_snapshots) {
         for (const auto& index_key : index_keys) {
-            auto& tmp = snapshots_for_symbol[{index_key.id(), index_key.version_id()}];
-            tmp.snapshots.push_back(snap_id);
-            tmp.ts = index_key.creation_ts();
+            auto& snapshot_info = snapshots_for_symbol[{index_key.id(), index_key.version_id()}];
+            snapshot_info.snapshots.push_back(snap_id);
+            snapshot_info.ts = index_key.creation_ts();
         }
     }
+
+    for (auto& [sid, snapshot_info] : snapshots_for_symbol)
+        std::sort(std::begin(snapshot_info.snapshots), std::end(snapshot_info.snapshots));
 }
 
 VersionResultVector get_latest_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotMap& snapshots_for_symbol
+        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap& snapshots_for_symbol
 ) {
     VersionResultVector res;
     for (auto& s_id : stream_ids) {
@@ -202,7 +204,7 @@ VersionResultVector get_latest_versions_for_symbols(
 
 VersionResultVector get_all_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotMap& snapshots_for_symbol
+        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap& snapshots_for_symbol
 ) {
     VersionResultVector res;
     std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
@@ -219,11 +221,13 @@ VersionResultVector get_all_versions_for_symbols(
                     false
             );
         }
-        for (const auto& [sym_version, tmp] : snapshots_for_symbol) {
+        for (const auto& [sym_version, snapshot_info] : snapshots_for_symbol) {
             // For all symbol, version combinations in snapshots, check if they have been pruned, and if so
             // use the information from the snapshot indexes and set deleted to true.
             if (sym_version.first == s_id && unpruned_versions.find(sym_version) == std::end(unpruned_versions)) {
-                res.emplace_back(sym_version.first, sym_version.second, tmp.ts, tmp.snapshots, true);
+                res.emplace_back(
+                        sym_version.first, sym_version.second, snapshot_info.ts, snapshot_info.snapshots, true
+                );
             }
         }
     }
@@ -247,8 +251,7 @@ VersionResultVector PythonVersionStore::list_versions(
 
     const bool do_snapshots = !skip_snapshots || snap_name;
 
-    SymbolVersionToSnapshotMap snapshots_for_symbol;
-    //    SymbolVersionTimestampMap creation_ts_for_version_symbol;
+    SymbolVersionToSnapshotInfoMap snapshots_for_symbol;
     std::optional<SnapshotMap> versions_for_snapshots;
     if (do_snapshots) {
         get_snapshot_version_info(store(), snapshots_for_symbol, versions_for_snapshots);
