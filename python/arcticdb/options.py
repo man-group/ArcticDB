@@ -43,6 +43,7 @@ class LibraryOptions:
         rows_per_segment: int = 100_000,
         columns_per_segment: int = 127,
         encoding_version: Optional[EncodingVersion] = None,
+        recursive_normalizers: bool = True,
     ):
         """
         Parameters
@@ -124,12 +125,19 @@ class LibraryOptions:
         encoding_version: Optional[EncodingVersion], default None
             The encoding version to use when writing data to storage.
             v2 is faster, but still experimental, so use with caution.
+
+        recursive_normalizers: bool, default True
+            Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
+            The data structure can be nested or a mix of lists and dictionaries.
+            Note: If the leaf nodes cannot be natively normalized and must be written using write_pickle, those leaf nodes
+            will be pickled, resulting in the overall data being only partially normalized and partially pickled.
         """
         self.dynamic_schema = dynamic_schema
         self.dedup = dedup
         self.rows_per_segment = rows_per_segment
         self.columns_per_segment = columns_per_segment
         self.encoding_version = encoding_version
+        self.recursive_normalizers = recursive_normalizers
 
     def __eq__(self, right):
         return (
@@ -138,13 +146,15 @@ class LibraryOptions:
             and self.rows_per_segment == right.rows_per_segment
             and self.columns_per_segment == right.columns_per_segment
             and self.encoding_version == right.encoding_version
+            and self.recursive_normalizers == right.recursive_normalizers
         )
 
     def __repr__(self):
         return (
             f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup},"
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
-            f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'})"
+            f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'},"
+            f" recursive_normalizers={self.recursive_normalizers})"
         )
 
 

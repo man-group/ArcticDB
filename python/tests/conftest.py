@@ -656,9 +656,22 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
 
 
 @pytest.fixture
+def arctic_client_s3(request) -> Arctic:
+    storage_fixture: StorageFixture = request.getfixturevalue("s3_storage")
+    ac = storage_fixture.create_arctic()
+    return ac
+
+
+@pytest.fixture
 def arctic_library(arctic_client, lib_name) -> Generator[Library, None, None]:
     yield arctic_client.create_library(lib_name)
     arctic_client.delete_library(lib_name)
+
+
+@pytest.fixture
+def arctic_library_s3(arctic_client_s3, lib_name) -> Generator[Library, None, None]:
+    yield arctic_client_s3.create_library(lib_name)
+    arctic_client_s3.delete_library(lib_name)
 
 
 @pytest.fixture

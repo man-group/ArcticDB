@@ -20,6 +20,8 @@ from arcticdb.exceptions import (
     UnsupportedKeyInDictionary,
     ArcticException as ArcticNativeException,
 )
+from arcticdb.version_store.library import ArcticUnsupportedDataTypeException
+import arcticdb.toolbox.query_stats as qs
 from arcticdb_ext.storage import KeyType
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb_ext.stream as adb_stream
@@ -55,6 +57,40 @@ def assert_vit_equals_except_data(left, right):
     assert left.metadata == right.metadata
     assert left.host == right.host
     assert left.timestamp == right.timestamp
+
+
+@pytest.mark.parametrize("recursive_normalizers", (True, False, None))
+def test_v2_api(arctic_library_s3, sym, recursive_normalizers, clear_query_stats):
+    lib = arctic_library_s3
+    data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+    if recursive_normalizers is None or recursive_normalizers is True:
+        with qs.query_stats():
+            lib.write(sym, data, recursive_normalizers=recursive_normalizers)
+        stats = qs.get_query_stats()
+        assert "MULTI_KEY" in stats["storage_operations"]["S3_PutObject"].keys()
+    else:
+        with pytest.raises(ArcticUnsupportedDataTypeException) as e:
+            lib.write(sym, data, recursive_normalizers=recursive_normalizers)
+
+
+@pytest.mark.parametrize("recursive_normalizers", (True, False, None))
+def test_v2_api_pickle(arctic_library_s3, sym, recursive_normalizers, clear_query_stats):
+    lib = arctic_library_s3
+    data = (
+        {
+            "a": [1, 2, 3],
+            "b": {"c": np.arange(24)},
+            "d": [AlmostAListNormalizer()],  # A random item that will be pickled
+        },
+    )
+    with qs.query_stats():
+        lib.write_pickle(sym, data, recursive_normalizers=recursive_normalizers)
+    keys = qs.get_query_stats()["storage_operations"]["S3_PutObject"].keys()
+    if recursive_normalizers is None or recursive_normalizers is True:
+        assert "MULTI_KEY" in keys
+    else:
+        assert "MULTI_KEY" not in keys
+        assert lib._nvs.is_symbol_pickled(sym) == True
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
