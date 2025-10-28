@@ -824,6 +824,22 @@ def test_s3_repr(s3_storage: S3Bucket, one_col_df, lib_name):
     assert written_vi.host == config
 
 
+def test_default_library_config(mem_storage, lib_name):
+    ac = mem_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+    assert lib._nvs.lib_cfg().lib_desc.version.symbol_list == True
+
+    write_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert write_options.dynamic_strings == True
+    assert write_options.recursive_normalizers == True
+    assert write_options.use_tombstones == True
+    assert write_options.fast_tombstone_all == True
+    assert write_options.prune_previous_version == False
+    assert write_options.pickle_on_failure == False
+    assert write_options.snapshot_dedup == False
+    assert write_options.delayed_deletes == False
+
+
 class A:
     """A dummy user defined type that requires pickling to serialize."""
 
