@@ -24,7 +24,6 @@ def set_library_options(
     write_options = lib_desc.version.write_options
 
     write_options.dynamic_strings = True
-    write_options.recursive_normalizers = True
     write_options.use_tombstones = True
     write_options.fast_tombstone_all = True
     lib_desc.version.symbol_list = True
@@ -38,6 +37,7 @@ def set_library_options(
     write_options.de_duplication = options.dedup
     write_options.segment_row_size = options.rows_per_segment
     write_options.column_group_size = options.columns_per_segment
+    write_options.recursive_normalizers = options.recursive_normalizers
 
     lib_desc.version.encoding_version = (
         options.encoding_version if options.encoding_version is not None else DEFAULT_ENCODING_VERSION

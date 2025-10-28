@@ -626,6 +626,15 @@ class NativeVersionStore:
             log.warning("The data could not be normalized to an ArcticDB format and has not been written")
             return None
 
+    def _is_recursive_normalizers_enabled(self, **kwargs):
+        return resolve_defaults(
+            "recursive_normalizers",
+            self._lib_cfg.lib_desc.version.write_options,
+            global_default=False,
+            uppercase=False,
+            **kwargs,
+        )
+
     def write(
         self,
         symbol: str,
@@ -712,11 +721,9 @@ class NativeVersionStore:
         prune_previous_version = resolve_defaults(
             "prune_previous_version", proto_cfg, global_default=False, existing_value=prune_previous_version, **kwargs
         )
-        recursive_normalizers = resolve_defaults(
-            "recursive_normalizers", proto_cfg, global_default=False, uppercase=False, **kwargs
-        )
         parallel = resolve_defaults("parallel", proto_cfg, global_default=False, uppercase=False, **kwargs)
         incomplete = resolve_defaults("incomplete", proto_cfg, global_default=False, uppercase=False, **kwargs)
+        recursive_normalizers = self._is_recursive_normalizers_enabled(**kwargs)
 
         # TODO remove me when dynamic strings is the default everywhere
         if parallel:
@@ -3314,12 +3321,8 @@ class NativeVersionStore:
         )
         if result and log_warning_message:
             proto_cfg = self._lib_cfg.lib_desc.version.write_options
-            resolved_recursive_normalizers = resolve_defaults(
-                "recursive_normalizers",
-                proto_cfg,
-                global_default=False,
-                uppercase=False,
-                **{"recursive_normalizers": recursive_normalizers},
+            resolved_recursive_normalizers = self._is_recursive_normalizers_enabled(
+                **{"recursive_normalizers": recursive_normalizers}
             )
             warning_msg = ""
             is_recursive_normalize_preferred, _, _ = self._try_flatten(item, "")
