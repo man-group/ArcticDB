@@ -124,7 +124,7 @@ struct Tmp {
 };
 
 using SymbolVersionToSnapshotMap = std::unordered_map<std::pair<StreamId, VersionId>, Tmp>;
-//using SymbolVersionTimestampMap = std::unordered_map<std::pair<StreamId, VersionId>, timestamp>;
+// using SymbolVersionTimestampMap = std::unordered_map<std::pair<StreamId, VersionId>, timestamp>;
 
 using VersionResultVector = std::vector<VersionResult>;
 
@@ -223,9 +223,7 @@ VersionResultVector get_all_versions_for_symbols(
             // For all symbol, version combinations in snapshots, check if they have been pruned, and if so
             // use the information from the snapshot indexes and set deleted to true.
             if (sym_version.first == s_id && unpruned_versions.find(sym_version) == std::end(unpruned_versions)) {
-                res.emplace_back(
-                        sym_version.first, sym_version.second, tmp.ts, tmp.snapshots, true
-                );
+                res.emplace_back(sym_version.first, sym_version.second, tmp.ts, tmp.snapshots, true);
             }
         }
     }
@@ -250,12 +248,10 @@ VersionResultVector PythonVersionStore::list_versions(
     const bool do_snapshots = !skip_snapshots || snap_name;
 
     SymbolVersionToSnapshotMap snapshots_for_symbol;
-//    SymbolVersionTimestampMap creation_ts_for_version_symbol;
+    //    SymbolVersionTimestampMap creation_ts_for_version_symbol;
     std::optional<SnapshotMap> versions_for_snapshots;
     if (do_snapshots) {
-        get_snapshot_version_info(
-                store(), snapshots_for_symbol, versions_for_snapshots
-        );
+        get_snapshot_version_info(store(), snapshots_for_symbol, versions_for_snapshots);
 
         if (snap_name)
             return list_versions_for_snapshot(stream_ids, snap_name, *versions_for_snapshots, snapshots_for_symbol);
@@ -264,9 +260,7 @@ VersionResultVector PythonVersionStore::list_versions(
     if (latest_only)
         return get_latest_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
     else
-        return get_all_versions_for_symbols(
-                store(), version_map(), stream_ids, snapshots_for_symbol
-        );
+        return get_all_versions_for_symbols(store(), version_map(), stream_ids, snapshots_for_symbol);
 }
 
 namespace {
