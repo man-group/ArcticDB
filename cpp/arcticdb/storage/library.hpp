@@ -88,6 +88,11 @@ class Library {
         if (open_mode() < OpenMode::WRITE) {
             throw LibraryPermissionException(library_path_, open_mode(), "write");
         }
+        if (key_seg.key_type() != KeyType::LIBRARY_CONFIG) {
+            action_factories::maybe_execute(0.4, [](FailureType type) {
+                raise<ErrorCode::E_QUOTA_EXCEEDED>("Quota exceeded!");
+            })(FailureType::WRITE);
+        }
         storages_->write(key_seg);
     }
 
