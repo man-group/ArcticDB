@@ -98,8 +98,50 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
 
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices);
 
-folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
+template<typename T, typename F>
+folly::SemiFuture<std::vector<T>> rollback_on_quota_exceeded(
+        std::vector<folly::Try<T>>&& try_slices, F&& remove_future
+) {
+    std::vector<T> succeeded;
+    std::optional<folly::exception_wrapper> exception;
+    bool has_quota_limit_exceeded = false;
+    succeeded.reserve(try_slices.size());
+    for (auto& try_slice : try_slices) {
+        if (try_slice.hasException()) {
+            if (!exception.has_value()) {
+                exception = try_slice.exception();
+            }
+
+            has_quota_limit_exceeded = has_quota_limit_exceeded ||
+                                       try_slice.exception().template is_compatible_with<QuotaExceededException>();
+        } else if (try_slice.hasValue()) {
+            succeeded.emplace_back(std::move(try_slice.value()));
+        }
+    }
+
+    if (has_quota_limit_exceeded) {
+        return std::forward<F>(remove_future)(std::move(succeeded))
+                .via(&async::cpu_executor())
+                .thenValue([](auto&&...) {
+                    return folly::makeSemiFuture<std::vector<T>>(
+                            QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
+                    );
+                });
+    }
+
+    if (exception.has_value()) {
+        exception->throw_exception();
+    }
+
+    return succeeded;
+}
+
+folly::SemiFuture<std::vector<SliceAndKey>> rollback_slices_on_quota_exceeded(
         std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+);
+
+folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quota_exceeded(
+        std::vector<folly::Try<std::vector<SliceAndKey>>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
 );
 
 folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(

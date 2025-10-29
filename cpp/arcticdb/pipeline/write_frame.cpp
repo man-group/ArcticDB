@@ -287,7 +287,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
     return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
             .via(&async::cpu_executor())
             .thenValue([sink](std::vector<folly::Try<SliceAndKey>>&& ks) {
-                return rollback_on_quota_exceeded(std::move(ks), sink);
+                return rollback_slices_on_quota_exceeded(std::move(ks), sink);
             })
             .via(&async::io_executor());
 }

@@ -245,14 +245,14 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
                    collectAll(maybe_intersect_before_fut)
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_before) {
-                               return rollback_on_quota_exceeded(
+                               return rollback_slices_on_quota_exceeded(
                                        std::move(maybe_intersect_before), std::static_pointer_cast<StreamSink>(store)
                                );
                            }),
                    collectAll(maybe_intersect_after_fut)
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_after) {
-                               return rollback_on_quota_exceeded(
+                               return rollback_slices_on_quota_exceeded(
                                        std::move(maybe_intersect_after), std::static_pointer_cast<StreamSink>(store)
                                );
                            })

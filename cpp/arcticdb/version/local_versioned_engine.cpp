@@ -1488,26 +1488,56 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     });
 }
 
-std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
-        const std::vector<VersionId>& version_ids, const std::vector<StreamId>& stream_ids,
+folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
+        std::vector<VersionId>&& version_ids, const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
     ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
-    std::vector<folly::Future<entity::AtomKey>> results_fut;
+    std::vector<folly::Future<std::vector<SliceAndKey>>> data_keys_futs;
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
-        results_fut.emplace_back(async_write_dataframe_impl(
-                store(),
-                version_ids[idx],
-                std::move(frames[idx]),
-                get_write_options(),
-                de_dup_maps[idx],
-                false,
-                validate_index
-        ));
+        auto& frame = frames[idx];
+        if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
+            sorting::raise<ErrorCode::E_UNSORTED_DATA>(
+                    "When calling write with validate_index enabled, input data must be sorted"
+            );
+        }
+        auto version_id = version_ids[idx];
+        if (version_id == 0) {
+            auto check_outcome = verify_symbol_key(frame->desc().id());
+            if (std::holds_alternative<Error>(check_outcome)) {
+                std::get<Error>(check_outcome).throw_error();
+            }
+        }
+
+        auto write_options = get_write_options();
+        frame->set_bucketize_dynamic(write_options.bucketize_dynamic);
+
+        auto slicing_policy = get_slicing_policy(write_options, *frame);
+        auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
+        auto fut_slice_keys =
+                slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
+        data_keys_futs.emplace_back(std::move(fut_slice_keys));
     }
-    return results_fut;
+
+    return folly::collectAll(data_keys_futs)
+            .via(&async::cpu_executor())
+            .thenValue([store = store()](std::vector<folly::Try<std::vector<SliceAndKey>>>&& batch) mutable {
+                return rollback_batches_on_quota_exceeded(std::move(batch), store);
+            })
+            .thenValue([store = store(),
+                        frames = std::move(frames),
+                        version_ids = std::move(version_ids)](std::vector<std::vector<SliceAndKey>>&& succeeded) {
+                std::vector<folly::Future<AtomKey>> res;
+                for (auto&& [idx, slice_keys] : folly::enumerate(std::move(succeeded))) {
+                    const auto& frame = frames[idx];
+                    auto partial_key = IndexPartialKey{frame->desc().id(), version_ids[idx]};
+                    res.emplace_back(index::write_index(frame, std::move(slice_keys), partial_key, store));
+                }
+
+                return folly::collect(std::move(res));
+            });
 }
 
 VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
