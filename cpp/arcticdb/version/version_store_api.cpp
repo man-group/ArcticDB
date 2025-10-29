@@ -183,28 +183,56 @@ void get_snapshot_version_info(
 
 VersionResultVector get_latest_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
+        std::set<StreamId>&& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
+    // folly::window requires subscript operator
+    std::vector<StreamId> symbols;
+    symbols.insert(
+            symbols.end(), std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
+    );
+    const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+    auto opt_version_result_futures = folly::window(
+            std::move(symbols),
+            [&store, &version_map, &snapshots_for_symbol](const StreamId& stream_id) {
+                return async::submit_io_task(CheckReloadTask{
+                                                     store,
+                                                     version_map,
+                                                     stream_id,
+                                                     LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}
+                                             }
+                ).thenValueInline([&stream_id, &snapshots_for_symbol](auto&& version_map_entry) {
+                    const auto& opt_version_key = version_map_entry->get_first_index(false).first;
+                    if (opt_version_key) {
+                        return std::make_optional<VersionResult>(
+                                stream_id,
+                                opt_version_key->version_id(),
+                                opt_version_key->creation_ts(),
+                                std::move(snapshots_for_symbol[{stream_id, opt_version_key->version_id()}].snapshots),
+                                false
+                        );
+                    } else {
+                        return std::optional<VersionResult>();
+                    }
+                });
+            },
+            window_size
+    );
+    // Need collectAll in case anything was deleted since the symbols were listed
+    auto opt_version_results = folly::collectAll(std::move(opt_version_result_futures)).get();
     VersionResultVector res;
-    for (auto& s_id : stream_ids) {
-        const auto& opt_version_key = get_latest_undeleted_version(store, version_map, s_id);
-        if (opt_version_key) {
-            res.emplace_back(
-                    s_id,
-                    opt_version_key->version_id(),
-                    opt_version_key->creation_ts(),
-                    std::move(snapshots_for_symbol[{s_id, opt_version_key->version_id()}].snapshots),
-                    false
-            );
+    res.reserve(opt_version_results.size());
+    // opt_version_results are already in alphabetical order of symbols, so no sorting required
+    for (auto&& opt_version_result_or_error : opt_version_results) {
+        if (opt_version_result_or_error.hasValue() && opt_version_result_or_error.value().has_value()) {
+            res.emplace_back(std::move(opt_version_result_or_error.value().value()));
         }
     }
-    std::sort(res.begin(), res.end(), VersionComp());
     return res;
 }
 
 VersionResultVector get_all_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
-        const std::set<StreamId>& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
+        std::set<StreamId>&& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
     VersionResultVector res;
     std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
@@ -267,9 +295,13 @@ VersionResultVector PythonVersionStore::list_versions(
     }
 
     if (latest_only)
-        return get_latest_versions_for_symbols(store(), version_map(), stream_ids, std::move(snapshots_for_symbol));
+        return get_latest_versions_for_symbols(
+                store(), version_map(), std::move(stream_ids), std::move(snapshots_for_symbol)
+        );
     else
-        return get_all_versions_for_symbols(store(), version_map(), stream_ids, std::move(snapshots_for_symbol));
+        return get_all_versions_for_symbols(
+                store(), version_map(), std::move(stream_ids), std::move(snapshots_for_symbol)
+        );
 }
 
 namespace {
