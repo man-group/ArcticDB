@@ -234,36 +234,84 @@ VersionResultVector get_all_versions_for_symbols(
         const std::shared_ptr<Store>& store, const std::shared_ptr<VersionMap>& version_map,
         std::set<StreamId>&& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
+    // folly::window requires subscript operator
+    std::vector<StreamId> symbols;
+    symbols.insert(
+            symbols.end(), std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
+    );
+    const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+    auto symbol_version_vector_futures = folly::window(
+            std::move(symbols),
+            [&store, &version_map, &snapshots_for_symbol](const StreamId& stream_id) {
+                return async::submit_io_task(CheckReloadTask{
+                                                     store,
+                                                     version_map,
+                                                     stream_id,
+                                                     LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}
+                                             })
+                        .via(&async::cpu_executor())
+                        .thenValue([&stream_id, &snapshots_for_symbol](auto&& version_map_entry) {
+                            auto all_versions = version_map_entry->get_indexes(false);
+                            std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
+                            VersionResultVector res;
+                            for (const auto& entry : all_versions) {
+                                unpruned_versions.emplace(stream_id, entry.version_id());
+                                res.emplace_back(
+                                        stream_id,
+                                        entry.version_id(),
+                                        entry.creation_ts(),
+                                        std::move(snapshots_for_symbol[{stream_id, entry.version_id()}].snapshots),
+                                        false
+                                );
+                            }
+                            for (auto& [sym_version, snapshot_info] : snapshots_for_symbol) {
+                                // For all symbol, version combinations in snapshots, check if they have been pruned,
+                                // and if so use the information from the snapshot indexes and set deleted to true.
+                                if (sym_version.first == stream_id &&
+                                    unpruned_versions.find(sym_version) == std::end(unpruned_versions)) {
+                                    res.emplace_back(
+                                            sym_version.first,
+                                            sym_version.second,
+                                            snapshot_info.ts,
+                                            std::move(snapshot_info.snapshots),
+                                            true
+                                    );
+                                }
+                            }
+                            // All symbols will be the same so compare only on date field
+                            std::sort(res.begin(), res.end(), [](const VersionResult& v1, const VersionResult& v2) {
+                                return std::get<2>(v1) > std::get<2>(v2);
+                            });
+                            return res;
+                        });
+            },
+            window_size
+    );
+    // Need collectAll in case anything was deleted since the symbols were listed
+    auto symbol_version_vectors = folly::collectAll(std::move(symbol_version_vector_futures)).get();
     VersionResultVector res;
-    std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
-    for (auto& s_id : stream_ids) {
-        auto all_versions = get_all_versions(store, version_map, s_id);
-        unpruned_versions = {};
-        for (const auto& entry : all_versions) {
-            unpruned_versions.emplace(s_id, entry.version_id());
-            res.emplace_back(
-                    s_id,
-                    entry.version_id(),
-                    entry.creation_ts(),
-                    std::move(snapshots_for_symbol[{s_id, entry.version_id()}].snapshots),
-                    false
+    res.reserve(std::accumulate(
+            symbol_version_vectors.cbegin(),
+            symbol_version_vectors.cend(),
+            size_t(0),
+            [](const size_t& accum, const auto& symbol_version_vector) {
+                if (symbol_version_vector.hasValue()) {
+                    return accum + symbol_version_vector.value().size();
+                } else {
+                    return accum;
+                }
+            }
+    ));
+    // symbol_version_vectors are already in alphabetical order of symbols, so no sorting required
+    for (auto&& symbol_version_vector : symbol_version_vectors) {
+        if (symbol_version_vector.hasValue()) {
+            res.insert(
+                    res.end(),
+                    std::make_move_iterator(symbol_version_vector.value().begin()),
+                    std::make_move_iterator(symbol_version_vector.value().end())
             );
         }
-        for (auto& [sym_version, snapshot_info] : snapshots_for_symbol) {
-            // For all symbol, version combinations in snapshots, check if they have been pruned, and if so
-            // use the information from the snapshot indexes and set deleted to true.
-            if (sym_version.first == s_id && unpruned_versions.find(sym_version) == std::end(unpruned_versions)) {
-                res.emplace_back(
-                        sym_version.first,
-                        sym_version.second,
-                        snapshot_info.ts,
-                        std::move(snapshot_info.snapshots),
-                        true
-                );
-            }
-        }
     }
-    std::sort(res.begin(), res.end(), VersionComp());
     return res;
 }
 
