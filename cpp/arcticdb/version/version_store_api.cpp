@@ -203,11 +203,14 @@ VersionResultVector get_latest_versions_for_symbols(
                 ).thenValueInline([&stream_id, &snapshots_for_symbol](auto&& version_map_entry) {
                     const auto& opt_version_key = version_map_entry->get_first_index(false).first;
                     if (opt_version_key) {
+                        std::pair<StreamId, VersionId> symbol_version_pair(stream_id, opt_version_key->version_id());
                         return std::make_optional<VersionResult>(
                                 stream_id,
                                 opt_version_key->version_id(),
                                 opt_version_key->creation_ts(),
-                                std::move(snapshots_for_symbol[{stream_id, opt_version_key->version_id()}].snapshots),
+                                snapshots_for_symbol.contains(symbol_version_pair)
+                                        ? std::move(snapshots_for_symbol[symbol_version_pair].snapshots)
+                                        : std::vector<SnapshotId>(),
                                 false
                         );
                     } else {
@@ -256,19 +259,21 @@ VersionResultVector get_all_versions_for_symbols(
                             VersionResultVector res;
                             for (const auto& entry : all_versions) {
                                 unpruned_versions.emplace(stream_id, entry.version_id());
+                                std::pair<StreamId, VersionId> symbol_version_pair(stream_id, entry.version_id());
                                 res.emplace_back(
                                         stream_id,
                                         entry.version_id(),
                                         entry.creation_ts(),
-                                        std::move(snapshots_for_symbol[{stream_id, entry.version_id()}].snapshots),
+                                        snapshots_for_symbol.contains(symbol_version_pair)
+                                                ? std::move(snapshots_for_symbol[symbol_version_pair].snapshots)
+                                                : std::vector<SnapshotId>(),
                                         false
                                 );
                             }
                             for (auto& [sym_version, snapshot_info] : snapshots_for_symbol) {
                                 // For all symbol, version combinations in snapshots, check if they have been pruned,
                                 // and if so use the information from the snapshot indexes and set deleted to true.
-                                if (sym_version.first == stream_id &&
-                                    unpruned_versions.find(sym_version) == std::end(unpruned_versions)) {
+                                if (sym_version.first == stream_id && !unpruned_versions.contains(sym_version)) {
                                     res.emplace_back(
                                             sym_version.first,
                                             sym_version.second,
