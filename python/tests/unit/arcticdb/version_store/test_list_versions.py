@@ -16,7 +16,7 @@ def populate_library(lib):
     # - sym<n> has n + 1 versions
     # - snap<n> contains version n of each symbol, or the latest version if symbol doesn't have that version
     # - even numbered versions are deleted
-    num_symbols = 3
+    num_symbols = 5
     num_snapshots = num_symbols
     snapshots = dict()
     all_versions = []
@@ -72,7 +72,7 @@ def filter_for_snapshot(versions, snapshot_versions):
 def filter_for_latest_only(versions):
     res = []
     for version in versions:
-        sym_idx = int(version["symbol"][-1])
+        sym_idx = int(version["symbol"][3:])
         if not version["deleted"] and version["version"] == (sym_idx - 1) + (sym_idx % 2):
             res.append(version)
     return res
