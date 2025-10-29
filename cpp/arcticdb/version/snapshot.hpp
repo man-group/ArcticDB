@@ -52,7 +52,9 @@ std::pair<std::vector<AtomKey>, std::unordered_set<AtomKey>> get_index_keys_part
         const std::shared_ptr<Store>& store, const StreamId& stream_id, std::vector<entity::AtomKey>&& all_index_keys
 );
 
-std::vector<AtomKey> get_versions_from_segment(const SegmentInMemory& snapshot_segment);
+std::vector<AtomKey> get_versions_from_segment(
+        const SegmentInMemory& snapshot_segment, const std::optional<StreamId>& stream_id = std::nullopt
+);
 
 std::optional<VariantKey> get_snapshot_key(const std::shared_ptr<Store>& store, const SnapshotId& snap_name);
 
@@ -64,7 +66,7 @@ std::set<StreamId> list_streams_in_snapshot(const std::shared_ptr<Store>& store,
 
 using SnapshotMap = std::unordered_map<SnapshotId, std::vector<AtomKey>>;
 
-SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store);
+SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store, const std::optional<StreamId>& stream_id);
 
 std::unordered_map<SnapshotId, std::optional<VariantKey>> get_keys_for_snapshots(
         const std::shared_ptr<Store>& store, const std::vector<SnapshotId>& snap_names
