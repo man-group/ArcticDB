@@ -944,7 +944,7 @@ class Library:
         staged=False,
         validate_index=True,
         index_column: Optional[str] = None,
-        recursive_normalizers: bool = None,
+        recursive_normalizers: bool = False,
     ) -> VersionedItem:
         """
         Write ``data`` to the specified ``symbol``. If ``symbol`` already exists then a new version will be created to
@@ -993,9 +993,8 @@ class Library:
         index_column: Optional[str], default=None
             Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
             table.
-        recursive_normalizers: bool, default None
+        recursive_normalizers: bool, default False
             Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
-            If None, falls back to the corresponding setting in the library configuration.
             The data structure can be nested or a mix of lists and dictionaries.
 
         Returns
@@ -1025,9 +1024,7 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
-        if not self._nvs._is_recursive_normalizers_enabled(
-            **{"recursive_normalizers": recursive_normalizers}
-        ) and not self._allowed_input_type(data):
+        if not recursive_normalizers and not self._allowed_input_type(data):
             raise ArcticUnsupportedDataTypeException(
                 "data is of a type that cannot be normalized. Consider using "
                 f"write_pickle instead. type(data)=[{type(data)}]"
@@ -1054,7 +1051,7 @@ class Library:
         metadata: Any = None,
         prune_previous_versions: bool = False,
         staged=False,
-        recursive_normalizers: bool = None,
+        recursive_normalizers: bool = False,
     ) -> VersionedItem:
         """
         See `write`. This method differs from `write` only in that ``data`` can be of any type that is serialisable via
@@ -1076,7 +1073,7 @@ class Library:
             See documentation on `write`.
         staged
             See documentation on `write`.
-        recursive_normalizers: bool, default None
+        recursive_normalizers: bool, default False
             See documentation on `write`.
             If the leaf nodes cannot be natively normalized, they will be pickled,
             resulting in the overall data being recursively normalized and partially pickled.
@@ -1104,7 +1101,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
             parallel=staged,
-            recursive_normalizers=recursive_normalizers,
+            recursive_normalizers=True if recursive_normalizers else False,
         )
 
     @staticmethod
