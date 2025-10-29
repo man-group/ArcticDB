@@ -183,6 +183,7 @@ class ChunkedBufferImpl {
         swap(left.blocks_, right.blocks_);
         swap(left.block_offsets_, right.block_offsets_);
         swap(left.allocation_type_, right.allocation_type_);
+        swap(left.extra_bytes_per_block_, right.extra_bytes_per_block_);
     }
 
     [[nodiscard]] const auto& blocks() const { return blocks_; }

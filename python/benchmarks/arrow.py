@@ -10,14 +10,12 @@ import time
 import numpy as np
 import pandas as pd
 
-from arcticdb import Arctic, OutputFormat
+from arcticdb import Arctic, OutputFormat, ArrowOutputStringFormat
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
 from benchmarks.common import generate_pseudo_random_dataframe
-
-from python.arcticdb.options import ArrowOutputStringFormat
 
 
 class ArrowNumeric:
@@ -139,14 +137,14 @@ class ArrowStrings:
                 table = self._generate_table(rows, self.num_cols, unique_string_count)
                 lib.write(self.symbol_name(rows, unique_string_count), table, index_column="ts")
 
-    def teardown(self, rows, date_range, unique_string_count):
+    def teardown(self, rows, date_range, unique_string_count, arrow_string_format):
         for lib in self.ac.list_libraries():
             if "prewritten" in lib:
                 continue
             self.ac.delete_library(lib)
         del self.ac
 
-    def setup(self, rows, date_range, unique_string_count):
+    def setup(self, rows, date_range, unique_string_count, arrow_string_format):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
         self.lib._nvs._set_allow_arrow_input()

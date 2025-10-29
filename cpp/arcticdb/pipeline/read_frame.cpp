@@ -54,23 +54,23 @@ std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_des
             [&desc, &filter_columns, &read_options](const auto& idx
             ) -> std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> {
                 const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
-                auto allocation_types = std::vector<std::optional<size_t>>();
-                allocation_types.reserve(fields->size());
+                auto extra_bytes_per_column = std::vector<std::optional<size_t>>();
+                extra_bytes_per_column.reserve(fields->size());
                 auto handlers = TypeHandlerRegistry::instance();
 
                 for (auto& field : *fields) {
                     if (auto handler = handlers->get_handler(read_options.output_format(), field.type())) {
                         auto [output_type, extra_bytes] =
                                 handler->output_type_and_extra_bytes(field.type(), field.name(), read_options);
-                        allocation_types.emplace_back(extra_bytes);
+                        extra_bytes_per_column.emplace_back(extra_bytes);
                         if (output_type != field.type())
                             field.mutable_type() = output_type;
                     } else {
-                        allocation_types.emplace_back(std::nullopt);
+                        extra_bytes_per_column.emplace_back(std::nullopt);
                     }
                 }
 
-                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, allocation_types};
+                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, extra_bytes_per_column};
             }
     );
 }
@@ -117,7 +117,6 @@ SegmentInMemory allocate_chunked_frame(
     SegmentInMemory output{
             std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, extra_bytes_per_column
     };
-    auto handlers = TypeHandlerRegistry::instance();
 
     for (auto& column : output.columns()) {
         const auto data_size = data_type_size(column->type());

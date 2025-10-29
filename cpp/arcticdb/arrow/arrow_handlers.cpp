@@ -246,7 +246,7 @@ std::pair<TypeDescriptor, std::optional<size_t>> ArrowStringHandler::output_type
     case ArrowOutputStringFormat::SMALL_STRING:
         return {make_scalar_type(DataType::UTF_DYNAMIC32), {sizeof(int32_t)}};
     default:
-        util::raise_rte("Unkown arrow string output format {}", static_cast<int32_t>(string_format));
+        util::raise_rte("Unknown arrow string output format {}", static_cast<int32_t>(string_format));
     }
 }
 
