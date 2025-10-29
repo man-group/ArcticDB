@@ -1041,7 +1041,7 @@ class Library:
             index_column=index_column,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
             "(such as date_range filtering and column selection) will not work on pickled data.",
-            recursive_normalizers=recursive_normalizers,
+            recursive_normalizers=bool(recursive_normalizers),
         )
 
     def write_pickle(
@@ -1101,7 +1101,7 @@ class Library:
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
             parallel=staged,
-            recursive_normalizers=True if recursive_normalizers else False,
+            recursive_normalizers=bool(recursive_normalizers),
         )
 
     @staticmethod

@@ -83,7 +83,7 @@ def main(type: str, in_place: bool, specific_file: str):
     elif type == "cpp":
         return lint_cpp(in_place, specific_file)
     else:
-        return lint_python(in_place) or lint_cpp(in_place)
+        return lint_python(in_place, specific_file) or lint_cpp(in_place, specific_file)
 
 
 if __name__ == "__main__":
@@ -131,8 +131,6 @@ if __name__ == "__main__":
         raise RuntimeError("Must specify --type")
     if args.type not in ("python", "cpp", "all"):
         raise RuntimeError("Invalid --type")
-    if args.type == "all" and args.file:
-        raise RuntimeError("Cannot specify file type when specifying a single file for formatting")
 
     return_code = main(
         type=args.type,

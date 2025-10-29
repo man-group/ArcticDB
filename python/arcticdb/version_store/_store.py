@@ -3151,7 +3151,6 @@ class NativeVersionStore:
             _LogLevel.WARN
         )
         if result and log_warning_message:
-            proto_cfg = self._lib_cfg.lib_desc.version.write_options
             resolved_recursive_normalizers = self._is_recursive_normalizers_enabled(
                 **{"recursive_normalizers": recursive_normalizers}
             )

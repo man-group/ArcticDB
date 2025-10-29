@@ -90,7 +90,7 @@ def test_v2_api_pickle(arctic_library_s3, sym, recursive_normalizers, clear_quer
         assert "MULTI_KEY" in keys
     else:
         assert "MULTI_KEY" not in keys
-        assert lib._nvs.is_symbol_pickled(sym) == True
+        assert lib._nvs.is_symbol_pickled(sym)
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
