@@ -41,7 +41,7 @@ void write_version_frame_with_three_segments_rec_norm(
     }
 
     std::vector<std::shared_ptr<DeDupMap>> de_dup_maps(size, nullptr);
-    store.batch_write_internal(version_ids, rec_norm_ids, std::move(frames_), de_dup_maps, false);
+    store.batch_write_internal(version_ids, rec_norm_ids, std::move(frames_), de_dup_maps, false).get();
 }
 
 void write_version_frame_with_three_segments(
@@ -76,12 +76,7 @@ auto get_keys(version_store::PythonVersionStore& store) {
         data_keys.emplace(std::get<AtomKeyImpl>(std::move(vk)));
     });
 
-    std::unordered_set<AtomKeyImpl> multi_keys;
-    mock_store->iterate_type(KeyType::MULTI_KEY, [&](VariantKey&& vk) {
-        multi_keys.emplace(std::get<AtomKeyImpl>(std::move(vk)));
-    });
-
-    return std::make_tuple(version_ref_keys, version_keys, index_keys, data_keys, multi_keys);
+    return std::make_tuple(version_ref_keys, version_keys, index_keys, data_keys);
 }
 
 TestTensorFrame update_with_three_segments(version_store::PythonVersionStore& store, const StreamId& stream_id) {
@@ -140,7 +135,6 @@ struct TestScenario {
     size_t expected_written_index_keys{};
     bool check_data_keys{true};
     size_t expected_written_data_keys{};
-    size_t expected_written_multi_keys{};
     size_t num_writes{};
     std::vector<Outcome> write_expected_outcome;
     Operation operation{Operation::WRITE};
@@ -210,7 +204,7 @@ class RollbackOnQuotaExceededUpdateOrAppend : public RollbackOnQuotaExceeded {
         StorageFailureSimulator::instance()->configure({{FailureType::WRITE, scenario.write_failures}});
         StorageFailureSimulator::instance()->configure({{FailureType::DELETE, scenario.delete_failures}});
 
-        auto [version_ref_keys, version_keys, index_keys, data_keys, multi_keys] = get_keys(*version_store_);
+        auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
 
         ASSERT_EQ(version_ref_keys.size(), 1);
         ASSERT_EQ(version_keys.size(), 1);
@@ -289,7 +283,6 @@ const auto TEST_DATA_WRITE_REC_NORM = {
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
-                .expected_written_multi_keys = 0,
                 .num_writes = 1,
                 .write_expected_outcome = {QUOTA},
                 .operation = Operation::WRITE_REC_NORM
@@ -301,7 +294,6 @@ const auto TEST_DATA_WRITE_REC_NORM = {
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
-                .expected_written_multi_keys = 0,
                 .num_writes = 1,
                 .write_expected_outcome = {QUOTA},
                 .operation = Operation::WRITE_REC_NORM
@@ -313,7 +305,6 @@ const auto TEST_DATA_WRITE_REC_NORM = {
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys = 0,
                 .expected_written_data_keys = 0,
-                .expected_written_multi_keys = 0,
                 .num_writes = 1,
                 .write_expected_outcome = {QUOTA},
                 .operation = Operation::WRITE_REC_NORM
@@ -321,22 +312,34 @@ const auto TEST_DATA_WRITE_REC_NORM = {
         TestScenario{
                 .name = "All_succeed",
                 .write_failures = make_fault_sequence({NONE}),
-                .expected_written_ref_keys = 1,
-                .expected_written_version_keys = 1,
-                .expected_written_index_keys = 0,
+                .expected_written_ref_keys = 0, // The rec norm test uses batch_write which only writes data and index
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 2,
                 .expected_written_data_keys = 6,
-                .expected_written_multi_keys = 2,
                 .num_writes = 1,
                 .write_expected_outcome = {NONE},
+                .operation = Operation::WRITE_REC_NORM
+        },
+        TestScenario{
+                .name = "Write_triggers_both_quota_and_other_exception",
+                .write_failures = make_fault_sequence({NONE, OTHER, NONE, NONE, QUOTA, NONE}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys =
+                        0, // Index should not be written as now that is done after all the data keys are written
+                .check_data_keys = true,
+                .expected_written_data_keys = 2,
+                .num_writes = 1,
+                .write_expected_outcome = {OTHER},
                 .operation = Operation::WRITE_REC_NORM
         },
         TestScenario{
                 .name = "Write_triggers_rollback_but_then_delete_fails",
                 .write_failures = make_fault_sequence({NONE, QUOTA, NONE, NONE, NONE, NONE}),
                 .delete_failures = make_fault_sequence({OTHER}),
-                .expected_written_ref_keys = 1,
-                .expected_written_version_keys = 1,
-                .expected_written_index_keys = 1,
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
                 .check_data_keys = true,
                 .expected_written_data_keys = 5,
                 .num_writes = 1,
@@ -510,15 +513,14 @@ TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
         }
     }
 
-    auto [version_ref_keys, version_keys, index_keys, data_keys, multi_keys] = get_keys(*version_store_);
+    auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
 
-    // ASSERT_EQ(version_ref_keys.size(), scenario.expected_written_ref_keys);
-    // ASSERT_EQ(version_keys.size(), scenario.expected_written_version_keys);
-    // ASSERT_EQ(index_keys.size(), scenario.expected_written_index_keys);
-    // if (scenario.check_data_keys) {
-    //     ASSERT_EQ(data_keys.size(), scenario.expected_written_data_keys);
-    // }
-    // ASSERT_EQ(multi_keys.size(), scenario.expected_written_multi_keys);
+    ASSERT_EQ(version_ref_keys.size(), scenario.expected_written_ref_keys);
+    ASSERT_EQ(version_keys.size(), scenario.expected_written_version_keys);
+    ASSERT_EQ(index_keys.size(), scenario.expected_written_index_keys);
+    if (scenario.check_data_keys) {
+        ASSERT_EQ(data_keys.size(), scenario.expected_written_data_keys);
+    }
 }
 
 TEST_P(RollbackOnQuotaExceededUpdateOrAppend, BasicUpdateOrAppend) {
@@ -544,7 +546,7 @@ TEST_P(RollbackOnQuotaExceededUpdateOrAppend, BasicUpdateOrAppend) {
         }
     }
 
-    auto [version_ref_keys, version_keys, index_keys, data_keys, multi_keys] = get_keys(*version_store_);
+    auto [version_ref_keys, version_keys, index_keys, data_keys] = get_keys(*version_store_);
     if (scenario.expected_written_ref_keys == 0) {
         ASSERT_EQ(version_ref_keys, std::get<0>(initial_keys));
     }
@@ -565,7 +567,6 @@ TEST_P(RollbackOnQuotaExceededUpdateOrAppend, BasicUpdateOrAppend) {
     if (scenario.check_data_keys) {
         ASSERT_EQ(data_keys.size(), scenario.expected_written_data_keys + 3);
     }
-    ASSERT_EQ(multi_keys.size(), scenario.expected_written_multi_keys);
 }
 
 INSTANTIATE_TEST_SUITE_P(

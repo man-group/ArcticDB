@@ -1488,7 +1488,7 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     });
 }
 
-std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
+folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
         const std::vector<VersionId>& version_ids, const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps, bool validate_index
@@ -1534,9 +1534,8 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
                     res.emplace_back(index::write_index(frame, std::move(slice_keys), partial_key, store()));
                 }
 
-                return res;
-            })
-            .get();
+                return folly::collect(std::move(res));
+            });
 }
 
 VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(

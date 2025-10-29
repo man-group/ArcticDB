@@ -207,7 +207,7 @@ class LocalVersionedEngine : public VersionedEngine {
             const CompactIncompleteParameters& parameters
     );
 
-    std::vector<folly::Future<AtomKey>> batch_write_internal(
+    folly::Future<std::vector<AtomKey>> batch_write_internal(
             const std::vector<VersionId>& version_ids, const std::vector<StreamId>& stream_ids,
             std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
             const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps, bool validate_index
