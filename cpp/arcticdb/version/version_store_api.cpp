@@ -203,14 +203,14 @@ VersionResultVector get_latest_versions_for_symbols(
                 ).thenValueInline([&stream_id, &snapshots_for_symbol](auto&& version_map_entry) {
                     const auto& opt_version_key = version_map_entry->get_first_index(false).first;
                     if (opt_version_key) {
-                        std::pair<StreamId, VersionId> symbol_version_pair(stream_id, opt_version_key->version_id());
+                        auto snapshots_it =
+                                snapshots_for_symbol.find(std::make_pair(stream_id, opt_version_key->version_id()));
                         return std::make_optional<VersionResult>(
                                 stream_id,
                                 opt_version_key->version_id(),
                                 opt_version_key->creation_ts(),
-                                snapshots_for_symbol.contains(symbol_version_pair)
-                                        ? std::move(snapshots_for_symbol[symbol_version_pair].snapshots)
-                                        : std::vector<SnapshotId>(),
+                                snapshots_it == snapshots_for_symbol.end() ? std::vector<SnapshotId>()
+                                                                           : std::move(snapshots_it->second.snapshots),
                                 false
                         );
                     } else {
@@ -259,14 +259,15 @@ VersionResultVector get_all_versions_for_symbols(
                             VersionResultVector res;
                             for (const auto& entry : all_versions) {
                                 unpruned_versions.emplace(stream_id, entry.version_id());
-                                std::pair<StreamId, VersionId> symbol_version_pair(stream_id, entry.version_id());
+                                auto snapshots_it =
+                                        snapshots_for_symbol.find(std::make_pair(stream_id, entry.version_id()));
                                 res.emplace_back(
                                         stream_id,
                                         entry.version_id(),
                                         entry.creation_ts(),
-                                        snapshots_for_symbol.contains(symbol_version_pair)
-                                                ? std::move(snapshots_for_symbol[symbol_version_pair].snapshots)
-                                                : std::vector<SnapshotId>(),
+                                        snapshots_it == snapshots_for_symbol.end()
+                                                ? std::vector<SnapshotId>()
+                                                : std::move(snapshots_it->second.snapshots),
                                         false
                                 );
                             }
