@@ -608,7 +608,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
                            ))
                     .get();
     release_gil.reset();
-    // This fails if index_keys is empty. Multikey is UNDEFINED
+    // TODO: This fails if index_keys is empty. Multikey is UNDEFINED
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
     auto versioned_item = VersionedItem(to_atom(std::move(multi_key)));
     write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, maybe_prev);

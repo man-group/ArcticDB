@@ -1505,39 +1505,30 @@ std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
         auto slicing_policy = get_slicing_policy(write_options, *frame);
         auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
         auto fut_slice_keys =
-                slice_and_write(frames[idx], slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
+                slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
         data_keys_futs.emplace_back(std::move(fut_slice_keys));
-        // results_fut.emplace_back(async_write_dataframe_impl(
-        //         store(),
-        //         version_ids[idx],
-        //         std::move(frames[idx]),
-        //         get_write_options(),
-        //         de_dup_maps[idx],
-        //         false,
-        //         validate_index
-        // ));
     }
 
-    auto remove_keys = [this](std::vector<std::vector<SliceAndKey>>&& slice_keys) {
+    auto remove_keys = [this](std::vector<std::vector<SliceAndKey>>&& slice_keys_per_batch) {
         return folly::collect(folly::window(
-                std::move(slice_keys),
-                [this](auto&& slice_keys) { return remove_slice_and_keys(std::move(slice_keys), *store()); },
+                std::move(slice_keys_per_batch),
+                [this](std::vector<SliceAndKey>&& slice_keys) {
+                    return remove_slice_and_keys(std::move(slice_keys), *store());
+                },
                 write_window_size()
         ));
     };
 
+    // TODO: think about the captures
     return folly::collectAll(data_keys_futs)
             .via(&async::cpu_executor())
-            .thenValue(
-                    [this, &remove_keys](std::vector<folly::Try<std::vector<SliceAndKey>>>&& batch
-                    ) -> folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> {
-                        return rollback_on_quota_exceeded_templ(std::move(batch), store(), remove_keys);
-                    }
-            )
-            .thenValue([this, &frames, &version_ids](std::vector<std::vector<SliceAndKey>>&& succeeded) {
+            .thenValue([this, remove_keys](std::vector<folly::Try<std::vector<SliceAndKey>>>&& batch) {
+                return rollback_on_quota_exceeded_templ(std::move(batch), store(), remove_keys);
+            })
+            .thenValue([this, frames, version_ids](std::vector<std::vector<SliceAndKey>>&& succeeded) {
                 std::vector<folly::Future<AtomKey>> res;
-                for (auto&& [idx, slice_keys] : folly::enumerate(succeeded)) {
-                    auto& frame = frames[idx];
+                for (auto&& [idx, slice_keys] : folly::enumerate(std::move(succeeded))) {
+                    const auto& frame = frames[idx];
 
                     auto partial_key = IndexPartialKey{frame->desc().id(), version_ids[idx]};
                     res.emplace_back(index::write_index(frame, std::move(slice_keys), partial_key, store()));
