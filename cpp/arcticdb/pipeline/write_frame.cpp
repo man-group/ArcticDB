@@ -458,39 +458,29 @@ folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_key
     return sink.remove_keys(std::move(keys));
 };
 
-folly::SemiFuture<std::vector<SliceAndKey>> rollback_on_quota_exceeded(
+folly::SemiFuture<std::vector<SliceAndKey>> rollback_slices_on_quota_exceeded(
         std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
 ) {
-    std::vector<SliceAndKey> succeeded;
-    std::optional<folly::exception_wrapper> exception;
-    bool has_quota_limit_exceeded = false;
-    succeeded.reserve(try_slices.size());
-    for (auto& try_slice : try_slices) {
-        if (try_slice.hasException()) {
-            if (!exception.has_value()) {
-                exception = try_slice.exception();
-            }
+    auto remove_slice_and_keys_func = [sink](std::vector<SliceAndKey>&& slice_keys) {
+        return remove_slice_and_keys(std::move(slice_keys), *sink);
+    };
 
-            has_quota_limit_exceeded =
-                    has_quota_limit_exceeded || try_slice.exception().is_compatible_with<QuotaExceededException>();
-        } else if (try_slice.hasValue()) {
-            succeeded.emplace_back(std::move(try_slice.value()));
-        }
-    }
-
-    if (has_quota_limit_exceeded) {
-        return remove_slice_and_keys(std::move(succeeded), *sink).thenValue([](auto&&) {
-            return folly::makeSemiFuture<std::vector<SliceAndKey>>(
-                    QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
-            );
-        });
-    }
-
-    if (exception.has_value()) {
-        exception->throw_exception();
-    }
-
-    return succeeded;
+    return rollback_on_quota_exceeded(std::move(try_slices), remove_slice_and_keys_func);
 }
 
+folly::SemiFuture<SliceAndKeyBatches> rollback_batches_on_quota_exceeded(
+        SliceAndKeyTryBatches&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+) {
+    auto remove_keys = [sink](std::vector<std::vector<SliceAndKey>>&& slice_keys_per_batch) {
+        return folly::collect(folly::window(
+                std::move(slice_keys_per_batch),
+                [sink](std::vector<SliceAndKey>&& slice_keys) {
+                    return remove_slice_and_keys(std::move(slice_keys), *sink);
+                },
+                write_window_size()
+        ));
+    };
+
+    return rollback_on_quota_exceeded(std::move(try_slices), remove_keys);
+}
 } // namespace arcticdb::pipelines

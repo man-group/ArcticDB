@@ -140,8 +140,10 @@ folly::SemiFuture<std::vector<SliceAndKey>> rollback_slices_on_quota_exceeded(
         std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
 );
 
-folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quota_exceeded(
-        std::vector<folly::Try<std::vector<SliceAndKey>>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+using SliceAndKeyBatches = std::vector<std::vector<SliceAndKey>>;
+using SliceAndKeyTryBatches = std::vector<folly::Try<std::vector<SliceAndKey>>>;
+folly::SemiFuture<SliceAndKeyBatches> rollback_batches_on_quota_exceeded(
+        SliceAndKeyTryBatches&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
 );
 
 folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(

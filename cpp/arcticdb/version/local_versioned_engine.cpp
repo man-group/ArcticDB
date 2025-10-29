@@ -1495,7 +1495,7 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
     ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
-    std::vector<folly::Future<std::vector<SliceAndKey>>> data_keys_futs;
+    std::vector<folly::Future<std::vector<SliceAndKey>>> batch_futures;
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         auto& frame = frames[idx];
         if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
@@ -1518,17 +1518,17 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
         auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
         auto fut_slice_keys =
                 slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
-        data_keys_futs.emplace_back(std::move(fut_slice_keys));
+        batch_futures.emplace_back(std::move(fut_slice_keys));
     }
 
-    return folly::collectAll(data_keys_futs)
+    return folly::collectAll(batch_futures)
             .via(&async::cpu_executor())
-            .thenValue([store = store()](std::vector<folly::Try<std::vector<SliceAndKey>>>&& batch) mutable {
-                return rollback_batches_on_quota_exceeded(std::move(batch), store);
+            .thenValue([store = store()](SliceAndKeyTryBatches&& batches) mutable {
+                return rollback_batches_on_quota_exceeded(std::move(batches), store);
             })
             .thenValue([store = store(),
                         frames = std::move(frames),
-                        version_ids = std::move(version_ids)](std::vector<std::vector<SliceAndKey>>&& succeeded) {
+                        version_ids = std::move(version_ids)](SliceAndKeyBatches&& succeeded) {
                 std::vector<folly::Future<AtomKey>> res;
                 for (auto&& [idx, slice_keys] : folly::enumerate(std::move(succeeded))) {
                     const auto& frame = frames[idx];
