@@ -832,7 +832,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Read the specified version of the dataframe from the store"
             )
-            .def("read_modify_write",
+            .def("_read_modify_write",
                  &PythonVersionStore::read_modify_write,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Read, modify and write the specified version for the dataframe (experimental)")

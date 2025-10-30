@@ -145,19 +145,22 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
     return desc;
 }
 
-/// When segments are produced by the processing pipeline some rows might be missing. Imagine a filter with the middle
+/// When segments are produced by the processing pipeline, some rows might be missing. Imagine a filter with the middle
 /// rows filtered out. These slices cannot be put in an index key as the row slices in the index key must be contiguous.
 /// This function adjusts the row slices so that there are no gaps.
-/// @note This expects the slices to be sorted by colum slice i.e. first are all row in the first column slice, then
-///     are the row slices in the second column slice, etc...
-void compact_row_slices(std::span<SliceAndKey> slices) {
+/// @note This expects the slices to be sorted by colum slice i.e., first are all row in the first column slice, then
+///     are the row slices in the second column slice, etc... It also expects that there are no missing columns. The
+///     difference between this and adjust_slice_ranges is that this will not change the column slices. While
+///     adjust_slice_ranges will change the column slices, making the first slice start from 0 even for timestamp-index
+///     dataframes (which should have column range starting from 1 when being written to disk).
+[[maybe_unused]] void compact_row_slices(std::span<SliceAndKey> slices) {
     size_t current_compacted_row = 0;
     size_t previous_uncompacted_end = slices.empty() ? 0 : slices.front().slice().row_range.end();
     size_t previous_col_slice_end = slices.empty() ? 0 : slices.front().slice().col_range.end();
     for (SliceAndKey& slice : slices) {
-        // Aggregation clause performs aggregations in parallel for each group. Thus it can produce several slices with
-        // the exact row_range and column_range. The ordering doesnt matter but this must be taken into account so that
-        // the row slices are always increasing. The second condition in the if takes care of this scenario.
+        // Aggregation clause performs aggregations in parallel for each group. Thus, it can produce several slices with
+        // the exact row_range and column_range. The ordering doesn't matter, but this must be taken into account so
+        // that the row slices are always increasing. The second condition in the "if" takes care of this scenario.
         if (slice.slice().row_range.start() < previous_uncompacted_end &&
             slice.slice().col_range.start() > previous_col_slice_end) {
             current_compacted_row = 0;
@@ -1145,7 +1148,7 @@ folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
-    ProcessingConfig processing_config{
+    const ProcessingConfig processing_config{
             opt_false(read_options.dynamic_schema()),
             pipeline_context->rows_,
             pipeline_context->descriptor().index().type()
@@ -1279,15 +1282,17 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
     );
 }
 
-void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query) {
+void check_can_perform_processing(
+        const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query
+) {
     // To remain backward compatibility, pending new major release to merge into below section
     // Ticket: 18038782559
-    bool is_pickled = pipeline_context->norm_meta_ && pipeline_context->is_pickled();
+    const bool is_pickled = pipeline_context->norm_meta_ && pipeline_context->is_pickled();
     util::check(
             !is_pickled ||
                     (!read_query.columns.has_value() && std::holds_alternative<std::monostate>(read_query.row_filter)),
-            "The data for this symbol is pickled and does not support column stats, date_range, row_range, or column "
-            "queries"
+            "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+            "etc.. on pickled data"
     );
     if (pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, read_query);
@@ -1300,27 +1305,30 @@ void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_cont
                         !std::holds_alternative<IndexRange>(read_query.row_filter),
                 "Cannot apply date range filter to symbol with non-timestamp index"
         );
-        auto sorted_value = pipeline_context->descriptor().sorted();
+        const auto sorted_value = pipeline_context->descriptor().sorted();
         sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING ||
                         !std::holds_alternative<IndexRange>(read_query.row_filter),
                 "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
-                "it "
-                "is not sorted in ascending order and cannot therefore filter the data using date_range."
+                "it is not sorted in ascending order and cannot therefore filter the data using date_range."
         );
     }
-    bool is_query_empty =
+    const bool is_query_empty =
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
-    bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
+    const bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
     if (!is_query_empty) {
         // Exception for filterig pickled data is skipped for now for backward compatibility
         if (pipeline_context->multi_key_) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
-                    "Cannot filter recursively normalized data"
+                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+                    "etc.. on recursively normalized data"
             );
         } else if (is_numpy_array) {
-            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>("Cannot filter numpy array");
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
+                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+                    "etc.. on recursively numpy array"
+            );
         }
     }
 }
@@ -1358,7 +1366,7 @@ static void read_indexed_keys_to_pipeline(
             std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta())
     );
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
-    check_can_be_filtered(pipeline_context, read_query);
+    check_can_perform_processing(pipeline_context, read_query);
     ARCTICDB_DEBUG(
             log::version(),
             "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows",
@@ -2708,7 +2716,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 
     if (pipeline_context->multi_key_) {
         if (read_query) {
-            check_can_be_filtered(pipeline_context, *read_query);
+            check_can_perform_processing(pipeline_context, *read_query);
         }
         return read_multi_key(
                 store, read_options, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_)
@@ -2750,10 +2758,7 @@ VersionedItem read_modify_write_impl(
             WriteClause(write_options, target_partial_index_key, std::make_shared<DeDupMap>(), store)
     ));
     const auto pipeline_context = setup_pipeline_context(store, source_version_info, *read_query, read_options);
-    internal::check<ErrorCode::E_NOT_SUPPORTED>(
-            !pipeline_context->multi_key_,
-            "Performing read modify write is not supported for data using recursive or custom normalizers"
-    );
+    check_can_perform_processing(pipeline_context, *read_query);
 
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
@@ -2770,14 +2775,7 @@ VersionedItem read_modify_write_impl(
                 return folly::collect(std::move(write_segments_futures));
             })
             .thenValue([&](std::vector<SliceAndKey>&& slices) {
-                ranges::sort(slices, [](const SliceAndKey& a, const SliceAndKey& b) {
-                    if (a.slice().col_range.first < b.slice().col_range.first) {
-                        return true;
-                    } else if (a.slice().col_range.first == b.slice().col_range.first) {
-                        return a.slice().row_range.first < b.slice().row_range.first;
-                    }
-                    return false;
-                });
+                ranges::sort(slices);
                 compact_row_slices(slices);
                 const size_t row_count =
                         slices.empty() ? 0 : slices.back().slice().row_range.second - slices[0].slice().row_range.first;

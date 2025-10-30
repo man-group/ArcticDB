@@ -2298,7 +2298,7 @@ class NativeVersionStore:
             query_builder=query_builder,
             **kwargs,
         )
-        return self.version_store.read_modify_write(
+        return self.version_store._read_modify_write(
             source_symbol, target_symbol, udm, version_query, read_query, read_options, prune_previous_versions
         )
 
