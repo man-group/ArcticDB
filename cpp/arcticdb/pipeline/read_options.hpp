@@ -10,6 +10,7 @@
 
 #include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
+#include <arcticdb/arrow/arrow_output_options.hpp>
 
 namespace arcticdb {
 
@@ -23,6 +24,7 @@ struct ReadOptionsData {
     std::optional<bool> optimise_string_memory_;
     std::optional<bool> batch_throw_on_error_;
     OutputFormat output_format_ = OutputFormat::PANDAS;
+    ArrowOutputConfig arrow_output_config_ = ArrowOutputConfig{};
 };
 
 struct ReadOptions {
@@ -65,6 +67,18 @@ struct ReadOptions {
     void set_output_format(OutputFormat output_format) { data_->output_format_ = output_format; }
 
     [[nodiscard]] OutputFormat output_format() const { return data_->output_format_; }
+
+    void set_arrow_output_default_string_format(ArrowOutputStringFormat arrow_output_string_format) {
+        data_->arrow_output_config_.default_string_format_ = arrow_output_string_format;
+    }
+
+    void set_arrow_output_per_column_string_format(
+            std::unordered_map<std::string, ArrowOutputStringFormat>& per_column_string_format
+    ) {
+        data_->arrow_output_config_.per_column_string_format_ = per_column_string_format;
+    }
+
+    [[nodiscard]] const ArrowOutputConfig& arrow_output_config() const { return data_->arrow_output_config_; }
 
     [[nodiscard]] ReadOptions clone() const { return ReadOptions(std::make_shared<ReadOptionsData>(*data_)); }
 };

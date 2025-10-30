@@ -7,7 +7,7 @@ import numpy as np
 
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.options import OutputFormat
-from arcticdb.util.arrow import stringify_dictionary_encoded_columns
+from arcticdb.util.arrow import cast_string_columns
 from arcticdb import QueryBuilder
 from tests.util.naughty_strings import read_big_list_of_naughty_strings
 
@@ -22,8 +22,9 @@ def create_dataframe(strings):
     return df
 
 
-def test_write_blns(lmdb_version_store):
+def test_write_blns(lmdb_version_store, any_arrow_string_format):
     lib = lmdb_version_store
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
     symbol = "blns_write"
     # Pandas
@@ -35,14 +36,13 @@ def test_write_blns(lmdb_version_store):
     lib._set_allow_arrow_input()
     table = pa.Table.from_pandas(df)
     lib.write(symbol, table, index_column="ts")
-    received = stringify_dictionary_encoded_columns(
-        lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string()
-    )
+    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string())
     assert table.equals(received)
 
 
-def test_append_blns(lmdb_version_store):
+def test_append_blns(lmdb_version_store, any_arrow_string_format):
     lib = lmdb_version_store
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
     symbol = "blns_append"
     # Pandas
@@ -60,15 +60,14 @@ def test_append_blns(lmdb_version_store):
     table_second_half = pa.Table.from_pandas(df_second_half)
     lib.write(symbol, table_first_half, index_column="ts")
     lib.append(symbol, table_second_half, index_column="ts")
-    received = stringify_dictionary_encoded_columns(
-        lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string()
-    )
+    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string())
     expected = pa.Table.from_pandas(df)
     assert expected.equals(received)
 
 
-def test_update_blns(lmdb_version_store):
+def test_update_blns(lmdb_version_store, any_arrow_string_format):
     lib = lmdb_version_store
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
     symbol = "blns_update"
     # Pandas
@@ -89,15 +88,14 @@ def test_update_blns(lmdb_version_store):
     table_middle_half = pa.Table.from_pandas(df_middle_half)
     lib.write(symbol, table_removed_middle, index_column="ts")
     lib.update(symbol, table_middle_half, index_column="ts")
-    received = stringify_dictionary_encoded_columns(
-        lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string()
-    )
+    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string())
     expected = pa.Table.from_pandas(df)
     assert expected.equals(received)
 
 
-def test_batch_read_blns(lmdb_version_store):
+def test_batch_read_blns(lmdb_version_store, any_arrow_string_format):
     lib = lmdb_version_store
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
     num_symbols = 10
     symbols = [f"blns_batch_read_{idx}" for idx in range(num_symbols)]
@@ -123,7 +121,7 @@ def test_batch_read_blns(lmdb_version_store):
         expected = tables[idx]
         if idx % 2 == 1:
             expected = expected.filter(expr)
-        assert expected.equals(stringify_dictionary_encoded_columns(res[sym].data, pa.string()))
+        assert expected.equals(cast_string_columns(res[sym].data, pa.string()))
 
 
 def assert_dicts_of_dfs_equal(dict1, dict2):
@@ -133,8 +131,9 @@ def assert_dicts_of_dfs_equal(dict1, dict2):
         pd.testing.assert_frame_equal(dict1[key], dict2[key], obj=f"DataFrame at key '{key}'")
 
 
-def test_recursive_normalizers_blns(lmdb_version_store_v1):
+def test_recursive_normalizers_blns(lmdb_version_store_v1, any_arrow_string_format):
     lib = lmdb_version_store_v1
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
     symbol = "blnd_recursive"
     keys = ["a", "b", "c", "d"]
@@ -152,7 +151,7 @@ def test_recursive_normalizers_blns(lmdb_version_store_v1):
     received = lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
     for key in keys:
         assert key in received.keys()
-        assert table.equals(stringify_dictionary_encoded_columns(received[key], pa.string()))
+        assert table.equals(cast_string_columns(received[key], pa.string()))
 
 
 @pytest.mark.skip(reason="These do not roundtrip properly. Monday: 9256783357")
