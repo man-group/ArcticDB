@@ -2667,39 +2667,47 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 ) {
-    auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
-    auto res_versioned_item = generate_result_versioned_item(version_info);
-
-    if (pipeline_context->multi_key_) {
-        if (read_query) {
-            check_can_be_filtered(pipeline_context, *read_query);
-        }
-        return read_multi_key(
-                store, read_options, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_)
-        );
-    }
-    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
-    DecodePathData shared_data;
-    return do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
-            .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](
-                               auto&& frame
-                       ) mutable {
-                ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-                return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
-                        .via(&async::cpu_executor())
-                        .thenValue(
-                                [res_versioned_item, pipeline_context, frame, read_query, shared_data](auto&&) mutable {
-                                    set_row_id_if_index_only(*pipeline_context, frame, *read_query);
-                                    return ReadVersionOutput{
-                                            std::move(res_versioned_item),
-                                            {frame,
-                                             timeseries_descriptor_from_pipeline_context(
-                                                     pipeline_context, {}, pipeline_context->bucketize_dynamic_
-                                             ),
-                                             {}}
-                                    };
-                                }
-                        );
+    return folly::makeFuture()
+            .thenValue([store, version_info, read_query, read_options](auto&&) {
+                auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
+                auto res_versioned_item = generate_result_versioned_item(version_info);
+                
+                return std::make_tuple(std::move(pipeline_context), std::move(res_versioned_item));
+            })
+            .thenValue([store, read_query, read_options, &handler_data](auto&& context_and_item) {
+                auto& [pipeline_context, res_versioned_item] = context_and_item;
+                
+                if (pipeline_context->multi_key_) {
+                    if (read_query) {
+                        check_can_be_filtered(pipeline_context, *read_query);
+                    }
+                    return read_multi_key(
+                            store, read_options, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_)
+                    );
+                }
+                ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
+                DecodePathData shared_data;
+                return do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
+                        .thenValue([res_versioned_item = std::move(res_versioned_item), pipeline_context, read_options, &handler_data, read_query, shared_data](
+                                           auto&& frame
+                                   ) mutable {
+                            ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
+                            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+                                    .via(&async::cpu_executor())
+                                    .thenValue(
+                                            [res_versioned_item, pipeline_context, frame, read_query, shared_data](auto&&) mutable {
+                                                set_row_id_if_index_only(*pipeline_context, frame, *read_query);
+                                                return ReadVersionOutput{
+                                                        std::move(res_versioned_item),
+                                                        {frame,
+                                                         timeseries_descriptor_from_pipeline_context(
+                                                                 pipeline_context, {}, pipeline_context->bucketize_dynamic_
+                                                         ),
+                                                         {}}
+                                                };
+                                            }
+                                    );
+                        });
             });
 }
 
