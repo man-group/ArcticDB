@@ -22,9 +22,7 @@ struct CursoredBuffer {
   public:
     CursoredBuffer() = default;
 
-    CursoredBuffer(
-            size_t size, AllocationType allocation_type, std::optional<size_t> extra_bytes_per_block = std::nullopt
-    ) :
+    CursoredBuffer(size_t size, AllocationType allocation_type, size_t extra_bytes_per_block = 0) :
         cursor_(allocation_type == AllocationType::PRESIZED || allocation_type == AllocationType::DETACHABLE
                         ? static_cast<int64_t>(size)
                         : 0),

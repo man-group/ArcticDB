@@ -267,7 +267,7 @@ class SegmentInMemoryImpl {
     using iterator = SegmentRowIterator<Row>;
     using const_iterator = SegmentRowIterator<const Row>;
 
-    using ExtraBytesPerColumn = std::optional<std::vector<std::optional<size_t>>>;
+    using ExtraBytesPerColumn = std::optional<std::vector<size_t>>;
 
     SegmentInMemoryImpl();
 

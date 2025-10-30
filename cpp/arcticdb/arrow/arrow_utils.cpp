@@ -110,6 +110,7 @@ sparrow::array minimal_strings_array() {
 }
 
 template<typename TagType>
+requires(is_sequence_type(TagType::DataTypeTag::data_type))
 sparrow::array string_array_from_block(
         TypedBlockData<TagType>& block, const Column& column, std::string_view name,
         std::optional<sparrow::validity_bitmap>&& maybe_bitmap
@@ -153,6 +154,7 @@ sparrow::array string_array_from_block(
 }
 
 template<typename TagType>
+requires(is_sequence_type(TagType::DataTypeTag::data_type))
 sparrow::array string_dict_from_block(
         TypedBlockData<TagType>& block, const Column& column, std::string_view name,
         std::optional<sparrow::validity_bitmap>&& maybe_bitmap
@@ -231,7 +233,7 @@ sparrow::array empty_arrow_array_for_column(const Column& column, std::string_vi
         std::optional<sparrow::validity_bitmap> validity_bitmap;
         if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
             using SignedType = std::make_signed_t<RawType>;
-            if (column.data().buffer().extra_bytes_per_block().has_value()) {
+            if (column.data().buffer().has_extra_bytes_per_block()) {
                 return minimal_strings_array<SignedType>();
             } else {
                 sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
@@ -265,7 +267,7 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
         while (auto block = column_data.next<TagType>()) {
             auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-                if (column_data.buffer().extra_bytes_per_block().has_value()) {
+                if (column_data.buffer().has_extra_bytes_per_block()) {
                     vec.emplace_back(string_array_from_block<TagType>(*block, column, name, std::move(bitmap)));
                 } else {
                     vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));

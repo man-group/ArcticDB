@@ -218,7 +218,7 @@ Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffe
 
 Column::Column(
         TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
-        std::optional<size_t> extra_bytes_per_block
+        size_t extra_bytes_per_block
 ) :
     data_(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block),
     type_(type),
