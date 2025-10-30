@@ -307,8 +307,7 @@ void decode_or_expand(
                 util::expand_dense_buffer_using_bitmap<RawType>(bv.value(), sparse.data(), dest);
             });
 
-            // TODO We must handle sparse columns in ArrowStringHandler and deduplicate logic between the two.
-            // Consider registering a sparse handler on the TypeHandlerRegistry.
+            // For arrow we must apply the truncation to the bitmap and set it as an extra buffer.
             if (output_format == OutputFormat::ARROW) {
                 bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
                 handle_truncation(*bv, mapping.truncate_);
@@ -327,9 +326,10 @@ void decode_or_expand(
             data += decode_field(source_type_desc, encoded_field_info, data, sink, bv, encoding_version);
         }
     }
-    // TODO: This is super inefficient for Arrow string columns. It will first produce the required 3 Arrow buffers
-    // for the entire slice of the column that was just decoded, and then restrict to just the relevant rows of the
-    // "data" column
+    // TODO: This can be inefficient for Arrow string columns if most of the strings are truncated.
+    // Current logic will allocate all required offsets and string buffers and truncate only the `keys` for categorical
+    // and the `offsets` for variable length encoding. This leaves the string buffer potentially larger than it needs
+    // to be.
     handle_truncation(dest_column, mapping);
 }
 
