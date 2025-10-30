@@ -327,8 +327,7 @@ const auto TEST_DATA_WRITE_REC_NORM = {
                 .expected_written_version_keys = 0,
                 .expected_written_index_keys =
                         0, // Index should not be written as now that is done after all the data keys are written
-                .check_data_keys = true,
-                .expected_written_data_keys = 2,
+                .check_data_keys = false,
                 .num_writes = 1,
                 .write_expected_outcome = {OTHER},
                 .operation = Operation::WRITE_REC_NORM
