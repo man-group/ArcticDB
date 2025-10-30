@@ -2667,7 +2667,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 ) {
-    return folly::makeFuture()
+    return folly::via(&async::io_executor())
             .thenValue([store, version_info, read_query, read_options](auto&&) {
                 auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
                 auto res_versioned_item = generate_result_versioned_item(version_info);
