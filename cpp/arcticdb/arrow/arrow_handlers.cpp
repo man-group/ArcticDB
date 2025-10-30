@@ -16,7 +16,7 @@
 
 namespace arcticdb {
 ArrowOutputStringFormat ArrowStringHandler::output_string_format(
-        const std::string_view& column_name, const ReadOptions& read_options
+        std::string_view column_name, const ReadOptions& read_options
 ) const {
     const auto& arrow_config = read_options.arrow_output_config();
     auto it = arrow_config.per_column_string_format_.find(std::string{column_name});
@@ -98,6 +98,8 @@ void encode_variable_length(
     while (last_idx <= mapping.num_rows_) {
         dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
     }
+    // The below assertion can only break for `SMALL_STRING` because `OffsetType=int32_t` and we can have more than 2^32
+    // bytes in memory. The same could not happen for `LARGE_STRING` where `OffsetType=int64=typeof(bytes)`.
     user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
             bytes <= std::numeric_limits<OffsetType>::max(),
             "The strings for column {} require {} bytes > {} bytes supported by requested string output format. "
@@ -234,17 +236,17 @@ void ArrowStringHandler::convert_type(
     }
 }
 
-std::pair<TypeDescriptor, std::optional<size_t>> ArrowStringHandler::output_type_and_extra_bytes(
-        const TypeDescriptor&, const std::string_view& column_name, const ReadOptions& read_options
+std::pair<TypeDescriptor, size_t> ArrowStringHandler::output_type_and_extra_bytes(
+        const TypeDescriptor&, std::string_view column_name, const ReadOptions& read_options
 ) const {
     auto string_format = output_string_format(column_name, read_options);
     switch (string_format) {
     case ArrowOutputStringFormat::CATEGORICAL:
-        return {make_scalar_type(DataType::UTF_DYNAMIC32), std::nullopt};
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), 0};
     case ArrowOutputStringFormat::LARGE_STRING:
-        return {make_scalar_type(DataType::UTF_DYNAMIC64), {sizeof(int64_t)}};
+        return {make_scalar_type(DataType::UTF_DYNAMIC64), sizeof(int64_t)};
     case ArrowOutputStringFormat::SMALL_STRING:
-        return {make_scalar_type(DataType::UTF_DYNAMIC32), {sizeof(int32_t)}};
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), sizeof(int32_t)};
     default:
         util::raise_rte("Unknown arrow string output format {}", static_cast<int32_t>(string_format));
     }
@@ -254,7 +256,7 @@ void ArrowStringHandler::default_initialize(
         ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& /*shared_data*/,
         std::any& /*handler_data*/
 ) const {
-    if (!buffer.extra_bytes_per_block().has_value()) {
+    if (!buffer.has_extra_bytes_per_block()) {
         // For categorical string columns the extra_bytes_per_block won't be set.
         // Categorical string columns can contain any values as long as they are marked as 0.
         return;
@@ -263,7 +265,7 @@ void ArrowStringHandler::default_initialize(
     // `default_initialize` is called only on entire row slices so it is ok to memset buffers with 0s
     auto dest_ptrs_and_sizes = buffer.byte_blocks_at(offset, byte_size);
     for (auto& [dest_ptr, bytes] : dest_ptrs_and_sizes) {
-        auto bytes_with_extra = bytes + buffer.extra_bytes_per_block().value();
+        auto bytes_with_extra = bytes + buffer.extra_bytes_per_block();
         memset(dest_ptr, 0, bytes_with_extra);
     }
 }

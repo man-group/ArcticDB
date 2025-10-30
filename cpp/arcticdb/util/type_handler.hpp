@@ -69,9 +69,8 @@ struct ITypeHandler {
             );
         }
 
-        std::pair<entity::TypeDescriptor, std::optional<size_t>> output_type_and_extra_bytes(
-                const entity::TypeDescriptor& input_type, const std::string_view& column_name,
-                const ReadOptions& read_options
+        std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+                const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
         ) const {
             return folly::poly_call<2>(*this, input_type, column_name, read_options);
         }

@@ -27,7 +27,7 @@ SegmentInMemory get_detachable_segment(
     auto handler = ArrowStringHandler();
     auto segment = SegmentInMemory();
     for (auto& field : fields_with_index) {
-        std::optional<size_t> extra_bytes_per_block;
+        size_t extra_bytes_per_block = 0;
         if (is_sequence_type(field.type().data_type())) {
             auto [type, extra_bytes] = handler.output_type_and_extra_bytes(field.type(), field.name(), read_options);
             field.type_ = type;

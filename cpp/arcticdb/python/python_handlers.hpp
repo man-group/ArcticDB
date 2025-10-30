@@ -30,9 +30,8 @@ struct PythonEmptyHandler {
             const ReadOptions& read_options
     ) const;
 
-    [[nodiscard]] std::pair<entity::TypeDescriptor, std::optional<size_t>> output_type_and_extra_bytes(
-            const entity::TypeDescriptor& input_type, const std::string_view& column_name,
-            const ReadOptions& read_options
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
     ) const;
 
     void default_initialize(
@@ -50,9 +49,8 @@ struct PythonStringHandler {
 
     [[nodiscard]] int type_size() const;
 
-    [[nodiscard]] std::pair<entity::TypeDescriptor, std::optional<size_t>> output_type_and_extra_bytes(
-            const entity::TypeDescriptor& input_type, const std::string_view& column_name,
-            const ReadOptions& read_options
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
     ) const;
 
     void convert_type(
@@ -82,9 +80,8 @@ struct PythonBoolHandler {
             const ReadOptions& read_options
     ) const;
 
-    [[nodiscard]] std::pair<entity::TypeDescriptor, std::optional<size_t>> output_type_and_extra_bytes(
-            const entity::TypeDescriptor& input_type, const std::string_view& column_name,
-            const ReadOptions& read_options
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
     ) const;
 
     void default_initialize(
@@ -102,9 +99,8 @@ struct PythonArrayHandler {
 
     [[nodiscard]] int type_size() const;
 
-    [[nodiscard]] std::pair<entity::TypeDescriptor, std::optional<size_t>> output_type_and_extra_bytes(
-            const entity::TypeDescriptor& input_type, const std::string_view& column_name,
-            const ReadOptions& read_options
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
     ) const;
 
     void default_initialize(

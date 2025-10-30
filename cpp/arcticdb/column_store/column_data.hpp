@@ -396,13 +396,10 @@ struct ColumnData {
 
         constexpr auto dim = TDT::DimensionTag::value;
         if constexpr (dim == Dimension::Dim0) {
-            auto bytes_without_extra = block->bytes() - buffer().extra_bytes_per_block().value_or(0);
+            auto bytes_without_extra = block->bytes() - buffer().extra_bytes_per_block();
             num_elements = bytes_without_extra / get_type_size(type_.data_type());
         } else {
-            util::check(
-                    !buffer().extra_bytes_per_block().has_value(),
-                    "Can't have `extra_bytes_per_block` when using dim > 0"
-            );
+            util::check(!buffer().has_extra_bytes_per_block(), "Can't have `extra_bytes_per_block` when using dim > 0");
             if (shapes_->empty()) {
                 num_elements = block->bytes() / get_type_size(type_.data_type());
             } else {

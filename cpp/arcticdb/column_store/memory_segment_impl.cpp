@@ -400,7 +400,7 @@ void SegmentInMemoryImpl::create_columns(
             "Size mismatch for extra_bytes_per_column"
     );
     for (size_t i = old_size; i < size_t(descriptor_->field_count()); ++i) {
-        std::optional<size_t> extra_bytes_per_block = std::nullopt;
+        size_t extra_bytes_per_block = 0;
         if (extra_bytes_per_column.has_value()) {
             extra_bytes_per_block = extra_bytes_per_column.value()[i];
         }

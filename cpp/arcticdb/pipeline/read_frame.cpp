@@ -41,7 +41,7 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(context->slice_and_keys_, true, context->incompletes_after_).value();
 }
 
-std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_descriptor_and_extra_bytes_per_column(
+std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
         StreamDescriptor&& descriptor, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
 ) {
@@ -52,9 +52,9 @@ std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_des
     return util::variant_match(
             index,
             [&desc, &filter_columns, &read_options](const auto& idx
-            ) -> std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> {
+            ) -> std::pair<StreamDescriptor, std::vector<size_t>> {
                 const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
-                auto extra_bytes_per_column = std::vector<std::optional<size_t>>();
+                auto extra_bytes_per_column = std::vector<size_t>();
                 extra_bytes_per_column.reserve(fields->size());
                 auto handlers = TypeHandlerRegistry::instance();
 
@@ -66,7 +66,7 @@ std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_des
                         if (output_type != field.type())
                             field.mutable_type() = output_type;
                     } else {
-                        extra_bytes_per_column.emplace_back(std::nullopt);
+                        extra_bytes_per_column.emplace_back(0);
                     }
                 }
 
@@ -75,7 +75,7 @@ std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_des
     );
 }
 
-std::pair<StreamDescriptor, std::vector<std::optional<size_t>>> get_filtered_descriptor_and_extra_bytes_per_column(
+std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
         const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
 ) {
     return get_filtered_descriptor_and_extra_bytes_per_column(
