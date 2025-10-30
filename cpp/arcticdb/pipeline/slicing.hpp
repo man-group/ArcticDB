@@ -96,7 +96,7 @@ inline auto get_partial_key_gen(std::shared_ptr<InputFrame> frame, const TypedSt
             // search for the relevant block. An alternative would be to look at the segment that was just generated in
             // WriteToSegmentTask and similar methods, but this is unlikely to be a bottleneck
             auto start = frame->index_value_at(slice_begin_pos(s, *frame));
-            auto end = frame->index_value_at(slice_end_pos(s, *frame));
+            const auto end = frame->index_value_at(slice_end_pos(s, *frame));
             return PartialKey{key.type, key.version_id, key.id, start, end_index_generator(end)};
         } else {
             return PartialKey{
