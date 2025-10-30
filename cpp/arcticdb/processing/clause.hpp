@@ -835,7 +835,7 @@ struct WriteClause {
     [[nodiscard]] std::string to_string() const;
 
   private:
-    stream::PartialKey create_partial_key(const StreamDescriptor& descriptor, const SegmentInMemory& segment) const;
+    stream::PartialKey create_partial_key(const SegmentInMemory& segment) const;
 };
 
 } // namespace arcticdb

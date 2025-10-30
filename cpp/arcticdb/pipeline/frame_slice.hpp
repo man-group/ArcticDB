@@ -106,9 +106,6 @@ struct FrameSlice {
     [[nodiscard]] const ColRange& columns() const { return col_range; }
     [[nodiscard]] const RowRange& rows() const { return row_range; }
 
-    ColRange col_range;
-    RowRange row_range;
-
     [[nodiscard]] std::size_t absolute_field_col(std::size_t col) const {
         if (indices_)
             return indices_->at(col) - desc()->index().field_count();
@@ -131,8 +128,8 @@ struct FrameSlice {
         return static_cast<ssize_t>(row_range.second);
     }
 
-    friend bool operator<(const FrameSlice& a, const FrameSlice& b) {
-        return std::tie(a.col_range.first, a.row_range.first) < std::tie(b.col_range.first, b.row_range.first);
+    friend std::weak_ordering operator<=>(const FrameSlice& a, const FrameSlice& b) {
+        return std::tie(a.col_range.first, a.row_range.first) <=> std::tie(b.col_range.first, b.row_range.first);
     }
 
     friend bool operator==(const FrameSlice& a, const FrameSlice& b) {
@@ -140,6 +137,9 @@ struct FrameSlice {
     }
 
     void check_magic() const { magic_.check(); }
+
+    ColRange col_range;
+    RowRange row_range;
 
   private:
     // never contains index field
@@ -281,7 +281,7 @@ struct SliceAndKey {
     std::optional<entity::AtomKey> key_;
 };
 
-inline bool operator<(const SliceAndKey& a, const SliceAndKey& b) { return a.slice_ < b.slice_; }
+inline std::weak_ordering operator<=>(const SliceAndKey& a, const SliceAndKey& b) { return a.slice_ <=> b.slice_; }
 
 } // namespace arcticdb::pipelines
 
