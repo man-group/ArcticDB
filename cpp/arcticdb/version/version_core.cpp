@@ -36,6 +36,7 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <arcticdb/version/version_tasks.hpp>
 #include <iterator>
 
 namespace arcticdb::version_store {
@@ -2671,13 +2672,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 ) {
-    return folly::via(&async::io_executor())
-            .thenValue([store, version_info, read_query, read_options](auto&&) {
-                auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
-                auto res_versioned_item = generate_result_versioned_item(version_info);
-
-                return std::make_tuple(std::move(pipeline_context), std::move(res_versioned_item));
-            })
+    return async::submit_io_task(GetContextAndVersionedItemTask{store, version_info, read_query, read_options})
             .thenValue([store, read_query, read_options, &handler_data](auto&& context_and_item) {
                 auto&& [pipeline_context, res_versioned_item] = std::forward<decltype(context_and_item)>(context_and_item);
 

@@ -217,6 +217,13 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
 );
 
+std::shared_ptr<PipelineContext> setup_pipeline_context(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        ReadQuery& read_query, const ReadOptions& read_options
+);
+
+VersionedItem generate_result_versioned_item(const std::variant<VersionedItem, StreamId>& version_info);
+
 } // namespace arcticdb::version_store
 
 namespace arcticdb {
