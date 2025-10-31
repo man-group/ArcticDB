@@ -2674,7 +2674,8 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 ) {
     return async::submit_io_task(GetContextAndVersionedItemTask{store, version_info, read_query, read_options})
             .thenValue([store, read_query, read_options, &handler_data](auto&& context_and_item) {
-                auto&& [pipeline_context, res_versioned_item] = std::forward<decltype(context_and_item)>(context_and_item);
+                auto&& [pipeline_context, res_versioned_item] =
+                        std::forward<decltype(context_and_item)>(context_and_item);
 
                 if (pipeline_context->multi_key_) {
                     if (read_query) {
