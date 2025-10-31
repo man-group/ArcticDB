@@ -116,7 +116,7 @@ class AsyncStore : public Store {
                 .thenValue(WriteSegmentTask{library_});
     }
 
-    folly::Future<VariantKey> write(PartialKey pk, SegmentInMemory&& segment) override {
+    folly::Future<VariantKey> write(stream::PartialKey pk, SegmentInMemory&& segment) override {
         return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
     }
 
@@ -129,7 +129,7 @@ class AsyncStore : public Store {
     }
 
     folly::Future<VariantKey> write_maybe_blocking(
-            PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
+            stream::PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
     ) override {
         log::version().debug("Waiting for semaphore for write_maybe_blocking {}", pk);
         semaphore->wait();
@@ -168,7 +168,7 @@ class AsyncStore : public Store {
         return WriteSegmentTask{library_}(std::move(encoded));
     }
 
-    entity::VariantKey write_sync(PartialKey pk, SegmentInMemory&& segment) override {
+    entity::VariantKey write_sync(stream::PartialKey pk, SegmentInMemory&& segment) override {
         return write_sync(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
     }
 
@@ -427,7 +427,7 @@ class AsyncStore : public Store {
     }
 
     folly::Future<SliceAndKey> async_write(
-            folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
+            folly::Future<std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) override {
         return std::move(input_fut)
