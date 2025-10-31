@@ -194,8 +194,6 @@ def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, 
     assert_frame_equal_with_arrow(table, df)
 
 
-# TODO: Fix unicode strings on windows
-@pytest.mark.skipif(WINDOWS, reason="Unicode arrow strings fail on windows")
 def test_all_types(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     # sample dataframe contains all dtypes + unicode strings
