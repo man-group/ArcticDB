@@ -209,7 +209,7 @@ std::vector<EntityId> push_entities(
 );
 
 std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
-        const std::vector<std::vector<size_t>>& processing_unit_indexes, size_t num_segments
+        std::span<const std::vector<size_t>> processing_unit_indexes, size_t num_segments
 );
 
 // Multi-symbol join utilities
