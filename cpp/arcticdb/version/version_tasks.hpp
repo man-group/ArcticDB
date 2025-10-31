@@ -144,10 +144,8 @@ struct GetContextAndVersionedItemTask : async::BaseTask {
     const ReadOptions read_options_;
 
     GetContextAndVersionedItemTask(
-            std::shared_ptr<Store> store,
-            std::variant<VersionedItem, StreamId> version_info,
-            std::shared_ptr<ReadQuery> read_query,
-            ReadOptions read_options
+            std::shared_ptr<Store> store, std::variant<VersionedItem, StreamId> version_info,
+            std::shared_ptr<ReadQuery> read_query, ReadOptions read_options
     ) :
         store_(std::move(store)),
         version_info_(std::move(version_info)),
