@@ -2675,7 +2675,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                 return std::make_tuple(std::move(pipeline_context), std::move(res_versioned_item));
             })
             .thenValue([store, read_query, read_options, &handler_data](auto&& context_and_item) {
-                auto& [pipeline_context, res_versioned_item] = context_and_item;
+                auto&& [pipeline_context, res_versioned_item] = std::forward<decltype(context_and_item)>(context_and_item);
 
                 if (pipeline_context->multi_key_) {
                     if (read_query) {
