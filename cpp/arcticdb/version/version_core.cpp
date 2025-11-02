@@ -2670,10 +2670,10 @@ VersionedItem generate_result_versioned_item(const std::variant<VersionedItem, S
 // part of a dataframe as-is, or transforms it via a processing pipeline
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data,
+        bool async_get_context
 ) {
-    return async::submit_io_task(GetContextAndVersionedItemTask{store, version_info, read_query, read_options})
-            .thenValue([store, read_query, read_options, &handler_data](auto&& context_and_item) {
+    auto read_and_process_fn = [store, read_query, read_options, &handler_data](auto&& context_and_item) {
                 auto&& [pipeline_context, res_versioned_item] =
                         std::forward<decltype(context_and_item)>(context_and_item);
 
@@ -2719,7 +2719,15 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
                                         };
                                     });
                         });
-            });
+            };
+    auto read_context_task = GetContextAndVersionedItemTask{store, version_info, read_query, read_options};
+    if (async_get_context) {
+        return async::submit_io_task(std::move(read_context_task))
+                .thenValue(read_and_process_fn);
+    }
+    else {
+        return read_and_process_fn(read_context_task());
+    }
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(

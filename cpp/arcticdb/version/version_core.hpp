@@ -176,7 +176,8 @@ void add_index_columns_to_query(const ReadQuery& read_query, const TimeseriesDes
 
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data,
+        bool async_get_context = false
 );
 
 folly::Future<SymbolProcessingResult> read_and_process(
