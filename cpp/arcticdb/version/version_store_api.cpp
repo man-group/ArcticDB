@@ -186,9 +186,8 @@ VersionResultVector get_latest_versions_for_symbols(
         std::set<StreamId>&& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
     // folly::window requires subscript operator
-    std::vector<StreamId> symbols;
-    symbols.insert(
-            symbols.end(), std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
+    std::vector<StreamId> symbols(
+            std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
     );
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
     auto opt_version_result_futures = folly::window(
@@ -238,9 +237,8 @@ VersionResultVector get_all_versions_for_symbols(
         std::set<StreamId>&& stream_ids, SymbolVersionToSnapshotInfoMap&& snapshots_for_symbol
 ) {
     // folly::window requires subscript operator
-    std::vector<StreamId> symbols;
-    symbols.insert(
-            symbols.end(), std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
+    std::vector<StreamId> symbols(
+            std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
     );
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
     auto symbol_version_vector_futures = folly::window(

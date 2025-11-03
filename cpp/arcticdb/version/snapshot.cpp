@@ -400,8 +400,8 @@ SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store, con
             std::move(snapshot_keys),
             [store, &snapshot_map, &stream_id](const VariantKey& snapshot_key) {
                 return store->read(snapshot_key).thenValueInline([&snapshot_map, &stream_id](auto&& key_seg) {
-                    auto snapshot_key = std::move(key_seg.first);
-                    auto snapshot_segment = std::move(key_seg.second);
+                    const auto& snapshot_key = key_seg.first;
+                    const auto& snapshot_segment = key_seg.second;
                     SnapshotId snapshot_id{fmt::format("{}", variant_key_id(snapshot_key))};
                     snapshot_map[snapshot_id] = get_versions_from_segment(snapshot_segment, stream_id);
                     return folly::Unit{};
