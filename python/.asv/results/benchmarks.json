@@ -2963,6 +2963,46 @@
         "version": "0470f242734c94e8f6d30f4241c13ffe6cc8b53cb2bad1973799878b94c3cccd",
         "warmup_time": 0
     },
+    "real_nested_dict_read.AWSNestedDictRead.peakmem_read_nested_dict": {
+        "code": "class AWSNestedDictRead:\n    def peakmem_read_nested_dict(self, num_dict_entries):\n        self.read_lib.read(self.symbol)\n\n    def setup(self, num_dict_entries):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.symbol = self.get_symbol_name(num_dict_entries)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        for num_entries in self.params:\n            symbol_name = self.get_symbol_name(num_entries)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\n                        \"a\": pd.DataFrame({\"a\": [1, 2, 3]}),\n                        \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})\n                    } for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
+        "name": "real_nested_dict_read.AWSNestedDictRead.peakmem_read_nested_dict",
+        "param_names": [
+            "num_dict_entries"
+        ],
+        "params": [
+            [
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "real_nested_dict_read:46",
+        "timeout": 1200,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "c69b746fd4c8b199c1b5708ad7726e8c9b70912c394e03ede9a2b88d947fc35e"
+    },
+    "real_nested_dict_read.AWSNestedDictRead.time_read_nested_dict": {
+        "code": "class AWSNestedDictRead:\n    def time_read_nested_dict(self, num_dict_entries):\n        self.read_lib.read(self.symbol)\n\n    def setup(self, num_dict_entries):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.symbol = self.get_symbol_name(num_dict_entries)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        for num_entries in self.params:\n            symbol_name = self.get_symbol_name(num_entries)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\n                        \"a\": pd.DataFrame({\"a\": [1, 2, 3]}),\n                        \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})\n                    } for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
+        "min_run_count": 1,
+        "name": "real_nested_dict_read.AWSNestedDictRead.time_read_nested_dict",
+        "number": 3,
+        "param_names": [
+            "num_dict_entries"
+        ],
+        "params": [
+            [
+                "1000"
+            ]
+        ],
+        "repeat": 1,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "real_nested_dict_read:46",
+        "timeout": 1200,
+        "type": "time",
+        "unit": "seconds",
+        "version": "13caa6a883202bb07062c49dda9d5c45324b0b690db72dd4b64956057c111e41",
+        "warmup_time": 0
+    },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_numeric": {
         "code": "class AWSQueryBuilderFunctions:\n    def peakmem_filtering_numeric(self, num_rows):\n        q = QueryBuilder()\n        # v3 is random floats between 0 and 100\n        q = q[q[\"v3\"] < 10.0]\n        data: pd.DataFrame = self.lib.read(self.symbol, columns=[\"v3\"], query_builder=q).data\n        assert data.shape[0] > 1\n\n    def setup(self, num_rows):\n        ## Construct back from arctic url the object\n        self.lib: Library = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n        self.policy = self.get_population_policy()\n        self.symbol = self.policy.get_symbol_name(num_rows)\n\n    def setup_cache(self):\n        \"\"\"\n        In setup_cache we only populate the persistent libraries if they are missing.\n        \"\"\"\n        manager = self.get_library_manager()\n        policy = self.get_population_policy()\n        populate_library_if_missing(manager, policy, LibraryType.PERSISTENT)\n        manager.log_info()  # Logs info about ArcticURI - do always use last",
         "name": "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_numeric",
