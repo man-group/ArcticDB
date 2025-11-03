@@ -1233,7 +1233,7 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
     py::gil_scoped_release release_gil;
     for (const auto& index_key : keys) {
         res.emplace_back(
-                read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), read_options, handler_data, true)
+                read_frame_for_version_async_get_context(store(), {index_key}, std::make_shared<ReadQuery>(), read_options, handler_data)
         );
     }
     Allocator::instance()->trim();
