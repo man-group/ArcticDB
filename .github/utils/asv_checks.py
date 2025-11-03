@@ -98,7 +98,7 @@ def file_unchanged(filepath, last_check_time):
 
 def get_project_root():
     file_location = os.path.abspath(__file__)
-    return file_location.split("/python/utils")[0]
+    return file_location.split("/.github/utils")[0]
 
 
 def perform_asv_checks() -> int:

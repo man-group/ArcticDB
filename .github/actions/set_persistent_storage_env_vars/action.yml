@@ -47,7 +47,7 @@ runs:
         ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX=$(shuf -i 0-999 -n 1)_$(date -u +'%Y-%m-%dT%H_%M_%S_%6N')
         echo "ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX=${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV
         ## This name prefix (STS_PREFIX -> ARCTICDB_REAL_S3_STS_PREFIX) is connected to another cleanup process at:
-        ## python/utils/s3_roles_delete.py (make sure to synchronize changes)
+        ## .github/utils/s3_roles_delete.py (make sure to synchronize changes)
         STS_PREFIX=gh_sts_test
         echo "ARCTICDB_REAL_S3_STS_PREFIX=${STS_PREFIX}" >> $GITHUB_ENV
         echo "ARCTICDB_REAL_S3_STS_TEST_USERNAME=${STS_PREFIX}_user_${ARCTICDB_REAL_S3_STS_TEST_CREDENTIALS_POSTFIX}" >> $GITHUB_ENV

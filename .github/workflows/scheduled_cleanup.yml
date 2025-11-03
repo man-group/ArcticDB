@@ -39,12 +39,12 @@ jobs:
           cd python
           # remove the empty protobuf libs so that protobufs are loaded from installed lib
           rm -rf arcticc
-          PYTHONPATH=. python -m utils.s3_roles_delete
+          PYTHONPATH=. python ../.github/utils/s3_roles_delete.py
 
       - name: Cleanup buckets
         run: |
           cd python
-          PYTHONPATH=. python -m utils.cleanup_test_buckets 
+          PYTHONPATH=. python ../.github/utils/cleanup_test_buckets.py 
 
 
 
