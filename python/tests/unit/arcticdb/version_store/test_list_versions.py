@@ -6,9 +6,10 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import pprint
-
 import pytest
+
+from arcticdb_ext.exceptions import KeyNotFoundException
+from arcticdb_ext.storage import KeyType
 
 
 def populate_library(lib):
@@ -287,3 +288,55 @@ def test_list_versions_snapshot_and_latest_only_and_skip_snapshots(lmdb_version_
     assert_versions_equal(
         expected_versions, lib.list_versions(snapshot=snapshot, latest_only=True, skip_snapshots=True)
     )
+
+
+# Miscellaneous
+
+
+@pytest.mark.parametrize("latest_only", [True, False])
+def test_tombstone_all(lmdb_version_store_v1, latest_only):
+    lib = lmdb_version_store_v1
+    sym = "test_tombstone_all"
+    lib.write(sym, 0)
+    lib.write(sym, 1)
+    # Versions 0 and 1 are deleted via a tombstone all key, and so are never loaded by LoadObjective::UNDELETED_ONLY
+    lib.delete(sym)
+    versions = lib.list_versions(latest_only=latest_only)
+    assert not len(versions)
+    lib.write(sym, 2)
+    lib.write(sym, 3)
+    lib.write(sym, 4)
+    lib.delete_version(sym, 4)
+    expected_versions = (
+        [{"symbol": sym, "version": 3, "deleted": False, "snapshots": []}]
+        if latest_only
+        else [
+            {"symbol": sym, "version": 3, "deleted": False, "snapshots": []},
+            {"symbol": sym, "version": 2, "deleted": False, "snapshots": []},
+        ]
+    )
+    versions = lib.list_versions(latest_only=latest_only)
+    assert_versions_equal(expected_versions, versions)
+
+
+@pytest.mark.parametrize("latest_only", [True, False])
+def test_broken_version_chain(lmdb_version_store_v1, latest_only):
+    lib = lmdb_version_store_v1
+    sym = "test_broken_version_chain"
+    broken_sym = "test_broken_version_chain_broken"
+    num_versions = 4
+    for _ in range(num_versions):
+        lib.write(sym, 1)
+        lib.write(broken_sym, 1)
+    # Latest version of broken_sym will be version 0, so that even latest_only=True requires version chain traversal
+    lib.delete_version(broken_sym, 3)
+    lib.delete_version(broken_sym, 2)
+    lib.delete_version(broken_sym, 1)
+    lib_tool = lmdb_version_store_v1.library_tool()
+    version_keys = lib_tool.find_keys_for_id(KeyType.VERSION, broken_sym)
+    # This is the entry for writing version 1
+    key_to_delete = version_keys[1]
+    lib_tool.remove(key_to_delete)
+    with pytest.raises(KeyNotFoundException) as e:
+        lib.list_versions(latest_only=latest_only)
+    assert broken_sym in str(e.value)

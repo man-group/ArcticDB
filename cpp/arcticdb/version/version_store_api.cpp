@@ -120,7 +120,7 @@ struct VersionComp {
 
 struct SnapshotInfo {
     std::vector<SnapshotId> snapshots;
-    timestamp ts;
+    timestamp index_creation_ts;
 };
 
 using SymbolVersionToSnapshotInfoMap = std::unordered_map<std::pair<StreamId, VersionId>, SnapshotInfo>;
@@ -173,7 +173,7 @@ void get_snapshot_version_info(
         for (const auto& index_key : index_keys) {
             auto& snapshot_info = snapshots_for_symbol[{index_key.id(), index_key.version_id()}];
             snapshot_info.snapshots.push_back(snap_id);
-            snapshot_info.ts = index_key.creation_ts();
+            snapshot_info.index_creation_ts = index_key.creation_ts();
         }
     }
 
@@ -190,26 +190,32 @@ VersionResultVector get_latest_versions_for_symbols(
             std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
     );
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+    // We are going to use folly::collect to short-circuit on any network errors, which means we need to keep everything
+    // alive even after this function exits to avoid segfaults in workers that are still going after one worker raises
+    auto snapshots_for_symbol_ptr = std::make_shared<SymbolVersionToSnapshotInfoMap>(std::move(snapshots_for_symbol));
     auto opt_version_result_futures = folly::window(
             std::move(symbols),
-            [&store, &version_map, &snapshots_for_symbol](const StreamId& stream_id) {
+            [store, version_map, snapshots_for_symbol_ptr](StreamId&& stream_id) {
                 return async::submit_io_task(CheckReloadTask{
                                                      store,
                                                      version_map,
                                                      stream_id,
                                                      LoadStrategy{LoadType::LATEST, LoadObjective::UNDELETED_ONLY}
                                              }
-                ).thenValueInline([&stream_id, &snapshots_for_symbol](auto&& version_map_entry) {
+                ).thenValueInline([stream_id, snapshots_for_symbol_ptr](auto&& version_map_entry) {
                     const auto& opt_version_key = version_map_entry->get_first_index(false).first;
                     if (opt_version_key) {
                         auto snapshots_it =
-                                snapshots_for_symbol.find(std::make_pair(stream_id, opt_version_key->version_id()));
+                                snapshots_for_symbol_ptr->find(std::make_pair(stream_id, opt_version_key->version_id())
+                                );
+                        auto snapshots = snapshots_it == snapshots_for_symbol_ptr->end()
+                                                 ? std::vector<SnapshotId>()
+                                                 : std::move(snapshots_it->second.snapshots);
                         return std::make_optional<VersionResult>(
                                 stream_id,
                                 opt_version_key->version_id(),
                                 opt_version_key->creation_ts(),
-                                snapshots_it == snapshots_for_symbol.end() ? std::vector<SnapshotId>()
-                                                                           : std::move(snapshots_it->second.snapshots),
+                                std::move(snapshots),
                                 false
                         );
                     } else {
@@ -219,14 +225,13 @@ VersionResultVector get_latest_versions_for_symbols(
             },
             window_size
     );
-    // Need collectAll in case anything was deleted since the symbols were listed
-    auto opt_version_results = folly::collectAll(std::move(opt_version_result_futures)).get();
+    auto opt_version_results = folly::collect(std::move(opt_version_result_futures)).get();
     VersionResultVector res;
     res.reserve(opt_version_results.size());
     // opt_version_results are already in alphabetical order of symbols, so no sorting required
-    for (auto&& opt_version_result_or_error : opt_version_results) {
-        if (opt_version_result_or_error.hasValue() && opt_version_result_or_error.value().has_value()) {
-            res.emplace_back(std::move(opt_version_result_or_error.value().value()));
+    for (auto&& opt_version_result : opt_version_results) {
+        if (opt_version_result.has_value()) {
+            res.emplace_back(std::move(opt_version_result.value()));
         }
     }
     return res;
@@ -241,9 +246,12 @@ VersionResultVector get_all_versions_for_symbols(
             std::make_move_iterator(stream_ids.rbegin()), std::make_move_iterator(stream_ids.rend())
     );
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
+    // We are going to use folly::collect to short-circuit on any network errors, which means we need to keep everything
+    // alive even after this function exits to avoid segfaults in workers that are still going after one worker raises
+    auto snapshots_for_symbol_ptr = std::make_shared<SymbolVersionToSnapshotInfoMap>(std::move(snapshots_for_symbol));
     auto symbol_version_vector_futures = folly::window(
             std::move(symbols),
-            [&store, &version_map, &snapshots_for_symbol](const StreamId& stream_id) {
+            [store, version_map, snapshots_for_symbol_ptr](StreamId&& stream_id) {
                 return async::submit_io_task(CheckReloadTask{
                                                      store,
                                                      version_map,
@@ -251,32 +259,29 @@ VersionResultVector get_all_versions_for_symbols(
                                                      LoadStrategy{LoadType::ALL, LoadObjective::UNDELETED_ONLY}
                                              })
                         .via(&async::cpu_executor())
-                        .thenValue([&stream_id, &snapshots_for_symbol](auto&& version_map_entry) {
+                        .thenValue([stream_id, snapshots_for_symbol_ptr](auto&& version_map_entry) {
                             auto all_versions = version_map_entry->get_indexes(false);
                             std::unordered_set<std::pair<StreamId, VersionId>> unpruned_versions;
                             VersionResultVector res;
                             for (const auto& entry : all_versions) {
                                 unpruned_versions.emplace(stream_id, entry.version_id());
                                 auto snapshots_it =
-                                        snapshots_for_symbol.find(std::make_pair(stream_id, entry.version_id()));
+                                        snapshots_for_symbol_ptr->find(std::make_pair(stream_id, entry.version_id()));
+                                auto snapshots = snapshots_it == snapshots_for_symbol_ptr->end()
+                                                         ? std::vector<SnapshotId>()
+                                                         : std::move(snapshots_it->second.snapshots);
                                 res.emplace_back(
-                                        stream_id,
-                                        entry.version_id(),
-                                        entry.creation_ts(),
-                                        snapshots_it == snapshots_for_symbol.end()
-                                                ? std::vector<SnapshotId>()
-                                                : std::move(snapshots_it->second.snapshots),
-                                        false
+                                        stream_id, entry.version_id(), entry.creation_ts(), std::move(snapshots), false
                                 );
                             }
-                            for (auto& [sym_version, snapshot_info] : snapshots_for_symbol) {
+                            for (auto& [sym_version, snapshot_info] : *snapshots_for_symbol_ptr) {
                                 // For all symbol, version combinations in snapshots, check if they have been pruned,
                                 // and if so use the information from the snapshot indexes and set deleted to true.
                                 if (sym_version.first == stream_id && !unpruned_versions.contains(sym_version)) {
                                     res.emplace_back(
                                             sym_version.first,
                                             sym_version.second,
-                                            snapshot_info.ts,
+                                            snapshot_info.index_creation_ts,
                                             std::move(snapshot_info.snapshots),
                                             true
                                     );
@@ -291,30 +296,21 @@ VersionResultVector get_all_versions_for_symbols(
             },
             window_size
     );
-    // Need collectAll in case anything was deleted since the symbols were listed
-    auto symbol_version_vectors = folly::collectAll(std::move(symbol_version_vector_futures)).get();
+    auto symbol_version_vectors = folly::collect(std::move(symbol_version_vector_futures)).get();
     VersionResultVector res;
     res.reserve(std::accumulate(
             symbol_version_vectors.cbegin(),
             symbol_version_vectors.cend(),
             size_t(0),
-            [](const size_t& accum, const auto& symbol_version_vector) {
-                if (symbol_version_vector.hasValue()) {
-                    return accum + symbol_version_vector.value().size();
-                } else {
-                    return accum;
-                }
-            }
+            [](const size_t& accum, const auto& symbol_version_vector) { return accum + symbol_version_vector.size(); }
     ));
     // symbol_version_vectors are already in alphabetical order of symbols, so no sorting required
     for (auto&& symbol_version_vector : symbol_version_vectors) {
-        if (symbol_version_vector.hasValue()) {
-            res.insert(
-                    res.end(),
-                    std::make_move_iterator(symbol_version_vector.value().begin()),
-                    std::make_move_iterator(symbol_version_vector.value().end())
-            );
-        }
+        res.insert(
+                res.end(),
+                std::make_move_iterator(symbol_version_vector.begin()),
+                std::make_move_iterator(symbol_version_vector.end())
+        );
     }
     return res;
 }

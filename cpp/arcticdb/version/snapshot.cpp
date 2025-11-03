@@ -391,8 +391,7 @@ SnapshotMap get_versions_from_snapshots(const std::shared_ptr<Store>& store, con
     SnapshotMap snapshot_map;
     std::vector<VariantKey> snapshot_keys;
     iterate_snapshots(store, [&snapshot_map, &snapshot_keys](auto&& snapshot_key) {
-        SnapshotId snapshot_id{fmt::format("{}", variant_key_id(snapshot_key))};
-        snapshot_map.emplace(std::move(snapshot_id), std::vector<AtomKey>{});
+        snapshot_map.emplace(variant_key_id(snapshot_key), std::vector<AtomKey>{});
         snapshot_keys.emplace_back(std::move(snapshot_key));
     });
     const auto window_size = async::TaskScheduler::instance()->io_thread_count();
