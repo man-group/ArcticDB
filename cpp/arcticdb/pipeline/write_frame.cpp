@@ -264,7 +264,7 @@ folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
                                                       sparsify_floats
                                               ))
                         .then([sink, de_dup_map](auto&& ks) {
-                            return sink->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
+                            return sink->async_write(folly::makeFuture(std::forward<decltype(ks)>(ks)), de_dup_map);
                         });
             },
             write_window
