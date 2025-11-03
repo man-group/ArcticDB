@@ -364,6 +364,15 @@ class InMemoryStore : public Store {
         });
     }
 
+    folly::Future<pipelines::SliceAndKey>
+    async_write(std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input, const std::shared_ptr<DeDupMap>&)
+            override {
+        auto [pk, seg, slice] = std::move(input);
+        auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);
+        add_segment(key, std::move(seg));
+        return SliceAndKey{std::move(slice), std::move(key)};
+    }
+
     std::vector<folly::Future<bool>> batch_key_exists(const std::vector<entity::VariantKey>& keys) override {
         auto failure_sim = StorageFailureSimulator::instance();
         failure_sim->go(FailureType::READ);

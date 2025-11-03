@@ -761,7 +761,7 @@ def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
     """
     read_modify_write_qb = copy.deepcopy(arctic_query)
     test_read_modify_write = os.getenv("ARCTICDB_TEST_READ_MODIFY_WRITE", "0") == "1"
-    processing_functions = [lambda: lib.read(symbol, query_builder=arctic_query).data]
+    processing_functions = [lambda: lib.read(symbol, query_builder=arctic_query, date_range=date_range).data]
     if test_read_modify_write:
         if date_range is not None:
             read_modify_write_qb.prepend(QueryBuilder().date_range(date_range))
@@ -1044,16 +1044,17 @@ def generic_resample_test(
         q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
     else:
         q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
-    query_processing_functions = get_query_processing_functions(lib, sym, q, date_range)
+
+    expected = expected_pandas_resample_generic(
+        original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
+    )
+
+    check_dtype = expected_types is not None
+
+    query_processing_functions = get_query_processing_functions(lib, sym, q, date_range=date_range)
     for proccessing_function in query_processing_functions:
         received = proccessing_function()
         received = received.reindex(columns=sorted(received.columns))
-
-        expected = expected_pandas_resample_generic(
-            original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
-        )
-
-        check_dtype = expected_types is not None
         try:
             assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
         except AssertionError:
