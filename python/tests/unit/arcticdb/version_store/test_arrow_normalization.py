@@ -2,8 +2,10 @@ from arcticdb.options import OutputFormat
 import pandas as pd
 import numpy as np
 import pyarrow as pa
+import pytest
 
 from arcticdb.util.test import assert_frame_equal_with_arrow
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from pandas import RangeIndex
 
 
@@ -258,3 +260,12 @@ def test_read_pickled(lmdb_version_store_arrow):
     lib.write(sym, obj)
     result = lib.read(sym).data
     assert obj == result
+
+
+def test_custom_normalizer(custom_thing_with_registered_normalizer, lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "sym"
+    obj = custom_thing_with_registered_normalizer
+    lib.write(sym, obj)
+    with pytest.raises(ArcticDbNotYetImplemented):
+        lib.read(sym).data

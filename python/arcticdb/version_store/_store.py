@@ -2521,6 +2521,10 @@ class NativeVersionStore:
             else:
                 table = pa.Table.from_batches(record_batches)
             data = self._normalizer.denormalize(table, read_result.norm)
+            if read_result.norm.HasField("custom"):
+                raise ArcticDbNotYetImplemented(
+                    "Denormalizing custom normalized data is not supported with Arrow output_format"
+                )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
         else:
