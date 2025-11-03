@@ -1640,7 +1640,7 @@
         "warmup_time": 0
     },
     "list_versions.ListVersions.peakmem_list_versions": {
-        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        if snapshot is None or num_snapshots > 0:\n            self.lib.list_versions(\n                symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n            )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "list_versions.ListVersions.peakmem_list_versions",
         "param_names": [
             "num_symbols",
@@ -1686,10 +1686,10 @@
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "38ba0ce0863d8967098e1ef5ef9662ace2664386f330833f483dc437dbcb2998"
+        "version": "7196504c08aa080e91f3cbb9cbd8228eea01a4b78ecb20f5509bbc67634f8508"
     },
     "list_versions.ListVersions.time_list_versions": {
-        "code": "class ListVersions:\n    def time_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        self.lib.list_versions(symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots)\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ListVersions:\n    def time_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        if snapshot is None or num_snapshots > 0:\n            self.lib.list_versions(\n                symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n            )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "list_versions.ListVersions.time_list_versions",
         "number": 5,
@@ -1740,7 +1740,7 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "51288a831ce0073bb37435b01232c3bcfc905449d6bfa8c5d8b2331f14691118",
+        "version": "ee6666cf1919afefb16b4814886b3b80160b921cb6ecbba442f0d473627ec943",
         "warmup_time": 0
     },
     "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric": {

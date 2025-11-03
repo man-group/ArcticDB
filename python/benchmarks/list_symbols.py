@@ -40,7 +40,7 @@ class ListSymbols:
             self.ac.delete_library(lib_name)
             lib = self.ac.create_library(lib_name)
             for sym in range(syms):
-                lib.write(f"{sym}_sym", generate_benchmark_df(ListFunctions.rows))
+                lib.write(f"{sym}_sym", generate_benchmark_df(ListSymbols.rows))
 
     def teardown(self, num_symbols):
         pass
