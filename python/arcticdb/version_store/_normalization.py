@@ -49,6 +49,7 @@ from arcticdb._msgpack_compat import packb, padded_packb, unpackb, ExtType
 from arcticdb.log import version as log
 from arcticdb_ext.log import LogLevel
 from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
+from arcticdb.options import OutputFormat
 
 PICKLE_PROTOCOL = 4
 
@@ -1298,8 +1299,14 @@ class MsgPackNormalizer(Normalizer):
         input_type = meta.WhichOneof("input_type")
         if input_type != "msg_pack_frame":
             raise ArcticNativeException("Expected msg_pack_frame input, actual {}".format(meta))
+        if isinstance(obj, FrameData):
+            np_arr = obj.data[0]
+        elif _PYARROW_AVAILABLE and isinstance(obj, pa.Table):
+            np_arr = obj.column(0).combine_chunks().to_numpy(zero_copy_only=True)
+        else:
+            raise ArcticNativeException(f"Unexpected denormalization input in MsgPackNormlizer: {input}")
         sb = meta.msg_pack_frame.size_bytes
-        col_data = obj.data[0].view(np.uint8)[:sb]
+        col_data = np_arr.view(np.uint8)[:sb]
         return self._msgpack_unpackb(memoryview(col_data))
 
     def _custom_pack(self, obj):
@@ -1555,7 +1562,13 @@ class CompositeNormalizer(Normalizer):
                 raise
 
     def denormalize(self, item, norm_meta):
-        # type: (_FrameData, NormalizationMetadata)->_SUPPORTED_TYPES
+        # type: (_FrameData, NormalizationMetadata, OutputFormat)->_SUPPORTED_TYPES
+        if _PYARROW_AVAILABLE and isinstance(item, pa.Table):
+            input_type = norm_meta.WhichOneof("input_type")
+            if input_type == "msg_pack_frame":
+                return self.msg_pack_denorm.denormalize(item, norm_meta)
+            elif input_type == "df" or input_type == "series":
+                return self.pa.denormalize(item, norm_meta)
         if isinstance(item, FrameData):
             input_type = norm_meta.WhichOneof("input_type")
             if input_type == "df":
@@ -1568,7 +1581,7 @@ class CompositeNormalizer(Normalizer):
                 return self.np.denormalize(item, norm_meta.np)
             elif input_type == "experimental_arrow":
                 return self.df.denormalize(item, norm_meta.experimental_arrow)
-            elif input_type == "msg_pack":
+            elif input_type == "msg_pack_frame":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 
         if self.fallback_normalizer is None:

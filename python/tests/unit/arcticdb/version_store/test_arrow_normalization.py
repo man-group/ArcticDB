@@ -249,3 +249,12 @@ def test_series_with_index(lmdb_version_store_arrow):
     assert table.schema.field(1).name == "x"
     assert table.schema.field(1).type == pa.int64()
     assert_frame_equal_with_arrow(table, pd.DataFrame(series))
+
+
+def test_read_pickled(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "sym"
+    obj = {"a": ["b", "c"], "x": 122.3}
+    lib.write(sym, obj)
+    result = lib.read(sym).data
+    assert obj == result
