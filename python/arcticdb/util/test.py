@@ -1085,6 +1085,13 @@ def generic_resample_test(
                 assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
             else:
                 raise
+            original_data = original_data.tail(len(original_data) - rows_to_pop)
+            expected = expected_pandas_resample_generic(
+                original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
+            )
+            assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
+        else:
+            raise
 
 
 def equals(x, y):
