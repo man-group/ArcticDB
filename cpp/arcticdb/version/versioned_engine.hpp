@@ -20,6 +20,7 @@
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/version/version_core.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
+#include <arcticdb/version/merge_options.hpp>
 
 namespace arcticdb::version_store {
 
@@ -144,6 +145,11 @@ class VersionedEngine {
     virtual void set_store(std::shared_ptr<Store> store) = 0;
     virtual timestamp latest_timestamp(const std::string& symbol) = 0;
     virtual void flush_version_map() = 0;
+
+    virtual VersionedItem merge_internal(
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& source, bool prune_previous_versions,
+            const MergeStrategy& strategy, std::span<const std::string> on, bool match_on_timeseries_index
+    ) = 0;
 };
 
 } // namespace arcticdb::version_store

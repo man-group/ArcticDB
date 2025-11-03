@@ -2278,4 +2278,29 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() { retu
 
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) { set_store(std::move(store)); }
 
+VersionedItem LocalVersionedEngine::merge_internal(
+        const StreamId& stream_id, const std::shared_ptr<InputFrame>& source, bool prune_previous_versions,
+        const MergeStrategy& strategy, std::span<const std::string> on, bool match_on_timeseries_index
+) {
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: merge");
+    py::gil_scoped_release release_gil;
+    const UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
+    if (update_info.previous_index_key_.has_value()) {
+        if (source->empty()) {
+            ARCTICDB_DEBUG(
+                    log::version(),
+                    "Merging into existing data with an empty source has no effect. \n No new version is being created "
+                    "for symbol='{}', and the last version is returned",
+                    stream_id
+            );
+            return VersionedItem{*std::move(update_info.previous_index_key_)};
+        }
+        auto versioned_item =
+                merge_impl(store(), source, update_info, get_write_options(), strategy, on, match_on_timeseries_index);
+        write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
+        return versioned_item;
+    }
+    storage::raise<ErrorCode::E_SYMBOL_NOT_FOUND>("Cannot merge into non-existent symbol \"{}\".", stream_id);
+}
+
 } // namespace arcticdb::version_store

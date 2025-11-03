@@ -2795,6 +2795,15 @@ VersionedItem read_modify_write_impl(
             .get();
 }
 
+VersionedItem merge_impl(
+        [[maybe_unused]] const std::shared_ptr<Store>& store, [[maybe_unused]] const std::shared_ptr<InputFrame>& frame,
+        [[maybe_unused]] const UpdateInfo& update_info, [[maybe_unused]] WriteOptions&& options,
+        [[maybe_unused]] const MergeStrategy& strategy, [[maybe_unused]] std::span<const std::string> on,
+        [[maybe_unused]] bool match_on_timeseries_index
+) {
+    return VersionedItem{};
+}
+
 folly::Future<SymbolProcessingResult> read_and_process(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,

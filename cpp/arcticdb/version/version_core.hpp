@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/version/merge_options.hpp>
 #include <string>
 
 namespace arcticdb::version_store {
@@ -218,6 +219,12 @@ VersionedItem read_modify_write_impl(
         std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+);
+
+VersionedItem merge_impl(
+        const std::shared_ptr<Store>& store, const std::shared_ptr<InputFrame>& frame, const UpdateInfo& update_info,
+        WriteOptions&& options, const MergeStrategy& strategy, std::span<const std::string> on,
+        bool match_on_timeseries_index
 );
 
 } // namespace arcticdb::version_store

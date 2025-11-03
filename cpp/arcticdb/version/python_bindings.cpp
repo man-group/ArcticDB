@@ -633,6 +633,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                  &PythonVersionStore::append,
                  py::call_guard<SingleThreadMutexHolder>(),
                  "Append a dataframe to the most recent version")
+            .def("merge",
+                 &PythonVersionStore::merge,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Merge a dataframe into the most recent version")
             .def("append_incomplete",
                  &PythonVersionStore::append_incomplete,
                  py::call_guard<SingleThreadMutexHolder>(),
