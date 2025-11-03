@@ -1075,7 +1075,6 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     return store
 
 
-# TODO: Revert to `params=list(OutputFormat)` once bug https://github.com/apache/arrow/issues/47234 is fixed
 @pytest.fixture(
     params=[OutputFormat.PANDAS, pytest.param(OutputFormat.EXPERIMENTAL_ARROW, marks=PYARROW_POST_PROCESSING)]
 )

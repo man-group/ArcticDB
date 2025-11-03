@@ -15,6 +15,7 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
+from arcticdb.util._versions import IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED
 from arcticdb.util import marks
 from arcticdb.util.logger import get_logger
 
@@ -233,7 +234,8 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
 PYARROW_POST_PROCESSING = pytest.mark.skipif(
-    WINDOWS, reason="pyarrow 21.0.0 doesn't correctly apply fill_null: https://github.com/apache/arrow/issues/47234"
+    WINDOWS and not IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED,
+    reason="pyarrow 21.0.0 doesn't correctly apply fill_null: https://github.com/apache/arrow/issues/47234",
 )
 
 ZONE_INFO_MARK = pytest.mark.skipif(sys.version_info < (3, 9), reason="zoneinfo module was introduced in Python 3.9")
