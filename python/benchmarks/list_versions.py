@@ -70,7 +70,7 @@ class ListVersions:
                     for sym in range(syms):
                         for _ in range(versions):
                             lib.write_pickle(self._sym_name(sym), 0)
-                    for snapshot in snapshots:
+                    for snapshot in range(snapshots):
                         lib.snapshot(
                             self._snap_name(snapshot),
                             {self._sym_name(sym): random.randint(0, versions - 1) for sym in range(syms)},
