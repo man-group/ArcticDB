@@ -759,13 +759,13 @@ def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
     created symbol. Functions that test the QueryBuilder such as generic_filter_test, generic_aggregation_test, etc...
     can iterate on the result array and test both methods for processing.
     """
-    qb = copy.deepcopy(arctic_query)
+    read_modify_write_qb = copy.deepcopy(arctic_query)
     test_read_modify_write = os.getenv("ARCTICDB_TEST_READ_MODIFY_WRITE", "0") == "1"
-    processing_functions = [lambda: lib.read(symbol, query_builder=qb).data]
+    processing_functions = [lambda: lib.read(symbol, query_builder=arctic_query).data]
     if test_read_modify_write:
         if date_range is not None:
-            qb.prepend(QueryBuilder().date_range(date_range))
-        processing_functions.append(lambda: read_modify_write_data(lib, symbol, qb))
+            read_modify_write_qb.prepend(QueryBuilder().date_range(date_range))
+        processing_functions.append(lambda: read_modify_write_data(lib, symbol, read_modify_write_qb))
     return processing_functions
 
 

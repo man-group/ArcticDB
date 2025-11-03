@@ -1663,7 +1663,7 @@ std::vector<std::vector<size_t>> WriteClause::structure_for_processing(std::vect
 std::vector<std::vector<EntityId>> WriteClause::structure_for_processing(
         std::vector<std::vector<EntityId>>&& entity_ids_vec
 ) {
-    return entity_ids_vec;
+    return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
 }
 
 std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) const {
