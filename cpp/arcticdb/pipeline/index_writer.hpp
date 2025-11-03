@@ -98,8 +98,8 @@ class IndexWriter {
 
         bool new_col_group = !current_col_.has_value() || *current_col_ < slice.col_range.first;
         bool missing_row_val = !current_row_.has_value();
-        bool is_valid_col = *current_col_ == slice.col_range.first;
-        bool is_valid_row = *current_row_ < slice.row_range.first;
+        bool is_valid_col = new_col_group || *current_col_ == slice.col_range.first;
+        bool is_valid_row = missing_row_val || *current_row_ < slice.row_range.first;
         bool is_valid = (is_valid_col && is_valid_row);
         util::check_arg(
                 missing_row_val || new_col_group || is_valid,
