@@ -884,7 +884,7 @@ VersionedItem LocalVersionedEngine::write_segment(
                                 auto frame_slice = FrameSlice{descriptor, column_slice, row_slice};
                                 auto pkey = get_partial_key_for_segment_slice(index_desc, tsv, slice);
                                 auto ks = std::make_tuple(std::move(pkey), std::move(slice), std::move(frame_slice));
-                                return sink->async_write(std::move(ks), de_dup_map);
+                                return sink->async_write(folly::makeFuture(std::move(ks)), de_dup_map);
                             },
                             write_window
                     )

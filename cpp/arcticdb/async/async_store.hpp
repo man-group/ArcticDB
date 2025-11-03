@@ -449,11 +449,38 @@ class AsyncStore : public Store {
                             dedup_lookup,
                             [&](NewObject& obj) {
                                 lib->write(obj);
-                                return SliceAndKey{slice, obj.atom_key()};
+                                return SliceAndKey{std::move(slice), obj.atom_key()};
                             },
-                            [&](ExistingObject& obj) { return SliceAndKey{slice, to_atom(std::move(obj))}; }
+                            [&](ExistingObject& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
                     );
                 });
+    }
+
+    folly::Future<SliceAndKey> async_write(
+            std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input,
+            const std::shared_ptr<DeDupMap>& de_dup_map
+    ) override {
+        storage::KeySegmentPair key_seg = EncodeAtomTask{
+                std::get<0>(std::move(input)),
+                ClockType::nanos_since_epoch(),
+                std::get<1>(std::move(input)),
+                codec_,
+                encoding_version_
+        }();
+        DeDupLookupResult dedup_lookup = lookup_match_in_dedup_map(de_dup_map, key_seg);
+        return folly::via(
+                &io_executor(),
+                [dedup_lookup = std::move(dedup_lookup), slice = std::get<2>(std::move(input)), this]() mutable {
+                    return util::variant_match(
+                            std::move(dedup_lookup),
+                            [&](NewObject&& obj) {
+                                library_->write(obj);
+                                return SliceAndKey{std::move(slice), obj.atom_key()};
+                            },
+                            [&](ExistingObject&& obj) { return SliceAndKey{slice, to_atom(std::move(obj))}; }
+                    );
+                }
+        );
     }
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) override {
