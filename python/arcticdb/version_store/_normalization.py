@@ -1567,7 +1567,7 @@ class CompositeNormalizer(Normalizer):
             input_type = norm_meta.WhichOneof("input_type")
             if input_type == "msg_pack_frame":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
-            elif input_type == "df" or input_type == "series":
+            elif input_type == "df" or input_type == "series" or input_type == "experimental_arrow":
                 return self.pa.denormalize(item, norm_meta)
         if isinstance(item, FrameData):
             input_type = norm_meta.WhichOneof("input_type")
