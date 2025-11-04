@@ -15,7 +15,6 @@ from packaging.version import Version
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb_ext.exceptions import UserInputException
-from arcticdb.util.test import CustomThing, TestCustomNormalizer
 from arcticdb.version_store._custom_normalizers import register_normalizer, clear_registered_normalizers
 from arcticdb.options import LibraryOptions
 from arcticdb import ReadRequest
@@ -261,11 +260,10 @@ class TestWithNormalizers:
         assert "normalizers" in str(exception_info.value)
 
     @pytest.mark.parametrize("dynamic_schema", [False, True])
-    def test_custom_throws(self, lmdb_storage, lib_name, dynamic_schema):
-        register_normalizer(TestCustomNormalizer())
+    def test_custom_throws(self, lmdb_storage, lib_name, dynamic_schema, custom_thing_with_registered_normalizer):
         ac = lmdb_storage.create_arctic()
         lib = ac.create_library(lib_name, LibraryOptions(dynamic_schema=dynamic_schema))
-        data = CustomThing(custom_columns=["a", "b"], custom_index=[12, 13], custom_values=[[2.0, 4.0], [3.0, 5.0]])
+        data = custom_thing_with_registered_normalizer
         lib._nvs.write("sym_custom", data)
 
         with pytest.raises(UserInputException) as exception_info:

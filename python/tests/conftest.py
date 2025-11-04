@@ -52,7 +52,7 @@ from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
 from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import create_df
+from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
 from .util.mark import (
@@ -84,6 +84,10 @@ from packaging.version import Version
 from arcticdb.util.venv import Venv
 import arcticdb.toolbox.query_stats as query_stats
 from arcticdb.options import OutputFormat
+from arcticdb.version_store._custom_normalizers import (
+    register_normalizer,
+    clear_registered_normalizers,
+)
 
 
 # region =================================== Misc. Constants & Setup ====================================
@@ -1080,6 +1084,18 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
 )
 def any_output_format(request) -> OutputFormat:
     return request.param
+
+
+@pytest.fixture
+def custom_thing_with_registered_normalizer() -> Generator[CustomThing, None, None]:
+    try:
+        register_normalizer(TestCustomNormalizer())
+        columns = ["a", "b"]
+        index = [12, 13]
+        values = [[2.0, 4.0], [3.0, 5.0]]
+        yield CustomThing(custom_columns=columns, custom_index=index, custom_values=values)
+    finally:
+        clear_registered_normalizers()
 
 
 @pytest.fixture(scope="function", params=("lmdb_version_store_v1", "lmdb_version_store_v2"))
