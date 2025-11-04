@@ -1,7 +1,7 @@
 from datetime import datetime
 import boto3
 import os
-from .bucket_management import s3_client
+from bucket_management import s3_client
 
 
 def list_roles_by_prefix(client, prefix):
