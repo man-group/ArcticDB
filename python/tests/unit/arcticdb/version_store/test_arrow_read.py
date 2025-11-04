@@ -165,6 +165,36 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
     assert_frame_equal_with_arrow(table, expected)
 
 
+@pytest.mark.skip(reason="Monday ref: 18352299908")
+def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_format):
+    lib = lmdb_version_store_arrow
+    df = pd.DataFrame(
+        {"x": ["hello", "world", "!"]},
+        index=[
+            ["first", "index", "column"],
+            ["yet", "another", "index"],
+        ],
+    )
+    df.index.names = ["index1", "index2"]
+    arrow_string_format_per_column = {
+        "index1": any_arrow_string_format,
+        "index2": any_arrow_string_format,
+        "x": any_arrow_string_format,
+    }
+    lib.write("arrow", df, dynamic_strings=True)
+    table = lib.read("arrow", arrow_string_format_per_column=arrow_string_format_per_column).data
+    if any_arrow_string_format == ArrowOutputStringFormat.LARGE_STRING:
+        expected_type = pa.large_string()
+    elif any_arrow_string_format == ArrowOutputStringFormat.SMALL_STRING:
+        expected_type = pa.string()
+    else:
+        expected_type = pa.dictionary(pa.int32(), pa.large_string())
+    assert table.field("index1").type == expected_type
+    assert table.field("index2").type == expected_type
+    assert table.field("x").type == expected_type
+    assert_frame_equal_with_arrow(table, df)
+
+
 @pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
 def test_fixed_width_strings(lmdb_version_store_arrow, any_arrow_string_format):
     lib = lmdb_version_store_arrow

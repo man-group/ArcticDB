@@ -371,7 +371,9 @@ class NativeVersionStore:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_output_format(output_format)
 
-    def set_arrow_string_format_default(self, arrow_string_format_default: ArrowOutputStringFormat):
+    def set_arrow_string_format_default(
+        self, arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"]
+    ):
         if self._runtime_options is None:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_arrow_string_format_default(arrow_string_format_default)
@@ -2069,24 +2071,25 @@ class NativeVersionStore:
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
-        read_options.set_arrow_output_default_string_format(
-            arrow_output_string_format_to_internal(
-                self.resolve_runtime_defaults(
-                    "arrow_string_format_default",
-                    proto_cfg,
-                    global_default=ArrowOutputStringFormat.LARGE_STRING,
-                    **kwargs,
+        if read_options.output_format == InternalOutputFormat.ARROW:
+            read_options.set_arrow_output_default_string_format(
+                arrow_output_string_format_to_internal(
+                    self.resolve_runtime_defaults(
+                        "arrow_string_format_default",
+                        proto_cfg,
+                        global_default=ArrowOutputStringFormat.LARGE_STRING,
+                        **kwargs,
+                    )
                 )
             )
-        )
-        read_options.set_arrow_output_per_column_string_format(
-            {
-                key: arrow_output_string_format_to_internal(value)
-                for key, value in resolve_defaults(
-                    "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
-                ).items()
-            }
-        )
+            read_options.set_arrow_output_per_column_string_format(
+                {
+                    key: arrow_output_string_format_to_internal(value)
+                    for key, value in resolve_defaults(
+                        "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
+                    ).items()
+                }
+            )
         return read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):

@@ -24,6 +24,7 @@ static void BM_arrow_string_handler(benchmark::State& state) {
     const auto num_sparse = state.range(2);
     const auto string_output_format = ArrowOutputStringFormat(state.range(3));
     auto read_options = ReadOptions{};
+    read_options.set_output_format(OutputFormat::ARROW);
     read_options.set_arrow_output_default_string_format(string_output_format);
 
     auto handler = ArrowStringHandler();

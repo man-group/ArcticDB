@@ -65,10 +65,7 @@ def test_basic_write_strings(lmdb_version_store_arrow, type):
     sym = "test_basic_write_strings"
     table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], type)})
     lib.write(sym, table)
-    arrow_string_format = (
-        ArrowOutputStringFormat.SMALL_STRING if type == pa.string() else ArrowOutputStringFormat.LARGE_STRING
-    )
-    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
+    received = lib.read(sym, arrow_string_format_default=type).data
     assert table.equals(received)
 
 
@@ -111,9 +108,7 @@ def test_write_multiple_record_batches(lmdb_version_store_arrow, type):
     rb2 = pa.RecordBatch.from_arrays([arr2], names=["col"])
     table = pa.Table.from_batches([rb0, rb1, rb2])
     lib.write(sym, table)
-    arrow_string_format = (
-        ArrowOutputStringFormat.SMALL_STRING if type == pa.string() else ArrowOutputStringFormat.LARGE_STRING
-    )
+    arrow_string_format = type if type == pa.large_string() or type == pa.string() else None
     received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
     assert table.equals(received)
 
@@ -307,11 +302,7 @@ def test_write_view_strings(lmdb_version_store_arrow, type):
     table = pa.concat_tables([table_0, table_1])
     view = table.slice(1, 4)
     lib.write(sym, view)
-    arrow_string_format = (
-        ArrowOutputStringFormat.SMALL_STRING if type == pa.string() else ArrowOutputStringFormat.LARGE_STRING
-    )
-    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
-    received = received
+    received = lib.read(sym, arrow_string_format_default=type).data
     assert view.equals(received)
 
 

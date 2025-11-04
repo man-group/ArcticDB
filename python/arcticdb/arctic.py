@@ -18,6 +18,7 @@ from arcticdb.options import (
     OutputFormat,
     ArrowOutputStringFormat,
 )
+from arcticdb.dependencies import pyarrow as pa
 from arcticdb_ext.storage import LibraryManager
 from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions, KeyNotFoundException
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
@@ -59,7 +60,9 @@ class Arctic:
         uri: str,
         encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
-        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING,
+        arrow_string_format_default: Union[
+            ArrowOutputStringFormat, "pa.DataType"
+        ] = ArrowOutputStringFormat.LARGE_STRING,
     ):
         """
         Initializes a top-level Arctic library management instance.
@@ -86,7 +89,7 @@ class Arctic:
             Accepts the OutputFormat as either OutputFormat enum values or as case-insensitive strings like "pandas"
             and "experimental_arrow".
 
-        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING
+        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"] = ArrowOutputStringFormat.LARGE_STRING
             Controls the default string format used for `OutputFormat.EXPERIMENTAL_ARROW`.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
 
@@ -124,7 +127,7 @@ class Arctic:
         self,
         name: str,
         output_format: Optional[Union[OutputFormat, str]] = None,
-        arrow_string_format_default: Optional[ArrowOutputStringFormat] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
     ) -> Library:
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
 
@@ -169,7 +172,7 @@ class Arctic:
         create_if_missing: Optional[bool] = False,
         library_options: Optional[LibraryOptions] = None,
         output_format: Optional[Union[OutputFormat, str]] = None,
-        arrow_string_format_default: Optional[ArrowOutputStringFormat] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
     ) -> Library:
         """
         Returns the library named ``name``.
@@ -197,7 +200,7 @@ class Arctic:
             For more information see documentation of `Arctic.__init__`.
             If `None` uses the output format from the Arctic instance.
 
-        arrow_string_format_default: Optional[ArrowOutputStringFormat], default=None
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
             If `None` uses the default arrow_string_format from the `Library` instance.
@@ -239,7 +242,7 @@ class Arctic:
         library_options: Optional[LibraryOptions] = None,
         enterprise_library_options: Optional[EnterpriseLibraryOptions] = None,
         output_format: Optional[Union[OutputFormat, str]] = None,
-        arrow_string_format_default: Optional[ArrowOutputStringFormat] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
     ) -> Library:
         """
         Creates the library named ``name``.
@@ -269,7 +272,7 @@ class Arctic:
             For more information see documentation of `Arctic.__init__`.
             If `None` uses the output format from the Arctic instance.
 
-        arrow_string_format_default: Optional[ArrowOutputStringFormat], default=None
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
             If `None` uses the default arrow_string_format from the `Library` instance.

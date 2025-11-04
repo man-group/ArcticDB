@@ -19,8 +19,8 @@ ArrowOutputStringFormat ArrowStringHandler::output_string_format(
         std::string_view column_name, const ReadOptions& read_options
 ) const {
     const auto& arrow_config = read_options.arrow_output_config();
-    auto it = arrow_config.per_column_string_format_.find(std::string{column_name});
-    if (it != arrow_config.per_column_string_format_.end()) {
+    if (auto it = arrow_config.per_column_string_format_.find(std::string{column_name});
+        it != arrow_config.per_column_string_format_.end()) {
         return it->second;
     }
     return arrow_config.default_string_format_;

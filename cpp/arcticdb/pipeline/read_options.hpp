@@ -69,16 +69,33 @@ struct ReadOptions {
     [[nodiscard]] OutputFormat output_format() const { return data_->output_format_; }
 
     void set_arrow_output_default_string_format(ArrowOutputStringFormat arrow_output_string_format) {
+        util::check(
+                output_format() == OutputFormat::ARROW,
+                "Setting arrow string format should only happen for ARROW output format but got {}",
+                static_cast<uint8_t>(output_format())
+        );
         data_->arrow_output_config_.default_string_format_ = arrow_output_string_format;
     }
 
     void set_arrow_output_per_column_string_format(
             std::unordered_map<std::string, ArrowOutputStringFormat>& per_column_string_format
     ) {
+        util::check(
+                output_format() == OutputFormat::ARROW,
+                "Setting arrow string format should only happen for ARROW output format but got {}",
+                static_cast<uint8_t>(output_format())
+        );
         data_->arrow_output_config_.per_column_string_format_ = per_column_string_format;
     }
 
-    [[nodiscard]] const ArrowOutputConfig& arrow_output_config() const { return data_->arrow_output_config_; }
+    [[nodiscard]] const ArrowOutputConfig& arrow_output_config() const {
+        util::check(
+                output_format() == OutputFormat::ARROW,
+                "Getting arrow string format should only happen for ARROW output format but got {}",
+                static_cast<uint8_t>(output_format())
+        );
+        return data_->arrow_output_config_;
+    }
 
     [[nodiscard]] ReadOptions clone() const { return ReadOptions(std::make_shared<ReadOptionsData>(*data_)); }
 };

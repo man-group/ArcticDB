@@ -144,7 +144,7 @@ SegmentInMemory allocate_contiguous_frame(
 ) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    auto [desc, _] = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options);
+    auto desc = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options).first;
     // extra_bytes_per_column are not used for contiguous frame allocation
     SegmentInMemory output{std::move(desc), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED};
     finalize_segment_setup(output, offset, row_count, context);

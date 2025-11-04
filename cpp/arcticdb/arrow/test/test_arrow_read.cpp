@@ -162,6 +162,7 @@ TEST_P(ArrowStringColumnRead, Basic) {
     auto handler = ArrowStringHandler();
     auto column_name = "col";
     auto read_options = ReadOptions();
+    read_options.set_output_format(OutputFormat::ARROW);
     read_options.set_arrow_output_default_string_format(output_string_format());
     auto [type_desc, extra_bytes] = handler.output_type_and_extra_bytes(
             TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0}, column_name, read_options
@@ -198,30 +199,34 @@ TEST_P(ArrowStringColumnRead, Basic) {
             // We should be using 64-bit offsets for LARGE_STRING and 32-bit offsets for SMALL_STRING
             details::visit_scalar(column.type(), [&](auto&& impl) {
                 using TagType = std::decay_t<decltype(impl)>;
-                using RawType = typename TagType::DataTypeTag::raw_type;
-                auto expected_dest_size = output_string_format() == ArrowOutputStringFormat::LARGE_STRING ? 8 : 4;
-                EXPECT_EQ(dest_size, expected_dest_size);
-                EXPECT_EQ(sizeof(RawType), expected_dest_size);
+                if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
+                    using RawType = typename TagType::DataTypeTag::raw_type;
+                    auto expected_dest_size = output_string_format() == ArrowOutputStringFormat::LARGE_STRING ? 8 : 4;
+                    EXPECT_EQ(dest_size, expected_dest_size);
+                    EXPECT_EQ(sizeof(RawType), expected_dest_size);
 
-                // We should have attached only a string buffer to the corresponding offset because we're storing the
-                // offsets in the column buffer.
-                auto offset = chunk * chunk_size * dest_size;
-                EXPECT_FALSE(column.has_extra_buffer(offset, ExtraBufferType::OFFSET));
-                EXPECT_TRUE(column.has_extra_buffer(offset, ExtraBufferType::STRING));
-                auto& column_buffer = column.buffer();
-                auto column_chunk_ptr = reinterpret_cast<RawType*>(
-                        column_buffer.bytes_at(chunk * chunk_size * dest_size, chunk_size * dest_size)
-                );
-                auto& string_buffer = column.get_extra_buffer(offset, ExtraBufferType::STRING);
-
-                for (auto row_in_chunk = 0u; row_in_chunk < chunk_size; ++row_in_chunk) {
-                    auto global_row = chunk * chunk_size + row_in_chunk;
-                    auto offset_begin = column_chunk_ptr[row_in_chunk];
-                    auto str_size = column_chunk_ptr[row_in_chunk + 1] - offset_begin;
-                    auto str_in_column = std::string_view(
-                            reinterpret_cast<char*>(string_buffer.bytes_at(offset_begin, str_size)), str_size
+                    // We should have attached only a string buffer to the corresponding offset because we're storing
+                    // the offsets in the column buffer.
+                    auto offset = chunk * chunk_size * dest_size;
+                    EXPECT_FALSE(column.has_extra_buffer(offset, ExtraBufferType::OFFSET));
+                    EXPECT_TRUE(column.has_extra_buffer(offset, ExtraBufferType::STRING));
+                    auto& column_buffer = column.buffer();
+                    auto column_chunk_ptr = reinterpret_cast<RawType*>(
+                            column_buffer.bytes_at(chunk * chunk_size * dest_size, chunk_size * dest_size)
                     );
-                    EXPECT_EQ(str_in_column, column_values[global_row]);
+                    auto& string_buffer = column.get_extra_buffer(offset, ExtraBufferType::STRING);
+
+                    for (auto row_in_chunk = 0u; row_in_chunk < chunk_size; ++row_in_chunk) {
+                        auto global_row = chunk * chunk_size + row_in_chunk;
+                        auto offset_begin = column_chunk_ptr[row_in_chunk];
+                        auto str_size = column_chunk_ptr[row_in_chunk + 1] - offset_begin;
+                        auto str_in_column = std::string_view(
+                                reinterpret_cast<char*>(string_buffer.bytes_at(offset_begin, str_size)), str_size
+                        );
+                        EXPECT_EQ(str_in_column, column_values[global_row]);
+                    }
+                } else {
+                    util::raise_rte("Unexpected non-string type");
                 }
             });
         }
@@ -314,6 +319,7 @@ TEST(ArrowRead, ConvertSegmentMultipleStringColumns) {
         string_values[1].emplace_back(fmt::format("string_{}", str_id_offset + row));
     }
     auto read_options = ReadOptions();
+    read_options.set_output_format(OutputFormat::ARROW);
     read_options.set_arrow_output_default_string_format(ArrowOutputStringFormat::CATEGORICAL);
     auto per_column_string_format =
             std::unordered_map<std::string, ArrowOutputStringFormat>{{"str_2", ArrowOutputStringFormat::LARGE_STRING}};

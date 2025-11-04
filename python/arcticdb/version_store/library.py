@@ -292,8 +292,8 @@ class ReadRequest(NamedTuple):
     columns: Optional[List[str]] = None
     query_builder: Optional[QueryBuilder] = None
     output_format: Optional[Union[OutputFormat, str]] = None
-    arrow_string_format_default: Optional[ArrowOutputStringFormat] = None
-    arrow_string_format_per_column: Optional[Dict[str, ArrowOutputStringFormat]] = None
+    arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None
+    arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None
 
     def __repr__(self):
         res = f"ReadRequest(symbol={self.symbol}"
@@ -303,6 +303,16 @@ class ReadRequest(NamedTuple):
         res += f", columns={self.columns}" if self.columns is not None else ""
         res += f", query_builder={self.query_builder}" if self.query_builder is not None else ""
         res += f", output_format={self.output_format}" if self.output_format is not None else ""
+        res += (
+            f", arrow_string_format_default={self.arrow_string_format_default}"
+            if self.arrow_string_format_default is not None
+            else ""
+        )
+        res += (
+            f", arrow_string_format_per_column={self.arrow_string_format_per_column}"
+            if self.arrow_string_format_per_column is not None
+            else ""
+        )
         res += ")"
         return res
 
@@ -1897,8 +1907,8 @@ class Library:
         query_builder: Optional[QueryBuilder] = None,
         lazy: bool = False,
         output_format: Optional[Union[OutputFormat, str]] = None,
-        arrow_string_format_default: Optional[ArrowOutputStringFormat] = None,
-        arrow_string_format_per_column: Optional[Dict[str, ArrowOutputStringFormat]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read data for the named symbol.  Returns a VersionedItem object with a data and metadata element (as passed into
@@ -1955,12 +1965,12 @@ class Library:
             For more information see documentation of `Arctic.__init__`.
             If `None` uses the default output format from the `Library` instance.
 
-        arrow_string_format_default: Optional[ArrowOutputStringFormat], default=None
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
             If `None` uses the default arrow_string_format from the `Library` instance.
 
-        arrow_string_format_per_column: Optional[Dict[str, ArrowOutputStringFormat]], default=None
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None
             Provides per column name overrides for `arrow_string_format_default`
 
         Returns
@@ -2750,8 +2760,8 @@ class Library:
         columns: List[str] = None,
         lazy: bool = False,
         output_format: Optional[Union[OutputFormat, str]] = None,
-        arrow_string_format_default: Optional[ArrowOutputStringFormat] = None,
-        arrow_string_format_per_column: Optional[Dict[str, ArrowOutputStringFormat]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the first n rows of data for the named symbol. If n is negative, return all rows except the last n rows.
@@ -2770,9 +2780,9 @@ class Library:
             See documentation on `read`.
         output_format: Optional[Union[OutputFormat, str]], default=None
             See documentation on `read`.
-        arrow_string_format_default: Optional[ArrowOutputStringFormat], default=None
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             See documentation on `read`.
-        arrow_string_format_per_column: Optional[Dict[str, ArrowOutputStringFormat]], default=None
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None
             See documentation on `read`.
 
         Returns
@@ -2816,8 +2826,8 @@ class Library:
         columns: List[str] = None,
         lazy: bool = False,
         output_format: Optional[Union[OutputFormat, str]] = None,
-        arrow_string_format_default: Optional[ArrowOutputStringFormat] = None,
-        arrow_string_format_per_column: Optional[Dict[str, ArrowOutputStringFormat]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
     ) -> Union[VersionedItem, LazyDataFrame]:
         """
         Read the last n rows of data for the named symbol. If n is negative, return all rows except the first n rows.
@@ -2836,9 +2846,9 @@ class Library:
             See documentation on `read`.
         output_format: Optional[Union[OutputFormat, str]], default=None
             See documentation on `read`.
-        arrow_string_format_default: Optional[ArrowOutputStringFormat], default=None
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
             See documentation on `read`.
-        arrow_string_format_per_column: Optional[Dict[str, ArrowOutputStringFormat]], default=None
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None
             See documentation on `read`.
 
         Returns

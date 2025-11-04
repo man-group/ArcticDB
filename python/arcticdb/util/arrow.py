@@ -19,6 +19,10 @@ def cast_string_columns(table, string_type=None):
     return table
 
 
+def stringify_dictionary_encoded_columns(table, string_type=None):
+    return cast_string_columns(table, string_type)
+
+
 def convert_arrow_to_pandas_for_tests(table):
     """
     Converts `pa.Table` outputted via `output_format=OutputFormat.EXPERIMENTAL_ARROW` to a `pd.DataFrame` so it would
