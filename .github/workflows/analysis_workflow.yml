@@ -205,7 +205,7 @@ jobs:
           
       - name: Run ASV Tests Check script
         run: |
-          python .github/utils/asv_checks.py
+          python python/utils/asv_checks.py
         continue-on-error: false
 
       - name: Disk usage
