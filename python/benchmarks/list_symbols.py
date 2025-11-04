@@ -1,5 +1,5 @@
 """
-Copyright 2023 Man Group Operations Limited
+Copyright 2025 Man Group Operations Limited
 
 Use of this software is governed by the Business Source License 1.1 included in the file licenses/BSL.txt.
 
@@ -12,7 +12,7 @@ from arcticdb import Arctic
 from benchmarks.common import *
 
 
-class ListFunctions:
+class ListSymbols:
     number = 5
     rounds = 1
     timeout = 6000
@@ -32,21 +32,21 @@ class ListFunctions:
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
     def _setup_cache(self):
-        self.ac = Arctic("lmdb://list_functions")
+        self.ac = Arctic("lmdb://list_symbols")
 
-        num_symbols = ListFunctions.params
+        num_symbols = ListSymbols.params
         for syms in num_symbols:
             lib_name = f"{syms}_num_symbols"
             self.ac.delete_library(lib_name)
             lib = self.ac.create_library(lib_name)
             for sym in range(syms):
-                lib.write(f"{sym}_sym", generate_benchmark_df(ListFunctions.rows))
+                lib.write(f"{sym}_sym", generate_benchmark_df(ListSymbols.rows))
 
     def teardown(self, num_symbols):
         pass
 
     def setup(self, num_symbols):
-        self.ac = Arctic("lmdb://list_functions")
+        self.ac = Arctic("lmdb://list_symbols")
         self.lib = self.ac[f"{num_symbols}_num_symbols"]
 
     def time_list_symbols(self, num_symbols):
@@ -54,12 +54,6 @@ class ListFunctions:
 
     def peakmem_list_symbols(self, num_symbols):
         self.lib.list_symbols()
-
-    def time_list_versions(self, num_symbols):
-        self.lib.list_versions()
-
-    def peakmem_list_versions(self, num_symbols):
-        self.lib.list_versions()
 
     def time_has_symbol(self, num_symbols):
         self.lib.has_symbol("250_sym")
