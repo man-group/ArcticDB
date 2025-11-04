@@ -2541,9 +2541,8 @@ class NativeVersionStore:
 
         return index_columns
 
-    def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
-        if isinstance(read_result.frame_data, ArrowOutputFrame):
-            frame_data = read_result.frame_data
+    def _adapt_frame_data(self, frame_data, norm):
+        if isinstance(frame_data, ArrowOutputFrame):
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
@@ -2560,9 +2559,14 @@ class NativeVersionStore:
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
         else:
-            data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
-            if read_result.norm.HasField("custom"):
-                data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
+            data = self._normalizer.denormalize(frame_data, norm)
+            if norm.HasField("custom"):
+                data = self._custom_normalizer.denormalize(data, norm.custom)
+
+        return data
+
+    def _adapt_read_res(self, read_result: ReadResult) -> VersionedItem:
+        data = self._adapt_frame_data(read_result.frame_data, read_result.norm)
 
         if isinstance(read_result.version, list):
             versions = []

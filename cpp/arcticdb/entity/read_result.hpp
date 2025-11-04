@@ -17,12 +17,28 @@
 #include <arcticdb/util/memory_tracing.hpp>
 #include <arcticdb/arrow/arrow_output_frame.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/version/version_core.hpp>
 
 #include <vector>
 
 namespace arcticdb {
 
 using OutputFrame = std::variant<pipelines::PandasOutputFrame, ArrowOutputFrame>;
+
+struct ARCTICDB_VISIBILITY_HIDDEN NodeReadResult {
+    NodeReadResult(
+            const std::string& symbol, OutputFrame&& frame_data,
+            const arcticdb::proto::descriptors::NormalizationMetadata& norm_meta
+    ) :
+        symbol_(symbol),
+        frame_data_(std::move(frame_data)),
+        norm_meta_(norm_meta) {};
+    std::string symbol_;
+    OutputFrame frame_data_;
+    arcticdb::proto::descriptors::NormalizationMetadata norm_meta_;
+
+    ARCTICDB_MOVE_ONLY_DEFAULT(NodeReadResult)
+};
 
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
@@ -32,7 +48,8 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
                     arcticdb::proto::descriptors::UserDefinedMetadata,
                     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
-            std::vector<entity::AtomKey>&& multi_keys
+            std::vector<entity::AtomKey>&& multi_keys,
+            std::vector<NodeReadResult>&& node_results = {}
     ) :
         item(versioned_item),
         frame_data(std::move(frame_data)),
@@ -40,7 +57,8 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
         norm_meta(norm_meta),
         user_meta(user_meta),
         multi_key_meta(multi_key_meta),
-        multi_keys(std::move(multi_keys)) {}
+        multi_keys(std::move(multi_keys)),
+        node_results(std::move(node_results)) {}
     std::variant<VersionedItem, std::vector<VersionedItem>> item;
     OutputFrame frame_data;
     OutputFormat output_format;
@@ -51,6 +69,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
             user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
     std::vector<entity::AtomKey> multi_keys;
+    std::vector<NodeReadResult> node_results;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadResult)
 };
@@ -58,7 +77,8 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
 inline ReadResult create_python_read_result(
         const std::variant<VersionedItem, std::vector<VersionedItem>>& version, OutputFormat output_format,
         FrameAndDescriptor&& fd,
-        std::optional<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>&& user_meta = std::nullopt
+        std::optional<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>&& user_meta = std::nullopt,
+        std::vector<version_store::ReadVersionOutput>&& node_outputs = {}
 ) {
     auto result = std::move(fd);
 
@@ -89,13 +109,14 @@ inline ReadResult create_python_read_result(
         }
     }
 
-    auto python_frame = [&]() -> OutputFrame {
+    auto get_python_frame = [output_format](auto& result) -> OutputFrame {
         if (output_format == OutputFormat::ARROW) {
             return ArrowOutputFrame{segment_to_arrow_data(result.frame_)};
         } else {
             return pipelines::PandasOutputFrame{result.frame_};
         }
-    }();
+    };
+    auto python_frame = get_python_frame(result);
     util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
     const auto& desc_proto = result.desc_.proto();
@@ -108,13 +129,26 @@ inline ReadResult create_python_read_result(
     } else {
         metadata = std::move(desc_proto.user_meta());
     }
+
+    std::vector<NodeReadResult> node_results;
+    for (auto& node_output : node_outputs) {
+        auto node_fd = std::move(node_output.frame_and_descriptor_);
+        auto node_python_frame = get_python_frame(node_fd);
+        auto& node_metadata = node_output.frame_and_descriptor_.desc_.proto().user_meta();
+        node_results.emplace_back(
+                node_output.versioned_item_.symbol(),
+                std::move(node_python_frame),
+                node_metadata
+        );
+    }
     return {version,
             std::move(python_frame),
             output_format,
             desc_proto.normalization(),
             metadata,
             desc_proto.multi_key_meta(),
-            std::move(result.keys_)};
+            std::move(result.keys_),
+            std::move(node_results)};
 }
 
 } // namespace arcticdb

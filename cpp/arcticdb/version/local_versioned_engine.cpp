@@ -408,14 +408,29 @@ std::variant<VersionedItem, StreamId> get_version_identifier(
     return *version;
 }
 
-ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
+struct ReadVersionWithNodesFuture {
+    ReadVersionOutput root_;
+    std::vector<folly::Future<ReadVersionOutput>> node_futures_;
+};
+
+ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::any& handler_data
 ) {
     py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
     const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
-    return read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+    auto task = read_frame_for_version(store(), identifier, read_query, read_options, handler_data);
+    auto result = std::move(task).thenValue([this, read_query, read_options, &handler_data](ReadVersionOutput&& result) -> ReadVersionWithNodesFuture {
+        std::vector<folly::Future<ReadVersionOutput>> node_futures;
+        auto& keys = result.frame_and_descriptor_.keys_;
+        node_futures.reserve(keys.size());
+        for (const auto& key : keys) {
+            node_futures.emplace_back(read_frame_for_version_async_get_context(store(), key, read_query, read_options, handler_data));
+        }
+        return {std::move(result), std::move(node_futures)};
+    }).get();
+    return {std::move(result.root_), folly::collect(result.node_futures_).get()};
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) {
