@@ -1683,9 +1683,11 @@ std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) c
         const RowRange& row_range = *(*proc.row_ranges_)[i];
         const ColRange& col_range = *(*proc.col_ranges_)[i];
         stream::PartialKey partial_key = create_partial_key(segment);
-        data_segments_to_write.push_back(std::make_shared<folly::Future<SliceAndKey>>(store_->async_write(
-                std::make_tuple(std::move(partial_key), segment, FrameSlice(col_range, row_range)), dedup_map_
-        )));
+        data_segments_to_write.push_back(
+                std::make_shared<folly::Future<SliceAndKey>>(store_->compress_and_schedule_async_write(
+                        std::make_tuple(std::move(partial_key), segment, FrameSlice(col_range, row_range)), dedup_map_
+                ))
+        );
     }
     return component_manager_->add_entities(std::move(data_segments_to_write));
 }

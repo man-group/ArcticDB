@@ -456,21 +456,18 @@ class AsyncStore : public Store {
                 });
     }
 
-    folly::Future<SliceAndKey> async_write(
+    folly::Future<SliceAndKey> compress_and_schedule_async_write(
             std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input,
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) override {
+        auto [partial_key, seg, input_slice] = std::move(input);
         storage::KeySegmentPair key_seg = EncodeAtomTask{
-                std::get<0>(std::move(input)),
-                ClockType::nanos_since_epoch(),
-                std::get<1>(std::move(input)),
-                codec_,
-                encoding_version_
+                std::move(partial_key), ClockType::nanos_since_epoch(), std::move(seg), codec_, encoding_version_
         }();
         DeDupLookupResult dedup_lookup = lookup_match_in_dedup_map(de_dup_map, key_seg);
         return folly::via(
                 &io_executor(),
-                [dedup_lookup = std::move(dedup_lookup), slice = std::get<2>(std::move(input)), this]() mutable {
+                [dedup_lookup = std::move(dedup_lookup), slice = std::move(input_slice), this]() mutable {
                     return util::variant_match(
                             std::move(dedup_lookup),
                             [&](NewObject&& obj) {

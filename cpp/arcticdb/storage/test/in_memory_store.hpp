@@ -365,7 +365,7 @@ class InMemoryStore : public Store {
     }
 
     folly::Future<pipelines::SliceAndKey>
-    async_write(std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input, const std::shared_ptr<DeDupMap>&)
+    compress_and_schedule_async_write(std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input, const std::shared_ptr<DeDupMap>&)
             override {
         auto [pk, seg, slice] = std::move(input);
         auto key = get_key(pk.key_type, 0, pk.stream_id, pk.start_index, pk.end_index);

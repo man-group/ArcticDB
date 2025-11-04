@@ -108,7 +108,7 @@ struct StreamSink {
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) = 0;
 
-    [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> async_write(
+    [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> compress_and_schedule_async_write(
             std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input,
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) = 0;
