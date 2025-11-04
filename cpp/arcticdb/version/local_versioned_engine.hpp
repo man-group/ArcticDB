@@ -111,7 +111,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::optional<VersionedItem> get_version_to_read(const StreamId& stream_id, const VersionQuery& version_query);
 
-    ReadVersionOutput read_dataframe_version_internal(
+    ReadVersionWithNodesOutput read_dataframe_version_internal(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
             const ReadOptions& read_options, std::any& handler_data
     ) override;

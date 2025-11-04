@@ -47,6 +47,11 @@ struct ReadVersionOutput {
     FrameAndDescriptor frame_and_descriptor_;
 };
 
+struct ReadVersionWithNodesOutput {
+    ReadVersionOutput root_;
+    std::vector<ReadVersionOutput> nodes_;
+};
+
 struct MultiSymbolReadOutput {
     MultiSymbolReadOutput() = delete;
     MultiSymbolReadOutput(
