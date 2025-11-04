@@ -465,9 +465,7 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
                                            return std::move(ks);
                                        })
                                        .thenValue([store, de_dup_map](auto&& ks) {
-                                           return store->async_write(
-                                                   folly::makeFuture(std::forward<decltype(ks)>(ks)), de_dup_map
-                                           );
+                                           return store->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
                                        })
                                        .thenValueInline([](SliceAndKey&& sk) { return sk.key(); });
                            },

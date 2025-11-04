@@ -13,6 +13,7 @@ from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
 import pandas as pd
 from pandas import DateOffset, Timedelta
+
 from pandas._typing import Scalar
 import datetime as dt
 import string
@@ -746,9 +747,9 @@ DYNAMIC_STRINGS_SUFFIX = "dynamic_strings"
 FIXED_STRINGS_SUFFIX = "fixed_strings"
 
 
-def read_modify_write_data(lib, symbol, query):
+def read_modify_write_data(lib, symbol, query, date_range=None):
     dest_symbol = f"{symbol}_modified"
-    lib._read_modify_write(symbol, query, dest_symbol)
+    lib._read_modify_write(symbol, query, dest_symbol, date_range=date_range)
     return lib.read(dest_symbol).data
 
 
@@ -759,13 +760,10 @@ def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
     created symbol. Functions that test the QueryBuilder such as generic_filter_test, generic_aggregation_test, etc...
     can iterate on the result array and test both methods for processing.
     """
-    read_modify_write_qb = copy.deepcopy(arctic_query)
     test_read_modify_write = os.getenv("ARCTICDB_TEST_READ_MODIFY_WRITE", "0") == "1"
     processing_functions = [lambda: lib.read(symbol, query_builder=arctic_query, date_range=date_range).data]
     if test_read_modify_write:
-        if date_range is not None:
-            read_modify_write_qb.prepend(QueryBuilder().date_range(date_range))
-        processing_functions.append(lambda: read_modify_write_data(lib, symbol, read_modify_write_qb))
+        processing_functions.append(lambda: read_modify_write_data(lib, symbol, arctic_query, date_range=date_range))
     return processing_functions
 
 
