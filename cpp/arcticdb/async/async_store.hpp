@@ -426,6 +426,18 @@ class AsyncStore : public Store {
         return res;
     }
 
+    SliceAndKey write_if_new(std::pair<DeDupLookupResult, FrameSlice>&& item) {
+        auto [dedup_lookup, slice] = std::move(item);
+        return util::variant_match(
+                std::move(dedup_lookup),
+                [&, this](NewObject&& obj) {
+                    library_->write(obj);
+                    return SliceAndKey{std::move(slice), std::move(obj).atom_key()};
+                },
+                [&](ExistingObject&& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
+        );
+    }
+
     folly::Future<SliceAndKey> async_write(
             folly::Future<std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
             const std::shared_ptr<DeDupMap>& de_dup_map
@@ -443,17 +455,7 @@ class AsyncStore : public Store {
                     return std::pair{lookup_match_in_dedup_map(de_dup_map, key_seg), std::move(slice)};
                 })
                 .via(&async::io_executor())
-                .thenValue([lib = library_](auto&& item) {
-                    auto& [dedup_lookup, slice] = item;
-                    return util::variant_match(
-                            dedup_lookup,
-                            [&](NewObject& obj) {
-                                lib->write(obj);
-                                return SliceAndKey{std::move(slice), obj.atom_key()};
-                            },
-                            [&](ExistingObject& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
-                    );
-                });
+                .thenValue([this](auto&& item) { return write_if_new(std::move(item)); });
     }
 
     folly::Future<SliceAndKey> compress_and_schedule_async_write(
@@ -468,14 +470,7 @@ class AsyncStore : public Store {
         return folly::via(
                 &io_executor(),
                 [dedup_lookup = std::move(dedup_lookup), slice = std::move(input_slice), this]() mutable {
-                    return util::variant_match(
-                            std::move(dedup_lookup),
-                            [&](NewObject&& obj) {
-                                library_->write(obj);
-                                return SliceAndKey{std::move(slice), obj.atom_key()};
-                            },
-                            [&](ExistingObject&& obj) { return SliceAndKey{slice, to_atom(std::move(obj))}; }
-                    );
+                    return write_if_new(std::pair{std::move(dedup_lookup), std::move(slice)});
                 }
         );
     }
