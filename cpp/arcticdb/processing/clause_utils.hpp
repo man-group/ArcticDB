@@ -92,9 +92,9 @@ struct RangesAndEntity {
 };
 
 template<typename T>
-requires std::is_same_v<T, RangesAndKey> || std::is_same_v<T, RangesAndEntity>
+requires util::any_of<T, RangesAndKey, RangesAndEntity>
 std::vector<std::vector<size_t>> structure_by_row_slice(std::vector<T>& ranges) {
-    std::sort(std::begin(ranges), std::end(ranges), [](const T& left, const T& right) {
+    std::ranges::sort(ranges, [](const T& left, const T& right) {
         return std::tie(left.row_range().first, left.col_range().first) <
                std::tie(right.row_range().first, right.col_range().first);
     });

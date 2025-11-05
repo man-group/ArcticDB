@@ -3066,6 +3066,16 @@ class Library:
         """
         return self._nvs.defragment_symbol_data(symbol, segment_size, prune_previous_versions)
 
+    def merge(
+        self,
+        symbol: str,
+        data: NormalizableType,
+        on: Optional[List[str]] = None,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+    ):
+        pass
+
     @property
     def name(self) -> str:
         """The name of this library."""

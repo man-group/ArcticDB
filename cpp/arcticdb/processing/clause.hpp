@@ -22,6 +22,7 @@
 #include <arcticdb/stream/aggregator.hpp>
 #include <folly/Poly.h>
 #include <arcticdb/pipeline/pipeline_common.hpp>
+#include <arcticdb/version/merge_options.hpp>
 #include <vector>
 #include <string>
 #include <variant>
@@ -37,6 +38,10 @@ using SliceAndKey = pipelines::SliceAndKey;
 namespace stream {
 struct PartialKey;
 } // namespace stream
+
+namespace pipelines {
+struct InputFrame;
+}
 
 class DeDupMap;
 
@@ -836,6 +841,40 @@ struct WriteClause {
 
   private:
     stream::PartialKey create_partial_key(const SegmentInMemory& segment) const;
+};
+
+struct MergeUpdateClause {
+    ClauseInfo clause_info_;
+    std::shared_ptr<ComponentManager> component_manager_;
+    std::vector<std::string> on_;
+    MergeStrategy strategy_;
+    std::shared_ptr<InputFrame> source_;
+    bool match_on_timeseries_index_;
+    MergeUpdateClause(
+            std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
+            bool match_on_timeseries_index
+    );
+    ARCTICDB_MOVE_COPY_DEFAULT(MergeUpdateClause)
+
+    [[nodiscard]] std::vector<std::vector<size_t>> structure_for_processing(std::vector<RangesAndKey>&);
+
+    [[nodiscard]] std::vector<std::vector<EntityId>> structure_for_processing(
+            std::vector<std::vector<EntityId>>&& entity_ids_vec
+    );
+
+    [[nodiscard]] std::vector<EntityId> process(std::vector<EntityId>&& entity_ids) const;
+
+    [[nodiscard]] const ClauseInfo& clause_info() const;
+
+    void set_processing_config(const ProcessingConfig&);
+
+    void set_component_manager(std::shared_ptr<ComponentManager> component_manager);
+
+    OutputSchema modify_schema(OutputSchema&& output_schema) const;
+
+    OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
+
+    [[nodiscard]] std::string to_string() const;
 };
 
 } // namespace arcticdb

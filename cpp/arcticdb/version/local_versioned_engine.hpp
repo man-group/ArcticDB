@@ -353,8 +353,9 @@ class LocalVersionedEngine : public VersionedEngine {
     const arcticdb::proto::storage::VersionStoreConfig& cfg() const override { return cfg_; }
 
     VersionedItem merge_internal(
-            const StreamId& stream_id, const std::shared_ptr<InputFrame>& source, bool prune_previous_versions,
-            const MergeStrategy& strategy, std::span<const std::string> on, bool match_on_timeseries_index
+            const StreamId& stream_id, const std::shared_ptr<InputFrame>& source, const py::object& user_meta,
+            bool prune_previous_versions, const MergeStrategy& strategy, std::vector<std::string>&& on,
+            bool match_on_timeseries_index
     ) override;
 
   protected:

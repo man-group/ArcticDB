@@ -222,9 +222,11 @@ VersionedItem read_modify_write_impl(
 );
 
 VersionedItem merge_impl(
-        const std::shared_ptr<Store>& store, const std::shared_ptr<InputFrame>& frame, const UpdateInfo& update_info,
-        WriteOptions&& options, const MergeStrategy& strategy, std::span<const std::string> on,
-        bool match_on_timeseries_index
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
+        std::vector<std::string>&& on, bool match_on_timeseries_index, const MergeStrategy& strategy,
+        const std::shared_ptr<InputFrame>& source
 );
 
 } // namespace arcticdb::version_store

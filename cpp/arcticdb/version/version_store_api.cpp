@@ -1335,7 +1335,7 @@ void PythonVersionStore::force_delete_symbol(const StreamId& stream_id) {
 
 VersionedItem PythonVersionStore::merge(
         const StreamId& stream_id, const py::tuple& source, const py::object& norm, const py::object& user_meta,
-        const bool prune_previous_versions, const py::tuple& py_strategy, const std::vector<std::string>& on,
+        const bool prune_previous_versions, const py::tuple& py_strategy, std::vector<std::string> on,
         const bool match_on_timeseries_index
 ) {
     const MergeStrategy strategy{
@@ -1344,9 +1344,10 @@ VersionedItem PythonVersionStore::merge(
     return merge_internal(
             stream_id,
             convert::py_ndf_to_frame(stream_id, source, norm, user_meta, cfg().write_options().empty_types()),
+            user_meta,
             prune_previous_versions,
             strategy,
-            on,
+            std::move(on),
             match_on_timeseries_index
     );
 }

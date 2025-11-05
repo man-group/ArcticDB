@@ -1374,17 +1374,10 @@ std::vector<EntityId> ColumnStatsGenerationClause::process(std::vector<EntityId>
 }
 
 std::vector<std::vector<size_t>> RowRangeClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys) {
-    auto row_range_filter = RowRange{start_, end_};
-    ranges_and_keys.erase(
-            std::remove_if(
-                    ranges_and_keys.begin(),
-                    ranges_and_keys.end(),
-                    [&](const RangesAndKey& ranges_and_key) {
-                        return !is_slice_in_row_range(ranges_and_key.row_range(), row_range_filter);
-                    }
-            ),
-            ranges_and_keys.end()
-    );
+    const auto row_range_filter = RowRange{start_, end_};
+    std::erase_if(ranges_and_keys, [&](const RangesAndKey& ranges_and_key) {
+        return !is_slice_in_row_range(ranges_and_key.row_range(), row_range_filter);
+    });
     return structure_by_row_slice(ranges_and_keys);
 }
 
@@ -1531,18 +1524,11 @@ std::vector<std::vector<size_t>> DateRangeClause::structure_for_processing(std::
             processing_config_.index_type_ == IndexDescriptor::Type::TIMESTAMP,
             "Cannot use date range with non-timestamp indexed data"
     );
-    auto index_filter = IndexRange(start_, end_);
-    ranges_and_keys.erase(
-            std::remove_if(
-                    ranges_and_keys.begin(),
-                    ranges_and_keys.end(),
-                    [&](const RangesAndKey& ranges_and_key) {
-                        auto slice_index_range = IndexRange(ranges_and_key.key_.time_range());
-                        return !is_slice_in_index_range(slice_index_range, index_filter, true);
-                    }
-            ),
-            ranges_and_keys.end()
-    );
+    const auto index_filter = IndexRange(start_, end_);
+    std::erase_if(ranges_and_keys, [&](const RangesAndKey& ranges_and_key) {
+        const auto slice_index_range = IndexRange(ranges_and_key.key_.time_range());
+        return !is_slice_in_index_range(slice_index_range, index_filter, true);
+    });
     return structure_by_row_slice(ranges_and_keys);
 }
 
@@ -1731,5 +1717,53 @@ OutputSchema WriteClause::join_schemas(std::vector<OutputSchema>&&) const {
 }
 
 std::string WriteClause::to_string() const { return "Write"; }
+
+MergeUpdateClause::MergeUpdateClause(
+        std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
+        bool match_on_timeseries_index
+) :
+    on_(std::move(on)),
+    strategy_(strategy),
+    source_(std::move(source)),
+    match_on_timeseries_index_(match_on_timeseries_index) {}
+
+std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
+) {
+    return structure_by_row_slice(ranges_and_keys);
+}
+
+std::vector<std::vector<EntityId>> MergeUpdateClause::structure_for_processing(
+        std::vector<std::vector<EntityId>>&& entity_ids_vec
+) {
+    return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
+}
+
+std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    const auto proc =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager_, std::move(entity_ids)
+            );
+
+    return {};
+}
+
+const ClauseInfo& MergeUpdateClause::clause_info() const { return clause_info_; }
+
+void MergeUpdateClause::set_processing_config(const ProcessingConfig&) {}
+
+void MergeUpdateClause::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+OutputSchema MergeUpdateClause::modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+
+OutputSchema MergeUpdateClause::join_schemas(std::vector<OutputSchema>&&) const {
+    util::raise_rte("MergeUpdateClause::join_schemas should never be called");
+}
+
+std::string MergeUpdateClause::to_string() const { return "MERGE_UPDATE"; }
 
 } // namespace arcticdb

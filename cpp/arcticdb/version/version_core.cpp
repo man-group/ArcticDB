@@ -2796,12 +2796,22 @@ VersionedItem read_modify_write_impl(
 }
 
 VersionedItem merge_impl(
-        [[maybe_unused]] const std::shared_ptr<Store>& store, [[maybe_unused]] const std::shared_ptr<InputFrame>& frame,
-        [[maybe_unused]] const UpdateInfo& update_info, [[maybe_unused]] WriteOptions&& options,
-        [[maybe_unused]] const MergeStrategy& strategy, [[maybe_unused]] std::span<const std::string> on,
-        [[maybe_unused]] bool match_on_timeseries_index
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
+        std::vector<std::string>&& on, const bool match_on_timeseries_index, const MergeStrategy& strategy,
+        const std::shared_ptr<InputFrame>& source
 ) {
-    return VersionedItem{};
+    auto read_query = std::make_shared<ReadQuery>();
+    read_query->clauses_.push_back(
+            std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source, match_on_timeseries_index))
+    );
+    if (source->has_index()) {
+        read_query->row_filter = source->index_range;
+    }
+    return read_modify_write_impl(
+            store, version_info, std::move(user_meta), read_query, read_options, write_options, target_partial_index_key
+    );
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(
