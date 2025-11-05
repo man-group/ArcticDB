@@ -1498,24 +1498,11 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
     std::vector<folly::Future<std::vector<SliceAndKey>>> batch_futures;
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
         auto& frame = frames[idx];
-        if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
-            sorting::raise<ErrorCode::E_UNSORTED_DATA>(
-                    "When calling write with validate_index enabled, input data must be sorted"
-            );
-        }
         auto version_id = version_ids[idx];
-        if (version_id == 0) {
-            auto check_outcome = verify_symbol_key(frame->desc().id());
-            if (std::holds_alternative<Error>(check_outcome)) {
-                std::get<Error>(check_outcome).throw_error();
-            }
-        }
-
         auto write_options = get_write_options();
         frame->set_bucketize_dynamic(write_options.bucketize_dynamic);
-
-        auto slicing_policy = get_slicing_policy(write_options, *frame);
-        auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
+        auto [partial_key, slicing_policy] =
+                get_partial_key_and_slicing_policy(write_options, *frame, version_id, validate_index);
         auto fut_slice_keys =
                 slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
         batch_futures.emplace_back(std::move(fut_slice_keys));
@@ -1523,12 +1510,12 @@ folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
 
     return folly::collectAll(batch_futures)
             .via(&async::cpu_executor())
-            .thenValue([store = store()](SliceAndKeyTryBatches&& batches) mutable {
+            .thenValue([store = store()](std::vector<folly::Try<std::vector<SliceAndKey>>>&& batches) {
                 return rollback_batches_on_quota_exceeded(std::move(batches), store);
             })
             .thenValue([store = store(),
                         frames = std::move(frames),
-                        version_ids = std::move(version_ids)](SliceAndKeyBatches&& succeeded) {
+                        version_ids = std::move(version_ids)](std::vector<std::vector<SliceAndKey>>&& succeeded) {
                 std::vector<folly::Future<AtomKey>> res;
                 for (auto&& [idx, slice_keys] : folly::enumerate(std::move(succeeded))) {
                     const auto& frame = frames[idx];

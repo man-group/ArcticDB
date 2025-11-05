@@ -445,7 +445,7 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
     return output;
 }
 
-folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(
+folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
         std::vector<SliceAndKey>&& slices, StreamSink& sink
 ) {
     std::vector<VariantKey> keys;
@@ -455,32 +455,43 @@ folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_key
             std::back_inserter(keys),
             [](SliceAndKey&& key) { return std::move(key).key(); }
     );
-    return sink.remove_keys(std::move(keys));
+    return sink.remove_keys(std::move(keys)).thenValue([](auto&&) { return folly::makeFuture(); });
+}
+
+folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys_batches(
+        std::vector<std::vector<SliceAndKey>>&& slices_batches, StreamSink& sink
+) {
+    return folly::collect(folly::window(
+                                  std::move(slices_batches),
+                                  [&sink](std::vector<SliceAndKey>&& slice_keys) {
+                                      return remove_slice_and_keys(std::move(slice_keys), sink);
+                                  },
+                                  write_window_size()
+                          ))
+            .via(&async::io_executor())
+            .thenValue([](auto&&) { return folly::makeFuture(); });
 };
 
 folly::SemiFuture<std::vector<SliceAndKey>> rollback_slices_on_quota_exceeded(
-        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<StreamSink>& sink
 ) {
     auto remove_slice_and_keys_func = [sink](std::vector<SliceAndKey>&& slice_keys) {
         return remove_slice_and_keys(std::move(slice_keys), *sink);
     };
 
-    return rollback_on_quota_exceeded(std::move(try_slices), remove_slice_and_keys_func);
+    return rollback_on_quota_exceeded<SliceAndKey>(std::move(try_slices), std::move(remove_slice_and_keys_func));
 }
 
-folly::SemiFuture<SliceAndKeyBatches> rollback_batches_on_quota_exceeded(
-        SliceAndKeyTryBatches&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quota_exceeded(
+        std::vector<folly::Try<std::vector<SliceAndKey>>>&& try_slice_batches,
+        const std::shared_ptr<stream::StreamSink>& sink
 ) {
-    auto remove_keys = [sink](std::vector<std::vector<SliceAndKey>>&& slice_keys_per_batch) {
-        return folly::collect(folly::window(
-                std::move(slice_keys_per_batch),
-                [sink](std::vector<SliceAndKey>&& slice_keys) {
-                    return remove_slice_and_keys(std::move(slice_keys), *sink);
-                },
-                write_window_size()
-        ));
+    auto remove_keys_func = [sink](std::vector<std::vector<SliceAndKey>>&& slice_keys_per_batch) {
+        return remove_slice_and_keys_batches(std::move(slice_keys_per_batch), *sink);
     };
 
-    return rollback_on_quota_exceeded(std::move(try_slices), remove_keys);
+    return rollback_on_quota_exceeded<std::vector<SliceAndKey>>(
+            std::move(try_slice_batches), std::move(remove_keys_func)
+    );
 }
 } // namespace arcticdb::pipelines

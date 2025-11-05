@@ -70,6 +70,10 @@ VersionedItem write_dataframe_impl(
         bool allow_sparse = false, bool validate_index = false
 );
 
+std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
+        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
+);
+
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<pipelines::InputFrame>& frame,
         const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool allow_sparse, bool validate_index

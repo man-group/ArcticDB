@@ -98,9 +98,11 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
 
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices);
 
-template<typename T, typename F>
+template<typename T>
+requires std::is_same_v<T, SliceAndKey> || std::is_same_v<T, std::vector<SliceAndKey>>
 folly::SemiFuture<std::vector<T>> rollback_on_quota_exceeded(
-        std::vector<folly::Try<T>>&& try_slices, F&& remove_future
+        std::vector<folly::Try<T>>&& try_slices,
+        folly::Function<folly::Future<StreamSink::RemoveKeyResultType>(std::vector<T>&&)>&& remove_future
 ) {
     std::vector<T> succeeded;
     std::optional<folly::exception_wrapper> exception;
@@ -120,13 +122,11 @@ folly::SemiFuture<std::vector<T>> rollback_on_quota_exceeded(
     }
 
     if (has_quota_limit_exceeded) {
-        return std::forward<F>(remove_future)(std::move(succeeded))
-                .via(&async::cpu_executor())
-                .thenValue([](auto&&...) {
-                    return folly::makeSemiFuture<std::vector<T>>(
-                            QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
-                    );
-                });
+        return std::move(remove_future)(std::move(succeeded)).via(&async::cpu_executor()).thenValue([](auto&&) {
+            return folly::makeSemiFuture<std::vector<T>>(
+                    QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
+            );
+        });
     }
 
     if (exception.has_value()) {
@@ -140,13 +140,12 @@ folly::SemiFuture<std::vector<SliceAndKey>> rollback_slices_on_quota_exceeded(
         std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
 );
 
-using SliceAndKeyBatches = std::vector<std::vector<SliceAndKey>>;
-using SliceAndKeyTryBatches = std::vector<folly::Try<std::vector<SliceAndKey>>>;
-folly::SemiFuture<SliceAndKeyBatches> rollback_batches_on_quota_exceeded(
-        SliceAndKeyTryBatches&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quota_exceeded(
+        std::vector<folly::Try<std::vector<SliceAndKey>>>&& try_slice_batches,
+        const std::shared_ptr<stream::StreamSink>& sink
 );
 
-folly::Future<std::vector<StreamSink::RemoveKeyResultType>> remove_slice_and_keys(
+folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
         std::vector<SliceAndKey>&& slices, StreamSink& sink
 );
 
