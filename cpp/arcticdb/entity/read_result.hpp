@@ -132,9 +132,9 @@ inline ReadResult create_python_read_result(
 
     std::vector<NodeReadResult> node_results;
     for (auto& node_output : node_outputs) {
-        auto node_fd = std::move(node_output.frame_and_descriptor_);
+        auto& node_fd = node_output.frame_and_descriptor_;
         auto node_python_frame = get_python_frame(node_fd);
-        auto& node_metadata = node_output.frame_and_descriptor_.desc_.proto().user_meta();
+        auto node_metadata = node_fd.desc_.proto().normalization();
         node_results.emplace_back(
                 node_output.versioned_item_.symbol(),
                 std::move(node_python_frame),
