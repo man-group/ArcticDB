@@ -1213,8 +1213,9 @@ class DataFrameNormalizer(_PandasNormalizer):
         if isinstance(item.index, MultiIndex):
             # We must not alter the input which might surprise too many users
             # Thus, we copy the index and column names because we will modify the index to prepare for write
-            # We use `item.values` which provides a view to the underlying data.
-            item = pd.DataFrame(item.values, index=item.index.copy(), columns=item.columns.copy())
+            item = item.copy(deep=False)
+            item.index = item.index.copy()
+            item.columns = item.columns.copy()
 
         if isinstance(item.columns, MultiIndex):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")

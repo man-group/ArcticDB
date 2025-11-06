@@ -13,6 +13,23 @@ def create_numeric_df(num_rows=100_000, num_columns=100):
     return df
 
 
+def create_mixed_type_df(num_rows=100_000, num_columns=100):
+    df = create_numeric_df(num_rows, num_columns)
+    for i, column in enumerate(df.columns):
+        if i % 5 == 0:
+            typ = np.int64
+        elif i % 5 == 1:
+            typ = np.float32
+        elif i % 5 == 2:
+            typ = bool
+        elif i % 5 == 3:
+            typ = str
+        elif i % 5 == 4:
+            typ = "datetime64[ns]"
+        df[column] = df[column].astype(typ)
+    return df
+
+
 def assert_write_allocates_small_fraction(lib, sym, create_obj_fn, acceptable_ratio=1.5):
     tracemalloc.start()
 
@@ -42,8 +59,8 @@ def test_peakmem_write_basic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "sym"
 
-    original_df_after_write = assert_write_allocates_small_fraction(lib, sym, create_numeric_df)
-    df_copy = create_numeric_df()
+    original_df_after_write = assert_write_allocates_small_fraction(lib, sym, create_mixed_type_df)
+    df_copy = create_mixed_type_df()
 
     # Verify that original dataframe was not modified during write.
     # We use `pd.testing.assert_frame_equal` to ensure even block structure is the same
@@ -55,7 +72,7 @@ def test_peakmem_write_arrow_basic(lmdb_version_store_arrow):
     sym = "sym"
 
     def create_pyarrow_table():
-        return pa.Table.from_pandas(create_numeric_df())
+        return pa.Table.from_pandas(create_mixed_type_df())
 
     original_table_after_write = assert_write_allocates_small_fraction(lib, sym, create_pyarrow_table)
     table_copy = create_pyarrow_table()
@@ -69,9 +86,9 @@ def test_peakmem_write_multiindex(lmdb_version_store_v1):
     sym = "sym"
 
     def create_multiindex(num_rows=100_000):
-        df = create_numeric_df(num_rows=num_rows)
+        df = create_mixed_type_df(num_rows=num_rows)
         num_indices = 3
-        indices_df = create_numeric_df(num_rows, num_indices)
+        indices_df = create_mixed_type_df(num_rows, num_indices)
         df.index = pd.MultiIndex.from_frame(indices_df)
         df.index.names = [f"index_{i}" for i in range(num_indices)]
         return df
