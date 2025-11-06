@@ -40,6 +40,8 @@ TEST(OutputFrame, AllocateChunked) {
     );
 
     context->set_descriptor(desc);
-    auto frame = allocate_frame(context, OutputFormat::ARROW);
+    auto read_options = ReadOptions{};
+    read_options.set_output_format(OutputFormat::ARROW);
+    auto frame = allocate_frame(context, read_options);
     ASSERT_EQ(frame.row_count(), 720);
 }

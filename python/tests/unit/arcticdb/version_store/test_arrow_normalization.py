@@ -66,7 +66,7 @@ def test_multi_index(lmdb_version_store_arrow):
     lib.write("arrow", df)
     table = lib.read("arrow").data
     assert table.schema.field(0).name == "index1"
-    assert table.schema.field(0).type == pa.dictionary(pa.int32(), pa.large_string())
+    assert table.schema.field(0).type == pa.large_string()
     assert table.schema.field(1).name == "index2"
     assert table.schema.field(1).type == pa.int64()
     assert_frame_equal_with_arrow(table, df)
@@ -145,7 +145,7 @@ def test_multi_index_with_tz(lmdb_version_store_arrow):
     lib.write("arrow", df)
     table = lib.read("arrow").data
     assert table.schema.field(0).name == "index1"
-    assert table.schema.field(0).type == pa.dictionary(pa.int32(), pa.large_string())
+    assert table.schema.field(0).type == pa.large_string()
     assert table.schema.field(1).name == "index2"
     assert table.schema.field(1).type == pa.timestamp("ns", "America/Los_Angeles")
     assert_frame_equal_with_arrow(table, df)

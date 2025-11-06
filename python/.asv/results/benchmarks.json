@@ -104,12 +104,13 @@
         "warmup_time": 0
     },
     "arrow.ArrowStrings.peakmem_read": {
-        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count):\n        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_read",
         "param_names": [
             "rows",
             "date_range",
-            "unique_string_count"
+            "unique_string_count",
+            "arrow_string_format"
         ],
         "params": [
             [
@@ -124,21 +125,28 @@
                 "1",
                 "100",
                 "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
         "setup_cache_key": "arrow:113",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "17372c9872c2a27c6319aead89a5339c06f9741b59700e2c860032c657e3f3ed"
+        "version": "a273a5f3619b20f832ece06f1ee4650c4c4bb76e6de07702968a2098d39a1bab"
     },
     "arrow.ArrowStrings.peakmem_write": {
-        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count):\n        # No point in running with and without date range\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "arrow.ArrowStrings.peakmem_write",
         "param_names": [
             "rows",
             "date_range",
-            "unique_string_count"
+            "unique_string_count",
+            "arrow_string_format"
         ],
         "params": [
             [
@@ -153,23 +161,30 @@
                 "1",
                 "100",
                 "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
         "setup_cache_key": "arrow:113",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "0001f96c10c9fea4573729eb8860c6e1b4bd3a50577aa35cdc33792c4e574aa5"
+        "version": "d1fa54f3f898dac7bbb27a41353877938711c2470afc8d5ad170bd8583f352d4"
     },
     "arrow.ArrowStrings.time_read": {
-        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count):\n        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_read",
         "number": 5,
         "param_names": [
             "rows",
             "date_range",
-            "unique_string_count"
+            "unique_string_count",
+            "arrow_string_format"
         ],
         "params": [
             [
@@ -184,6 +199,12 @@
                 "1",
                 "100",
                 "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
         "repeat": 0,
@@ -193,18 +214,19 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "f3b43fb90d56ca0b3e21885c08e66821b96857707c7415453a258ca79ba3b713",
+        "version": "8b5591c39110f8a625f84894f4f49f6e757449018c652c5644b63f94a4ea95ea",
         "warmup_time": 0
     },
     "arrow.ArrowStrings.time_write": {
-        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count):\n        # No point in running with and without date range\n        if date_range is None:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_write",
         "number": 5,
         "param_names": [
             "rows",
             "date_range",
-            "unique_string_count"
+            "unique_string_count",
+            "arrow_string_format"
         ],
         "params": [
             [
@@ -219,6 +241,12 @@
                 "1",
                 "100",
                 "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
         "repeat": 0,
@@ -228,7 +256,7 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "b92e0da75511b2d40c7abbb7417570391bd80aaeab41851f5a6ad042caf933d5",
+        "version": "05391bc18c869bb06480f5117f87ac7cc6a90d50acd8405162c9e935f0de14b0",
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.peakmem_read": {

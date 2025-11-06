@@ -43,10 +43,7 @@ struct ColumnMapping {
     const size_t dest_col_;
     ColumnTruncation truncate_;
 
-    ColumnMapping(
-            SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context,
-            OutputFormat output_format
-    );
+    ColumnMapping(SegmentInMemory& frame, size_t dst_col, size_t field_col, pipelines::PipelineContextRow& context);
 
     ColumnMapping(
             const entity::TypeDescriptor source_type_desc, const entity::TypeDescriptor dest_type_desc,

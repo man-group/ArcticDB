@@ -19,17 +19,20 @@ struct PythonEmptyHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-            const std::shared_ptr<StringPool>& string_pool
+            const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
     [[nodiscard]] int type_size() const;
 
     void convert_type(
             const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
-            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool
+            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
+            const ReadOptions& read_options
     ) const;
 
-    [[nodiscard]] entity::TypeDescriptor output_type(const entity::TypeDescriptor& input_type) const;
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
+    ) const;
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
@@ -41,16 +44,19 @@ struct PythonStringHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-            const std::shared_ptr<StringPool>& string_pool
+            const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
     [[nodiscard]] int type_size() const;
 
-    [[nodiscard]] entity::TypeDescriptor output_type(const entity::TypeDescriptor& input_type) const;
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
+    ) const;
 
     void convert_type(
             const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
-            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool
+            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
+            const ReadOptions& read_options
     ) const;
 
     void default_initialize(
@@ -63,17 +69,20 @@ struct PythonBoolHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-            const std::shared_ptr<StringPool>& string_pool
+            const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
     [[nodiscard]] int type_size() const;
 
     void convert_type(
             const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
-            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool
+            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
+            const ReadOptions& read_options
     ) const;
 
-    [[nodiscard]] entity::TypeDescriptor output_type(const entity::TypeDescriptor& input_type) const;
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
+    ) const;
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
@@ -85,12 +94,14 @@ struct PythonArrayHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-            const std::shared_ptr<StringPool>& string_pool
+            const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
 
     [[nodiscard]] int type_size() const;
 
-    [[nodiscard]] entity::TypeDescriptor output_type(const entity::TypeDescriptor& input_type) const;
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
+    ) const;
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
@@ -99,7 +110,8 @@ struct PythonArrayHandler {
 
     void convert_type(
             const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
-            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool
+            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
+            const ReadOptions& read_options
     ) const;
 };
 

@@ -10,9 +10,10 @@ from typing import Optional, Union
 from enum import Enum
 
 from arcticdb.dependencies import _PYARROW_AVAILABLE
+from arcticdb.dependencies import pyarrow as pa
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
-from arcticdb_ext.version_store import InternalOutputFormat
+from arcticdb_ext.version_store import InternalOutputFormat, InternalArrowOutputStringFormat
 
 
 DEFAULT_ENCODING_VERSION = EncodingVersion.V1
@@ -167,16 +168,75 @@ def output_format_to_internal(output_format: Union[OutputFormat, str]) -> Intern
         raise ValueError(f"Unknown OutputFormat: {output_format}")
 
 
+class ArrowOutputStringFormat(str, Enum):
+    """
+    Used to specify string format when output_format=OutputFormat.EXPERIMENTAL_ARROW.
+    Arguments allow specifying either the enum value or the corresponding pyarrow.DataType
+
+    LARGE_STRING (default):
+    Produces string columns with type `pa.large_string()`. Total length of strings must fit in a 64-bit integer.
+    Does not deduplicate strings, so has better performance for columns with many unique strings.
+
+    SMALL_STRING:
+    Produces string columns with type `pa.string()`. Total length of strings must fit in a 32-bit integer.
+    Does not deduplicate strings, so has better performance for columns with many unique strings.
+    Slightly faster than `LARGE_STRING` but does not work with very long strings.
+
+    CATEGORICAL and DICTIONARY_ENCODED:
+    Both are different aliases for the same string format. Produces string columns with type
+    `pa.dictionary(pa.int32(), pa.large_string())`. Total length of strings must fit in a 64-bit integer.  Splitting in
+    record batches guarantees that 32-bit dictionary keys are sufficient.
+    Does deduplicate strings, so has better performance for columns with few unique strings.
+
+    """
+
+    CATEGORICAL = "CATEGORICAL"
+    DICTIONARY_ENCODED = "DICTIONARY_ENCODED"
+    LARGE_STRING = "LARGE_STRING"
+    SMALL_STRING = "SMALL_STRING"
+
+
+def arrow_output_string_format_to_internal(
+    arrow_string_format: Union[ArrowOutputStringFormat, "pa.DataType"],
+) -> InternalArrowOutputStringFormat:
+    if (
+        arrow_string_format == ArrowOutputStringFormat.CATEGORICAL
+        or arrow_string_format == ArrowOutputStringFormat.DICTIONARY_ENCODED
+        or _PYARROW_AVAILABLE
+        and arrow_string_format == pa.dictionary(pa.int32(), pa.large_string())
+    ):
+        return InternalArrowOutputStringFormat.CATEGORICAL
+    elif (
+        arrow_string_format == ArrowOutputStringFormat.LARGE_STRING
+        or _PYARROW_AVAILABLE
+        and arrow_string_format == pa.large_string()
+    ):
+        return InternalArrowOutputStringFormat.LARGE_STRING
+    elif (
+        arrow_string_format == ArrowOutputStringFormat.SMALL_STRING
+        or _PYARROW_AVAILABLE
+        and arrow_string_format == pa.string()
+    ):
+        return InternalArrowOutputStringFormat.SMALL_STRING
+    else:
+        raise ValueError(f"Unkown ArrowOutputStringFormat: {arrow_string_format}")
+
+
 class RuntimeOptions:
     def __init__(
         self,
         *,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
+        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING,
     ):
         self.output_format = output_format
+        self.arrow_string_format_default = arrow_string_format_default
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         self.output_format = output_format
+
+    def set_arrow_string_format_default(self, arrow_string_format_default: ArrowOutputStringFormat):
+        self.arrow_string_format_default = arrow_string_format_default
 
 
 class EnterpriseLibraryOptions:
