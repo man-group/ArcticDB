@@ -1729,13 +1729,63 @@ MergeUpdateClause::MergeUpdateClause(
 
 std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std::vector<RangesAndKey>& ranges_and_keys
 ) {
-    return structure_by_row_slice(ranges_and_keys);
+    if (!source_->has_index()) {
+        return structure_by_row_slice(ranges_and_keys);
+    }
+    std::vector<std::vector<size_t>> entities = structure_by_row_slice(ranges_and_keys);
+    util::BitSet row_slices_to_keep(entities.size());
+    size_t source_row = 0;
+    auto first_col_slice_in_row = ranges_and_keys.begin();
+    for (size_t row_slice_idx = 0; row_slice_idx < entities.size() && source_row < source_->num_rows; ++row_slice_idx) {
+        const TimestampRange time_range = first_col_slice_in_row->key_.time_range();
+        bool keep_row_slice = source_->num_rows && strategy_.not_matched_by_target == MergeAction::INSERT &&
+                              source_->index_value_at(source_row) < time_range.first;
+        if (keep_row_slice) {
+            source_start_for_row_range_[first_col_slice_in_row->row_range()] = source_row;
+        }
+        timestamp source_ts = source_->index_value_at(source_row);
+        // TODO: If there are values to be inserted before the first segment this will read it and prepend the values
+        //  There is no need to read the segment. We can just create a new segment.
+        while (source_row < source_->num_rows && strategy_.not_matched_by_target == MergeAction::INSERT &&
+               source_ts < time_range.first) {
+            source_ts = source_->index_value_at(++source_row);
+        }
+        const bool source_ts_in_segment_range = source_ts >= time_range.first && source_ts < time_range.second;
+        if (!keep_row_slice && source_ts_in_segment_range) {
+            source_start_for_row_range_[first_col_slice_in_row->row_range()] = source_row;
+        }
+        keep_row_slice |= source_ts_in_segment_range;
+        while (source_row < source_->num_rows && source_ts >= time_range.first && source_ts < time_range.second) {
+            source_ts = source_->index_value_at(++source_row);
+        }
+        row_slices_to_keep[row_slice_idx] = keep_row_slice;
+        const size_t col_slice_count = entities[row_slice_idx].size();
+        first_col_slice_in_row += col_slice_count;
+    }
+    // TODO: If there are values to be inserted after the last segment this will read it and append the values and split
+    //  the segment if needed. There is no need to do this as we can just create a new segment.
+    if (source_row < source_->num_rows && strategy_.not_matched_by_target == MergeAction::INSERT) {
+        row_slices_to_keep[entities.size() - 1] = true;
+    }
+    const size_t num_row_slices_to_keep = row_slices_to_keep.count();
+    if (num_row_slices_to_keep == entities.size()) {
+        return entities;
+    }
+    size_t entity_pos = 0;
+    for (size_t i = 0; i < entities.size(); ++i) {
+        if (row_slices_to_keep[i]) {
+            if (entity_pos != i) {
+                entities[entity_pos] = std::move(entities[i]);
+            }
+            ++entity_pos;
+        }
+    }
+    entities.resize(num_row_slices_to_keep);
+    return entities;
 }
 
-std::vector<std::vector<EntityId>> MergeUpdateClause::structure_for_processing(
-        std::vector<std::vector<EntityId>>&& entity_ids_vec
-) {
-    return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
+std::vector<std::vector<EntityId>> MergeUpdateClause::structure_for_processing(std::vector<std::vector<EntityId>>&&) {
+    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("MergeUpdate clause should be the first clause in the pipeline");
 }
 
 std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_ids) const {

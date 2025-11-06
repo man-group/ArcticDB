@@ -875,6 +875,9 @@ struct MergeUpdateClause {
     OutputSchema join_schemas(std::vector<OutputSchema>&&) const;
 
     [[nodiscard]] std::string to_string() const;
+
+  private:
+    ankerl::unordered_dense::map<RowRange, size_t, RowRange::Hasher> source_start_for_row_range_;
 };
 
 } // namespace arcticdb
