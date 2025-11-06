@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from datetime import datetime, timedelta, timezone
 import os
 from arcticdb.util.logger import get_logger
-from .bucket_management import (
+from bucket_management import (
     azure_client,
     delete_azure_container,
     delete_gcp_bucket,
