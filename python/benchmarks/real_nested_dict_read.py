@@ -29,8 +29,8 @@ class AWSNestedDictRead(AsvBase):
 
     timeout = 1200
 
-    param_names = ["num_dict_entries"]
-    params = [1000]
+    param_names = ["num_dict_entries", "num_symbols"]
+    params = [1000, 10]
 
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="NESTED_DICT_READ")
 
@@ -47,8 +47,11 @@ class AWSNestedDictRead(AsvBase):
         manager = self.get_library_manager()
         lib = manager.get_library(LibraryType.PERSISTENT)
         
-        for num_entries in self.params:
-            symbol_name = self.get_symbol_name(num_entries)
+        num_entries = self.params[0]
+        num_symbols = self.params[1]
+        
+        for symbol_idx in range(num_symbols):
+            symbol_name = self.get_symbol_name(symbol_idx)
             if symbol_name not in lib.list_symbols():
                 data = {
                     f"{i}": {
@@ -60,18 +63,23 @@ class AWSNestedDictRead(AsvBase):
         
         manager.log_info()
 
-    def get_symbol_name(self, num_dict_entries):
-        return f"nested_dict_{num_dict_entries}"
+    def get_symbol_name(self, symbol_idx=0):
+        return f"nested_dict_{self.params[0]}_sym{symbol_idx}"
 
-    def setup(self, num_dict_entries):
+    def setup(self, num_dict_entries, num_symbols):
         self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)
-        self.symbol = self.get_symbol_name(num_dict_entries)
 
-    def teardown(self, num_dict_entries):
+    def teardown(self, num_dict_entries, num_symbols):
         pass
 
-    def time_read_nested_dict(self, num_dict_entries):
-        self.read_lib.read(self.symbol)
+    def time_read_nested_dict(self, num_dict_entries, num_symbols):
+        self.read_lib.read(self.get_symbol_name())
 
-    def peakmem_read_nested_dict(self, num_dict_entries):
-        self.read_lib.read(self.symbol)
+    def peakmem_read_nested_dict(self, num_dict_entries, num_symbols):
+        self.read_lib.read(self.get_symbol_name())
+        
+    def time_read_batch_nested_dict(self, num_dict_entries, num_symbols):
+        self.read_lib.read([self.get_symbol_name(i) for i in range(num_symbols)])
+
+    def peakmem_read_batch_nested_dict(self, num_dict_entries, num_symbols):
+        self.read_lib.read([self.get_symbol_name(i) for i in range(num_symbols)])
