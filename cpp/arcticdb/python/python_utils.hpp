@@ -244,9 +244,9 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                     py::list node_results;
                     for (auto& node_result : read_result.node_results) {
                         node_results.append(py::make_tuple(
-                            node_result.symbol_,
-                            std::move(node_result.frame_data_),
-                            python_util::pb_to_python(node_result.norm_meta_)
+                                node_result.symbol_,
+                                std::move(node_result.frame_data_),
+                                python_util::pb_to_python(node_result.norm_meta_)
                         ));
                     }
                     lst.append(py::make_tuple(

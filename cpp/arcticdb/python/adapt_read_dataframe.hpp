@@ -37,12 +37,20 @@ inline py::tuple adapt_read_df(ReadResult&& ret, std::any* const handler_data) {
     py::list node_results;
     for (auto& node_result : ret.node_results) {
         node_results.append(py::make_tuple(
-            node_result.symbol_,
-            std::move(node_result.frame_data_),
-            python_util::pb_to_python(node_result.norm_meta_)
+                node_result.symbol_,
+                std::move(node_result.frame_data_),
+                python_util::pb_to_python(node_result.norm_meta_)
         ));
     }
-    return py::make_tuple(ret.item, std::move(ret.frame_data), pynorm, pyuser_meta, multi_key_meta, ret.multi_keys, std::move(node_results));
+    return py::make_tuple(
+            ret.item,
+            std::move(ret.frame_data),
+            pynorm,
+            pyuser_meta,
+            multi_key_meta,
+            ret.multi_keys,
+            std::move(node_results)
+    );
 };
 
 } // namespace arcticdb

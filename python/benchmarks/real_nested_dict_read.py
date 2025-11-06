@@ -46,21 +46,19 @@ class AWSNestedDictRead(AsvBase):
     def setup_cache(self):
         manager = self.get_library_manager()
         lib = manager.get_library(LibraryType.PERSISTENT)
-        
+
         num_entries = self.params[0]
         num_symbols = self.params[1]
-        
+
         for symbol_idx in range(num_symbols):
             symbol_name = self.get_symbol_name(symbol_idx)
             if symbol_name not in lib.list_symbols():
                 data = {
-                    f"{i}": {
-                        "a": pd.DataFrame({"a": [1, 2, 3]}),
-                        "b": pd.DataFrame({"b": [1, 2, 3, 4, 5, 6]})
-                    } for i in range(num_entries)
+                    f"{i}": {"a": pd.DataFrame({"a": [1, 2, 3]}), "b": pd.DataFrame({"b": [1, 2, 3, 4, 5, 6]})}
+                    for i in range(num_entries)
                 }
                 lib._nvs.write(symbol_name, data, recursive_normalizers=True)
-        
+
         manager.log_info()
 
     def get_symbol_name(self, symbol_idx=0):
@@ -77,7 +75,7 @@ class AWSNestedDictRead(AsvBase):
 
     def peakmem_read_nested_dict(self, num_dict_entries, num_symbols):
         self.read_lib.read(self.get_symbol_name())
-        
+
     def time_read_batch_nested_dict(self, num_dict_entries, num_symbols):
         self.read_lib.read([self.get_symbol_name(i) for i in range(num_symbols)])
 
