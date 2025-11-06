@@ -241,13 +241,22 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                             std::get<proto::descriptors::UserDefinedMetadata>(read_result.user_meta)
                     );
                     auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
+                    py::list node_results;
+                    for (auto& node_result : read_result.node_results) {
+                        node_results.append(py::make_tuple(
+                            node_result.symbol_,
+                            std::move(node_result.frame_data_),
+                            python_util::pb_to_python(node_result.norm_meta_)
+                        ));
+                    }
                     lst.append(py::make_tuple(
                             read_result.item,
                             std::move(read_result.frame_data),
                             pynorm,
                             pyuser_meta,
                             multi_key_meta,
-                            read_result.multi_keys
+                            read_result.multi_keys,
+                            std::move(node_results)
                     ));
                     util::check(
                             !output_format.has_value() || output_format.value() == read_result.output_format,

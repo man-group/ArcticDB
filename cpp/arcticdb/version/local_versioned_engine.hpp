@@ -232,7 +232,7 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<AtomKey>& keys, const ReadOptions& read_options, std::any& handler_data
     );
 
-    std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
+    std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> batch_read_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
             std::any& handler_data

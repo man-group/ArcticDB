@@ -908,11 +908,13 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     for (auto&& [idx, read_version_or_error] : folly::enumerate(read_versions_or_errors)) {
         util::variant_match(
                 read_version_or_error,
-                [&res, &read_options](ReadVersionOutput& read_version) {
+                [&res, &read_options](ReadVersionWithNodesOutput& read_version) {
                     res.emplace_back(create_python_read_result(
-                            read_version.versioned_item_,
+                            read_version.root_.versioned_item_,
                             read_options.output_format(),
-                            std::move(read_version.frame_and_descriptor_)
+                            std::move(read_version.root_.frame_and_descriptor_),
+                            std::nullopt,
+                            std::move(read_version.nodes_)
                     ));
                 },
                 [&res](DataError& data_error) { res.emplace_back(std::move(data_error)); }
