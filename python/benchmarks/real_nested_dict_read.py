@@ -30,7 +30,7 @@ class AWSNestedDictRead(AsvBase):
     timeout = 1200
 
     param_names = ["num_dict_entries", "num_symbols"]
-    params = [1000, 10]
+    params = [[1000], [10]]
 
     library_manager = TestLibraryManager(storage=Storage.AMAZON, name_benchmark="NESTED_DICT_READ")
 
@@ -47,8 +47,8 @@ class AWSNestedDictRead(AsvBase):
         manager = self.get_library_manager()
         lib = manager.get_library(LibraryType.PERSISTENT)
 
-        num_entries = self.params[0]
-        num_symbols = self.params[1]
+        num_entries = self.params[0][0]
+        num_symbols = self.params[1][0]
 
         for symbol_idx in range(num_symbols):
             symbol_name = self.get_symbol_name(symbol_idx)
