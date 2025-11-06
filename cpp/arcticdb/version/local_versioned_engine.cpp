@@ -417,15 +417,19 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
 
     auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
-    
-    std::vector<folly::Future<ReadVersionOutput>> node_futures;
     auto& keys = root_result.frame_and_descriptor_.keys_;
-    node_futures.reserve(keys.size());
-    for (const auto& key : keys) { //Empty if it is not recursive normalized data
-        node_futures.emplace_back(read_frame_for_version_async_get_context(store(), key, read_query, read_options, handler_data));
+    if (keys.empty()) {
+        return {std::move(root_result), {}};
     }
-    
-    return {std::move(root_result), folly::collect(node_futures).get()};
+    else {
+        std::vector<folly::Future<ReadVersionOutput>> node_futures;
+        node_futures.reserve(keys.size());
+        for (const auto& key : keys) {
+            node_futures.emplace_back(read_frame_for_version_async_get_context(store(), key, read_query, read_options, handler_data));
+        }
+        
+        return {std::move(root_result), folly::collect(node_futures).get()};
+    }
 }
 
 folly::Future<DescriptorItem> LocalVersionedEngine::get_descriptor(AtomKey&& k) {
