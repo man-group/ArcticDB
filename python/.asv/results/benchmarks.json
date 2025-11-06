@@ -3054,14 +3054,17 @@
         "warmup_time": 0
     },
     "real_nested_dict_read.AWSNestedDictRead.peakmem_read_batch_nested_dict": {
-        "code": "class AWSNestedDictRead:\n    def peakmem_read_batch_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read([self.get_symbol_name(i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0]\n        num_symbols = self.params[1]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
+        "code": "class AWSNestedDictRead:\n    def peakmem_read_batch_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read([self.get_symbol_name(i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0][0]\n        num_symbols = self.params[1][0]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
         "name": "real_nested_dict_read.AWSNestedDictRead.peakmem_read_batch_nested_dict",
         "param_names": [
-            "num_dict_entries"
+            "num_dict_entries",
+            "num_symbols"
         ],
         "params": [
             [
-                "1000",
+                "1000"
+            ],
+            [
                 "10"
             ]
         ],
@@ -3069,17 +3072,20 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "30b241e14a06cd0221beadd2ae1fa50bfa2ae26c4e45f1d8e0ada3ae245edf34"
+        "version": "87a473ea7a194841bdaedcd5219a61b76ac8097da9429cfab365266ee5435f67"
     },
     "real_nested_dict_read.AWSNestedDictRead.peakmem_read_nested_dict": {
-        "code": "class AWSNestedDictRead:\n    def peakmem_read_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read(self.get_symbol_name())\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0]\n        num_symbols = self.params[1]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
+        "code": "class AWSNestedDictRead:\n    def peakmem_read_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read(self.get_symbol_name())\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0][0]\n        num_symbols = self.params[1][0]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
         "name": "real_nested_dict_read.AWSNestedDictRead.peakmem_read_nested_dict",
         "param_names": [
-            "num_dict_entries"
+            "num_dict_entries",
+            "num_symbols"
         ],
         "params": [
             [
-                "1000",
+                "1000"
+            ],
+            [
                 "10"
             ]
         ],
@@ -3087,19 +3093,22 @@
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "5173da2b56e8535772868aa2a8f48ec37a39077c53b1b46fcfa5b858ea66ce18"
+        "version": "bf91713ba451477777d0ed464beb30eec3a1e60c082befe62a51db79f80561e7"
     },
     "real_nested_dict_read.AWSNestedDictRead.time_read_batch_nested_dict": {
-        "code": "class AWSNestedDictRead:\n    def time_read_batch_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read([self.get_symbol_name(i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0]\n        num_symbols = self.params[1]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
+        "code": "class AWSNestedDictRead:\n    def time_read_batch_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read([self.get_symbol_name(i) for i in range(num_symbols)])\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0][0]\n        num_symbols = self.params[1][0]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
         "min_run_count": 1,
         "name": "real_nested_dict_read.AWSNestedDictRead.time_read_batch_nested_dict",
         "number": 3,
         "param_names": [
-            "num_dict_entries"
+            "num_dict_entries",
+            "num_symbols"
         ],
         "params": [
             [
-                "1000",
+                "1000"
+            ],
+            [
                 "10"
             ]
         ],
@@ -3110,20 +3119,23 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "c051b398079f0c6d586e5fef0a7011f9a520d37328d33271ca06ad6436de3e54",
+        "version": "7d7f5ee2de6fb9e2fd98966967293c1b5c1708a437baecebd2b75c65d749d4f6",
         "warmup_time": 0
     },
     "real_nested_dict_read.AWSNestedDictRead.time_read_nested_dict": {
-        "code": "class AWSNestedDictRead:\n    def time_read_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read(self.get_symbol_name())\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0]\n        num_symbols = self.params[1]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
+        "code": "class AWSNestedDictRead:\n    def time_read_nested_dict(self, num_dict_entries, num_symbols):\n        self.read_lib.read(self.get_symbol_name())\n\n    def setup(self, num_dict_entries, num_symbols):\n        self.read_lib = self.get_library_manager().get_library(LibraryType.PERSISTENT)\n\n    def setup_cache(self):\n        manager = self.get_library_manager()\n        lib = manager.get_library(LibraryType.PERSISTENT)\n    \n        num_entries = self.params[0][0]\n        num_symbols = self.params[1][0]\n    \n        for symbol_idx in range(num_symbols):\n            symbol_name = self.get_symbol_name(symbol_idx)\n            if symbol_name not in lib.list_symbols():\n                data = {\n                    f\"{i}\": {\"a\": pd.DataFrame({\"a\": [1, 2, 3]}), \"b\": pd.DataFrame({\"b\": [1, 2, 3, 4, 5, 6]})}\n                    for i in range(num_entries)\n                }\n                lib._nvs.write(symbol_name, data, recursive_normalizers=True)\n    \n        manager.log_info()",
         "min_run_count": 1,
         "name": "real_nested_dict_read.AWSNestedDictRead.time_read_nested_dict",
         "number": 3,
         "param_names": [
-            "num_dict_entries"
+            "num_dict_entries",
+            "num_symbols"
         ],
         "params": [
             [
-                "1000",
+                "1000"
+            ],
+            [
                 "10"
             ]
         ],
@@ -3134,7 +3146,7 @@
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
-        "version": "357d586281fdf03680305c3e46145d3648d410a4af2ed2596565de2f45994572",
+        "version": "6a59fdcff053427d45c07efa523d572802544c0125e1e88089ba8667d132de54",
         "warmup_time": 0
     },
     "real_query_builder.AWSQueryBuilderFunctions.peakmem_filtering_numeric": {
