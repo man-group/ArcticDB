@@ -31,4 +31,4 @@ class ReadResult:
         self.keys = keys
         self.node_read_results = [
             NodeReadResult(*node_read_result) for node_read_result in node_read_results
-        ]
+        ] if node_read_results is not None else []
