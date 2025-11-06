@@ -15,7 +15,8 @@ import pytest
 import random
 
 from arcticdb.exceptions import ArcticException, SchemaException, StreamDescriptorMismatch, UserInputException
-from arcticdb.util.arrow import stringify_dictionary_encoded_columns
+from arcticdb.options import ArrowOutputStringFormat
+from arcticdb.util.arrow import cast_string_columns
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.util.hypothesis import use_of_function_scoped_fixtures_in_hypothesis_checked
 from arcticdb.version_store._normalization import ArrowTableNormalizer
@@ -64,8 +65,7 @@ def test_basic_write_strings(lmdb_version_store_arrow, type):
     sym = "test_basic_write_strings"
     table = pa.table({"col": pa.array(["hello", "bonjour", "gutentag", "nihao", "konnichiwa"], type)})
     lib.write(sym, table)
-    received = lib.read(sym).data
-    received = stringify_dictionary_encoded_columns(received, type)
+    received = lib.read(sym, arrow_string_format_default=type).data
     assert table.equals(received)
 
 
@@ -108,9 +108,8 @@ def test_write_multiple_record_batches(lmdb_version_store_arrow, type):
     rb2 = pa.RecordBatch.from_arrays([arr2], names=["col"])
     table = pa.Table.from_batches([rb0, rb1, rb2])
     lib.write(sym, table)
-    received = lib.read(sym).data
-    if type in {pa.string(), pa.large_string()}:
-        received = stringify_dictionary_encoded_columns(received, type)
+    arrow_string_format = type if type == pa.large_string() or type == pa.string() else None
+    received = lib.read(sym, arrow_string_format_default=arrow_string_format).data
     assert table.equals(received)
 
 
@@ -128,7 +127,7 @@ def test_write_with_index(lmdb_version_store_arrow, index_col_position):
     if index_col_position == 1:
         table = table.select([1, 0, 2])
     lib.write(sym, table, index_column="ts")
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     assert table.equals(received)
 
 
@@ -161,7 +160,7 @@ def test_write_multiple_record_batches_indexed(lmdb_version_store_arrow):
     )
     table = pa.Table.from_batches([rb0, rb1, rb2])
     lib.write(sym, table)
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data)
+    received = lib.read(sym).data
     assert table.equals(received)
 
 
@@ -183,7 +182,7 @@ def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
         }
     )
     lib.write(sym, table)
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     assert table.equals(received)
 
 
@@ -272,7 +271,7 @@ def test_many_record_batches_many_slices(version_store_factory, rows_per_slice):
         )
     table = pa.concat_tables(tables)
     lib.write(sym, table)
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     assert table.equals(received)
 
 
@@ -303,8 +302,7 @@ def test_write_view_strings(lmdb_version_store_arrow, type):
     table = pa.concat_tables([table_0, table_1])
     view = table.slice(1, 4)
     lib.write(sym, view)
-    received = lib.read(sym).data
-    received = stringify_dictionary_encoded_columns(received, type)
+    received = lib.read(sym, arrow_string_format_default=type).data
     assert view.equals(received)
 
 
@@ -431,7 +429,7 @@ def test_append(lmdb_version_store_arrow, existing_data):
     append_table = pa.table({"col0": pa.array([2, 3], pa.int64()), "col1": pa.array(["ccc", "dddd"], pa.string())})
     lib.append(sym, append_table)
 
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     expected = pa.concat_tables([write_table, append_table]) if existing_data else append_table
     assert expected.equals(received)
 
@@ -446,7 +444,7 @@ def test_append_mix_strings_and_large_strings(lmdb_version_store_arrow, first_ty
     append_table = pa.table({"col": pa.array(["ccc", "dddd"], second_type)})
     lib.append(sym, append_table)
 
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.large_string())
+    received = lib.read(sym).data
     expected = pa.concat_tables([write_table, append_table], promote_options="permissive")
     assert expected.equals(received)
 
@@ -519,7 +517,7 @@ def test_update(lmdb_version_store_arrow, existing_data):
     )
     lib.update(sym, update_table, upsert=not existing_data, index_column="ts")
 
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     if existing_data:
         expected = pa.table(
             {
@@ -553,7 +551,7 @@ def test_update_mix_strings_and_large_strings(lmdb_version_store_arrow, first_ty
     )
     lib.update(sym, update_table, index_column="ts")
 
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     expected = pa.table(
         {
             "ts": pa.Array.from_pandas(pd.date_range("2025-01-01", periods=4), type=pa.timestamp("ns")),
@@ -667,7 +665,7 @@ def test_staging_without_sorting(version_store_factory, method):
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1])
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     assert expected.equals(received)
 
 
@@ -729,7 +727,7 @@ def test_staging_with_sorting_strings(version_store_factory):
     assert len(lib_tool.find_keys_for_symbol(KeyType.APPEND_DATA, sym)) == 4
     lib.compact_incomplete(sym, False, False)
     expected = pa.concat_tables([table_0, table_1]).sort_by("ts")
-    received = stringify_dictionary_encoded_columns(lib.read(sym).data, pa.string())
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
     assert expected.equals(received)
 
 
@@ -750,9 +748,9 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
     assert not lib.is_symbol_pickled(sym)
     received = lib.read(sym).data
     assert len(received) == 3
-    assert table_0.equals(stringify_dictionary_encoded_columns(received[0], pa.string()))
+    assert table_0.equals(cast_string_columns(received[0], pa.string()))
     assert_frame_equal_with_arrow(df_1, received[1])
-    assert table_2.equals(stringify_dictionary_encoded_columns(received[2], pa.large_string()))
+    assert table_2.equals(cast_string_columns(received[2], pa.large_string()))
 
     dict_data = {
         "a": table_0,
@@ -767,11 +765,11 @@ def test_recursive_normalizers(lmdb_version_store_arrow):
     received = lib.read(sym).data
     assert isinstance(received, dict)
     assert "a" in received.keys() and "b" in received.keys()
-    assert table_0.equals(stringify_dictionary_encoded_columns(received["a"], pa.string()))
+    assert table_0.equals(cast_string_columns(received["a"], pa.string()))
     assert "c" in received["b"].keys() and "d" in received["b"].keys()
     assert isinstance(received["b"]["c"], list) and len(received["b"]["c"]) == 1
     assert_frame_equal_with_arrow(df_1, received["b"]["c"][0])
-    assert table_2.equals(stringify_dictionary_encoded_columns(received["b"]["d"], pa.large_string()))
+    assert table_2.equals(cast_string_columns(received["b"]["d"], pa.large_string()))
 
 
 def test_batch_write(lmdb_version_store_arrow):
@@ -902,7 +900,7 @@ def test_arrow_writes_hypothesis(
     lib.update(sym, table.slice(df_length // 3, ((2 * df_length) // 3) - (df_length // 3)), index_column="ts")
     received = lib.read(sym).data
     for i, name in enumerate(received.column_names):
-        if pa.types.is_dictionary(received.column(i).type):
+        if pa.types.is_large_string(received.column(i).type):
             received = received.set_column(
                 i, name, received.column(name).cast(pa.string() if name == str(pa.string()) else pa.large_string())
             )

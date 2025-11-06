@@ -22,11 +22,18 @@ static void BM_arrow_string_handler(benchmark::State& state) {
     const auto num_rows = state.range(0);
     const auto num_different_strings = state.range(1);
     const auto num_sparse = state.range(2);
+    const auto string_output_format = ArrowOutputStringFormat(state.range(3));
+    auto read_options = ReadOptions{};
+    read_options.set_output_format(OutputFormat::ARROW);
+    read_options.set_arrow_output_default_string_format(string_output_format);
+
+    auto handler = ArrowStringHandler();
 
     const double sparsity_ratio = num_sparse / num_rows;
     auto source_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC64, Dimension::Dim0};
-    auto dest_type_desc = TypeDescriptor{DataType::UTF_DYNAMIC32, Dimension::Dim0};
-    auto dest_size = data_type_size(dest_type_desc, OutputFormat::ARROW, DataTypeMode::EXTERNAL);
+    auto [dest_type_desc, extra_bytes_per_block] =
+            handler.output_type_and_extra_bytes({DataType::UTF_DYNAMIC64, Dimension::Dim0}, "col", read_options);
+    auto dest_size = data_type_size(dest_type_desc);
     auto sparsity = num_sparse == 0 ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
 
     // Fill up source column
@@ -40,10 +47,11 @@ static void BM_arrow_string_handler(benchmark::State& state) {
             ++num_set;
         }
     }
+    auto field_wrapper = FieldWrapper(dest_type_desc, "col");
     auto mapping = ColumnMapping(
             source_type_desc,
             dest_type_desc,
-            FieldWrapper(dest_type_desc, "col").field(),
+            field_wrapper.field(),
             dest_size,
             num_rows,
             0,
@@ -51,28 +59,56 @@ static void BM_arrow_string_handler(benchmark::State& state) {
             dest_size * num_different_strings,
             0
     );
-    auto handler = ArrowStringHandler();
     auto handler_data = std::any{};
 
     for (auto _ : state) {
         state.PauseTiming();
-        auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, sparsity);
-        allocate_and_fill_chunked_column<int32_t>(dest_column, num_rows, num_rows);
+        auto dest_column = Column(dest_type_desc, 0, AllocationType::DETACHABLE, sparsity, extra_bytes_per_block);
+        allocate_chunked_column(dest_column, num_rows, num_rows);
         state.ResumeTiming();
-        handler.convert_type(source_column, dest_column, mapping, DecodePathData{}, handler_data, string_pool);
+        handler.convert_type(
+                source_column, dest_column, mapping, DecodePathData{}, handler_data, string_pool, read_options
+        );
     }
 }
 
 BENCHMARK(BM_arrow_string_handler)
-        // Not sparse, small string and offset buffers
-        ->Args({10'000, 1, 0})
-        ->Args({100'000, 1, 0})
-        // Not sparse, large string and offset buffers
-        ->Args({10'000, 10'000, 0})
-        ->Args({100'000, 100'000, 0})
+        // ArrowOutputStringFormat::CATEGORICAL
+        // Not sparse, small string buffers
+        ->Args({10'000, 1, 0, 0})
+        ->Args({100'000, 1, 0, 0})
+        // Not sparse, large string buffers
+        ->Args({10'000, 10'000, 0, 0})
+        ->Args({100'000, 100'000, 0, 0})
         // Half sparse
-        ->Args({10'000, 1, 5'000})
-        ->Args({100'000, 1, 50'000})
+        ->Args({10'000, 1, 5'000, 0})
+        ->Args({100'000, 1, 50'000, 0})
         // Fully sparse
-        ->Args({10'000, 1, 10'000})
-        ->Args({100'000, 1, 100'000});
+        ->Args({10'000, 1, 10'000, 0})
+        ->Args({100'000, 1, 100'000, 0})
+        // ArrowOutputStringFormat::LARGE_STRING
+        // Not sparse, small string buffers
+        ->Args({10'000, 1, 0, 1})
+        ->Args({100'000, 1, 0, 1})
+        // Not sparse, large string buffers
+        ->Args({10'000, 10'000, 0, 1})
+        ->Args({100'000, 100'000, 0, 1})
+        // Half sparse
+        ->Args({10'000, 1, 5'000, 1})
+        ->Args({100'000, 1, 50'000, 1})
+        // Fully sparse
+        ->Args({10'000, 1, 10'000, 1})
+        ->Args({100'000, 1, 100'000, 1})
+        // ArrowOutputStringFormat::SMALL_STRING
+        // Not sparse, small string buffers
+        ->Args({10'000, 1, 0, 2})
+        ->Args({100'000, 1, 0, 2})
+        // Not sparse, large string buffers
+        ->Args({10'000, 10'000, 0, 2})
+        ->Args({100'000, 100'000, 0, 2})
+        // Half sparse
+        ->Args({10'000, 1, 5'000, 2})
+        ->Args({100'000, 1, 50'000, 2})
+        // Fully sparse
+        ->Args({10'000, 1, 10'000, 2})
+        ->Args({100'000, 1, 100'000, 2});

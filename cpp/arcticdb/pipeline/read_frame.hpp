@@ -17,7 +17,7 @@
 
 namespace arcticdb::pipelines {
 
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format);
+SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options);
 
 template<typename KeySliceContainer>
 std::optional<util::BitSet> check_and_mark_slices(
@@ -88,7 +88,8 @@ folly::Future<folly::Unit> reduce_and_fix_columns(
 );
 
 StreamDescriptor get_filtered_descriptor(
-        const StreamDescriptor& desc, OutputFormat output_format, const std::shared_ptr<FieldCollection>& filter_columns
+        const StreamDescriptor& desc, const ReadOptions& read_options,
+        const std::shared_ptr<FieldCollection>& filter_columns
 );
 
 size_t get_index_field_count(const SegmentInMemory& frame);

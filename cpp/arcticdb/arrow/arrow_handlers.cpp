@@ -15,11 +15,21 @@
 #include <arcticdb/column_store/column_algorithms.hpp>
 
 namespace arcticdb {
+ArrowOutputStringFormat ArrowStringHandler::output_string_format(
+        std::string_view column_name, const ReadOptions& read_options
+) const {
+    const auto& arrow_config = read_options.arrow_output_config();
+    if (auto it = arrow_config.per_column_string_format_.find(std::string{column_name});
+        it != arrow_config.per_column_string_format_.end()) {
+        return it->second;
+    }
+    return arrow_config.default_string_format_;
+}
 
 void ArrowStringHandler::handle_type(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-        const std::shared_ptr<StringPool>& string_pool
+        const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     ARCTICDB_SAMPLE(ArrowHandleString, 0)
     util::check(field.has_ndarray(), "String handler expected array");
@@ -45,13 +55,90 @@ void ArrowStringHandler::handle_type(
             m.source_type_desc_, field, data, decoded_data, decoded_data.opt_sparse_map(), encoding_version
     );
 
-    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool);
+    convert_type(decoded_data, dest_column, m, shared_data, handler_data, string_pool, read_options);
 }
 
-void ArrowStringHandler::convert_type(
-        const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&,
-        std::any&, const std::shared_ptr<StringPool>& string_pool
-) const {
+template<typename OffsetType>
+void encode_variable_length(
+        const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
+        const std::shared_ptr<StringPool>& string_pool
+) {
+    using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
+
+    int64_t bytes = 0u;
+    auto last_idx = 0u;
+
+    // `mapping.dest_bytes` does not count the extra offset value we need to store in the end.
+    // Thus, we request one extra value to assert that the buffer has that extra value allocated.
+    auto dest_ptr = reinterpret_cast<OffsetType*>(
+            dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_ + sizeof(OffsetType))
+    );
+    std::vector<std::string_view> strings;
+    util::BitSet dest_bitset;
+    util::BitSet::bulk_insert_iterator inserter(dest_bitset);
+    bool populate_inverted_bitset = !source_column.opt_sparse_map().has_value();
+    for_each_enumerated<ArcticStringColumnTag>(source_column, [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
+        if (is_a_string(en.value())) {
+            auto strv = string_pool->get_const_view(en.value());
+            while (last_idx <= en.idx()) {
+                // According to arrow spec offsets must be monotonic even for null values.
+                // Hence, we fill missing values between `last_idx` and `en.idx` so that they contain 0 rows in
+                // string buffer
+                dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
+            }
+            bytes += strv.size();
+            strings.emplace_back(std::move(strv));
+            if (!populate_inverted_bitset) {
+                inserter = en.idx();
+            }
+        } else if (populate_inverted_bitset) {
+            inserter = en.idx();
+        }
+    });
+    while (last_idx <= mapping.num_rows_) {
+        dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
+    }
+    // The below assertion can only break for `SMALL_STRING` because `OffsetType=int32_t` and we can have more than 2^32
+    // bytes in memory. The same could not happen for `LARGE_STRING` where `OffsetType=int64=typeof(bytes)`.
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            bytes <= std::numeric_limits<OffsetType>::max(),
+            "The strings for column {} require {} bytes > {} bytes supported by requested string output format. "
+            "Consider using LARGE_STRING or CATEGORICAL.",
+            mapping.frame_field_descriptor_.name(),
+            bytes,
+            std::numeric_limits<OffsetType>::max()
+    );
+    inserter.flush();
+    if (populate_inverted_bitset) {
+        // For dense columns at this point bitset has ones where the source column is missing values.
+        // We invert it back, so we can use it for the sparse map on the output column.
+        dest_bitset.invert();
+    }
+    dest_bitset.resize(mapping.num_rows_);
+
+    if (dest_bitset.count() > 0) {
+        auto& string_buffer = dest_column.create_extra_buffer(
+                mapping.offset_bytes_, ExtraBufferType::STRING, bytes, AllocationType::DETACHABLE
+        );
+        auto string_ptr = reinterpret_cast<char*>(string_buffer.data());
+        for (auto strv : strings) {
+            memcpy(string_ptr, strv.data(), strv.size());
+            string_ptr += strv.size();
+        }
+    }
+
+    // We explicitly truncate the bitset after creation of the string buffer, because in the case where the truncated
+    // bitset is all False, we still should allocate a string buffer, so that the offsets for the nulls are valid.
+    if (dest_bitset.count() != dest_bitset.size()) {
+        handle_truncation(dest_bitset, mapping.truncate_);
+        create_dense_bitmap(mapping.offset_bytes_, dest_bitset, dest_column, AllocationType::DETACHABLE);
+    } // else there weren't any missing values
+}
+
+void encode_dictionary(
+        const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
+        const std::shared_ptr<StringPool>& string_pool
+) {
     using ArcticStringColumnTag = ScalarTagType<DataTypeTag<DataType::UTF_DYNAMIC64>>;
     struct DictEntry {
         int32_t offset_buffer_pos_;
@@ -131,15 +218,56 @@ void ArrowStringHandler::convert_type(
     }
 }
 
-TypeDescriptor ArrowStringHandler::output_type(const TypeDescriptor&) const {
-    return make_scalar_type(DataType::UTF_DYNAMIC32);
+void ArrowStringHandler::convert_type(
+        const Column& source_column, Column& dest_column, const ColumnMapping& mapping, const DecodePathData&,
+        std::any&, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
+) const {
+    auto string_format = output_string_format(mapping.frame_field_descriptor_.name(), read_options);
+    switch (string_format) {
+    case ArrowOutputStringFormat::CATEGORICAL:
+        encode_dictionary(source_column, dest_column, mapping, string_pool);
+        break;
+    case ArrowOutputStringFormat::LARGE_STRING:
+        encode_variable_length<int64_t>(source_column, dest_column, mapping, string_pool);
+        break;
+    case ArrowOutputStringFormat::SMALL_STRING:
+        encode_variable_length<int32_t>(source_column, dest_column, mapping, string_pool);
+        break;
+    }
 }
 
-int ArrowStringHandler::type_size() const { return sizeof(uint32_t); }
+std::pair<TypeDescriptor, size_t> ArrowStringHandler::output_type_and_extra_bytes(
+        const TypeDescriptor&, std::string_view column_name, const ReadOptions& read_options
+) const {
+    auto string_format = output_string_format(column_name, read_options);
+    switch (string_format) {
+    case ArrowOutputStringFormat::CATEGORICAL:
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), 0};
+    case ArrowOutputStringFormat::LARGE_STRING:
+        return {make_scalar_type(DataType::UTF_DYNAMIC64), sizeof(int64_t)};
+    case ArrowOutputStringFormat::SMALL_STRING:
+        return {make_scalar_type(DataType::UTF_DYNAMIC32), sizeof(int32_t)};
+    default:
+        util::raise_rte("Unknown arrow string output format {}", static_cast<int32_t>(string_format));
+    }
+}
 
 void ArrowStringHandler::default_initialize(
-        ChunkedBuffer& /*buffer*/, size_t /*offset*/, size_t /*byte_size*/, const DecodePathData& /*shared_data*/,
+        ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& /*shared_data*/,
         std::any& /*handler_data*/
-) const {}
+) const {
+    if (!buffer.has_extra_bytes_per_block()) {
+        // For categorical string columns the extra_bytes_per_block won't be set.
+        // Categorical string columns can contain any values as long as they are marked as 0.
+        return;
+    }
+    // Large or small string columns must be default initialized because monotonicity is required even for null values.
+    // `default_initialize` is called only on entire row slices so it is ok to memset buffers with 0s
+    auto dest_ptrs_and_sizes = buffer.byte_blocks_at(offset, byte_size);
+    for (auto& [dest_ptr, bytes] : dest_ptrs_and_sizes) {
+        auto bytes_with_extra = bytes + buffer.extra_bytes_per_block();
+        memset(dest_ptr, 0, bytes_with_extra);
+    }
+}
 
 } // namespace arcticdb

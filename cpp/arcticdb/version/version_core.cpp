@@ -1579,7 +1579,7 @@ void init_sparse_dst_column_before_copy(
 
 void copy_frame_data_to_buffer(
         SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index,
-        const RowRange& row_range, DecodePathData shared_data, std::any& handler_data, OutputFormat output_format,
+        const RowRange& row_range, DecodePathData shared_data, std::any& handler_data, const ReadOptions& read_options,
         const std::optional<Value>& default_value
 ) {
     const auto num_rows = row_range.diff();
@@ -1588,7 +1588,7 @@ void copy_frame_data_to_buffer(
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
-    auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+    auto dst_rawtype_size = data_type_size(dst_column.type());
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
@@ -1602,8 +1602,8 @@ void copy_frame_data_to_buffer(
             dst_column.type(),
             destination.field(target_index).name()
     );
-    if (auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
-        const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+    if (auto handler = get_type_handler(read_options.output_format(), src_column.type(), dst_column.type()); handler) {
+        const auto type_size = data_type_size(dst_column.type());
         const ColumnMapping mapping{
                 src_column.type(),
                 dst_column.type(),
@@ -1615,10 +1615,18 @@ void copy_frame_data_to_buffer(
                 total_size,
                 target_index
         };
-        handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
+        handler->convert_type(
+                src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr(), read_options
+        );
     } else if (is_empty_type(src_column.type().data_type())) {
         init_sparse_dst_column_before_copy(
-                dst_column, offset, num_rows, dst_rawtype_size, output_format, std::nullopt, default_value
+                dst_column,
+                offset,
+                num_rows,
+                dst_rawtype_size,
+                read_options.output_format(),
+                std::nullopt,
+                default_value
         );
         // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows
         // values
@@ -1635,7 +1643,7 @@ void copy_frame_data_to_buffer(
                     offset,
                     num_rows,
                     dst_rawtype_size,
-                    output_format,
+                    read_options.output_format(),
                     src_column.opt_sparse_map(),
                     default_value
             );
@@ -1666,7 +1674,7 @@ void copy_frame_data_to_buffer(
                         offset,
                         num_rows,
                         dst_rawtype_size,
-                        output_format,
+                        read_options.output_format(),
                         src_column.opt_sparse_map(),
                         default_value
                 );
@@ -1712,7 +1720,7 @@ void copy_frame_data_to_buffer(
                                 offset,
                                 num_rows,
                                 dst_rawtype_size,
-                                output_format,
+                                read_options.output_format(),
                                 src_column.opt_sparse_map(),
                                 default_value
                         );
@@ -1744,13 +1752,13 @@ struct CopyToBufferTask : async::BaseTask {
     uint32_t required_fields_count_;
     DecodePathData shared_data_;
     std::any& handler_data_;
-    OutputFormat output_format_;
+    const ReadOptions read_options_;
     std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment, SegmentInMemory target_segment, FrameSlice frame_slice,
             uint32_t required_fields_count, DecodePathData shared_data, std::any& handler_data,
-            OutputFormat output_format, std::shared_ptr<PipelineContext> pipeline_context
+            const ReadOptions& read_options, std::shared_ptr<PipelineContext> pipeline_context
     ) :
         source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
@@ -1758,7 +1766,7 @@ struct CopyToBufferTask : async::BaseTask {
         required_fields_count_(required_fields_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        output_format_(output_format),
+        read_options_(read_options),
         pipeline_context_(std::move(pipeline_context)) {}
 
     folly::Unit operator()() {
@@ -1780,7 +1788,7 @@ struct CopyToBufferTask : async::BaseTask {
                         frame_slice_.row_range,
                         shared_data_,
                         handler_data_,
-                        output_format_,
+                        read_options_,
                         {}
                 );
             } else {
@@ -1806,7 +1814,7 @@ struct CopyToBufferTask : async::BaseTask {
                         frame_slice_.row_range,
                         shared_data_,
                         handler_data_,
-                        output_format_,
+                        read_options_,
                         default_value
                 );
             }
@@ -1817,7 +1825,7 @@ struct CopyToBufferTask : async::BaseTask {
 
 folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        SegmentInMemory frame, std::any& handler_data, OutputFormat output_format
+        SegmentInMemory frame, std::any& handler_data, const ReadOptions& read_options
 ) {
     const auto required_fields_count =
             pipelines::index::required_fields_count(pipeline_context->descriptor(), *pipeline_context->norm_meta_);
@@ -1833,7 +1841,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 required_fields_count,
                 shared_data,
                 handler_data,
-                output_format,
+                read_options,
                 pipeline_context
         }));
     }
@@ -1856,8 +1864,8 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
-    auto frame = allocate_frame(pipeline_context, read_options.output_format());
-    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format())
+    auto frame = allocate_frame(pipeline_context, read_options);
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options)
             .thenValue([frame](auto&&) { return frame; });
 }
 
@@ -2028,7 +2036,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
                 "Cannot use head/tail/row_range with pickled data, use plain read instead"
         );
         mark_index_slices(pipeline_context);
-        auto frame = allocate_frame(pipeline_context, read_options.output_format());
+        auto frame = allocate_frame(pipeline_context, read_options);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
         return fetch_data(
