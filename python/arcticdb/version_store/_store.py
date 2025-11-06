@@ -2312,10 +2312,12 @@ class NativeVersionStore:
         vitem = self._adapt_read_res(read_result)
 
         # Handle custom normalized data
-        if len(read_result.keys) > 0:
+        if len(read_result.keys) > 0 or len(read_result.node_read_results) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
-
-            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys, read_options)}
+            if len(read_result.node_read_results) > 0:
+                key_map = {v.sym: self._adapt_frame_data(v.frame_data, v.norm) for v in read_result.node_read_results}
+            else:
+                key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys, read_options)}
             original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
 
             return VersionedItem(

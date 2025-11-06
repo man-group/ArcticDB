@@ -29,9 +29,6 @@ class ReadResult:
         self.udm = udm
         self.mmeta = mmeta
         self.keys = keys
-        if node_read_results is not None:
-            self.node_read_results = [
-                NodeReadResult(*node_read_result) for node_read_result in node_read_results
-            ]
-        else:
-            self.node_read_results = None
+        self.node_read_results = [
+            NodeReadResult(*node_read_result) for node_read_result in node_read_results
+        ]
