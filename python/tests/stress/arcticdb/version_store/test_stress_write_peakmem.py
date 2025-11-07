@@ -3,6 +3,7 @@ import numpy as np
 import pyarrow as pa
 import pytest
 import tracemalloc
+import sys
 
 
 def create_numeric_df(num_rows=100_000, num_columns=100):
@@ -55,6 +56,7 @@ def assert_write_allocates_small_fraction(lib, sym, create_obj_fn, acceptable_ra
     return obj
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="Tracemalloc doesn't support `reset_peak` before python 3.9")
 def test_peakmem_write_basic(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "sym"
@@ -67,6 +69,7 @@ def test_peakmem_write_basic(lmdb_version_store_v1):
     pd.testing.assert_frame_equal(original_df_after_write, df_copy)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="Tracemalloc doesn't support `reset_peak` before python 3.9")
 def test_peakmem_write_arrow_basic(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "sym"
@@ -81,6 +84,7 @@ def test_peakmem_write_arrow_basic(lmdb_version_store_arrow):
     original_table_after_write.equals(table_copy)
 
 
+@pytest.mark.skipif(sys.version_info < (3, 9), reason="Tracemalloc doesn't support `reset_peak` before python 3.9")
 def test_peakmem_write_multiindex(lmdb_version_store_v1):
     lib = lmdb_version_store_v1
     sym = "sym"
