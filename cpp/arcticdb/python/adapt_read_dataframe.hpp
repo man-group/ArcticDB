@@ -48,7 +48,6 @@ inline py::tuple adapt_read_df(ReadResult&& ret, std::any* const handler_data) {
             pynorm,
             pyuser_meta,
             multi_key_meta,
-            ret.multi_keys,
             std::move(node_results)
     );
 };

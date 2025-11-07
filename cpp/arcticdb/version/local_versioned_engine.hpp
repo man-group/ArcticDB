@@ -228,10 +228,6 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<UpdateQuery>& update_queries, bool prune_previous_versions, bool upsert
     );
 
-    std::vector<ReadVersionOutput> batch_read_keys(
-            const std::vector<AtomKey>& keys, const ReadOptions& read_options, std::any& handler_data
-    );
-
     std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> batch_read_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
