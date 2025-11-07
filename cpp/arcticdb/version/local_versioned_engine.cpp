@@ -1488,26 +1488,43 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     });
 }
 
-std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
-        const std::vector<VersionId>& version_ids, const std::vector<StreamId>& stream_ids,
+folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
+        std::vector<VersionId>&& version_ids, const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
     ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
-    std::vector<folly::Future<entity::AtomKey>> results_fut;
+    std::vector<folly::Future<std::vector<SliceAndKey>>> batch_futures;
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
-        results_fut.emplace_back(async_write_dataframe_impl(
-                store(),
-                version_ids[idx],
-                std::move(frames[idx]),
-                get_write_options(),
-                de_dup_maps[idx],
-                false,
-                validate_index
-        ));
+        auto& frame = frames[idx];
+        auto version_id = version_ids[idx];
+        auto write_options = get_write_options();
+        frame->set_bucketize_dynamic(write_options.bucketize_dynamic);
+        auto [partial_key, slicing_policy] =
+                get_partial_key_and_slicing_policy(write_options, *frame, version_id, validate_index);
+        auto fut_slice_keys =
+                slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
+        batch_futures.emplace_back(std::move(fut_slice_keys));
     }
-    return results_fut;
+
+    return folly::collectAll(batch_futures)
+            .via(&async::cpu_executor())
+            .thenValue([store = store()](std::vector<folly::Try<std::vector<SliceAndKey>>>&& batches) {
+                return rollback_batches_on_quota_exceeded(std::move(batches), store);
+            })
+            .thenValue([store = store(),
+                        frames = std::move(frames),
+                        version_ids = std::move(version_ids)](std::vector<std::vector<SliceAndKey>>&& succeeded) {
+                std::vector<folly::Future<AtomKey>> res;
+                for (auto&& [idx, slice_keys] : folly::enumerate(std::move(succeeded))) {
+                    const auto& frame = frames[idx];
+                    auto partial_key = IndexPartialKey{frame->desc().id(), version_ids[idx]};
+                    res.emplace_back(index::write_index(frame, std::move(slice_keys), partial_key, store));
+                }
+
+                return folly::collect(std::move(res));
+            });
 }
 
 VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
