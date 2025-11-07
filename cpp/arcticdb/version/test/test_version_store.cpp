@@ -688,7 +688,7 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
     ASSERT_TRUE(it == std::end(all_index_keys));
 }
 
-TEST(VersionStore, UpdateWithin) {
+TEST(VersionStore, UpdateWithin) { 
     using namespace arcticdb;
     using namespace arcticdb::storage;
     using namespace arcticdb::stream;
