@@ -95,29 +95,38 @@ VersionedItem write_dataframe_impl(
     return {std::move(atom_key_fut).get()};
 }
 
-folly::Future<entity::AtomKey> async_write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
-        bool validate_index
+std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
+        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
 ) {
-    ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame->desc().id());
+        auto check_outcome = verify_symbol_key(frame.desc().id());
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
     }
 
     // Slice the frame according to the write options
-    frame->set_bucketize_dynamic(options.bucketize_dynamic);
-    auto slicing_arg = get_slicing_policy(options, *frame);
-    auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
-    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
+    auto slicing_arg = get_slicing_policy(options, frame);
+    auto partial_key = IndexPartialKey{frame.desc().id(), version_id};
+    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling write with validate_index enabled, input data must be sorted"
         );
     }
-    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
+
+    return std::make_tuple(partial_key, slicing_arg);
+}
+
+folly::Future<entity::AtomKey> async_write_dataframe_impl(
+        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
+        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
+        bool validate_index
+) {
+    ARCTICDB_SAMPLE(DoWrite, 0)
+    frame->set_bucketize_dynamic(options.bucketize_dynamic);
+    auto [partial_key, slicing_policy] =
+            get_partial_key_and_slicing_policy(options, *frame, version_id, validate_index);
+    return write_frame(std::move(partial_key), frame, slicing_policy, store, de_dup_map, sparsify_floats);
 }
 
 namespace {
@@ -245,14 +254,14 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
                    collectAll(maybe_intersect_before_fut)
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_before) {
-                               return rollback_on_quota_exceeded(
+                               return rollback_slices_on_quota_exceeded(
                                        std::move(maybe_intersect_before), std::static_pointer_cast<StreamSink>(store)
                                );
                            }),
                    collectAll(maybe_intersect_after_fut)
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_after) {
-                               return rollback_on_quota_exceeded(
+                               return rollback_slices_on_quota_exceeded(
                                        std::move(maybe_intersect_after), std::static_pointer_cast<StreamSink>(store)
                                );
                            })
@@ -261,28 +270,15 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             .thenValue([store](auto&& try_before_and_after) -> folly::Future<IntersectingSegments> {
                 auto& [try_intersect_before, try_intersect_after] = try_before_and_after;
 
-                if (try_intersect_before.template hasException<QuotaExceededException>() &&
-                    !try_intersect_after.hasException()) {
-                    return remove_slice_and_keys(std::move(try_intersect_after.value()), *store)
-                            .thenValueInline([](auto&&) {
-                                return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
-                                );
-                            });
-                }
-
-                if (try_intersect_after.template hasException<QuotaExceededException>() &&
-                    !try_intersect_before.hasException()) {
-                    return remove_slice_and_keys(std::move(try_intersect_before.value()), *store)
-                            .thenValueInline([](auto&&) {
-                                return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
-                                );
-                            });
-                }
-
-                // Return the tuple if all is okay, or throw any contained exception on .value().
-                return IntersectingSegments{
-                        std::move(try_intersect_before.value()), std::move(try_intersect_after.value())
-                };
+                return rollback_batches_on_quota_exceeded(
+                               {std::move(try_intersect_before), std::move(try_intersect_after)}, store
+                )
+                        .via(&async::cpu_executor())
+                        .thenValue([](auto&& batch) {
+                            auto& intersect_before = batch[0];
+                            auto& intersect_after = batch[1];
+                            return IntersectingSegments{std::move(intersect_before), std::move(intersect_after)};
+                        });
             })
             .via(&async::io_executor());
 }

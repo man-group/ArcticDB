@@ -688,9 +688,7 @@ VersionedItem PythonVersionStore::write_versioned_composite_data(
     // Need to hold the GIL up to this point as we will call pb_from_python
     auto release_gil = std::make_unique<py::gil_scoped_release>();
     auto index_keys =
-            folly::collect(batch_write_internal(
-                                   std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false
-                           ))
+            batch_write_internal(std::move(version_ids), sub_keys, std::move(frames), std::move(de_dup_maps), false)
                     .get();
     release_gil.reset();
     auto multi_key = write_multi_index_entry(store(), index_keys, stream_id, metastruct, user_meta, version_id);
