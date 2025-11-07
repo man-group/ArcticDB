@@ -1195,7 +1195,6 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
 
-
     def trim(self) -> None:
         """
         Calls trim on the allocator of the underlying version_store

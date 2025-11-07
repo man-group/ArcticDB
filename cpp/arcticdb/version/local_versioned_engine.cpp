@@ -1289,8 +1289,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                 return folly::makeFuture<ReadVersionWithNodesOutput>(
                                         ReadVersionWithNodesOutput{std::move(result), {}}
                                 );
-                            }
-                            else {
+                            } else {
                                 std::vector<folly::Future<ReadVersionOutput>> node_futures;
                                 node_futures.reserve(keys.size());
                                 for (const auto& key : keys) {
@@ -1301,7 +1300,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                 return folly::collect(std::move(node_futures))
                                         .via(&async::cpu_executor())
                                         .thenValue([result = std::move(result)](std::vector<ReadVersionOutput>&& nodes
-                                                ) mutable {
+                                                   ) mutable {
                                             return ReadVersionWithNodesOutput{std::move(result), std::move(nodes)};
                                         });
                             }

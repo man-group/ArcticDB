@@ -43,12 +43,7 @@ inline py::tuple adapt_read_df(ReadResult&& ret, std::any* const handler_data) {
         ));
     }
     return py::make_tuple(
-            ret.item,
-            std::move(ret.frame_data),
-            pynorm,
-            pyuser_meta,
-            multi_key_meta,
-            std::move(node_results)
+            ret.item, std::move(ret.frame_data), pynorm, pyuser_meta, multi_key_meta, std::move(node_results)
     );
 };
 
