@@ -34,6 +34,8 @@ class LibraryOptions:
         See `__init__` for details.
     columns_per_segment: int
         See `__init__` for details.
+    recursive_normalizers: bool
+        See `__init__` for details.
     """
 
     def __init__(
@@ -44,7 +46,7 @@ class LibraryOptions:
         rows_per_segment: int = 100_000,
         columns_per_segment: int = 127,
         encoding_version: Optional[EncodingVersion] = None,
-        recursive_normalizers: bool = True,
+        recursive_normalizers: bool = False,
     ):
         """
         Parameters
@@ -127,7 +129,7 @@ class LibraryOptions:
             The encoding version to use when writing data to storage.
             v2 is faster, but still experimental, so use with caution.
 
-        recursive_normalizers: bool, default True
+        recursive_normalizers: bool, default False
             Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
             The data structure can be nested or a mix of lists and dictionaries.
             Note: If the leaf nodes cannot be natively normalized and must be written using write_pickle, those leaf nodes
