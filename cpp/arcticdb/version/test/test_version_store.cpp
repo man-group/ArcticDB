@@ -688,6 +688,18 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
     ASSERT_TRUE(it == std::end(all_index_keys));
 }
 
+auto get_frame_from_read_output(const auto& read_result) {
+    return arcticdb::util::variant_match(
+            read_result,
+            [](const arcticdb::version_store::ReadVersionOutput& output){
+                return output.frame_and_descriptor_.frame_;
+            },
+            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output){
+                return output.root_.frame_and_descriptor_.frame_;
+            }
+    );
+}
+
 TEST(VersionStore, UpdateWithin) {
     using namespace arcticdb;
     using namespace arcticdb::storage;
@@ -724,15 +736,7 @@ TEST(VersionStore, UpdateWithin) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = util::variant_match(
-            read_result,
-            [](const arcticdb::version_store::ReadVersionOutput& output) -> const SegmentInMemory& {
-                return output.frame_and_descriptor_.frame_;
-            },
-            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output) -> const SegmentInMemory& {
-                return output.root_.frame_and_descriptor_.frame_;
-            }
-    );
+    const auto& seg = get_frame_from_read_output(read_result);
 
     for (auto i = 0u; i < num_rows; ++i) {
         const uint8_t expected = update_range.contains(i) ? i + update_val : i;
@@ -776,15 +780,7 @@ TEST(VersionStore, UpdateBefore) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = util::variant_match(
-            read_result,
-            [](const arcticdb::version_store::ReadVersionOutput& output) -> const SegmentInMemory& {
-                return output.frame_and_descriptor_.frame_;
-            },
-            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output) -> const SegmentInMemory& {
-                return output.root_.frame_and_descriptor_.frame_;
-            }
-    );
+    const auto& seg = get_frame_from_read_output(read_result);
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -828,7 +824,7 @@ TEST(VersionStore, UpdateAfter) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
+    const auto& seg = get_frame_from_read_output(read_result);
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -872,15 +868,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = util::variant_match(
-            read_result,
-            [](const arcticdb::version_store::ReadVersionOutput& output) -> const SegmentInMemory& {
-                return output.frame_and_descriptor_.frame_;
-            },
-            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output) -> const SegmentInMemory& {
-                return output.root_.frame_and_descriptor_.frame_;
-            }
-    );
+    const auto& seg = get_frame_from_read_output(read_result);
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -924,15 +912,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = util::variant_match(
-            read_result,
-            [](const arcticdb::version_store::ReadVersionOutput& output) -> const SegmentInMemory& {
-                return output.frame_and_descriptor_.frame_;
-            },
-            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output) -> const SegmentInMemory& {
-                return output.root_.frame_and_descriptor_.frame_;
-            }
-    );
+    const auto& seg = get_frame_from_read_output(read_result);
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -986,15 +966,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
-    const auto& seg = util::variant_match(
-            read_result,
-            [](const arcticdb::version_store::ReadVersionOutput& output) -> const SegmentInMemory& {
-                return output.frame_and_descriptor_.frame_;
-            },
-            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output) -> const SegmentInMemory& {
-                return output.root_.frame_and_descriptor_.frame_;
-            }
-    );
+    const auto& seg = get_frame_from_read_output(read_result);
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = update_range.contains(i) ? i + update_val : i;
@@ -1058,15 +1030,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
-    const auto& seg = util::variant_match(
-            read_result,
-            [](const arcticdb::version_store::ReadVersionOutput& output) -> const SegmentInMemory& {
-                return output.frame_and_descriptor_.frame_;
-            },
-            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output) -> const SegmentInMemory& {
-                return output.root_.frame_and_descriptor_.frame_;
-            }
-    );
+    const auto& seg = get_frame_from_read_output(read_result);
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = update_range.contains(i) ? i + update_val : i;
