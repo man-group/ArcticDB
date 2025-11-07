@@ -913,10 +913,10 @@ ReadResult PythonVersionStore::read_dataframe_version(
 
     auto version_and_frame_variant =
             read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
-    
+
     return util::variant_match(
             version_and_frame_variant,
-            [&read_options](ReadVersionOutput& version_and_frame){
+            [&read_options](ReadVersionOutput& version_and_frame) {
                 return create_python_read_result(
                         version_and_frame.versioned_item_,
                         read_options.output_format(),
@@ -925,7 +925,7 @@ ReadResult PythonVersionStore::read_dataframe_version(
                         std::vector<ReadVersionOutput>{}
                 );
             },
-            [&read_options](ReadVersionWithNodesOutput& version_and_frame){
+            [&read_options](ReadVersionWithNodesOutput& version_and_frame) {
                 return create_python_read_result(
                         version_and_frame.root_.versioned_item_,
                         read_options.output_format(),

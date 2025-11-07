@@ -691,10 +691,10 @@ TEST(VersionStore, AppendRefKeyOptimisation) {
 auto get_frame_from_read_output(const auto& read_result) {
     return arcticdb::util::variant_match(
             read_result,
-            [](const arcticdb::version_store::ReadVersionOutput& output){
+            [](const arcticdb::version_store::ReadVersionOutput& output) {
                 return output.frame_and_descriptor_.frame_;
             },
-            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output){
+            [](const arcticdb::version_store::ReadVersionWithNodesOutput& output) {
                 return output.root_.frame_and_descriptor_.frame_;
             }
     );
