@@ -84,7 +84,7 @@ class VersionedEngine {
             const StreamId& id, const VersionQuery& version_query
     ) = 0;
 
-    virtual ReadVersionWithNodesOutput read_dataframe_version_internal(
+    virtual std::variant<ReadVersionOutput, ReadVersionWithNodesOutput> read_dataframe_version_internal(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
             const ReadOptions& read_options, std::any& handler_data
     ) = 0;

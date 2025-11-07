@@ -408,7 +408,7 @@ std::variant<VersionedItem, StreamId> get_version_identifier(
     return *version;
 }
 
-ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
+std::variant<ReadVersionOutput, ReadVersionWithNodesOutput> LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::any& handler_data
 ) {
@@ -419,7 +419,7 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
     auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
     auto& keys = root_result.frame_and_descriptor_.keys_;
     if (keys.empty()) {
-        return {std::move(root_result), {}};
+        return root_result;
     } else {
         std::vector<folly::Future<ReadVersionOutput>> node_futures;
         node_futures.reserve(keys.size());
@@ -429,7 +429,7 @@ ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal
             );
         }
 
-        return {std::move(root_result), folly::collect(node_futures).get()};
+        return ReadVersionWithNodesOutput{std::move(root_result), folly::collect(node_futures).get()};
     }
 }
 
