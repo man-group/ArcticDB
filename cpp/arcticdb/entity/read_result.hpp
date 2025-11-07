@@ -48,7 +48,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
                     arcticdb::proto::descriptors::UserDefinedMetadata,
                     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
-            std::vector<entity::AtomKey>&& multi_keys, std::vector<NodeReadResult>&& node_results = {}
+            std::vector<NodeReadResult>&& node_results = {}
     ) :
         item(versioned_item),
         frame_data(std::move(frame_data)),
@@ -56,7 +56,6 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
         norm_meta(norm_meta),
         user_meta(user_meta),
         multi_key_meta(multi_key_meta),
-        multi_keys(std::move(multi_keys)),
         node_results(std::move(node_results)) {}
     std::variant<VersionedItem, std::vector<VersionedItem>> item;
     OutputFrame frame_data;
@@ -67,7 +66,6 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
             std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>
             user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
-    std::vector<entity::AtomKey> multi_keys;
     std::vector<NodeReadResult> node_results;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadResult)
@@ -142,7 +140,6 @@ inline ReadResult create_python_read_result(
             desc_proto.normalization(),
             metadata,
             desc_proto.multi_key_meta(),
-            std::move(result.keys_),
             std::move(node_results)};
 }
 

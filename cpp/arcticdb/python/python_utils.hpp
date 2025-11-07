@@ -255,7 +255,6 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
                             pynorm,
                             pyuser_meta,
                             multi_key_meta,
-                            read_result.multi_keys,
                             std::move(node_results)
                     ));
                     util::check(

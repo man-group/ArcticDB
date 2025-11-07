@@ -1240,21 +1240,6 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
     return versioned_item;
 }
 
-std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
-        const std::vector<AtomKey>& keys, const ReadOptions& read_options, std::any& handler_data
-) {
-    std::vector<folly::Future<ReadVersionOutput>> res;
-    res.reserve(keys.size());
-    py::gil_scoped_release release_gil;
-    for (const auto& index_key : keys) {
-        res.emplace_back(read_frame_for_version_async_get_context(
-                store(), {index_key}, std::make_shared<ReadQuery>(), read_options, handler_data
-        ));
-    }
-    Allocator::instance()->trim();
-    return folly::collect(res).get();
-}
-
 std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedEngine::batch_read_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
         std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options, std::any& handler_data
@@ -1299,20 +1284,27 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
                                     read_options,
                                     &handler_data](ReadVersionOutput&& result) {
-                            std::vector<folly::Future<ReadVersionOutput>> node_futures;
                             auto& keys = result.frame_and_descriptor_.keys_;
-                            node_futures.reserve(keys.size());
-                            for (const auto& key : keys) {
-                                node_futures.emplace_back(read_frame_for_version_async_get_context(
-                                        store(), key, read_query, read_options, handler_data
-                                ));
+                            if (keys.empty()) {
+                                return folly::makeFuture<ReadVersionWithNodesOutput>(
+                                        ReadVersionWithNodesOutput{std::move(result), {}}
+                                );
                             }
-                            return folly::collect(std::move(node_futures))
-                                    .via(&async::cpu_executor())
-                                    .thenValue([result = std::move(result)](std::vector<ReadVersionOutput>&& nodes
-                                               ) mutable {
-                                        return ReadVersionWithNodesOutput{std::move(result), std::move(nodes)};
-                                    });
+                            else {
+                                std::vector<folly::Future<ReadVersionOutput>> node_futures;
+                                node_futures.reserve(keys.size());
+                                for (const auto& key : keys) {
+                                    node_futures.emplace_back(read_frame_for_version_async_get_context(
+                                            store(), key, read_query, read_options, handler_data
+                                    ));
+                                }
+                                return folly::collect(std::move(node_futures))
+                                        .via(&async::cpu_executor())
+                                        .thenValue([result = std::move(result)](std::vector<ReadVersionOutput>&& nodes
+                                                ) mutable {
+                                            return ReadVersionWithNodesOutput{std::move(result), std::move(nodes)};
+                                        });
+                            }
                         })
         );
         if (++batch_count == static_cast<size_t>(max_batch_size)) {
