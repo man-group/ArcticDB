@@ -995,7 +995,10 @@ class Library:
             table.
         recursive_normalizers: bool, default None
             Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
-            If None, falls back to the corresponding setting in the library configuration.
+            If None, falls back to the corresponding setting in the library configuration. For libraries created with < v6.4.0,
+            the default library configuration is True, otherwise it is False.
+            The library configuration can be modified via Arctic.modify_library_option(). Please refer to
+            https://docs.arcticdb.io/latest/api/arctic/#arcticdb.Arctic.modify_library_option for more details.
             The data structure can be nested or a mix of lists and dictionaries.
 
         Returns
