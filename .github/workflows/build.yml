@@ -34,11 +34,6 @@ on:
         description: Tag of the ArcticDB development image to use for the Linux C++ tests build
         type: string
         default: arcticdb-dev-clang:latest
-      macos_enabled:
-        description: Enable macOS tests
-        required: false
-        default: false
-        type: boolean
       version_cache_full_test:
         description: 'Run tests with both version cache 0 and 2000000000'
         required: false
@@ -48,7 +43,7 @@ on:
         type: string
         description: 'Enable debug logging or debug by setting respective value to 1'
         required: true
-        default: "DEBUG_LOGGING=0;DEBUG=0"                  
+        default: "DEBUG_LOGGING=0;DEBUG=0"
       pytest_args:
         description: Rewrite what tests will run or do your own pytest line if string starts with pytest ... (Example -- pytest -n auto -v --count=50 -x python/tests/compat)
         type: string
@@ -72,7 +67,7 @@ jobs:
     outputs:
       storage: ${{ steps.set-storage.outputs.storage }}
       DEBUG_LOGGING_ENABLED: ${{ steps.parse-flags.outputs.DEBUG_LOGGING_ENABLED }}
-      DEBUG_ENABLED: ${{ steps.parse-flags.outputs.DEBUG_ENABLED }}      
+      DEBUG_ENABLED: ${{ steps.parse-flags.outputs.DEBUG_ENABLED }}
     steps:
       - name: Determine Storage Type Based On Schedule
         id: set-storage
@@ -332,8 +327,8 @@ jobs:
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{inputs.version_cache_full_test || false}}
-      DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}            
-      DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}            
+      DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}
+      DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
 
 
   cpp-test-windows:
@@ -349,7 +344,6 @@ jobs:
 
   cpp-test-macos:
     needs: [common_config]
-    if: ${{ inputs.macos_enabled }}
     name: macOS C++ Tests
     uses: ./.github/workflows/build_steps.yml
     secrets: inherit
@@ -384,8 +378,8 @@ jobs:
       pytest_xdist_mode: "-n logical --dist worksteal"
       pytest_args: ${{inputs.pytest_args || ''}}
       version_cache_full_test: ${{github.event_name == 'schedule' || inputs.version_cache_full_test || false}}
-      DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}            
-      DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}            
+      DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}
+      DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
 
   persistent_storage_verify_linux:
     needs: [common_config, build-python-wheels-linux, build-python-wheels-windows, storage_type]
@@ -454,11 +448,10 @@ jobs:
 
   build-python-wheels-macos:
     needs: [common_config, storage_type]
-    if: ${{ inputs.macos_enabled }}
     strategy:
       fail-fast: false
       matrix:
-        python3: ${{ fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11]' ) }}
+        python3: ${{ fromJson( !inputs.run_full_matrix_of_persistent_tests && (needs.storage_type.outputs.storage != 'no') && '[11]' || '[8, 9, 10, 11, 12, 13]' ) }}
         include:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
@@ -477,8 +470,8 @@ jobs:
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
       pytest_xdist_mode: ${{matrix.pytest_xdist_mode}}
       pytest_args: ${{inputs.pytest_args}}
-      DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}            
-      DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}            
+      DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}
+      DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
 
   publish_pytest_data:
     needs: [common_config,build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]

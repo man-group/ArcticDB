@@ -389,6 +389,13 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
           CIBW_ARCHS_MACOS: "arm64"
+          # Ensure macOS builds use sccache as the compiler launcher
+          CIBW_ENVIRONMENT_MACOS: |
+            CMAKE_C_COMPILER_LAUNCHER=sccache
+            CMAKE_CXX_COMPILER_LAUNCHER=sccache
+            SCCACHE_DIR=${{env.SCCACHE_DIR || ''}}
+          C_COMPILER_LAUNCHER: sccache
+          CXX_COMPILER_LAUNCHER: sccache
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
       - name: Store wheel artifact
