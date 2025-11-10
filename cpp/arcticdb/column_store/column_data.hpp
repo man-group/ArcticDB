@@ -453,4 +453,16 @@ struct ColumnData {
     const util::BitMagic* bit_vector_;
 };
 
+template<typename>
+struct is_column_data_iterator : std::false_type {};
+
+template<typename TDT, IteratorType IT, IteratorDensity ID, bool Const>
+struct is_column_data_iterator<ColumnData::ColumnDataIterator<TDT, IT, ID, Const>> : std::true_type {};
+
+template<typename T>
+inline constexpr bool is_column_data_iterator_v = is_column_data_iterator<std::remove_cvref_t<T>>::value;
+
+template<typename T>
+concept column_data_iterator = is_column_data_iterator_v<T>;
+
 } // namespace arcticdb

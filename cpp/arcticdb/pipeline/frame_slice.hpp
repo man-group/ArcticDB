@@ -34,7 +34,7 @@ struct AxisRange : std::pair<size_t, size_t> {
 
     struct Hasher {
         template<class T>
-        requires std::derived_from<T, AxisRange>
+        requires std::is_base_of_v<AxisRange, T>
         std::size_t operator()(const T& r) const {
             // try to make better use of msb lsb given how F14 is implemented
 #ifdef _WIN32
