@@ -1215,9 +1215,11 @@ class DataFrameNormalizer(_PandasNormalizer):
             norm_meta.df.has_synthetic_columns = True
 
         if isinstance(item.index, MultiIndex):
-            # need to copy otherwise we are altering input which might surprise too many users
-            # TODO provide a better impl of MultiIndex
-            item = item.copy()
+            # We must not alter the input which might surprise too many users
+            # Thus, we copy the index and column names because we will modify the index to prepare for write
+            item = item.copy(deep=False)
+            item.index = item.index.copy()
+            item.columns = item.columns.copy()
 
         if isinstance(item.columns, MultiIndex):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
