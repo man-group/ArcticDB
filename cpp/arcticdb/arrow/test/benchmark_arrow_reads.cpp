@@ -34,7 +34,7 @@ static void BM_arrow_string_handler(benchmark::State& state) {
     const auto data_type = fixed_width_strings ? DataType::UTF_FIXED64 : DataType::UTF_DYNAMIC64;
     auto source_type_desc = TypeDescriptor{data_type, Dimension::Dim0};
     auto [dest_type_desc, extra_bytes_per_block] =
-            handler.output_type_and_extra_bytes({data_type, Dimension::Dim0}, "col", read_options);
+            handler.output_type_and_extra_bytes(source_type_desc, "col", read_options);
     auto dest_size = data_type_size(dest_type_desc);
     auto sparsity = num_sparse == 0 ? Sparsity::NOT_PERMITTED : Sparsity::PERMITTED;
 
