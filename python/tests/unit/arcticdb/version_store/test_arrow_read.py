@@ -85,7 +85,7 @@ def test_read_empty(lmdb_version_store_arrow):
     expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
     # During normalization when doing the write we attach an empty DateTimeIndex to the DataFrame. We correctly see it
     # in arrow
-    assert table.column_names == ["index"]
+    assert table.column_names == ["__index__"]
     assert table.shape == (0, 1)
     # arcticdb read(output_format=PANDAS) produces `pd.RangeIndex(start=0, stop=0, step=1)` column index if no columns
     # pyarrow to_pandas produces `pd.Index([])` if no columns.
@@ -101,7 +101,7 @@ def test_read_empty_with_columns(lmdb_version_store_arrow):
     lib.write(sym, df)
     table = lib.read(sym).data
     expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
-    assert table.column_names == ["index", "col_int", "col_float"]
+    assert table.column_names == ["__index__", "col_int", "col_float"]
     assert table.shape == (0, 3)
     assert_frame_equal_with_arrow(table, expected)
 
