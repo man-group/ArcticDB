@@ -22,6 +22,23 @@ def create_dataframe(strings):
     return df
 
 
+def test_fixed_width_blns(lmdb_version_store, any_arrow_string_format):
+    lib = lmdb_version_store
+    lib.set_arrow_string_format_default(any_arrow_string_format)
+    strings = read_big_list_of_naughty_strings()
+    symbol = "blns_write"
+    # Pandas
+    df = create_dataframe(strings)
+    lib.write(symbol, df, dynamic_strings=False)
+    vit = lib.read(symbol)
+    assert_frame_equal(df, vit.data)
+    # Arrow
+    received = cast_string_columns(
+        lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string()
+    ).to_pandas()
+    assert_frame_equal(df, received)
+
+
 def test_write_blns(lmdb_version_store, any_arrow_string_format):
     lib = lmdb_version_store
     lib.set_arrow_string_format_default(any_arrow_string_format)

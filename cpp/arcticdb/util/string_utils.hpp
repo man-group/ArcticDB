@@ -82,4 +82,9 @@ std::string safe_encode(const std::string& value);
 
 std::string safe_decode(const std::string& value);
 
+// We store fixed-width (i.e. UTF-32 strings) in the string pool alongside UTF-8 strings, and the string pool does not
+// know which strings are which. Therefore methods like get_const_view return a std::string_view regardless. If the
+// string is UTF-32, this converts that view into a UTF-8 string
+std::string utf32_to_u8(std::string_view strv);
+
 } // namespace arcticdb::util

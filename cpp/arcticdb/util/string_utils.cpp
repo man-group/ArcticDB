@@ -12,6 +12,8 @@
 #include <iomanip>
 #include <sstream>
 
+#include <boost/locale.hpp>
+
 namespace arcticdb::util {
 
 char from_hex(char c) { return std::isdigit(c) != 0 ? c - '0' : c - 'A' + 10; }
@@ -63,4 +65,12 @@ std::string safe_decode(const std::string& value) {
     }
     return unescaped.str();
 }
+
+std::string utf32_to_u8(std::string_view strv) {
+    std::u32string_view strv32{reinterpret_cast<const char32_t*>(strv.data()), strv.size() / 4};
+    // Strip trailing null characters
+    strv32 = strv32.substr(0, strv32.find_first_of(char32_t(0)));
+    return boost::locale::conv::utf_to_utf<char>(strv32.data(), strv32.data() + strv32.size());
+}
+
 } // namespace arcticdb::util
