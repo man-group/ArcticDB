@@ -171,6 +171,8 @@ ssize_t byte_offset_impl(const stride_t* strides, ssize_t i, Ix... index) {
 // TODO is the conversion to a typed tensor really necessary for the codec part?
 template<typename T>
 struct TypedTensor : public NativeTensor {
+    using raw_type = T;
+
     constexpr static size_t itemsize() { return sizeof(T); }
 
     std::array<stride_t, 2> f_style_strides() {

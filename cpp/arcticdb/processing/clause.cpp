@@ -1718,6 +1718,66 @@ OutputSchema WriteClause::join_schemas(std::vector<OutputSchema>&&) const {
 
 std::string WriteClause::to_string() const { return "Write"; }
 
+template<typename TDT, typename T>
+class SourceView {};
+
+template<typename TDT, typename T>
+requires(std::same_as<T, Column> && util::instantiation_of<TDT, TypeDescriptorTag>)
+class SourceView<TDT, T> {
+    using Iterator = decltype(std::declval<T>().data().template begin<TDT>());
+
+  public:
+    SourceView(const T& source, size_t source_data_row) :
+        it_(source.data().template begin<TDT>()),
+        source_data_row_(source_data_row) {
+        std::advance(it_, source_data_row);
+    }
+
+    void set_row(const size_t new_row) {
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                new_row >= source_data_row_, "Cannot move SourceColumnIterator backwards"
+        );
+        // TODO: Implement operator+= because std::advance is linear
+        std::advance(it_, new_row - source_data_row_);
+        source_data_row_ = new_row;
+    }
+
+    const TDT::DataTypeTag::raw_type& operator*() const { return *it_; }
+
+  private:
+    Iterator it_;
+    size_t source_data_row_;
+};
+
+template<typename TDT, typename T>
+requires std::same_as<T, NativeTensor> && util::instantiation_of<TDT, TypeDescriptorTag>
+class SourceView<TDT, T> {
+    using Iterator = const TDT::DataTypeTag::raw_type*;
+
+  public:
+    SourceView(const T& source, const size_t source_data_row) : source_(source), source_data_row_(source_data_row) {}
+
+    void set_row(const size_t new_row) { source_data_row_ = new_row; }
+
+    const TDT::DataTypeTag::raw_type& operator*() const { return source_.at(source_data_row_); }
+
+  private:
+    TypedTensor<typename TDT::DataTypeTag::raw_type> source_;
+    size_t source_data_row_;
+};
+
+template<typename TDT, typename T>
+requires util::any_of<T, SegmentInMemory, std::vector<NativeTensor>> && util::instantiation_of<TDT, TypeDescriptorTag>
+auto get_source_column_iterator(const T& source, size_t column_index) {
+    if constexpr (std::is_same_v<T, SegmentInMemory>) {
+        return SourceView<TDT, Column>(source.column(column_index), 0);
+    } else if constexpr (std::is_same_v<T, std::vector<NativeTensor>>) {
+        return SourceView<TDT, NativeTensor>(source[column_index], 0);
+    } else {
+        static_assert(sizeof(T) == 0, "Invalid type");
+    }
+}
+
 MergeUpdateClause::MergeUpdateClause(
         std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
         bool match_on_timeseries_index
@@ -1806,10 +1866,9 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     if (entity_ids.empty()) {
         return {};
     }
-    const auto proc =
-            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-                    *component_manager_, std::move(entity_ids)
-            );
+    auto proc = gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+            *component_manager_, std::move(entity_ids)
+    );
     std::vector<std::vector<size_t>> matched = filter_index_match(proc);
     if (source_->has_segment()) {
         update_and_insert<SegmentInMemory>(source_->segment(), source_->desc(), proc, matched);
@@ -1819,28 +1878,8 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
         );
         update_and_insert<std::vector<NativeTensor>>(source_->field_tensors(), source_->desc(), proc, matched);
     }
-    return {};
+    return push_entities(*component_manager_, std::move(proc));
 }
-
-template<typename T>
-requires column_data_iterator<T>
-class SourceColumnIterator {
-  public:
-    SourceColumnIterator(T&& source_data, size_t source_data_row) :
-        iterator_(std::move(source_data)),
-        source_data_row_(source_data_row) {}
-
-    const auto& operator*() const { return *iterator_; }
-    auto operator+=(size_t n) {
-        std::advance(iterator_, n);
-        source_data_row_ += n;
-        return *this;
-    }
-
-  private:
-    T iterator_;
-    size_t source_data_row_;
-};
 
 template<typename T>
 void MergeUpdateClause::update_and_insert(
@@ -1872,46 +1911,24 @@ void MergeUpdateClause::update_and_insert(
                     return;
                 }
                 size_t target_data_row = rows_to_update[source_row].front();
-                // TODO: Implement operator+= because std::advance is linear
+
                 auto target_data_it = target_segments[segment_idx]->column(column_idx).data().begin<TDT>();
+                // TODO: Implement operator+= because std::advance is linear
                 std::advance(target_data_it, target_data_row);
-                if constexpr (std::is_same_v<T, SegmentInMemory>) {
-                    size_t source_data_row = source_row_start;
-                    // TODO: Implement operator+= because std::advance is linear
-                    auto source_data_it = source.column(column_idx).data().template begin<TDT>();
-                    std::advance(source_data_it, source_data_row);
-                    while (source_row < source_row_end) {
-                        std::span rows_to_update_for_source_row = rows_to_update[source_row];
-                        if (rows_to_update_for_source_row.empty()) {
-                            ++source_row;
-                            continue;
-                        }
-                        std::advance(source_data_it, source_row - source_data_row);
-                        source_data_row = source_row;
-                        const auto& source_row_value = *source_data_it;
-                        for (const size_t target_row_to_update : rows_to_update_for_source_row) {
-                            // TODO: Implement operator+= because std::advance is linear
-                            std::advance(target_data_it, target_row_to_update - target_data_row);
-                            *target_data_it = source_row_value;
-                            target_data_row = target_row_to_update;
-                        }
+                SourceView source_column_view = get_source_column_iterator<TDT>(source, column_idx);
+                while (source_row < source_row_end) {
+                    std::span rows_to_update_for_source_row = rows_to_update[source_row];
+                    if (rows_to_update_for_source_row.empty()) {
+                        ++source_row;
+                        continue;
                     }
-                } else if constexpr (std::is_same_v<T, std::vector<NativeTensor>>) {
-                    using RawType = typename TDT::DataTypeTag::raw_type;
-                    TypedTensor<RawType> source_data{source[column_idx]};
-                    while (source_row < source_row_end) {
-                        std::span rows_to_update_for_source_row = rows_to_update[source_row];
-                        if (rows_to_update_for_source_row.empty()) {
-                            ++source_row;
-                            continue;
-                        }
-                        const auto& source_row_value = source_data.at(source_row);
-                        for (const size_t target_row_to_update : rows_to_update_for_source_row) {
-                            // TODO: Implement operator+= because std::advance is linear
-                            std::advance(target_data_it, target_row_to_update - target_data_row);
-                            *target_data_it = source_row_value;
-                            target_data_row = target_row_to_update;
-                        }
+                    source_column_view.set_row(source_row);
+                    const auto& source_row_value = *source_column_view;
+                    for (const size_t target_row_to_update : rows_to_update_for_source_row) {
+                        // TODO: Implement operator+= because std::advance is linear
+                        std::advance(target_data_it, target_row_to_update - target_data_row);
+                        *target_data_it = source_row_value;
+                        target_data_row = target_row_to_update;
                     }
                 }
             });
@@ -1933,7 +1950,6 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const Pro
     const size_t source_rows_in_row_slice = source_row_end - source_row;
     std::vector<std::vector<size_t>> matched_rows(source_rows_in_row_slice);
     ColumnData target_index = target_segments[0]->column(0).data();
-    util::BitSet matched(target_segments[0]->row_count());
     auto target_index_it = target_index.cbegin<IndexType>();
     const auto target_index_end = target_index.cend<IndexType>();
     while (target_index_it != target_index_end && source_row < source_row_end) {
