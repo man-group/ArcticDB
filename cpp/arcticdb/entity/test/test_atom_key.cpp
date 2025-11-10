@@ -95,7 +95,8 @@ TEST(Key, Library) {
     using namespace arcticdb::storage;
 
     LibraryPath lib{"a", "b"};
-    LibraryPath lib2(std::views::all(std::vector<std::string>{"a", "b"}));
+    std::vector<std::string> parts{"a", "b"};
+    LibraryPath lib2(std::views::all(parts));
 
     ASSERT_EQ(lib.hash(), lib2.hash());
     ASSERT_EQ(lib, lib2);
