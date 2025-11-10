@@ -92,13 +92,13 @@ void encode_variable_length(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
                                     if (is_a_string(en.value())) {
-                                        auto strv = string_pool->get_const_view(en.value());
                                         while (last_idx <= en.idx()) {
                                             // According to arrow spec offsets must be monotonic even for null values.
                                             // Hence, we fill missing values between `last_idx` and `en.idx` so that
                                             // they contain 0 rows in string buffer
                                             dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
                                         }
+                                        auto strv = string_pool->get_const_view(en.value());
                                         bytes += strv.size();
                                         strings.emplace_back(strv);
                                         if (!populate_inverted_bitset) {
@@ -117,7 +117,12 @@ void encode_variable_length(
                         for_each_enumerated<typename source_type_info::TDT>(
                                 source_column,
                                 [&] ARCTICDB_LAMBDA_INLINE(const auto& en) {
-                                    dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
+                                    while (last_idx <= en.idx()) {
+                                        // According to arrow spec offsets must be monotonic even for null values.
+                                        // Hence, we fill missing values between `last_idx` and `en.idx` so that
+                                        // they contain 0 rows in string buffer
+                                        dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
+                                    }
                                     // Fixed-width string columns don't support None/NaN values, so is_a_string check
                                     // not required
                                     auto str = util::utf32_to_u8(string_pool->get_const_view(en.value()));
