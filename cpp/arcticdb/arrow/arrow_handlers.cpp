@@ -100,7 +100,7 @@ void encode_variable_length(
                                             dest_ptr[last_idx++] = static_cast<OffsetType>(bytes);
                                         }
                                         bytes += strv.size();
-                                        strings.emplace_back(std::move(strv));
+                                        strings.emplace_back(strv);
                                         if (!populate_inverted_bitset) {
                                             inserter = en.idx();
                                         }
