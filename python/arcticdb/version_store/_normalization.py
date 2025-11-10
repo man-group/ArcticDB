@@ -643,9 +643,13 @@ class ArrowTableNormalizer(Normalizer):
             pandas_type = str(field.type)
             numpy_type = str(field.type)
             metadata = None
-            if isinstance(field.type, pa.DictionaryType):
-                # Arrow backend produces DictionaryTypes for string columns
-                assert field.type.value_type == pa.large_string()
+            if (
+                pa.types.is_dictionary(field.type)
+                and pa.types.is_large_string(field.type.value_type)
+                or pa.types.is_large_string(field.type)
+                or pa.types.is_string(field.type)
+            ):
+                # Arrow backend can produce dictionary, large string or regular string types depending on ArrowOutputStringFormat
                 pandas_type = "unicode"
                 numpy_type = "object"
             elif isinstance(field.type, pa.TimestampType):

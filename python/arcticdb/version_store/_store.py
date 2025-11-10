@@ -60,7 +60,13 @@ from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
 from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat
-from arcticdb.options import RuntimeOptions, OutputFormat, output_format_to_internal
+from arcticdb.options import (
+    RuntimeOptions,
+    OutputFormat,
+    output_format_to_internal,
+    ArrowOutputStringFormat,
+    arrow_output_string_format_to_internal,
+)
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
@@ -364,6 +370,13 @@ class NativeVersionStore:
         if self._runtime_options is None:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_output_format(output_format)
+
+    def set_arrow_string_format_default(
+        self, arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"]
+    ):
+        if self._runtime_options is None:
+            self._runtime_options = RuntimeOptions()
+        self._runtime_options.set_arrow_string_format_default(arrow_string_format_default)
 
     def _set_allow_arrow_input(self, allow_arrow_input: bool = True):
         self._allow_arrow_input = allow_arrow_input
@@ -2058,6 +2071,25 @@ class NativeVersionStore:
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
+        if read_options.output_format == InternalOutputFormat.ARROW:
+            read_options.set_arrow_output_default_string_format(
+                arrow_output_string_format_to_internal(
+                    self.resolve_runtime_defaults(
+                        "arrow_string_format_default",
+                        proto_cfg,
+                        global_default=ArrowOutputStringFormat.LARGE_STRING,
+                        **kwargs,
+                    )
+                )
+            )
+            read_options.set_arrow_output_per_column_string_format(
+                {
+                    key: arrow_output_string_format_to_internal(value)
+                    for key, value in resolve_defaults(
+                        "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
+                    ).items()
+                }
+            )
         return read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):

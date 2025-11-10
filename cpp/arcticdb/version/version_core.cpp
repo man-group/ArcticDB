@@ -95,29 +95,38 @@ VersionedItem write_dataframe_impl(
     return {std::move(atom_key_fut).get()};
 }
 
-folly::Future<entity::AtomKey> async_write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
-        bool validate_index
+std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
+        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
 ) {
-    ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame->desc().id());
+        auto check_outcome = verify_symbol_key(frame.desc().id());
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
     }
 
     // Slice the frame according to the write options
-    frame->set_bucketize_dynamic(options.bucketize_dynamic);
-    auto slicing_arg = get_slicing_policy(options, *frame);
-    auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
-    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
+    auto slicing_arg = get_slicing_policy(options, frame);
+    auto partial_key = IndexPartialKey{frame.desc().id(), version_id};
+    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling write with validate_index enabled, input data must be sorted"
         );
     }
-    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
+
+    return std::make_tuple(partial_key, slicing_arg);
+}
+
+folly::Future<entity::AtomKey> async_write_dataframe_impl(
+        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
+        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
+        bool validate_index
+) {
+    ARCTICDB_SAMPLE(DoWrite, 0)
+    frame->set_bucketize_dynamic(options.bucketize_dynamic);
+    auto [partial_key, slicing_policy] =
+            get_partial_key_and_slicing_policy(options, *frame, version_id, validate_index);
+    return write_frame(std::move(partial_key), frame, slicing_policy, store, de_dup_map, sparsify_floats);
 }
 
 namespace {
@@ -245,14 +254,14 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
                    collectAll(maybe_intersect_before_fut)
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_before) {
-                               return rollback_on_quota_exceeded(
+                               return rollback_slices_on_quota_exceeded(
                                        std::move(maybe_intersect_before), std::static_pointer_cast<StreamSink>(store)
                                );
                            }),
                    collectAll(maybe_intersect_after_fut)
                            .via(&async::io_executor())
                            .thenValueInline([store](auto&& maybe_intersect_after) {
-                               return rollback_on_quota_exceeded(
+                               return rollback_slices_on_quota_exceeded(
                                        std::move(maybe_intersect_after), std::static_pointer_cast<StreamSink>(store)
                                );
                            })
@@ -261,28 +270,15 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             .thenValue([store](auto&& try_before_and_after) -> folly::Future<IntersectingSegments> {
                 auto& [try_intersect_before, try_intersect_after] = try_before_and_after;
 
-                if (try_intersect_before.template hasException<QuotaExceededException>() &&
-                    !try_intersect_after.hasException()) {
-                    return remove_slice_and_keys(std::move(try_intersect_after.value()), *store)
-                            .thenValueInline([](auto&&) {
-                                return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
-                                );
-                            });
-                }
-
-                if (try_intersect_after.template hasException<QuotaExceededException>() &&
-                    !try_intersect_before.hasException()) {
-                    return remove_slice_and_keys(std::move(try_intersect_before.value()), *store)
-                            .thenValueInline([](auto&&) {
-                                return folly::makeFuture<IntersectingSegments>(QuotaExceededException("Quota exceeded")
-                                );
-                            });
-                }
-
-                // Return the tuple if all is okay, or throw any contained exception on .value().
-                return IntersectingSegments{
-                        std::move(try_intersect_before.value()), std::move(try_intersect_after.value())
-                };
+                return rollback_batches_on_quota_exceeded(
+                               {std::move(try_intersect_before), std::move(try_intersect_after)}, store
+                )
+                        .via(&async::cpu_executor())
+                        .thenValue([](auto&& batch) {
+                            auto& intersect_before = batch[0];
+                            auto& intersect_after = batch[1];
+                            return IntersectingSegments{std::move(intersect_before), std::move(intersect_after)};
+                        });
             })
             .via(&async::io_executor());
 }
@@ -1579,7 +1575,7 @@ void init_sparse_dst_column_before_copy(
 
 void copy_frame_data_to_buffer(
         SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index,
-        const RowRange& row_range, DecodePathData shared_data, std::any& handler_data, OutputFormat output_format,
+        const RowRange& row_range, DecodePathData shared_data, std::any& handler_data, const ReadOptions& read_options,
         const std::optional<Value>& default_value
 ) {
     const auto num_rows = row_range.diff();
@@ -1588,7 +1584,7 @@ void copy_frame_data_to_buffer(
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
-    auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+    auto dst_rawtype_size = data_type_size(dst_column.type());
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
@@ -1602,8 +1598,8 @@ void copy_frame_data_to_buffer(
             dst_column.type(),
             destination.field(target_index).name()
     );
-    if (auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
-        const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+    if (auto handler = get_type_handler(read_options.output_format(), src_column.type(), dst_column.type()); handler) {
+        const auto type_size = data_type_size(dst_column.type());
         const ColumnMapping mapping{
                 src_column.type(),
                 dst_column.type(),
@@ -1615,10 +1611,18 @@ void copy_frame_data_to_buffer(
                 total_size,
                 target_index
         };
-        handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
+        handler->convert_type(
+                src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr(), read_options
+        );
     } else if (is_empty_type(src_column.type().data_type())) {
         init_sparse_dst_column_before_copy(
-                dst_column, offset, num_rows, dst_rawtype_size, output_format, std::nullopt, default_value
+                dst_column,
+                offset,
+                num_rows,
+                dst_rawtype_size,
+                read_options.output_format(),
+                std::nullopt,
+                default_value
         );
         // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows
         // values
@@ -1635,7 +1639,7 @@ void copy_frame_data_to_buffer(
                     offset,
                     num_rows,
                     dst_rawtype_size,
-                    output_format,
+                    read_options.output_format(),
                     src_column.opt_sparse_map(),
                     default_value
             );
@@ -1666,7 +1670,7 @@ void copy_frame_data_to_buffer(
                         offset,
                         num_rows,
                         dst_rawtype_size,
-                        output_format,
+                        read_options.output_format(),
                         src_column.opt_sparse_map(),
                         default_value
                 );
@@ -1712,7 +1716,7 @@ void copy_frame_data_to_buffer(
                                 offset,
                                 num_rows,
                                 dst_rawtype_size,
-                                output_format,
+                                read_options.output_format(),
                                 src_column.opt_sparse_map(),
                                 default_value
                         );
@@ -1744,13 +1748,13 @@ struct CopyToBufferTask : async::BaseTask {
     uint32_t required_fields_count_;
     DecodePathData shared_data_;
     std::any& handler_data_;
-    OutputFormat output_format_;
+    const ReadOptions read_options_;
     std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment, SegmentInMemory target_segment, FrameSlice frame_slice,
             uint32_t required_fields_count, DecodePathData shared_data, std::any& handler_data,
-            OutputFormat output_format, std::shared_ptr<PipelineContext> pipeline_context
+            const ReadOptions& read_options, std::shared_ptr<PipelineContext> pipeline_context
     ) :
         source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
@@ -1758,7 +1762,7 @@ struct CopyToBufferTask : async::BaseTask {
         required_fields_count_(required_fields_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        output_format_(output_format),
+        read_options_(read_options),
         pipeline_context_(std::move(pipeline_context)) {}
 
     folly::Unit operator()() {
@@ -1780,7 +1784,7 @@ struct CopyToBufferTask : async::BaseTask {
                         frame_slice_.row_range,
                         shared_data_,
                         handler_data_,
-                        output_format_,
+                        read_options_,
                         {}
                 );
             } else {
@@ -1806,7 +1810,7 @@ struct CopyToBufferTask : async::BaseTask {
                         frame_slice_.row_range,
                         shared_data_,
                         handler_data_,
-                        output_format_,
+                        read_options_,
                         default_value
                 );
             }
@@ -1817,7 +1821,7 @@ struct CopyToBufferTask : async::BaseTask {
 
 folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        SegmentInMemory frame, std::any& handler_data, OutputFormat output_format
+        SegmentInMemory frame, std::any& handler_data, const ReadOptions& read_options
 ) {
     const auto required_fields_count =
             pipelines::index::required_fields_count(pipeline_context->descriptor(), *pipeline_context->norm_meta_);
@@ -1833,7 +1837,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 required_fields_count,
                 shared_data,
                 handler_data,
-                output_format,
+                read_options,
                 pipeline_context
         }));
     }
@@ -1856,8 +1860,8 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
-    auto frame = allocate_frame(pipeline_context, read_options.output_format());
-    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format())
+    auto frame = allocate_frame(pipeline_context, read_options);
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options)
             .thenValue([frame](auto&&) { return frame; });
 }
 
@@ -2028,7 +2032,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
                 "Cannot use head/tail/row_range with pickled data, use plain read instead"
         );
         mark_index_slices(pipeline_context);
-        auto frame = allocate_frame(pipeline_context, read_options.output_format());
+        auto frame = allocate_frame(pipeline_context, read_options);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
         return fetch_data(

@@ -38,7 +38,9 @@ TEST(Append, Simple) {
     pipeline_context->slice_and_keys_ = arcticdb::get_incomplete(store, stream_id, range, 0, false, false);
     generate_filtered_field_descriptors(pipeline_context, {});
 
-    SegmentInMemory allocated_frame = allocate_frame(pipeline_context, OutputFormat::NATIVE);
+    auto read_options = ReadOptions{};
+    read_options.set_output_format(OutputFormat::NATIVE);
+    SegmentInMemory allocated_frame = allocate_frame(pipeline_context, read_options);
     ASSERT_EQ(allocated_frame.row_count(), frame->num_rows);
 }
 

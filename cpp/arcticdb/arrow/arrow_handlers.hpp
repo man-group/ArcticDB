@@ -16,21 +16,26 @@ struct ArrowStringHandler {
     void handle_type(
             const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& field, const ColumnMapping& m,
             const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-            const std::shared_ptr<StringPool>& string_pool
+            const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
     );
-
-    [[nodiscard]] int type_size() const;
 
     void convert_type(
             const Column& source_column, Column& dest_column, const ColumnMapping& mapping,
-            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool
+            const DecodePathData& shared_data, std::any& handler_data, const std::shared_ptr<StringPool>& string_pool,
+            const ReadOptions& read_options
     ) const;
 
-    [[nodiscard]] entity::TypeDescriptor output_type(const entity::TypeDescriptor& input_type) const;
+    [[nodiscard]] std::pair<entity::TypeDescriptor, size_t> output_type_and_extra_bytes(
+            const entity::TypeDescriptor& input_type, std::string_view column_name, const ReadOptions& read_options
+    ) const;
 
     void default_initialize(
             ChunkedBuffer& buffer, size_t offset, size_t byte_size, const DecodePathData& shared_data,
             std::any& handler_data
+    ) const;
+
+    [[nodiscard]] ArrowOutputStringFormat output_string_format(
+            std::string_view column_name, const ReadOptions& read_options
     ) const;
 };
 
@@ -44,9 +49,10 @@ inline void register_arrow_handler_data_factory() {
 
 inline void register_arrow_string_types() {
     using namespace arcticdb;
-    constexpr std::array<entity::DataType, 4> dynamic_string_data_types = {
+    constexpr std::array<entity::DataType, 5> dynamic_string_data_types = {
             entity::DataType::ASCII_DYNAMIC64,
             entity::DataType::UTF_DYNAMIC64,
+            entity::DataType::UTF_DYNAMIC32,
             entity::DataType::ASCII_FIXED64,
             entity::DataType::UTF_FIXED64
     };

@@ -41,32 +41,46 @@ void mark_index_slices(const std::shared_ptr<PipelineContext>& context) {
     context->fetch_index_ = check_and_mark_slices(context->slice_and_keys_, true, context->incompletes_after_).value();
 }
 
-StreamDescriptor get_filtered_descriptor(
-        StreamDescriptor&& descriptor, OutputFormat output_format,
+std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
+        StreamDescriptor&& descriptor, const ReadOptions& read_options,
         const std::shared_ptr<FieldCollection>& filter_columns
 ) {
     // We assume here that filter_columns_ will always contain the index.
 
     auto desc = std::move(descriptor);
     auto index = stream::index_type_from_descriptor(desc);
-    return util::variant_match(index, [&desc, &filter_columns, output_format](const auto& idx) {
-        const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
-        auto handlers = TypeHandlerRegistry::instance();
+    return util::variant_match(
+            index,
+            [&desc, &filter_columns, &read_options](const auto& idx
+            ) -> std::pair<StreamDescriptor, std::vector<size_t>> {
+                const std::shared_ptr<FieldCollection>& fields = filter_columns ? filter_columns : desc.fields_ptr();
+                auto extra_bytes_per_column = std::vector<size_t>();
+                extra_bytes_per_column.reserve(fields->size());
+                auto handlers = TypeHandlerRegistry::instance();
 
-        for (auto& field : *fields) {
-            if (auto handler = handlers->get_handler(output_format, field.type())) {
-                auto output_type = handler->output_type(field.type());
-                if (output_type != field.type())
-                    field.mutable_type() = output_type;
+                for (auto& field : *fields) {
+                    if (auto handler = handlers->get_handler(read_options.output_format(), field.type())) {
+                        auto [output_type, extra_bytes] =
+                                handler->output_type_and_extra_bytes(field.type(), field.name(), read_options);
+                        extra_bytes_per_column.emplace_back(extra_bytes);
+                        if (output_type != field.type())
+                            field.mutable_type() = output_type;
+                    } else {
+                        extra_bytes_per_column.emplace_back(0);
+                    }
+                }
+
+                return {StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)}, extra_bytes_per_column};
             }
-        }
-
-        return StreamDescriptor{index_descriptor_from_range(desc.id(), idx, *fields)};
-    });
+    );
 }
 
-StreamDescriptor get_filtered_descriptor(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
-    return get_filtered_descriptor(context->descriptor().clone(), output_format, context->filter_columns_);
+std::pair<StreamDescriptor, std::vector<size_t>> get_filtered_descriptor_and_extra_bytes_per_column(
+        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
+) {
+    return get_filtered_descriptor_and_extra_bytes_per_column(
+            context->descriptor().clone(), read_options, context->filter_columns_
+    );
 }
 
 void handle_modified_descriptor(const std::shared_ptr<PipelineContext>& context, SegmentInMemory& output) {
@@ -92,24 +106,20 @@ void finalize_segment_setup(
     handle_modified_descriptor(context, output);
 }
 
-SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
+SegmentInMemory allocate_chunked_frame(
+        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
+) {
     ARCTICDB_SAMPLE_DEFAULT(AllocContiguousFrame)
     auto [offset, row_count] = offset_and_row_count(context);
     auto block_row_counts = output_block_row_counts(context);
     ARCTICDB_DEBUG(log::version(), "Allocated chunked frame with offset {} and row count {}", offset, row_count);
+    auto [desc, extra_bytes_per_column] = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options);
     SegmentInMemory output{
-            get_filtered_descriptor(context, output_format),
-            0,
-            AllocationType::DETACHABLE,
-            Sparsity::NOT_PERMITTED,
-            output_format,
-            DataTypeMode::EXTERNAL
+            std::move(desc), 0, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED, extra_bytes_per_column
     };
-    auto handlers = TypeHandlerRegistry::instance();
 
     for (auto& column : output.columns()) {
-        auto handler = handlers->get_handler(output_format, column->type());
-        const auto data_size = data_type_size(column->type(), output_format, DataTypeMode::EXTERNAL);
+        const auto data_size = data_type_size(column->type());
         for (auto block_row_count : block_row_counts) {
             if (block_row_count > 0) {
                 // We can end up with empty segments from the processing pipeline, e.g. when:
@@ -129,26 +139,23 @@ SegmentInMemory allocate_chunked_frame(const std::shared_ptr<PipelineContext>& c
     return output;
 }
 
-SegmentInMemory allocate_contiguous_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
+SegmentInMemory allocate_contiguous_frame(
+        const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options
+) {
     ARCTICDB_SAMPLE_DEFAULT(AllocChunkedFrame)
     auto [offset, row_count] = offset_and_row_count(context);
-    SegmentInMemory output{
-            get_filtered_descriptor(context, output_format),
-            row_count,
-            AllocationType::DETACHABLE,
-            Sparsity::NOT_PERMITTED,
-            output_format,
-            DataTypeMode::EXTERNAL
-    };
+    auto desc = get_filtered_descriptor_and_extra_bytes_per_column(context, read_options).first;
+    // extra_bytes_per_column are not used for contiguous frame allocation
+    SegmentInMemory output{std::move(desc), row_count, AllocationType::DETACHABLE, Sparsity::NOT_PERMITTED};
     finalize_segment_setup(output, offset, row_count, context);
     return output;
 }
 
-SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, OutputFormat output_format) {
-    if (output_format == OutputFormat::ARROW)
-        return allocate_chunked_frame(context, output_format);
+SegmentInMemory allocate_frame(const std::shared_ptr<PipelineContext>& context, const ReadOptions& read_options) {
+    if (read_options.output_format() == OutputFormat::ARROW)
+        return allocate_chunked_frame(context, read_options);
     else
-        return allocate_contiguous_frame(context, output_format);
+        return allocate_contiguous_frame(context, read_options);
 }
 
 size_t get_index_field_count(const SegmentInMemory& frame) { return frame.descriptor().index().field_count(); }
@@ -231,7 +238,7 @@ void decode_string_pool(
 void decode_index_field(
         SegmentInMemory& frame, const EncodedFieldImpl& field, const uint8_t*& data,
         const uint8_t* begin ARCTICDB_UNUSED, const uint8_t* end ARCTICDB_UNUSED, PipelineContextRow& context,
-        EncodingVersion encoding_version, OutputFormat output_format
+        EncodingVersion encoding_version
 ) {
     if (get_index_field_count(frame)) {
         if (!context.fetch_index()) {
@@ -244,7 +251,7 @@ void decode_index_field(
         } else {
             auto& buffer = frame.column(0).data().buffer();
             auto& frame_field_descriptor = frame.field(0);
-            auto sz = data_type_size(frame_field_descriptor.type(), output_format, DataTypeMode::EXTERNAL);
+            auto sz = data_type_size(frame_field_descriptor.type());
             const auto& slice_and_key = context.slice_and_key();
             auto offset = sz * (slice_and_key.slice_.row_range.first - frame.offset());
             auto tot_size = sz * slice_and_key.slice_.row_range.diff();
@@ -277,14 +284,22 @@ void decode_index_field(
 void decode_or_expand(
         const uint8_t*& data, Column& dest_column, const EncodedFieldImpl& encoded_field_info,
         const DecodePathData& shared_data, std::any& handler_data, EncodingVersion encoding_version,
-        const ColumnMapping& mapping, const std::shared_ptr<StringPool>& string_pool, OutputFormat output_format
+        const ColumnMapping& mapping, const std::shared_ptr<StringPool>& string_pool, const ReadOptions& read_options
 ) {
     const auto source_type_desc = mapping.source_type_desc_;
     const auto dest_type_desc = mapping.dest_type_desc_;
     auto* dest = dest_column.bytes_at(mapping.offset_bytes_, mapping.dest_bytes_);
-    if (auto handler = get_type_handler(output_format, source_type_desc, dest_type_desc); handler) {
+    if (auto handler = get_type_handler(read_options.output_format(), source_type_desc, dest_type_desc); handler) {
         handler->handle_type(
-                data, dest_column, encoded_field_info, mapping, shared_data, handler_data, encoding_version, string_pool
+                data,
+                dest_column,
+                encoded_field_info,
+                mapping,
+                shared_data,
+                handler_data,
+                encoding_version,
+                string_pool,
+                read_options
         );
     } else {
         ARCTICDB_TRACE(log::version(), "Decoding standard field to position {}", mapping.offset_bytes_);
@@ -297,10 +312,10 @@ void decode_or_expand(
             ChunkedBuffer sparse = ChunkedBuffer::presized(bytes);
             SliceDataSink sparse_sink{sparse.data(), bytes};
             data += decode_field(source_type_desc, encoded_field_info, data, sparse_sink, bv, encoding_version);
-            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, output_format](auto tdt) {
+            source_type_desc.visit_tag([dest, dest_bytes, &bv, &sparse, &read_options](auto tdt) {
                 using TagType = decltype(tdt);
                 using RawType = typename TagType::DataTypeTag::raw_type;
-                if (output_format != OutputFormat::ARROW) {
+                if (read_options.output_format() != OutputFormat::ARROW) {
                     // Arrow doesn't care what values are at indices where the validity bitmap is zero
                     util::default_initialize<TagType>(dest, dest_bytes);
                 }
@@ -308,7 +323,7 @@ void decode_or_expand(
             });
 
             // For arrow we must apply the truncation to the bitmap and set it as an extra buffer.
-            if (output_format == OutputFormat::ARROW) {
+            if (read_options.output_format() == OutputFormat::ARROW) {
                 bv->resize(dest_bytes / dest_type_desc.get_type_bytes());
                 handle_truncation(*bv, mapping.truncate_);
                 create_dense_bitmap(mapping.offset_bytes_, *bv, dest_column, AllocationType::DETACHABLE);
@@ -588,9 +603,7 @@ void decode_into_frame_static(
 
         auto& index_field = fields.at(0u);
         const auto index_field_offset = data;
-        decode_index_field(
-                frame, index_field, data, begin, end, context, encoding_version, read_options.output_format()
-        );
+        decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
         auto truncate_range = get_truncate_range(
                 frame, context, read_options, read_query, encoding_version, index_field, index_field_offset
         );
@@ -616,7 +629,7 @@ void decode_into_frame_static(
             );
             auto field_name = context.descriptor().fields(it.source_field_pos()).name();
             auto& column = frame.column(static_cast<ssize_t>(it.dest_col()));
-            ColumnMapping mapping{frame, it.dest_col(), it.source_field_pos(), context, read_options.output_format()};
+            ColumnMapping mapping{frame, it.dest_col(), it.source_field_pos(), context};
             mapping.set_truncate(truncate_range);
 
             check_type_compatibility(mapping, field_name, it.source_col(), it.dest_col());
@@ -631,7 +644,7 @@ void decode_into_frame_static(
                     encoding_version,
                     mapping,
                     context.string_pool_ptr(),
-                    read_options.output_format()
+                    read_options
             );
 
             ARCTICDB_TRACE(
@@ -665,11 +678,9 @@ void check_mapping_type_compatibility(const ColumnMapping& m) {
 // We therefore need to iterate backwards through the source values, static casting them to the destination
 // type to avoid overriding values we haven't cast yet.
 template<typename SourceType, typename DestinationType>
-void promote_integral_type(const ColumnMapping& m, const ReadOptions& read_options, Column& column) {
-    const auto src_data_type_size =
-            data_type_size(m.source_type_desc_, read_options.output_format(), DataTypeMode::INTERNAL);
-    const auto dest_data_type_size =
-            data_type_size(m.dest_type_desc_, read_options.output_format(), DataTypeMode::INTERNAL);
+void promote_integral_type(const ColumnMapping& m, Column& column) {
+    const auto src_data_type_size = data_type_size(m.source_type_desc_);
+    const auto dest_data_type_size = data_type_size(m.dest_type_desc_);
 
     const auto src_ptr_offset = src_data_type_size * (m.num_rows_ - 1);
     const auto dest_ptr_offset = dest_data_type_size * (m.num_rows_ - 1);
@@ -684,16 +695,14 @@ void promote_integral_type(const ColumnMapping& m, const ReadOptions& read_optio
 
 bool source_is_empty(const ColumnMapping& m) { return is_empty_type(m.source_type_desc_.data_type()); }
 
-void handle_type_promotion(
-        const ColumnMapping& m, const DecodePathData& shared_data, const ReadOptions& read_options, Column& column
-) {
+void handle_type_promotion(const ColumnMapping& m, const DecodePathData& shared_data, Column& column) {
     if (!trivially_compatible_types(m.source_type_desc_, m.dest_type_desc_) && !source_is_empty(m)) {
-        m.dest_type_desc_.visit_tag([&column, &m, shared_data, &read_options](auto dest_desc_tag) {
+        m.dest_type_desc_.visit_tag([&column, &m, shared_data](auto dest_desc_tag) {
             using DestinationType = typename decltype(dest_desc_tag)::DataTypeTag::raw_type;
-            m.source_type_desc_.visit_tag([&column, &m, &read_options](auto src_desc_tag) {
+            m.source_type_desc_.visit_tag([&column, &m](auto src_desc_tag) {
                 using SourceType = typename decltype(src_desc_tag)::DataTypeTag::raw_type;
                 if constexpr (std::is_arithmetic_v<SourceType> && std::is_arithmetic_v<DestinationType>) {
-                    promote_integral_type<SourceType, DestinationType>(m, read_options, column);
+                    promote_integral_type<SourceType, DestinationType>(m, column);
                 } else {
                     util::raise_rte(
                             "Can't promote type {} to type {} in field {}",
@@ -734,9 +743,7 @@ void decode_into_frame_dynamic(
         const auto& fields = hdr.body_fields();
         auto& index_field = fields.at(0u);
         auto index_field_offset = data;
-        decode_index_field(
-                frame, index_field, data, begin, end, context, encoding_version, read_options.output_format()
-        );
+        decode_index_field(frame, index_field, data, begin, end, context, encoding_version);
         auto truncate_range = get_truncate_range(
                 frame, context, read_options, read_query, encoding_version, index_field, index_field_offset
         );
@@ -756,7 +763,7 @@ void decode_into_frame_dynamic(
 
             auto dst_col = *column_output_destination;
             auto& column = frame.column(static_cast<position_t>(dst_col));
-            ColumnMapping mapping{frame, dst_col, field_col, context, read_options.output_format()};
+            ColumnMapping mapping{frame, dst_col, field_col, context};
             check_mapping_type_compatibility(mapping);
             mapping.set_truncate(truncate_range);
             util::check(
@@ -774,10 +781,10 @@ void decode_into_frame_dynamic(
                     encoding_version,
                     mapping,
                     context.string_pool_ptr(),
-                    read_options.output_format()
+                    read_options
             );
 
-            handle_type_promotion(mapping, shared_data, read_options, column);
+            handle_type_promotion(mapping, shared_data, column);
             ARCTICDB_TRACE(
                     log::codec(),
                     "Decoded or expanded dynamic column {} to position {}",
@@ -853,12 +860,9 @@ class NullValueReducer {
             const auto end_row = up_to - frame_.offset();
             if (const std::shared_ptr<TypeHandler>& handler = get_type_handler(output_format_, column_.type());
                 handler) {
+                auto type_size = data_type_size(column_.type());
                 handler->default_initialize(
-                        column_.buffer(),
-                        start_row * handler->type_size(),
-                        num_rows * handler->type_size(),
-                        shared_data_,
-                        handler_data_
+                        column_.buffer(), start_row * type_size, num_rows * type_size, shared_data_, handler_data_
                 );
             } else if (output_format_ != OutputFormat::ARROW || default_value_.has_value()) {
                 // Arrow does not care what values are in the main buffer where the validity bitmap is zero
@@ -926,38 +930,30 @@ struct ReduceColumnTask : async::BaseTask {
         }();
 
         if (dynamic_schema && column_data == slice_map_->columns_.end()) {
-            if (const std::shared_ptr<TypeHandler>& handler =
-                        get_type_handler(read_options_.output_format(), column.type());
-                handler) {
-                handler->default_initialize(
-                        column.buffer(), 0, frame_.row_count() * handler->type_size(), shared_data_, handler_data_
-                );
+            if (is_fixed_string_type(field_type)) {
+                // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
+                // where this column was not present in any of the read row-slices)
+                // All other column types are allocated in the output frame as detachable by default since we know
+                // we will be handing them off to Python to free. This is not the case for fixed-width string
+                // columns, since the buffer still contains string pool offsets at this point, and so will usually
+                // be swapped out with the inflated strings buffer. However, if there are no strings to inflate, we
+                // still need to make this buffer detachable and full of nulls of the correct length
+                auto buffer_size = frame_.row_count() * (field_type == DataType::UTF_FIXED64 ? 4 : 1);
+                ChunkedBuffer new_buffer(buffer_size, AllocationType::DETACHABLE);
+                memset(new_buffer.data(), 0, buffer_size);
+                auto& prev_buffer = column.buffer();
+                swap(prev_buffer, new_buffer);
             } else {
-                if (is_fixed_string_type(field_type)) {
-                    // Special case where we have a fixed-width string column that is all null (e.g. dynamic schema
-                    // where this column was not present in any of the read row-slices)
-                    // All other column types are allocated in the output frame as detachable by default since we know
-                    // we will be handing them off to Python to free. This is not the case for fixed-width string
-                    // columns, since the buffer still contains string pool offsets at this point, and so will usually
-                    // be swapped out with the inflated strings buffer. However, if there are no strings to inflate, we
-                    // still need to make this buffer detachable and full of nulls of the correct length
-                    auto buffer_size = frame_.row_count() * (field_type == DataType::UTF_FIXED64 ? 4 : 1);
-                    ChunkedBuffer new_buffer(buffer_size, AllocationType::DETACHABLE);
-                    memset(new_buffer.data(), 0, buffer_size);
-                    auto& prev_buffer = column.buffer();
-                    swap(prev_buffer, new_buffer);
-                } else {
-                    NullValueReducer null_reducer{
-                            column,
-                            context_,
-                            frame_,
-                            shared_data_,
-                            handler_data_,
-                            read_options_.output_format(),
-                            default_value
-                    };
-                    null_reducer.finalize();
-                }
+                NullValueReducer null_reducer{
+                        column,
+                        context_,
+                        frame_,
+                        shared_data_,
+                        handler_data_,
+                        read_options_.output_format(),
+                        default_value
+                };
+                null_reducer.finalize();
             }
         } else if (column_data != slice_map_->columns_.end()) {
             if (dynamic_schema) {

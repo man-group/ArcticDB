@@ -22,12 +22,13 @@ struct CursoredBuffer {
   public:
     CursoredBuffer() = default;
 
-    CursoredBuffer(size_t size, AllocationType allocation_type) :
+    CursoredBuffer(size_t size, AllocationType allocation_type, size_t extra_bytes_per_block = 0) :
         cursor_(allocation_type == AllocationType::PRESIZED || allocation_type == AllocationType::DETACHABLE
                         ? static_cast<int64_t>(size)
                         : 0),
-        buffer_(allocation_type == AllocationType::PRESIZED ? BufferType::presized(size)
-                                                            : BufferType{size, allocation_type}) {}
+        buffer_(allocation_type == AllocationType::PRESIZED
+                        ? BufferType::presized(size)
+                        : BufferType{size, allocation_type, extra_bytes_per_block}) {}
 
     explicit CursoredBuffer(BufferType&& buffer) : cursor_(0), buffer_(std::move(buffer)) {}
 
