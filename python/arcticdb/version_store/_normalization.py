@@ -49,6 +49,7 @@ from arcticdb._msgpack_compat import packb, padded_packb, unpackb, ExtType
 from arcticdb.log import version as log
 from arcticdb_ext.log import LogLevel
 from arcticdb.version_store._common import _column_name_to_strings, TimeFrame
+from arcticdb.options import OutputFormat
 
 PICKLE_PROTOCOL = 4
 
@@ -642,9 +643,13 @@ class ArrowTableNormalizer(Normalizer):
             pandas_type = str(field.type)
             numpy_type = str(field.type)
             metadata = None
-            if isinstance(field.type, pa.DictionaryType):
-                # Arrow backend produces DictionaryTypes for string columns
-                assert field.type.value_type == pa.large_string()
+            if (
+                pa.types.is_dictionary(field.type)
+                and pa.types.is_large_string(field.type.value_type)
+                or pa.types.is_large_string(field.type)
+                or pa.types.is_string(field.type)
+            ):
+                # Arrow backend can produce dictionary, large string or regular string types depending on ArrowOutputStringFormat
                 pandas_type = "unicode"
                 numpy_type = "object"
             elif isinstance(field.type, pa.TimestampType):
@@ -775,7 +780,10 @@ class ArrowTableNormalizer(Normalizer):
             is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
             if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
                 pandas_indexes = 1
-                if index_meta.tz:
+                if index_meta.tz and len(item.columns) > 0 and pa.types.is_timestamp(item.columns[0].type):
+                    # We apply timezone metadata only when the first column is a timestamp column.
+                    # This matches the behavior and is required to handle `groupby`s which can change index type.
+                    # TODO: This is still not correct if grouping by a timestamp column. Monday ref: 18197986461
                     timezones[0] = index_meta.tz
                 if index_meta.name:
                     renames_for_table[0] = index_meta.name
@@ -1207,9 +1215,11 @@ class DataFrameNormalizer(_PandasNormalizer):
             norm_meta.df.has_synthetic_columns = True
 
         if isinstance(item.index, MultiIndex):
-            # need to copy otherwise we are altering input which might surprise too many users
-            # TODO provide a better impl of MultiIndex
-            item = item.copy()
+            # We must not alter the input which might surprise too many users
+            # Thus, we copy the index and column names because we will modify the index to prepare for write
+            item = item.copy(deep=False)
+            item.index = item.index.copy()
+            item.columns = item.columns.copy()
 
         if isinstance(item.columns, MultiIndex):
             raise ArcticDbNotYetImplemented("MultiIndex column are not supported yet")
@@ -1295,8 +1305,14 @@ class MsgPackNormalizer(Normalizer):
         input_type = meta.WhichOneof("input_type")
         if input_type != "msg_pack_frame":
             raise ArcticNativeException("Expected msg_pack_frame input, actual {}".format(meta))
+        if isinstance(obj, FrameData):
+            np_arr = obj.data[0]
+        elif _PYARROW_AVAILABLE and isinstance(obj, pa.Table):
+            np_arr = obj.column(0).combine_chunks().to_numpy(zero_copy_only=True)
+        else:
+            raise ArcticNativeException(f"Unexpected denormalization input in MsgPackNormlizer: {input}")
         sb = meta.msg_pack_frame.size_bytes
-        col_data = obj.data[0].view(np.uint8)[:sb]
+        col_data = np_arr.view(np.uint8)[:sb]
         return self._msgpack_unpackb(memoryview(col_data))
 
     def _custom_pack(self, obj):
@@ -1552,7 +1568,13 @@ class CompositeNormalizer(Normalizer):
                 raise
 
     def denormalize(self, item, norm_meta):
-        # type: (_FrameData, NormalizationMetadata)->_SUPPORTED_TYPES
+        # type: (_FrameData, NormalizationMetadata, OutputFormat)->_SUPPORTED_TYPES
+        if _PYARROW_AVAILABLE and isinstance(item, pa.Table):
+            input_type = norm_meta.WhichOneof("input_type")
+            if input_type == "msg_pack_frame":
+                return self.msg_pack_denorm.denormalize(item, norm_meta)
+            elif input_type == "df" or input_type == "series" or input_type == "experimental_arrow":
+                return self.pa.denormalize(item, norm_meta)
         if isinstance(item, FrameData):
             input_type = norm_meta.WhichOneof("input_type")
             if input_type == "df":
@@ -1565,7 +1587,7 @@ class CompositeNormalizer(Normalizer):
                 return self.np.denormalize(item, norm_meta.np)
             elif input_type == "experimental_arrow":
                 return self.df.denormalize(item, norm_meta.experimental_arrow)
-            elif input_type == "msg_pack":
+            elif input_type == "msg_pack_frame":
                 return self.msg_pack_denorm.denormalize(item, norm_meta)
 
         if self.fallback_normalizer is None:

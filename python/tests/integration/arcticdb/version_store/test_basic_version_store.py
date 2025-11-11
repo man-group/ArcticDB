@@ -110,7 +110,6 @@ def test_special_chars(object_version_store):
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_s3_breaking_chars(object_version_store, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
     corrupting the db.
@@ -126,7 +125,6 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_s3_breaking_chars_staged(object_version_store, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
     corrupting the db.
@@ -142,7 +140,6 @@ def test_s3_breaking_chars_staged(object_version_store, breaking_char):
 
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_unhandled_chars_default(object_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
     xfail_azure_chars(object_version_store, unhandled_char)
@@ -156,7 +153,6 @@ def test_unhandled_chars_default(object_version_store, unhandled_char):
 
 @pytest.mark.parametrize("sym", [chr(0), chr(30), chr(127), chr(128), "", "l" * 255])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_unhandled_chars_staged_data(object_version_store, sym):
     xfail_azure_chars(object_version_store, sym)
     """Test that by default, the problematic chars are raising an exception at staging time."""
@@ -849,7 +845,8 @@ def test_range_index(basic_store, sym):
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
-def test_date_range(basic_store, use_date_range_clause):
+def test_date_range(basic_store, use_date_range_clause, any_output_format):
+    basic_store._set_output_format_for_pipeline_tests(any_output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(data=np.arange(100), index=pd.date_range(initial_timestamp, periods=100))
     sym = "date_test"
@@ -897,7 +894,8 @@ def test_date_range(basic_store, use_date_range_clause):
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
-def test_date_range_none(basic_store, use_date_range_clause):
+def test_date_range_none(basic_store, use_date_range_clause, any_output_format):
+    basic_store._set_output_format_for_pipeline_tests(any_output_format)
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -916,7 +914,8 @@ def test_date_range_none(basic_store, use_date_range_clause):
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
-def test_date_range_start_equals_end(basic_store, use_date_range_clause):
+def test_date_range_start_equals_end(basic_store, use_date_range_clause, any_output_format):
+    basic_store._set_output_format_for_pipeline_tests(any_output_format)
     sym = "date_test2"
     rows = 100
     initial_timestamp = pd.Timestamp("2019-01-01")
@@ -938,8 +937,9 @@ def test_date_range_start_equals_end(basic_store, use_date_range_clause):
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
-def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause):
+def test_date_range_row_sliced(basic_store_tiny_segment, use_date_range_clause, any_output_format):
     lib = basic_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_date_range_row_sliced"
     # basic_store_tiny_segment produces 2x2 segments
     num_rows = 6
@@ -2832,8 +2832,9 @@ def test_batch_append_with_throw_exception(basic_store, three_col_df):
 
 @pytest.mark.parametrize("use_date_range_clause", [True, False])
 @marks([Marks.pipeline, Marks.storage])
-def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause):
+def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_range_clause, any_output_format):
     lmdb_version_store = basic_store_tombstone_and_sync_passive
+    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     symbols = []
     for i in range(5):
         symbols.append("sym_{}".format(i))
@@ -2873,8 +2874,9 @@ def test_batch_read_date_range(basic_store_tombstone_and_sync_passive, use_date_
 
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
 @marks([Marks.pipeline])
-def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause):
+def test_batch_read_row_range(lmdb_version_store_v1, use_row_range_clause, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     num_symbols = 5
     num_rows = 10
     symbols = [f"sym_{i}" for i in range(num_symbols)]

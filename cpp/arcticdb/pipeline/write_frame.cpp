@@ -17,6 +17,7 @@
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/write_frame.hpp>
 #include <arcticdb/async/task_scheduler.hpp>
+#include <arcticdb/async/tasks.hpp>
 #include <arcticdb/util/format_date.hpp>
 
 #include <vector>
@@ -63,32 +64,83 @@ SegmentInMemory WriteToSegmentTask::slice_segment() const {
         seg.descriptor().set_index({IndexDescriptorImpl::Type::ROWCOUNT, 0});
     }
     for (size_t col_idx = 0; col_idx < frame.descriptor().index().field_count(); ++col_idx) {
-        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset)));
+        seg.add_column(
+                frame.field(col_idx).name(),
+                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     for (size_t col_idx = slice_.columns().first; col_idx < slice_.columns().second; ++col_idx) {
-        seg.add_column(frame.field(col_idx), std::make_shared<Column>(slice_column(frame, col_idx, offset)));
+        seg.add_column(
+                frame.field(col_idx).name(),
+                std::make_shared<Column>(slice_column(frame, col_idx, offset, seg.string_pool()))
+        );
     }
     seg.set_row_data((slice_.rows().second - slice_.rows().first) - 1);
     return seg;
 }
 
-Column WriteToSegmentTask::slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset) const {
+Column WriteToSegmentTask::slice_column(
+        const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool
+) const {
     const auto& source_column = frame.column(col_idx);
-    const auto first_byte = (slice_.rows().first - offset) * get_type_size(source_column.type().data_type());
-    const auto bytes = ((slice_.rows().second - offset) * get_type_size(source_column.type().data_type())) - first_byte;
+    const auto type_size = get_type_size(source_column.type().data_type());
+    const auto first_byte = (slice_.rows().first - offset) * type_size;
+    const auto bytes = ((slice_.rows().second - offset) * type_size) - first_byte;
     // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
-    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to multiples
-    // of the type size
-    auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
-    ChunkedBuffer chunked_buffer;
-    if (byte_blocks_at.size() == 1) {
-        // All required bytes lie within a single block, so we can avoid a copy by adding an external block
-        chunked_buffer.add_external_block(byte_blocks_at.front().first, bytes);
-    } else {
-        // Required bytes span multiple blocks, so we need to memcpy them into a single block for encoding
-        chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+    // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
+    // multiples of the type size
+    const auto byte_blocks_at = source_column.data().buffer().byte_blocks_at(first_byte, bytes);
+    if (is_sequence_type(source_column.type().data_type())) {
+        const auto& block_offsets = source_column.data().buffer().block_offsets();
+        auto first_block_offset = source_column.data().buffer().block_and_offset(first_byte).block_index_;
+        auto block_offsets_it = block_offsets.cbegin() + first_block_offset;
+        Column res(
+                make_scalar_type(DataType::UTF_DYNAMIC64),
+                slice_.rows().diff(),
+                AllocationType::PRESIZED,
+                Sparsity::NOT_PERMITTED
+        );
+        res.set_row_data(slice_.rows().diff() - 1);
+        auto col_data = res.data();
+        // String columns use int64_t as the offsets
+        auto col_it = col_data.begin<ScalarTagType<DataTypeTag<DataType::INT64>>>();
+        details::visit_type(source_column.type().data_type(), [&](auto tag) {
+            using type_info = ScalarTypeInfo<decltype(tag)>;
+            using Rawtype = type_info::RawType;
+            // Already checked the data type above, this is just to reduce code generation
+            if constexpr (is_sequence_type(type_info::data_type)) {
+                for (const auto& offset_ptr_and_size : byte_blocks_at) {
+                    // The extra string buffer is always one block by construction, so use a raw pointer into it to
+                    // avoid block_and_offset calculations
+                    char* string_data = reinterpret_cast<char*>(
+                            source_column.get_extra_buffer(*block_offsets_it++, ExtraBufferType::STRING).data()
+                    );
+                    auto offset_ptr = reinterpret_cast<const Rawtype*>(offset_ptr_and_size.first);
+                    auto num_elements = offset_ptr_and_size.second / sizeof(Rawtype);
+                    for (size_t idx = 0; idx < num_elements; ++idx, ++offset_ptr) {
+                        auto strings_buffer_offset = *offset_ptr;
+                        // Note that in arrow_data_to_segment we omitted the last value from the offsets buffer to keep
+                        // our indexing into the chunked buffer accurate. So when idx == size - 1, (ptr + 1) is still
+                        // within the memory owned by the input Arrow structure
+                        auto string_length = *(offset_ptr + 1) - strings_buffer_offset;
+                        std::string_view str(&string_data[strings_buffer_offset], string_length);
+                        *col_it++ = string_pool.get(str).offset();
+                    }
+                }
+            }
+        });
+        return res;
+    } else { // Numeric and bool types
+        ChunkedBuffer chunked_buffer;
+        if (byte_blocks_at.size() == 1) {
+            // All required bytes lie within a single block, so we can avoid a copy by adding an external block
+            chunked_buffer.add_external_block(byte_blocks_at.front().first, bytes);
+        } else {
+            // Required bytes span multiple blocks, so we need to memcpy them into a single block for encoding
+            chunked_buffer = truncate(source_column.data().buffer(), first_byte, first_byte + bytes);
+        }
+        return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
     }
-    return {source_column.type(), Sparsity::NOT_PERMITTED, std::move(chunked_buffer)};
 }
 
 SegmentInMemory WriteToSegmentTask::slice_tensors() const {
@@ -189,7 +241,7 @@ int64_t write_window_size() {
     );
 }
 
-folly::Future<std::vector<SliceAndKey>> write_slices(
+folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& key, const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
@@ -199,26 +251,25 @@ folly::Future<std::vector<SliceAndKey>> write_slices(
     auto slice_and_rowcount = get_slice_and_rowcount(slices);
 
     int64_t write_window = write_window_size();
-    return folly::collect(folly::window(
-                                  std::move(slice_and_rowcount),
-                                  [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice
-                                  ) {
-                                      return async::submit_cpu_task(WriteToSegmentTask(
-                                                                            frame,
-                                                                            slice.first,
-                                                                            slicing,
-                                                                            get_partial_key_gen(frame, key),
-                                                                            slice.second,
-                                                                            frame->index,
-                                                                            sparsify_floats
-                                                                    ))
-                                              .then([sink, de_dup_map](auto&& ks) {
-                                                  return sink->async_write(ks, de_dup_map);
-                                              });
-                                  },
-                                  write_window
-                          ))
-            .via(&async::io_executor());
+    auto window = folly::window(
+            std::move(slice_and_rowcount),
+            [de_dup_map, frame, slicing, key = std::move(key), sink, sparsify_floats](auto&& slice) {
+                return async::submit_cpu_task(WriteToSegmentTask(
+                                                      frame,
+                                                      slice.first,
+                                                      slicing,
+                                                      get_partial_key_gen(frame, key),
+                                                      slice.second,
+                                                      frame->index,
+                                                      sparsify_floats
+                                              ))
+                        .then([sink, de_dup_map](auto&& ks) {
+                            return sink->async_write(std::forward<decltype(ks)>(ks), de_dup_map);
+                        });
+            },
+            write_window
+    );
+    return folly::collectAll(std::move(window));
 }
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
@@ -233,7 +284,12 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
-    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats);
+    return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
+            .via(&async::cpu_executor())
+            .thenValue([sink](std::vector<folly::Try<SliceAndKey>>&& ks) {
+                return rollback_slices_on_quota_exceeded(std::move(ks), sink);
+            })
+            .via(&async::io_executor());
 }
 
 folly::Future<entity::AtomKey> write_frame(
@@ -325,7 +381,7 @@ static RowRange partial_rewrite_row_range(
     }
 }
 
-folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
+folly::Future<SliceAndKey> async_rewrite_partial_segment(
         const SliceAndKey& existing, const IndexRange& index_range, VersionId version_id,
         AffectedSegmentPart affected_part, const std::shared_ptr<Store>& store
 ) {
@@ -333,15 +389,15 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
             .thenValueInline(
                     [existing, index_range, version_id, affected_part, store](
                             std::pair<VariantKey, SegmentInMemory>&& key_segment
-                    ) -> folly::Future<std::optional<SliceAndKey>> {
+                    ) -> folly::Future<SliceAndKey> {
                         const auto& key = existing.key();
                         const SegmentInMemory& segment = key_segment.second;
                         const RowRange affected_row_range =
                                 partial_rewrite_row_range(segment, index_range, affected_part);
                         const auto num_rows = int64_t(affected_row_range.end() - affected_row_range.start());
-                        if (num_rows <= 0)
-                            return std::nullopt;
-
+                        if (num_rows <= 0) {
+                            return folly::Try<SliceAndKey>{}; // Empty future
+                        }
                         SegmentInMemory output =
                                 segment.truncate(affected_row_range.start(), affected_row_range.end(), true);
                         const IndexValue start_ts = TimeseriesIndex::start_value_for_segment(output);
@@ -357,7 +413,7 @@ folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
                         };
                         return store->write(key.type(), version_id, key.id(), start_ts, end_ts, std::move(output))
                                 .thenValueInline([new_slice = std::move(new_slice)](VariantKey&& k) {
-                                    return std::make_optional<SliceAndKey>(new_slice, std::get<AtomKey>(std::move(k)));
+                                    return SliceAndKey{new_slice, std::get<AtomKey>(std::move(k))};
                                 });
                     }
             );
@@ -389,4 +445,53 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
     return output;
 }
 
+folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
+        std::vector<SliceAndKey>&& slices, StreamSink& sink
+) {
+    std::vector<VariantKey> keys;
+    std::transform(
+            std::make_move_iterator(std::begin(slices)),
+            std::make_move_iterator(std::end(slices)),
+            std::back_inserter(keys),
+            [](SliceAndKey&& key) { return std::move(key).key(); }
+    );
+    return sink.remove_keys(std::move(keys)).thenValue([](auto&&) { return folly::makeFuture(); });
+}
+
+folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys_batches(
+        std::vector<std::vector<SliceAndKey>>&& slices_batches, StreamSink& sink
+) {
+    return folly::collect(folly::window(
+                                  std::move(slices_batches),
+                                  [&sink](std::vector<SliceAndKey>&& slice_keys) {
+                                      return remove_slice_and_keys(std::move(slice_keys), sink);
+                                  },
+                                  write_window_size()
+                          ))
+            .via(&async::io_executor())
+            .thenValue([](auto&&) { return folly::makeFuture(); });
+};
+
+folly::SemiFuture<std::vector<SliceAndKey>> rollback_slices_on_quota_exceeded(
+        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<StreamSink>& sink
+) {
+    auto remove_slice_and_keys_func = [sink](std::vector<SliceAndKey>&& slice_keys) {
+        return remove_slice_and_keys(std::move(slice_keys), *sink);
+    };
+
+    return rollback_on_quota_exceeded<SliceAndKey>(std::move(try_slices), std::move(remove_slice_and_keys_func));
+}
+
+folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quota_exceeded(
+        std::vector<folly::Try<std::vector<SliceAndKey>>>&& try_slice_batches,
+        const std::shared_ptr<stream::StreamSink>& sink
+) {
+    auto remove_keys_func = [sink](std::vector<std::vector<SliceAndKey>>&& slice_keys_per_batch) {
+        return remove_slice_and_keys_batches(std::move(slice_keys_per_batch), *sink);
+    };
+
+    return rollback_on_quota_exceeded<std::vector<SliceAndKey>>(
+            std::move(try_slice_batches), std::move(remove_keys_func)
+    );
+}
 } // namespace arcticdb::pipelines

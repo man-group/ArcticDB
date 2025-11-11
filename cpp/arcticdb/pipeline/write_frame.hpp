@@ -45,7 +45,7 @@ struct WriteToSegmentTask : public async::BaseTask {
   private:
     SegmentInMemory slice_tensors() const;
     SegmentInMemory slice_segment() const;
-    Column slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset) const;
+    Column slice_column(const SegmentInMemory& frame, size_t col_idx, size_t offset, StringPool& string_pool) const;
 };
 
 folly::Future<std::vector<SliceAndKey>> slice_and_write(
@@ -56,7 +56,7 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
 
 int64_t write_window_size();
 
-folly::Future<std::vector<SliceAndKey>> write_slices(
+folly::SemiFuture<std::vector<folly::Try<SliceAndKey>>> write_slices(
         const std::shared_ptr<InputFrame>& frame, std::vector<FrameSlice>&& slices, const SlicingPolicy& slicing,
         TypedStreamVersion&& partial_key, const std::shared_ptr<stream::StreamSink>& sink,
         const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats
@@ -76,7 +76,7 @@ folly::Future<entity::AtomKey> append_frame(
 
 enum class AffectedSegmentPart { START, END };
 
-folly::Future<std::optional<SliceAndKey>> async_rewrite_partial_segment(
+folly::Future<SliceAndKey> async_rewrite_partial_segment(
         const SliceAndKey& existing, const IndexRange& index_range, VersionId version_id,
         AffectedSegmentPart affected_part, const std::shared_ptr<Store>& store
 );
@@ -97,5 +97,56 @@ std::vector<SliceAndKey> flatten_and_fix_rows(
 );
 
 std::vector<std::pair<FrameSlice, size_t>> get_slice_and_rowcount(const std::vector<FrameSlice>& slices);
+
+template<typename T>
+requires std::is_same_v<T, SliceAndKey> || std::is_same_v<T, std::vector<SliceAndKey>>
+folly::SemiFuture<std::vector<T>> rollback_on_quota_exceeded(
+        std::vector<folly::Try<T>>&& try_slices,
+        folly::Function<folly::Future<StreamSink::RemoveKeyResultType>(std::vector<T>&&)>&& remove_future
+) {
+    std::vector<T> succeeded;
+    std::optional<folly::exception_wrapper> exception;
+    bool has_quota_limit_exceeded = false;
+    succeeded.reserve(try_slices.size());
+    for (auto& try_slice : try_slices) {
+        if (try_slice.hasException()) {
+            if (!exception.has_value()) {
+                exception = try_slice.exception();
+            }
+
+            has_quota_limit_exceeded = has_quota_limit_exceeded ||
+                                       try_slice.exception().template is_compatible_with<QuotaExceededException>();
+        } else if (try_slice.hasValue()) {
+            succeeded.emplace_back(std::move(try_slice.value()));
+        }
+    }
+
+    if (has_quota_limit_exceeded) {
+        return std::move(remove_future)(std::move(succeeded)).via(&async::cpu_executor()).thenValue([](auto&&) {
+            return folly::makeSemiFuture<std::vector<T>>(
+                    QuotaExceededException("Quota has been exceeded. Orphaned keys have been deleted.")
+            );
+        });
+    }
+
+    if (exception.has_value()) {
+        exception->throw_exception();
+    }
+
+    return succeeded;
+}
+
+folly::SemiFuture<std::vector<SliceAndKey>> rollback_slices_on_quota_exceeded(
+        std::vector<folly::Try<SliceAndKey>>&& try_slices, const std::shared_ptr<stream::StreamSink>& sink
+);
+
+folly::SemiFuture<std::vector<std::vector<SliceAndKey>>> rollback_batches_on_quota_exceeded(
+        std::vector<folly::Try<std::vector<SliceAndKey>>>&& try_slice_batches,
+        const std::shared_ptr<stream::StreamSink>& sink
+);
+
+folly::Future<StreamSink::RemoveKeyResultType> remove_slice_and_keys(
+        std::vector<SliceAndKey>&& slices, StreamSink& sink
+);
 
 } // namespace arcticdb::pipelines

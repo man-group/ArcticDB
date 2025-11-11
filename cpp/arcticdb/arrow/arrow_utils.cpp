@@ -95,21 +95,66 @@ sparrow::dictionary_encoded_array<T> create_dict_array(
     }
 }
 
-// TODO: This is super hacky. Our string column return type is dictionary encoded, and this should be
+sparrow::u8_buffer<char> minimal_string_buffer() { return sparrow::u8_buffer<char>(nullptr, 0); }
+
+// TODO: This is super hacky. If our string column return type is dictionary encoded, and this should be
 //  consistent when there are zero rows or the validity bitmap is all zeros. But sparrow (or possibly Arrow) requires at
 //  least one key-value pair in the dictionary, even if there are zero rows
-sparrow::big_string_array minimal_strings_dict() {
-    std::unique_ptr<int64_t[]> offset_ptr(new int64_t[2]);
-    offset_ptr[0] = 0;
-    offset_ptr[1] = 1;
-    sparrow::u8_buffer<int64_t> offsets_buffer(offset_ptr.release(), 2);
-    std::unique_ptr<char[]> strings_ptr(new char[1]);
-    strings_ptr[0] = 'a';
-    sparrow::u8_buffer<char> strings_buffer(strings_ptr.release(), 1);
-    return {std::move(strings_buffer), std::move(offsets_buffer)};
+sparrow::big_string_array minimal_strings_for_dict() {
+    return sparrow::big_string_array(std::vector<std::string>{"a"});
+}
+
+template<typename OffsetType>
+sparrow::array minimal_strings_array() {
+    return sparrow::array(sparrow::string_array_impl<OffsetType>(std::vector<std::string>()));
 }
 
 template<typename TagType>
+requires(is_sequence_type(TagType::DataTypeTag::data_type))
+sparrow::array string_array_from_block(
+        TypedBlockData<TagType>& block, const Column& column, std::string_view name,
+        std::optional<sparrow::validity_bitmap>&& maybe_bitmap
+) {
+    using DataTagType = typename TagType::DataTypeTag;
+    using RawType = typename DataTagType::raw_type;
+    // Arrow spec expects signed integers as offsets even though all of them are unsigned
+    using SignedType = std::make_signed_t<RawType>;
+    auto offset = block.offset();
+    auto block_size = block.row_count();
+    util::check(
+            block.mem_block()->bytes() == (block_size + 1) * sizeof(SignedType),
+            "Expected memory block for variable length strings to have size {} due to extra bytes but got a memory "
+            "block with size {}",
+            (block_size + 1) * sizeof(SignedType),
+            block.mem_block()->bytes()
+    );
+    sparrow::u8_buffer<SignedType> offset_buffer(reinterpret_cast<SignedType*>(block.release()), block_size + 1);
+    const bool has_string_buffer = column.has_extra_buffer(offset, ExtraBufferType::STRING);
+    auto strings_buffer = [&]() {
+        if (!has_string_buffer) {
+            return minimal_string_buffer();
+        }
+        auto& strings = column.get_extra_buffer(offset, ExtraBufferType::STRING);
+        const auto strings_buffer_size = strings.block(0)->bytes();
+        return sparrow::u8_buffer<char>(reinterpret_cast<char*>(strings.block(0)->release()), strings_buffer_size);
+    }();
+    auto arr = [&]() {
+        if (maybe_bitmap.has_value()) {
+            return sparrow::array(sparrow::string_array_impl<SignedType>(
+                    std::move(strings_buffer), std::move(offset_buffer), std::move(maybe_bitmap.value())
+            ));
+        } else {
+            return sparrow::array(
+                    sparrow::string_array_impl<SignedType>(std::move(strings_buffer), std::move(offset_buffer))
+            );
+        }
+    }();
+    arr.set_name(name);
+    return arr;
+}
+
+template<typename TagType>
+requires(is_sequence_type(TagType::DataTypeTag::data_type))
 sparrow::array string_dict_from_block(
         TypedBlockData<TagType>& block, const Column& column, std::string_view name,
         std::optional<sparrow::validity_bitmap>&& maybe_bitmap
@@ -143,7 +188,7 @@ sparrow::array string_dict_from_block(
             );
             return {std::move(strings_buffer), std::move(offsets_buffer)};
         } else if (!has_offset_buffer && !has_string_buffer) {
-            return minimal_strings_dict();
+            return minimal_strings_for_dict();
         } else {
             util::raise_rte("Arrow output string creation expected either both or neither of OFFSET and STRING buffers "
                             "to be present");
@@ -180,20 +225,25 @@ sparrow::array arrow_array_from_block(
     return arr;
 }
 
-sparrow::array empty_arrow_array_from_type(const TypeDescriptor& type, std::string_view name) {
-    auto res = details::visit_scalar(type, [](auto&& tdt) {
+sparrow::array empty_arrow_array_for_column(const Column& column, std::string_view name) {
+    auto res = details::visit_scalar(column.type(), [&](auto&& tdt) {
         using TagType = std::decay_t<decltype(tdt)>;
         using DataTagType = typename TagType::DataTypeTag;
         using RawType = typename DataTagType::raw_type;
         std::optional<sparrow::validity_bitmap> validity_bitmap;
         if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-            sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
-            auto dict_values_array = minimal_strings_dict();
-            return sparrow::array{create_dict_array<int32_t>(
-                    sparrow::array{std::move(dict_values_array)},
-                    std::move(dict_keys_buffer),
-                    std::move(validity_bitmap)
-            )};
+            using SignedType = std::make_signed_t<RawType>;
+            if (column.data().buffer().has_extra_bytes_per_block()) {
+                return minimal_strings_array<SignedType>();
+            } else {
+                sparrow::u8_buffer<int32_t> dict_keys_buffer{nullptr, 0};
+                auto dict_values_array = minimal_strings_for_dict();
+                return sparrow::array{create_dict_array<int32_t>(
+                        sparrow::array{std::move(dict_values_array)},
+                        std::move(dict_keys_buffer),
+                        std::move(validity_bitmap)
+                )};
+            }
         } else if constexpr (is_time_type(TagType::DataTypeTag::data_type)) {
             return sparrow::array{create_timestamp_array<RawType>(nullptr, 0, std::move(validity_bitmap))};
         } else {
@@ -212,12 +262,16 @@ std::vector<sparrow::array> arrow_arrays_from_column(const Column& column, std::
         using TagType = std::decay_t<decltype(impl)>;
         if (column_data.num_blocks() == 0) {
             // For empty columns we want to return one empty array instead of no arrays.
-            vec.emplace_back(empty_arrow_array_from_type(column.type(), name));
+            vec.emplace_back(empty_arrow_array_for_column(column, name));
         }
         while (auto block = column_data.next<TagType>()) {
             auto bitmap = create_validity_bitmap(block->offset(), column, block->row_count());
             if constexpr (is_sequence_type(TagType::DataTypeTag::data_type)) {
-                vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                if (column_data.buffer().has_extra_bytes_per_block()) {
+                    vec.emplace_back(string_array_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                } else {
+                    vec.emplace_back(string_dict_from_block<TagType>(*block, column, name, std::move(bitmap)));
+                }
             } else {
                 vec.emplace_back(arrow_array_from_block<TagType>(*block, name, std::move(bitmap)));
             }
@@ -269,8 +323,11 @@ std::shared_ptr<std::vector<sparrow::record_batch>> segment_to_arrow_data(Segmen
     return output;
 }
 
-DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
-    switch (arrow_type) {
+DataType arcticdb_type_from_arrow_array(const sparrow::array& array) {
+    schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
+            !array.dictionary().has_value(), "Dictionary-encoded Arrow data unsupported"
+    );
+    switch (array.data_type()) {
     case sparrow::data_type::BOOL:
         return DataType::BOOL8;
     case sparrow::data_type::UINT8:
@@ -295,9 +352,13 @@ DataType arcticdb_type_from_arrow_type(sparrow::data_type arrow_type) {
         return DataType::FLOAT64;
     case sparrow::data_type::TIMESTAMP_NANOSECONDS:
         return DataType::NANOSECONDS_UTC64;
+    case sparrow::data_type::STRING:
+        return DataType::UTF_DYNAMIC32;
+    case sparrow::data_type::LARGE_STRING:
+        return DataType::UTF_DYNAMIC64;
     default:
         schema::raise<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                "Unsupported Arrow data type provided `{}`", sparrow::data_type_to_format(arrow_type)
+                "Unsupported Arrow data type provided `{}`", sparrow::data_type_to_format(array.data_type())
         );
         return DataType::UNKNOWN; // Prevent "control reaches end of non-void function"
     }
@@ -313,7 +374,7 @@ std::pair<std::vector<DataType>, std::optional<size_t>> find_data_types_and_inde
         if (index_name.has_value() && record_batch.get_column_name(idx) == *index_name) {
             index_column_position = idx;
         }
-        data_types.emplace_back(arcticdb_type_from_arrow_type(record_batch.get_column(idx).data_type()));
+        data_types.emplace_back(arcticdb_type_from_arrow_array(record_batch.get_column(idx)));
     }
     if (index_name.has_value()) {
         schema::check<ErrorCode::E_COLUMN_DOESNT_EXIST>(
@@ -340,21 +401,27 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 return accum + record_batch.nb_rows();
             }
     );
-    std::vector<ChunkedBuffer> chunked_buffers(record_batch->nb_columns());
+    auto column_names = record_batches.front().names();
+    std::vector<Column> columns;
+    columns.reserve(data_types.size());
+    for (auto data_type : data_types) {
+        // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
+        columns.emplace_back(make_scalar_type(data_type), Sparsity::NOT_PERMITTED, ChunkedBuffer());
+    }
     uint64_t start_row{0};
     for (; record_batch != record_batches.cend(); ++record_batch) {
         for (size_t idx = 0; idx < record_batch->nb_columns(); ++idx) {
-            auto& chunked_buffer = chunked_buffers[idx];
+            auto& column = columns[idx];
             const auto& data_type = data_types[idx];
             const auto& array = record_batch->get_column(idx);
             auto [arrow_array, arrow_schema] = sparrow::get_arrow_structures(array);
             schema::check<ErrorCode::E_UNSUPPORTED_COLUMN_TYPE>(
-                    arrow_array->null_count == 0,
+                    array.null_count() == 0,
                     "Column '{}' contains null values, which are not currently supported",
                     record_batch->names()[idx]
             );
             auto arrow_array_buffers = sparrow::get_arrow_array_buffers(*arrow_array, *arrow_schema);
-            // arrow_array_buffers.at(0) seems to be the validity bitmap, and may be NULL if there are no null values
+            // arrow_array_buffers[0] seems to be the validity bitmap, and may be NULL if there are no null values
             // need to handle it being non-NULL and all 1s though
             const auto* data = arrow_array_buffers[1].data<uint8_t>();
             if (is_bool_type(data_type)) {
@@ -362,38 +429,41 @@ std::pair<SegmentInMemory, std::optional<size_t>> arrow_data_to_segment(
                 // This is the limiting factor when writing a lot of bool data as it is serial. This should be moved to
                 // WriteToSegmentTask
                 if (record_batch == record_batches.cbegin()) {
-                    chunked_buffer = ChunkedBuffer::presized(total_rows);
+                    column.buffer() = ChunkedBuffer::presized(total_rows);
                 }
                 packed_bits_to_buffer(
-                        data, array.size(), arrow_array->offset, chunked_buffer.bytes_at(start_row, array.size())
+                        data, array.size(), array.offset(), column.buffer().bytes_at(start_row, array.size())
                 );
-            } else {
-                data += arrow_array->offset * get_type_size(data_type);
+            } else { // Numeric and string types
+                data += array.offset() * get_type_size(data_type);
+                // For string columns, we deliberately omit the last value from the offsets buffer to keep our indexing
+                // into the column's ChunkedBuffer accurate. See corresponding comment in
+                // WriteToSegmentTask::slice_column
                 const auto bytes = array.size() * get_type_size(data_type);
-                chunked_buffer.add_external_block(data, bytes);
+                column.buffer().add_external_block(data, bytes);
+                if (is_sequence_type(data_type)) {
+                    // arrow_array_buffers[2] is the buffer that contains the actual strings. The data pointer
+                    // represents offsets into this buffer
+                    ChunkedBuffer strings_buffer;
+                    const auto string_bytes = arrow_array_buffers[2].size();
+                    strings_buffer.add_external_block(arrow_array_buffers[2].data<uint8_t>(), string_bytes);
+                    column.set_extra_buffer(
+                            start_row * get_type_size(data_type), ExtraBufferType::STRING, std::move(strings_buffer)
+                    );
+                }
             }
         }
         start_row += record_batch->nb_rows();
     }
-    auto column_names = record_batches.front().names();
     if (index_column_position.has_value()) {
-        auto idx = *index_column_position;
         seg.add_column(
-                scalar_field(data_types[idx], column_names[idx]),
-                std::make_shared<Column>(
-                        make_scalar_type(data_types[idx]), Sparsity::NOT_PERMITTED, std::move(chunked_buffers[idx])
-                )
+                column_names[*index_column_position],
+                std::make_shared<Column>(std::move(columns[*index_column_position]))
         );
     }
     for (size_t idx = 0; idx < column_names.size(); ++idx) {
         if (!index_column_position.has_value() || idx != *index_column_position) {
-            // The Arrow data may be semantically sparse, but this buffer is still dense, hence Sparsity::NOT_PERMITTED
-            seg.add_column(
-                    scalar_field(data_types[idx], column_names[idx]),
-                    std::make_shared<Column>(
-                            make_scalar_type(data_types[idx]), Sparsity::NOT_PERMITTED, std::move(chunked_buffers[idx])
-                    )
-            );
+            seg.add_column(column_names[idx], std::make_shared<Column>(std::move(columns[idx])));
         }
     }
     seg.set_row_data(static_cast<ssize_t>(total_rows) - 1);

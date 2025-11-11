@@ -7,6 +7,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 """
 
 import logging
+from re import L
 from typing import List, Optional, Any, Union
 
 from arcticdb.options import (
@@ -15,9 +16,11 @@ from arcticdb.options import (
     EnterpriseLibraryOptions,
     RuntimeOptions,
     OutputFormat,
+    ArrowOutputStringFormat,
 )
+from arcticdb.dependencies import pyarrow as pa
 from arcticdb_ext.storage import LibraryManager
-from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions
+from arcticdb.exceptions import LibraryNotFound, MismatchingLibraryOptions, KeyNotFoundException
 from arcticdb.version_store.library import ArcticInvalidApiUsageException, Library
 from arcticdb.version_store._store import NativeVersionStore
 from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter
@@ -29,7 +32,6 @@ from arcticdb.adapters.in_memory_library_adapter import InMemoryLibraryAdapter
 from arcticdb.adapters.gcpxml_library_adapter import GCPXMLLibraryAdapter
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb.options import ModifiableEnterpriseLibraryOption, ModifiableLibraryOption
-
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +60,9 @@ class Arctic:
         uri: str,
         encoding_version: EncodingVersion = DEFAULT_ENCODING_VERSION,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
+        arrow_string_format_default: Union[
+            ArrowOutputStringFormat, "pa.DataType"
+        ] = ArrowOutputStringFormat.LARGE_STRING,
     ):
         """
         Initializes a top-level Arctic library management instance.
@@ -83,6 +88,10 @@ class Arctic:
             experimental and the arrow layout might change in a minor release.
             Accepts the OutputFormat as either OutputFormat enum values or as case-insensitive strings like "pandas"
             and "experimental_arrow".
+
+        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"] = ArrowOutputStringFormat.LARGE_STRING
+            Controls the default string format used for `OutputFormat.EXPERIMENTAL_ARROW`.
+            See documentation of `ArrowOutputStringFormat` for more information on the different options.
 
         Examples
         --------
@@ -110,29 +119,40 @@ class Arctic:
         self._library_adapter: ArcticLibraryAdapter = _cls(uri, self._encoding_version)
         self._library_manager = LibraryManager(self._library_adapter.config_library)
         self._uri = uri
-        self._runtime_options = RuntimeOptions(output_format=output_format)
+        self._runtime_options = RuntimeOptions(
+            output_format=output_format, arrow_string_format_default=arrow_string_format_default
+        )
 
-    def _get_library(self, name: str, output_format: Optional[Union[OutputFormat, str]] = None) -> Library:
+    def _get_library(
+        self,
+        name: str,
+        output_format: Optional[Union[OutputFormat, str]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+    ) -> Library:
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
-        if not self._library_manager.has_library(lib_mgr_name):
-            raise LibraryNotFound(name)
 
         storage_override = self._library_adapter.get_storage_override()
 
+        runtime_options = self._runtime_options
         if output_format is not None:
-            runtime_options = RuntimeOptions(output_format=output_format)
-        else:
-            runtime_options = self._runtime_options
+            runtime_options.set_output_format(output_format=output_format)
+        if arrow_string_format_default is not None:
+            runtime_options.set_arrow_string_format_default(arrow_string_format_default=arrow_string_format_default)
 
-        lib = NativeVersionStore(
-            self._library_manager.get_library(
+        try:
+            lib_with_config = self._library_manager.get_library(
                 lib_mgr_name, storage_override, native_storage_config=self._library_adapter.native_config()
-            ),
-            repr(self._library_adapter),
-            lib_cfg=self._library_manager.get_library_config(lib_mgr_name, storage_override),
-            native_cfg=self._library_adapter.native_config(),
-            runtime_options=runtime_options,
-        )
+            )
+            lib = NativeVersionStore(
+                lib_with_config.library,
+                repr(self._library_adapter),
+                lib_cfg=lib_with_config.config,
+                native_cfg=self._library_adapter.native_config(),
+                runtime_options=runtime_options,
+            )
+        except KeyNotFoundException as ex:
+            raise LibraryNotFound(name) from ex
+
         if self._accessed_libs is not None:
             self._accessed_libs.append(lib)
         return Library(repr(self), lib)
@@ -152,6 +172,7 @@ class Arctic:
         create_if_missing: Optional[bool] = False,
         library_options: Optional[LibraryOptions] = None,
         output_format: Optional[Union[OutputFormat, str]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
     ) -> Library:
         """
         Returns the library named ``name``.
@@ -179,6 +200,11 @@ class Arctic:
             For more information see documentation of `Arctic.__init__`.
             If `None` uses the output format from the Arctic instance.
 
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
+            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            See documentation of `ArrowOutputStringFormat` for more information on the different options.
+            If `None` uses the default arrow_string_format from the `Library` instance.
+
         Examples
         --------
         >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
@@ -195,7 +221,9 @@ class Arctic:
                 "In get_library, library_options must be falsey if create_if_missing is falsey"
             )
         try:
-            lib = self._get_library(name, output_format)
+            lib = self._get_library(
+                name, output_format=output_format, arrow_string_format_default=arrow_string_format_default
+            )
             if create_if_missing and library_options:
                 if library_options.encoding_version is None:
                     library_options.encoding_version = self._encoding_version
@@ -204,7 +232,7 @@ class Arctic:
             return lib
         except LibraryNotFound as e:
             if create_if_missing:
-                return self.create_library(name, library_options, output_format)
+                return self.create_library(name, library_options, output_format, arrow_string_format_default)
             else:
                 raise e
 
@@ -214,6 +242,7 @@ class Arctic:
         library_options: Optional[LibraryOptions] = None,
         enterprise_library_options: Optional[EnterpriseLibraryOptions] = None,
         output_format: Optional[Union[OutputFormat, str]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
     ) -> Library:
         """
         Creates the library named ``name``.
@@ -243,6 +272,11 @@ class Arctic:
             For more information see documentation of `Arctic.__init__`.
             If `None` uses the output format from the Arctic instance.
 
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
+            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            See documentation of `ArrowOutputStringFormat` for more information on the different options.
+            If `None` uses the default arrow_string_format from the `Library` instance.
+
         Examples
         --------
         >>> arctic = adb.Arctic('s3://MY_ENDPOINT:MY_BUCKET')
@@ -265,7 +299,9 @@ class Arctic:
         cfg = self._library_adapter.get_library_config(name, library_options, enterprise_library_options)
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(name)
         self._library_manager.write_library_config(cfg, lib_mgr_name, self._library_adapter.get_masking_override())
-        return self.get_library(name, output_format=output_format)
+        return self.get_library(
+            name, output_format=output_format, arrow_string_format_default=arrow_string_format_default
+        )
 
     def delete_library(self, name: str) -> None:
         """
@@ -365,16 +401,16 @@ class Arctic:
 
         lib_mgr_name = self._library_adapter.get_name_for_library_manager(library.name)
         storage_override = self._library_adapter.get_storage_override()
-        new_cfg = self._library_manager.get_library_config(lib_mgr_name, storage_override)
+        lib_with_config = self._library_manager.get_library(
+            lib_mgr_name,
+            storage_override,
+            ignore_cache=True,
+            native_storage_config=self._library_adapter.native_config(),
+        )
         library._nvs._initialize(
-            self._library_manager.get_library(
-                lib_mgr_name,
-                storage_override,
-                ignore_cache=True,
-                native_storage_config=self._library_adapter.native_config(),
-            ),
+            lib_with_config.library,
             library._nvs.env,
-            new_cfg,
+            lib_with_config.config,
             library._nvs._custom_normalizer,
             library._nvs._open_mode,
         )

@@ -2,8 +2,10 @@ from arcticdb.options import OutputFormat
 import pandas as pd
 import numpy as np
 import pyarrow as pa
+import pytest
 
 from arcticdb.util.test import assert_frame_equal_with_arrow
+from arcticdb.exceptions import ArcticDbNotYetImplemented
 from pandas import RangeIndex
 
 
@@ -64,7 +66,7 @@ def test_multi_index(lmdb_version_store_arrow):
     lib.write("arrow", df)
     table = lib.read("arrow").data
     assert table.schema.field(0).name == "index1"
-    assert table.schema.field(0).type == pa.dictionary(pa.int32(), pa.large_string())
+    assert table.schema.field(0).type == pa.large_string()
     assert table.schema.field(1).name == "index2"
     assert table.schema.field(1).type == pa.int64()
     assert_frame_equal_with_arrow(table, df)
@@ -143,7 +145,7 @@ def test_multi_index_with_tz(lmdb_version_store_arrow):
     lib.write("arrow", df)
     table = lib.read("arrow").data
     assert table.schema.field(0).name == "index1"
-    assert table.schema.field(0).type == pa.dictionary(pa.int32(), pa.large_string())
+    assert table.schema.field(0).type == pa.large_string()
     assert table.schema.field(1).name == "index2"
     assert table.schema.field(1).type == pa.timestamp("ns", "America/Los_Angeles")
     assert_frame_equal_with_arrow(table, df)
@@ -249,3 +251,21 @@ def test_series_with_index(lmdb_version_store_arrow):
     assert table.schema.field(1).name == "x"
     assert table.schema.field(1).type == pa.int64()
     assert_frame_equal_with_arrow(table, pd.DataFrame(series))
+
+
+def test_read_pickled(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "sym"
+    obj = {"a": ["b", "c"], "x": 122.3}
+    lib.write(sym, obj)
+    result = lib.read(sym).data
+    assert obj == result
+
+
+def test_custom_normalizer(custom_thing_with_registered_normalizer, lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "sym"
+    obj = custom_thing_with_registered_normalizer
+    lib.write(sym, obj)
+    with pytest.raises(ArcticDbNotYetImplemented):
+        lib.read(sym).data

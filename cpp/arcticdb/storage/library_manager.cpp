@@ -204,7 +204,7 @@ void LibraryManager::remove_library_config(const LibraryPath& path) const {
     store_->remove_key(RefKey{StreamId(path.to_delim_path()), entity::KeyType::LIBRARY_CONFIG}).wait();
 }
 
-std::shared_ptr<Library> LibraryManager::get_library(
+LibraryManager::LibraryWithConfig LibraryManager::get_library(
         const LibraryPath& path, const StorageOverride& storage_override, const bool ignore_cache,
         const NativeVariantStorage& native_storage_config
 ) {
@@ -212,22 +212,22 @@ std::shared_ptr<Library> LibraryManager::get_library(
         // Check global cache first, important for LMDB to only open once from a given process
         std::lock_guard<std::mutex> lock{open_libraries_mutex_};
         if (auto cached = open_libraries_.get(path); cached) {
-            return *cached;
+            return cached.value();
         }
     }
 
     arcticdb::proto::storage::LibraryConfig config = get_config_internal(path, {storage_override});
     auto storages = create_storages(path, OpenMode::DELETE, config.storage_by_id(), native_storage_config);
     auto lib = std::make_shared<Library>(path, std::move(storages), config.lib_desc().version());
-    open_libraries_.put(path, lib);
+    open_libraries_.put(path, {config, lib});
 
-    return lib;
+    return {config, lib};
 }
 
 void LibraryManager::cleanup_library_if_open(const LibraryPath& path) {
     std::lock_guard<std::mutex> lock{open_libraries_mutex_};
     if (auto library = open_libraries_.get(path); library) {
-        library.value()->cleanup();
+        library.value().library->cleanup();
         open_libraries_.remove(path);
     }
 }

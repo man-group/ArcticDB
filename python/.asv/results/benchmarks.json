@@ -103,13 +103,14 @@
         "version": "b0a49f584f44c8451a2fda903df76351a10368b81d639239cfa3023e9dee737b",
         "warmup_time": 0
     },
-    "arrow.ArrowReadStrings.peakmem_read": {
-        "code": "class ArrowReadStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count):\n        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "arrow.ArrowReadStrings.peakmem_read",
+    "arrow.ArrowStrings.peakmem_read": {
+        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "arrow.ArrowStrings.peakmem_read",
         "param_names": [
             "rows",
             "date_range",
-            "unique_string_count"
+            "unique_string_count",
+            "arrow_string_format"
         ],
         "params": [
             [
@@ -124,23 +125,66 @@
                 "1",
                 "100",
                 "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
-        "setup_cache_key": "arrow:111",
+        "setup_cache_key": "arrow:113",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "e4507030a33067ee8dc5e23a40f2ef36232ac8e8cf42fc70b77bdd0ca16c72ea"
+        "version": "a273a5f3619b20f832ece06f1ee4650c4c4bb76e6de07702968a2098d39a1bab"
     },
-    "arrow.ArrowReadStrings.time_read": {
-        "code": "class ArrowReadStrings:\n    def time_read(self, rows, date_range, unique_string_count):\n        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)\n\n    def setup(self, rows, date_range, unique_string_count):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name)\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+    "arrow.ArrowStrings.peakmem_write": {
+        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "arrow.ArrowStrings.peakmem_write",
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "10000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "1",
+                "100",
+                "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "setup_cache_key": "arrow:113",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "d1fa54f3f898dac7bbb27a41353877938711c2470afc8d5ad170bd8583f352d4"
+    },
+    "arrow.ArrowStrings.time_read": {
+        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
-        "name": "arrow.ArrowReadStrings.time_read",
+        "name": "arrow.ArrowStrings.time_read",
         "number": 5,
         "param_names": [
             "rows",
             "date_range",
-            "unique_string_count"
+            "unique_string_count",
+            "arrow_string_format"
         ],
         "params": [
             [
@@ -155,16 +199,64 @@
                 "1",
                 "100",
                 "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
             ]
         ],
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:111",
+        "setup_cache_key": "arrow:113",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "4ff5c086861a792b7bc9591bbe8d74f6c29d420929db8f89fa6781dbb508b349",
+        "version": "8b5591c39110f8a625f84894f4f49f6e757449018c652c5644b63f94a4ea95ea",
+        "warmup_time": 0
+    },
+    "arrow.ArrowStrings.time_write": {
+        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "arrow.ArrowStrings.time_write",
+        "number": 5,
+        "param_names": [
+            "rows",
+            "date_range",
+            "unique_string_count",
+            "arrow_string_format"
+        ],
+        "params": [
+            [
+                "10000",
+                "1000000"
+            ],
+            [
+                "None",
+                "'middle'"
+            ],
+            [
+                "1",
+                "100",
+                "100000"
+            ],
+            [
+                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
+                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
+                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
+                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "arrow:113",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "05391bc18c869bb06480f5117f87ac7cc6a90d50acd8405162c9e935f0de14b0",
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.peakmem_read": {
@@ -1401,114 +1493,6 @@
         "version": "6c8fcb770b3ba6cd93b63b830a169dd3afd65e5cf007496395938a6f8e10cf82",
         "warmup_time": 0
     },
-    "list_functions.ListFunctions.peakmem_list_symbols": {
-        "code": "class ListFunctions:\n    def peakmem_list_symbols(self, num_symbols):\n        self.lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "list_functions.ListFunctions.peakmem_list_symbols",
-        "param_names": [
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "setup_cache_key": "list_functions:29",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "36bbe8ba3ff6df423837100203b3182d32efce65a17df876ac1369d05d7523fc"
-    },
-    "list_functions.ListFunctions.peakmem_list_versions": {
-        "code": "class ListFunctions:\n    def peakmem_list_versions(self, num_symbols):\n        self.lib.list_versions()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "list_functions.ListFunctions.peakmem_list_versions",
-        "param_names": [
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "setup_cache_key": "list_functions:29",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "4d771cfea089c1fb8c4b9b8331803fa8aeca814cc8c2d0558485705521bb184b"
-    },
-    "list_functions.ListFunctions.time_has_symbol": {
-        "code": "class ListFunctions:\n    def time_has_symbol(self, num_symbols):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "list_functions.ListFunctions.time_has_symbol",
-        "number": 5,
-        "param_names": [
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "list_functions:29",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "033af6c71329e0162ae9ea485b64a83dba030888400a9e1d0c5c33d686bd0880",
-        "warmup_time": 0
-    },
-    "list_functions.ListFunctions.time_list_symbols": {
-        "code": "class ListFunctions:\n    def time_list_symbols(self, num_symbols):\n        self.lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "list_functions.ListFunctions.time_list_symbols",
-        "number": 5,
-        "param_names": [
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "list_functions:29",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "272c3535600411e60dd72ff988009bbc491bca183158c04d2aa82748e95bfc33",
-        "warmup_time": 0
-    },
-    "list_functions.ListFunctions.time_list_versions": {
-        "code": "class ListFunctions:\n    def time_list_versions(self, num_symbols):\n        self.lib.list_versions()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_functions\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "list_functions.ListFunctions.time_list_versions",
-        "number": 5,
-        "param_names": [
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "list_functions:29",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "2c963b861564347f6311befd6189eb42e4b882c06fb468060e38b9cda65cd12b",
-        "warmup_time": 0
-    },
     "list_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list": {
         "code": "class SnaphotFunctions:\n    def peakmem_snapshots_no_metadata_list(self, symbols_x_snaps_per_sym):\n        list = self.lib_no_meta.list_snapshots(load_metadata=False)\n\n    def setup(self, symbols_x_snaps_per_sym):\n        num_symbols = self.get_symbols(symbols_x_snaps_per_sym)\n        self.ac = Arctic(SnaphotFunctions.ARCTIC_URL)\n        self.lib = self.ac[self.get_lib_name(num_symbols, True)]\n        self.lib_no_meta = self.ac[self.get_lib_name(num_symbols, False)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "list_snapshots.SnaphotFunctions.peakmem_snapshots_no_metadata_list",
@@ -1615,6 +1599,176 @@
         "type": "time",
         "unit": "seconds",
         "version": "68900e75770793f36f0f940ebab65e148dee97f5c8cebe43c4ebd3ba5350dfbf",
+        "warmup_time": 0
+    },
+    "list_symbols.ListSymbols.peakmem_list_symbols": {
+        "code": "class ListSymbols:\n    def peakmem_list_symbols(self, num_symbols):\n        self.lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_symbols\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "list_symbols.ListSymbols.peakmem_list_symbols",
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "setup_cache_key": "list_symbols:29",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "16efc69bf586370ed0cce02ce79c1e9f2ee420a0d3e95a49a9140f3bffd4bec3"
+    },
+    "list_symbols.ListSymbols.time_has_symbol": {
+        "code": "class ListSymbols:\n    def time_has_symbol(self, num_symbols):\n        self.lib.has_symbol(\"250_sym\")\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_symbols\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "list_symbols.ListSymbols.time_has_symbol",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_symbols:29",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "55ed097229031fd1c932964b9321bbc2047989b50369b6be45c54144b0a6045d",
+        "warmup_time": 0
+    },
+    "list_symbols.ListSymbols.time_list_symbols": {
+        "code": "class ListSymbols:\n    def time_list_symbols(self, num_symbols):\n        self.lib.list_symbols()\n\n    def setup(self, num_symbols):\n        self.ac = Arctic(\"lmdb://list_symbols\")\n        self.lib = self.ac[f\"{num_symbols}_num_symbols\"]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "list_symbols.ListSymbols.time_list_symbols",
+        "number": 5,
+        "param_names": [
+            "num_symbols"
+        ],
+        "params": [
+            [
+                "500",
+                "1000"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_symbols:29",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ef02b0e52758b1f2f904c1924ca644e5a212dc6ca38bdffb06508b46c0ef6cf7",
+        "warmup_time": 0
+    },
+    "list_versions.ListVersions.peakmem_list_versions": {
+        "code": "class ListVersions:\n    def peakmem_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        if snapshot is None or num_snapshots > 0:\n            self.lib.list_versions(\n                symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n            )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "name": "list_versions.ListVersions.peakmem_list_versions",
+        "param_names": [
+            "num_symbols",
+            "num_versions",
+            "num_snapshots",
+            "symbol",
+            "snapshot",
+            "latest_only",
+            "skip_snapshots"
+        ],
+        "params": [
+            [
+                "100",
+                "1000"
+            ],
+            [
+                "1",
+                "10"
+            ],
+            [
+                "0",
+                "10",
+                "100"
+            ],
+            [
+                "None",
+                "'0_sym'"
+            ],
+            [
+                "None",
+                "'0_snap'"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ]
+        ],
+        "setup_cache_key": "list_versions:44",
+        "timeout": 6000,
+        "type": "peakmemory",
+        "unit": "bytes",
+        "version": "7196504c08aa080e91f3cbb9cbd8228eea01a4b78ecb20f5509bbc67634f8508"
+    },
+    "list_versions.ListVersions.time_list_versions": {
+        "code": "class ListVersions:\n    def time_list_versions(\n        self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots\n    ):\n        if snapshot is None or num_snapshots > 0:\n            self.lib.list_versions(\n                symbol=symbol, snapshot=snapshot, latest_only=latest_only, skip_snapshots=skip_snapshots\n            )\n\n    def setup(self, num_symbols, num_versions, num_snapshots, symbol, snapshot, latest_only, skip_snapshots):\n        self.ac = Arctic(\"lmdb://list_versions\")\n        self.lib = self.ac[self._lib_name(num_symbols, num_versions, num_snapshots)]\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "min_run_count": 2,
+        "name": "list_versions.ListVersions.time_list_versions",
+        "number": 5,
+        "param_names": [
+            "num_symbols",
+            "num_versions",
+            "num_snapshots",
+            "symbol",
+            "snapshot",
+            "latest_only",
+            "skip_snapshots"
+        ],
+        "params": [
+            [
+                "100",
+                "1000"
+            ],
+            [
+                "1",
+                "10"
+            ],
+            [
+                "0",
+                "10",
+                "100"
+            ],
+            [
+                "None",
+                "'0_sym'"
+            ],
+            [
+                "None",
+                "'0_snap'"
+            ],
+            [
+                "True",
+                "False"
+            ],
+            [
+                "True",
+                "False"
+            ]
+        ],
+        "repeat": 0,
+        "rounds": 1,
+        "sample_time": 0.01,
+        "setup_cache_key": "list_versions:44",
+        "timeout": 6000,
+        "type": "time",
+        "unit": "seconds",
+        "version": "ee6666cf1919afefb16b4814886b3b80160b921cb6ecbba442f0d473627ec943",
         "warmup_time": 0
     },
     "local_query_builder.LocalQueryBuilderFunctions.peakmem_filtering_numeric": {

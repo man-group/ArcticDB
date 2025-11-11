@@ -95,29 +95,38 @@ VersionedItem write_dataframe_impl(
     return {std::move(atom_key_fut).get()};
 }
 
-folly::Future<entity::AtomKey> async_write_dataframe_impl(
-        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
-        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
-        bool validate_index
+std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
+        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
 ) {
-    ARCTICDB_SAMPLE(DoWrite, 0)
     if (version_id == 0) {
-        auto check_outcome = verify_symbol_key(frame->desc().id());
+        auto check_outcome = verify_symbol_key(frame.desc().id());
         if (std::holds_alternative<Error>(check_outcome)) {
             std::get<Error>(check_outcome).throw_error();
         }
     }
 
     // Slice the frame according to the write options
-    frame->set_bucketize_dynamic(options.bucketize_dynamic);
-    auto slicing_arg = get_slicing_policy(options, *frame);
-    auto partial_key = IndexPartialKey{frame->desc().id(), version_id};
-    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(*frame)) {
+    auto slicing_arg = get_slicing_policy(options, frame);
+    auto partial_key = IndexPartialKey{frame.desc().id(), version_id};
+    if (validate_index && !index_is_not_timeseries_or_is_sorted_ascending(frame)) {
         sorting::raise<ErrorCode::E_UNSORTED_DATA>(
                 "When calling write with validate_index enabled, input data must be sorted"
         );
     }
-    return write_frame(std::move(partial_key), frame, slicing_arg, store, de_dup_map, sparsify_floats);
+
+    return std::make_tuple(partial_key, slicing_arg);
+}
+
+folly::Future<entity::AtomKey> async_write_dataframe_impl(
+        const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
+        const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool sparsify_floats,
+        bool validate_index
+) {
+    ARCTICDB_SAMPLE(DoWrite, 0)
+    frame->set_bucketize_dynamic(options.bucketize_dynamic);
+    auto [partial_key, slicing_policy] =
+            get_partial_key_and_slicing_policy(options, *frame, version_id, validate_index);
+    return write_frame(std::move(partial_key), frame, slicing_policy, store, de_dup_map, sparsify_floats);
 }
 
 namespace {
@@ -205,16 +214,6 @@ bool is_before(const IndexRange& a, const IndexRange& b) { return a.start_ < b.s
 
 bool is_after(const IndexRange& a, const IndexRange& b) { return a.end_ > b.end_; }
 
-std::vector<SliceAndKey> filter_existing_slices(std::vector<std::optional<SliceAndKey>>&& maybe_slices) {
-    std::vector<SliceAndKey> result;
-    for (auto& maybe_slice : maybe_slices) {
-        if (maybe_slice.has_value()) {
-            result.push_back(std::move(*maybe_slice));
-        }
-    }
-    return result;
-}
-
 /// Represents all slices which are intersecting (but not overlapping) with range passed to update
 /// First member is a vector of all segments intersecting with the first row-slice of the update range
 /// Second member is a vector of all segments intersecting with the last row-slice of the update range
@@ -232,8 +231,8 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             "Both first and last index range of the update range must intersect with at least one of the slices in the "
             "dataframe"
     );
-    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_before_fut;
-    std::vector<folly::Future<std::optional<SliceAndKey>>> maybe_intersect_after_fut;
+    std::vector<folly::Future<SliceAndKey>> maybe_intersect_before_fut;
+    std::vector<folly::Future<SliceAndKey>> maybe_intersect_after_fut;
 
     for (const auto& affected_slice_and_key : *affected_keys) {
         const auto& affected_range = affected_slice_and_key.key().index_range();
@@ -251,11 +250,36 @@ using IntersectingSegments = std::tuple<std::vector<SliceAndKey>, std::vector<Sl
             ));
         }
     }
-    return collect(collect(maybe_intersect_before_fut)
+    return collectAll(
+                   collectAll(maybe_intersect_before_fut)
                            .via(&async::io_executor())
-                           .thenValueInline(filter_existing_slices),
-                   collect(maybe_intersect_after_fut).via(&async::io_executor()).thenValueInline(filter_existing_slices)
+                           .thenValueInline([store](auto&& maybe_intersect_before) {
+                               return rollback_slices_on_quota_exceeded(
+                                       std::move(maybe_intersect_before), std::static_pointer_cast<StreamSink>(store)
+                               );
+                           }),
+                   collectAll(maybe_intersect_after_fut)
+                           .via(&async::io_executor())
+                           .thenValueInline([store](auto&& maybe_intersect_after) {
+                               return rollback_slices_on_quota_exceeded(
+                                       std::move(maybe_intersect_after), std::static_pointer_cast<StreamSink>(store)
+                               );
+                           })
     )
+            .via(&async::cpu_executor())
+            .thenValue([store](auto&& try_before_and_after) -> folly::Future<IntersectingSegments> {
+                auto& [try_intersect_before, try_intersect_after] = try_before_and_after;
+
+                return rollback_batches_on_quota_exceeded(
+                               {std::move(try_intersect_before), std::move(try_intersect_after)}, store
+                )
+                        .via(&async::cpu_executor())
+                        .thenValue([](auto&& batch) {
+                            auto& intersect_before = batch[0];
+                            auto& intersect_after = batch[1];
+                            return IntersectingSegments{std::move(intersect_before), std::move(intersect_after)};
+                        });
+            })
             .via(&async::io_executor());
 }
 
@@ -500,7 +524,8 @@ folly::Future<AtomKey> async_update_impl(
                                     get_keys_not_affected_by_update(index_segment_reader, *affected_keys);
                             util::check(
                                     affected_keys->size() + unaffected_keys.size() == index_segment_reader.size(),
-                                    "The sum of affected keys and unaffected keys must be equal to the total number of "
+                                    "The sum of affected keys and unaffected keys must be "
+                                    "equal to the total number of "
                                     "keys {} + {} != {}",
                                     affected_keys->size(),
                                     unaffected_keys.size(),
@@ -508,6 +533,8 @@ folly::Future<AtomKey> async_update_impl(
                             );
                             const UpdateRanges update_ranges =
                                     compute_update_ranges(query.row_filter, *frame, new_slice_and_keys);
+                            auto new_slice_and_keys_ptr =
+                                    std::make_shared<std::vector<SliceAndKey>>(std::move(new_slice_and_keys));
                             return async_intersecting_segments(
                                            affected_keys,
                                            update_ranges.front,
@@ -515,7 +542,7 @@ folly::Future<AtomKey> async_update_impl(
                                            update_info.next_version_id_,
                                            store
                             )
-                                    .thenValue([new_slice_and_keys = std::move(new_slice_and_keys),
+                                    .thenValue([new_slice_and_keys_ptr,
                                                 update_ranges = update_ranges,
                                                 unaffected_keys = std::move(unaffected_keys),
                                                 affected_keys = std::move(affected_keys),
@@ -529,7 +556,7 @@ folly::Future<AtomKey> async_update_impl(
                                                 unaffected_keys,
                                                 *affected_keys,
                                                 std::move(intersecting_segments),
-                                                std::move(new_slice_and_keys)
+                                                std::move(*new_slice_and_keys_ptr)
                                         );
                                         auto tsd = index::get_merged_tsd(
                                                 row_count, dynamic_schema, index_segment_reader.tsd(), frame
@@ -541,6 +568,16 @@ folly::Future<AtomKey> async_update_impl(
                                                 IndexPartialKey{frame->desc().id(), update_info.next_version_id_},
                                                 store
                                         );
+                                    })
+                                    .thenError([store,
+                                                new_slice_and_keys_ptr](folly::exception_wrapper&& error) mutable {
+                                        if (error.template is_compatible_with<QuotaExceededException>()) {
+                                            return remove_slice_and_keys(std::move(*new_slice_and_keys_ptr), *store)
+                                                    .thenTry([error](auto&&) {
+                                                        return folly::makeSemiFuture<AtomKeyImpl>(error);
+                                                    });
+                                        }
+                                        return folly::makeFuture<AtomKeyImpl>(error);
                                     });
                         });
             });
@@ -560,7 +597,8 @@ VersionedItem update_impl(
 }
 
 folly::Future<ReadVersionOutput> read_multi_key(
-        const std::shared_ptr<Store>& store, const SegmentInMemory& index_key_seg, std::any& handler_data, AtomKey&& key
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
+        std::any& handler_data, AtomKey&& key
 ) {
     std::vector<AtomKey> keys;
     keys.reserve(index_key_seg.row_count());
@@ -572,7 +610,7 @@ folly::Future<ReadVersionOutput> read_multi_key(
     VersionedItem versioned_item{std::move(dup)};
     TimeseriesDescriptor multi_key_desc{index_key_seg.index_descriptor()};
 
-    return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), ReadOptions{}, handler_data)
+    return read_frame_for_version(store, versioned_item, std::make_shared<ReadQuery>(), read_options, handler_data)
             .thenValue([multi_key_desc = std::move(multi_key_desc),
                         keys = std::move(keys),
                         key = std::move(key)](ReadVersionOutput&& read_version_output) mutable {
@@ -1537,7 +1575,7 @@ void init_sparse_dst_column_before_copy(
 
 void copy_frame_data_to_buffer(
         SegmentInMemory& destination, size_t target_index, SegmentInMemory& source, size_t source_index,
-        const RowRange& row_range, DecodePathData shared_data, std::any& handler_data, OutputFormat output_format,
+        const RowRange& row_range, DecodePathData shared_data, std::any& handler_data, const ReadOptions& read_options,
         const std::optional<Value>& default_value
 ) {
     const auto num_rows = row_range.diff();
@@ -1546,7 +1584,7 @@ void copy_frame_data_to_buffer(
     }
     auto& src_column = source.column(static_cast<position_t>(source_index));
     auto& dst_column = destination.column(static_cast<position_t>(target_index));
-    auto dst_rawtype_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+    auto dst_rawtype_size = data_type_size(dst_column.type());
     auto offset = dst_rawtype_size * (row_range.first - destination.offset());
     const auto total_size = dst_rawtype_size * num_rows;
     dst_column.assert_size(offset + total_size);
@@ -1560,8 +1598,8 @@ void copy_frame_data_to_buffer(
             dst_column.type(),
             destination.field(target_index).name()
     );
-    if (auto handler = get_type_handler(output_format, src_column.type(), dst_column.type()); handler) {
-        const auto type_size = data_type_size(dst_column.type(), output_format, DataTypeMode::EXTERNAL);
+    if (auto handler = get_type_handler(read_options.output_format(), src_column.type(), dst_column.type()); handler) {
+        const auto type_size = data_type_size(dst_column.type());
         const ColumnMapping mapping{
                 src_column.type(),
                 dst_column.type(),
@@ -1573,10 +1611,18 @@ void copy_frame_data_to_buffer(
                 total_size,
                 target_index
         };
-        handler->convert_type(src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr());
+        handler->convert_type(
+                src_column, dst_column, mapping, shared_data, handler_data, source.string_pool_ptr(), read_options
+        );
     } else if (is_empty_type(src_column.type().data_type())) {
         init_sparse_dst_column_before_copy(
-                dst_column, offset, num_rows, dst_rawtype_size, output_format, std::nullopt, default_value
+                dst_column,
+                offset,
+                num_rows,
+                dst_rawtype_size,
+                read_options.output_format(),
+                std::nullopt,
+                default_value
         );
         // Do not use src_column.is_sparse() here, as that misses columns that are dense, but have fewer than num_rows
         // values
@@ -1593,7 +1639,7 @@ void copy_frame_data_to_buffer(
                     offset,
                     num_rows,
                     dst_rawtype_size,
-                    output_format,
+                    read_options.output_format(),
                     src_column.opt_sparse_map(),
                     default_value
             );
@@ -1624,7 +1670,7 @@ void copy_frame_data_to_buffer(
                         offset,
                         num_rows,
                         dst_rawtype_size,
-                        output_format,
+                        read_options.output_format(),
                         src_column.opt_sparse_map(),
                         default_value
                 );
@@ -1670,7 +1716,7 @@ void copy_frame_data_to_buffer(
                                 offset,
                                 num_rows,
                                 dst_rawtype_size,
-                                output_format,
+                                read_options.output_format(),
                                 src_column.opt_sparse_map(),
                                 default_value
                         );
@@ -1702,13 +1748,13 @@ struct CopyToBufferTask : async::BaseTask {
     uint32_t required_fields_count_;
     DecodePathData shared_data_;
     std::any& handler_data_;
-    OutputFormat output_format_;
+    const ReadOptions read_options_;
     std::shared_ptr<PipelineContext> pipeline_context_;
 
     CopyToBufferTask(
             SegmentInMemory&& source_segment, SegmentInMemory target_segment, FrameSlice frame_slice,
             uint32_t required_fields_count, DecodePathData shared_data, std::any& handler_data,
-            OutputFormat output_format, std::shared_ptr<PipelineContext> pipeline_context
+            const ReadOptions& read_options, std::shared_ptr<PipelineContext> pipeline_context
     ) :
         source_segment_(std::move(source_segment)),
         target_segment_(std::move(target_segment)),
@@ -1716,7 +1762,7 @@ struct CopyToBufferTask : async::BaseTask {
         required_fields_count_(required_fields_count),
         shared_data_(std::move(shared_data)),
         handler_data_(handler_data),
-        output_format_(output_format),
+        read_options_(read_options),
         pipeline_context_(std::move(pipeline_context)) {}
 
     folly::Unit operator()() {
@@ -1738,7 +1784,7 @@ struct CopyToBufferTask : async::BaseTask {
                         frame_slice_.row_range,
                         shared_data_,
                         handler_data_,
-                        output_format_,
+                        read_options_,
                         {}
                 );
             } else {
@@ -1764,7 +1810,7 @@ struct CopyToBufferTask : async::BaseTask {
                         frame_slice_.row_range,
                         shared_data_,
                         handler_data_,
-                        output_format_,
+                        read_options_,
                         default_value
                 );
             }
@@ -1775,7 +1821,7 @@ struct CopyToBufferTask : async::BaseTask {
 
 folly::Future<folly::Unit> copy_segments_to_frame(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
-        SegmentInMemory frame, std::any& handler_data, OutputFormat output_format
+        SegmentInMemory frame, std::any& handler_data, const ReadOptions& read_options
 ) {
     const auto required_fields_count =
             pipelines::index::required_fields_count(pipeline_context->descriptor(), *pipeline_context->norm_meta_);
@@ -1791,7 +1837,7 @@ folly::Future<folly::Unit> copy_segments_to_frame(
                 required_fields_count,
                 shared_data,
                 handler_data,
-                output_format,
+                read_options,
                 pipeline_context
         }));
     }
@@ -1814,8 +1860,8 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         row.set_string_pool(row.slice_and_key().segment(store).string_pool_ptr());
     }
 
-    auto frame = allocate_frame(pipeline_context, read_options.output_format());
-    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options.output_format())
+    auto frame = allocate_frame(pipeline_context, read_options);
+    return copy_segments_to_frame(store, pipeline_context, frame, handler_data, read_options)
             .thenValue([frame](auto&&) { return frame; });
 }
 
@@ -1986,7 +2032,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
                 "Cannot use head/tail/row_range with pickled data, use plain read instead"
         );
         mark_index_slices(pipeline_context);
-        auto frame = allocate_frame(pipeline_context, read_options.output_format());
+        auto frame = allocate_frame(pipeline_context, read_options);
         util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
         ARCTICDB_DEBUG(log::version(), "Fetching frame data");
         return fetch_data(
@@ -2061,24 +2107,34 @@ void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store) {
 }
 
 DeleteIncompleteKeysOnExit::DeleteIncompleteKeysOnExit(
-        std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration
+        std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration,
+        std::optional<std::vector<StageResult>> stage_results
 ) :
     context_(std::move(pipeline_context)),
     store_(std::move(store)),
-    via_iteration_(via_iteration) {}
+    via_iteration_(via_iteration),
+    stage_results_(std::move(stage_results)) {}
 
 DeleteIncompleteKeysOnExit::~DeleteIncompleteKeysOnExit() {
     if (released_)
         return;
 
     try {
+        storage::RemoveOpts opts{.ignores_missing_key_ = true};
         if (context_->incompletes_after_) {
             delete_incomplete_keys(*context_, *store_);
         } else {
             // If an exception is thrown before read_incompletes_to_pipeline the keys won't be placed inside the
             // context thus they must be read manually.
-            auto entries = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
-            store_->remove_keys(entries).get();
+            std::vector<VariantKey> keys_to_delete;
+            if (stage_results_) {
+                auto keys_to_delete_view =
+                        *stage_results_ | std::views::transform(&StageResult::staged_segments) | std::views::join;
+                keys_to_delete = std::vector<VariantKey>(keys_to_delete_view.begin(), keys_to_delete_view.end());
+            } else {
+                keys_to_delete = read_incomplete_keys_for_symbol(store_, context_->stream_id_, via_iteration_);
+            }
+            store_->remove_keys(keys_to_delete, opts).get();
         }
     } catch (const std::exception& e) {
         // Don't emit exceptions from destructor
@@ -2090,10 +2146,12 @@ std::optional<DeleteIncompleteKeysOnExit> get_delete_keys_on_failure(
         const std::shared_ptr<PipelineContext>& pipeline_context, const std::shared_ptr<Store>& store,
         const CompactIncompleteParameters& parameters
 ) {
-    if (parameters.delete_staged_data_on_failure_)
-        return std::make_optional<DeleteIncompleteKeysOnExit>(pipeline_context, store, parameters.via_iteration_);
-    else
-        return std::nullopt;
+    if (parameters.delete_staged_data_on_failure_) {
+        return std::make_optional<DeleteIncompleteKeysOnExit>(
+                pipeline_context, store, parameters.via_iteration_, parameters.stage_results
+        );
+    }
+    return std::nullopt;
 }
 
 static void read_indexed_keys_for_compaction(
@@ -2620,7 +2678,9 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         if (read_query) {
             check_can_be_filtered(pipeline_context, *read_query);
         }
-        return read_multi_key(store, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_));
+        return read_multi_key(
+                store, read_options, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_)
+        );
     }
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
     DecodePathData shared_data;

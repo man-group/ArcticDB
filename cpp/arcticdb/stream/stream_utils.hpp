@@ -392,7 +392,7 @@ inline std::vector<std::string> get_index_columns_from_descriptor(const Timeseri
     // For explicit integer indexes, the index is actually present in the first column even though the field_count
     // is 0.
     ssize_t index_till;
-    const auto& common = norm_info.df().common();
+    const auto& common = norm_info.has_df() ? norm_info.df().common() : norm_info.series().common();
     if (auto idx_type = common.index_type_case();
         idx_type == arcticdb::proto::descriptors::NormalizationMetadata_Pandas::kIndex)
         index_till = common.index().is_physically_stored() ? 1 : stream_descriptor.index().field_count();

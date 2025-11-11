@@ -70,6 +70,10 @@ VersionedItem write_dataframe_impl(
         bool allow_sparse = false, bool validate_index = false
 );
 
+std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
+        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
+);
+
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<pipelines::InputFrame>& frame,
         const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map, bool allow_sparse, bool validate_index
@@ -117,7 +121,8 @@ FrameAndDescriptor read_column_stats_impl(const std::shared_ptr<Store>& store, c
 ColumnStats get_column_stats_info_impl(const std::shared_ptr<Store>& store, const VersionedItem& versioned_item);
 
 folly::Future<ReadVersionOutput> read_multi_key(
-        const std::shared_ptr<Store>& store, const SegmentInMemory& index_key_seg, std::any& handler_data
+        const std::shared_ptr<Store>& store, const ReadOptions& read_options, const SegmentInMemory& index_key_seg,
+        std::any& handler_data
 );
 
 folly::Future<std::vector<EntityId>> schedule_remaining_iterations(
@@ -183,7 +188,8 @@ folly::Future<SymbolProcessingResult> read_and_process(
 class DeleteIncompleteKeysOnExit {
   public:
     DeleteIncompleteKeysOnExit(
-            std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration
+            std::shared_ptr<PipelineContext> pipeline_context, std::shared_ptr<Store> store, bool via_iteration,
+            std::optional<std::vector<StageResult>> stage_results
     );
 
     ARCTICDB_NO_MOVE_OR_COPY(DeleteIncompleteKeysOnExit)
@@ -197,6 +203,7 @@ class DeleteIncompleteKeysOnExit {
     std::shared_ptr<Store> store_;
     bool via_iteration_;
     bool released_ = false;
+    std::optional<std::vector<StageResult>> stage_results_;
 };
 void delete_incomplete_keys(PipelineContext& pipeline_context, Store& store);
 

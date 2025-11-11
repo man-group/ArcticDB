@@ -25,19 +25,20 @@ class SegmentInMemory {
     using Row = SegmentInMemoryImpl::Row;
     using iterator = SegmentInMemoryImpl::iterator;
     using const_iterator = SegmentInMemoryImpl::const_iterator;
+    using ExtraBytesPerColumn = SegmentInMemoryImpl::ExtraBytesPerColumn;
 
     SegmentInMemory();
 
     explicit SegmentInMemory(
             const StreamDescriptor& tsd, size_t expected_column_size = 0,
-            AllocationType presize = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-            OutputFormat output_format = OutputFormat::NATIVE, DataTypeMode mode = DataTypeMode::INTERNAL
+            AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
+            const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
     );
 
     explicit SegmentInMemory(
-            StreamDescriptor&& tsd, size_t expected_column_size = 0, AllocationType presize = AllocationType::DYNAMIC,
-            Sparsity allow_sparse = Sparsity::NOT_PERMITTED, OutputFormat output_format = OutputFormat::NATIVE,
-            DataTypeMode mode = DataTypeMode::INTERNAL
+            StreamDescriptor&& tsd, size_t expected_column_size = 0,
+            AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
+            const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
     );
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept;
@@ -126,6 +127,8 @@ class SegmentInMemory {
     position_t add_column(const Field& field, const std::shared_ptr<Column>& column);
 
     position_t add_column(FieldRef field_ref, const std::shared_ptr<Column>& column);
+
+    position_t add_column(std::string_view name, const std::shared_ptr<Column>& column);
 
     position_t add_column(FieldRef field_ref, size_t num_rows, AllocationType presize);
 

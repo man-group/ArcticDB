@@ -674,6 +674,24 @@ def test_roundtrip_index_name(lmdb_version_store_v1, name):
     assert_frame_equal(df, lib.read(sym).data)
 
 
+def test_series_read_column_names(lmdb_version_store, sym):
+    lib = lmdb_version_store
+    series = pd.Series(np.arange(366), name="test", index=pd.date_range("2020-01-01", "2020-12-31"))
+    lib.write(sym, series)
+    assert_series_equal(series, lib.read(sym, columns=["test"]).data)
+
+
+def test_series_read_column_empty(lmdb_library_static_dynamic, sym):
+    lib = lmdb_library_static_dynamic
+    series = pd.Series(np.arange(366), name="test", index=pd.date_range("2020-01-01", "2020-12-31"))
+    lib.write(sym, series)
+    res = lib.read(sym, columns=[]).data
+    assert res.empty
+    # This is not the case for series because pandas doesn't support series with index and no columns.
+    # To be addressed in #2728
+    # assert res.index.equals(pd.date_range("2020-01-01", "2020-12-31"))
+
+
 def test_columns_names_series(lmdb_version_store, sym):
     dr = pd.date_range("2020-01-01", "2020-12-31", name="date")
     date_series = pd.Series(dr, index=dr)
@@ -688,6 +706,19 @@ def test_columns_names_series_dynamic(lmdb_version_store_dynamic_schema, sym):
 
     lmdb_version_store_dynamic_schema.write(sym + "dynamic_schema", date_series)
     assert_series_equal(lmdb_version_store_dynamic_schema.read(sym + "dynamic_schema").data, date_series)
+
+
+@pytest.mark.parametrize("with_columns", [True, False])
+@pytest.mark.parametrize("index_names", [None, ["level_0", "level_1"], ["date", "value"]])
+def test_series_with_multiindex(lmdb_version_store, sym, index_names, with_columns):
+    lib = lmdb_version_store
+    dtidx = pd.date_range("2020-01-01", periods=10)
+    vals = np.arange(10, dtype=np.uint32)[::-1]
+    multiindex = pd.MultiIndex.from_arrays([dtidx, vals], names=index_names)
+    series = pd.Series(np.arange(10, dtype=np.float64), name="data", index=multiindex)
+    lib.write(sym, series)
+    result = lib.read(sym, columns=["data"] if with_columns else None).data
+    assert_series_equal(series, result)
 
 
 @pytest.mark.skipif(not IS_PANDAS_TWO, reason="pandas 2.0-specific test")
@@ -1326,3 +1357,19 @@ def test_digit_columns(lmdb_version_store_v1):
     result_df = lib.read("sym").data
     # Both column contents and column names are broken
     assert_frame_equal(result_df, df)
+
+
+@pytest.mark.skip(reason="Monday ref: 18197986461")
+def test_groupby_timeseries_column_with_timezone(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "sym"
+    timezone_times = pd.date_range(pd.Timestamp(2025, 1, 1, tz="America/New_York"), periods=5)
+    non_timezone_times = pd.date_range(pd.Timestamp(2025, 1, 1), periods=5)
+    df = pd.DataFrame({"time": non_timezone_times, "ints": np.arange(5)}, index=timezone_times)
+    lib.write(sym, df)
+    q = QueryBuilder().groupby("time").agg({"ints": "sum"})
+    result = lib.read(sym, query_builder=q).data
+    expected = df
+    expected.reset_index(drop=True, inplace=True)
+    expected.set_index("time", inplace=True)
+    assert_frame_equal(result, expected)

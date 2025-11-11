@@ -282,6 +282,8 @@ void do_sort(SegmentInMemory& mutable_seg, const std::vector<std::string> sort_c
     // This clone is unnecessarily expensive. We should have a sort method that produces a new segment (current one is
     // in-place)
     // Note that we do not set `next_key` in the has_segment() case as that is only used by the library tool
+    // TODO: This clone is also insufficient if there are string columns in the input frame, fix with 18190648152
+    // Ideally remove incomplete_segment_from_tensor_frame entirely and just use WriteToSegmentTask
     auto segment = frame->has_tensors() ? incomplete_segment_from_tensor_frame(frame, 0, next_key, sparsify_floats)
                                         : frame->segment().clone();
     if (options.sort_on_index) {

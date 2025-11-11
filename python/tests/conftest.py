@@ -22,6 +22,8 @@ import re
 import time
 import requests
 import uuid
+import sys
+import multiprocessing
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
@@ -52,14 +54,13 @@ from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
 from arcticdb_ext import set_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import create_df
+from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
 from .util.mark import (
     EXTENDED_MARKS,
     LMDB_TESTS_MARK,
     LOCAL_STORAGE_TESTS_ENABLED,
-    MACOS_WHEEL_BUILD,
     MEM_TESTS_MARK,
     REAL_AZURE_TESTS_MARK,
     SIM_GCP_TESTS_MARK,
@@ -76,14 +77,19 @@ from .util.mark import (
     VENV_COMPAT_TESTS_MARK,
     PANDAS_2_COMPAT_TESTS_MARK,
     MACOS,
+    ARM64,
     ARCTICDB_USING_CONDA,
+    PYARROW_POST_PROCESSING,
 )
 from arcticdb.storage_fixtures.utils import safer_rmtree
 from packaging.version import Version
 from arcticdb.util.venv import Venv
 import arcticdb.toolbox.query_stats as query_stats
-from arcticdb.options import OutputFormat
-
+from arcticdb.options import OutputFormat, ArrowOutputStringFormat
+from arcticdb.version_store._custom_normalizers import (
+    register_normalizer,
+    clear_registered_normalizers,
+)
 
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
@@ -95,6 +101,19 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
+
+
+# Ensure pytest-xdist uses 'fork' start method on macOS
+@pytest.fixture(scope="session", autouse=True)
+def _set_multiprocessing_start_method_for_macos():
+    if platform.system() == "Darwin":
+        # Improve stability with forking on macOS when native libs are loaded
+        os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
+        try:
+            multiprocessing.set_start_method("fork", force=True)
+        except RuntimeError:
+            # Start method was already set by Python or another plugin
+            pass
 
 
 # silence warnings about custom markers
@@ -727,7 +746,7 @@ def version_store_factory(lib_name, lmdb_storage) -> Generator[Callable[..., Nat
     # Otherwise there will be no storage space left for unit tests
     # very peculiar behavior for LMDB, not investigated yet
     # On MacOS ARM build this will sometimes hang test execution, so no clearing there either
-    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or MACOS_WHEEL_BUILD))
+    yield from _store_factory(lib_name, lmdb_storage, not (WINDOWS or (MACOS and ARM64)))
 
 
 @pytest.fixture
@@ -1074,9 +1093,28 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     return store
 
 
-@pytest.fixture(params=list(OutputFormat))
+@pytest.fixture(
+    params=[OutputFormat.PANDAS, pytest.param(OutputFormat.EXPERIMENTAL_ARROW, marks=PYARROW_POST_PROCESSING)]
+)
 def any_output_format(request) -> OutputFormat:
     return request.param
+
+
+@pytest.fixture(params=list(ArrowOutputStringFormat))
+def any_arrow_string_format(request) -> ArrowOutputStringFormat:
+    return request.param
+
+
+@pytest.fixture
+def custom_thing_with_registered_normalizer() -> Generator[CustomThing, None, None]:
+    try:
+        register_normalizer(TestCustomNormalizer())
+        columns = ["a", "b"]
+        index = [12, 13]
+        values = [[2.0, 4.0], [3.0, 5.0]]
+        yield CustomThing(custom_columns=columns, custom_index=index, custom_values=values)
+    finally:
+        clear_registered_normalizers()
 
 
 @pytest.fixture(scope="function", params=("lmdb_version_store_v1", "lmdb_version_store_v2"))
@@ -1620,6 +1658,7 @@ class Marks:
     unit = Mark("unit")
     stress = Mark("stress")
     nonreg = Mark("nonreg")
+    sanitizers = Mark("sanitizers")
     hypothesis = Mark("hypothesis")
     arcticdb = Mark("arcticdb")
     version_store = Mark("version_store")
@@ -1641,7 +1680,6 @@ def apply_hybrid_marks(item, source_values: Iterable[str], rules: dict):
     :param rules: dict of mark_name -> list[str | regex]
     """
     for mark_name, patterns in rules.items():
-
         # Deduplication guard
         if item.get_closest_marker(mark_name):
             continue
@@ -1681,42 +1719,51 @@ LOCAL_OBJECT_STORE_FIXTURES = [re.compile(r"^(local_object_store.*|local_object_
 VERSION_STORE_AND_REAL_FIXTURES = [re.compile(r"^version_store_and_real*", re.I)]
 
 FIXTURES_TO_MARK = {
-    Marks.lmdb.name: [re.compile(r"^lmdb_.*", re.I)]
-    + ALL_FIXTURES_AND_LMDB
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + BASIC_STORE_FIXTURES,
+    Marks.lmdb.name: (
+        [re.compile(r"^lmdb_.*", re.I)] + ALL_FIXTURES_AND_LMDB + VERSION_STORE_AND_REAL_FIXTURES + BASIC_STORE_FIXTURES
+    ),
     Marks.mem.name: [re.compile(r"^(mem_.*|in_memory_.*)", re.I)] + ALL_FIXTURES + BASIC_STORE_FIXTURES,
-    Marks.s3.name: [re.compile(r"^(s3_.*|mock_s3.*)", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + LOCAL_OBJECT_STORE_FIXTURES
-    + OBJECT_STORE_FIXTURES,
+    Marks.s3.name: (
+        [re.compile(r"^(s3_.*|mock_s3.*)", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + LOCAL_OBJECT_STORE_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
     Marks.nfs.name: [re.compile(r"^nfs_.*", re.I)] + ALL_FIXTURES + OBJECT_STORE_FIXTURES,
     Marks.gcp.name: [re.compile(r"^gcp_.*", re.I)] + ALL_FIXTURES,
     Marks.mongo.name: [re.compile(r"^mongo_.*", re.I)] + ALL_FIXTURES,
-    Marks.azurite.name: [re.compile(r"^(azurite_.*|azure_.*)", re.I)]
-    + ALL_FIXTURES
-    + LOCAL_OBJECT_STORE_FIXTURES
-    + OBJECT_STORE_FIXTURES
-    + OBJECT_STORE_FIXTURES,
-    Marks.real_s3.name: [re.compile(r"^real_s3_.*", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + BASIC_ARCTIC_FIXTURES
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + OBJECT_STORE_FIXTURES,
-    Marks.real_azure.name: [re.compile(r"^real_azure_.*", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + BASIC_ARCTIC_FIXTURES
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + OBJECT_STORE_FIXTURES,
-    Marks.real_gcp.name: [re.compile(r"^real_gcp_.*", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + BASIC_ARCTIC_FIXTURES
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + OBJECT_STORE_FIXTURES,
+    Marks.azurite.name: (
+        [re.compile(r"^(azurite_.*|azure_.*)", re.I)]
+        + ALL_FIXTURES
+        + LOCAL_OBJECT_STORE_FIXTURES
+        + OBJECT_STORE_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
+    Marks.real_s3.name: (
+        [re.compile(r"^real_s3_.*", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + BASIC_ARCTIC_FIXTURES
+        + VERSION_STORE_AND_REAL_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
+    Marks.real_azure.name: (
+        [re.compile(r"^real_azure_.*", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + BASIC_ARCTIC_FIXTURES
+        + VERSION_STORE_AND_REAL_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
+    Marks.real_gcp.name: (
+        [re.compile(r"^real_gcp_.*", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + BASIC_ARCTIC_FIXTURES
+        + VERSION_STORE_AND_REAL_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
     Marks.dynamic_schema.name: [re.compile(r".*(dynamic_schema|dynamic(?!string)).*", re.I)],
     Marks.empty_types.name: [
         "empty_types",

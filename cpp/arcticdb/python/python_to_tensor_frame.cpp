@@ -286,8 +286,8 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
         frame.index = stream::EmptyIndex();
         desc.set_index_type(IndexDescriptor::Type::EMPTY);
     }
+    desc.set_sorted(sorted);
     frame.set_from_tensors(std::move(desc), std::move(field_tensors), std::move(opt_index_tensor));
-    frame.set_sorted(sorted);
 }
 
 void record_batches_to_frame(const std::vector<RecordBatchData>& record_batches, InputFrame& frame) {
@@ -345,12 +345,10 @@ std::shared_ptr<InputFrame> py_none_to_frame() {
     res->index = stream::RowCountIndex();
     StreamDescriptor desc;
     desc.set_index_type(IndexDescriptorImpl::Type::ROWCOUNT);
+    desc.set_sorted(SortedValue::UNKNOWN);
 
     // Fill tensors
     auto col_name = "bytes";
-    auto sorted = SortedValue::UNKNOWN;
-
-    res->set_sorted(sorted);
 
     const stride_t strides = 8;
     const shape_t shapes = 1;

@@ -10,29 +10,17 @@ import copy
 from functools import partial
 import numpy as np
 import pandas as pd
-import pyarrow as pa
 import pytest
 import pickle
 import datetime
 import dateutil
-from typing import Union
 
+from arcticdb import OutputFormat
 from arcticdb.version_store.processing import QueryBuilder
-from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow, stringify_dictionary_encoded_columns
-from arcticdb.options import OutputFormat
+from arcticdb.util.test import assert_frame_equal
 import arcticdb.toolbox.query_stats as qs
 
 pytestmark = pytest.mark.pipeline
-
-
-def sort_by_index(df_or_table: Union[pa.Table, pd.DataFrame]):
-    if isinstance(df_or_table, pd.DataFrame):
-        return df_or_table.sort_index()
-    elif isinstance(df_or_table, pa.Table):
-        table = stringify_dictionary_encoded_columns(df_or_table)
-        return table.sort_by(table.column_names[0])
-    else:
-        raise ValueError("Unsupported format")
 
 
 def test_query_builder_equality_checks():
@@ -49,7 +37,7 @@ def test_query_builder_equality_checks():
 
 def test_querybuilder_getitem_idempotency(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_querybuilder_getitem_idempotency"
     df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
     lib.write(sym, df)
@@ -59,13 +47,13 @@ def test_querybuilder_getitem_idempotency(lmdb_version_store_v1, any_output_form
     q_copy = q_copy[q_copy["a"] == 0]
     expected = df[df["a"] == 1]
     expected_copy = df[df["a"] == 0]
-    assert_frame_equal_with_arrow(expected, lib.read(sym, query_builder=q).data)
-    assert_frame_equal_with_arrow(expected_copy, lib.read(sym, query_builder=q_copy).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected_copy, lib.read(sym, query_builder=q_copy).data)
 
 
 def test_querybuilder_shallow_copy(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_querybuilder_shallow_copy"
     df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
     lib.write(sym, df)
@@ -73,13 +61,13 @@ def test_querybuilder_shallow_copy(lmdb_version_store_v1, any_output_format):
     q = q[q["a"] == 1]
     q_copy = copy.copy(q)
     expected = df[df["a"] == 1]
-    assert_frame_equal_with_arrow(expected, lib.read(sym, query_builder=q).data)
-    assert_frame_equal_with_arrow(expected, lib.read(sym, query_builder=q_copy).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_copy).data)
 
 
 def test_querybuilder_deepcopy(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_querybuilder_deepcopy"
     df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
     lib.write(sym, df)
@@ -87,13 +75,13 @@ def test_querybuilder_deepcopy(lmdb_version_store_v1, any_output_format):
     q = q[q["a"] == 1]
     q_copy = copy.deepcopy(q)
     expected = df[df["a"] == 1]
-    assert_frame_equal_with_arrow(expected, lib.read(sym, query_builder=q).data)
-    assert_frame_equal_with_arrow(expected, lib.read(sym, query_builder=q_copy).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_copy).data)
 
 
 def test_querybuilder_pickle(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_querybuilder_pickle"
     df = pd.DataFrame({"a": [0, 1]}, index=np.arange(2))
     lib.write(sym, df)
@@ -101,10 +89,10 @@ def test_querybuilder_pickle(lmdb_version_store_v1, any_output_format):
     q = q[q["a"] == 1]
     q_pickled = pickle.dumps(q)
     expected = df[df["a"] == 1]
-    assert_frame_equal_with_arrow(expected, lib.read(sym, query_builder=q).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q).data)
     del q
     q_unpickled = pickle.loads(q_pickled)
-    assert_frame_equal_with_arrow(expected, lib.read(sym, query_builder=q_unpickled).data)
+    assert_frame_equal(expected, lib.read(sym, query_builder=q_unpickled).data)
 
 
 def test_querybuilder_pickling_all_clauses():
@@ -144,7 +132,7 @@ def test_querybuilder_pickling_all_clauses():
 
 def test_reuse_querybuilder(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_reuse_querybuilder"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
@@ -155,19 +143,19 @@ def test_reuse_querybuilder(lmdb_version_store_tiny_segment, any_output_format):
     q = q[q["col1"].isin(2, 3, 7)]
     expected = df.query("col1 in [2, 3, 7]")
     received = lib.read(symbol, query_builder=q).data
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
     q = q.apply("new_col", (q["col1"] * q["col2"]) + 13)
     expected = df.query("col1 in [2, 3, 7]")
     received = lib.read(symbol, query_builder=q).data
 
     expected["new_col"] = (expected["col1"] * expected["col2"]) + 13
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_reuse_querybuilder_date_range"
     df = pd.DataFrame({"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
@@ -177,25 +165,25 @@ def test_reuse_querybuilder_date_range(lmdb_version_store_tiny_segment, any_outp
 
     expected_0 = df.query("col1 in [2, 3]")
     received_0 = lib.read(symbol, date_range=(None, pd.Timestamp("2000-01-06")), query_builder=q).data
-    assert_frame_equal_with_arrow(expected_0, received_0)
+    assert_frame_equal(expected_0, received_0)
 
     received_1 = lib.read(symbol, date_range=(None, pd.Timestamp("2000-01-06")), query_builder=q).data
-    assert_frame_equal_with_arrow(expected_0, received_1)
+    assert_frame_equal(expected_0, received_1)
 
     expected_2 = df.query("col1 in [2, 3, 7]")
     received_2 = lib.read(symbol, query_builder=q).data
-    assert_frame_equal_with_arrow(expected_2, received_2)
+    assert_frame_equal(expected_2, received_2)
 
     expected_3 = df.query("col1 in [7]")
     received_3 = lib.read(
         symbol, date_range=(pd.Timestamp("2000-01-06"), pd.Timestamp("2000-01-08")), query_builder=q
     ).data
-    assert_frame_equal_with_arrow(expected_3, received_3)
+    assert_frame_equal(expected_3, received_3)
 
 
 def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_reuse_querybuilder_date_range_batch"
     df = pd.DataFrame({"col1": np.arange(1, 11, dtype=np.int64)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
@@ -207,21 +195,21 @@ def test_reuse_querybuilder_date_range_batch(lmdb_version_store_tiny_segment, an
     received_0 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=q)[
         symbol
     ].data
-    assert_frame_equal_with_arrow(expected_0, received_0)
+    assert_frame_equal(expected_0, received_0)
 
     received_1 = lib.batch_read([symbol], date_ranges=[(None, pd.Timestamp("2000-01-06"))], query_builder=[q])[
         symbol
     ].data
-    assert_frame_equal_with_arrow(expected_0, received_1)
+    assert_frame_equal(expected_0, received_1)
 
     expected_2 = df.query("col1 in [2, 3, 7]")
     received_2 = lib.read(symbol, query_builder=q).data
-    assert_frame_equal_with_arrow(expected_2, received_2)
+    assert_frame_equal(expected_2, received_2)
 
 
 def test_querybuilder_filter_datetime_with_timezone(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "symbol"
 
     def can_read_back(write_with_time, filter_with_time):
@@ -259,7 +247,7 @@ def test_querybuilder_date_range_then_date_range(
     lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_date_range_then_date_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
@@ -283,7 +271,7 @@ def test_querybuilder_date_range_then_date_range(
         else:
             received = lib.read(symbol, date_range=first_date_range, query_builder=q).data
     expected = df.query("col in [7, 8]")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -292,7 +280,7 @@ def test_querybuilder_date_range_then_row_range(
     lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_date_range_then_row_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2000-01-01", periods=10))
     lib.write(symbol, df)
@@ -315,7 +303,7 @@ def test_querybuilder_date_range_then_row_range(
         else:
             received = lib.read(symbol, date_range=date_range, query_builder=q).data
     expected = df.iloc[2:8]
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -324,7 +312,7 @@ def test_querybuilder_date_range_then_filter(
     lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_date_range_then_filter"
     df = pd.DataFrame(
         {"col1": np.arange(10), "col2": np.arange(100, 110)}, index=pd.date_range("2000-01-01", periods=10)
@@ -349,7 +337,7 @@ def test_querybuilder_date_range_then_filter(
         else:
             received = lib.read(symbol, date_range=date_range, query_builder=q).data
     expected = df.query("col1 in [3, 6]")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_tiny_segment, any_output_format):
@@ -361,7 +349,7 @@ def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_ti
         return pd.Timestamp((t.value // td.value) * td.value)
 
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_date_range_then_filter_then_resample"
     rng = np.random.default_rng()
     df = pd.DataFrame(
@@ -377,7 +365,7 @@ def test_querybuilder_date_range_then_filter_then_resample(lmdb_version_store_ti
     received = lib.read(symbol, date_range=date_range, query_builder=q).data
     expected = lib.read(symbol, date_range=date_range, output_format=OutputFormat.PANDAS).data.query("filter_col == 0")
     expected = expected.groupby(partial(round, freq="3h")).agg({"agg_col": "sum"})
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -386,7 +374,7 @@ def test_querybuilder_date_range_then_project(
     lmdb_version_store_tiny_segment, batch, use_date_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_date_range_then_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
@@ -413,7 +401,7 @@ def test_querybuilder_date_range_then_project(
             received = lib.read(symbol, date_range=date_range, query_builder=q).data
     expected = df.iloc[3:-3]
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -422,7 +410,7 @@ def test_querybuilder_date_range_then_groupby(
     lmdb_version_store_tiny_segment_dynamic_strings, batch, use_date_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment_dynamic_strings
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_date_range_then_groupby"
     df = pd.DataFrame(
         {
@@ -450,18 +438,42 @@ def test_querybuilder_date_range_then_groupby(
             received = lib.batch_read([symbol], date_ranges=[date_range], query_builder=q)[symbol].data
         else:
             received = lib.read(symbol, date_range=date_range, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
 
     expected = df.iloc[3:-3]
     expected = expected.groupby("col1").agg({"col2": "sum"})
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
+
+
+def test_querybuilder_empty_date_range_then_groupby(lmdb_version_store_v1, any_output_format):
+    lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
+    symbol = "test_querybuilder_empty_date_range_then_groupby"
+    df = pd.DataFrame(
+        {
+            "col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"],
+            "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4],
+        },
+        index=pd.date_range("2000-01-01", periods=10),
+    )
+    lib.write(symbol, df)
+
+    date_range = (pd.Timestamp("2000-01-04 12:00:00"), pd.Timestamp("2000-01-04 13:00:00"))
+
+    q = QueryBuilder().date_range(date_range).groupby("col1").agg({"col2": "sum"})
+
+    received = lib.read(symbol, query_builder=q).data
+    assert not len(received)
+    assert received.index.name == "col1"
+    assert len(received.columns) == 1
+    assert "col2" in received.columns
 
 
 @pytest.mark.parametrize("batch", [True, False])
 @pytest.mark.parametrize("use_row_range_clause", [True, False])
 def test_querybuilder_row_range(lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
@@ -483,7 +495,7 @@ def test_querybuilder_row_range(lmdb_version_store_tiny_segment, batch, use_row_
         else:
             received = lib.read(symbol, row_range=row_range).data
     expected = df.iloc[3:7]
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -492,7 +504,7 @@ def test_querybuilder_row_range_then_date_range(
     lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range_then_date_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -515,7 +527,7 @@ def test_querybuilder_row_range_then_date_range(
         else:
             received = lib.read(symbol, row_range=row_range, query_builder=q).data
     expected = df.query("col in [4, 5, 6]")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -524,7 +536,7 @@ def test_querybuilder_row_range_then_row_range(
     lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range_then_row_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -548,7 +560,7 @@ def test_querybuilder_row_range_then_row_range(
         else:
             received = lib.read(symbol, row_range=first_row_range, query_builder=q).data
     expected = df.iloc[4:6]
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -557,7 +569,7 @@ def test_querybuilder_row_range_then_filter(
     lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range_then_filter"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
@@ -580,7 +592,7 @@ def test_querybuilder_row_range_then_filter(
         else:
             received = lib.read(symbol, row_range=row_range, query_builder=q).data
     expected = df.query("col1 in [3, 6]")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -589,7 +601,7 @@ def test_querybuilder_row_range_then_project(
     lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range_then_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)},
@@ -616,7 +628,7 @@ def test_querybuilder_row_range_then_project(
             received = lib.read(symbol, row_range=row_range, query_builder=q).data
     expected = df.iloc[3:-3]
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -625,7 +637,7 @@ def test_querybuilder_row_range_then_groupby(
     lmdb_version_store_tiny_segment_dynamic_strings, batch, use_row_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment_dynamic_strings
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range_then_groupby"
     df = pd.DataFrame(
         {
@@ -653,11 +665,11 @@ def test_querybuilder_row_range_then_groupby(
             received = lib.batch_read([symbol], row_ranges=[row_range], query_builder=q)[symbol].data
         else:
             received = lib.read(symbol, row_range=row_range, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
 
     expected = df.iloc[3:-3]
     expected = expected.groupby("col1").agg({"col2": "sum"})
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("batch", [True, False])
@@ -666,7 +678,7 @@ def test_querybuilder_row_range_then_resample(
     lmdb_version_store_tiny_segment, batch, use_row_range_clause, any_output_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_row_range_then_resample"
     idx = [0, 1, 2, 1000, 1001, 1002]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -692,12 +704,12 @@ def test_querybuilder_row_range_then_resample(
             received = lib.read(symbol, row_range=row_range, query_builder=q).data
     expected = df.query("col in [1, 2, 3, 4]")
     expected = expected.resample("us").agg({"col": "sum"})
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_filter_then_date_range(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_date_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -707,13 +719,13 @@ def test_querybuilder_filter_then_date_range(lmdb_version_store_tiny_segment, an
     received = lib.read(symbol, query_builder=q).data
 
     expected = df.query("col in [3, 7]")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("n", range(-7, 8))
 def test_querybuilder_filter_then_head(lmdb_version_store_tiny_segment, n, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_head"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -724,13 +736,13 @@ def test_querybuilder_filter_then_head(lmdb_version_store_tiny_segment, n, any_o
 
     expected = df.query("col in [4, 5, 6, 8, 10]")
     expected = expected.head(n)
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 @pytest.mark.parametrize("n", range(-7, 8))
 def test_querybuilder_filter_then_tail(lmdb_version_store_tiny_segment, n, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_head"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -741,12 +753,12 @@ def test_querybuilder_filter_then_tail(lmdb_version_store_tiny_segment, n, any_o
 
     expected = df.query("col in [4, 5, 6, 8, 10]")
     expected = expected.tail(n)
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_filter_then_row_range(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_row_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -757,12 +769,12 @@ def test_querybuilder_filter_then_row_range(lmdb_version_store_tiny_segment, any
 
     expected = df.query("col in [4, 5, 6, 8, 10]")
     expected = expected.iloc[1:4]
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_filter_then_filter(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_filter"
     df = pd.DataFrame({"col1": np.arange(10), "col2": np.arange(100, 110)}, index=np.arange(10))
     lib.write(symbol, df)
@@ -773,12 +785,12 @@ def test_querybuilder_filter_then_filter(lmdb_version_store_tiny_segment, any_ou
     received = lib.read(symbol, query_builder=q).data
 
     expected = df.query("col1 in [2, 3]")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_filter_then_project(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
@@ -792,12 +804,12 @@ def test_querybuilder_filter_then_project(lmdb_version_store_tiny_segment, any_o
 
     expected = df.query("col1 in [2, 3, 7]")
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_filter_then_groupby(lmdb_version_store_tiny_segment_dynamic_strings, any_output_format):
     lib = lmdb_version_store_tiny_segment_dynamic_strings
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_groupby"
     df = pd.DataFrame(
         {"col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"], "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4]},
@@ -808,14 +820,14 @@ def test_querybuilder_filter_then_groupby(lmdb_version_store_tiny_segment_dynami
     q = q[q["col1"] != "b"]
     q = q.groupby("col1").agg({"col2": "sum"})
     received = lib.read(symbol, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
     expected = df.query("col1 != 'b'").groupby("col1").agg({"col2": "sum"})
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_filter_then_resample(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_filter_then_resample"
     idx = [0, 1, 2, 1000, 1001, 1002]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -830,12 +842,12 @@ def test_querybuilder_filter_then_resample(lmdb_version_store_tiny_segment, any_
 
     expected = df.query("(col != 1) & (col != 5)")
     expected = expected.resample("us").agg({"col": "sum"})
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_project_then_date_range(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_project_then_date_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -847,12 +859,12 @@ def test_querybuilder_project_then_date_range(lmdb_version_store_tiny_segment, a
     expected = df
     expected["new_col"] = expected["col"] * 3
     expected = expected.query("col in [3, 4, 5, 6, 7, 8]")
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_project_then_row_range(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_project_then_row_range"
     df = pd.DataFrame({"col": np.arange(1, 11)}, index=pd.date_range("2024-01-01", periods=10))
     lib.write(symbol, df)
@@ -864,12 +876,12 @@ def test_querybuilder_project_then_row_range(lmdb_version_store_tiny_segment, an
     expected = df
     expected["new_col"] = expected["col"] * 3
     expected = expected.iloc[3:9]
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_project_then_filter(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_project_then_filter"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
@@ -884,12 +896,12 @@ def test_querybuilder_project_then_filter(lmdb_version_store_tiny_segment, any_o
     expected = df
     expected["new_col"] = expected["col1"] * expected["col2"] + 13
     expected = expected.query("new_col in [13, 114, 538]")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_project_then_project(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_project_then_project"
     df = pd.DataFrame(
         {"col1": np.arange(10, dtype=np.int64), "col2": np.arange(100, 110, dtype=np.int64)}, index=np.arange(10)
@@ -904,12 +916,12 @@ def test_querybuilder_project_then_project(lmdb_version_store_tiny_segment, any_
     expected = df
     expected["new_col1"] = expected["col1"] * expected["col2"] + 13
     expected["new_col2"] = expected["new_col1"] * expected["col2"] - 5
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_project_then_groupby(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_project_then_groupby"
     df = pd.DataFrame(
         {"col1": [1, 2, 2, 3, 3, 3, 4, 4, 4, 4], "col2": np.arange(0, 1, 0.1, dtype=np.float64)}, index=np.arange(10)
@@ -920,17 +932,17 @@ def test_querybuilder_project_then_groupby(lmdb_version_store_tiny_segment, any_
     q = q.apply("new_col2", q["col2"] + 2.5)
     q = q.groupby("new_col1").agg({"new_col2": "sum"})
     received = lib.read(symbol, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
     expected = df
     expected["new_col1"] = expected["col1"] * 3
     expected["new_col2"] = expected["col2"] + 2.5
     expected = expected.groupby("new_col1").agg({"new_col2": "sum"})
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_project_then_resample(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_project_then_resample"
     idx = [0, 1, 2, 1000, 1001, 1002]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -946,12 +958,12 @@ def test_querybuilder_project_then_resample(lmdb_version_store_tiny_segment, any
     expected = df
     expected["new_col"] = expected["col"] * 3
     expected = expected.resample("us").agg({"new_col": "sum"})
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_groupby_then_filter(lmdb_version_store_tiny_segment_dynamic_strings, any_output_format):
     lib = lmdb_version_store_tiny_segment_dynamic_strings
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_groupby_then_filter"
     df = pd.DataFrame(
         {"col1": ["a", "b", "c", "a", "b", "c", "a", "b", "c", "d"], "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4]},
@@ -962,14 +974,14 @@ def test_querybuilder_groupby_then_filter(lmdb_version_store_tiny_segment_dynami
     q = q.groupby("col1").agg({"col2": "sum"})
     q = q[(q["col1"] != "b") & (q["col2"] != 9)]
     received = lib.read(symbol, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
     expected = df.groupby("col1").agg({"col2": "sum"}).query("(col1 != 'b') & (col2 != 9)")
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_groupby_then_project(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_groupby_then_project"
     df = pd.DataFrame(
         {"col1": [5, 23, 42, 5, 23, 42, 5, 23, 42, 0], "col2": [1, 2, 3, 2, 1, 3, 1, 1, 3, 4]}, index=np.arange(10)
@@ -979,15 +991,15 @@ def test_querybuilder_groupby_then_project(lmdb_version_store_tiny_segment, any_
     q = q.groupby("col1").agg({"col2": "sum"})
     q = q.apply("new_col", q["col2"] * 3)
     received = lib.read(symbol, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
     expected = df.groupby("col1").agg({"col2": "sum"})
     expected["new_col"] = expected["col2"] * 3
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_groupby_then_groupby(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_groupby_then_groupby"
     df = pd.DataFrame(
         {
@@ -1002,14 +1014,14 @@ def test_querybuilder_groupby_then_groupby(lmdb_version_store_tiny_segment, any_
     q = q.groupby("col1").agg({"col2": "sum", "col3": "mean"})
     q = q.groupby("col2").agg({"col3": "mean"})
     received = lib.read(symbol, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
     expected = df.groupby("col1").agg({"col2": "sum", "col3": "mean"}).groupby("col2").agg({"col3": "mean"})
-    assert_frame_equal_with_arrow(expected, received)
+    assert_frame_equal(expected, received)
 
 
 def test_querybuilder_resample_then_date_range(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_resample_then_date_range"
     df = pd.DataFrame({"col": np.arange(30)}, index=pd.date_range("1970-01-01", periods=30, freq="D"))
     lib.write(symbol, df)
@@ -1022,12 +1034,12 @@ def test_querybuilder_resample_then_date_range(lmdb_version_store_tiny_segment, 
 
     expected = df.resample("2D").agg({"col": "sum"})
     expected = expected.iloc[1:-1]
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_resample_then_row_range(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_resample_then_row_range"
     df = pd.DataFrame({"col": np.arange(30)}, index=pd.date_range("1970-01-01", periods=30, freq="D"))
     lib.write(symbol, df)
@@ -1040,12 +1052,12 @@ def test_querybuilder_resample_then_row_range(lmdb_version_store_tiny_segment, a
 
     expected = df.resample("2D").agg({"col": "sum"})
     expected = expected.iloc[5:8]
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_resample_then_filter(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_resample_then_filter"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -1060,12 +1072,12 @@ def test_querybuilder_resample_then_filter(lmdb_version_store_tiny_segment, any_
 
     expected = df.resample("us").agg({"col": "sum"})
     expected = expected.query("col == 9")
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_resample_then_project(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_resample_then_project"
     idx = [0, 1, 2, 3, 1000, 1001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -1080,12 +1092,12 @@ def test_querybuilder_resample_then_project(lmdb_version_store_tiny_segment, any
 
     expected = df.resample("us").agg({"col": "sum"})
     expected["new_col"] = expected["col"] * 3
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_resample_then_groupby"
     idx = [0, 1, 1000, 1001, 2000, 2001, 3000, 3001]
     idx = np.array(idx, dtype="datetime64[ns]")
@@ -1104,16 +1116,16 @@ def test_querybuilder_resample_then_groupby(lmdb_version_store_tiny_segment, any
     q = q.groupby("grouping_col").agg({"agg_col": "sum"})
 
     received = lib.read(symbol, query_builder=q).data
-    received = sort_by_index(received)
+    received.sort_index(inplace=True)
 
     expected = df.resample("us").agg({"grouping_col": "sum", "agg_col": "sum"})
     expected = expected.groupby("grouping_col").agg({"agg_col": "sum"})
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_querybuilder_resample_then_resample(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_querybuilder_resample_then_resample"
     df = pd.DataFrame(
         {
@@ -1129,12 +1141,12 @@ def test_querybuilder_resample_then_resample(lmdb_version_store_tiny_segment, an
     # Pandas 1.X needs None as the first argument to agg with named aggregators
     expected = df.resample("h").agg(None, new_col=pd.NamedAgg("col", "mean"))
     expected = expected.resample("2h").agg({"new_col": "mean"})
-    assert_frame_equal_with_arrow(expected, received, check_dtype=False)
+    assert_frame_equal(expected, received, check_dtype=False)
 
 
 def test_query_builder_vwap(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_query_builder_vwap"
     rng = np.random.default_rng()
     index = pd.date_range("2024-01-01", "2024-01-03", freq="min")
@@ -1160,8 +1172,6 @@ def test_query_builder_vwap(lmdb_version_store_v1, any_output_format):
     expected = expected.resample(freq).agg(aggs)
     expected["vwap"] = expected["product"] / expected["volume"]
     expected.sort_index(inplace=True, axis=1)
-    if isinstance(received, pa.Table):
-        received = received.to_pandas()
     received.sort_index(inplace=True, axis=1)
     assert_frame_equal(expected, received, check_dtype=False)
 
@@ -1209,7 +1219,7 @@ def test_to_strings():
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_output_format):
     lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     lib.write(sym, pd.DataFrame({"a": [1, 2], "b": ["a", "b"], "c": [5, 6]}))
     qb = QueryBuilder()
@@ -1219,14 +1229,14 @@ def test_column_select_projected_column(s3_store_factory, dynamic_schema, any_ou
         stats = qs.get_query_stats()
     qs.reset_stats()
     expected = pd.DataFrame({"new_column": [3, 4]})
-    assert_frame_equal_with_arrow(expected, result)
+    assert_frame_equal(expected, result)
     assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
 
 
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_schema, any_output_format):
     lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     lib.write(sym, pd.DataFrame({"b": ["a", "b"], "c": [5, 6], "a": [1, 2]}))
     qb = QueryBuilder()
@@ -1237,7 +1247,7 @@ def test_column_select_projected_column_and_filter_it(s3_store_factory, dynamic_
         stats = qs.get_query_stats()
     qs.reset_stats()
     expected = pd.DataFrame({"new_column": [4]})
-    assert_frame_equal_with_arrow(expected, result)
+    assert_frame_equal(expected, result)
     assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == 1
 
 
@@ -1247,7 +1257,7 @@ def test_filter_synthetic_column_and_select_on_disk_column(
     s3_store_factory, dynamic_schema, column_to_read, any_output_format
 ):
     lib = s3_store_factory(dynamic_schema=dynamic_schema, column_group_size=2)
-    lib.set_output_format(any_output_format)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "sym_0"
     df = pd.DataFrame({"a": [1, 2], "b": [7, 8], "c": [5, 6]})
     lib.write(sym, df)
@@ -1259,7 +1269,7 @@ def test_filter_synthetic_column_and_select_on_disk_column(
         stats = qs.get_query_stats()
     qs.reset_stats()
     expected = pd.DataFrame({column_to_read: [df[column_to_read][1]]})
-    assert_frame_equal_with_arrow(expected, result)
+    assert_frame_equal(expected, result)
     if dynamic_schema or column_to_read == "b":
         data_keys_count = 1
     elif column_to_read == "c" and not dynamic_schema:

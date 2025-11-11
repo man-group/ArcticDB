@@ -36,11 +36,16 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
+from arcticdb.util._versions import IS_NUMPY_ONE
 
 
 pytestmark = pytest.mark.pipeline
 
 
+@pytest.mark.skipif(
+    IS_NUMPY_ONE,
+    reason="numpy==1.x has bugs with comparing int64 and uint64 (e.g. here https://github.com/numpy/numpy/issues/12525)",
+)
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -49,9 +54,10 @@ pytestmark = pytest.mark.pipeline
     ),
     val=numeric_type_strategies(),
 )
-def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
+def test_filter_numeric_binary_comparison(lmdb_version_store_v1, any_output_format, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_binary_comparison"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -92,9 +98,10 @@ def test_filter_numeric_binary_comparison(lmdb_version_store_v1, df, val):
     ),
     val=string_strategy,
 )
-def test_filter_string_binary_comparison(lmdb_version_store_v1, df, val):
+def test_filter_string_binary_comparison(lmdb_version_store_v1, any_output_format, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_binary_comparison"
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
     lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
@@ -119,9 +126,10 @@ def test_filter_string_binary_comparison(lmdb_version_store_v1, df, val):
     signed_vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
-def test_filter_numeric_set_membership(lmdb_version_store_v1, df, signed_vals, unsigned_vals):
+def test_filter_numeric_set_membership(lmdb_version_store_v1, any_output_format, df, signed_vals, unsigned_vals):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_set_membership"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -140,9 +148,10 @@ def test_filter_numeric_set_membership(lmdb_version_store_v1, df, signed_vals, u
     df=dataframe_strategy([column_strategy("a", supported_string_dtypes())]),
     vals=st.frozensets(string_strategy, min_size=1),
 )
-def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
+def test_filter_string_set_membership(lmdb_version_store_v1, any_output_format, df, vals):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_set_membership"
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
     lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
@@ -158,9 +167,10 @@ def test_filter_string_set_membership(lmdb_version_store_v1, df, vals):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=dataframe_strategy([column_strategy("a", supported_integer_dtypes())]))
-def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
+def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, any_output_format, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_empty_set_membership"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -175,9 +185,10 @@ def test_filter_numeric_empty_set_membership(lmdb_version_store_v1, df):
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(df=dataframe_strategy([column_strategy("a", supported_string_dtypes())]))
-def test_filter_string_empty_set_membership(lmdb_version_store_v1, df):
+def test_filter_string_empty_set_membership(lmdb_version_store_v1, any_output_format, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_empty_set_membership"
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
     lib.write(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", df, dynamic_strings=False)
@@ -197,8 +208,9 @@ def test_filter_string_empty_set_membership(lmdb_version_store_v1, df):
     df_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
     comparison_dt=st.datetimes(min_value=datetime(2020, 1, 1), max_value=datetime(2022, 1, 1), timezones=timezone_st()),
 )
-def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, df_dt, comparison_dt):
+def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, any_output_format, df_dt, comparison_dt):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_timezone_aware_hypothesis"
     df = pd.DataFrame({"a": [df_dt]})
     lib.write(symbol, df)
@@ -227,9 +239,10 @@ def test_filter_datetime_timezone_aware_hypothesis(lmdb_version_store_v1, df_dt,
         [column_strategy("a", supported_numeric_dtypes()), column_strategy("b", supported_numeric_dtypes())]
     )
 )
-def test_filter_binary_boolean(lmdb_version_store_v1, df):
+def test_filter_binary_boolean(lmdb_version_store_v1, any_output_format, df):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_binary_boolean"
     lib.write(symbol, df)
     # Would be cleaner to use pytest.parametrize, but the expensive bit is generating/writing the df, so make sure we
@@ -254,9 +267,10 @@ def test_filter_binary_boolean(lmdb_version_store_v1, df):
     df=dataframe_strategy([column_strategy("a", supported_numeric_dtypes())]),
     val=numeric_type_strategies(),
 )
-def test_filter_not(lmdb_version_store_v1, df, val):
+def test_filter_not(lmdb_version_store_v1, any_output_format, df, val):
     assume(not df.empty)
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_not"
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -276,9 +290,10 @@ def test_filter_not(lmdb_version_store_v1, df, val):
         ]
     ),
 )
-def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_segment, df):
+def test_filter_more_columns_than_fit_in_one_segment(lmdb_version_store_tiny_segment, any_output_format, df):
     assume(not df.empty)
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_more_columns_than_fit_in_one_segment"
     lib.write(symbol, df)
     q = QueryBuilder()
@@ -320,6 +335,10 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
 ##################################
 
 
+@pytest.mark.skipif(
+    IS_NUMPY_ONE,
+    reason="numpy==1.x has bugs with comparing int64 and uint64 (e.g. here https://github.com/numpy/numpy/issues/12525)",
+)
 @use_of_function_scoped_fixtures_in_hypothesis_checked
 @settings(deadline=None)
 @given(
@@ -328,9 +347,10 @@ def test_filter_with_column_slicing(lmdb_version_store_tiny_segment, df):
     ),
     val=numeric_type_strategies(),
 )
-def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
+def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_binary_comparison_dynamic"
     lib.delete(symbol)
     slices = [
@@ -437,9 +457,10 @@ def test_filter_numeric_binary_comparison_dynamic(lmdb_version_store_dynamic_sch
     ),
     val=string_strategy,
 )
-def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, df, val):
+def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format, df, val):
     assume(len(df) >= 3)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_binary_comparison_dynamic"
 
     slices = [
@@ -477,9 +498,12 @@ def test_filter_string_binary_comparison_dynamic(lmdb_version_store_dynamic_sche
     signed_vals=st.frozensets(signed_integral_type_strategies(), min_size=1),
     unsigned_vals=st.frozensets(unsigned_integral_type_strategies(), min_size=1),
 )
-def test_filter_numeric_set_membership_dynamic(lmdb_version_store_dynamic_schema_v1, df, signed_vals, unsigned_vals):
+def test_filter_numeric_set_membership_dynamic(
+    lmdb_version_store_dynamic_schema_v1, df, signed_vals, unsigned_vals, any_output_format
+):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_set_membership_dynamic"
     lib.delete(symbol)
     slices = [
@@ -512,9 +536,10 @@ def test_filter_numeric_set_membership_dynamic(lmdb_version_store_dynamic_schema
     df=dataframe_strategy([column_strategy("a", supported_string_dtypes())]),
     vals=st.frozensets(string_strategy, min_size=1),
 )
-def test_filter_string_set_membership_dynamic(lmdb_version_store_dynamic_schema_v1, df, vals):
+def test_filter_string_set_membership_dynamic(lmdb_version_store_dynamic_schema_v1, df, vals, any_output_format):
     assume(len(df) >= 2)
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_set_membership_dynamic"
     slices = [
         df[: len(df) // 2],

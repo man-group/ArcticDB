@@ -15,18 +15,19 @@ namespace arcticdb {
 SegmentInMemory::SegmentInMemory() : impl_(std::make_shared<SegmentInMemoryImpl>()) {}
 
 SegmentInMemory::SegmentInMemory(
-        const StreamDescriptor& tsd, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse,
-        OutputFormat output_format, DataTypeMode mode
-) :
-    impl_(std::make_shared<SegmentInMemoryImpl>(tsd, expected_column_size, presize, allow_sparse, output_format, mode)
-    ) {}
-
-SegmentInMemory::SegmentInMemory(
-        StreamDescriptor&& tsd, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse,
-        OutputFormat output_format, DataTypeMode mode
+        const StreamDescriptor& tsd, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
+        const ExtraBytesPerColumn& extra_bytes_per_column
 ) :
     impl_(std::make_shared<SegmentInMemoryImpl>(
-            std::move(tsd), expected_column_size, presize, allow_sparse, output_format, mode
+            tsd, expected_column_size, allocation_type, allow_sparse, extra_bytes_per_column
+    )) {}
+
+SegmentInMemory::SegmentInMemory(
+        StreamDescriptor&& tsd, size_t expected_column_size, AllocationType allocation_type, Sparsity allow_sparse,
+        const ExtraBytesPerColumn& extra_bytes_per_column
+) :
+    impl_(std::make_shared<SegmentInMemoryImpl>(
+            std::move(tsd), expected_column_size, allocation_type, allow_sparse, extra_bytes_per_column
     )) {}
 
 void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept { std::swap(left.impl_, right.impl_); }
@@ -106,6 +107,10 @@ position_t SegmentInMemory::add_column(const Field& field, const std::shared_ptr
 
 position_t SegmentInMemory::add_column(FieldRef field_ref, const std::shared_ptr<Column>& column) {
     return impl_->add_column(field_ref, column);
+}
+
+position_t SegmentInMemory::add_column(std::string_view name, const std::shared_ptr<Column>& column) {
+    return impl_->add_column(name, column);
 }
 
 position_t SegmentInMemory::add_column(FieldRef field_ref, size_t num_rows, AllocationType presize) {

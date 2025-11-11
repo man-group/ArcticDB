@@ -33,9 +33,10 @@ dependencies:
   - prometheus-cpp
   - libprotobuf <7
   - openssl
-  - libcurl
+  # TODO: understand failures with libcurl>=8.17
+  - libcurl <8.17
   - bitmagic
-  - sparrow-devel==1.2.0
+  - sparrow-devel==1.3.0
   - spdlog
   - azure-core-cpp
   - azure-identity-cpp
@@ -85,7 +86,5 @@ dependencies:
   - retrying
   - trustme
   - psutil
-  # Use memray and pytest-memray only on Linux and MacOS
-  - sel(unix): memray
-  - sel(unix): pytest-memray
+  # Use pytest-xdist only on Linux and MacOS
   - sel(unix): pytest-xdist

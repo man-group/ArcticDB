@@ -10,7 +10,7 @@ import time
 import numpy as np
 import pandas as pd
 
-from arcticdb import Arctic, OutputFormat
+from arcticdb import Arctic, OutputFormat, ArrowOutputStringFormat
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
@@ -92,15 +92,17 @@ class ArrowNumeric:
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
 
-class ArrowReadStrings:
+class ArrowStrings:
     number = 5
     warmup_time = 0
     timeout = 6000
     rounds = 1
-    connection_string = "lmdb://arrow_read_strings?map_size=20GB"
-    lib_name = "arrow_read_strings"
-    params = ([10_000, 1_000_000], [None, "middle"], [1, 100, 100_000])
-    param_names = ["rows", "date_range", "unique_string_count"]
+    connection_string = "lmdb://arrow_strings?map_size=20GB"
+    lib_name_prewritten = "arrow_strings_prewritten"
+    lib_name_fresh = "arrow_strings_fresh"
+    params = ([10_000, 1_000_000], [None, "middle"], [1, 100, 100_000], list(ArrowOutputStringFormat))
+    param_names = ["rows", "date_range", "unique_string_count", "arrow_string_format"]
+    num_cols = 10
 
     def symbol_name(self, num_rows: int, unique_strings: int):
         return f"string_{num_rows}_rows_{unique_strings}_unique_strings"
@@ -113,37 +115,72 @@ class ArrowReadStrings:
         self._setup_cache()
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
-    def _setup_cache(self):
+    def _generate_table(self, num_rows, num_cols, unique_string_count):
         rng = np.random.default_rng()
-        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
-        num_rows, date_ranges, unique_string_counts = self.params
-        num_cols = 10
-        self.ac.delete_library(self.lib_name)
-        self.ac.create_library(self.lib_name)
-        lib = self.ac.get_library(self.lib_name)
-        for unique_string_count in unique_string_counts:
-            strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True))
-            for rows in num_rows:
-                df = pd.DataFrame(
-                    {f"col{idx}": rng.choice(strings, rows) for idx in range(num_cols)},
-                    index=pd.date_range("1970-01-01", freq="ns", periods=rows),
-                )
-                lib.write(self.symbol_name(rows, unique_string_count), df)
+        strings = np.array(random_strings_of_length(unique_string_count, 10, unique=True))
+        df = pd.DataFrame(
+            {f"col{idx}": rng.choice(strings, num_rows) for idx in range(num_cols)},
+            index=pd.date_range("1970-01-01", freq="ns", periods=num_rows),
+        )
+        df.index.name = "ts"
+        return pa.Table.from_pandas(df)
 
-    def teardown(self, rows, date_range, unique_string_count):
+    def _setup_cache(self):
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
+        num_rows, date_ranges, unique_string_counts, arrow_string_format = self.params
+        self.ac.delete_library(self.lib_name_prewritten)
+        self.ac.create_library(self.lib_name_prewritten)
+        lib = self.ac.get_library(self.lib_name_prewritten)
+        lib._nvs._set_allow_arrow_input()
+        for rows in num_rows:
+            for unique_string_count in unique_string_counts:
+                table = self._generate_table(rows, self.num_cols, unique_string_count)
+                lib.write(self.symbol_name(rows, unique_string_count), table, index_column="ts")
+
+    def teardown(self, rows, date_range, unique_string_count, arrow_string_format):
+        for lib in self.ac.list_libraries():
+            if "prewritten" in lib:
+                continue
+            self.ac.delete_library(lib)
         del self.ac
 
-    def setup(self, rows, date_range, unique_string_count):
+    def setup(self, rows, date_range, unique_string_count, arrow_string_format):
         self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
-        self.lib = self.ac.get_library(self.lib_name)
+        self.lib = self.ac.get_library(self.lib_name_prewritten)
+        self.lib._nvs._set_allow_arrow_input()
         if date_range is None:
             self.date_range = None
         else:
             # Create a date range that excludes the first and last 10 rows of the data only
             self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))
+        self.fresh_lib = self.get_fresh_lib()
+        self.fresh_lib._nvs._set_allow_arrow_input()
+        self.table = self._generate_table(rows, self.num_cols, unique_string_count)
 
-    def time_read(self, rows, date_range, unique_string_count):
-        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)
+    def get_fresh_lib(self):
+        self.ac.delete_library(self.lib_name_fresh)
+        return self.ac.create_library(self.lib_name_fresh)
 
-    def peakmem_read(self, rows, date_range, unique_string_count):
-        self.lib.read(self.symbol_name(rows, unique_string_count), date_range=self.date_range)
+    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
+        # No point in running with all read time options
+        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+
+    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
+        # No point in running with all read time options
+        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
+            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
+
+    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):
+        self.lib.read(
+            self.symbol_name(rows, unique_string_count),
+            date_range=self.date_range,
+            arrow_string_format_default=arrow_string_format,
+        )
+
+    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):
+        self.lib.read(
+            self.symbol_name(rows, unique_string_count),
+            date_range=self.date_range,
+            arrow_string_format_default=arrow_string_format,
+        )

@@ -25,8 +25,9 @@ class TestQueryBuilderSparse:
     df = None
 
     @pytest.fixture(autouse=True)
-    def write_test_data(self, lmdb_version_store):
+    def write_test_data(self, lmdb_version_store, any_output_format):
         lib = lmdb_version_store
+        lib._set_output_format_for_pipeline_tests(any_output_format)
         df_0 = pd.DataFrame(
             {
                 "sparse1": [1.0, np.nan, 2.0, np.nan],
@@ -145,8 +146,9 @@ class TestQueryBuilderSparse:
         assert_frame_equal(expected, received, check_dtype=False)
 
 
-def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dynamic_schema):
+def test_query_builder_sparse_dynamic_schema_type_change(lmdb_version_store_dynamic_schema, any_output_format):
     lib = lmdb_version_store_dynamic_schema
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_query_builder_sparse_dynamic_schema_type_change"
     df_0 = pd.DataFrame(
         {

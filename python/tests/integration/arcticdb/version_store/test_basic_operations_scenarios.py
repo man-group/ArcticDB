@@ -8,6 +8,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 
 import re
 import sys
+import time
 from typing import List
 import pytest
 import pandas as pd
@@ -309,6 +310,7 @@ def test_append_scenario_with_errors_and_success(version_store_and_real_s3_basic
 
     before_append = pd.Timestamp.now(tz=timezone.utc).value
     result = lib.append(symbol, df_2)
+    time.sleep(0.001)  # In case utcnow() has a lower precision
     after_append = pd.Timestamp.now(tz=timezone.utc).value
     # Verify VersionedItem structure
     assert isinstance(result, VersionedItem)

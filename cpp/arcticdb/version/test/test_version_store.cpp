@@ -497,7 +497,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
         frames.push_back(wrapper.frame_);
     }
 
-    folly::collect(test_store_->batch_write_internal(version_ids, symbols, std::move(frames), dedup_maps, false)).get();
+    test_store_->batch_write_internal(std::move(version_ids), symbols, std::move(frames), dedup_maps, false).get();
 }
 
 TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
@@ -1069,4 +1069,67 @@ TEST(VersionStore, TestWriteAppendMapHead) {
     auto [next_key, total_rows] = read_head(version_store._test_get_store(), symbol);
     ASSERT_EQ(next_key, key);
     ASSERT_EQ(total_rows, num_rows);
+}
+
+TEST(DeleteIncompleteKeysOnExit, TestDeleteIncompleteKeysOnExit) {
+    using namespace arcticdb;
+
+    auto version_store_ptr = test_store("testlib");
+    auto version_store = *version_store_ptr;
+    auto store = version_store._test_get_store();
+    std::string stream_id{"sym"};
+    auto pipeline_context = std::make_shared<PipelineContext>();
+    pipeline_context->stream_id_ = stream_id;
+    auto get_staged_keys = [store]() {
+        std::unordered_set<AtomKey> res;
+        store->iterate_type(KeyType::APPEND_DATA, [&](VariantKey&& found_key) { res.emplace(to_atom(found_key)); });
+        return res;
+    };
+    auto wrapper1 = get_test_simple_frame(stream_id, 15, 2);
+    auto& frame1 = wrapper1.frame_;
+    auto wrapper2 = get_test_simple_frame(stream_id, 15, 2);
+    auto& frame2 = wrapper2.frame_;
+    auto staged_keys_1 =
+            version_store.write_parallel_frame(stream_id, frame1, true, false, std::nullopt).staged_segments;
+    auto staged_keys_2 =
+            version_store.write_parallel_frame(stream_id, frame2, true, false, std::nullopt).staged_segments;
+    ASSERT_EQ(staged_keys_1.size(), 1);
+    ASSERT_EQ(staged_keys_2.size(), 1);
+
+    auto wrapper3 = get_test_simple_frame(stream_id, 15, 2);
+    auto& frame3 = wrapper3.frame_;
+    auto staged_result_3 = version_store.write_parallel_frame(stream_id, frame3, true, false, std::nullopt);
+    const auto& staged_keys_3 = staged_result_3.staged_segments;
+    ASSERT_EQ(staged_keys_3.size(), 1);
+
+    const auto staged_keys = get_staged_keys();
+    ASSERT_EQ(staged_keys.size(), 3);
+
+    auto stage_results = std::make_optional(std::vector{staged_result_3});
+
+    CompactIncompleteParameters params;
+    params.via_iteration_ = true;
+    params.delete_staged_data_on_failure_ = true;
+    params.stage_results = stage_results;
+    {
+        auto delete_tombstone_keys_on_exit = version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    }
+
+    // Doesn't touch the other keys when staged result is provided
+    auto staged_keys_1_and_2 = std::unordered_set{staged_keys_1[0], staged_keys_2[0]};
+    ASSERT_EQ(get_staged_keys(), staged_keys_1_and_2);
+
+    // Providing a non-existent key is fine
+    {
+        auto delete_tombstone_keys_on_exit = version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    }
+    ASSERT_EQ(get_staged_keys(), staged_keys_1_and_2);
+
+    // Providing no stage result deletes everything
+    params.stage_results = std::nullopt;
+    {
+        auto delete_tombstone_keys_on_exit = version_store::get_delete_keys_on_failure(pipeline_context, store, params);
+    }
+    auto staged_keys_final = get_staged_keys();
+    ASSERT_EQ(staged_keys_final.size(), 0);
 }

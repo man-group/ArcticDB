@@ -77,7 +77,7 @@ struct ExtraBufferIndexHash {
 };
 
 struct ExtraBufferContainer {
-    mutable std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
     std::unordered_map<ExtraBufferIndex, ChunkedBuffer, ExtraBufferIndexHash> buffers_;
 
     ChunkedBuffer& create_buffer(size_t offset, ExtraBufferType type, size_t size, AllocationType allocation_type);
@@ -225,10 +225,8 @@ class Column {
 
     Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes);
 
-    Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse);
-
-    Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse,
-           OutputFormat output_format, DataTypeMode mode);
+    Column(TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
+           size_t extra_bytes_per_block = 0);
 
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 

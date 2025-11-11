@@ -181,6 +181,7 @@ set(arcticdb_srcs
         # header files
         arrow/arrow_handlers.hpp
         arrow/arrow_output_frame.hpp
+        arrow/arrow_output_options.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -938,6 +939,7 @@ if(${TEST})
 
     set(unit_test_srcs
             arrow/test/arrow_test_utils.hpp
+            arrow/test/arrow_test_utils.cpp
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
             async/test/test_async.cpp
@@ -962,6 +964,7 @@ if(${TEST})
             pipeline/test/test_pipeline.cpp
             pipeline/test/test_query.cpp
             pipeline/test/test_frame_allocation.cpp
+            pipeline/test/test_rollback.cpp
             pipeline/test/test_value.cpp
             util/test/test_regex.cpp
             processing/test/test_arithmetic_type_promotion.cpp
@@ -1106,6 +1109,7 @@ if(${TEST})
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             arrow/test/arrow_test_utils.hpp
+            arrow/test/arrow_test_utils.cpp
             arrow/test/benchmark_arrow_reads.cpp
             arrow/test/benchmark_arrow_writes.cpp
             column_store/test/benchmark_column.cpp

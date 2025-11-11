@@ -255,6 +255,7 @@ void register_error_code_ecosystem(py::module& m, py::exception<arcticdb::Arctic
     });
 
     py::register_exception<storage::DuplicateKeyException>(m, "DuplicateKeyException", storage_exception.ptr());
+    py::register_exception<storage::KeyNotFoundException>(m, "KeyNotFoundException", storage_exception.ptr());
     py::register_exception<PermissionException>(m, "PermissionException", storage_exception.ptr());
 
     py::register_exception<SchemaException>(m, "SchemaException", compat_exception.ptr());
@@ -381,15 +382,8 @@ PYBIND11_MODULE(arcticdb_ext, m) {
     register_metrics(m.def_submodule("metrics"));
     register_type_handlers();
 
-    auto cleanup_callback = []() {
-        using namespace arcticdb;
-        ARCTICDB_DEBUG(log::version(), "Running cleanup callback");
-        shutdown_globals();
-    };
-
-    m.add_object("_cleanup", py::capsule(cleanup_callback));
-
     register_termination_handler();
+    Py_AtExit(shutdown_globals);
 
 #ifdef VERSION_INFO
     m.attr("__version__") = VERSION_INFO;

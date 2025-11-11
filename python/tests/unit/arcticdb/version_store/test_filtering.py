@@ -17,6 +17,7 @@ from pytz import timezone
 import random
 import string
 
+from arcticdb import OutputFormat
 from arcticdb.exceptions import ArcticNativeException, InternalException, UserInputException, SchemaException
 from arcticdb.version_store.processing import QueryBuilder
 from arcticdb.util.test import (
@@ -39,8 +40,9 @@ from arcticdb.util._versions import IS_PANDAS_TWO, PANDAS_VERSION, IS_NUMPY_TWO
 pytestmark = pytest.mark.pipeline
 
 
-def test_filter_column_not_present(lmdb_version_store_v1):
+def test_filter_column_not_present(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["b"] < 5]
@@ -50,8 +52,9 @@ def test_filter_column_not_present(lmdb_version_store_v1):
         _ = lib.read(symbol, query_builder=q)
 
 
-def test_filter_column_attribute_syntax(lmdb_version_store_v1):
+def test_filter_column_attribute_syntax(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_column_attribute_syntax"
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]})
     lib.write(symbol, df)
@@ -67,8 +70,9 @@ def test_filter_infinite_value():
         q = q[q["a"] < math.inf]
 
 
-def test_filter_categorical(lmdb_version_store_v1):
+def test_filter_categorical(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": ["hello", "hi", "hello"]}, index=np.arange(3))
     df.a = df.a.astype("category")
     q = QueryBuilder()
@@ -79,8 +83,9 @@ def test_filter_categorical(lmdb_version_store_v1):
         _ = lib.read(symbol, query_builder=q)
 
 
-def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
+def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_date_range_row_indexed"
     df = pd.DataFrame({"a": np.arange(3)}, index=np.arange(3))
     lib.write(symbol, df)
@@ -88,8 +93,9 @@ def test_filter_date_range_row_indexed(lmdb_version_store_tiny_segment):
         lib.read(symbol, date_range=(pd.Timestamp("2000-01-01"), pd.Timestamp("2000-01-02")))
 
 
-def test_filter_explicit_index(lmdb_version_store_v1):
+def test_filter_explicit_index(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [np.uint8(1), np.uint8(0)]}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["a"] < np.uint8(1)]
@@ -99,8 +105,9 @@ def test_filter_explicit_index(lmdb_version_store_v1):
     assert_frame_equal(df.query(pandas_query), lib.read(symbol, query_builder=q).data)
 
 
-def test_filter_clashing_values(lmdb_version_store_v1):
+def test_filter_clashing_values(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_clashing_values"
     df = pd.DataFrame({"a": [10, 11, 12], "b": ["11", "12", "13"]}, index=np.arange(3))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -111,9 +118,10 @@ def test_filter_clashing_values(lmdb_version_store_v1):
     generic_filter_test_strings(lib, base_symbol, q, expected)
 
 
-def test_filter_bool_nonbool_comparison(lmdb_version_store_v1):
+def test_filter_bool_nonbool_comparison(lmdb_version_store_v1, any_output_format):
     symbol = "test_filter_bool_nonbool_comparison"
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"string": ["True", "False"], "numeric": [1, 0], "bool": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
 
@@ -149,8 +157,9 @@ def test_filter_bool_nonbool_comparison(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_filter_bool_column(lmdb_version_store_v1):
+def test_filter_bool_column(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
@@ -160,8 +169,9 @@ def test_filter_bool_column(lmdb_version_store_v1):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_bool_column_not(lmdb_version_store_v1):
+def test_filter_bool_column_not(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column_not"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
@@ -171,8 +181,9 @@ def test_filter_bool_column_not(lmdb_version_store_v1):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_bool_column_binary_boolean(lmdb_version_store_v1):
+def test_filter_bool_column_binary_boolean(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column_binary_boolean"
     df = pd.DataFrame({"a": [True, True, False, False], "b": [True, False, True, False]}, index=np.arange(4))
     lib.write(symbol, df)
@@ -182,8 +193,9 @@ def test_filter_bool_column_binary_boolean(lmdb_version_store_v1):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_bool_column_comparison(lmdb_version_store_v1):
+def test_filter_bool_column_comparison(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_bool_column_comparison"
     df = pd.DataFrame({"a": [True, False]}, index=np.arange(2))
     lib.write(symbol, df)
@@ -213,8 +225,9 @@ def test_filter_bool_column_comparison(lmdb_version_store_v1):
             generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_datetime_naive(lmdb_version_store_v1):
+def test_filter_datetime_naive(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_simple"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
@@ -226,8 +239,9 @@ def test_filter_datetime_naive(lmdb_version_store_v1):
         generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_datetime_isin(lmdb_version_store_v1):
+def test_filter_datetime_isin(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_isin"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     lib.write(symbol, df)
@@ -239,8 +253,9 @@ def test_filter_datetime_isin(lmdb_version_store_v1):
         generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_datetime_timedelta(lmdb_version_store_v1):
+def test_filter_datetime_timedelta(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_timedelta"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10)})
     pd_ts = pd.Timestamp("2000-01-05")
@@ -262,8 +277,9 @@ def test_filter_datetime_timedelta(lmdb_version_store_v1):
             assert True
 
 
-def test_filter_datetime_timezone_aware(lmdb_version_store_v1):
+def test_filter_datetime_timezone_aware(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_datetime_timezone_aware"
     df = pd.DataFrame({"a": pd.date_range("2000-01-01", periods=10, tz=timezone("Europe/Amsterdam"))})
     lib.write(symbol, df)
@@ -277,8 +293,9 @@ def test_filter_datetime_timezone_aware(lmdb_version_store_v1):
         generic_filter_test(lib, symbol, q, expected)
 
 
-def test_df_query_wrong_type(lmdb_version_store_v1):
+def test_df_query_wrong_type(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
 
     df1 = pd.DataFrame(
         {
@@ -340,8 +357,9 @@ def test_df_query_wrong_type(lmdb_version_store_v1):
         lib.read(sym, query_builder=q)
 
 
-def test_filter_datetime_nanoseconds(lmdb_version_store_v1):
+def test_filter_datetime_nanoseconds(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_filter_datetime_nanoseconds"
 
     # Dataframe has three rows and a single column containing timestamps 1 nanosecond apart
@@ -381,8 +399,9 @@ def test_filter_datetime_nanoseconds(lmdb_version_store_v1):
     assert_frame_equal(second_and_third_row_result, df.iloc[[1, 2]].reset_index(drop=True))
 
 
-def test_filter_isin_clashing_sets(lmdb_version_store_v1):
+def test_filter_isin_clashing_sets(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_isin_clashing_sets"
     a_unique_val = 100000
     b_unique_val = 200000
@@ -408,8 +427,11 @@ def test_filter_isin_clashing_sets(lmdb_version_store_v1):
         ([-1, 0, 1], [0, 1, 2**62], [0, 1]),
     ],
 )
-def test_filter_numeric_isin_hashing_overflows(lmdb_version_store_v1, df_col, isin_vals, expected_col):
+def test_filter_numeric_isin_hashing_overflows(
+    lmdb_version_store_v1, df_col, isin_vals, expected_col, any_output_format
+):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": df_col})
     lib.write("test_filter_numeric_isin_hashing_overflows", df)
 
@@ -421,8 +443,9 @@ def test_filter_numeric_isin_hashing_overflows(lmdb_version_store_v1, df_col, is
     assert_frame_equal(expected, result)
 
 
-def test_filter_numeric_isin_unsigned(lmdb_version_store_v1):
+def test_filter_numeric_isin_unsigned(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [0, 1, 2**64 - 1]})
     lib.write("test_filter_numeric_isin_unsigned", df)
 
@@ -441,8 +464,9 @@ def test_filter_numeric_isnotin_mixed_types_exception():
         q = q[q["a"].isnotin(vals)]
 
 
-def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store_v1):
+def test_filter_numeric_isnotin_hashing_overflow(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": [256]})
     lib.write("test_filter_numeric_isnotin_hashing_overflow", df)
 
@@ -460,8 +484,11 @@ _uint64_max = np.iinfo(np.uint64).max
 @pytest.mark.parametrize("op", ("in", "not in"))
 @pytest.mark.parametrize("signed_type", (np.int8, np.int16, np.int32, np.int64))
 @pytest.mark.parametrize("uint64_in", ("df", "vals") if PANDAS_VERSION >= Version("1.2") else ("vals",))
-def test_filter_numeric_membership_mixing_int64_and_uint64(lmdb_version_store_v1, op, signed_type, uint64_in):
+def test_filter_numeric_membership_mixing_int64_and_uint64(
+    lmdb_version_store_v1, op, signed_type, uint64_in, any_output_format
+):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_numeric_membership_mixing_int64_and_uint64"
     signed = signed_type(-1)
     if uint64_in == "df":
@@ -476,8 +503,9 @@ def test_filter_numeric_membership_mixing_int64_and_uint64(lmdb_version_store_v1
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
+def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     sym = "test_filter_nones_and_nans_retained_in_string_column"
     df = pd.DataFrame({"filter_column": [1, 2, 1, 2, 1, 2], "string_column": ["1", "2", np.nan, "4", None, "6"]})
     lib.write(sym, df)
@@ -488,13 +516,19 @@ def test_filter_nones_and_nans_retained_in_string_column(lmdb_version_store_v1):
     received = lib.read(sym, query_builder=q).data
     assert np.array_equal(expected["filter_column"], received["filter_column"])
     assert received["string_column"].iloc[0] == "1"
-    assert np.isnan(received["string_column"].iloc[1])
+    if any_output_format == OutputFormat.PANDAS:
+        assert np.isnan(received["string_column"].iloc[1])
+    else:
+        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s which then is
+        # converted to pandas `None`s
+        assert received["string_column"].iloc[1] is None
     assert received["string_column"].iloc[2] is None
 
 
 # Tests that false matches aren't generated when list members truncate to column values
-def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1):
+def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_fixed_width_string_isin_truncation"
     df = pd.DataFrame({"a": ["1"]}, index=np.arange(1))
     lib.write(symbol, df, dynamic_strings=False)
@@ -505,7 +539,7 @@ def test_filter_fixed_width_string_isin_truncation(lmdb_version_store_v1):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
+def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment, any_output_format):
     # Construct a dataframe and QueryBuilder pair with the following properties:
     # - original dataframe spanning multiple segments horizontally and vertically (tiny segment == 2x2)
     # - strings of varying lengths to exercise fixed width strings more completely
@@ -514,6 +548,7 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
     # - at least one segment will need none of the strings in it's pool after filtering
     # - at least one segment will need some, but not all of the strings in it's pool after filtering
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_stringpool_shrinking_basic"
     df = pd.DataFrame(
         {
@@ -532,8 +567,9 @@ def test_filter_stringpool_shrinking_basic(lmdb_version_store_tiny_segment):
     generic_filter_test_strings(lib, base_symbol, q, expected)
 
 
-def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1):
+def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_stringpool_shrinking_block_alignment"
     # Create a dataframe with more than one block (3968 bytes) worth of strings for the stringpool
     string_length = 10
@@ -549,8 +585,9 @@ def test_filter_stringpool_shrinking_block_alignment(lmdb_version_store_v1):
     generic_filter_test_strings(lib, base_symbol, q, expected)
 
 
-def test_filter_explicit_type_promotion(lmdb_version_store_v1):
+def test_filter_explicit_type_promotion(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         {
             "uint8": [np.iinfo(np.uint8).min, np.iinfo(np.uint8).max],
@@ -632,8 +669,9 @@ def test_filter_explicit_type_promotion(lmdb_version_store_v1):
     assert np.array_equal(lib.read(symbol, query_builder=q).data, df.loc[[1]])
 
 
-def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segment):
+def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": np.arange(0, 10), "b": np.arange(10, 20), "c": np.arange(20, 30)}, index=np.arange(10))
     symbol = "test_filter_column_slicing_different_segments"
     lib.write(symbol, df)
@@ -661,8 +699,9 @@ def test_filter_column_slicing_different_segments(lmdb_version_store_tiny_segmen
     assert np.array_equal(expected, received)
 
 
-def test_filter_with_multi_index(lmdb_version_store_v1):
+def test_filter_with_multi_index(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_with_multi_index"
     dt1 = datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime(2019, 4, 9, 10, 5, 2, 1)
@@ -678,8 +717,9 @@ def test_filter_with_multi_index(lmdb_version_store_v1):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_on_multi_index(lmdb_version_store_v1):
+def test_filter_on_multi_index(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_on_multi_index"
     dt1 = datetime(2019, 4, 8, 10, 5, 2, 1)
     dt2 = datetime(2019, 4, 9, 10, 5, 2, 1)
@@ -695,8 +735,9 @@ def test_filter_on_multi_index(lmdb_version_store_v1):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_complex_expression(lmdb_version_store_tiny_segment):
+def test_filter_complex_expression(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_complex_expression"
     df = pd.DataFrame(
         {
@@ -713,8 +754,9 @@ def test_filter_complex_expression(lmdb_version_store_tiny_segment):
     generic_filter_test(lib, symbol, q, expected)
 
 
-def test_filter_string_backslash(lmdb_version_store_v1):
+def test_filter_string_backslash(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": ["", "\\"]}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["a"] == "\\"]
@@ -725,8 +767,9 @@ def test_filter_string_backslash(lmdb_version_store_v1):
     assert np.array_equal(expected, received)
 
 
-def test_filter_string_single_quote(lmdb_version_store_v1):
+def test_filter_string_single_quote(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame({"a": ["", "'"]}, index=np.arange(2))
     q = QueryBuilder()
     q = q[q["a"] == "'"]
@@ -737,8 +780,9 @@ def test_filter_string_single_quote(lmdb_version_store_v1):
     assert np.array_equal(expected, received)
 
 
-def test_filter_string_less_than(lmdb_version_store_v1):
+def test_filter_string_less_than(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_less_than"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -751,8 +795,9 @@ def test_filter_string_less_than(lmdb_version_store_v1):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 
-def test_filter_string_less_than_equal(lmdb_version_store_v1):
+def test_filter_string_less_than_equal(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_less_than_equal"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -765,8 +810,9 @@ def test_filter_string_less_than_equal(lmdb_version_store_v1):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 
-def test_filter_string_greater_than(lmdb_version_store_v1):
+def test_filter_string_greater_than(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_greater_than"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -779,8 +825,9 @@ def test_filter_string_greater_than(lmdb_version_store_v1):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 
-def test_filter_string_greater_than_equal(lmdb_version_store_v1):
+def test_filter_string_greater_than_equal(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     base_symbol = "test_filter_string_greater_than_equal"
     df = pd.DataFrame({"a": ["row1", "row2"]}, index=np.arange(2))
     lib.write(f"{base_symbol}_{DYNAMIC_STRINGS_SUFFIX}", df, dynamic_strings=True)
@@ -793,8 +840,9 @@ def test_filter_string_greater_than_equal(lmdb_version_store_v1):
         lib.read(f"{base_symbol}_{FIXED_STRINGS_SUFFIX}", query_builder=q).data
 
 
-def test_filter_string_nans_col_val(lmdb_version_store_v1):
+def test_filter_string_nans_col_val(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_string_nans_col_val"
     df = pd.DataFrame({"a": ["row1", "row2", None, np.nan, math.nan]}, index=np.arange(5))
     lib.write(symbol, df, dynamic_strings=True)
@@ -802,36 +850,37 @@ def test_filter_string_nans_col_val(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q[q["a"] == "row2"]
     expected = df[df["a"] == "row2"]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
     q = QueryBuilder()
     q = q[q["a"] != "row2"]
     expected = df[df["a"] != "row2"]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
     q = QueryBuilder()
     q = q[q["a"] == ["row2"]]
     expected = df[df["a"].isin(["row2"])]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
     q = QueryBuilder()
     q = q[q["a"] != ["row2"]]
     expected = df[~df["a"].isin(["row2"])]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
     q = QueryBuilder()
     q = q[q["a"] == []]
     expected = df[df["a"].isin([])]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
     q = QueryBuilder()
     q = q[q["a"] != []]
     expected = df[~df["a"].isin([])]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
 
-def test_filter_string_nans_col_col(lmdb_version_store_v1):
+def test_filter_string_nans_col_col(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_string_nans_col_col"
     # Compare all combinations of string, None, np.nan, and math.nan to one another
     df = pd.DataFrame(
@@ -846,18 +895,19 @@ def test_filter_string_nans_col_col(lmdb_version_store_v1):
     q = QueryBuilder()
     q = q[q["a"] == q["b"]]
     expected = df[df["a"] == df["b"]]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
     q = QueryBuilder()
     q = q[q["a"] != q["b"]]
     expected = df[df["a"] != df["b"]]
-    generic_filter_test_nans(lib, symbol, q, expected)
+    generic_filter_test_nans(lib, symbol, q, expected, any_output_format)
 
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
-def test_filter_null_filtering(lmdb_version_store_v1, method, dtype):
+def test_filter_null_filtering(lmdb_version_store_v1, method, dtype, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_null_filtering"
     num_rows = 5
     if dtype is np.int64:
@@ -1040,8 +1090,9 @@ def test_filter_bool_short_circuiting():
     assert not errors
 
 
-def test_filter_string_number_comparison(lmdb_version_store_v1):
+def test_filter_string_number_comparison(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_string_number_comparison"
     lib.write(symbol, pd.DataFrame({"a": [0], "b": ["hello"]}))
     q = QueryBuilder()
@@ -1070,8 +1121,9 @@ def test_filter_string_number_comparison(lmdb_version_store_v1):
         lib.read(symbol, query_builder=q)
 
 
-def test_filter_string_number_set_membership(lmdb_version_store_v1):
+def test_filter_string_number_set_membership(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_string_number_set_membership"
     lib.write(symbol, pd.DataFrame({"a": [0], "b": ["hello"]}))
     q = QueryBuilder()
@@ -1086,8 +1138,9 @@ def test_filter_string_number_set_membership(lmdb_version_store_v1):
 
 # float32 comparisons are excluded from the hypothesis tests due to a bug in Pandas, so cover these here instead
 # https://github.com/pandas-dev/pandas/issues/59524
-def test_float32_binary_comparison(lmdb_version_store_v1):
+def test_float32_binary_comparison(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_float32_binary_comparison"
     df = pd.DataFrame(
         {
@@ -1177,8 +1230,9 @@ def test_head_tail_unfilterable_data(lmdb_version_store_v1, head, sym, data):
 
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_pickled_symbol(request, lib_type):
+def test_filter_pickled_symbol(request, lib_type, any_output_format):
     lib = request.getfixturevalue(lib_type)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_pickled_symbol"
     lib.write(symbol, np.arange(100).tolist())
     assert lib.is_symbol_pickled(symbol)
@@ -1189,8 +1243,9 @@ def test_filter_pickled_symbol(request, lib_type):
 
 
 @pytest.mark.parametrize("lib_type", ["lmdb_version_store_v1", "lmdb_version_store_dynamic_schema_v1"])
-def test_filter_date_range_pickled_symbol(request, lib_type):
+def test_filter_date_range_pickled_symbol(request, lib_type, any_output_format):
     lib = request.getfixturevalue(lib_type)
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_date_range_pickled_symbol"
     idx = pd.date_range("2000-01-01", periods=4)
     df = pd.DataFrame({"a": [[1, 2], [3, 4], [5, 6], [7, 8]]}, index=idx)
@@ -1200,8 +1255,9 @@ def test_filter_date_range_pickled_symbol(request, lib_type):
         lib.read(symbol, date_range=(idx[1], idx[2]))
 
 
-def test_filter_date_range_none_none(lmdb_version_store_v1):
+def test_filter_date_range_none_none(lmdb_version_store_v1, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "sym"
     idx = pd.date_range("2000-01-01", periods=4)
     df = pd.DataFrame({"a": [1, 2, 3, 4]}, index=idx)
@@ -1215,8 +1271,9 @@ def test_filter_date_range_none_none(lmdb_version_store_v1):
 ##################################
 
 
-def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
+def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic, any_output_format):
     lib = lmdb_version_store_tiny_segment_dynamic
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_numeric_filter_dynamic_schema"
     df = get_wide_dataframe(100)
     expected, slices = make_dynamic(df)
@@ -1233,8 +1290,9 @@ def test_numeric_filter_dynamic_schema(lmdb_version_store_tiny_segment_dynamic):
     assert_frame_equal(expected, received)
 
 
-def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1):
+def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_column_not_present_dynamic"
     df = pd.DataFrame({"a": np.arange(2)}, index=np.arange(2), dtype="int64")
     q = QueryBuilder()
@@ -1245,8 +1303,9 @@ def test_filter_column_not_present_dynamic(lmdb_version_store_dynamic_schema_v1)
         vit = lib.read(symbol, query_builder=q)
 
 
-def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1):
+def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_column_not_present_dynamic"
     df = pd.DataFrame({"a": np.arange(2)}, dtype="int64")
     lib.write(symbol, df)
@@ -1261,8 +1320,9 @@ def test_filter_column_present_in_some_segments(lmdb_version_store_dynamic_schem
     assert_frame_equal(result, pd.DataFrame({"a": [0], "b": [1]}))
 
 
-def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
+def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_column_type_change"
 
     # Write a column of float type
@@ -1297,8 +1357,9 @@ def test_filter_column_type_change(lmdb_version_store_dynamic_schema_v1):
 
 @pytest.mark.parametrize("method", ("isna", "notna", "isnull", "notnull"))
 @pytest.mark.parametrize("dtype", (np.int64, np.float32, np.float64, np.datetime64, str))
-def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype):
+def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, method, dtype, any_output_format):
     lib = lmdb_version_store_dynamic_schema_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "lmdb_version_store_dynamic_schema"
     num_rows = 3
     if dtype is np.int64:
@@ -1345,8 +1406,9 @@ def test_filter_null_filtering_dynamic(lmdb_version_store_dynamic_schema_v1, met
 
 
 # Defrag removes column slicing and therefore basically makes any symbol dynamic
-def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment):
+def test_filter_with_column_slicing_defragmented(lmdb_version_store_tiny_segment, any_output_format):
     lib = lmdb_version_store_tiny_segment
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_filter_with_column_slicing_defragmented"
     with config_context("SymbolDataCompact.SegmentCount", 0):
         df = pd.DataFrame(
@@ -1384,8 +1446,9 @@ def test_filter_unsupported_boolean_operators():
 
 
 @pytest.mark.parametrize("dynamic_strings", [True, False])
-def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
+def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         index=pd.date_range(pd.Timestamp(0), periods=3),
         data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]},
@@ -1424,8 +1487,9 @@ def test_filter_regex_match_basic(lmdb_version_store_v1, sym, dynamic_strings):
 
 
 @pytest.mark.parametrize("dynamic_strings", [True, False])
-def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_strings):
+def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_strings, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         index=pd.date_range(pd.Timestamp(0), periods=3),
         data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3], "c": ["12a", "q34c", "567f"]},
@@ -1447,8 +1511,9 @@ def test_filter_regex_match_empty_match(lmdb_version_store_v1, sym, dynamic_stri
     assert lib.read(sym, query_builder=q2).data.empty
 
 
-def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
+def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         index=pd.date_range(pd.Timestamp(0), periods=4),
         data={"a": ["abc", None, "aabc", np.nan], "b": [1, 2, 3, 4], "c": [np.nan, "q34c", None, "567f"]},
@@ -1468,7 +1533,7 @@ def test_filter_regex_match_nans_nones(lmdb_version_store_v1, sym):
     assert_frame_equal(lib.read(sym, query_builder=q_c).data, expected)
 
 
-def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
+def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym, any_output_format):
     with pytest.raises(InternalException):  # Pending changing exception type to UserInputException in v6.0.0 release
         q = QueryBuilder()
         q = q[q["a"].regex_match("[")]
@@ -1478,8 +1543,9 @@ def test_filter_regex_match_invalid_pattern(lmdb_version_store_v1, sym):
         q = q[q["b"].regex_match(1)]
 
 
-def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
+def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         index=pd.date_range(pd.Timestamp(0), periods=3), data={"a": ["abc", "abcd", "aabc"], "b": [1, 2, 3]}
     )
@@ -1492,8 +1558,9 @@ def test_filter_regex_match_uncompatible_column(lmdb_version_store_v1, sym):
 
 
 @pytest.mark.parametrize("dynamic_strings", [True, False])
-def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings):
+def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         index=pd.date_range(pd.Timestamp(0), periods=3),
         data={"a": [f"{unicode_symbols}abc", f"abc{unicode_symbols}", "abc"], "b": [1, 2, 3]},
@@ -1510,8 +1577,9 @@ def test_filter_regex_match_unicode(lmdb_version_store_v1, sym, dynamic_strings)
 
 
 @pytest.mark.parametrize("dynamic_strings", [True, False])
-def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynamic_strings):
+def test_filter_regex_comma_separated_strings(lmdb_version_store_v1, sym, dynamic_strings, any_output_format):
     lib = lmdb_version_store_v1
+    lib._set_output_format_for_pipeline_tests(any_output_format)
     df = pd.DataFrame(
         index=pd.date_range(pd.Timestamp(0), periods=3), data={"a": ["a-1,d-1", "g-i,3-l", "d-2,-hi"], "b": [1, 2, 3]}
     )

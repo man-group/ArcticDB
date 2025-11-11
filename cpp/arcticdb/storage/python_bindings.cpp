@@ -140,23 +140,23 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             .value("DELETE", OpenMode::DELETE);
 
     py::enum_<ModifiableLibraryOption>(storage, "ModifiableLibraryOption", R"pbdoc(
-        Library options that can be modified after library creation.
-
-        See also `ModifiableEnterpriseLibraryOption` for enterprise options that can be modified.
-
-        See `LibraryOptions` for a description of each option.
-    )pbdoc")
+         Library options that can be modified after library creation.
+ 
+         See also `ModifiableEnterpriseLibraryOption` for enterprise options that can be modified.
+ 
+         See `LibraryOptions` for a description of each option.
+     )pbdoc")
             .value("DEDUP", ModifiableLibraryOption::DEDUP)
             .value("ROWS_PER_SEGMENT", ModifiableLibraryOption::ROWS_PER_SEGMENT)
             .value("COLUMNS_PER_SEGMENT", ModifiableLibraryOption::COLUMNS_PER_SEGMENT);
 
     py::enum_<ModifiableEnterpriseLibraryOption>(storage, "ModifiableEnterpriseLibraryOption", R"pbdoc(
-        Enterprise library options that can be modified after library creation.
-
-        See also `ModifiableLibraryOption` for non-enterprise options that can be modified.
-
-        See `EnterpriseLibraryOptions` for a description of each option.
-    )pbdoc")
+         Enterprise library options that can be modified after library creation.
+ 
+         See also `ModifiableLibraryOption` for non-enterprise options that can be modified.
+ 
+         See `EnterpriseLibraryOptions` for a description of each option.
+     )pbdoc")
             .value("REPLICATION", ModifiableEnterpriseLibraryOption::REPLICATION)
             .value("BACKGROUND_DELETION", ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION);
 
@@ -308,6 +308,17 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             .def("set_azure_override", &StorageOverride::set_azure_override)
             .def("set_lmdb_override", &StorageOverride::set_lmdb_override)
             .def("set_gcpxml_override", &StorageOverride::set_gcpxml_override);
+
+    py::class_<LibraryManager::LibraryWithConfig>(storage, "LibraryWithConfig")
+            .def_property_readonly(
+                    "config",
+                    [](const LibraryManager::LibraryWithConfig& library_with_config) {
+                        return pb_to_python(library_with_config.config);
+                    }
+            )
+            .def_property_readonly("library", [](const LibraryManager::LibraryWithConfig& library_with_config) {
+                return library_with_config.library;
+            });
 
     py::class_<LibraryManager, std::shared_ptr<LibraryManager>>(storage, "LibraryManager")
             .def(py::init<std::shared_ptr<storage::Library>>())

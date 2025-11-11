@@ -16,10 +16,10 @@
 
 namespace arcticdb::detail {
 
-inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, OutputFormat output_format) {
+inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos) {
     ARCTICDB_SAMPLE_DEFAULT(PythonOutputFrameArrayAt)
     if (frame.empty()) {
-        return visit_field(frame.field(col_pos), [output_format](auto tag) {
+        return visit_field(frame.field(col_pos), [](auto tag) {
             using TypeTag = std::decay_t<decltype(tag)>;
             constexpr auto data_type = TypeTag::DataTypeTag::data_type;
             std::string dtype;
@@ -50,7 +50,7 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
             } else if constexpr (is_empty_type(data_type) || is_bool_object_type(data_type) ||
                                  is_array_type(TypeDescriptor(tag))) {
                 dtype = "O";
-                esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
+                esize = data_type_size(TypeDescriptor{tag});
             } else if constexpr (tag.dimension() == Dimension::Dim2) {
                 util::raise_rte("Read resulted in two dimensional type. This is not supported.");
             } else {
@@ -59,14 +59,16 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
             return py::array{py::dtype{dtype}, py::array::ShapeContainer{0}, py::array::StridesContainer{esize}};
         });
     }
-    return visit_field(frame.field(col_pos), [&, frame = frame, col_pos = col_pos, output_format](auto tag) {
+    return visit_field(frame.field(col_pos), [&, frame = frame, col_pos = col_pos](auto tag) {
         using TypeTag = std::decay_t<decltype(tag)>;
         constexpr auto data_type = TypeTag::DataTypeTag::data_type;
         auto column_data = frame.column(col_pos).data();
         const auto& buffer = column_data.buffer();
         util::check(buffer.num_blocks() == 1, "Expected 1 block when creating ndarray, got {}", buffer.num_blocks());
-        uint8_t* ptr = buffer.blocks().at(0)->release();
-        NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, frame.row_count());
+        auto* block = buffer.blocks().at(0);
+        size_t allocated_bytes = block->bytes();
+        uint8_t* ptr = block->release();
+        NumpyBufferHolder numpy_buffer_holder(TypeDescriptor{tag}, ptr, frame.row_count(), allocated_bytes);
         auto base_obj = pybind11::cast(std::move(numpy_buffer_holder));
         std::string dtype;
         ssize_t esize = get_type_size(data_type);
@@ -100,10 +102,10 @@ inline py::array array_at(const SegmentInMemory& frame, std::size_t col_pos, Out
             }
         } else if constexpr (is_empty_type(data_type) || is_bool_object_type(data_type)) {
             dtype = "O";
-            esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
+            esize = data_type_size(TypeDescriptor{tag});
         } else if constexpr (is_array_type(TypeDescriptor(tag))) {
             dtype = "O";
-            esize = data_type_size(TypeDescriptor{tag}, output_format, DataTypeMode::EXTERNAL);
+            esize = data_type_size(TypeDescriptor{tag});
             // The python representation of multidimensional columns differs from the in-memory/on-storage. In memory,
             // we hold all scalars in a contiguous buffer with the shapes buffer telling us how many elements are there
             // per array. Each element is of size sizeof(DataTypeTag::raw_type). For the python representation the

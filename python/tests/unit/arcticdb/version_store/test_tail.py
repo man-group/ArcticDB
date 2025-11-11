@@ -25,65 +25,79 @@ def generic_tail_test(version_store, symbol, df, num_rows):
     assert np.array_equal(expected, actual)
 
 
-def test_tail_large_segment(lmdb_version_store):
+def test_tail_large_segment(lmdb_version_store, any_output_format):
+    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     df = DataFrame({"x": np.arange(100_000, dtype=np.int64)})
     generic_tail_test(lmdb_version_store, "test_tail_large_segment", df, 50_000)
 
 
-def test_tail_zero_num_rows(lmdb_version_store, one_col_df):
+def test_tail_zero_num_rows(lmdb_version_store, one_col_df, any_output_format):
+    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     generic_tail_test(lmdb_version_store, "test_tail_zero_num_rows", one_col_df(), 0)
 
 
-def test_tail_one_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_one_num_rows(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     generic_tail_test(lmdb_version_store_tiny_segment, "test_tail_one_num_rows", one_col_df(), 1)
 
 
-def test_tail_segment_boundary_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_segment_boundary_num_rows(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # lmdb_version_store_tiny_segment has segment_row_size set to 2
     generic_tail_test(lmdb_version_store_tiny_segment, "test_tail_segment_boundary_num_rows", one_col_df(), 2)
 
 
-def test_tail_multiple_segments(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_multiple_segments(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # lmdb_version_store_tiny_segment has segment_row_size set to 2
     generic_tail_test(lmdb_version_store_tiny_segment, "test_tail_multiple_segments", one_col_df(), 7)
 
 
-def test_tail_negative_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_negative_num_rows(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     generic_tail_test(lmdb_version_store_tiny_segment, "test_tail_negative_num_rows", one_col_df(), -7)
 
 
-def test_tail_num_rows_equals_table_length(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_num_rows_equals_table_length(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # one_col_df generates a dataframe with 10 rows
     generic_tail_test(lmdb_version_store_tiny_segment, "test_tail_num_rows_greater_than_table_length", one_col_df(), 10)
 
 
-def test_tail_negative_num_rows_equals_table_length(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_negative_num_rows_equals_table_length(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # one_col_df generates a dataframe with 10 rows
     generic_tail_test(
         lmdb_version_store_tiny_segment, "test_tail_negative_num_rows_equals_table_length", one_col_df(), -10
     )
 
 
-def test_tail_num_rows_greater_than_table_length(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_num_rows_greater_than_table_length(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # one_col_df generates a dataframe with 10 rows
     generic_tail_test(lmdb_version_store_tiny_segment, "test_tail_num_rows_greater_than_table_length", one_col_df(), 11)
 
 
-def test_tail_negative_num_rows_greater_than_table_length(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_negative_num_rows_greater_than_table_length(
+    lmdb_version_store_tiny_segment, one_col_df, any_output_format
+):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     # one_col_df generates a dataframe with 10 rows
     generic_tail_test(
         lmdb_version_store_tiny_segment, "test_tail_negative_num_rows_greater_than_table_length", one_col_df(), -11
     )
 
 
-def test_tail_default_num_rows(lmdb_version_store_tiny_segment, one_col_df):
+def test_tail_default_num_rows(lmdb_version_store_tiny_segment, one_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_tail_default_num_rows"
     lmdb_version_store_tiny_segment.write(symbol, one_col_df())
     num_rows = signature(lmdb_version_store_tiny_segment.tail).parameters["n"].default
     assert np.array_equal(one_col_df().tail(num_rows), lmdb_version_store_tiny_segment.tail(symbol).data)
 
 
-def test_tail_with_column_filter(lmdb_version_store_tiny_segment, three_col_df):
+def test_tail_with_column_filter(lmdb_version_store_tiny_segment, three_col_df, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_tail_with_column_filter"
     lmdb_version_store_tiny_segment.write(symbol, three_col_df())
     # lmdb_version_store_tiny_segment has column_group_size set to 2
@@ -96,7 +110,8 @@ def test_tail_with_column_filter(lmdb_version_store_tiny_segment, three_col_df):
     )
 
 
-def test_tail_multiple_segments_odd_total_rows(lmdb_version_store_tiny_segment):
+def test_tail_multiple_segments_odd_total_rows(lmdb_version_store_tiny_segment, any_output_format):
+    lmdb_version_store_tiny_segment._set_output_format_for_pipeline_tests(any_output_format)
     generic_tail_test(
         lmdb_version_store_tiny_segment,
         "test_tail_multiple_segments_odd_total_rows",
@@ -105,7 +120,8 @@ def test_tail_multiple_segments_odd_total_rows(lmdb_version_store_tiny_segment):
     )
 
 
-def test_tail_pickled_symbol(lmdb_version_store):
+def test_tail_pickled_symbol(lmdb_version_store, any_output_format):
+    lmdb_version_store._set_output_format_for_pipeline_tests(any_output_format)
     symbol = "test_tail_pickled_symbol"
     lmdb_version_store.write(symbol, np.arange(100).tolist())
     assert lmdb_version_store.is_symbol_pickled(symbol)

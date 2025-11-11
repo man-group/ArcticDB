@@ -60,7 +60,13 @@ from arcticdb_ext.version_store import StreamDescriptorMismatch
 from arcticdb_ext.version_store import DataError, KeyNotFoundInStageResultInfo
 from arcticdb_ext.version_store import sorted_value_name
 from arcticdb_ext.version_store import ArrowOutputFrame, InternalOutputFormat
-from arcticdb.options import RuntimeOptions, OutputFormat, output_format_to_internal
+from arcticdb.options import (
+    RuntimeOptions,
+    OutputFormat,
+    output_format_to_internal,
+    ArrowOutputStringFormat,
+    arrow_output_string_format_to_internal,
+)
 from arcticdb_ext.log import LogLevel as _LogLevel
 from arcticdb.authorization.permissions import OpenMode
 from arcticdb.exceptions import ArcticDbNotYetImplemented, ArcticNativeException, MissingKeysInStageResultsError
@@ -75,7 +81,6 @@ from arcticdb.version_store._normalization import (
     denormalize_dataframe,
     MsgPackNormalizer,
     CompositeNormalizer,
-    ArrowTableNormalizer,
     FrameData,
     _IDX_PREFIX_LEN,
     get_timezone_from_metadata,
@@ -89,6 +94,8 @@ TimeSeriesType = Union[pd.DataFrame, pd.Series]
 from arcticdb.util._versions import PANDAS_VERSION
 from packaging.version import Version
 import arcticdb_ext as ae
+
+from arcticdb.util.arrow import convert_arrow_to_pandas_for_tests
 
 IS_WINDOWS = sys.platform == "win32"
 
@@ -349,21 +356,35 @@ class NativeVersionStore:
         self.env = env or "local"
         self._lib_cfg = lib_cfg
         self._custom_normalizer = custom_normalizer
-        self._arrow_normalizer = ArrowTableNormalizer()
         self._init_norm_failure_handler()
         self._open_mode = open_mode
         self._native_cfg = native_cfg
         self._runtime_options = runtime_options
         # Do not make this a runtime option, as it is only temporary until Arrow writes are fully supported
         self._allow_arrow_input = False
+        # Testing configuration to read as ARROW but directly convert back to PANDAS.
+        # This is useful to mass enable ARROW testing on existing PANDAS tests without much code changes
+        self._test_convert_arrow_back_to_pandas = False
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         if self._runtime_options is None:
             self._runtime_options = RuntimeOptions()
         self._runtime_options.set_output_format(output_format)
 
+    def set_arrow_string_format_default(
+        self, arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"]
+    ):
+        if self._runtime_options is None:
+            self._runtime_options = RuntimeOptions()
+        self._runtime_options.set_arrow_string_format_default(arrow_string_format_default)
+
     def _set_allow_arrow_input(self, allow_arrow_input: bool = True):
         self._allow_arrow_input = allow_arrow_input
+
+    def _set_output_format_for_pipeline_tests(self, output_format):
+        self.set_output_format(output_format)
+        if output_format == OutputFormat.EXPERIMENTAL_ARROW:
+            self._test_convert_arrow_back_to_pandas = True
 
     @classmethod
     def create_store_from_lib_config(cls, lib_cfg, env, open_mode=OpenMode.DELETE, native_cfg=None):
@@ -759,6 +780,10 @@ class NativeVersionStore:
                 log.debug(
                     "Windows only supports dynamic_strings=True, using dynamic strings despite configuration or kwarg"
                 )
+            dynamic_strings = True
+        if self._test_convert_arrow_back_to_pandas:
+            # Arrow output format doesn't support fixed width strings, so if we're testing arrow by converting to
+            # pandas, we always use dynamic strings
             dynamic_strings = True
         return dynamic_strings
 
@@ -2046,6 +2071,25 @@ class NativeVersionStore:
         read_options.set_set_tz(resolve_defaults("set_tz", proto_cfg, global_default=False, **kwargs))
         read_options.set_allow_sparse(resolve_defaults("allow_sparse", proto_cfg, global_default=False, **kwargs))
         read_options.set_incompletes(resolve_defaults("incomplete", proto_cfg, global_default=False, **kwargs))
+        if read_options.output_format == InternalOutputFormat.ARROW:
+            read_options.set_arrow_output_default_string_format(
+                arrow_output_string_format_to_internal(
+                    self.resolve_runtime_defaults(
+                        "arrow_string_format_default",
+                        proto_cfg,
+                        global_default=ArrowOutputStringFormat.LARGE_STRING,
+                        **kwargs,
+                    )
+                )
+            )
+            read_options.set_arrow_output_per_column_string_format(
+                {
+                    key: arrow_output_string_format_to_internal(value)
+                    for key, value in resolve_defaults(
+                        "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
+                    ).items()
+                }
+            )
         return read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
@@ -2508,7 +2552,13 @@ class NativeVersionStore:
                 table = pa.Table.from_arrays([])
             else:
                 table = pa.Table.from_batches(record_batches)
-            data = self._arrow_normalizer.denormalize(table, read_result.norm)
+            data = self._normalizer.denormalize(table, read_result.norm)
+            if read_result.norm.HasField("custom"):
+                raise ArcticDbNotYetImplemented(
+                    "Denormalizing custom normalized data is not supported with Arrow output_format"
+                )
+            if self._test_convert_arrow_back_to_pandas:
+                data = convert_arrow_to_pandas_for_tests(data)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):

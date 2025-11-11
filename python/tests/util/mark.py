@@ -15,6 +15,7 @@ from datetime import date
 from numpy import datetime64
 from copy import deepcopy
 
+from arcticdb.util._versions import IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED
 from arcticdb.util import marks
 from arcticdb.util.logger import get_logger
 
@@ -139,6 +140,9 @@ SKIP_CONDA_MARK = pytest.mark.skipif(
     ARCTICDB_USING_CONDA,
     reason="Those tests are skipped on conda",
 )
+SANITIZER_TESTS_MARK = pytest.mark.skipif(
+    os.getenv("ARCTICDB_USE_SANITIZER", "") == "", reason="Tests are skipped when no sanitizers are enabled"
+)
 # !!!!!!!!!!!!!!!!!!!!!! Below mark (variable) names should reflect where they will be used, not what they do.
 # This is to avoid the risk of the name becoming out of sync with the actual condition.
 SLOW_TESTS_MARK = pytest.mark.skipif(
@@ -229,10 +233,9 @@ SSL_TEST_SUPPORTED = sys.platform == "linux"
 
 FORK_SUPPORTED = pytest.mark.skipif(WINDOWS, reason="Fork not supported on Windows")
 
-## MEMRAY supports linux and macos and python 3.8 and above
-MEMRAY_SUPPORTED = MACOS or LINUX
-MEMRAY_TESTS_MARK = pytest.mark.skipif(
-    not MEMRAY_SUPPORTED, reason="MEMRAY supports linux and macos and python 3.8 and above"
+PYARROW_POST_PROCESSING = pytest.mark.skipif(
+    WINDOWS and not IS_PYARROW_WINDOWS_NULL_COMPUTE_FIXED,
+    reason="pyarrow 21.0.0 doesn't correctly apply fill_null: https://github.com/apache/arrow/issues/47234",
 )
 
 ZONE_INFO_MARK = pytest.mark.skipif(sys.version_info < (3, 9), reason="zoneinfo module was introduced in Python 3.9")
@@ -285,7 +288,6 @@ def param_dict(fields, cases=None):
 
 
 def xfail_azure_chars(nvs, symbol_name):
-
     def contains_problem_chars(text: str) -> list:
         target_chars = [chr(c) for c in range(0, 32)] + [chr(126), chr(127), chr(140), chr(142), chr(143), chr(156)]
         found = [(ord(char), repr(char)) for char in text if char in target_chars]
