@@ -41,7 +41,8 @@ void write_version_frame_with_three_segments_rec_norm(
     }
 
     std::vector<std::shared_ptr<DeDupMap>> de_dup_maps(size, nullptr);
-    store.batch_write_internal(std::move(version_ids), rec_norm_ids, std::move(internal_frames), de_dup_maps, false).get();
+    store.batch_write_internal(std::move(version_ids), rec_norm_ids, std::move(internal_frames), de_dup_maps, false)
+            .get();
 }
 
 void write_version_frame_with_three_segments(
