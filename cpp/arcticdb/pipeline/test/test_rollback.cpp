@@ -28,18 +28,20 @@ void write_version_frame_with_three_segments_rec_norm(
         version_store::PythonVersionStore& store, const StreamId& stream_id
 ) {
     std::vector<StreamId> rec_norm_ids;
-    std::vector<std::shared_ptr<InputFrame>> frames;
+    std::vector<TestTensorFrame> frames;
+    std::vector<std::shared_ptr<InputFrame>> internal_frames;
     std::string stream_id_str = std::get<std::string>(stream_id);
     constexpr auto size = 2;
     std::vector<VersionId> version_ids(size, 0);
     for (size_t i = 0; i < size; ++i) {
         rec_norm_ids.emplace_back(stream_id_str + "__" + std::to_string(i));
         auto frame = get_test_timeseries_frame(stream_id, 30, 0);
-        frames.emplace_back(frame.frame_);
+        internal_frames.emplace_back(frame.frame_);
+        frames.emplace_back(std::move(frame));
     }
 
     std::vector<std::shared_ptr<DeDupMap>> de_dup_maps(size, nullptr);
-    store.batch_write_internal(std::move(version_ids), rec_norm_ids, std::move(frames), de_dup_maps, false).get();
+    store.batch_write_internal(std::move(version_ids), rec_norm_ids, std::move(internal_frames), de_dup_maps, false).get();
 }
 
 void write_version_frame_with_three_segments(
