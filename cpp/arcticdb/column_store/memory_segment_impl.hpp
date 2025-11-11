@@ -281,37 +281,74 @@ class SegmentInMemoryImpl {
     );
 
     template<typename T>
-    requires std::ranges::range<T> && std::ranges::contiguous_range<std::iter_value_t<T>>
-    SegmentInMemoryImpl create_dense_segment(const T& column_data, const StreamDescriptor& descriptor) {
-        if (std::ranges::begin(column_data) == std::ranges::end(column_data)) {
+    requires std::ranges::sized_range<T> && std::ranges::sized_range<std::iter_value_t<T>>
+    static SegmentInMemoryImpl create_dense_segment(const StreamDescriptor& descriptor, const T& columns) {
+        const size_t input_column_count = std::ranges::size(columns);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                input_column_count == descriptor.fields().size(),
+                "When creating a dense segment in memory the number of columns ({}) must match the number of fields in "
+                "the stream descriptor ({}}",
+                input_column_count,
+                descriptor.fields().size()
+        );
+        if (input_column_count == 0) {
             return SegmentInMemoryImpl();
         }
 
-        const size_t expected_column_size = column_data.begin()->first.size();
+        const size_t expected_column_size = columns.begin()->first.size();
         constexpr static AllocationType allocation_type = AllocationType::PRESIZED;
         constexpr static Sparsity sparsity = Sparsity::NOT_PERMITTED;
         SegmentInMemoryImpl result(descriptor, expected_column_size, allocation_type, sparsity);
-        for (auto const& [column_index, contiguous_column_data] : folly::enumerate(column_data)) {
-            if (is_sequence_type(descriptor.field(column_index).type().data_type())) {
-                for (std::string_view str : contiguous_column_data) {
-                    result.set_string_at(column_index, str);
-                }
-            } else {
-                using ValueType = std::decay_t<std::iter_value_t<decltype(contiguous_column_data)>>;
-                Column& column = result.column(column_index);
-                const size_t row_count = std::ranges::size(contiguous_column_data);
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        row_count == expected_column_size,
-                        "When creating a dense segment from a range of dense column data, all columns must have "
-                        "the same size. Column[0] has size {} Column[{}] has size: {}",
-                        expected_column_size,
-                        column_index,
-                        row_count
-                );
-                std::memcpy(column.ptr(), row_count, row_count * sizeof(ValueType));
-                result.set_row_data(row_count);
-            }
+        for (auto const& [column_index, column_data] : folly::enumerate(columns)) {
+            const size_t row_count = std::ranges::size(column_data);
+            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                    row_count == expected_column_size,
+                    "When creating a dense segment all columns must have the same size. Column[0] has {} rows, "
+                    "Column[{}] has {} rows",
+                    expected_column_size,
+                    column_index,
+                    row_count
+            );
+            result.fill_dense_column_data(column_index, column_data);
         }
+        return result;
+    }
+
+    template<typename... T>
+    requires(... && std::ranges::sized_range<T>)
+    static SegmentInMemoryImpl create_dense_segment(const StreamDescriptor& descriptor, const T&... columns) {
+        constexpr size_t input_column_count = sizeof...(T);
+        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                input_column_count == descriptor.fields().size(),
+                "When creating a dense segment in memory the number of columns ({}) must match the number of fields in "
+                "the stream descriptor ({}}",
+                input_column_count,
+                descriptor.fields().size()
+        );
+        if (input_column_count == 0) {
+            return SegmentInMemoryImpl();
+        }
+        const size_t expected_column_size = []<typename H, typename... Tail>(const H& head, const T&...) {
+            return std::ranges::size(head);
+        }(columns...);
+        constexpr static AllocationType allocation_type = AllocationType::PRESIZED;
+        constexpr static Sparsity sparsity = Sparsity::NOT_PERMITTED;
+        SegmentInMemoryImpl result(descriptor, expected_column_size, allocation_type, sparsity);
+        util::enumerate(
+                [&result, expected_column_size](size_t column_index, auto&& column_data) {
+                    const size_t row_count = std::ranges::size(column_data);
+                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                            row_count == expected_column_size,
+                            "When creating a dense segment all columns must have the same size. Column[0] has {} rows, "
+                            "Column[{}] has {} rows",
+                            expected_column_size,
+                            column_index,
+                            row_count
+                    );
+                    result.fill_dense_column_data(column_index, column_data);
+                },
+                columns...
+        );
         return result;
     }
 
@@ -599,6 +636,26 @@ class SegmentInMemoryImpl {
     void drop_empty_columns();
 
   private:
+    template<typename T>
+    requires std::ranges::sized_range<T>
+    void fill_dense_column_data(const T& input_data, const size_t column_index) {
+        const size_t row_count = std::ranges::size(input_data);
+        if (is_sequence_type(descriptor().field(column_index).type().data_type())) {
+            for (const std::string_view str : input_data) {
+                set_string(column_index, str);
+            }
+        } else {
+            using ValueType = std::decay_t<std::iter_value_t<decltype(input_data)>>;
+            Column& column_to_fill = column(column_index);
+            if constexpr (std::ranges::contiguous_range<std::iter_value_t<T>>) {
+                std::memcpy(column_to_fill.ptr(), std::ranges::data(input_data), row_count * sizeof(ValueType));
+            } else {
+                std::ranges::copy(input_data, column_to_fill.ptr());
+            }
+        }
+        set_row_data(row_count);
+    }
+
     ssize_t row_id_ = -1;
     std::shared_ptr<StreamDescriptor> descriptor_;
     std::vector<std::shared_ptr<Column>> columns_;

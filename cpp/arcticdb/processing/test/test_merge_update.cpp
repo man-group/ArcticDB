@@ -30,19 +30,17 @@ TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
     StreamDescriptor source_descriptor =
             TimeseriesIndex::default_index().create_stream_descriptor("Source", non_string_fields);
     constexpr std::array<timestamp, 3> source_index{1, 12, 25};
-    constexpr std::array<int8_t, 3> source_int8{10, 20, 30};
-    constexpr std::array<uint32_t, 3> source_uint32{100, 200, 300};
-    constexpr std::array source_bool{true, false, true};
-    constexpr std::array source_float{11.1f, 22.2f, 33.3f};
-    constexpr std::array<timestamp, 3> source_timestamp{1000, 2000, 3000};
     InputFrame source(
             std::move(source_descriptor),
             create_one_dimensional_tensors(
-                    std::pair{source_int8, TypeDescriptor::scalar_type(DataType::INT8)},
-                    std::pair{source_uint32, TypeDescriptor::scalar_type(DataType::UINT32)},
-                    std::pair{source_bool, TypeDescriptor::scalar_type(DataType::BOOL8)},
-                    std::pair{source_float, TypeDescriptor::scalar_type(DataType::FLOAT32)},
-                    std::pair{source_timestamp, TypeDescriptor::scalar_type(DataType::NANOSECONDS_UTC64)}
+                    std::pair{std::array<int8_t, 3>{10, 20, 30}, TypeDescriptor::scalar_type(DataType::INT8)},
+                    std::pair{std::array<uint32_t, 3>{100, 200, 300}, TypeDescriptor::scalar_type(DataType::UINT32)},
+                    std::pair{std::array{true, false, true}, TypeDescriptor::scalar_type(DataType::BOOL8)},
+                    std::pair{std::array{11.1f, 22.2f, 33.3f}, TypeDescriptor::scalar_type(DataType::FLOAT32)},
+                    std::pair{
+                            std::array<timestamp, 3>{1000, 2000, 3000},
+                            TypeDescriptor::scalar_type(DataType::NANOSECONDS_UTC64)
+                    }
             ),
             NativeTensor::one_dimensional_tensor(source_index, DataType::NANOSECONDS_UTC64)
     );
