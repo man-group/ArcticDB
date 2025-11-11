@@ -230,6 +230,16 @@ class Column {
     Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse,
            OutputFormat output_format, DataTypeMode mode);
 
+    template<typename Input>
+    requires std::ranges::contiguous_range<Input>
+    static Column create_dense_column(const Input& data, const TypeDescriptor& type) {
+        constexpr size_t element_size = sizeof(std::ranges::range_value_t<Input>);
+        Column result(type, data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+        std::memcpy(result.ptr(), data.data(), data.size() * element_size);
+        result.set_row_data(data.size());
+        return result;
+    }
+
     ARCTICDB_MOVE_ONLY_DEFAULT(Column)
 
     friend bool operator==(const Column& left, const Column& right);

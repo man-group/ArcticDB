@@ -9,6 +9,7 @@
 #pragma once
 
 #include <type_traits>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb::util {
 
@@ -26,4 +27,12 @@ concept instantiation_of = is_instantiation_of_v<T, TT>;
 
 template<typename T, typename... U>
 concept any_of = std::disjunction_v<std::is_same<T, U>...>;
+
+template<typename T>
+concept contiguous_type_tagged_data = requires(T t) {
+    instantiation_of<T, std::pair>;
+    std::ranges::contiguous_range<typename T::first_type>;
+    std::same_as<typename T::second_type, entity::TypeDescriptor>;
+};
+
 } // namespace arcticdb::util

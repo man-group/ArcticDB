@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/stream/row_builder.hpp>
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/entity/native_tensor.hpp>
@@ -16,7 +15,6 @@
 
 #include <vector>
 #include <numeric>
-#include <random>
 #include <filesystem>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/library_path.hpp>
@@ -261,17 +259,3 @@ class StorageGenerator {
     const std::string storage_;
     inline static const fs::path TEST_DATABASES_PATH = "./test_databases";
 };
-
-template<typename TagType, typename Input>
-requires requires(Input in) {
-    requires util::instantiation_of<TagType, TypeDescriptorTag>;
-    requires std::ranges::contiguous_range<Input>;
-    requires std::same_as<typename TagType::DataTypeTag::raw_type, std::ranges::range_value_t<Input>>;
-}
-Column create_dense_column(const Input& data) {
-    constexpr size_t element_size = sizeof(std::ranges::range_value_t<Input>);
-    Column result(TagType::type_descriptor(), data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
-    std::memcpy(result.ptr(), data.data(), data.size() * element_size);
-    result.set_row_data(data.size());
-    return result;
-}

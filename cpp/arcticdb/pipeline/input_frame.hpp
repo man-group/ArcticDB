@@ -29,6 +29,11 @@ concept ValidIndex = util::any_of<
 struct InputFrame {
   public:
     InputFrame();
+    InputFrame(SegmentInMemory&& seg);
+    InputFrame(
+            StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
+            std::optional<entity::NativeTensor>&& index_tensor = std::nullopt
+    );
     void set_segment(SegmentInMemory&& seg);
     void set_from_tensors(
             StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,

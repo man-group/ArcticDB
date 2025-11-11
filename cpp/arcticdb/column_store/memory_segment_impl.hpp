@@ -16,6 +16,8 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <boost/iterator/iterator_facade.hpp>
+#include <google/protobuf/extension_set.h>
+#include <folly/container/Enumerate.h>
 
 namespace arcticdb {
 
@@ -277,6 +279,41 @@ class SegmentInMemoryImpl {
             const StreamDescriptor& desc, size_t expected_column_size, AllocationType presize, Sparsity allow_sparse,
             OutputFormat output_format, DataTypeMode mode
     );
+
+    template<typename T>
+    requires std::ranges::range<T> && std::ranges::contiguous_range<std::iter_value_t<T>>
+    SegmentInMemoryImpl create_dense_segment(const T& column_data, const StreamDescriptor& descriptor) {
+        if (std::ranges::begin(column_data) == std::ranges::end(column_data)) {
+            return SegmentInMemoryImpl();
+        }
+
+        const size_t expected_column_size = column_data.begin()->first.size();
+        constexpr static AllocationType allocation_type = AllocationType::PRESIZED;
+        constexpr static Sparsity sparsity = Sparsity::NOT_PERMITTED;
+        SegmentInMemoryImpl result(descriptor, expected_column_size, allocation_type, sparsity);
+        for (auto const& [column_index, contiguous_column_data] : folly::enumerate(column_data)) {
+            if (is_sequence_type(descriptor.field(column_index).type().data_type())) {
+                for (std::string_view str : contiguous_column_data) {
+                    result.set_string_at(column_index, str);
+                }
+            } else {
+                using ValueType = std::decay_t<std::iter_value_t<decltype(contiguous_column_data)>>;
+                Column& column = result.column(column_index);
+                const size_t row_count = std::ranges::size(contiguous_column_data);
+                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
+                        row_count == expected_column_size,
+                        "When creating a dense segment from a range of dense column data, all columns must have "
+                        "the same size. Column[0] has size {} Column[{}] has size: {}",
+                        expected_column_size,
+                        column_index,
+                        row_count
+                );
+                std::memcpy(column.ptr(), row_count, row_count * sizeof(ValueType));
+                result.set_row_data(row_count);
+            }
+        }
+        return result;
+    }
 
     ~SegmentInMemoryImpl();
 
