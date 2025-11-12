@@ -46,3 +46,23 @@ PROTOBUF_GENERATE_CPP(PROTO_SRC PROTO_HEADER
         )
 
 ADD_LIBRARY(arcticdb_proto ${PROTO_HEADER} ${PROTO_SRC})
+
+# Link against protobuf. Try modern target first, fallback to old-style variables.
+if(TARGET protobuf::libprotobuf)
+    target_link_libraries(arcticdb_proto PRIVATE protobuf::libprotobuf)
+    # On Windows, when protobuf is built as a DLL, the generated code needs PROTOBUF_USE_DLLS
+    # to properly import symbols from the DLL.
+    if(WIN32)
+        get_target_property(PROTOBUF_LIB_TYPE protobuf::libprotobuf TYPE)
+        if(PROTOBUF_LIB_TYPE STREQUAL "SHARED_LIBRARY")
+            target_compile_definitions(arcticdb_proto PRIVATE PROTOBUF_USE_DLLS=1)
+        endif()
+    endif()
+else()
+    # Fallback to old-style FindProtobuf variables
+    target_link_libraries(arcticdb_proto PRIVATE ${Protobuf_LIBRARIES})
+    # On Windows with conda, protobuf is typically a DLL
+    if(WIN32 AND DEFINED ARCTICDB_USING_CONDA AND ARCTICDB_USING_CONDA)
+        target_compile_definitions(arcticdb_proto PRIVATE PROTOBUF_USE_DLLS=1)
+    endif()
+endif()
