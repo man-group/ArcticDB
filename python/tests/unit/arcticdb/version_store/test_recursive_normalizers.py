@@ -90,7 +90,7 @@ def test_v2_api_pickle(arctic_library_s3, sym, recursive_normalizers, clear_quer
     with qs.query_stats():
         lib.write_pickle(sym, data, recursive_normalizers=recursive_normalizers)
     keys = qs.get_query_stats()["storage_operations"]["S3_PutObject"].keys()
-    if recursive_normalizers is None or recursive_normalizers is True:
+    if recursive_normalizers is True:
         assert "MULTI_KEY" in keys
     else:
         assert "MULTI_KEY" not in keys
