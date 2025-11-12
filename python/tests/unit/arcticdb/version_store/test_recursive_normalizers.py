@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 import numpy as np
 import arcticdb
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, LibraryOptions
 from arcticdb.util.test import equals
 from arcticdb.flattener import Flattener
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -59,11 +59,15 @@ def assert_vit_equals_except_data(left, right):
     assert left.timestamp == right.timestamp
 
 
+@pytest.mark.parametrize("lib_option", (True, False, None))
 @pytest.mark.parametrize("recursive_normalizers", (True, False, None))
-def test_v2_api(arctic_library_s3, sym, recursive_normalizers, clear_query_stats):
-    lib = arctic_library_s3
+def test_v2_api(arctic_client_s3, sym, recursive_normalizers, clear_query_stats, lib_name, lib_option):
+    if lib_option is None:
+        lib = arctic_client_s3.create_library(lib_name)
+    else:
+        lib = arctic_client_s3.create_library(lib_name, LibraryOptions(recursive_normalizers=lib_option))
     data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
-    if recursive_normalizers is None or recursive_normalizers is True:
+    if (lib_option is True and recursive_normalizers is not False) or recursive_normalizers is True:
         with qs.query_stats():
             lib.write(sym, data, recursive_normalizers=recursive_normalizers)
         stats = qs.get_query_stats()
