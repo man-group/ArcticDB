@@ -31,7 +31,7 @@ def install_tools():
     return black or clang
 
 
-def lint_python(in_place: bool, specific_file: str):
+def lint_python(in_place: bool, specific_file: str = None):
     try:
         import black
         assert black.__version__ == black_version
@@ -49,7 +49,7 @@ def lint_python(in_place: bool, specific_file: str):
         return subprocess.run(["black", "-l", "120", "--check", path]).returncode
 
 
-def lint_cpp(in_place: bool, specific_file: str):
+def lint_cpp(in_place: bool, specific_file: str = None):
     try:
         import clang_format
     except ImportError:

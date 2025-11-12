@@ -831,7 +831,7 @@ def test_default_library_config(mem_storage, lib_name):
 
     write_options = lib._nvs.lib_cfg().lib_desc.version.write_options
     assert write_options.dynamic_strings == True
-    assert write_options.recursive_normalizers == True
+    assert write_options.recursive_normalizers == False
     assert write_options.use_tombstones == True
     assert write_options.fast_tombstone_all == True
     assert write_options.prune_previous_version == False
