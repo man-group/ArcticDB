@@ -19,10 +19,10 @@ from benchmarks.common import generate_pseudo_random_dataframe
 
 
 class ArrowNumeric:
-    number = 5
+    number = 20
     warmup_time = 0
     timeout = 6000
-    rounds = 1
+    rounds = 2
     connection_string = "lmdb://arrow_numeric?map_size=20GB"
     lib_name_prewritten = "arrow_numeric_prewritten"
     lib_name_fresh = "arrow_numeric_fresh"
@@ -93,10 +93,10 @@ class ArrowNumeric:
 
 
 class ArrowStrings:
-    number = 5
+    number = 20
     warmup_time = 0
     timeout = 6000
-    rounds = 1
+    rounds = 2
     connection_string = "lmdb://arrow_strings?map_size=20GB"
     lib_name_prewritten = "arrow_strings_prewritten"
     lib_name_fresh = "arrow_strings_fresh"

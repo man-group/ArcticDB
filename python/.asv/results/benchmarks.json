@@ -49,7 +49,7 @@
         "code": "class ArrowNumeric:\n    def time_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowNumeric.time_read",
-        "number": 5,
+        "number": 20,
         "param_names": [
             "rows",
             "date_range"
@@ -65,7 +65,7 @@
             ]
         ],
         "repeat": 0,
-        "rounds": 1,
+        "rounds": 2,
         "sample_time": 0.01,
         "setup_cache_key": "arrow:38",
         "timeout": 6000,
@@ -78,7 +78,7 @@
         "code": "class ArrowNumeric:\n    def time_write(self, rows, date_range):\n        self.fresh_lib.write(f\"sym_{rows}\", self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowNumeric.time_write",
-        "number": 5,
+        "number": 20,
         "param_names": [
             "rows",
             "date_range"
@@ -94,7 +94,7 @@
             ]
         ],
         "repeat": 0,
-        "rounds": 1,
+        "rounds": 2,
         "sample_time": 0.01,
         "setup_cache_key": "arrow:38",
         "timeout": 6000,
@@ -179,7 +179,7 @@
         "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_read",
-        "number": 5,
+        "number": 20,
         "param_names": [
             "rows",
             "date_range",
@@ -208,7 +208,7 @@
             ]
         ],
         "repeat": 0,
-        "rounds": 1,
+        "rounds": 2,
         "sample_time": 0.01,
         "setup_cache_key": "arrow:113",
         "timeout": 6000,
@@ -221,7 +221,7 @@
         "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "arrow.ArrowStrings.time_write",
-        "number": 5,
+        "number": 20,
         "param_names": [
             "rows",
             "date_range",
@@ -250,7 +250,7 @@
             ]
         ],
         "repeat": 0,
-        "rounds": 1,
+        "rounds": 2,
         "sample_time": 0.01,
         "setup_cache_key": "arrow:113",
         "timeout": 6000,
