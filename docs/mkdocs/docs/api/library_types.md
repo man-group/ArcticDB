@@ -22,3 +22,4 @@
 
 ::: arcticdb.WriteMetadataPayload
 
+::: arcticdb_ext.version_store.StageResult

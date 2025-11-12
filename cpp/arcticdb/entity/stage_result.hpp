@@ -10,11 +10,29 @@
 
 #include <arcticdb/entity/atom_key.hpp>
 #include <vector>
+#include <fmt/format.h>
 
 namespace arcticdb {
 struct StageResult {
     explicit StageResult(std::vector<entity::AtomKey> staged_segments) : staged_segments(std::move(staged_segments)) {}
 
     std::vector<entity::AtomKey> staged_segments;
+
+    std::string view() const;
 };
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::StageResult> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    auto format(const arcticdb::StageResult& stage_result, FormatContext& ctx) const {
+        return format_to(ctx.out(), "StageResult(staged_segments=[{}])", fmt::join(stage_result.staged_segments, ", "));
+    }
+};
+} // namespace fmt
