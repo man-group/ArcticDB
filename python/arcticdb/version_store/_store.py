@@ -54,6 +54,7 @@ from arcticdb_ext.version_store import PythonVersionStore as _PythonVersionStore
 from arcticdb_ext.version_store import PythonVersionStoreReadQuery as _PythonVersionStoreReadQuery
 from arcticdb_ext.version_store import PythonVersionStoreUpdateQuery as _PythonVersionStoreUpdateQuery
 from arcticdb_ext.version_store import PythonVersionStoreReadOptions as _PythonVersionStoreReadOptions
+from arcticdb_ext.version_store import PythonVersionStoreBatchReadOptions as _PythonVersionStoreBatchReadOptions
 from arcticdb_ext.version_store import PythonVersionStoreVersionQuery as _PythonVersionStoreVersionQuery
 from arcticdb_ext.version_store import ColumnStats as _ColumnStats
 from arcticdb_ext.version_store import StreamDescriptorMismatch
@@ -1216,6 +1217,13 @@ class NativeVersionStore:
         row_ranges: Optional[List[Optional[Tuple[int, int]]]] = None,
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
         columns: Optional[List[List[str]]] = None,
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        per_symbol_arrow_string_format_default: Optional[
+            List[Optional[Union[ArrowOutputStringFormat, "pa.DataType"]]]
+        ] = None,
+        per_symbol_arrow_string_format_per_column: Optional[
+            List[Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]]]
+        ] = None,
         **kwargs,
     ) -> Dict[str, VersionedItem]:
         """
@@ -1245,6 +1253,18 @@ class NativeVersionStore:
             returned, or a list of QueryBuilder objects of the same length as the symbols list.
             For more information see the documentation for the QueryBuilder class.
             i-th entry corresponds to i-th element of `symbols`.
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
+            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            See documentation of `ArrowOutputStringFormat` for more information on the different options.
+            It serves as the default for the entire batch.
+        per_symbol_arrow_string_format_default: Optional[List[Optional[Union[ArrowOutputStringFormat, "pa.DataType"]]]], default=None,
+            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            See documentation of `ArrowOutputStringFormat` for more information on the different options.
+            It serves as the default per symbol. It overrides the global `arrow_string_format_default` setting
+        per_symbol_arrow_string_format_per_column: Optional[List[Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]]]], default=None,
+            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            See documentation of `ArrowOutputStringFormat` for more information on the different options.
+            It defines the setting per symbol and per column. It overrides all other string format settings.
 
         Examples
         --------
@@ -1271,6 +1291,9 @@ class NativeVersionStore:
             columns=columns,
             query_builder=query_builder,
             throw_on_error=throw_on_error,
+            arrow_string_format_default=arrow_string_format_default,
+            per_symbol_arrow_string_format_default=per_symbol_arrow_string_format_default,
+            per_symbol_arrow_string_format_per_column=per_symbol_arrow_string_format_per_column,
             **kwargs,
         )
         check(
@@ -1280,7 +1303,18 @@ class NativeVersionStore:
         return {v.symbol: v for v in versioned_items}
 
     def _batch_read_to_versioned_items(
-        self, symbols, as_ofs, date_ranges, row_ranges, columns, query_builder, throw_on_error, **kwargs
+        self,
+        symbols,
+        as_ofs,
+        date_ranges,
+        row_ranges,
+        columns,
+        query_builder,
+        throw_on_error,
+        arrow_string_format_default,
+        per_symbol_arrow_string_format_default,
+        per_symbol_arrow_string_format_per_column,
+        **kwargs,
     ):
         implement_read_index = kwargs.get("implement_read_index", False)
         if columns:
@@ -1289,9 +1323,15 @@ class NativeVersionStore:
         # Take a copy as _get_read_queries can modify the input argument, which makes reusing the input counter-intuitive
         query_builder = copy.deepcopy(query_builder)
         read_queries = self._get_read_queries(len(symbols), date_ranges, row_ranges, columns, query_builder)
-        read_options = self._get_read_options(**kwargs)
-        read_options.set_batch_throw_on_error(throw_on_error)
-        read_results = self.version_store.batch_read(symbols, version_queries, read_queries, read_options)
+        batch_read_options = self._get_batch_read_options(
+            len(symbols),
+            throw_on_error,
+            arrow_string_format_default,
+            per_symbol_arrow_string_format_default,
+            per_symbol_arrow_string_format_per_column,
+            **kwargs,
+        )
+        read_results = self.version_store.batch_read(symbols, version_queries, read_queries, batch_read_options)
         versioned_items = []
         for i in range(len(read_results)):
             if isinstance(read_results[i], DataError):
@@ -1299,6 +1339,7 @@ class NativeVersionStore:
             else:
                 read_result = ReadResult(*read_results[i])
                 read_query = read_queries[i]
+                read_options = batch_read_options.at(i)
                 vitem = self._post_process_dataframe(read_result, read_query, read_options, implement_read_index)
                 versioned_items.append(vitem)
         return versioned_items
@@ -1463,12 +1504,11 @@ class NativeVersionStore:
 
     def _batch_read_metadata_to_versioned_items(self, symbols, as_ofs, include_errors_and_none_meta, **kwargs):
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
-        read_options = self._get_read_options(**kwargs)
         # For historical reasons, NativeVersionStore.batch_read_metadata returns None if the requested version does not
         # exist, but should throw an exception for other errors. Library.read_metadata_batch should get DataError
         # objects if exceptions are thrown.
-        read_options.set_batch_throw_on_error(not include_errors_and_none_meta)
-        metadatas_or_errors = self.version_store.batch_read_metadata(symbols, version_queries, read_options)
+        batch_read_options = self._get_batch_read_options(len(symbols), not include_errors_and_none_meta, **kwargs)
+        metadatas_or_errors = self.version_store.batch_read_metadata(symbols, version_queries, batch_read_options)
         meta_items = []
         for metadata in metadatas_or_errors:
             if isinstance(metadata, DataError) and include_errors_and_none_meta:
@@ -1526,9 +1566,8 @@ class NativeVersionStore:
         _check_batch_kwargs(NativeVersionStore.batch_read_metadata, NativeVersionStore.read_metadata, kwargs)
         results_dict = {}
         version_queries = self._get_version_queries(len(symbols), as_ofs, **kwargs)
-        read_options = self._get_read_options(**kwargs)
-        read_options.set_batch_throw_on_error(True)
-        for result in self.version_store.batch_read_metadata(symbols, version_queries, read_options):
+        batch_read_options = self._get_batch_read_options(len(symbols), True, **kwargs)
+        for result in self.version_store.batch_read_metadata(symbols, version_queries, batch_read_options):
             vitem, udm = result
             meta = denormalize_user_metadata(udm, self._normalizer) if udm else None
             if vitem.symbol not in results_dict:
@@ -2091,6 +2130,62 @@ class NativeVersionStore:
                 }
             )
         return read_options
+
+    def _get_batch_read_options(
+        self,
+        num_symbols,
+        batch_throw_on_error,
+        global_arrow_string_format_default=None,
+        per_symbol_arrow_string_format_default=None,
+        per_symbol_arrow_string_format_per_column=None,
+        **kwargs,
+    ):
+        read_options_per_symbol = []
+
+        if per_symbol_arrow_string_format_default is not None:
+            check(
+                len(per_symbol_arrow_string_format_default) == num_symbols,
+                "Mismatched number of symbols ({}) and per_symbol_arrow_string_format_default ({}) supplied to batch read",
+                num_symbols,
+                len(per_symbol_arrow_string_format_default),
+            )
+
+        if per_symbol_arrow_string_format_per_column is not None:
+            check(
+                len(per_symbol_arrow_string_format_per_column) == num_symbols,
+                "Mismatched number of symbols ({}) and per_symbol_arrow_string_format_per_column ({}) supplied to batch read",
+                num_symbols,
+                len(per_symbol_arrow_string_format_per_column),
+            )
+        for idx in range(num_symbols):
+            arrow_string_format_default = global_arrow_string_format_default
+            arrow_string_format_per_column = None
+
+            if per_symbol_arrow_string_format_default is not None:
+                arrow_string_format_default = (
+                    per_symbol_arrow_string_format_default[idx] or global_arrow_string_format_default
+                )
+
+            if per_symbol_arrow_string_format_per_column is not None:
+                arrow_string_format_per_column = per_symbol_arrow_string_format_per_column[idx]
+
+            read_options_per_symbol.append(
+                self._get_read_options(
+                    arrow_string_format_default=arrow_string_format_default,
+                    arrow_string_format_per_column=arrow_string_format_per_column,
+                    **kwargs,
+                )
+            )
+        batch_read_options = _PythonVersionStoreBatchReadOptions()
+        batch_read_options.set_read_options_per_symbol(read_options_per_symbol)
+        batch_read_options.set_batch_throw_on_error(batch_throw_on_error)
+        # output_format is also a batch level setting, because we currently don't support mixed output formats
+        batch_read_options.set_output_format(
+            output_format_to_internal(
+                self.resolve_runtime_defaults("output_format", {}, global_default=OutputFormat.PANDAS, **kwargs)
+            )
+        )
+        return batch_read_options
 
     def _get_queries(self, as_of, date_range, row_range, columns=None, query_builder=None, **kwargs):
         version_query = self._get_version_query(as_of, **kwargs)

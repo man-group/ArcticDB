@@ -4,10 +4,11 @@ import pyarrow as pa
 import pytest
 
 from arcticdb import LazyDataFrame, DataError, concat
-from arcticdb.options import OutputFormat, ArrowOutputStringFormat
+from arcticdb.exceptions import ArcticNativeException
+from arcticdb.options import OutputFormat, ArrowOutputStringFormat, LibraryOptions
 from arcticdb.util.test import assert_frame_equal_with_arrow, sample_dataframe
 
-from arcticdb.version_store.library import ArcticUnsupportedDataTypeException, WritePayload, UpdatePayload
+from arcticdb.version_store.library import ArcticUnsupportedDataTypeException, WritePayload, UpdatePayload, ReadRequest
 
 all_output_format_args = [
     None,
@@ -324,3 +325,78 @@ def test_read_arctic_strings(
         assert pa.types.is_large_string(result.column(0).type)
     if expected_str_format == ArrowOutputStringFormat.SMALL_STRING:
         assert pa.types.is_string(result.column(0).type)
+
+
+@pytest.mark.parametrize("lazy", [True, False])
+@pytest.mark.parametrize("batch_default", [ArrowOutputStringFormat.SMALL_STRING, None])
+def test_read_batch_strings(lmdb_storage, lib_name, lazy, batch_default):
+    ac = lmdb_storage.create_arctic(output_format=OutputFormat.EXPERIMENTAL_ARROW)
+    lib = ac.create_library(lib_name)
+    sym_1, sym_2 = "sym_1", "sym_2"
+    df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})
+    df_2 = pd.DataFrame({"col_1": ["a", "aa", "aaa"], "col_2": ["a", "a", "a"]})
+    lib.write_batch([WritePayload(sym_1, df_1), WritePayload(sym_2, df_2)])
+
+    read_requests = [
+        ReadRequest(symbol=sym_1, arrow_string_format_per_column={"col_1": ArrowOutputStringFormat.CATEGORICAL}),
+        ReadRequest(
+            symbol=sym_2,
+            arrow_string_format_default=ArrowOutputStringFormat.LARGE_STRING,
+            arrow_string_format_per_column={"col_2": ArrowOutputStringFormat.CATEGORICAL},
+        ),
+    ]
+    batch_result = lib.read_batch(read_requests, arrow_string_format_default=batch_default, lazy=lazy)
+    if lazy:
+        batch_result = batch_result.collect()
+    table_1 = batch_result[0].data
+    assert table_1.schema.field(0).type == pa.dictionary(pa.int32(), pa.large_string())  # per_column override
+    assert table_1.schema.field(1).type == batch_default or pa.large_string()  # global default for all symbols
+    assert_frame_equal_with_arrow(table_1, df_1)
+    table_2 = batch_result[1].data
+    assert table_2.schema.field(0).type == pa.large_string()  # per symbol default
+    assert table_2.schema.field(1).type == pa.dictionary(pa.int32(), pa.large_string())  # per_column override
+    assert_frame_equal_with_arrow(table_2, df_2)
+
+
+@pytest.mark.parametrize("default_1", [None, ArrowOutputStringFormat.SMALL_STRING])
+@pytest.mark.parametrize(
+    "default_2", [None, ArrowOutputStringFormat.LARGE_STRING, ArrowOutputStringFormat.SMALL_STRING]
+)
+@pytest.mark.parametrize("per_column_1", [ArrowOutputStringFormat.CATEGORICAL, ArrowOutputStringFormat.LARGE_STRING])
+def test_read_batch_and_join_strings(lmdb_storage, lib_name, default_1, default_2, per_column_1):
+    ac = lmdb_storage.create_arctic(output_format=OutputFormat.EXPERIMENTAL_ARROW)
+    lib = ac.create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
+    sym_1, sym_2 = "sym_1", "sym_2"
+    df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})
+    df_2 = pd.DataFrame({"col_2": ["a", "aa", "aaa"], "col_3": ["a", "a", "a"]})
+    lib.write_batch([WritePayload(sym_1, df_1), WritePayload(sym_2, df_2)])
+
+    read_requests = [
+        ReadRequest(
+            symbol=sym_1, arrow_string_format_default=default_1, arrow_string_format_per_column={"col_2": per_column_1}
+        ),
+        ReadRequest(
+            symbol=sym_2,
+            arrow_string_format_default=default_2,
+            arrow_string_format_per_column={
+                "col_2": ArrowOutputStringFormat.CATEGORICAL,
+                "col_3": ArrowOutputStringFormat.LARGE_STRING,
+            },
+        ),
+    ]
+    lazy_dfs = lib.read_batch(read_requests, lazy=True)
+
+    has_mismatch_default = default_1 is not None and default_2 is not None and default_1 != default_2
+    has_mismatch_per_column = per_column_1 != ArrowOutputStringFormat.CATEGORICAL
+    should_raise = has_mismatch_default or has_mismatch_per_column
+    if should_raise:
+        with pytest.raises(ArcticNativeException):
+            lazy_with_join = concat(lazy_dfs)
+    else:
+        lazy_with_join = concat(lazy_dfs)
+        result = lazy_with_join.collect().data
+        assert result.schema.field(0).type == default_1 or default_2 or pa.large_string()
+        assert result.schema.field(1).type == pa.dictionary(pa.int32(), pa.large_string())
+        assert result.schema.field(2).type == pa.large_string()
+        expected_df = pd.concat([df_1, df_2]).reset_index(drop=True)
+        assert_frame_equal_with_arrow(expected_df, result)
