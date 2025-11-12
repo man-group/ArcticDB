@@ -384,7 +384,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
         Attributes
         ----------
         staged_segments : List[AtomKey]
-        List of keys identifying the segments that were staged
 )pbdoc")
             .def(py::init([]() { return StageResult({}); }))
             .def_property_readonly("staged_segments", [](const StageResult& self) { return self.staged_segments; })
