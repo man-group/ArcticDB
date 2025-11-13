@@ -157,7 +157,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("type", [](const AtomKey& self) { return self.type(); })
             .def(pybind11::self == pybind11::self)
             .def(pybind11::self != pybind11::self)
-            .def("__repr__", &AtomKey::view)
+            .def("__repr__", &AtomKey::view_human)
             .def(py::self < py::self)
             .def(py::pickle(
                     [](const AtomKey& key) {

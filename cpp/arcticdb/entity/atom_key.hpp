@@ -116,6 +116,8 @@ class AtomKeyImpl {
         return {str_};
     }
 
+    std::string view_human() const;
+
   private:
     StreamId id_;
     VersionId version_id_ = 0;
@@ -327,7 +329,9 @@ struct hash<arcticdb::entity::AtomKeyImpl> {
 
 namespace arcticdb::entity {
 // This needs to be defined AFTER the formatter for AtomKeyImpl
-inline void AtomKeyImpl::set_string() const { 
-    str_ = fmt::format("{}", formattable<AtomKey, DisplayAtomKeyFormat>(*this)); 
+inline void AtomKeyImpl::set_string() const { str_ = fmt::format("{}", *this); }
+
+inline std::string AtomKeyImpl::view_human() const {
+    return fmt::format("{}", formattable<AtomKeyImpl, DisplayAtomKeyFormat>(*this));
 }
 } // namespace arcticdb::entity
