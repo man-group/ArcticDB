@@ -34,12 +34,12 @@ struct formatter<arcticdb::StageResult> {
 
     template<typename FormatContext>
     auto format(const arcticdb::StageResult& stage_result, FormatContext& ctx) const {
-        auto transform_view = stage_result.staged_segments 
-            | std::views::transform([](const auto& key) { 
-                return arcticdb::entity::formattable<arcticdb::entity::AtomKey, arcticdb::entity::DisplayAtomKeyFormat>(key); 
-            });
-        return fmt::format_to(ctx.out(), "StageResult(staged_segments=[{}])", 
-                            fmt::join(transform_view, ", "));
+        auto transform_view =
+                stage_result.staged_segments | std::views::transform([](const auto& key) {
+                    return arcticdb::entity::
+                            formattable<arcticdb::entity::AtomKey, arcticdb::entity::DisplayAtomKeyFormat>(key);
+                });
+        return fmt::format_to(ctx.out(), "StageResult(staged_segments=[{}])", fmt::join(transform_view, ", "));
     }
 };
 } // namespace fmt
