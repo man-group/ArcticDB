@@ -7,11 +7,7 @@ on:
       python_deps_ids:   {default: '[""]', type: string, description: Follower test matrix parameter. JSON string.}
       python3:           {default: -1, type: number, description: Python 3 minor version}
       arcticdb_version:  {default: "", type: string, description: The version of ArcticDB that will be installed and used for seed/verify }
-      # TODO: Maybe we should add these as GitHub variables
-      bucket:            {default: 'arcticdb-ci-test-bucket-02', type: string, description: The name of the S3 bucket that we will test against}
-      endpoint:          {default: 's3.eu-west-1.amazonaws.com', type: string, description: The address of the S3 endpoint}
-      region:            {default: 'eu-west-1', type: string, description: The S3 region of the bucket}
-      clear:             {default: 0, type: number, description: Controls wheather we will clear the libraries in the versions stores that we test against}      
+      # TODO: Maybe we should add these as GitHub variables   
       persistent_storage: {required: true, default: "no", type: string, description: Specifies whether the python tests should tests against real storages e.g. AWS S3  }
 
 jobs:
@@ -52,8 +48,8 @@ jobs:
         if: matrix.os == 'linux'
         run: echo /opt/python/${{env.python_impl_name}}*/bin >> $GITHUB_PATH
 
-      - name: Select Python (Windows)
-        if: matrix.os == 'windows'
+      - name: Select Python (Windows and Mac)
+        if: matrix.os == 'windows' || matrix.os == 'macos'
         uses: actions/setup-python@v4.7.1
         with:
           python-version: "3.${{inputs.python3}}"
@@ -63,19 +59,34 @@ jobs:
         run: |
           pip install pytest arcticdb "protobuf<5"
       
-      # Currently, the oldest "supported" release is 3.0.0
+      # Currently, the oldest "supported" release is 3.0.0 for windows and linux, 6.5.0 for mac
+      # For gcpxml, the release needs to be >= v5.3.0
       # We use this version to test forwards/barwards compatibility 
       # So we expect that libs written by the version that we are build to be readable by arcticdb>=3.0.0 and vice-versa
       # Change this value, if we need to support a newer one in the future
-      - name: Install oldest supported release
+      - name: Install oldest supported release (Windows and Linux)
+        if: matrix.os == 'windows' || matrix.os == 'linux'
         run: |
-          pip install pytest arcticdb=="3.0.0" "protobuf<5" "numpy<2"
+          if [ "${{ inputs.persistent_storage }}" == "GCPXML" ]; then
+            pip install pytest arcticdb=="5.3.0" "protobuf<5" "numpy<2"
+          else
+            pip install pytest arcticdb=="3.0.0" "protobuf<5" "numpy<2"
+          fi
+
+      - name: Install oldest supported release (macOS)
+        if: matrix.os == 'macos'
+        run: |
+          pip install pytest arcticdb=="6.5.0" "protobuf<5" "numpy<2"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob"
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           strategy_branch: "${{matrix.os}}_${{env.python_impl_name}}"
           persistent_storage: ${{ inputs.persistent_storage }}
         
@@ -112,6 +123,10 @@ jobs:
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
           aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob"
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
           persistent_storage: ${{ inputs.persistent_storage }}
       
       - name: Clean the storage

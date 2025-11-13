@@ -9,7 +9,7 @@ on:
     branches: ["**"]
   schedule:
     # IMPORTANT: For scheduled job we execute AWS_S3
-    - cron: '0 23 * * 0,1,2,3,4' # Start previous dat at 23:00 to finish next day
+    - cron: '0 23 * * 0,1,2,3,4,5' # Start previous dat at 23:00 to finish next day
   workflow_dispatch:
     inputs:
       persistent_storage:
@@ -213,8 +213,7 @@ jobs:
 
   pre_seed_cleanup:
     needs: [storage_type]
-    # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+    if: ${{ needs.storage_type.outputs.storage != 'no' }}
     name: Cleanup persistent storages
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
@@ -224,8 +223,7 @@ jobs:
 
   persistent_storage_seed_linux:
     needs: [common_config, pre_seed_cleanup, storage_type]
-    # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+    if: ${{ needs.storage_type.outputs.storage != 'no' }}
     strategy:
       fail-fast: false
       matrix:
@@ -250,8 +248,7 @@ jobs:
 
   persistent_storage_seed_windows:
     needs: [common_config, pre_seed_cleanup, storage_type]
-    # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
+    if: ${{ needs.storage_type.outputs.storage != 'no' }}
     strategy:
       fail-fast: false
       matrix:
@@ -262,6 +259,30 @@ jobs:
           - python_deps_ids: [""]
             matrix_override: ${{fromJson(needs.common_config.outputs.windows_matrix)}}
     name: Seed Persistent Storage for 3.${{matrix.python3}} Windows with ${{ matrix.arcticdb_version }} ArcticDB package version
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: seed
+      python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
+
+  persistent_storage_seed_macos:
+    needs: [common_config, pre_seed_cleanup, storage_type]
+    if: ${{ needs.storage_type.outputs.storage != 'no' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # This uses old arcticdb versions which won't work on python < 3.12
+        python3: ${{fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]')}}
+        arcticdb_version: ["oldest", "latest"]
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
+    name: Seed Persistent Storage for 3.${{matrix.python3}} MacOS with ${{ matrix.arcticdb_version }} ArcticDB package version
     uses: ./.github/workflows/persistent_storage.yml
     secrets: inherit
     permissions: {packages: write}
@@ -376,9 +397,8 @@ jobs:
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
 
   persistent_storage_verify_linux:
-    needs: [common_config, build-python-wheels-linux, build-python-wheels-windows, storage_type]
-    # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
+    needs: [common_config, build-python-wheels-linux, storage_type]
+    if: ${{ needs.storage_type.outputs.storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -401,9 +421,8 @@ jobs:
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   persistent_storage_verify_windows:
-    needs: [common_config, storage_type]
-    # This step is valid only for AWS_S3.
-    if: ${{ needs.storage_type.outputs.storage == 'AWS_S3'}}
+    needs: [common_config, build-python-wheels-windows, storage_type]
+    if: ${{ needs.storage_type.outputs.storage != 'no'}}
     strategy:
       fail-fast: false
       matrix:
@@ -423,21 +442,6 @@ jobs:
       arcticdb_version: ${{matrix.arcticdb_version}}
       matrix: ${{toJson(matrix.matrix_override)}}
       python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
-      persistent_storage: ${{ needs.storage_type.outputs.storage }}
-
-  post_verify_cleanup:
-    needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, storage_type]
-    # This step is valid only for AWS_S3.
-    if: |
-      always() &&
-      !failure() &&
-      !cancelled() &&
-      ${{ needs.storage_type.outputs.storage == 'AWS_S3' }}
-    name: Cleanup persistent storages
-    uses: ./.github/workflows/persistent_storage.yml
-    secrets: inherit
-    with:
-      job_type: cleanup
       persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   build-python-wheels-macos:
@@ -467,6 +471,44 @@ jobs:
       pytest_args: ${{inputs.pytest_args}}
       DEBUG_ENABLED: ${{ needs.storage_type.outputs.DEBUG_ENABLED }}
       DEBUG_LOGGING_ENABLED: ${{ needs.storage_type.outputs.DEBUG_LOGGING_ENABLED }}
+
+  persistent_storage_verify_macos:
+    needs: [common_config, build-python-wheels-macos, storage_type]
+    if: ${{ needs.storage_type.outputs.storage != 'no'}}
+    strategy:
+      fail-fast: false
+      matrix:
+        # This uses old arcticdb versions which won't work on python < 3.12
+        python3: ${{ fromJson(inputs.run_full_matrix_of_persistent_tests && '[8, 9, 10, 11]' || '[11]') }}
+        arcticdb_version: ["oldest", "latest"]
+        include:
+          - python_deps_ids: [""]
+            matrix_override: ${{fromJson(needs.common_config.outputs.macos_matrix)}}
+    name: Verify Persistent Storage for 3.${{matrix.python3}} MacOS with ${{ matrix.arcticdb_version }} ArcticDB package version
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    permissions: {packages: write}
+    with:
+      job_type: verify
+      python3: ${{matrix.python3}}
+      arcticdb_version: ${{matrix.arcticdb_version}}
+      matrix: ${{toJson(matrix.matrix_override)}}
+      python_deps_ids: ${{toJson(matrix.python_deps_ids)}}
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
+
+  post_verify_cleanup:
+    needs: [persistent_storage_verify_windows, persistent_storage_verify_linux, persistent_storage_verify_macos, storage_type]
+    if: |
+      always() &&
+      !failure() &&
+      !cancelled() &&
+      ${{ needs.storage_type.outputs.storage != 'no' }}
+    name: Cleanup persistent storages
+    uses: ./.github/workflows/persistent_storage.yml
+    secrets: inherit
+    with:
+      job_type: cleanup
+      persistent_storage: ${{ needs.storage_type.outputs.storage }}
 
   publish_pytest_data:
     needs: [common_config,build-python-wheels-linux, build-python-wheels-windows, build-python-wheels-macos]
