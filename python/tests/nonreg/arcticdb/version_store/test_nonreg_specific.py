@@ -23,7 +23,6 @@ from arcticdb_ext.storage import KeyType
 from arcticc.pb2.descriptors_pb2 import TypeDescriptor
 from tests.conftest import Marks
 from tests.util.date import DateRange
-from tests.util.mark import MACOS_WHEEL_BUILD
 from tests.util.marking import marks
 
 

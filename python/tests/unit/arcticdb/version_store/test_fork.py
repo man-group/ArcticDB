@@ -15,7 +15,7 @@ from arcticdb import Arctic
 
 from arcticdb.util.test import assert_frame_equal
 
-from tests.util.mark import SKIP_CONDA_MARK, MACOS_WHEEL_BUILD
+from tests.util.mark import SKIP_CONDA_MARK
 
 
 def df(symbol):
