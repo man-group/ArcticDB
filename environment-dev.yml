@@ -31,7 +31,7 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
-  - libprotobuf <7
+  - conda-forge/label/libprotobuf_dev::libprotobuf <6
   - openssl
   # TODO: understand failures with libcurl>=8.17
   - libcurl <8.17
