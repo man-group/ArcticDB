@@ -49,9 +49,9 @@ auto variant_match(Variant&& v, Ts&&... ts) {
 
 template<typename InputFun, typename... Elements>
 void enumerate(InputFun&& callback, Elements&&... elements) {
-    []<typename Fn_, typename... Ts_, size_t... Is_>(Fn_&& cb, Ts_&&... ts, std::index_sequence<Is_...>) {
-        (cb(Is_, std::forward<Ts_>(ts)), ...);
-    }(std::forward<InputFun>(callback), std::forward<Elements>(elements)..., std::index_sequence_for<Elements...>{});
+    [&callback, &elements...]<size_t... Is_>(std::index_sequence<Is_...>) {
+        (callback(Is_, std::forward<Elements>(elements)), ...);
+    }(std::index_sequence_for<Elements...>{});
 }
 
 } // namespace arcticdb::util

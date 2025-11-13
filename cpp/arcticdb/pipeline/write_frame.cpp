@@ -281,7 +281,6 @@ folly::Future<std::vector<SliceAndKey>> slice_and_write(
     auto slices = slice(*frame, slicing);
     if (slices.empty())
         return folly::makeFuture(std::vector<SliceAndKey>{});
-
     ARCTICDB_SUBSAMPLE_DEFAULT(SliceAndWrite)
     TypedStreamVersion tsv{std::move(key.id), key.version_id, KeyType::TABLE_DATA};
     return write_slices(frame, std::move(slices), slicing, std::move(tsv), sink, de_dup_map, sparsify_floats)
