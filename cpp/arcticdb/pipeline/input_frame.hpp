@@ -30,16 +30,27 @@ struct InputFrame {
   public:
     InputFrame();
     InputFrame(SegmentInMemory&& seg);
-    InputFrame(
-            StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
-            std::optional<entity::NativeTensor>&& index_tensor = std::nullopt
-    );
-    void set_segment(SegmentInMemory&& seg);
-    void set_from_tensors(
-            StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
-            std::optional<entity::NativeTensor>&& index_tensor
-    );
 
+    template<typename DescriptorT>
+    requires util::forwarding_ref_to<DescriptorT, StreamDescriptor>
+    InputFrame(
+            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
+    ) :
+        index(stream::empty_index()) {
+        set_from_tensors(std::forward<DescriptorT>(desc), std::move(field_tensors), std::move(index_tensor));
+    }
+
+    template<typename DescriptorT>
+    requires util::forwarding_ref_to<DescriptorT, StreamDescriptor>
+    void set_from_tensors(
+            DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
+    ) {
+        input_data.emplace<InputTensors>(
+                std::move(index_tensor), std::move(field_tensors), std::forward<DescriptorT>(desc)
+        );
+    }
+
+    void set_segment(SegmentInMemory&& seg);
     StreamDescriptor& desc();
     const StreamDescriptor& desc() const;
     // The descriptor of the input frame can differ than that for the timeseries descriptor in the index key for Arrow

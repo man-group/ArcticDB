@@ -18,14 +18,6 @@ InputFrame::InputFrame() : index(stream::empty_index()) {}
 
 InputFrame::InputFrame(SegmentInMemory&& seg) : index(stream::empty_index()) { set_segment(std::move(seg)); }
 
-InputFrame::InputFrame(
-        StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
-        std::optional<entity::NativeTensor>&& index_tensor
-) :
-    index(stream::empty_index()) {
-    set_from_tensors(std::move(desc), std::move(field_tensors), std::move(index_tensor));
-}
-
 void InputFrame::set_segment(SegmentInMemory&& seg) {
     num_rows = seg.row_count();
     util::check(norm_meta.has_experimental_arrow(), "Unexpected non-Arrow norm metadata provided with Arrow data");
@@ -47,13 +39,6 @@ void InputFrame::set_segment(SegmentInMemory&& seg) {
         seg.descriptor().set_sorted(SortedValue::UNKNOWN);
     }
     input_data.emplace<InputSegment>(std::move(seg));
-}
-
-void InputFrame::set_from_tensors(
-        StreamDescriptor&& desc, std::vector<entity::NativeTensor>&& field_tensors,
-        std::optional<entity::NativeTensor>&& index_tensor
-) {
-    input_data.emplace<InputTensors>(std::move(index_tensor), std::move(field_tensors), std::move(desc));
 }
 
 StreamDescriptor& InputFrame::desc() {

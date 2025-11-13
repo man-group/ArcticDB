@@ -228,7 +228,6 @@ VersionedItem merge_impl(
         std::vector<std::string>&& on, bool match_on_timeseries_index, const MergeStrategy& strategy,
         const std::shared_ptr<InputFrame>& source
 );
-
 } // namespace arcticdb::version_store
 
 namespace arcticdb {

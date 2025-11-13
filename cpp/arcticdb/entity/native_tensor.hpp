@@ -67,15 +67,13 @@ struct NativeTensor {
         }
     }
 
-    template<typename T>
-    requires std::ranges::contiguous_range<T>
+    template<std::ranges::contiguous_range T>
     static NativeTensor one_dimensional_tensor(const T& data, const DataType data_type) {
-        using ValueType = std::ranges::range_value_t<T>;
+        using ValueType = std::decay_t<std::ranges::range_value_t<T>>;
         constexpr static size_t element_size = sizeof(ValueType);
         constexpr shape_t shapes = 1;
-        constexpr stride_t strides = element_size;
         const int64_t byte_size = data.size() * element_size;
-        return NativeTensor{byte_size, 1, &shapes, &strides, data_type, element_size, std::ranges::data(data), 1};
+        return NativeTensor{byte_size, 1, nullptr, &shapes, data_type, element_size, std::ranges::data(data), 1};
     }
 
     NativeTensor(const NativeTensor& other) :

@@ -35,4 +35,7 @@ concept contiguous_type_tagged_data = requires(T t) {
     std::same_as<typename T::second_type, entity::TypeDescriptor>;
 };
 
+template<typename Given, typename Base>
+concept forwarding_ref_to = std::same_as<std::decay_t<Given>, Base>;
+
 } // namespace arcticdb::util

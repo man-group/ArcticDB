@@ -280,78 +280,6 @@ class SegmentInMemoryImpl {
             OutputFormat output_format, DataTypeMode mode
     );
 
-    template<std::ranges::sized_range T>
-    requires std::ranges::sized_range<std::ranges::range_value_t<T>>
-    static SegmentInMemoryImpl create_dense_segment(const StreamDescriptor& descriptor, const T& columns) {
-        const size_t input_column_count = std::ranges::size(columns);
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                input_column_count == descriptor.fields().size(),
-                "When creating a dense segment in memory the number of columns ({}) must match the number of fields in "
-                "the stream descriptor ({})",
-                input_column_count,
-                descriptor.fields().size()
-        );
-        if (input_column_count == 0) {
-            return SegmentInMemoryImpl();
-        }
-
-        const size_t expected_column_size = columns.begin()->first.size();
-        constexpr static AllocationType allocation_type = AllocationType::PRESIZED;
-        constexpr static Sparsity sparsity = Sparsity::NOT_PERMITTED;
-        SegmentInMemoryImpl result(descriptor, expected_column_size, allocation_type, sparsity);
-        for (auto const& [column_index, column_data] : folly::enumerate(columns)) {
-            const size_t row_count = std::ranges::size(column_data);
-            internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                    row_count == expected_column_size,
-                    "When creating a dense segment all columns must have the same size. Column[0] has {} rows, "
-                    "Column[{}] has {} rows",
-                    expected_column_size,
-                    column_index,
-                    row_count
-            );
-            result.fill_dense_column_data(column_index, column_data);
-        }
-        return result;
-    }
-
-    template<typename... T>
-    requires(... && std::ranges::sized_range<T>)
-    static SegmentInMemoryImpl create_dense_segment(const StreamDescriptor& descriptor, const T&... columns) {
-        constexpr size_t input_column_count = sizeof...(T);
-        internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                input_column_count == descriptor.fields().size(),
-                "When creating a dense segment in memory the number of columns ({}) must match the number of fields in "
-                "the stream descriptor ({})",
-                input_column_count,
-                descriptor.fields().size()
-        );
-        if (input_column_count == 0) {
-            return SegmentInMemoryImpl();
-        }
-        const size_t expected_column_size = []<typename H, typename... Tail>(const H& head, const Tail&...) {
-            return std::ranges::size(head);
-        }(columns...);
-        constexpr static AllocationType allocation_type = AllocationType::PRESIZED;
-        constexpr static Sparsity sparsity = Sparsity::NOT_PERMITTED;
-        SegmentInMemoryImpl result(descriptor, expected_column_size, allocation_type, sparsity);
-        util::enumerate(
-                [&result, expected_column_size](size_t column_index, const auto& column_data) {
-                    const size_t row_count = std::ranges::size(column_data);
-                    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                            row_count == expected_column_size,
-                            "When creating a dense segment all columns must have the same size. Column[0] has {} rows, "
-                            "Column[{}] has {} rows",
-                            expected_column_size,
-                            column_index,
-                            row_count
-                    );
-                    result.fill_dense_column_data(column_index, column_data);
-                },
-                columns...
-        );
-        return result;
-    }
-
     ~SegmentInMemoryImpl();
 
     iterator begin();
@@ -636,49 +564,6 @@ class SegmentInMemoryImpl {
     void drop_empty_columns();
 
   private:
-    template<std::ranges::sized_range T>
-    void fill_dense_column_data(const size_t column_index, const T& input_data) {
-        using InputValueType = std::decay_t<std::ranges::range_value_t<T>>;
-        constexpr static bool is_input_string_like = std::is_convertible_v<InputValueType, std::string_view>;
-        const size_t row_count = std::ranges::size(input_data);
-        details::visit_type(descriptor().field(column_index).type().data_type(), [&, this](auto tdt) {
-            using col_type_info = ScalarTypeInfo<decltype(tdt)>;
-            constexpr static bool is_sequence = is_sequence_type(col_type_info::data_type);
-            if constexpr (is_input_string_like && is_sequence) {
-                // Clang has a bug where it the for_each is just regular range-based for the constexpr if will not
-                // the body of the if even if the condition is false. This leads to compile time errors because it tries
-                // to call set_string with non-string values.
-                // https://stackoverflow.com/questions/79817660/discarded-branch-of-c-constexpr-if-fails-compilation-because-it-calls-non-matc
-                std::ranges::for_each(input_data, [&, this](const std::string_view& str) {
-                    set_string(column_index, str);
-                });
-            } else if constexpr (!is_sequence && !is_input_string_like) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        std::is_same_v<typename col_type_info::RawType, InputValueType>,
-                        "Type mismatch when setting data for Column[{}]. Column data type is {}.",
-                        column_index,
-                        col_type_info::data_type
-                );
-                Column& column_to_fill = column(column_index);
-                if constexpr (std::ranges::contiguous_range<std::ranges::range_value_t<T>>) {
-                    std::memcpy(
-                            column_to_fill.ptr(), std::ranges::data(input_data), row_count * sizeof(InputValueType)
-                    );
-                } else {
-                    std::ranges::copy(input_data, column_to_fill.ptr_cast<InputValueType>(0, row_count));
-                }
-            } else {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        std::is_same_v<typename col_type_info::RawType, InputValueType>,
-                        "Type mismatch when setting data for Column[{}]. Column data type is {}.",
-                        column_index,
-                        col_type_info::data_type
-                );
-            }
-            set_row_data(row_count);
-        });
-    }
-
     ssize_t row_id_ = -1;
     std::shared_ptr<StreamDescriptor> descriptor_;
     std::vector<std::shared_ptr<Column>> columns_;
