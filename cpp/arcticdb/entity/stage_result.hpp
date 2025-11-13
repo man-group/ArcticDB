@@ -11,6 +11,7 @@
 #include <arcticdb/entity/atom_key.hpp>
 #include <vector>
 #include <fmt/format.h>
+#include <fmt/ranges.h>
 
 namespace arcticdb {
 struct StageResult {
