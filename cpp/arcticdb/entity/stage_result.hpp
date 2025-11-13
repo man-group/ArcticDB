@@ -32,7 +32,7 @@ struct formatter<arcticdb::StageResult> {
 
     template<typename FormatContext>
     auto format(const arcticdb::StageResult& stage_result, FormatContext& ctx) const {
-        return format_to(ctx.out(), "StageResult(staged_segments=[{}])", fmt::join(stage_result.staged_segments, ", "));
+        return fmt::format_to(ctx.out(), "StageResult(staged_segments=[{}])", fmt::join(stage_result.staged_segments, ", "));
     }
 };
 } // namespace fmt
