@@ -1373,3 +1373,13 @@ def test_groupby_timeseries_column_with_timezone(lmdb_version_store_v1):
     expected.reset_index(drop=True, inplace=True)
     expected.set_index("time", inplace=True)
     assert_frame_equal(result, expected)
+
+
+@pytest.mark.skip(reason="Monday ref: 10538465252")
+def test_unnamed_multiindex_clashing_column_name(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    sym = "test_unnamed_multiindex_clashing_column_name"
+    df = pd.DataFrame({"__fkidx__1": [0]}, index=pd.MultiIndex.from_product([[pd.Timestamp(0)], ["id"]]))
+    lib.write(sym, df)
+    received = lib.read(sym).data
+    assert_frame_equal(df, received)
