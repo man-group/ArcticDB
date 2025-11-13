@@ -55,7 +55,7 @@ from tests.conftest import Marks
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
-from tests.util.mark import MACOS, MACOS_WHEEL_BUILD, xfail_azure_chars
+from tests.util.mark import xfail_azure_chars
 from tests.util.marking import marks
 
 
