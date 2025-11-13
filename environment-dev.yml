@@ -81,7 +81,7 @@ dependencies:
   - pytest-timeout
   - azure-storage-blob
   - azure-identity
-  - pyarrow
+  # - pyarrow
   - asv
   - pymongo
   - pytest
