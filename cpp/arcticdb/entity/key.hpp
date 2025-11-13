@@ -19,6 +19,10 @@ namespace rng = std::ranges;
 namespace arcticdb::entity {
 
 struct DefaultAtomKeyFormat {
+    static constexpr char format[] = "{}:{}:{:d}:0x{:x}@{:d}[{},{}]";
+};
+
+struct DisplayAtomKeyFormat {
     static constexpr char format[] = "Key(type={}, id='{}', version_id={:d}, content_hash=0x{:x}, creation_ts={:d}, "
                                      "start_index={}, end_index={})";
 };

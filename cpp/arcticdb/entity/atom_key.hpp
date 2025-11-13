@@ -327,5 +327,7 @@ struct hash<arcticdb::entity::AtomKeyImpl> {
 
 namespace arcticdb::entity {
 // This needs to be defined AFTER the formatter for AtomKeyImpl
-inline void AtomKeyImpl::set_string() const { str_ = fmt::format("{}", *this); }
+inline void AtomKeyImpl::set_string() const { 
+    str_ = fmt::format("{}", formattable<AtomKey, DisplayAtomKeyFormat>(*this)); 
+}
 } // namespace arcticdb::entity
