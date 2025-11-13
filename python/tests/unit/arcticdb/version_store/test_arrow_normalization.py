@@ -84,10 +84,10 @@ def test_named_timeseries_index_no_clash(lmdb_version_store_arrow, index_name):
 
 @pytest.mark.parametrize("index_name", ["index", "__index__", "ts"])
 def test_named_timeseries_index_clash(lmdb_version_store_arrow, index_name):
-    columns = [index_name, index_name]
+    columns = [index_name, index_name, f"_{index_name}_"]
     df = pd.DataFrame(np.zeros((1, len(columns))), columns=columns, index=[pd.Timestamp(0)])
     df.index.name = index_name
-    expected_columns = [index_name, f"_{columns[0]}_", f"__{columns[1]}__"]
+    expected_columns = [index_name, f"_{columns[0]}_", f"__{columns[1]}__", f"__{columns[2]}__"]
     generic_arrow_norm_test(lmdb_version_store_arrow, "test_named_timeseries_index_clash", df, expected_columns)
 
 
