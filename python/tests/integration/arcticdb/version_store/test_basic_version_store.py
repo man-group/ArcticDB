@@ -55,7 +55,7 @@ from tests.conftest import Marks
 from tests.util.date import DateRange
 from arcticdb.util.test import equals
 from arcticdb.version_store._store import resolve_defaults
-from tests.util.mark import MACOS, MACOS_WHEEL_BUILD, xfail_azure_chars
+from tests.util.mark import xfail_azure_chars
 from tests.util.marking import marks
 
 
@@ -110,7 +110,6 @@ def test_special_chars(object_version_store):
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_s3_breaking_chars(object_version_store, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
     corrupting the db.
@@ -126,7 +125,6 @@ def test_s3_breaking_chars(object_version_store, breaking_char):
 
 @pytest.mark.parametrize("breaking_char", [chr(0), "\0", "*", "<", ">"])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_s3_breaking_chars_staged(object_version_store, breaking_char):
     """Test that chars that are not supported are raising the appropriate exception and that we fail on write without
     corrupting the db.
@@ -142,7 +140,6 @@ def test_s3_breaking_chars_staged(object_version_store, breaking_char):
 
 @pytest.mark.parametrize("unhandled_char", [chr(0), chr(30), chr(127), chr(128)])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_unhandled_chars_default(object_version_store, unhandled_char):
     """Test that by default, the problematic chars are raising an exception"""
     xfail_azure_chars(object_version_store, unhandled_char)
@@ -156,7 +153,6 @@ def test_unhandled_chars_default(object_version_store, unhandled_char):
 
 @pytest.mark.parametrize("sym", [chr(0), chr(30), chr(127), chr(128), "", "l" * 255])
 @pytest.mark.storage
-@pytest.mark.skipif(MACOS, reason="Halts execution on MacOS ARM")
 def test_unhandled_chars_staged_data(object_version_store, sym):
     xfail_azure_chars(object_version_store, sym)
     """Test that by default, the problematic chars are raising an exception at staging time."""

@@ -85,7 +85,7 @@ def test_read_empty(lmdb_version_store_arrow):
     expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
     # During normalization when doing the write we attach an empty DateTimeIndex to the DataFrame. We correctly see it
     # in arrow
-    assert table.column_names == ["index"]
+    assert table.column_names == ["__index__"]
     assert table.shape == (0, 1)
     # arcticdb read(output_format=PANDAS) produces `pd.RangeIndex(start=0, stop=0, step=1)` column index if no columns
     # pyarrow to_pandas produces `pd.Index([])` if no columns.
@@ -101,7 +101,7 @@ def test_read_empty_with_columns(lmdb_version_store_arrow):
     lib.write(sym, df)
     table = lib.read(sym).data
     expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
-    assert table.column_names == ["index", "col_int", "col_float"]
+    assert table.column_names == ["__index__", "col_int", "col_float"]
     assert table.shape == (0, 3)
     assert_frame_equal_with_arrow(table, expected)
 
@@ -117,12 +117,17 @@ def test_column_filtering(lmdb_version_store_arrow):
 
 @pytest.mark.parametrize(
     "dynamic_strings",
-    [True, pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))],
+    [
+        True,
+        pytest.param(
+            False, marks=pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
+        ),
+    ],
 )
 def test_strings_basic(lmdb_version_store_arrow, dynamic_strings, any_arrow_string_format):
     lib = lmdb_version_store_arrow
     lib.set_arrow_string_format_default(any_arrow_string_format)
-    df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
+    df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin", ""]})
     lib.write("arrow", df, dynamic_strings=dynamic_strings)
     table = lib.read("arrow").data
     assert_frame_equal_with_arrow(table, df)
@@ -195,21 +200,14 @@ def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_forma
     assert_frame_equal_with_arrow(table, df)
 
 
-@pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
-def test_fixed_width_strings(lmdb_version_store_arrow, any_arrow_string_format):
-    lib = lmdb_version_store_arrow
-    lib.set_arrow_string_format_default(any_arrow_string_format)
-    sym = "test_fixed_width_strings"
-    df0 = pd.DataFrame({"my_column": ["hello", "goodbye"]})
-    lib.write(sym, df0, dynamic_strings=False)
-    with pytest.raises(SchemaException) as e:
-        lib.read(sym)
-    assert "my_column" in str(e.value) and "Arrow" in str(e.value)
-
-
 @pytest.mark.parametrize(
     "dynamic_strings",
-    [True, pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))],
+    [
+        True,
+        pytest.param(
+            False, marks=pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
+        ),
+    ],
 )
 def test_strings_multiple_segments_and_columns(
     lmdb_version_store_tiny_segment, dynamic_strings, any_arrow_string_format

@@ -22,6 +22,8 @@ import re
 import time
 import requests
 import uuid
+import sys
+import multiprocessing
 from datetime import datetime
 from functools import partial
 from tempfile import mkdtemp
@@ -89,7 +91,6 @@ from arcticdb.version_store._custom_normalizers import (
     clear_registered_normalizers,
 )
 
-
 # region =================================== Misc. Constants & Setup ====================================
 hypothesis.settings.register_profile("ci_linux", max_examples=100)
 hypothesis.settings.register_profile("ci_windows", max_examples=100)
@@ -100,6 +101,19 @@ hypothesis.settings.load_profile(os.environ.get("HYPOTHESIS_PROFILE", "dev"))
 
 # Use a smaller memory mapped limit for all tests
 MsgPackNormalizer.MMAP_DEFAULT_SIZE = 20 * (1 << 20)
+
+
+# Ensure pytest-xdist uses 'fork' start method on macOS
+@pytest.fixture(scope="session", autouse=True)
+def _set_multiprocessing_start_method_for_macos():
+    if platform.system() == "Darwin":
+        # Improve stability with forking on macOS when native libs are loaded
+        os.environ.setdefault("OBJC_DISABLE_INITIALIZE_FORK_SAFETY", "YES")
+        try:
+            multiprocessing.set_start_method("fork", force=True)
+        except RuntimeError:
+            # Start method was already set by Python or another plugin
+            pass
 
 
 # silence warnings about custom markers
@@ -1705,42 +1719,51 @@ LOCAL_OBJECT_STORE_FIXTURES = [re.compile(r"^(local_object_store.*|local_object_
 VERSION_STORE_AND_REAL_FIXTURES = [re.compile(r"^version_store_and_real*", re.I)]
 
 FIXTURES_TO_MARK = {
-    Marks.lmdb.name: [re.compile(r"^lmdb_.*", re.I)]
-    + ALL_FIXTURES_AND_LMDB
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + BASIC_STORE_FIXTURES,
+    Marks.lmdb.name: (
+        [re.compile(r"^lmdb_.*", re.I)] + ALL_FIXTURES_AND_LMDB + VERSION_STORE_AND_REAL_FIXTURES + BASIC_STORE_FIXTURES
+    ),
     Marks.mem.name: [re.compile(r"^(mem_.*|in_memory_.*)", re.I)] + ALL_FIXTURES + BASIC_STORE_FIXTURES,
-    Marks.s3.name: [re.compile(r"^(s3_.*|mock_s3.*)", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + LOCAL_OBJECT_STORE_FIXTURES
-    + OBJECT_STORE_FIXTURES,
+    Marks.s3.name: (
+        [re.compile(r"^(s3_.*|mock_s3.*)", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + LOCAL_OBJECT_STORE_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
     Marks.nfs.name: [re.compile(r"^nfs_.*", re.I)] + ALL_FIXTURES + OBJECT_STORE_FIXTURES,
     Marks.gcp.name: [re.compile(r"^gcp_.*", re.I)] + ALL_FIXTURES,
     Marks.mongo.name: [re.compile(r"^mongo_.*", re.I)] + ALL_FIXTURES,
-    Marks.azurite.name: [re.compile(r"^(azurite_.*|azure_.*)", re.I)]
-    + ALL_FIXTURES
-    + LOCAL_OBJECT_STORE_FIXTURES
-    + OBJECT_STORE_FIXTURES
-    + OBJECT_STORE_FIXTURES,
-    Marks.real_s3.name: [re.compile(r"^real_s3_.*", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + BASIC_ARCTIC_FIXTURES
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + OBJECT_STORE_FIXTURES,
-    Marks.real_azure.name: [re.compile(r"^real_azure_.*", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + BASIC_ARCTIC_FIXTURES
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + OBJECT_STORE_FIXTURES,
-    Marks.real_gcp.name: [re.compile(r"^real_gcp_.*", re.I)]
-    + ALL_FIXTURES
-    + BASIC_STORE_FIXTURES
-    + BASIC_ARCTIC_FIXTURES
-    + VERSION_STORE_AND_REAL_FIXTURES
-    + OBJECT_STORE_FIXTURES,
+    Marks.azurite.name: (
+        [re.compile(r"^(azurite_.*|azure_.*)", re.I)]
+        + ALL_FIXTURES
+        + LOCAL_OBJECT_STORE_FIXTURES
+        + OBJECT_STORE_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
+    Marks.real_s3.name: (
+        [re.compile(r"^real_s3_.*", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + BASIC_ARCTIC_FIXTURES
+        + VERSION_STORE_AND_REAL_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
+    Marks.real_azure.name: (
+        [re.compile(r"^real_azure_.*", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + BASIC_ARCTIC_FIXTURES
+        + VERSION_STORE_AND_REAL_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
+    Marks.real_gcp.name: (
+        [re.compile(r"^real_gcp_.*", re.I)]
+        + ALL_FIXTURES
+        + BASIC_STORE_FIXTURES
+        + BASIC_ARCTIC_FIXTURES
+        + VERSION_STORE_AND_REAL_FIXTURES
+        + OBJECT_STORE_FIXTURES
+    ),
     Marks.dynamic_schema.name: [re.compile(r".*(dynamic_schema|dynamic(?!string)).*", re.I)],
     Marks.empty_types.name: [
         "empty_types",
