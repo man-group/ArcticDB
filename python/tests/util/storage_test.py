@@ -8,6 +8,7 @@ import numpy as np
 import argparse
 import re
 from datetime import datetime
+import ssl
 
 from arcticdb import Arctic
 from arcticc.pb2.s3_storage_pb2 import Config as S3Config
