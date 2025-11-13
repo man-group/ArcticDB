@@ -144,7 +144,7 @@ def lib_name(request: "pytest.FixtureRequest") -> str:
     thread_id = threading.get_ident()
     # There is limit to the name length, and note that without
     # the dot (.) in the name mongo will not work!
-    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"[:190]
+    return f"{name}.{pid}_{thread_id}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_')}_{uuid.uuid4()}"[:200]
 
 
 @pytest.fixture
@@ -385,24 +385,21 @@ def mock_s3_storage_with_error_simulation(mock_s3_storage_with_error_simulation_
 @pytest.fixture(scope="session")
 def real_s3_storage_factory() -> BaseS3StorageFixtureFactory:
     return real_s3_from_environment_variables(
-        shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        shared_path=False
     )
 
 
 @pytest.fixture(scope="session")
 def real_gcp_storage_factory() -> BaseGCPStorageFixtureFactory:
     return real_gcp_from_environment_variables(
-        shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        shared_path=False
     )
 
 
 @pytest.fixture(scope="session")
 def real_azure_storage_factory() -> AzureStorageFixtureFactory:
     return real_azure_from_environment_variables(
-        shared_path=False,
-        additional_suffix=f"{random.randint(0, 999)}_{datetime.utcnow().strftime('%Y-%m-%dT%H_%M_%S_%f')}",
+        shared_path=False
     )
 
 
