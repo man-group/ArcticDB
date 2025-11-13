@@ -37,6 +37,7 @@ void write_version_frame_with_three_segments_rec_norm(
         rec_norm_ids.emplace_back(stream_id_str + "__" + std::to_string(i));
         auto frame = get_test_timeseries_frame(stream_id, 30, 0);
         internal_frames.emplace_back(frame.frame_);
+        // Need to keep the TestTensorFrames as they own the memory used in the internal_frames
         frames.emplace_back(std::move(frame));
     }
 
