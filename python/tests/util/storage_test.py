@@ -170,7 +170,7 @@ def find_ca_certs():
 ###  there is no way how arcticdb 3.0 could have had the functions that we are going to implement
 ###  and support from now on
 def get_real_azure_uri(shared_path: bool = True):
-    container, constr, path_prefix = real_azure_credentials(shared_path)
+    container, constr, path_prefix, _ = real_azure_credentials(shared_path)
     ca_certs_file = find_ca_certs()
     uri = f"azure://Container={container};Path_prefix={path_prefix}"
     assert ca_certs_file, f"CA file: {ca_certs_file} not found!"
