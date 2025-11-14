@@ -116,7 +116,7 @@ class AsyncStore : public Store {
                 .thenValue(WriteSegmentTask{library_});
     }
 
-    folly::Future<VariantKey> write(PartialKey pk, SegmentInMemory&& segment) override {
+    folly::Future<VariantKey> write(stream::PartialKey pk, SegmentInMemory&& segment) override {
         return write(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
     }
 
@@ -129,7 +129,7 @@ class AsyncStore : public Store {
     }
 
     folly::Future<VariantKey> write_maybe_blocking(
-            PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
+            stream::PartialKey pk, SegmentInMemory&& segment, std::shared_ptr<folly::NativeSemaphore> semaphore
     ) override {
         log::version().debug("Waiting for semaphore for write_maybe_blocking {}", pk);
         semaphore->wait();
@@ -168,7 +168,7 @@ class AsyncStore : public Store {
         return WriteSegmentTask{library_}(std::move(encoded));
     }
 
-    entity::VariantKey write_sync(PartialKey pk, SegmentInMemory&& segment) override {
+    entity::VariantKey write_sync(stream::PartialKey pk, SegmentInMemory&& segment) override {
         return write_sync(pk.key_type, pk.version_id, pk.stream_id, pk.start_index, pk.end_index, std::move(segment));
     }
 
@@ -426,8 +426,20 @@ class AsyncStore : public Store {
         return res;
     }
 
+    SliceAndKey write_if_new(std::pair<DeDupLookupResult, FrameSlice>&& item) {
+        auto [dedup_lookup, slice] = std::move(item);
+        return util::variant_match(
+                std::move(dedup_lookup),
+                [&, this](NewObject&& obj) {
+                    library_->write(obj);
+                    return SliceAndKey{std::move(slice), std::move(obj).atom_key()};
+                },
+                [&](ExistingObject&& obj) { return SliceAndKey{std::move(slice), to_atom(std::move(obj))}; }
+        );
+    }
+
     folly::Future<SliceAndKey> async_write(
-            folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
+            folly::Future<std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) override {
         return std::move(input_fut)
@@ -443,17 +455,24 @@ class AsyncStore : public Store {
                     return std::pair{lookup_match_in_dedup_map(de_dup_map, key_seg), std::move(slice)};
                 })
                 .via(&async::io_executor())
-                .thenValue([lib = library_](auto&& item) {
-                    auto& [dedup_lookup, slice] = item;
-                    return util::variant_match(
-                            dedup_lookup,
-                            [&](NewObject& obj) {
-                                lib->write(obj);
-                                return SliceAndKey{slice, obj.atom_key()};
-                            },
-                            [&](ExistingObject& obj) { return SliceAndKey{slice, to_atom(std::move(obj))}; }
-                    );
-                });
+                .thenValue([this](auto&& item) { return write_if_new(std::move(item)); });
+    }
+
+    folly::Future<SliceAndKey> compress_and_schedule_async_write(
+            std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input,
+            const std::shared_ptr<DeDupMap>& de_dup_map
+    ) override {
+        auto [partial_key, seg, input_slice] = std::move(input);
+        storage::KeySegmentPair key_seg = EncodeAtomTask{
+                std::move(partial_key), ClockType::nanos_since_epoch(), std::move(seg), codec_, encoding_version_
+        }();
+        DeDupLookupResult dedup_lookup = lookup_match_in_dedup_map(de_dup_map, key_seg);
+        return folly::via(
+                &io_executor(),
+                [dedup_lookup = std::move(dedup_lookup), slice = std::move(input_slice), this]() mutable {
+                    return write_if_new(std::pair{std::move(dedup_lookup), std::move(slice)});
+                }
+        );
     }
 
     void set_failure_sim(const arcticdb::proto::storage::VersionStoreConfig::StorageFailureSimulator& cfg) override {

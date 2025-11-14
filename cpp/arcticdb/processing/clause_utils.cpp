@@ -113,19 +113,19 @@ std::vector<FutureOrSplitter> split_futures(
 }
 
 std::shared_ptr<std::vector<EntityFetchCount>> generate_segment_fetch_counts(
-        const std::vector<std::vector<size_t>>& processing_unit_indexes, size_t num_segments
+        const std::span<const std::vector<size_t>> processing_unit_indexes, const size_t num_segments
 ) {
-    auto res = std::make_shared<std::vector<EntityFetchCount>>(num_segments, 0);
+    auto res = std::vector<EntityFetchCount>(num_segments, 0);
     for (const auto& list : processing_unit_indexes) {
-        for (auto idx : list) {
-            res->at(idx)++;
+        for (const auto idx : list) {
+            res[idx]++;
         }
     }
     debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-            ranges::none_of(*res, [](size_t val) { return val == 0; }),
+            ranges::none_of(res, [](const size_t val) { return val == 0; }),
             "All segments should be needed by at least one ProcessingUnit"
     );
-    return res;
+    return std::make_shared<std::vector<EntityFetchCount>>(std::move(res));
 }
 
 template<ResampleBoundary closed_boundary, typename T>

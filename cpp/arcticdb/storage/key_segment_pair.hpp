@@ -43,9 +43,14 @@ class KeySegmentPair {
         key_ = std::make_shared<VariantKey>(std::forward<T>(key));
     }
 
-    [[nodiscard]] const AtomKey& atom_key() const {
+    [[nodiscard]] const AtomKey& atom_key() const& {
         util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
         return std::get<AtomKey>(variant_key());
+    }
+
+    [[nodiscard]] AtomKey&& atom_key() && {
+        util::check(std::holds_alternative<AtomKey>(variant_key()), "Expected atom key access");
+        return std::get<AtomKey>(std::move(*key_));
     }
 
     [[nodiscard]] const RefKey& ref_key() const {
@@ -53,9 +58,14 @@ class KeySegmentPair {
         return std::get<RefKey>(variant_key());
     }
 
-    [[nodiscard]] const VariantKey& variant_key() const {
+    [[nodiscard]] const VariantKey& variant_key() const& {
         util::check(key_, "Attempting to access key_ but it has not been set");
         return *key_;
+    }
+
+    [[nodiscard]] VariantKey&& variant_key() && {
+        util::check(key_, "Attempting to access key_ but it has not been set");
+        return std::move(*key_);
     }
 
     [[nodiscard]] const Segment& segment() const {

@@ -404,7 +404,7 @@ class VersionMapImpl {
         IndexAggregator<RowCountIndex> journal_agg(
                 stream_id,
                 [&store, &journal_key, &version_id, &stream_id](auto&& segment) {
-                    stream::StreamSink::PartialKey pk{
+                    const PartialKey pk{
                             KeyType::VERSION,
                             version_id,
                             stream_id,
@@ -900,7 +900,7 @@ class VersionMapImpl {
         IndexAggregator<RowCountIndex> version_agg(
                 stream_id,
                 [&store, &journal_key, &version_id, &stream_id](auto&& segment) {
-                    stream::StreamSink::PartialKey pk{
+                    const PartialKey pk{
                             KeyType::VERSION,
                             version_id,
                             stream_id,

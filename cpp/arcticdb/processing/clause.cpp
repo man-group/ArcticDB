@@ -23,6 +23,9 @@
 #include <arcticdb/util/movable_priority_queue.hpp>
 #include <arcticdb/stream/merge_utils.hpp>
 #include <arcticdb/processing/unsorted_aggregation.hpp>
+#include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/storage/store.hpp>
+#include <arcticdb/stream/stream_sink.hpp>
 
 #include <ranges>
 
@@ -561,7 +564,6 @@ std::vector<EntityId> AggregationClause::process(std::vector<EntityId>&& entity_
 
     seg.set_string_pool(string_pool);
     seg.set_row_id(num_unique - 1);
-
     return push_entities(*component_manager_, ProcessingUnit(std::move(seg)));
 }
 
@@ -1644,5 +1646,90 @@ OutputSchema ConcatClause::join_schemas(std::vector<OutputSchema>&& input_schema
 }
 
 std::string ConcatClause::to_string() const { return "CONCAT"; }
+
+WriteClause::WriteClause(
+        const WriteOptions& write_options, const IndexPartialKey& index_partial_key,
+        std::shared_ptr<DeDupMap> dedup_map, std::shared_ptr<Store> store
+) :
+    write_options_(write_options),
+    index_partial_key_(index_partial_key),
+    dedup_map_(std::move(dedup_map)),
+    store_(std::move(store)) {}
+
+std::vector<std::vector<size_t>> WriteClause::structure_for_processing(std::vector<RangesAndKey>&) {
+    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("WriteClause should never be first in the pipeline");
+}
+
+std::vector<std::vector<EntityId>> WriteClause::structure_for_processing(
+        std::vector<std::vector<EntityId>>&& entity_ids_vec
+) {
+    return structure_by_row_slice(*component_manager_, std::move(entity_ids_vec));
+}
+
+std::vector<EntityId> WriteClause::process(std::vector<EntityId>&& entity_ids) const {
+    if (entity_ids.empty()) {
+        return {};
+    }
+    const auto proc =
+            gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                    *component_manager_, std::move(entity_ids)
+            );
+
+    std::vector<std::shared_ptr<folly::Future<SliceAndKey>>> data_segments_to_write;
+    data_segments_to_write.reserve(proc.segments_->size());
+
+    for (size_t i = 0; i < proc.segments_->size(); ++i) {
+        const SegmentInMemory& segment = *(*proc.segments_)[i];
+        const RowRange& row_range = *(*proc.row_ranges_)[i];
+        const ColRange& col_range = *(*proc.col_ranges_)[i];
+        stream::PartialKey partial_key = create_partial_key(segment);
+        data_segments_to_write.push_back(
+                std::make_shared<folly::Future<SliceAndKey>>(store_->compress_and_schedule_async_write(
+                        std::make_tuple(std::move(partial_key), segment, FrameSlice(col_range, row_range)), dedup_map_
+                ))
+        );
+    }
+    return component_manager_->add_entities(std::move(data_segments_to_write));
+}
+
+stream::PartialKey WriteClause::create_partial_key(const SegmentInMemory& segment) const {
+    if (segment.descriptor().index().type() == IndexDescriptor::Type::ROWCOUNT) {
+        return stream::PartialKey{
+                .key_type = KeyType::TABLE_DATA,
+                .version_id = index_partial_key_.version_id,
+                .stream_id = index_partial_key_.id,
+                .start_index = 0,
+                .end_index = 0
+        };
+    } else if (segment.descriptor().index().type() == IndexDescriptor::Type::TIMESTAMP) {
+        const timestamp start_ts = std::get<timestamp>(stream::TimeseriesIndex::start_value_for_segment(segment));
+        const timestamp end_ts =
+                std::get<timestamp>(end_index_generator(stream::TimeseriesIndex::end_value_for_segment(segment)));
+        return stream::PartialKey{
+                .key_type = KeyType::TABLE_DATA,
+                .version_id = index_partial_key_.version_id,
+                .stream_id = index_partial_key_.id,
+                .start_index = start_ts,
+                .end_index = end_ts
+        };
+    }
+    internal::raise<ErrorCode::E_ASSERTION_FAILURE>("Unknown index encountered in WriteClause");
+}
+
+const ClauseInfo& WriteClause::clause_info() const { return clause_info_; }
+
+void WriteClause::set_processing_config(const ProcessingConfig&) {}
+
+void WriteClause::set_component_manager(std::shared_ptr<ComponentManager> component_manager) {
+    component_manager_ = std::move(component_manager);
+}
+
+OutputSchema WriteClause::modify_schema(OutputSchema&& output_schema) const { return output_schema; }
+
+OutputSchema WriteClause::join_schemas(std::vector<OutputSchema>&&) const {
+    util::raise_rte("WriteClause::join_schemas should never be called");
+}
+
+std::string WriteClause::to_string() const { return "Write"; }
 
 } // namespace arcticdb

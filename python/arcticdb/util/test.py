@@ -13,6 +13,7 @@ from typing import Mapping, Any, Optional, NamedTuple, List, AnyStr, Union, Dict
 import numpy as np
 import pandas as pd
 from pandas import DateOffset, Timedelta
+
 from pandas._typing import Scalar
 import datetime as dt
 import string
@@ -746,15 +747,37 @@ DYNAMIC_STRINGS_SUFFIX = "dynamic_strings"
 FIXED_STRINGS_SUFFIX = "fixed_strings"
 
 
+def read_modify_write_data(lib, symbol, query, date_range=None):
+    dest_symbol = f"{symbol}_modified"
+    lib._read_modify_write(symbol, query, dest_symbol, date_range=date_range)
+    return lib.read(dest_symbol).data
+
+
+def get_query_processing_functions(lib, symbol, arctic_query, date_range=None):
+    """
+    This added to ease testing of read_modify_write. It returns a list of functions which perform processing
+    One is the standard read with a query builder, the other is a read_modify_write followed by a read of the newly
+    created symbol. Functions that test the QueryBuilder such as generic_filter_test, generic_aggregation_test, etc...
+    can iterate on the result array and test both methods for processing.
+    """
+    test_read_modify_write = os.getenv("ARCTICDB_TEST_READ_MODIFY_WRITE", "0") == "1"
+    processing_functions = [lambda: lib.read(symbol, query_builder=arctic_query, date_range=date_range).data]
+    if test_read_modify_write:
+        processing_functions.append(lambda: read_modify_write_data(lib, symbol, arctic_query, date_range=date_range))
+    return processing_functions
+
+
 def generic_filter_test(lib, symbol, arctic_query, expected):
-    received = lib.read(symbol, query_builder=arctic_query).data
-    if not np.array_equal(expected, received):
-        original_df = lib.read(symbol).data
-        print(
-            f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
-            f"""\nPandas result:\n{expected}\nArcticDB result:\n{received}"""
-        )
-        assert False
+    query_processing_functions = get_query_processing_functions(lib, symbol, arctic_query)
+    for processing in query_processing_functions:
+        received = processing()
+        if not np.array_equal(expected, received):
+            original_df = lib.read(symbol).data
+            print(
+                f"""Original df:\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
+                f"""\nPandas result:\n{expected}\nArcticDB result:\n{received}"""
+            )
+            assert False
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
@@ -767,24 +790,26 @@ def generic_filter_test_strings(lib, base_symbol, arctic_query, expected):
 
 
 def generic_filter_test_dynamic(lib, symbol, arctic_query, queried_slices):
-    received = lib.read(symbol, query_builder=arctic_query).data
-    assert len(received) == sum([len(queried_slice) for queried_slice in queried_slices])
-    start_row = 0
-    arrays_equal = True
-    for queried_slice in queried_slices:
-        for col_name in queried_slice.columns:
-            if not np.array_equal(
-                queried_slice[col_name], received[col_name].iloc[start_row : start_row + len(queried_slice)]
-            ):
-                arrays_equal = False
-        start_row += len(queried_slice)
-    if not arrays_equal:
-        original_df = lib.read(symbol).data
-        print(
-            f"""Original df (in ArcticDB, backfilled):\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
-            f"""\nPandas result:\n{queried_slices}\nArcticDB result:\n{received}"""
-        )
-        assert False
+    query_processing_functions = get_query_processing_functions(lib, symbol, arctic_query)
+    for proccessing_function in query_processing_functions:
+        received = proccessing_function()
+        assert len(received) == sum([len(queried_slice) for queried_slice in queried_slices])
+        start_row = 0
+        arrays_equal = True
+        for queried_slice in queried_slices:
+            for col_name in queried_slice.columns:
+                if not np.array_equal(
+                    queried_slice[col_name], received[col_name].iloc[start_row : start_row + len(queried_slice)]
+                ):
+                    arrays_equal = False
+            start_row += len(queried_slice)
+        if not arrays_equal:
+            original_df = lib.read(symbol).data
+            print(
+                f"""Original df (in ArcticDB, backfilled):\n{original_df}\nwith dtypes:\n{original_df.dtypes}\nquery:\n{arctic_query}"""
+                f"""\nPandas result:\n{queried_slices}\nArcticDB result:\n{received}"""
+            )
+            assert False
 
 
 # For string queries, test both with and without dynamic strings, and with the query both optimised for speed and memory
@@ -805,34 +830,38 @@ def generic_filter_test_strings_dynamic(lib, base_symbol, slices, arctic_query, 
 
 # TODO: Replace with np.array_equal with equal_nan argument (added in 1.19.0)
 def generic_filter_test_nans(lib, symbol, arctic_query, expected, output_format=OutputFormat.PANDAS):
-    received = lib.read(symbol, query_builder=arctic_query).data
-    assert expected.shape == received.shape
-    for col in expected.columns:
-        expected_col = expected.loc[:, col]
-        received_col = received.loc[:, col]
-        for idx, expected_val in expected_col.items():
-            received_val = received_col[idx]
-            if isinstance(expected_val, str):
-                assert isinstance(received_val, str) and expected_val == received_val
-            elif expected_val is None:
-                assert received_val is None
-            elif np.isnan(expected_val):
-                if output_format == OutputFormat.PANDAS:
-                    assert np.isnan(received_val)
-                else:
-                    # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
-                    # which then is converted to pandas `None`s
+    query_processing_functions = get_query_processing_functions(lib, symbol, arctic_query)
+    for proccessing_function in query_processing_functions:
+        received = proccessing_function()
+        assert expected.shape == received.shape
+        for col in expected.columns:
+            expected_col = expected.loc[:, col]
+            received_col = received.loc[:, col]
+            for idx, expected_val in expected_col.items():
+                received_val = received_col[idx]
+                if isinstance(expected_val, str):
+                    assert isinstance(received_val, str) and expected_val == received_val
+                elif expected_val is None:
                     assert received_val is None
+                elif np.isnan(expected_val):
+                    if output_format == OutputFormat.PANDAS:
+                        assert np.isnan(received_val)
+                    else:
+                        # When reading as arrow `None` vs `NaN` information is lost. It's all stored as arrow `null`s
+                        # which then is converted to pandas `None`s
+                        assert received_val is None
 
 
 def generic_aggregation_test(lib, symbol, df, grouping_column, aggs_dict):
     expected = df.groupby(grouping_column).agg(aggs_dict)
     expected = expected.reindex(columns=sorted(expected.columns))
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
-    received = lib.read(symbol, query_builder=q).data
-    received = received.reindex(columns=sorted(received.columns))
-    received.sort_index(inplace=True)
-    assert_frame_equal(expected, received, check_dtype=False)
+    query_processing_functions = get_query_processing_functions(lib, symbol, q)
+    for proccessing_function in query_processing_functions:
+        received = proccessing_function()
+        received = received.reindex(columns=sorted(received.columns))
+        received.sort_index(inplace=True)
+        assert_frame_equal(expected, received, check_dtype=False)
 
 
 def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, agg_dtypes=None):
@@ -847,21 +876,23 @@ def generic_named_aggregation_test(lib, symbol, df, grouping_column, aggs_dict, 
                 expected[name] = expected[name].fillna(0)
         expected = expected.astype(agg_dtypes)
     q = QueryBuilder().groupby(grouping_column).agg(aggs_dict)
-    received = lib.read(symbol, query_builder=q).data
-    received = received.reindex(columns=sorted(received.columns))
-    received.sort_index(inplace=True)
-    try:
-        assert_frame_equal(expected, received, check_dtype=agg_dtypes is not None)
-    except AssertionError as e:
-        print(
-            f"""Original df:\n{df}\nwith dtypes:\n{df.dtypes}\naggs dict:\n{aggs_dict}"""
-            f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
-            f"""\n{df.dtypes}"""
-            f"""\n{expected.dtypes}"""
-            f"""\n{received.dtypes}"""
-            f"""\n{agg_dtypes}"""
-        )
-        raise e
+    query_processing_functions = get_query_processing_functions(lib, symbol, q)
+    for proccessing_function in query_processing_functions:
+        received = proccessing_function()
+        received = received.reindex(columns=sorted(received.columns))
+        received.sort_index(inplace=True)
+        try:
+            assert_frame_equal(expected, received, check_dtype=agg_dtypes is not None)
+        except AssertionError as e:
+            print(
+                f"""Original df:\n{df}\nwith dtypes:\n{df.dtypes}\naggs dict:\n{aggs_dict}"""
+                f"""\nPandas result:\n{expected}\n"ArcticDB result:\n{received}"""
+                f"""\n{df.dtypes}"""
+                f"""\n{expected.dtypes}"""
+                f"""\n{received.dtypes}"""
+                f"""\n{agg_dtypes}"""
+            )
+            raise e
 
 
 def drop_inf_and_nan(df: pd.DataFrame) -> pd.DataFrame:
@@ -1011,38 +1042,49 @@ def generic_resample_test(
         q = q.resample(rule, closed=closed, label=label, offset=offset, origin=origin).agg(aggregations)
     else:
         q = q.resample(rule, closed=closed, label=label, offset=offset).agg(aggregations)
-    received = lib.read(sym, date_range=date_range, query_builder=q).data
-    received = received.reindex(columns=sorted(received.columns))
 
     expected = expected_pandas_resample_generic(
         original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
     )
 
     check_dtype = expected_types is not None
-    try:
-        assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
-    except AssertionError:
-        if origin in ["end_day", "end"] and closed == "right":
-            # Pandas has a bug https://github.com/pandas-dev/pandas/issues/62154
-            # When end_day or end is used with right closed, and the first rows lie on the bucket, Pandas includes them in the
-            # bucket, which is wrong since closed is right. We remove the first rows from the dataframe and run the
-            # resampling again.
 
-            resampler = create_resampler(original_data, rule, closed, "left", offset, origin)
-            first_bin = list(resampler.groups.keys())[0]
-            rows_to_pop = 0
-            while rows_to_pop < len(original_data) and original_data.index[rows_to_pop] == first_bin:
-                rows_to_pop += 1
-            if rows_to_pop == 0:
-                # If there are no rows to be removed, then this is not the same issue.
-                raise
-            original_data = original_data.tail(len(original_data) - rows_to_pop)
-            expected = expected_pandas_resample_generic(
-                original_data, rule, aggregations, closed, label, offset, origin, drop_empty_buckets_for, expected_types
-            )
+    query_processing_functions = get_query_processing_functions(lib, sym, q, date_range=date_range)
+    for proccessing_function in query_processing_functions:
+        received = proccessing_function()
+        received = received.reindex(columns=sorted(received.columns))
+        try:
             assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
-        else:
-            raise
+        except AssertionError:
+            if origin in ["end_day", "end"] and closed == "right":
+                # Pandas has a bug https://github.com/pandas-dev/pandas/issues/62154
+                # When end_day or end is used with right closed, and the first rows lie on the bucket, Pandas includes them in the
+                # bucket, which is wrong since closed is right. We remove the first rows from the dataframe and run the
+                # resampling again.
+
+                resampler = create_resampler(original_data, rule, closed, "left", offset, origin)
+                first_bin = list(resampler.groups.keys())[0]
+                rows_to_pop = 0
+                while rows_to_pop < len(original_data) and original_data.index[rows_to_pop] == first_bin:
+                    rows_to_pop += 1
+                if rows_to_pop == 0:
+                    # If there are no rows to be removed, then this is not the same issue.
+                    raise
+                original_data = original_data.tail(len(original_data) - rows_to_pop)
+                expected = expected_pandas_resample_generic(
+                    original_data,
+                    rule,
+                    aggregations,
+                    closed,
+                    label,
+                    offset,
+                    origin,
+                    drop_empty_buckets_for,
+                    expected_types,
+                )
+                assert_resampled_dataframes_are_equal(received, expected, check_dtype=check_dtype)
+            else:
+                raise
 
 
 def equals(x, y):
