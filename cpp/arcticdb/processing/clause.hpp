@@ -887,6 +887,7 @@ struct MergeUpdateClause {
     /// row
     std::vector<std::vector<size_t>> filter_index_match(const ProcessingUnit& proc) const;
 
+    /// For each row range stores the first and last row in the source that overlaps with the row range
     ankerl::unordered_dense::map<RowRange, std::pair<size_t, size_t>, RowRange::Hasher> source_start_for_row_range_;
 };
 

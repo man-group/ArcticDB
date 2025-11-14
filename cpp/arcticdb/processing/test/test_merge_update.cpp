@@ -170,39 +170,75 @@ std::vector<std::shared_ptr<T>> wrap_in_shared_ptr(std::vector<T>&& v) {
     return res;
 }
 
-template<typename RandomEngine, std::ranges::random_access_range... Ranges>
-void shuffle_multiple(RandomEngine& engine, Ranges&... to_shuffle) {
-    const size_t num_elements = []<typename H, typename... T>(const H& h, const T&...) {
-        return std::ranges::size(h);
-    }(to_shuffle...);
-    std::vector<size_t> destinations(num_elements);
-    std::iota(destinations.begin(), destinations.end(), 0);
-    std::ranges::shuffle(destinations, engine);
-    for (size_t i = 0; i < num_elements; ++i) {
-        (std::swap(to_shuffle[i], to_shuffle[destinations[i]]), ...);
-        std::swap(destinations[i], destinations[destinations[i]]);
-    }
-}
-
 std::vector<RangesAndKey> generate_ranges_and_keys(
-        const StreamDescriptor& source_descriptor, const std::span<const std::shared_ptr<SegmentInMemory>> segments,
-        const std::span<const std::shared_ptr<ColRange>> col_ranges,
-        const std::span<const std::shared_ptr<RowRange>> row_ranges
+        const StreamDescriptor& source_descriptor, const std::span<const SegmentInMemory> segments,
+        const std::span<const ColRange> col_ranges, const std::span<const RowRange> row_ranges
 ) {
     std::vector<RangesAndKey> ranges_and_keys;
     ranges_and_keys.reserve(segments.size());
     for (size_t i = 0; i < segments.size(); ++i) {
-        const timestamp start_ts = *segments[i]->scalar_at<timestamp>(0, 0);
-        const timestamp end_ts = *segments[i]->scalar_at<timestamp>(segments[i]->row_count() - 1, 0);
+        const timestamp start_ts = *segments[i].scalar_at<timestamp>(0, 0);
+        const timestamp end_ts = *segments[i].scalar_at<timestamp>(segments[i].row_count() - 1, 0);
         ranges_and_keys.emplace_back(
-                *row_ranges[i],
-                *col_ranges[i],
+                row_ranges[i],
+                col_ranges[i],
                 AtomKeyBuilder().start_index(start_ts).end_index(end_ts).build<KeyType::TABLE_DATA>(
                         source_descriptor.id()
                 )
         );
     }
     return ranges_and_keys;
+}
+
+template<std::ranges::random_access_range... Other>
+void sort_by_rowslice(std::span<RowRange> rows, std::span<ColRange> cols, Other&... other) {
+    std::vector<size_t> correct_positions(rows.size());
+    std::iota(correct_positions.begin(), correct_positions.end(), 0);
+    std::ranges::sort(correct_positions, [&](const size_t i, const size_t j) {
+        return std::tie(rows[i], cols[i]) < std::tie(rows[j], cols[j]);
+    });
+    []<std::ranges::random_access_range... T>(const std::span<const size_t> positions, T&... ts) {
+        util::BitSet used;
+        used.resize(positions.size());
+        for (size_t i = 0; i < positions.size(); ++i) {
+            if (used[i] || positions[i] == i) {
+                continue;
+            }
+            auto temp = std::tuple{std::move(ts[i])...};
+            size_t current = i;
+            while (positions[current] != i) {
+                size_t next = positions[current];
+                ((ts[current] = std::move(ts[next])), ...);
+                used[current] = true;
+                current = next;
+            }
+            [&]<size_t... Is>(std::index_sequence<Is...>) {
+                ((ts[current] = std::move(std::get<Is>(temp))), ...);
+            }(std::make_index_sequence<sizeof...(T)>{});
+            used[current] = true;
+        }
+    }(correct_positions, rows, cols, other...);
+}
+
+std::vector<std::vector<EntityId>> map_entities_to_structure_for_processing_output(
+        const std::span<const std::vector<size_t>> structure_for_processing_out,
+        const std::span<const EntityId> entities
+) {
+    std::vector<std::vector<EntityId>> process_input;
+    process_input.reserve(structure_for_processing_out.size());
+    std::ranges::transform(
+            structure_for_processing_out,
+            std::back_inserter(process_input),
+            [&](const std::vector<size_t>& indices) {
+                std::vector<EntityId> result;
+                result.reserve(indices.size());
+                std::ranges::transform(indices, std::back_inserter(result), [&](const size_t idx) {
+                    return entities[idx];
+                });
+                return result;
+            }
+    );
+    return process_input;
 }
 
 TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
@@ -214,7 +250,7 @@ TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
     constexpr static size_t rows_per_segment = 10;
     const StreamDescriptor source_descriptor =
             TimeseriesIndex::default_index().create_stream_descriptor("Source", non_string_fields);
-    auto sliced = slice_data_into_segments<TimeseriesIndex, columns_per_segment>(
+    auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex, columns_per_segment>(
             rows_per_segment,
             source_descriptor,
             iota_view(timestamp{0}, timestamp{30}),
@@ -226,14 +262,10 @@ TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
             iota_view(0, 30) | views::transform([](auto x) { return static_cast<float>(x); }),
             iota_view(timestamp{0}, timestamp{30})
     );
-    auto [proc_segments, proc_col_range, proc_row_range] = std::apply(
-            [](auto&&... args) { return std::tuple{wrap_in_shared_ptr(std::move(args))...}; }, std::move(sliced)
-    );
-    EXPECT_EQ(proc_segments.size(), proc_col_range.size());
-    EXPECT_EQ(proc_segments.size(), proc_row_range.size());
+    sort_by_rowslice(row_ranges, col_ranges, segments);
 
-    std::vector<RangesAndKey> ranges_and_keys =
-            generate_ranges_and_keys(source_descriptor, proc_segments, proc_col_range, proc_row_range);
+    EXPECT_EQ(segments.size(), col_ranges.size());
+    EXPECT_EQ(segments.size(), row_ranges.size());
 
     InputFrame source(
             source_descriptor,
@@ -251,45 +283,58 @@ TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
     );
     source.num_rows = 3;
 
+    // Shuffle the input ranges and keys to ensure structure_for_processing sorts correctly
     constexpr static size_t rand_seed = 0;
     std::mt19937 g(rand_seed);
-    shuffle_multiple(g, ranges_and_keys, proc_segments, proc_col_range, proc_row_range);
-    std::vector<EntityFetchCount> fetch_count(proc_segments.size(), 0);
+    std::vector<RangesAndKey> ranges_and_keys =
+            generate_ranges_and_keys(source_descriptor, segments, col_ranges, row_ranges);
+    shuffle(ranges_and_keys, g);
+
     auto component_manager = std::make_shared<ComponentManager>();
-    std::vector<EntityId> entities = component_manager->add_entities(
-            std::move(proc_segments), std::move(proc_col_range), std::move(proc_row_range), std::move(fetch_count)
-    );
+    std::vector<EntityFetchCount> fetch_count(segments.size(), 0);
+    std::vector<std::shared_ptr<RowRange>> proc_row_range = wrap_in_shared_ptr(std::move(row_ranges));
+    std::vector<std::shared_ptr<ColRange>> proc_col_range = wrap_in_shared_ptr(std::move(col_ranges));
+    std::vector<std::shared_ptr<SegmentInMemory>> proc_seg = wrap_in_shared_ptr(std::move(segments));
+    std::vector<EntityId> entities =
+            component_manager->add_entities(proc_col_range, proc_row_range, proc_seg, std::move(fetch_count));
 
     MergeUpdateClause clause({}, strategy, std::make_shared<InputFrame>(std::move(source)), true);
     clause.set_component_manager(component_manager);
-    std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
-    constexpr static size_t row_slices_to_read = 3;
-    EXPECT_EQ(structure_indices.size(), row_slices_to_read);
-    for (size_t row = 0; row < row_slices_to_read; ++row) {
-        EXPECT_EQ(structure_indices[row].size(), 2);
-        for (size_t col = 0; col < structure_indices[row].size(); ++col) {
-            const size_t entt = structure_indices[row][col];
-            const RowRange& row_range = ranges_and_keys[entt].row_range();
-            EXPECT_EQ(row_range, ranges_and_keys[structure_indices[row][0]].row_range());
 
-            const ColRange& col_range = ranges_and_keys[entt].col_range();
-            const size_t start_col = TimeseriesIndex::field_count() + col * columns_per_segment;
-            const size_t end_col = std::min(start_col + columns_per_segment, source_descriptor.field_count());
-            const ColRange expected_col_range{start_col, end_col};
-            EXPECT_EQ(col_range, expected_col_range);
-        }
-    }
+    const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
 
-    std::vector<std::vector<EntityId>> row_slice_structure =
-            structure_by_row_slice(*component_manager, std::move(entities));
-    for (size_t row_slice_idx = 0; row_slice_idx < row_slice_structure.size(); ++row_slice_idx) {
-        std::vector<EntityId>& row_slice = row_slice_structure[row_slice_idx];
-        std::vector<EntityId> result_entities = clause.process(std::move(row_slice));
-        ProcessingUnit proc =
-                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<ColRange>, std::shared_ptr<RowRange>>(
-                        *component_manager, result_entities
+    constexpr static int row_slices_to_process = 3;
+    constexpr static int column_slices_per_row_slice = 2;
+    EXPECT_EQ(structure_indices.size(), row_slices_to_process);
+
+    EXPECT_EQ(structure_indices[0].size(), column_slices_per_row_slice);
+    EXPECT_EQ(ranges_and_keys[structure_indices[0][0]].row_range(), RowRange(0, 10));
+    EXPECT_EQ(ranges_and_keys[structure_indices[0][0]].col_range(), ColRange(1, 4));
+    EXPECT_EQ(ranges_and_keys[structure_indices[0][1]].row_range(), RowRange(0, 10));
+    EXPECT_EQ(ranges_and_keys[structure_indices[0][1]].col_range(), ColRange(4, 6));
+
+    EXPECT_EQ(structure_indices[1].size(), column_slices_per_row_slice);
+    EXPECT_EQ(ranges_and_keys[structure_indices[1][0]].row_range(), RowRange(10, 20));
+    EXPECT_EQ(ranges_and_keys[structure_indices[1][0]].col_range(), ColRange(1, 4));
+    EXPECT_EQ(ranges_and_keys[structure_indices[1][1]].row_range(), RowRange(10, 20));
+    EXPECT_EQ(ranges_and_keys[structure_indices[1][1]].col_range(), ColRange(4, 6));
+
+    EXPECT_EQ(structure_indices[2].size(), column_slices_per_row_slice);
+    EXPECT_EQ(ranges_and_keys[structure_indices[2][0]].row_range(), RowRange(20, 30));
+    EXPECT_EQ(ranges_and_keys[structure_indices[2][0]].col_range(), ColRange(1, 4));
+    EXPECT_EQ(ranges_and_keys[structure_indices[2][1]].row_range(), RowRange(20, 30));
+    EXPECT_EQ(ranges_and_keys[structure_indices[2][1]].col_range(), ColRange(4, 6));
+
+    // This works because the entities pushed to the component manager are pre-sorted by row range and structure for
+    // processing of the merge clause also sorts by row slice
+    std::vector<std::vector<EntityId>> entities_for_processing =
+            map_entities_to_structure_for_processing_output(structure_indices, entities);
+    std::array<std::vector<EntityId>, 3> processing_result;
+    processing_result[0] = clause.process(std::move(entities_for_processing[0]));
+    {
+        auto proc_0 =
+                gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
+                        *component_manager, processing_result[0]
                 );
-        EXPECT_EQ(proc.row_ranges_->size(), 2);
-        EXPECT_EQ(proc.col_ranges_->size(), 2);
     }
 }

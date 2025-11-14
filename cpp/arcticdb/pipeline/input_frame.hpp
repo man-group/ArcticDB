@@ -32,7 +32,7 @@ struct InputFrame {
     InputFrame(SegmentInMemory&& seg);
 
     template<typename DescriptorT>
-    requires util::forwarding_ref_to<DescriptorT, StreamDescriptor>
+    requires util::decays_to<DescriptorT, StreamDescriptor>
     InputFrame(
             DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
     ) :
@@ -41,7 +41,7 @@ struct InputFrame {
     }
 
     template<typename DescriptorT>
-    requires util::forwarding_ref_to<DescriptorT, StreamDescriptor>
+    requires util::decays_to<DescriptorT, StreamDescriptor>
     void set_from_tensors(
             DescriptorT&& desc, std::vector<NativeTensor>&& field_tensors, std::optional<NativeTensor>&& index_tensor
     ) {

@@ -175,8 +175,7 @@ struct NativeTensor {
 /// @tparam Input Parameter pack of pair-like types satisfying the contiguous_range requirement
 /// @param arrays Variadic pairs of (contiguous_range, DataType)
 /// @return Vector of one-dimensional NativeTensors
-template<typename... Input>
-requires(... && util::contiguous_type_tagged_data<Input>)
+template<util::contiguous_type_tagged_data... Input>
 std::vector<NativeTensor> create_one_dimensional_tensors(const Input&... arrays) {
     std::vector<NativeTensor> tensors;
     tensors.reserve(sizeof...(arrays));
