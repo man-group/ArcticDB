@@ -878,11 +878,12 @@ struct MergeUpdateClause {
 
   private:
     template<typename T>
+    requires util::any_of<T, SegmentInMemory, std::vector<NativeTensor>>
     void
     update_and_insert(const T&, const StreamDescriptor&, const ProcessingUnit&, std::span<const std::vector<size_t>>)
             const;
 
-    /// @return Vector of size equal to the number of source data rows that are withing the rows lice being processed.
+    /// @return Vector of size equal to the number of source data rows that are withing the row slice being processed.
     /// Each element is a vector of the rows from the target data that has the same index as the corresponding source
     /// row
     std::vector<std::vector<size_t>> filter_index_match(const ProcessingUnit& proc) const;

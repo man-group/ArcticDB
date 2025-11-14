@@ -1809,24 +1809,26 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
     auto first_col_slice_in_row = ranges_and_keys.begin();
     for (size_t row_slice_idx = 0; row_slice_idx < entities.size() && source_row < source_->num_rows; ++row_slice_idx) {
         const TimestampRange time_range = first_col_slice_in_row->key_.time_range();
-        bool keep_row_slice = source_->num_rows && strategy_.not_matched_by_target == MergeAction::INSERT &&
-                              source_->index_value_at(source_row) < time_range.first;
+        // If we're inserting and the source timestamp is before the start of the row slice, we are going to insert the
+        // new values at the beginning of each column slice in row slice, thus we need to keep it.
+        // TODO: Improvement if strategy.matched is DO_NOTHING or there is no other intersection between source and the
+        //  row slice there is no need to read it. We can just create a row slice.
+        timestamp source_ts = source_->index_value_at(source_row);
+        bool keep_row_slice = strategy_.not_matched_by_target == MergeAction::INSERT && source_ts < time_range.first;
         if (keep_row_slice) {
             source_start_for_row_range_[first_col_slice_in_row->row_range()] = std::pair{source_row, source_row + 1};
         }
-        timestamp source_ts = source_->index_value_at(source_row);
-        // TODO: If there are values to be inserted before the first segment this will read it and prepend the values
-        //  There is no need to read the segment. We can just create a new segment.
-        while (source_row < source_->num_rows && strategy_.not_matched_by_target == MergeAction::INSERT &&
-               source_ts < time_range.first) {
+        // Skip all values in the source that are before the first index value in the row slice
+        while (source_row < source_->num_rows && source_ts < time_range.first) {
             source_ts = source_->index_value_at(++source_row);
         }
-        const bool source_ts_in_segment_range = source_ts >= time_range.first && source_ts < time_range.second;
+        const bool source_ts_in_segment_range = source_ts >= time_range.first && source_ts <= time_range.second;
         if (!keep_row_slice && source_ts_in_segment_range) {
             source_start_for_row_range_[first_col_slice_in_row->row_range()] = std::pair{source_row, source_row + 1};
         }
         keep_row_slice |= source_ts_in_segment_range;
-        while (source_row < source_->num_rows && source_ts >= time_range.first && source_ts < time_range.second) {
+        // Find the first row in source that is after the row slice
+        while (source_row < source_->num_rows && source_ts >= time_range.first && source_ts <= time_range.second) {
             source_ts = source_->index_value_at(++source_row);
         }
         if (keep_row_slice) {
@@ -1836,13 +1838,14 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
         const size_t col_slice_count = entities[row_slice_idx].size();
         first_col_slice_in_row += col_slice_count;
     }
-    // TODO: If there are values to be inserted after the last segment this will read it and append the values and split
+    // TODO: If there are values to be inserted after the last segment this will read it, append the values and split
     //  the segment if needed. There is no need to do this as we can just create a new segment.
     if (source_row < source_->num_rows && strategy_.not_matched_by_target == MergeAction::INSERT) {
         row_slices_to_keep[entities.size() - 1] = true;
     }
     const size_t num_row_slices_to_keep = row_slices_to_keep.count();
-    if (num_row_slices_to_keep == entities.size()) {
+    const bool keep_all_row_slices = num_row_slices_to_keep == entities.size();
+    if (keep_all_row_slices) {
         return entities;
     }
     size_t entity_pos = 0;
@@ -1871,53 +1874,67 @@ std::vector<EntityId> MergeUpdateClause::process(std::vector<EntityId>&& entity_
     );
     std::vector<std::vector<size_t>> matched = filter_index_match(proc);
     if (source_->has_segment()) {
-        update_and_insert<SegmentInMemory>(source_->segment(), source_->desc(), proc, matched);
+        update_and_insert(source_->segment(), source_->desc(), proc, matched);
     } else {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 source_->has_tensors(), "Input frame does not contain neither a segment nor tensors"
         );
-        update_and_insert<std::vector<NativeTensor>>(source_->field_tensors(), source_->desc(), proc, matched);
+        update_and_insert(source_->field_tensors(), source_->desc(), proc, matched);
     }
     return push_entities(*component_manager_, std::move(proc));
 }
 
 template<typename T>
+requires util::any_of<T, SegmentInMemory, std::vector<NativeTensor>>
 void MergeUpdateClause::update_and_insert(
         const T& source, const StreamDescriptor& source_descriptor, const ProcessingUnit& proc,
-        std::span<const std::vector<size_t>> rows_to_update
+        const std::span<const std::vector<size_t>> rows_to_update
 ) const {
     const std::vector<std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
     const std::vector<std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
     const std::vector<std::shared_ptr<ColRange>> col_ranges = *proc.col_ranges_;
     const auto [source_row_start, source_row_end] = source_start_for_row_range_.at(*row_ranges[0]);
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
-        const ColRange& col_range = *col_ranges[segment_idx];
-        for (size_t column_idx = col_range.first; column_idx < col_range.second; ++column_idx) {
-            entity::visit_field(source_descriptor.field(column_idx), [&](auto tdt) {
+        const size_t columns_in_range = target_segments[segment_idx]->num_columns();
+        for (size_t column_idx = source_descriptor.index().field_count(); column_idx < columns_in_range; ++column_idx) {
+            entity::visit_field(target_segments[segment_idx]->descriptor().field(column_idx), [&](auto tdt) {
                 internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                         !is_sequence_type(tdt.data_type()), "String columns are not supported in merge update yet"
                 );
                 using TDT = decltype(tdt);
 
                 size_t source_row = source_row_start;
-                while (source_row < source_row_end && rows_to_update[source_row].empty()) {
+                while (source_row < source_row_end && rows_to_update[source_row_start - source_row].empty()) {
                     ++source_row;
                 };
-                // For each row in the source rows to update contains a list of rows in the target that match this
+                // For each row in the source rows_to_update contains a list of rows in the target that match this
                 // row and must be updated. If all rows in the row slice are empty this means that the current row
                 // slice should not be updated
                 // TODO: Do not return in case of MergeAction::INSERT
                 if (source_row >= source_row_end) {
                     return;
                 }
-                size_t target_data_row = rows_to_update[source_row].front();
+                size_t target_data_row = rows_to_update[source_row_start - source_row].front();
 
                 auto target_data_it = target_segments[segment_idx]->column(column_idx).data().begin<TDT>();
                 // TODO: Implement operator+= because std::advance is linear
                 std::advance(target_data_it, target_data_row);
-                SourceView source_column_view = get_source_column_iterator<TDT>(source, column_idx);
+                const size_t source_column = [&]() {
+                    if constexpr (std::same_as<T, SegmentInMemory>) {
+                        return col_ranges[segment_idx]->first;
+                    } else if constexpr (std::same_as<T, std::vector<NativeTensor>>) {
+                        // If the source frame is a list of tensors, the index frame is kept separately, so the first
+                        // non-index column will be at index 0. If there's an index the first ColRange will start from
+                        // 1 and the first column of each segment will contain the index
+                        return col_ranges[segment_idx]->first + column_idx -
+                               2 * source_descriptor.index().field_count();
+                    } else {
+                        static_assert(sizeof(T) == 0, "Invalid type");
+                    }
+                }();
+                SourceView source_column_view = get_source_column_iterator<TDT>(source, source_column);
                 while (source_row < source_row_end) {
-                    std::span rows_to_update_for_source_row = rows_to_update[source_row];
+                    std::span rows_to_update_for_source_row = rows_to_update[source_row_start - source_row];
                     if (rows_to_update_for_source_row.empty()) {
                         ++source_row;
                         continue;
@@ -1930,6 +1947,7 @@ void MergeUpdateClause::update_and_insert(
                         *target_data_it = source_row_value;
                         target_data_row = target_row_to_update;
                     }
+                    ++source_row;
                 }
             });
         }
@@ -1946,20 +1964,24 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const Pro
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     const std::vector<std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
     const std::vector<std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
-    auto [source_row, source_row_end] = source_start_for_row_range_.at(*row_ranges[0]);
+    const auto [source_row_start, source_row_end] = source_start_for_row_range_.at(*row_ranges[0]);
+    size_t source_row = source_row_start;
     const size_t source_rows_in_row_slice = source_row_end - source_row;
     std::vector<std::vector<size_t>> matched_rows(source_rows_in_row_slice);
     ColumnData target_index = target_segments[0]->column(0).data();
     auto target_index_it = target_index.cbegin<IndexType>();
+    size_t target_row = 0;
     const auto target_index_end = target_index.cend<IndexType>();
     while (target_index_it != target_index_end && source_row < source_row_end) {
         const timestamp source_ts = source_->index_value_at(source_row);
-        target_index_it = std::lower_bound(target_index_it, target_index_end, source_ts);
-        while (*target_index_it == source_ts) {
-            const size_t target_row = std::distance(target_index.cbegin<IndexType>(), target_index_it);
-            matched_rows[source_row].push_back(target_row);
-            ++target_index_it;
+        auto lower_bound = std::lower_bound(target_index_it, target_index_end, source_ts);
+        target_row += std::distance(target_index_it, lower_bound);
+        while (*lower_bound == source_ts) {
+            matched_rows[source_row_start - source_row].push_back(target_row);
+            ++lower_bound;
+            ++target_row;
         }
+        target_index_it = lower_bound;
         source_row++;
     }
     return matched_rows;

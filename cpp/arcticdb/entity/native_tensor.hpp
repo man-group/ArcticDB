@@ -126,7 +126,7 @@ struct NativeTensor {
     [[nodiscard]] auto extent(ssize_t dim) const { return shapes_[dim] * strides_[dim]; }
     [[nodiscard]] auto expanded_dim() const { return expanded_dim_; }
     template<typename T>
-    const T* ptr_cast(size_t pos) const {
+    const T* ptr_cast(const size_t pos) const {
         util::check(ptr != nullptr, "Unexpected null ptr in NativeTensor");
         const bool dimension_condition = ndim() == 1;
         const bool elsize_condition = elsize_ != 0;

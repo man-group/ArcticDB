@@ -241,33 +241,50 @@ std::vector<std::vector<EntityId>> map_entities_to_structure_for_processing_outp
     return process_input;
 }
 
+void print_segment(const SegmentInMemory& segment) {
+    const StreamDescriptor& desc = segment.descriptor();
+    for (unsigned i = 0; i < desc.field_count(); ++i) {
+        std::cout << fmt::format("Print column[{}]: {}\n", i, desc.field(i));
+        visit_field(desc.field(i), [&](auto tdt) {
+            using TDT = decltype(tdt);
+            ColumnData cd = segment.column_data(i);
+            for (auto it = cd.begin<TDT>(); it != cd.end<TDT>(); ++it) {
+                if constexpr (std::same_as<typename TDT::DataTypeTag::raw_type, int8_t>) {
+                    std::cout << int(*it) << " ";
+                } else {
+                    std::cout << *it << " ";
+                }
+            }
+            std::cout << "\n";
+        });
+    }
+}
+
 TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
     using namespace std::ranges;
     using stream::TimeseriesIndex;
     constexpr static auto strategy =
             MergeStrategy{.matched = MergeAction::UPDATE, .not_matched_by_target = MergeAction::DO_NOTHING};
-    constexpr static size_t columns_per_segment = 3;
-    constexpr static size_t rows_per_segment = 10;
+    constexpr static int columns_per_segment = 3;
+    constexpr static int rows_per_segment = 5;
     const StreamDescriptor source_descriptor =
             TimeseriesIndex::default_index().create_stream_descriptor("Source", non_string_fields);
     auto [segments, col_ranges, row_ranges] = slice_data_into_segments<TimeseriesIndex, columns_per_segment>(
             rows_per_segment,
             source_descriptor,
-            iota_view(timestamp{0}, timestamp{30}),
-            iota_view(static_cast<int8_t>(0), static_cast<int8_t>(30)),
-            iota_view(static_cast<unsigned>(0), static_cast<unsigned>(30)),
-            std::array{true,  false, true,  true,  false, false, true,  false, true,  false,
-                       true,  true,  false, true,  false, false, true,  true,  false, true,
-                       false, true,  false, false, true,  true,  false, true,  false, true},
-            iota_view(0, 30) | views::transform([](auto x) { return static_cast<float>(x); }),
-            iota_view(timestamp{0}, timestamp{30})
+            iota_view(timestamp{0}, timestamp{3 * rows_per_segment}),
+            iota_view(static_cast<int8_t>(0), static_cast<int8_t>(3 * rows_per_segment)),
+            iota_view(static_cast<unsigned>(0), static_cast<unsigned>(3 * rows_per_segment)),
+            iota_view(0, 3 * rows_per_segment) | views::transform([](auto x) -> bool { return x % 2 == 1; }),
+            iota_view(0, 3 * rows_per_segment) | views::transform([](auto x) { return static_cast<float>(x); }),
+            iota_view(timestamp{0}, timestamp{3 * rows_per_segment})
     );
     sort_by_rowslice(row_ranges, col_ranges, segments);
 
-    EXPECT_EQ(segments.size(), col_ranges.size());
-    EXPECT_EQ(segments.size(), row_ranges.size());
+    ASSERT_EQ(segments.size(), col_ranges.size());
+    ASSERT_EQ(segments.size(), row_ranges.size());
 
-    InputFrame source(
+    auto source = std::make_shared<InputFrame>(
             source_descriptor,
             create_one_dimensional_tensors(
                     std::pair{std::array<int8_t, 3>{10, 20, 30}, TypeDescriptor::scalar_type(DataType::INT8)},
@@ -279,9 +296,9 @@ TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
                             TypeDescriptor::scalar_type(DataType::NANOSECONDS_UTC64)
                     }
             ),
-            NativeTensor::one_dimensional_tensor(std::array<timestamp, 3>{1, 12, 25}, DataType::NANOSECONDS_UTC64)
+            NativeTensor::one_dimensional_tensor(std::array<timestamp, 3>{0, 7, 14}, DataType::NANOSECONDS_UTC64)
     );
-    source.num_rows = 3;
+    source->num_rows = 3;
 
     // Shuffle the input ranges and keys to ensure structure_for_processing sorts correctly
     constexpr static size_t rand_seed = 0;
@@ -291,50 +308,68 @@ TEST(MergeUpdateUpdateTimeseries, SourceIndexMatchesAllSegments) {
     shuffle(ranges_and_keys, g);
 
     auto component_manager = std::make_shared<ComponentManager>();
-    std::vector<EntityFetchCount> fetch_count(segments.size(), 0);
-    std::vector<std::shared_ptr<RowRange>> proc_row_range = wrap_in_shared_ptr(std::move(row_ranges));
-    std::vector<std::shared_ptr<ColRange>> proc_col_range = wrap_in_shared_ptr(std::move(col_ranges));
-    std::vector<std::shared_ptr<SegmentInMemory>> proc_seg = wrap_in_shared_ptr(std::move(segments));
-    std::vector<EntityId> entities =
-            component_manager->add_entities(proc_col_range, proc_row_range, proc_seg, std::move(fetch_count));
+    std::vector<EntityId> entities = component_manager->add_entities(
+            wrap_in_shared_ptr(std::move(col_ranges)),
+            wrap_in_shared_ptr(std::move(row_ranges)),
+            wrap_in_shared_ptr(std::move(segments)),
+            std::vector<EntityFetchCount>(segments.size(), 0)
+    );
 
-    MergeUpdateClause clause({}, strategy, std::make_shared<InputFrame>(std::move(source)), true);
+    MergeUpdateClause clause({}, strategy, source, true);
     clause.set_component_manager(component_manager);
 
     const std::vector<std::vector<size_t>> structure_indices = clause.structure_for_processing(ranges_and_keys);
 
     constexpr static int row_slices_to_process = 3;
     constexpr static int column_slices_per_row_slice = 2;
-    EXPECT_EQ(structure_indices.size(), row_slices_to_process);
+    ASSERT_EQ(structure_indices.size(), row_slices_to_process);
 
-    EXPECT_EQ(structure_indices[0].size(), column_slices_per_row_slice);
-    EXPECT_EQ(ranges_and_keys[structure_indices[0][0]].row_range(), RowRange(0, 10));
-    EXPECT_EQ(ranges_and_keys[structure_indices[0][0]].col_range(), ColRange(1, 4));
-    EXPECT_EQ(ranges_and_keys[structure_indices[0][1]].row_range(), RowRange(0, 10));
-    EXPECT_EQ(ranges_and_keys[structure_indices[0][1]].col_range(), ColRange(4, 6));
-
-    EXPECT_EQ(structure_indices[1].size(), column_slices_per_row_slice);
-    EXPECT_EQ(ranges_and_keys[structure_indices[1][0]].row_range(), RowRange(10, 20));
-    EXPECT_EQ(ranges_and_keys[structure_indices[1][0]].col_range(), ColRange(1, 4));
-    EXPECT_EQ(ranges_and_keys[structure_indices[1][1]].row_range(), RowRange(10, 20));
-    EXPECT_EQ(ranges_and_keys[structure_indices[1][1]].col_range(), ColRange(4, 6));
-
-    EXPECT_EQ(structure_indices[2].size(), column_slices_per_row_slice);
-    EXPECT_EQ(ranges_and_keys[structure_indices[2][0]].row_range(), RowRange(20, 30));
-    EXPECT_EQ(ranges_and_keys[structure_indices[2][0]].col_range(), ColRange(1, 4));
-    EXPECT_EQ(ranges_and_keys[structure_indices[2][1]].row_range(), RowRange(20, 30));
-    EXPECT_EQ(ranges_and_keys[structure_indices[2][1]].col_range(), ColRange(4, 6));
+    for (size_t i = 0; i < structure_indices.size(); ++i) {
+        SCOPED_TRACE(testing::Message() << fmt::format("structure index: {}", i));
+        EXPECT_EQ(structure_indices[i].size(), column_slices_per_row_slice);
+        EXPECT_EQ(
+                ranges_and_keys[structure_indices[i][0]].row_range(),
+                RowRange(i * rows_per_segment, (i + 1) * rows_per_segment)
+        );
+        EXPECT_EQ(
+                ranges_and_keys[structure_indices[i][1]].row_range(),
+                RowRange(i * rows_per_segment, (i + 1) * rows_per_segment)
+        );
+        EXPECT_EQ(ranges_and_keys[structure_indices[i][0]].col_range(), ColRange(1, 4));
+        EXPECT_EQ(ranges_and_keys[structure_indices[i][1]].col_range(), ColRange(4, 6));
+    }
 
     // This works because the entities pushed to the component manager are pre-sorted by row range and structure for
     // processing of the merge clause also sorts by row slice
     std::vector<std::vector<EntityId>> entities_for_processing =
             map_entities_to_structure_for_processing_output(structure_indices, entities);
-    std::array<std::vector<EntityId>, 3> processing_result;
-    processing_result[0] = clause.process(std::move(entities_for_processing[0]));
-    {
-        auto proc_0 =
+
+    auto [expected_segments, expected_col_ranges, expected_row_ranges] =
+            slice_data_into_segments<TimeseriesIndex, columns_per_segment>(
+                    rows_per_segment,
+                    source_descriptor,
+                    iota_view(timestamp{0}, timestamp{3 * rows_per_segment}),
+                    std::array<int8_t, 15>{10, 1, 2, 3, 4, 5, 6, 20, 8, 9, 10, 11, 12, 13, 30},
+                    std::array<unsigned, 15>{100, 1, 2, 3, 4, 5, 6, 200, 8, 9, 10, 11, 12, 13, 300},
+                    std::array<bool, 15>{1, 1, 0, 1, 0, 1, 0, 0, 0, 1, 0, 1, 0, 1, 1},
+                    std::array<float, 15>{11.1f, 1, 2, 3, 4, 5, 6, 22.2f, 8, 9, 10, 11, 12, 13, 33.3f},
+                    std::array<timestamp, 15>{1000, 1, 2, 3, 4, 5, 6, 2000, 8, 9, 10, 11, 12, 13, 3000}
+            );
+    sort_by_rowslice(expected_row_ranges, expected_col_ranges, expected_segments);
+    for (size_t i = 0; i < entities_for_processing.size(); ++i) {
+        auto proc =
                 gather_entities<std::shared_ptr<SegmentInMemory>, std::shared_ptr<RowRange>, std::shared_ptr<ColRange>>(
-                        *component_manager, processing_result[0]
+                        *component_manager, clause.process(std::move(entities_for_processing[i]))
                 );
+        SCOPED_TRACE(testing::Message() << "processing result = " << i);
+        EXPECT_EQ(proc.segments_->size(), 2);
+        EXPECT_EQ(proc.row_ranges_->size(), 2);
+        EXPECT_EQ(proc.col_ranges_->size(), 2);
+        EXPECT_EQ(*(proc.row_ranges_.value())[0], RowRange(i * rows_per_segment, (i + 1) * rows_per_segment));
+        EXPECT_EQ(*(proc.row_ranges_.value())[1], RowRange(i * rows_per_segment, (i + 1) * rows_per_segment));
+        EXPECT_EQ(*(proc.col_ranges_.value())[0], RowRange(1, 4));
+        EXPECT_EQ(*(proc.col_ranges_.value())[1], RowRange(4, 6));
+        EXPECT_EQ(*(proc.segments_.value())[0], expected_segments[i * 2]);
+        EXPECT_EQ(*(proc.segments_.value())[1], expected_segments[i * 2 + 1]);
     }
 }
