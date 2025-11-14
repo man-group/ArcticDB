@@ -217,6 +217,13 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
 );
 
+VersionedItem read_modify_write_impl(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+);
+
 } // namespace arcticdb::version_store
 
 namespace arcticdb {
@@ -261,7 +268,7 @@ template<
             [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory&& segment) {
                 auto local_index_start = IndexType::start_value_for_segment(segment);
                 auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
-                stream::StreamSink::PartialKey pk{
+                const PartialKey pk{
                         KeyType::TABLE_DATA,
                         pipeline_context->version_id_,
                         pipeline_context->stream_id_,

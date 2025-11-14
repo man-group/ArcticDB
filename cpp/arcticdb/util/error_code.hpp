@@ -59,6 +59,7 @@ inline std::unordered_map<ErrorCategory, const char*> get_error_category_names()
     ERROR_CODE(1002, E_ASSERTION_FAILURE)                                                                              \
     ERROR_CODE(1003, E_RUNTIME_ERROR)                                                                                  \
     ERROR_CODE(1004, E_STORED_CONFIG_ERROR)                                                                            \
+    ERROR_CODE(1005, E_NOT_SUPPORTED)                                                                                  \
     ERROR_CODE(2000, E_INCOMPATIBLE_OBJECTS)                                                                           \
     ERROR_CODE(2001, E_UNIMPLEMENTED_INPUT_TYPE)                                                                       \
     ERROR_CODE(2002, E_UPDATE_NOT_SUPPORTED)                                                                           \

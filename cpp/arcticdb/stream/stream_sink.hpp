@@ -28,6 +28,24 @@ namespace arcticdb::stream {
 using KeyType = entity::KeyType;
 using IndexValue = entity::IndexValue;
 
+struct PartialKey {
+    KeyType key_type;
+    VersionId version_id;
+    StreamId stream_id;
+    IndexValue start_index;
+    IndexValue end_index;
+
+    [[nodiscard]] AtomKey build_key(timestamp creation_ts, ContentHash content_hash) const {
+        return entity::atom_key_builder()
+                .gen_id(version_id)
+                .start_index(start_index)
+                .end_index(end_index)
+                .content_hash(content_hash)
+                .creation_ts(creation_ts)
+                .build(stream_id, key_type);
+    }
+};
+
 struct StreamSink {
     /**
      The remove_key{,s,sync} methods used to return the key to indicate success/not. However, most implementations
@@ -61,24 +79,6 @@ struct StreamSink {
             const VariantKey& key, SegmentInMemory&& segment, storage::UpdateOpts = storage::UpdateOpts{}
     ) = 0;
 
-    struct PartialKey {
-        KeyType key_type;
-        VersionId version_id;
-        StreamId stream_id;
-        IndexValue start_index;
-        IndexValue end_index;
-
-        [[nodiscard]] AtomKey build_key(timestamp creation_ts, ContentHash content_hash) const {
-            return entity::atom_key_builder()
-                    .gen_id(version_id)
-                    .start_index(start_index)
-                    .end_index(end_index)
-                    .content_hash(content_hash)
-                    .creation_ts(creation_ts)
-                    .build(stream_id, key_type);
-        }
-    };
-
     [[nodiscard]] virtual folly::Future<entity::VariantKey> write(PartialKey pk, SegmentInMemory&& segment) = 0;
 
     // shared_ptr for semaphore as executing futures need guarantees it is in a valid state, so need to participate
@@ -105,6 +105,11 @@ struct StreamSink {
 
     [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> async_write(
             folly::Future<std::tuple<PartialKey, SegmentInMemory, pipelines::FrameSlice>>&& input_fut,
+            const std::shared_ptr<DeDupMap>& de_dup_map
+    ) = 0;
+
+    [[nodiscard]] virtual folly::Future<pipelines::SliceAndKey> compress_and_schedule_async_write(
+            std::tuple<stream::PartialKey, SegmentInMemory, pipelines::FrameSlice>&& input,
             const std::shared_ptr<DeDupMap>& de_dup_map
     ) = 0;
 
@@ -146,14 +151,14 @@ namespace fmt {
 using namespace arcticdb::stream;
 
 template<>
-struct formatter<StreamSink::PartialKey> {
+struct formatter<PartialKey> {
     template<typename ParseContext>
     constexpr auto parse(ParseContext& ctx) {
         return ctx.begin();
     }
 
     template<typename FormatContext>
-    auto format(const StreamSink::PartialKey& pk, FormatContext& ctx) const {
+    auto format(const PartialKey& pk, FormatContext& ctx) const {
         return fmt::format_to(
                 ctx.out(), "'{}:{}:{}:{}:{}", pk.key_type, pk.stream_id, pk.version_id, pk.start_index, pk.end_index
         );

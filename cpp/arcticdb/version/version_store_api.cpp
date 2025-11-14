@@ -1001,6 +1001,16 @@ ReadResult PythonVersionStore::read_dataframe_version(
     );
 }
 
+VersionedItem PythonVersionStore::read_modify_write(
+        const StreamId& source_stream, const StreamId& target_stream, const py::object& user_meta,
+        const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+        const ReadOptions& read_options, bool prune_previous_versions
+) {
+    return read_modify_write_internal(
+            source_stream, target_stream, user_meta, version_query, read_query, read_options, prune_previous_versions
+    );
+}
+
 namespace {
 
 std::vector<SnapshotVariantKey> ARCTICDB_UNUSED iterate_snapshot_tombstones(

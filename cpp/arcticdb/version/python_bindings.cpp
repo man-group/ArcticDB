@@ -492,7 +492,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         _clauses.emplace_back(std::make_shared<Clause>(*clause));
                     });
                 }
-                self.add_clauses(_clauses);
+                self.add_clauses(std::move(_clauses));
             });
 
     py::enum_<OperationType>(version, "OperationType")
@@ -832,6 +832,10 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Read the specified version of the dataframe from the store"
             )
+            .def("_read_modify_write",
+                 &PythonVersionStore::read_modify_write,
+                 py::call_guard<SingleThreadMutexHolder>(),
+                 "Read, modify and write the specified version for the dataframe (experimental)")
             .def(
                     "read_index",
                     [&](PythonVersionStore& v, StreamId sid, const VersionQuery& version_query) {
