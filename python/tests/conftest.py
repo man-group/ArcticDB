@@ -669,10 +669,10 @@ def arctic_client_lmdb(request, encoding_version) -> Arctic:
     return ac
 
 
-@pytest.fixture
-def arctic_client_s3(request) -> Arctic:
-    storage_fixture: StorageFixture = request.getfixturevalue("s3_storage")
-    ac = storage_fixture.create_arctic()
+@pytest.fixture(scope="function", params=["lmdb"])
+def arctic_client_lmdb_v1_only(request) -> Arctic:
+    storage_fixture: StorageFixture = request.getfixturevalue(request.param + "_storage")
+    ac = storage_fixture.create_arctic(encoding_version=EncodingVersion.V1)
     return ac
 
 
@@ -680,12 +680,6 @@ def arctic_client_s3(request) -> Arctic:
 def arctic_library(arctic_client, lib_name) -> Generator[Library, None, None]:
     yield arctic_client.create_library(lib_name)
     arctic_client.delete_library(lib_name)
-
-
-@pytest.fixture
-def arctic_library_s3(arctic_client_s3, lib_name) -> Generator[Library, None, None]:
-    yield arctic_client_s3.create_library(lib_name)
-    arctic_client_s3.delete_library(lib_name)
 
 
 @pytest.fixture
@@ -705,6 +699,12 @@ def arctic_library_v1(arctic_client_v1, lib_name) -> Generator[Library, None, No
 def arctic_library_lmdb(arctic_client_lmdb, lib_name) -> Generator[Library, None, None]:
     yield arctic_client_lmdb.create_library(lib_name)
     arctic_client_lmdb.delete_library(lib_name)
+
+
+@pytest.fixture
+def arctic_library_lmdb_v1_only(arctic_client_lmdb_v1_only, lib_name) -> Generator[Library, None, None]:
+    yield arctic_client_lmdb_v1_only.create_library(lib_name)
+    arctic_client_lmdb_v1_only.delete_library(lib_name)
 
 
 @pytest.fixture(

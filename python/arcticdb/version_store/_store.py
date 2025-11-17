@@ -487,6 +487,7 @@ class NativeVersionStore:
         coerce_columns,
         norm_failure_options_msg="",
         index_column=None,
+        recursive_normalize_msgpack_no_pickle_fallback=None,
         **kwargs,
     ):
         dynamic_schema = resolve_defaults(
@@ -510,6 +511,7 @@ class NativeVersionStore:
                     empty_types=empty_types,
                     index_column=index_column,
                     allow_arrow_input=self._allow_arrow_input,
+                    disallow_pickle=recursive_normalize_msgpack_no_pickle_fallback,
                     **kwargs,
                 )
         except ArcticDbNotYetImplemented as ex:
@@ -539,14 +541,29 @@ class NativeVersionStore:
             return FlattenResult(False, None, None)
 
     def _try_flatten_and_write_composite_object(
-        self, symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous
+        self,
+        symbol,
+        data,
+        metadata,
+        pickle_on_failure,
+        dynamic_strings,
+        prune_previous,
+        recursive_normalize_msgpack_no_pickle_fallback,
     ):
         is_recursive_normalize_preferred, metastruct, to_write = self._try_flatten(data, symbol)
         if is_recursive_normalize_preferred:
             items = []
             norm_metas = []
             for k, v in to_write.items():
-                _, item, norm_meta = self._try_normalize(k, v, None, pickle_on_failure, dynamic_strings, None)
+                _, item, norm_meta = self._try_normalize(
+                    k,
+                    v,
+                    None,
+                    pickle_on_failure,
+                    dynamic_strings,
+                    None,
+                    recursive_normalize_msgpack_no_pickle_fallback=recursive_normalize_msgpack_no_pickle_fallback,
+                )
                 items.append(item)
                 norm_metas.append(norm_meta)
             normalized_udm = normalize_metadata(metadata)
@@ -724,6 +741,9 @@ class NativeVersionStore:
         parallel = resolve_defaults("parallel", proto_cfg, global_default=False, uppercase=False, **kwargs)
         incomplete = resolve_defaults("incomplete", proto_cfg, global_default=False, uppercase=False, **kwargs)
         recursive_normalizers = self._is_recursive_normalizers_enabled(**kwargs)
+        recursive_normalize_msgpack_no_pickle_fallback = kwargs.get(
+            "recursive_normalize_msgpack_no_pickle_fallback", None
+        )
 
         # TODO remove me when dynamic strings is the default everywhere
         if parallel:
@@ -745,7 +765,13 @@ class NativeVersionStore:
         # Do a multi_key write if the structured is nested and is not trivially normalizable via msgpack.
         if recursive_normalizers:
             vit = self._try_flatten_and_write_composite_object(
-                symbol, data, metadata, pickle_on_failure, dynamic_strings, prune_previous_version
+                symbol,
+                data,
+                metadata,
+                pickle_on_failure,
+                dynamic_strings,
+                prune_previous_version,
+                recursive_normalize_msgpack_no_pickle_fallback,
             )
             if isinstance(vit, VersionedItem):
                 return vit
@@ -759,6 +785,7 @@ class NativeVersionStore:
             coerce_columns,
             norm_failure_options_msg,
             index_column,
+            recursive_normalize_msgpack_no_pickle_fallback,
         )
         if self._valid_item_type(item):
             if parallel or incomplete:

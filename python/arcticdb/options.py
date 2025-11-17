@@ -134,6 +134,12 @@ class LibraryOptions:
             The data structure can be nested or a mix of lists and dictionaries.
             Note: If the leaf nodes cannot be natively normalized and must be written using write_pickle, those leaf nodes
             will be pickled, resulting in the overall data being only partially normalized and partially pickled.
+            Example:
+                data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+                lib = ac.create_library(lib_name)
+                lib.write(symbol, data) # ArcticUnsupportedDataTypeException will be thrown by default
+                lib2 = ac.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
+                lib2.write(symbol, data) # data will be successfully written
         """
         self.dynamic_schema = dynamic_schema
         self.dedup = dedup

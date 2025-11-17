@@ -1031,6 +1031,12 @@ class Library:
             The library configuration can be modified via Arctic.modify_library_option(). Please refer to
             https://docs.arcticdb.io/latest/api/arctic/#arcticdb.Arctic.modify_library_option for more details.
             The data structure can be nested or a mix of lists and dictionaries.
+            Example:
+                data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+                lib.write(symbol, data, recursive_normalizers=False) # ArcticUnsupportedDataTypeException will be thrown
+                lib.write(symbol, data, recursive_normalizers=True) # The data will be successfully written
+                ac.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
+                lib.write(symbol, data) # The data will be successfully written
 
         Returns
         -------
@@ -1059,13 +1065,20 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
-        if not self._nvs._is_recursive_normalizers_enabled(
+        is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
             **{"recursive_normalizers": recursive_normalizers}
-        ) and not self._allowed_input_type(data):
-            raise ArcticUnsupportedDataTypeException(
-                "data is of a type that cannot be normalized. Consider using "
-                f"write_pickle instead. type(data)=[{type(data)}]"
-            )
+        )
+        if not self._allowed_input_type(data):
+            if is_recursive_normalizers_enabled:
+                if staged:
+                    raise ArcticUnsupportedDataTypeException(
+                        "Staged data must be of a type that can be natively normalized"
+                    )
+            else:
+                raise ArcticUnsupportedDataTypeException(
+                    "Data is of a type that cannot be normalized. Consider using "
+                    f"write_pickle instead. type(data)=[{type(data)}]"
+                )
 
         return self._nvs.write(
             symbol=symbol,
@@ -1079,6 +1092,7 @@ class Library:
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
             "(such as date_range filtering and column selection) will not work on pickled data.",
             recursive_normalizers=recursive_normalizers,
+            recursive_normalize_msgpack_no_pickle_fallback=True,
         )
 
     def write_pickle(
@@ -1114,6 +1128,14 @@ class Library:
             See documentation on `write`.
             If the leaf nodes cannot be natively normalized, they will be pickled,
             resulting in the overall data being recursively normalized and partially pickled.
+            Example:
+                data = {"a": np.arange(5), "b": ABC()} # ABC is some custom class that cannot be natively normalized
+                # Exception will be thrown, as the leaf node requires pickling to normalize
+                lib.write(symbol, data, recursive_normalizers=True)
+                # The data will be successfully written by partially pickling the leaf node
+                lib.write_pickle(symbol, data, recursive_normalizers=True)
+                # The data will be successfully written by pickling the whole object
+                lib.write_pickle(symbol, data)
 
         Returns
         -------
@@ -1139,6 +1161,7 @@ class Library:
             pickle_on_failure=True,
             parallel=staged,
             recursive_normalizers=recursive_normalizers,
+            recursive_normalize_msgpack_no_pickle_fallback=False,
         )
 
     @staticmethod

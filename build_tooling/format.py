@@ -131,8 +131,6 @@ if __name__ == "__main__":
         raise RuntimeError("Must specify --type")
     if args.type not in ("python", "cpp", "all"):
         raise RuntimeError("Invalid --type")
-    if args.type == "all" and args.file:
-        raise RuntimeError("Cannot specify file type when specifying a single file for formatting")
 
     return_code = main(
         type=args.type,
