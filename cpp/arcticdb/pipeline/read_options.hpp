@@ -116,7 +116,7 @@ struct BatchReadOptions {
     [[nodiscard]] ReadOptions at(size_t idx) const {
         return util::variant_match(
                 data_->read_options_per_symbol_,
-                [&](std::vector<ReadOptions> read_options) { return read_options.at(idx); },
+                [&](const std::vector<ReadOptions>& read_options) { return read_options.at(idx); },
                 [&](ReadOptions read_options) { return read_options; }
         );
     }
