@@ -1279,69 +1279,69 @@ def test_filter_synthetic_column_and_select_on_disk_column(
     assert stats["storage_operations"]["S3_GetObject"]["TABLE_DATA"]["count"] == data_keys_count
 
 
-from arcticdb import Arctic, LibraryOptions
-import time
-
-
-start_date = pd.Timestamp("2005-01-01")
-end_date = pd.Timestamp("2025-01-01")
-years = pd.date_range(start_date, end_date, freq="YS")
-quarters = []
-for ts in years:
-    year = ts.year
-    for q in [1, 2, 3, 4]:
-        quarters.append(f"{year} Q{q}")
-num_companies = 70_000
-companies = [f"company_{i}" for i in range(num_companies)]
-
-
-def test_write():
-    adb = Arctic("lmdb:///tmp/query_performance?map_size=10GB")
-    lib = adb.get_library(
-        "query_performance", create_if_missing=True, library_options=LibraryOptions(dynamic_schema=True)
-    )
-    lib._nvs.version_store.clear()
-    rng = np.random.default_rng(0)
-    index = pd.date_range(start_date, end_date, freq="d")
-    data = {"FISCAL_YEAR_PERIOD": rng.choice(quarters, size=len(index))}
-    for company in companies:
-        data[company] = np.arange(len(index), dtype=np.float64)
-    df = pd.DataFrame(data, index=index)
-    df.index.name = "DL_SNAPSHOT_DATE"
-    lib.write("sym", df)
-
-
-def test_read_without_querybuilder():
-    adb = Arctic("lmdb:///tmp/query_performance?map_size=10GB")
-    lib = adb.get_library("query_performance")
-    rng = np.random.default_rng(0)
-    filter_companies = list(rng.choice(companies, size=500, replace=False))
-    filter_quarters = rng.choice(quarters, size=40, replace=False)
-    start = time.time()
-    df = lib.read(
-        "sym",
-        date_range=(pd.Timestamp("2010-01-01"), pd.Timestamp("2015-01-01")),
-        columns=["FISCAL_YEAR_PERIOD"] + filter_companies,
-    ).data
-    df = df[df["FISCAL_YEAR_PERIOD"].isin(filter_quarters)]
-    end = time.time()
-    print(f"Read without QB and filter in Pandas took {end - start:.2f}s")
-
-
-def test_read_with_querybuilder():
-    adb = Arctic("lmdb:///tmp/query_performance?map_size=10GB")
-    lib = adb.get_library("query_performance")
-    rng = np.random.default_rng(0)
-    filter_companies = list(rng.choice(companies, size=500, replace=False))
-    filter_quarters = rng.choice(quarters, size=40, replace=False)
-    q = QueryBuilder()
-    q = q[q["FISCAL_YEAR_PERIOD"].isin(filter_quarters)]
-    start = time.time()
-    df = lib.read(
-        "sym",
-        date_range=(pd.Timestamp("2010-01-01"), pd.Timestamp("2015-01-01")),
-        columns=["FISCAL_YEAR_PERIOD"] + filter_companies,
-        query_builder=q,
-    ).data
-    end = time.time()
-    print(f"Read and filter with QB took {end - start:.2f}s")
+# from arcticdb import Arctic, LibraryOptions
+# import time
+#
+#
+# start_date = pd.Timestamp("2005-01-01")
+# end_date = pd.Timestamp("2025-01-01")
+# years = pd.date_range(start_date, end_date, freq="YS")
+# quarters = []
+# for ts in years:
+#     year = ts.year
+#     for q in [1, 2, 3, 4]:
+#         quarters.append(f"{year} Q{q}")
+# num_companies = 70_000
+# companies = [f"company_{i}" for i in range(num_companies)]
+#
+#
+# def test_write():
+#     adb = Arctic("lmdb:///tmp/query_performance?map_size=10GB")
+#     lib = adb.get_library(
+#         "query_performance", create_if_missing=True, library_options=LibraryOptions(dynamic_schema=True)
+#     )
+#     lib._nvs.version_store.clear()
+#     rng = np.random.default_rng(0)
+#     index = pd.date_range(start_date, end_date, freq="d")
+#     data = {"FISCAL_YEAR_PERIOD": rng.choice(quarters, size=len(index))}
+#     for company in companies:
+#         data[company] = np.arange(len(index), dtype=np.float64)
+#     df = pd.DataFrame(data, index=index)
+#     df.index.name = "DL_SNAPSHOT_DATE"
+#     lib.write("sym", df)
+#
+#
+# def test_read_without_querybuilder():
+#     adb = Arctic("lmdb:///tmp/query_performance?map_size=10GB")
+#     lib = adb.get_library("query_performance")
+#     rng = np.random.default_rng(0)
+#     filter_companies = list(rng.choice(companies, size=500, replace=False))
+#     filter_quarters = rng.choice(quarters, size=40, replace=False)
+#     start = time.time()
+#     df = lib.read(
+#         "sym",
+#         date_range=(pd.Timestamp("2010-01-01"), pd.Timestamp("2015-01-01")),
+#         columns=["FISCAL_YEAR_PERIOD"] + filter_companies,
+#     ).data
+#     df = df[df["FISCAL_YEAR_PERIOD"].isin(filter_quarters)]
+#     end = time.time()
+#     print(f"Read without QB and filter in Pandas took {end - start:.2f}s")
+#
+#
+# def test_read_with_querybuilder():
+#     adb = Arctic("lmdb:///tmp/query_performance?map_size=10GB")
+#     lib = adb.get_library("query_performance")
+#     rng = np.random.default_rng(0)
+#     filter_companies = list(rng.choice(companies, size=500, replace=False))
+#     filter_quarters = rng.choice(quarters, size=40, replace=False)
+#     q = QueryBuilder()
+#     q = q[q["FISCAL_YEAR_PERIOD"].isin(filter_quarters)]
+#     start = time.time()
+#     df = lib.read(
+#         "sym",
+#         date_range=(pd.Timestamp("2010-01-01"), pd.Timestamp("2015-01-01")),
+#         columns=["FISCAL_YEAR_PERIOD"] + filter_companies,
+#         query_builder=q,
+#     ).data
+#     end = time.time()
+#     print(f"Read and filter with QB took {end - start:.2f}s")
