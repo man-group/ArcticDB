@@ -660,19 +660,20 @@ class LazyDataFrameAfterJoin(QueryBuilder):
                 self.arrow_string_format_default,
                 lf.read_request.arrow_string_format_default,
             )
-            common_cols = (
-                self.arrow_string_format_per_column.keys() & lf.read_request.arrow_string_format_per_column.keys()
-            )
-            for common_col in common_cols:
-                check(
-                    self.arrow_string_format_per_column[common_col]
-                    == lf.read_request.arrow_string_format_per_column[common_col],
-                    "Lazy frames from collection cannot be combined for join because they have incompatible arrow_string_format_per_column values {} and {} for column {}",
-                    self.arrow_string_format_per_column[common_col],
-                    lf.read_request.arrow_string_format_per_column[common_col],
-                    common_col,
+            if lf.read_request.arrow_string_format_per_column is not None:
+                common_cols = (
+                    self.arrow_string_format_per_column.keys() & lf.read_request.arrow_string_format_per_column.keys()
                 )
-            self.arrow_string_format_per_column.update(lf.read_request.arrow_string_format_per_column)
+                for common_col in common_cols:
+                    check(
+                        self.arrow_string_format_per_column[common_col]
+                        == lf.read_request.arrow_string_format_per_column[common_col],
+                        "Lazy frames from collection cannot be combined for join because they have incompatible arrow_string_format_per_column values {} and {} for column {}",
+                        self.arrow_string_format_per_column[common_col],
+                        lf.read_request.arrow_string_format_per_column[common_col],
+                        common_col,
+                    )
+                self.arrow_string_format_per_column.update(lf.read_request.arrow_string_format_per_column)
 
     def collect(self) -> VersionedItemWithJoin:
         """

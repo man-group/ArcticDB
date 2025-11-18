@@ -3641,9 +3641,9 @@ class NativeVersionStore:
         for as_of in as_ofs_lists:
             version_queries.append(self._get_version_query(as_of))
 
-        read_options = _PythonVersionStoreReadOptions()
-        read_options.set_batch_throw_on_error(throw_on_error)
-        descriptions_or_errors = self.version_store.batch_read_descriptor(symbols, version_queries, read_options)
+        batch_read_options = _PythonVersionStoreBatchReadOptions()
+        batch_read_options.set_batch_throw_on_error(throw_on_error)
+        descriptions_or_errors = self.version_store.batch_read_descriptor(symbols, version_queries, batch_read_options)
         args_list = list(zip(descriptions_or_errors, symbols, version_queries, as_ofs_lists))
         description_results = []
         for dit, symbol, version_query, as_of in args_list:
