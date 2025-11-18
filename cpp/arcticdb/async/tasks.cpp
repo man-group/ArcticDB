@@ -49,6 +49,7 @@ pipelines::SegmentAndSlice DecodeSliceTask::decode_into_slice(storage::KeySegmen
     ARCTICDB_TRACE(log::codec(), "Creating segment");
     SegmentInMemory segment_in_memory(std::move(descriptor));
     decode_into_memory_segment(seg, hdr, segment_in_memory, desc);
+    segment_in_memory.set_row_data(std::max(segment_in_memory.row_count() - 1, ranges_and_key_.row_range().diff() - 1));
     return pipelines::SegmentAndSlice(std::move(ranges_and_key_), std::move(segment_in_memory));
 }
 } // namespace arcticdb::async
