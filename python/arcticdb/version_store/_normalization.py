@@ -56,7 +56,6 @@ PICKLE_PROTOCOL = 4
 from pandas._libs.tslib import Timestamp
 from pandas._libs.tslibs.timezones import get_timezone
 
-
 try:
     from pandas._libs.tslibs.timezones import is_utc as check_is_utc_if_newer_pandas
 except ImportError:
@@ -1381,7 +1380,7 @@ class MsgPackNormalizer(Normalizer):
         col_data = np_arr.view(np.uint8)[:sb]
         return self._msgpack_unpackb(memoryview(col_data))
 
-    def _custom_pack(self, obj):
+    def _custom_pack(self, obj, print_pickling_warning=True):
         if isinstance(obj, pd.Timestamp):
             tz = _ensure_str_timezone(get_timezone(obj.tz)) if obj.tz is not None else None
             return ExtType(MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz]))
@@ -1395,7 +1394,10 @@ class MsgPackNormalizer(Normalizer):
         if self.strict_mode:
             raise TypeError("Normalisation is running in strict mode, writing pickled data is disabled.")
         else:
-            return ExtType(MsgPackSerialization.PY_PICKLE_3, packb(Pickler.write(obj)))
+            return ExtType(
+                MsgPackSerialization.PY_PICKLE_3,
+                packb(Pickler.write(obj, print_pickling_warning=print_pickling_warning)),
+            )
 
     def _ext_hook(self, code, data):
         if code == MsgPackSerialization.PD_TIMESTAMP:
@@ -1425,8 +1427,10 @@ class MsgPackNormalizer(Normalizer):
 
         return ExtType(code, data)
 
-    def _msgpack_packb(self, obj):
-        return packb(obj, default=self._custom_pack)
+    def _msgpack_packb(self, obj, print_pickling_warning=True):
+        return packb(
+            obj, default=lambda to_pack: self._custom_pack(to_pack, print_pickling_warning=print_pickling_warning)
+        )
 
     def _msgpack_padded_packb(self, obj):
         return padded_packb(obj, default=self._custom_pack)
@@ -1441,8 +1445,9 @@ class Pickler(object):
         return pd.read_pickle(io.BytesIO(data))
 
     @staticmethod
-    def write(obj):
-        log.log(get_pickled_metadata_loglevel(), f"Pickling metadata - may not be readable by other clients")
+    def write(obj, print_pickling_warning=True):
+        if print_pickling_warning:
+            log.log(get_pickled_metadata_loglevel(), f"Pickling metadata - may not be readable by other clients")
         return pickle.dumps(obj, protocol=PICKLE_PROTOCOL)
 
 
@@ -1693,7 +1698,7 @@ def normalize_metadata(metadata: Any) -> UserDefinedMetadata:
     # However, this is also a probable sign of poor data modelling
     # and understanding the need should be a priority before
     # removing this protection.
-    packed = _msgpack_metadata._msgpack_packb(metadata)
+    packed = _msgpack_metadata._msgpack_packb(metadata, print_pickling_warning=False)
     size = len(packed)
     if size > _MAX_USER_DEFINED_META:
         raise ArcticDbNotYetImplemented(f"User defined metadata cannot exceed {_MAX_USER_DEFINED_META}B")
@@ -1709,7 +1714,7 @@ def normalize_metadata(metadata: Any) -> UserDefinedMetadata:
 
 def normalize_recursive_metastruct(metastruct: Dict[Any, Any]) -> UserDefinedMetadata:
     # Prevent arbitrary large object serialization, as it is indicative of a poor data layout
-    packed = _msgpack_metadata._msgpack_packb(metastruct)
+    packed = _msgpack_metadata._msgpack_packb(metastruct, print_pickling_warning=False)
     size = len(packed)
     if size > _MAX_RECURSIVE_METASTRUCT:
         raise ArcticDbNotYetImplemented(
