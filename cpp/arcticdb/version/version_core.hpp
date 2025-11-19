@@ -36,6 +36,17 @@ struct SymbolProcessingResult {
     std::vector<EntityId> entity_ids_;
 };
 
+enum class ReadModifyWriteIndexStrategy {
+    /// The index key for the new version will contain only the data produced by the processing query.
+    /// E.g. Running a filter query will produce a new version containing only the filtered data.
+    REWRITE_INDEX,
+    /// The index key will be a merge of the current index key and the new data.
+    /// E.g. Running merge_update with 3 segments where only the middle segment is matched will keep the first and the
+    /// third segment in the index and add a new segment in the middle. If REWRITE_INDEX was used it would only keep the
+    /// new (middle segment)
+    MERGE_INDEX
+};
+
 struct ReadVersionOutput {
     ReadVersionOutput() = delete;
     ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor) :
@@ -216,12 +227,12 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 
 VersionedItem read_modify_write_impl(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, std::shared_ptr<ReadQuery> read_query,
+        const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy
 );
 
-VersionedItem merge_impl(
+VersionedItem merge_update_impl(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,

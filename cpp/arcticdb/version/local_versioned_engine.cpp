@@ -455,7 +455,8 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
             read_query,
             read_options,
             write_options,
-            IndexPartialKey{target_stream, target_version}
+            IndexPartialKey{target_stream, target_version},
+            ReadModifyWriteIndexStrategy::REWRITE_INDEX
     );
     if (cfg().symbol_list())
         symbol_list().add_symbol(store(), target_stream, versioned_item.key_.version_id());
@@ -2319,7 +2320,7 @@ VersionedItem LocalVersionedEngine::merge_internal(
             }
         }
         const WriteOptions write_options = get_write_options();
-        auto versioned_item = merge_impl(
+        auto versioned_item = merge_update_impl(
                 store(),
                 identifier,
                 std::move(user_meta_proto),

@@ -144,7 +144,7 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
 ///     difference between this and adjust_slice_ranges is that this will not change the column slices. While
 ///     adjust_slice_ranges will change the column slices, making the first slice start from 0 even for timestamp-index
 ///     dataframes (which should have column range starting from 1 when being written to disk).
-[[maybe_unused]] void compact_row_slices(std::span<SliceAndKey> slices) {
+void compact_row_slices(std::span<SliceAndKey> slices) {
     size_t current_compacted_row = 0;
     size_t previous_uncompacted_end = slices.empty() ? 0 : slices.front().slice().row_range.end();
     size_t previous_col_slice_end = slices.empty() ? 0 : slices.front().slice().col_range.end();
@@ -163,6 +163,33 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
         current_compacted_row += rows_in_slice;
         previous_col_slice_end = slice.slice().col_range.end();
     }
+}
+
+folly::Future<AtomKey> rewrite_index_for_read_modify_write(
+        const PipelineContext& pipeline_context, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<Store>& store,
+        std::vector<SliceAndKey>&& slices, std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta
+) {
+    ranges::sort(slices);
+    compact_row_slices(slices);
+    const size_t row_count =
+            slices.empty() ? 0 : slices.back().slice().row_range.second - slices[0].slice().row_range.first;
+    const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+            row_count,
+            pipeline_context.descriptor(),
+            std::move(*pipeline_context.norm_meta_),
+            user_meta ? std::make_optional(*std::move(user_meta)) : std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            write_options.bucketize_dynamic
+    );
+    return index::write_index(
+            index_type_from_descriptor(pipeline_context.descriptor()),
+            tsd,
+            std::move(slices),
+            target_partial_index_key,
+            store
+    );
 }
 } // namespace
 
@@ -2744,21 +2771,23 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 }
 
 VersionedItem read_modify_write_impl(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& source_version_info,
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, std::shared_ptr<ReadQuery> read_query,
+        const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy
 ) {
 
     read_query->clauses_.push_back(std::make_shared<Clause>(
             WriteClause(write_options, target_partial_index_key, std::make_shared<DeDupMap>(), store)
     ));
-    const auto pipeline_context = setup_pipeline_context(store, source_version_info, *read_query, read_options);
+    const auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
     check_can_perform_processing(pipeline_context, *read_query);
 
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
-            .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
+            .thenValue([component_manager,
+                        pipeline_context,
+                        read_query = std::move(read_query)](std::vector<EntityId>&& processed_entity_ids) {
                 generate_output_schema_and_save_to_pipeline(*pipeline_context, *read_query);
                 std::vector<folly::Future<SliceAndKey>> write_segments_futures;
                 ranges::transform(
@@ -2771,31 +2800,23 @@ VersionedItem read_modify_write_impl(
                 return folly::collect(std::move(write_segments_futures));
             })
             .thenValue([&](std::vector<SliceAndKey>&& slices) {
-                ranges::sort(slices);
-                compact_row_slices(slices);
-                const size_t row_count =
-                        slices.empty() ? 0 : slices.back().slice().row_range.second - slices[0].slice().row_range.first;
-                const TimeseriesDescriptor tsd = make_timeseries_descriptor(
-                        row_count,
-                        pipeline_context->descriptor(),
-                        std::move(*pipeline_context->norm_meta_),
-                        user_meta ? std::make_optional(*std::move(user_meta)) : std::nullopt,
-                        std::nullopt,
-                        std::nullopt,
-                        write_options.bucketize_dynamic
-                );
-                return index::write_index(
-                        index_type_from_descriptor(pipeline_context->descriptor()),
-                        tsd,
-                        std::move(slices),
-                        target_partial_index_key,
-                        store
-                );
+                if (index_strategy == ReadModifyWriteIndexStrategy::REWRITE_INDEX) {
+                    return rewrite_index_for_read_modify_write(
+                            *pipeline_context,
+                            write_options,
+                            target_partial_index_key,
+                            store,
+                            std::move(slices),
+                            std::move(user_meta)
+                    );
+                } else {
+                    return folly::Future<AtomKey>(AtomKey{});
+                }
             })
             .get();
 }
 
-VersionedItem merge_impl(
+VersionedItem merge_update_impl(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
@@ -2810,7 +2831,14 @@ VersionedItem merge_impl(
         read_query->row_filter = source->index_range;
     }
     return read_modify_write_impl(
-            store, version_info, std::move(user_meta), read_query, read_options, write_options, target_partial_index_key
+            store,
+            version_info,
+            std::move(user_meta),
+            std::move(read_query),
+            read_options,
+            write_options,
+            target_partial_index_key,
+            ReadModifyWriteIndexStrategy::MERGE_INDEX
     );
 }
 

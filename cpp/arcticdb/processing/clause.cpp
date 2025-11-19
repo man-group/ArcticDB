@@ -29,6 +29,32 @@
 
 #include <ranges>
 
+namespace {
+template<typename T>
+void stable_select(std::vector<T>& vec, std::span<const size_t> indexes_to_keep) {
+    arcticdb::debug::check<arcticdb::ErrorCode::E_ASSERTION_FAILURE>(
+            std::ranges::is_sorted(indexes_to_keep),
+            "Bulk removal of elements from vector requires the indexes of the elements to be sorted"
+    );
+    if (indexes_to_keep.size() == vec.size()) {
+        return;
+    }
+    if (indexes_to_keep.empty()) {
+        vec.resize(0);
+    }
+    size_t free_slot = 0, to_keep = 0;
+    for (size_t i = 0; i < vec.size(); ++i) {
+        if (free_slot == indexes_to_keep[to_keep]) {
+            to_keep++;
+            free_slot++;
+        } else if (i == indexes_to_keep[to_keep]) {
+            vec[free_slot++] = std::move(vec[indexes_to_keep[to_keep++]]);
+        }
+    }
+    vec.resize(indexes_to_keep.size());
+}
+} // namespace
+
 namespace arcticdb {
 
 namespace ranges = std::ranges;
@@ -1804,7 +1830,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
         return structure_by_row_slice(ranges_and_keys);
     }
     std::vector<std::vector<size_t>> entities = structure_by_row_slice(ranges_and_keys);
-    util::BitSet row_slices_to_keep(entities.size());
+    std::vector<size_t> row_slices_to_keep;
     size_t source_row = 0;
     auto first_col_slice_in_row = ranges_and_keys.begin();
     for (size_t row_slice_idx = 0; row_slice_idx < entities.size() && source_row < source_->num_rows; ++row_slice_idx) {
@@ -1817,6 +1843,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
         bool keep_row_slice = strategy_.not_matched_by_target == MergeAction::INSERT && source_ts < time_range.first;
         if (keep_row_slice) {
             source_start_for_row_range_[first_col_slice_in_row->row_range()] = std::pair{source_row, source_row + 1};
+            row_slices_to_keep.push_back(row_slice_idx);
         }
         // Skip all values in the source that are before the first index value in the row slice
         while (source_row < source_->num_rows && source_ts < time_range.first) {
@@ -1825,6 +1852,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
         const bool source_ts_in_segment_range = source_ts >= time_range.first && source_ts <= time_range.second;
         if (!keep_row_slice && source_ts_in_segment_range) {
             source_start_for_row_range_[first_col_slice_in_row->row_range()] = std::pair{source_row, source_row + 1};
+            row_slices_to_keep.push_back(row_slice_idx);
         }
         keep_row_slice |= source_ts_in_segment_range;
         // Find the first row in source that is after the row slice
@@ -1834,30 +1862,10 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
         if (keep_row_slice) {
             source_start_for_row_range_.at(first_col_slice_in_row->row_range()).second = source_row;
         }
-        row_slices_to_keep[row_slice_idx] = keep_row_slice;
         const size_t col_slice_count = entities[row_slice_idx].size();
         first_col_slice_in_row += col_slice_count;
     }
-    // TODO: If there are values to be inserted after the last segment this will read it, append the values and split
-    //  the segment if needed. There is no need to do this as we can just create a new segment.
-    if (source_row < source_->num_rows && strategy_.not_matched_by_target == MergeAction::INSERT) {
-        row_slices_to_keep[entities.size() - 1] = true;
-    }
-    const size_t num_row_slices_to_keep = row_slices_to_keep.count();
-    const bool keep_all_row_slices = num_row_slices_to_keep == entities.size();
-    if (keep_all_row_slices) {
-        return entities;
-    }
-    size_t entity_pos = 0;
-    for (size_t i = 0; i < entities.size(); ++i) {
-        if (row_slices_to_keep[i]) {
-            if (entity_pos != i) {
-                entities[entity_pos] = std::move(entities[i]);
-            }
-            ++entity_pos;
-        }
-    }
-    entities.resize(num_row_slices_to_keep);
+    stable_select(entities, row_slices_to_keep);
     return entities;
 }
 
@@ -1890,9 +1898,9 @@ void MergeUpdateClause::update_and_insert(
         const T& source, const StreamDescriptor& source_descriptor, const ProcessingUnit& proc,
         const std::span<const std::vector<size_t>> rows_to_update
 ) const {
-    const std::vector<std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
-    const std::vector<std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
-    const std::vector<std::shared_ptr<ColRange>> col_ranges = *proc.col_ranges_;
+    const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
+    const std::span<const std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
+    const std::span<const std::shared_ptr<ColRange>> col_ranges = *proc.col_ranges_;
     const auto [source_row_start, source_row_end] = source_start_for_row_range_.at(*row_ranges[0]);
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
         const size_t columns_in_range = target_segments[segment_idx]->num_columns();
@@ -1904,7 +1912,7 @@ void MergeUpdateClause::update_and_insert(
                 using TDT = decltype(tdt);
 
                 size_t source_row = source_row_start;
-                while (source_row < source_row_end && rows_to_update[source_row_start - source_row].empty()) {
+                while (source_row < source_row_end && rows_to_update[source_row - source_row_start].empty()) {
                     ++source_row;
                 };
                 // For each row in the source rows_to_update contains a list of rows in the target that match this
@@ -1914,7 +1922,7 @@ void MergeUpdateClause::update_and_insert(
                 if (source_row >= source_row_end) {
                     return;
                 }
-                size_t target_data_row = rows_to_update[source_row_start - source_row].front();
+                size_t target_data_row = rows_to_update[source_row - source_row_start].front();
 
                 auto target_data_it = target_segments[segment_idx]->column(column_idx).data().begin<TDT>();
                 // TODO: Implement operator+= because std::advance is linear
@@ -1934,7 +1942,7 @@ void MergeUpdateClause::update_and_insert(
                 }();
                 SourceView source_column_view = get_source_column_iterator<TDT>(source, source_column);
                 while (source_row < source_row_end) {
-                    std::span rows_to_update_for_source_row = rows_to_update[source_row_start - source_row];
+                    std::span rows_to_update_for_source_row = rows_to_update[source_row - source_row_start];
                     if (rows_to_update_for_source_row.empty()) {
                         ++source_row;
                         continue;
@@ -1962,8 +1970,8 @@ template void MergeUpdateClause::
 
 std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const ProcessingUnit& proc) const {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
-    const std::vector<std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
-    const std::vector<std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
+    const std::span<const std::shared_ptr<SegmentInMemory>> target_segments{*proc.segments_};
+    const std::span<const std::shared_ptr<RowRange>> row_ranges{*proc.row_ranges_};
     const auto [source_row_start, source_row_end] = source_start_for_row_range_.at(*row_ranges[0]);
     size_t source_row = source_row_start;
     const size_t source_rows_in_row_slice = source_row_end - source_row;
@@ -1975,9 +1983,12 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const Pro
     while (target_index_it != target_index_end && source_row < source_row_end) {
         const timestamp source_ts = source_->index_value_at(source_row);
         auto lower_bound = std::lower_bound(target_index_it, target_index_end, source_ts);
+        if (lower_bound == target_index_end) {
+            break;
+        }
         target_row += std::distance(target_index_it, lower_bound);
         while (*lower_bound == source_ts) {
-            matched_rows[source_row_start - source_row].push_back(target_row);
+            matched_rows[source_row - source_row_start].push_back(target_row);
             ++lower_bound;
             ++target_row;
         }

@@ -169,32 +169,6 @@ struct NativeTensor {
     int expanded_dim_;
 };
 
-/// Creates a vector of NativeTensors from pairs of 1D contiguous data and DataType.
-/// Each input must be a pair-like object where `first` is a contiguous range and `second` is a DataType.
-/// The resulting tensors can be passed to InputFrame.
-/// @tparam Input Parameter pack of pair-like types satisfying the contiguous_range requirement
-/// @param arrays Variadic pairs of (contiguous_range, DataType)
-/// @return Vector of one-dimensional NativeTensors
-template<util::contiguous_type_tagged_data... Input>
-std::vector<NativeTensor> create_one_dimensional_tensors(const Input&... arrays) {
-    std::vector<NativeTensor> tensors;
-    tensors.reserve(sizeof...(arrays));
-    (tensors.emplace_back(NativeTensor::one_dimensional_tensor(arrays.first, arrays.second.data_type())), ...);
-    return tensors;
-}
-
-template<typename T>
-requires util::contiguous_type_tagged_data<T>
-std::vector<NativeTensor> create_one_dimensional_tensors(std::span<const T> contiguous_columns) {
-    std::vector<NativeTensor> tensors;
-    for (const T& contiguous_column_data : contiguous_columns) {
-        tensors.emplace_back(NativeTensor::one_dimensional_tensor(
-                contiguous_column_data.first, contiguous_column_data.second.data_type()
-        ));
-    }
-    return tensors;
-}
-
 template<ssize_t>
 ssize_t byte_offset_impl(const stride_t*) {
     return 0;
