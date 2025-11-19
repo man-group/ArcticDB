@@ -1218,6 +1218,7 @@ class NativeVersionStore:
         query_builder: Optional[Union[QueryBuilder, List[QueryBuilder]]] = None,
         columns: Optional[List[List[str]]] = None,
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
         per_symbol_arrow_string_format_default: Optional[
             List[Optional[Union[ArrowOutputStringFormat, "pa.DataType"]]]
         ] = None,
@@ -1257,6 +1258,11 @@ class NativeVersionStore:
             If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
             It serves as the default for the entire batch.
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None,
+            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            See documentation of `ArrowOutputStringFormat` for more information on the different options.
+            It defines the setting per column. It is applied to all symbols which don't have a
+            `per_symbol_arrow_string_format_per_column` set.
         per_symbol_arrow_string_format_default: Optional[List[Optional[Union[ArrowOutputStringFormat, "pa.DataType"]]]], default=None,
             If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
@@ -1292,6 +1298,7 @@ class NativeVersionStore:
             query_builder=query_builder,
             throw_on_error=throw_on_error,
             arrow_string_format_default=arrow_string_format_default,
+            arrow_string_format_per_column=arrow_string_format_per_column,
             per_symbol_arrow_string_format_default=per_symbol_arrow_string_format_default,
             per_symbol_arrow_string_format_per_column=per_symbol_arrow_string_format_per_column,
             **kwargs,
@@ -1312,6 +1319,7 @@ class NativeVersionStore:
         query_builder,
         throw_on_error,
         arrow_string_format_default,
+        arrow_string_format_per_column,
         per_symbol_arrow_string_format_default,
         per_symbol_arrow_string_format_per_column,
         **kwargs,
@@ -1327,6 +1335,7 @@ class NativeVersionStore:
             len(symbols),
             throw_on_error,
             arrow_string_format_default,
+            arrow_string_format_per_column,
             per_symbol_arrow_string_format_default,
             per_symbol_arrow_string_format_per_column,
             **kwargs,
@@ -2136,6 +2145,7 @@ class NativeVersionStore:
         num_symbols,
         batch_throw_on_error,
         global_arrow_string_format_default=None,
+        global_arrow_string_format_per_column=None,
         per_symbol_arrow_string_format_default=None,
         per_symbol_arrow_string_format_per_column=None,
         **kwargs,
@@ -2159,7 +2169,7 @@ class NativeVersionStore:
             )
         for idx in range(num_symbols):
             arrow_string_format_default = global_arrow_string_format_default
-            arrow_string_format_per_column = None
+            arrow_string_format_per_column = global_arrow_string_format_per_column
 
             if per_symbol_arrow_string_format_default is not None:
                 arrow_string_format_default = (
@@ -2167,7 +2177,9 @@ class NativeVersionStore:
                 )
 
             if per_symbol_arrow_string_format_per_column is not None:
-                arrow_string_format_per_column = per_symbol_arrow_string_format_per_column[idx]
+                arrow_string_format_per_column = (
+                    per_symbol_arrow_string_format_per_column[idx] or global_arrow_string_format_per_column
+                )
 
             read_options_per_symbol.append(
                 self._get_read_options(

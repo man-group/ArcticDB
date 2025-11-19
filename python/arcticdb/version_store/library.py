@@ -538,6 +538,8 @@ class LazyDataFrameCollection(QueryBuilder):
     def __init__(
         self,
         lazy_dataframes: List[LazyDataFrame],
+        arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
     ):
         """
         Gather a list of `LazyDataFrame`s into a single object that can be collected together.
@@ -563,6 +565,8 @@ class LazyDataFrameCollection(QueryBuilder):
         )
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
+        self._arrow_string_format_default = arrow_string_format_default
+        self._arrow_string_format_per_column = arrow_string_format_per_column
         if len(self._lazy_dataframes):
             self._lib = self._lazy_dataframes[0].lib
             self._output_format = self._lazy_dataframes[0].read_request.output_format
@@ -588,7 +592,12 @@ class LazyDataFrameCollection(QueryBuilder):
         """
         if not len(self._lazy_dataframes):
             return []
-        return self._lib.read_batch(self._read_requests(), output_format=self._output_format)
+        return self._lib.read_batch(
+            self._read_requests(),
+            output_format=self._output_format,
+            arrow_string_format_default=self._arrow_string_format_default,
+            arrow_string_format_per_column=self._arrow_string_format_per_column,
+        )
 
     def _read_requests(self) -> List[ReadRequest]:
         # Combines queries for individual LazyDataFrames with the global query associated with this
@@ -647,33 +656,6 @@ class LazyDataFrameAfterJoin(QueryBuilder):
         super().__init__()
         self._lazy_dataframes = lazy_dataframes
         self.then(join)
-        self.arrow_string_format_default = None
-        self.arrow_string_format_per_column = {}
-        for lf in self._lazy_dataframes._lazy_dataframes:
-            self.arrow_string_format_default = (
-                self.arrow_string_format_default or lf.read_request.arrow_string_format_default
-            )
-            check(
-                lf.read_request.arrow_string_format_default is None
-                or self.arrow_string_format_default == lf.read_request.arrow_string_format_default,
-                "Lazy frames from collection cannot be combined for join because they have incompatible arrow_string_format_default values {} and {}",
-                self.arrow_string_format_default,
-                lf.read_request.arrow_string_format_default,
-            )
-            if lf.read_request.arrow_string_format_per_column is not None:
-                common_cols = (
-                    self.arrow_string_format_per_column.keys() & lf.read_request.arrow_string_format_per_column.keys()
-                )
-                for common_col in common_cols:
-                    check(
-                        self.arrow_string_format_per_column[common_col]
-                        == lf.read_request.arrow_string_format_per_column[common_col],
-                        "Lazy frames from collection cannot be combined for join because they have incompatible arrow_string_format_per_column values {} and {} for column {}",
-                        self.arrow_string_format_per_column[common_col],
-                        lf.read_request.arrow_string_format_per_column[common_col],
-                        common_col,
-                    )
-                self.arrow_string_format_per_column.update(lf.read_request.arrow_string_format_per_column)
 
     def collect(self) -> VersionedItemWithJoin:
         """
@@ -693,8 +675,8 @@ class LazyDataFrameAfterJoin(QueryBuilder):
                 self._lazy_dataframes._read_requests(),
                 self,
                 output_format=self._lazy_dataframes._output_format,
-                arrow_string_format_default=self.arrow_string_format_default,
-                arrow_string_format_per_column=self.arrow_string_format_per_column,
+                arrow_string_format_default=self._lazy_dataframes._arrow_string_format_default,
+                arrow_string_format_per_column=self._lazy_dataframes._arrow_string_format_per_column,
             )
 
     def __str__(self) -> str:
@@ -2079,6 +2061,7 @@ class Library:
         lazy: bool = False,
         output_format: Optional[Union[OutputFormat, str]] = None,
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]] = None,
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]] = None,
     ) -> Union[List[Union[VersionedItem, DataError]], LazyDataFrameCollection]:
         """
         Reads multiple symbols.
@@ -2106,6 +2089,10 @@ class Library:
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
             It serves as the default for the entire batch. The string format settings inside the `ReadRequest`s will
             override this batch level setting.
+
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None,
+            Provides per column name overrides for `arrow_string_format_default`. It is only applied to symbols which
+            don't have a `arrow_string_format_per_column` set in their `ReadRequest`.
 
         Returns
         -------
@@ -2221,14 +2208,18 @@ class Library:
                             columns=columns[idx],
                             query_builder=q,
                             output_format=output_format,
-                            arrow_string_format_default=(
-                                per_symbol_arrow_string_format_default[idx] or arrow_string_format_default
-                            ),
-                            arrow_string_format_per_column=per_symbol_arrow_string_format_per_column[idx],
+                            arrow_string_format_default=per_symbol_arrow_string_format_default[idx]
+                            or arrow_string_format_default,
+                            arrow_string_format_per_column=per_symbol_arrow_string_format_per_column[idx]
+                            or arrow_string_format_per_column,
                         ),
                     )
                 )
-            return LazyDataFrameCollection(lazy_dataframes)
+            return LazyDataFrameCollection(
+                lazy_dataframes,
+                arrow_string_format_default=arrow_string_format_default,
+                arrow_string_format_per_column=arrow_string_format_per_column,
+            )
         else:
             return self._nvs._batch_read_to_versioned_items(
                 symbol_strings,
@@ -2242,6 +2233,7 @@ class Library:
                 iterate_snapshots_if_tombstoned=False,
                 output_format=output_format,
                 arrow_string_format_default=arrow_string_format_default,
+                arrow_string_format_per_column=arrow_string_format_per_column,
                 per_symbol_arrow_string_format_default=per_symbol_arrow_string_format_default,
                 per_symbol_arrow_string_format_per_column=per_symbol_arrow_string_format_per_column,
             )
