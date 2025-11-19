@@ -35,10 +35,7 @@ struct formatter<arcticdb::StageResult> {
     template<typename FormatContext>
     auto format(const arcticdb::StageResult& stage_result, FormatContext& ctx) const {
         auto transform_view =
-                stage_result.staged_segments | std::views::transform([](const auto& key) {
-                    return arcticdb::entity::
-                            formattable<arcticdb::entity::AtomKey, arcticdb::entity::DisplayAtomKeyFormat>(key);
-                });
+                stage_result.staged_segments | std::views::transform([](const auto& key) { return key.view_human(); });
         return fmt::format_to(ctx.out(), "StageResult(staged_segments=[{}])", fmt::join(transform_view, ", "));
     }
 };
