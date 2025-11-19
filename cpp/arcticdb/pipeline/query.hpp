@@ -264,10 +264,9 @@ void build_col_read_query_filters(
         };
         queries.push_back(std::move(query));
     } else if (pipeline_context->overall_column_bitset_) {
-        util::check(!dynamic_schema || column_groups, "Did not expect a column bitset with dynamic schema");
         if (column_groups)
             queries.emplace_back(create_dynamic_col_filter(std::move(pipeline_context)));
-        else
+        else if (!dynamic_schema)
             queries.emplace_back(create_static_col_filter(std::move(pipeline_context)));
     }
 }
