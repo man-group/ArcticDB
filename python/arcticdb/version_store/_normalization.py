@@ -823,9 +823,9 @@ class ArrowTableNormalizer(Normalizer):
         index_type = pandas_meta.WhichOneof("index_type")
         if index_type == "index":
             index_meta = pandas_meta.index
-            # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
-            is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
-            if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
+            # Old arcticc tick streaming data does not populate `is_physically_stored` field and considers an index
+            # physically stored if `step==0`
+            if index_meta.is_physically_stored or not index_meta.step:
                 if index_meta.tz and len(item.columns) > 0 and pa.types.is_timestamp(item.columns[0].type):
                     # We apply timezone metadata only when the first column is a timestamp column.
                     # This matches the behavior and is required to handle `groupby`s which can change index type.
