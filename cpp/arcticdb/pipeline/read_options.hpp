@@ -100,12 +100,18 @@ using ReadOptionsPerSymbol = std::variant<ReadOptions, std::vector<ReadOptions>>
 
 struct BatchReadOptionsData {
     ReadOptionsPerSymbol read_options_per_symbol_;
-    std::optional<bool> batch_throw_on_error_;
+    bool batch_throw_on_error_;
     OutputFormat output_format_ = OutputFormat::PANDAS;
+
+    BatchReadOptionsData(bool batch_throw_on_error) : batch_throw_on_error_(batch_throw_on_error) {}
 };
 
 struct BatchReadOptions {
-    std::shared_ptr<BatchReadOptionsData> data_ = std::make_shared<BatchReadOptionsData>();
+    std::shared_ptr<BatchReadOptionsData> data_;
+
+    BatchReadOptions(bool batch_throw_on_error) {
+        data_ = std::make_shared<BatchReadOptionsData>(batch_throw_on_error);
+    }
 
     void set_read_options(const ReadOptions& read_options) { data_->read_options_per_symbol_ = read_options; }
 
@@ -123,7 +129,7 @@ struct BatchReadOptions {
 
     void set_batch_throw_on_error(bool batch_throw_on_error) { data_->batch_throw_on_error_ = batch_throw_on_error; }
 
-    [[nodiscard]] const std::optional<bool>& batch_throw_on_error() const { return data_->batch_throw_on_error_; }
+    [[nodiscard]] bool batch_throw_on_error() const { return data_->batch_throw_on_error_; }
 
     void set_output_format(OutputFormat output_format) { data_->output_format_ = output_format; }
 

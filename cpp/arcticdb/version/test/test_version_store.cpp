@@ -522,8 +522,7 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     }
 
     std::vector<std::shared_ptr<ReadQuery>> read_queries;
-    BatchReadOptions batch_read_options;
-    batch_read_options.set_batch_throw_on_error(true);
+    BatchReadOptions batch_read_options(true);
     batch_read_options.set_output_format(OutputFormat::NATIVE);
     register_native_handler_data_factory();
     auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format());

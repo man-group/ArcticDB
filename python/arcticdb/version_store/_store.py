@@ -2188,9 +2188,8 @@ class NativeVersionStore:
                     **kwargs,
                 )
             )
-        batch_read_options = _PythonVersionStoreBatchReadOptions()
+        batch_read_options = _PythonVersionStoreBatchReadOptions(batch_throw_on_error)
         batch_read_options.set_read_options_per_symbol(read_options_per_symbol)
-        batch_read_options.set_batch_throw_on_error(batch_throw_on_error)
         # output_format is also a batch level setting, because we currently don't support mixed output formats
         batch_read_options.set_output_format(
             output_format_to_internal(
@@ -3653,8 +3652,7 @@ class NativeVersionStore:
         for as_of in as_ofs_lists:
             version_queries.append(self._get_version_query(as_of))
 
-        batch_read_options = _PythonVersionStoreBatchReadOptions()
-        batch_read_options.set_batch_throw_on_error(throw_on_error)
+        batch_read_options = _PythonVersionStoreBatchReadOptions(throw_on_error)
         descriptions_or_errors = self.version_store.batch_read_descriptor(symbols, version_queries, batch_read_options)
         args_list = list(zip(descriptions_or_errors, symbols, version_queries, as_ofs_lists))
         description_results = []

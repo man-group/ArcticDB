@@ -261,7 +261,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("output_format", &ReadOptions::output_format);
 
     py::class_<BatchReadOptions>(version, "PythonVersionStoreBatchReadOptions")
-            .def(py::init())
+            .def(py::init([](bool batch_throw_on_error) { return BatchReadOptions(batch_throw_on_error); }))
             .def("set_read_options", &BatchReadOptions::set_read_options)
             .def("set_read_options_per_symbol", &BatchReadOptions::set_read_options_per_symbol)
             .def("set_output_format", &BatchReadOptions::set_output_format)
