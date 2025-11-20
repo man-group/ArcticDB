@@ -23,7 +23,7 @@ if MACOS_WHEEL_BUILD:
     pytest.skip("We don't have previous versions of arcticdb pypi released for MacOS", allow_module_level=True)
 
 
-def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
+def test_compat_write_read(old_venv_and_arctic_uri, lib_name, any_output_format):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         sym = "sym"
@@ -42,8 +42,8 @@ def test_compat_write_read(old_venv_and_arctic_uri, lib_name):
 
         # Check that latest version is readable in current version
         with compat.current_version() as curr:
-            read_df = curr.lib.read(sym).data
-            assert_frame_equal(read_df, df_2)
+            read_df = curr.lib.read(sym, output_format=any_output_format).data
+            assert_frame_equal_with_arrow(read_df, df_2)
 
 
 def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_name):
@@ -80,7 +80,7 @@ def test_modify_old_library_option_with_current(old_venv_and_arctic_uri, lib_nam
             assert cfg_after_use == expected_cfg
 
 
-def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name):
+def test_pandas_pickling(pandas_v1_venv, s3_ssl_disabled_storage, lib_name, any_output_format):
     arctic_uri = s3_ssl_disabled_storage.arctic_uri
     with CompatLibrary(pandas_v1_venv, arctic_uri, lib_name) as compat:
         # Create library using old version and write pickled Pandas 1 metadata
@@ -104,7 +104,7 @@ lib.write("sym", df, metadata={{"abc": df}})
         # Check we can read with Pandas 2
         with compat.current_version() as curr:
             sym = "sym"
-            read_df = curr.lib.read(sym).metadata["abc"]
+            read_df = curr.lib.read(sym, output_format=any_output_format).metadata["abc"]
             expected_df = pd.DataFrame({"a": [1, 2, 3]})
             idx = pd.Index([1, 2, 3], dtype="int64")
             expected_df.index = idx
@@ -241,7 +241,7 @@ assert lib.read_metadata({repr(sym)}, as_of=4).metadata == timestamp_pytz
         )
 
 
-def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name):
+def test_compat_read_incomplete(old_venv_and_arctic_uri, lib_name, any_output_format):
     old_venv, arctic_uri = old_venv_and_arctic_uri
     with CompatLibrary(old_venv, arctic_uri, lib_name) as compat:
         sym = "sym"
@@ -280,16 +280,17 @@ lib._nvs.append("sym", df_2, incomplete=True)
             )
 
         with compat.current_version() as curr:
+            curr.lib._nvs.set_output_format(any_output_format)
             read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True).data
-            assert_frame_equal(read_df, df)
+            assert_frame_equal_with_arrow(read_df, df)
 
             read_df = curr.lib._nvs.read(sym, date_range=(None, None), incomplete=True, columns=["float_col"]).data
-            assert_frame_equal(read_df, df[["float_col"]])
+            assert_frame_equal_with_arrow(read_df, df[["float_col"]])
 
             read_df = curr.lib._nvs.read(
                 sym, date_range=(None, None), incomplete=True, columns=["float_col", "str_col"]
             ).data
-            assert_frame_equal(read_df, df[["float_col", "str_col"]])
+            assert_frame_equal_with_arrow(read_df, df[["float_col", "str_col"]])
 
             read_df = curr.lib._nvs.read(
                 sym,
@@ -297,7 +298,7 @@ lib._nvs.append("sym", df_2, incomplete=True)
                 incomplete=True,
                 columns=["float_col", "str_col"],
             ).data
-            assert_frame_equal(read_df, df[["float_col", "str_col"]].iloc[4:9])
+            assert_frame_equal_with_arrow(read_df, df[["float_col", "str_col"]].iloc[4:9])
 
 
 def test_storage_mover_clone_old_library(old_venv_and_arctic_uri, lib_name):

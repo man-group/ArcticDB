@@ -157,7 +157,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("type", [](const AtomKey& self) { return self.type(); })
             .def(pybind11::self == pybind11::self)
             .def(pybind11::self != pybind11::self)
-            .def("__repr__", &AtomKey::view)
+            .def("__repr__", &AtomKey::view_human)
             .def(py::self < py::self)
             .def(py::pickle(
                     [](const AtomKey& key) {
@@ -375,9 +375,19 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
             .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
 
-    py::class_<StageResult>(version, "StageResult")
+    py::class_<StageResult>(version, "StageResult", R"pbdoc(
+        Result returned by the stage method containing information about staged segments.
+        
+        StageResult objects can be passed to finalization methods to specify which staged data to finalize.
+        This enables selective finalization of staged data when multiple stage operations have been performed.
+        
+        Attributes
+        ----------
+        staged_segments : List[AtomKey]
+)pbdoc")
             .def(py::init([]() { return StageResult({}); }))
             .def_property_readonly("staged_segments", [](const StageResult& self) { return self.staged_segments; })
+            .def("__repr__", &StageResult::view)
             .def(py::pickle(
                     [](const StageResult& s) {
                         constexpr int serialization_version = 0;
