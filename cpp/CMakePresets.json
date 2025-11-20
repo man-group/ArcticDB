@@ -137,7 +137,6 @@
       "name": "macos-debug",
       "inherits": ["common_vcpkg", "macos"],
       "cacheVariables": {
-        "CMAKE_OSX_ARCHITECTURES": "arm64",
         "CMAKE_OSX_DEPLOYMENT_TARGET": "15.0",
         "CMAKE_C_COMPILER_LAUNCHER": "sccache",
         "CMAKE_CXX_COMPILER_LAUNCHER": "sccache"
