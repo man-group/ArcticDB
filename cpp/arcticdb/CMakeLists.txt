@@ -228,6 +228,7 @@ set(arcticdb_srcs
         entity/ref_key.hpp
         entity/serialized_key.hpp
         entity/stage_result.hpp
+        entity/stage_result.cpp
         entity/type_conversion.hpp
         entity/types.hpp
         entity/type_utils.hpp
