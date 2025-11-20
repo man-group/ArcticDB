@@ -151,14 +151,34 @@ class LibraryOptions:
 
 # TODO: Use enum.StrEnum when we no longer need to support python 3.9
 class OutputFormat(str, Enum):
+    """
+    Controls the output format of operations which return dataframes. All APIs which take an `output_format` argument
+    accept the enum values and case-insensitive strings. E.g. all of `OutputFormat.EXPERIMENTAL_ARROW`,
+    `"EXPERIMENTAL_ARROW"`, `"experimental_arrow"` will be interpreted as `OutputFormat.EXPERIMENTAL_ARROW`.
+
+    PANDAS (default):
+    Dataframes will be returned as `pandas.DataFrames` or `pandas.Series` backed by numpy arrays.
+
+    EXPERIMENTAL_ARROW:
+    Dataframes will be returned as `pyarrow.Table`s.
+    The arrow API is still experimental and the arrow layout might change in a minor release.
+    Faster than `PANDAS`, especially for dataframes containing mostly strings.
+
+    EXPERIMENTAL_POLARS:
+    Dataframes will be returned as `polars.DataFrame`s.
+    The polars API is still experimental and the data layout might change in a minor release.
+    Faster than `PANDAS`, especially for dataframes containing mostly strings.
+    """
+
     PANDAS = "PANDAS"
     EXPERIMENTAL_ARROW = "EXPERIMENTAL_ARROW"
+    EXPERIMENTAL_POLARS = "EXPERIMENTAL_POLARS"
 
 
 def output_format_to_internal(output_format: Union[OutputFormat, str]) -> InternalOutputFormat:
     if output_format.lower() == OutputFormat.PANDAS.lower():
         return InternalOutputFormat.PANDAS
-    elif output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
+    elif output_format.lower() in [OutputFormat.EXPERIMENTAL_ARROW.lower(), OutputFormat.EXPERIMENTAL_POLARS.lower()]:
         if not _PYARROW_AVAILABLE:
             raise ModuleNotFoundError(
                 "ArcticDB's pyarrow optional dependency missing but is required to use arrow output format."

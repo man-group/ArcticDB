@@ -20,6 +20,7 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
+import polars as pl
 from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
@@ -1156,3 +1157,28 @@ def test_arrow_read_batch_with_strings(lmdb_version_store_arrow):
     assert table_2.schema.field(0).type == pa.string()  # global default for all symbols
     assert table_2.schema.field(1).type == pa.dictionary(pa.int32(), pa.large_string())  # per_column override
     assert_frame_equal_with_arrow(table_2, df_2)
+
+
+def test_polars_basic(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_POLARS)
+    sym = "polars"
+    df = pd.DataFrame(
+        {
+            "col_int": np.arange(10, dtype=np.int64),
+            "col_float": np.arange(10, dtype=np.float32),
+            "col_bool": [i % 2 == 0 for i in range(10)],
+            "col_str": ["x" * (i + 1) for i in range(10)],
+            "col_cat": [f"str_{i%3}" for i in range(10)],
+        },
+        index=pd.date_range(pd.Timestamp(2025, 1, 1), periods=10),
+    )
+    lib.write(sym, df)
+    result = lib.read(sym, arrow_string_format_per_column={"col_cat": ArrowOutputStringFormat.CATEGORICAL}).data
+    df.index.name = "__index__"
+    expected = pl.from_pandas(df.reset_index())
+    expected = expected.with_columns(pl.col("col_cat").cast(pl.Categorical))
+    expected.columns[0] = "__index__"
+    assert result.columns == ["__index__", "col_int", "col_float", "col_bool", "col_str", "col_cat"]
+    assert result.dtypes == [pl.Datetime("ns"), pl.Int64, pl.Float32, pl.Boolean, pl.String, pl.Categorical]
+    assert result.equals(expected)
