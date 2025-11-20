@@ -188,7 +188,13 @@ class CMakeBuild(build_ext):
             conda_suffix = "-conda" if ARCTICDB_USING_CONDA else ""
             suffix = "-debug" if self.debug else "-release"
             suffix = conda_suffix + suffix
-            preset = ("windows-cl" if platform.system() == "Windows" else platform.system().lower()) + suffix
+            system_name = platform.system()
+            if system_name == "Windows":
+                preset = "windows-cl" + suffix
+            elif system_name == "Darwin":
+                preset = "macos" + suffix
+            else:
+                preset = system_name.lower() + suffix
 
         cmd = [
             cmake,

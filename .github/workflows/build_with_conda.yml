@@ -216,7 +216,7 @@ jobs:
         if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
-          cd cpp/out/darwin-conda-release-build/
+          cd cpp/out/macos-conda-release-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
@@ -224,7 +224,7 @@ jobs:
         if: ${{ inputs.run_cpp_tests == true|| github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
-          cd cpp/out/darwin-conda-release-build/
+          cd cpp/out/macos-conda-release-build/
           CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm
