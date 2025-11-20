@@ -128,7 +128,7 @@ For instance:
 
   ```bash
   export ARCTICDB_USING_CONDA=1
-  cmake -DTEST=off --preset darwin-conda-release cpp
+  cmake -DTEST=off --preset macos-conda-release cpp
   cd cpp
 
   # You might need to use fewer threads than what's possible your machine
