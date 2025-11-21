@@ -1030,13 +1030,15 @@ class Library:
             the default library configuration is True, otherwise it is False.
             The library configuration can be modified via Arctic.modify_library_option(). Please refer to
             https://docs.arcticdb.io/latest/api/arctic/#arcticdb.Arctic.modify_library_option for more details.
-            The data structure can be nested or a mix of lists and dictionaries.
+            The data structure can be nested or a mix of lists, dictionaries and tuples.
             Example:
                 data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
                 lib.write(symbol, data, recursive_normalizers=False) # ArcticUnsupportedDataTypeException will be thrown
                 lib.write(symbol, data, recursive_normalizers=True) # The data will be successfully written
                 ac.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
                 lib.write(symbol, data) # The data will be successfully written
+            Please refer to https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers for more details
+            of this feature.
 
         Returns
         -------
@@ -1072,7 +1074,7 @@ class Library:
             if is_recursive_normalizers_enabled:
                 if staged:
                     raise ArcticUnsupportedDataTypeException(
-                        "Staged data must be of a type that can be natively normalized"
+                        "Staged data cannot be natively normalized. The recursive normalizer is enabled but is not allowed to work on staged data."
                     )
             else:
                 raise ArcticUnsupportedDataTypeException(
@@ -1126,6 +1128,7 @@ class Library:
             See documentation on `write`.
         recursive_normalizers: bool, default None
             See documentation on `write`.
+            If enabled, attempts to recursively normalize data before falling back to pickling.
             If the leaf nodes cannot be natively normalized, they will be pickled,
             resulting in the overall data being recursively normalized and partially pickled.
             Example:
