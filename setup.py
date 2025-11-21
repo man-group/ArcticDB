@@ -192,7 +192,13 @@ class CMakeBuild(build_ext):
             if system_name == "Windows":
                 preset = "windows-cl" + suffix
             elif system_name == "Darwin":
-                preset = "macos" + suffix
+                arch = platform.machine()
+                if arch == "x86_64":
+                    preset = "macos-x86_64" + suffix
+                elif arch == "arm64":
+                    preset = "macos-arm64" + suffix
+                else:
+                    raise ValueError(f"Unsupported architecture: {arch}")
             else:
                 preset = system_name.lower() + suffix
 

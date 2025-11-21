@@ -130,11 +130,8 @@
       "environment": {"cmakepreset_expected_host_system": "Darwin"}
     },
     {
-      "name": "macos-conda-debug",
-      "inherits": ["common_conda", "macos"]
-    },
-    {
       "name": "macos-debug",
+      "hidden": true,
       "inherits": ["common_vcpkg", "macos"],
       "cacheVariables": {
         "CMAKE_OSX_DEPLOYMENT_TARGET": "15.0",
@@ -142,25 +139,59 @@
         "CMAKE_CXX_COMPILER_LAUNCHER": "sccache"
       }
     },
-    { "name": "windows-cl-release",       "inherits": "windows-cl-debug",       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }},
-    { "name": "windows-cl-conda-release", "inherits": "windows-cl-conda-debug", "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
-    { "name": "linux-release",            "inherits": "linux-debug",            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
-    { "name": "linux-conda-release",      "inherits": "linux-conda-debug",      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
-    { "name": "macos-release",            "inherits": "macos-debug",            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
-    { "name": "macos-conda-release",      "inherits": "macos-conda-debug",      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } }
+    {
+      "name": "macos-x86_64-debug",
+      "inherits": ["macos-debug", "macos"],
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "x86_64"
+      }
+    },
+    {
+      "name": "macos-arm64-debug",
+      "inherits": ["macos-debug", "macos"],
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    {
+      "name": "macos-x86_64-conda-debug",
+      "inherits": ["common_conda", "macos"],
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "x86_64"
+      }
+    },
+    {
+      "name": "macos-arm64-conda-debug",
+      "inherits": ["common_conda", "macos"],
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64"
+      }
+    },
+    { "name": "windows-cl-release",         "inherits": "windows-cl-debug",             "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }},
+    { "name": "windows-cl-conda-release",   "inherits": "windows-cl-conda-debug",       "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" } },
+    { "name": "linux-release",              "inherits": "linux-debug",                  "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
+    { "name": "linux-conda-release",        "inherits": "linux-conda-debug",            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
+    { "name": "macos-x86_64-release",       "inherits": "macos-x86_64-debug",           "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
+    { "name": "macos-arm64-release",        "inherits": "macos-arm64-debug",            "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
+    { "name": "macos-x86_64-conda-release", "inherits": "macos-x86_64-conda-debug",     "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } },
+    { "name": "macos-arm64-conda-release",  "inherits": "macos-arm64-conda-debug",      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" } }
   ],
   "buildPresets": [
-    {"name": "windows-cl-debug",          "configurePreset": "windows-cl-debug",          "targets": "arcticdb_ext" },
-    {"name": "windows-cl-release",        "configurePreset": "windows-cl-release",        "targets": "arcticdb_ext" },
-    {"name": "windows-cl-conda-debug",    "configurePreset": "windows-cl-conda-debug",    "targets": "arcticdb_ext" },
-    {"name": "windows-cl-conda-release",  "configurePreset": "windows-cl-conda-release",  "targets": "arcticdb_ext" },
-    {"name": "linux-debug",               "configurePreset": "linux-debug",               "targets": "arcticdb_ext" },
-    {"name": "linux-release",             "configurePreset": "linux-release",             "targets": "arcticdb_ext" },
-    {"name": "linux-conda-debug",         "configurePreset": "linux-conda-debug",         "targets": "arcticdb_ext" },
-    {"name": "linux-conda-release",       "configurePreset": "linux-conda-release",       "targets": "arcticdb_ext" },
-    {"name": "macos-debug",               "configurePreset": "macos-debug",               "targets": "arcticdb_ext" },
-    {"name": "macos-release",             "configurePreset": "macos-release",             "targets": "arcticdb_ext" },
-    {"name": "macos-conda-debug",         "configurePreset": "macos-conda-debug",         "targets": "arcticdb_ext" },
-    {"name": "macos-conda-release",       "configurePreset": "macos-conda-release",       "targets": "arcticdb_ext" }
+    {"name": "windows-cl-debug",           "configurePreset": "windows-cl-debug",           "targets": "arcticdb_ext" },
+    {"name": "windows-cl-release",         "configurePreset": "windows-cl-release",         "targets": "arcticdb_ext" },
+    {"name": "windows-cl-conda-debug",     "configurePreset": "windows-cl-conda-debug",     "targets": "arcticdb_ext" },
+    {"name": "windows-cl-conda-release",   "configurePreset": "windows-cl-conda-release",   "targets": "arcticdb_ext" },
+    {"name": "linux-debug",                "configurePreset": "linux-debug",                "targets": "arcticdb_ext" },
+    {"name": "linux-release",              "configurePreset": "linux-release",              "targets": "arcticdb_ext" },
+    {"name": "linux-conda-debug",          "configurePreset": "linux-conda-debug",          "targets": "arcticdb_ext" },
+    {"name": "linux-conda-release",        "configurePreset": "linux-conda-release",        "targets": "arcticdb_ext" },
+    {"name": "macos-x86_64-debug",         "configurePreset": "macos-x86_64-debug",         "targets": "arcticdb_ext" },
+    {"name": "macos-x86_64-release",       "configurePreset": "macos-x86_64-release",       "targets": "arcticdb_ext" },
+    {"name": "macos-arm64-debug",          "configurePreset": "macos-arm64-debug",          "targets": "arcticdb_ext" },
+    {"name": "macos-arm64-release",        "configurePreset": "macos-arm64-release",        "targets": "arcticdb_ext" },
+    {"name": "macos-x86_64-conda-debug",   "configurePreset": "macos-x86_64-conda-debug",   "targets": "arcticdb_ext" },
+    {"name": "macos-x86_64-conda-release", "configurePreset": "macos-x86_64-conda-release", "targets": "arcticdb_ext" },
+    {"name": "macos-arm64-conda-debug",    "configurePreset": "macos-arm64-conda-debug",    "targets": "arcticdb_ext" },
+    {"name": "macos-arm64-conda-release",  "configurePreset": "macos-arm64-conda-release",  "targets": "arcticdb_ext" },
   ]
 }
