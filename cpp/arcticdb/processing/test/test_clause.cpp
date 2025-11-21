@@ -65,6 +65,37 @@ TEST(Clause, PartitionEmptyColumn) {
     ASSERT_TRUE(processed.empty());
 }
 
+TEST(Clause, PartitionHashQuality) {
+    // Poor quality hash implementations of integral types, including at least some implementations of std::hash are
+    // basically a static cast. e.g. std::hash<int64_t>{}(100) == 100. This is fast, but leads to poor distributions in
+    // our bucketing, where we mod the hash with the number of buckets. In particular, if performing a grouping hash on
+    // a timeseries where the time points are dates results in all of the rows being partitioned into bucket zero, which
+    // then results in no parallelism in the aggregation clause.
+    using namespace arcticdb;
+    ScopedConfig scoped_config({{"Partition.NumBuckets", 10}});
+    auto component_manager = std::make_shared<ComponentManager>();
+
+    PartitionClause<arcticdb::grouping::HashingGroupers, arcticdb::grouping::ModuloBucketizer> partition{"grouping"};
+    partition.set_component_manager(component_manager);
+
+    int64_t num_rows{100};
+    SegmentInMemory seg;
+    auto col = std::make_shared<Column>(
+            make_scalar_type(DataType::INT64), 0, AllocationType::DYNAMIC, Sparsity::NOT_PERMITTED
+    );
+    for (int64_t idx = 0; idx < num_rows; ++idx) {
+        col->set_scalar<int64_t>(idx, idx * 1'000'000'000);
+    }
+    seg.add_column("grouping", col);
+    seg.set_row_id(num_rows - 1);
+
+    auto proc_unit = ProcessingUnit{std::move(seg)};
+    auto entity_ids = push_entities(*component_manager, std::move(proc_unit));
+    auto processed = partition.process(std::move(entity_ids));
+
+    ASSERT_TRUE(processed.size() > 1);
+}
+
 TEST(Clause, AggregationEmptyColumn) {
     using namespace arcticdb;
     auto component_manager = std::make_shared<ComponentManager>();
