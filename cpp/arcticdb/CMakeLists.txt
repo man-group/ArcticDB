@@ -102,8 +102,6 @@ add_library(xxHash STATIC IMPORTED)
 set_target_properties(xxHash PROPERTIES IMPORTED_LOCATION ${xxHash_LIBRARY})
 set_target_properties(xxHash PROPERTIES INTERFACE_INCLUDE_DIRECTORIES ${xxHash_INCLUDE_DIR})
 
-# Libraries baked into the internal and external Linux images are found by searching various paths
-# On Windows, vcpkg will provide a "Config" which takes precedence
 if (WIN32)
     find_package(Iconv)
 else ()
@@ -168,11 +166,19 @@ if (NOT MSVC)
     add_compile_options("-fno-omit-frame-pointer")
 else()
     add_compile_options(
-        /WX
         /wd4250 # Suppress inherits via dominance warning
-        /we4189 # Unused local variable is an error
         /we4100 # Unused function parameter is an error
+        # For now, we do not want to treat warnings as errors for those builds.
+        # /WX
     )
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Some of the warnings are due to the protobuf library,
+        # observed for the conda-forge builds.
+        # See: https://github.com/protocolbuffers/protobuf/pull/20840
+        add_compile_options(
+            /we4189 # Unused local variable is an error
+        )
+    endif()
 endif ()
 
 ## Core library without python bindings ##
