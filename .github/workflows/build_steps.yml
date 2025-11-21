@@ -26,6 +26,7 @@ jobs:
         os: [0] # Decouples the steps from any distro version changes
         cmake_preset_prefix: [0]
         cibw_build_suffix: [0]
+        cibw_archs_macos: [0]
         envs: [0]
         cmake_extra_args: [0]
         build_dir: [0] # Must be an absolute path
@@ -389,7 +390,7 @@ jobs:
         env:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
-          CIBW_ARCHS_MACOS: "arm64"
+          CIBW_ARCHS_MACOS: ${{matrix.cibw_archs_macos || 'arm64'}}
           # Ensure macOS builds use sccache as the compiler launcher
           CIBW_ENVIRONMENT_MACOS: |
             CMAKE_C_COMPILER_LAUNCHER=sccache
