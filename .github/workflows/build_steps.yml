@@ -175,7 +175,6 @@ jobs:
       - name: Install sanitizer runtime libraries
         if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
         run: |
-          yum install -y compiler-rt clang lld
           ldconfig
           find /usr -name "libclang_rt.asan*.so*" 2>/dev/null || echo "ASan library not found in standard locations"
 
