@@ -537,14 +537,8 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
 
 std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch_read_descriptor_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        const ReadOptions& read_options
+        const BatchReadOptions& batch_read_options
 ) {
-
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            read_options.batch_throw_on_error().has_value(),
-            "ReadOptions::batch_throw_on_error_ should always be set here"
-    );
-
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
@@ -554,7 +548,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     }
     auto descriptors = folly::collectAll(descriptor_futures).get();
     TransformBatchResultsFlags flags;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
 }
 
@@ -1288,14 +1282,13 @@ std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
 
 std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::batch_read_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options, std::any& handler_data
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
+        std::any& handler_data
 ) {
     py::gil_scoped_release release_gil;
-    // This read option should always be set when calling batch_read
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            read_options.batch_throw_on_error().has_value(),
-            "ReadOptions::batch_throw_on_error_ should always be set here"
-    );
+    if (stream_ids.empty()) {
+        return {};
+    }
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
 
@@ -1313,7 +1306,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                     &version_queries,
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
-                                    &read_options,
+                                    read_options = batch_read_options.at(idx),
                                     &handler_data](auto&& opt_index_key) {
                             auto version_info = get_version_identifier(
                                     stream_ids[idx],
@@ -1349,7 +1342,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
 
     TransformBatchResultsFlags flags;
     flags.convert_no_data_found_to_key_not_found_ = true;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
 }
 
@@ -2079,13 +2072,8 @@ folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> Local
 std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> LocalVersionedEngine::
         batch_read_metadata_internal(
                 const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-                const ReadOptions& read_options
+                const BatchReadOptions& batch_read_options
         ) {
-    // This read option should always be set when calling batch_read_metadata
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            read_options.batch_throw_on_error().has_value(),
-            "ReadOptions::batch_throw_on_error_ should always be set here"
-    );
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
     for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
@@ -2098,7 +2086,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // For legacy reason read_metadata_batch is not throwing if the symbol is missing
     TransformBatchResultsFlags flags;
     flags.throw_on_missing_symbol_ = false;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(metadatas), stream_ids, flags, version_queries);
 }
 

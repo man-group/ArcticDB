@@ -1125,3 +1125,34 @@ def test_sparse_strings_from_processing_pipeline(lmdb_version_store_dynamic_sche
     expected["new_col"] = np.where(expected["condition"].to_numpy(), expected["col_1"], expected["col_2"])
     expected.reset_index(drop=True, inplace=True)
     assert_frame_equal_with_arrow(table, expected)
+
+
+def test_arrow_read_batch_with_strings(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym_1, sym_2 = "sym_1", "sym_2"
+    df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})
+    df_2 = pd.DataFrame({"col_1": ["a", "aa", "aaa"], "col_2": ["a", "a", "a"]})
+    lib.batch_write([sym_1, sym_2], [df_1, df_2])
+
+    arrow_string_format_default = ArrowOutputStringFormat.SMALL_STRING
+    arrow_string_format_per_column = {"col_1": ArrowOutputStringFormat.CATEGORICAL}
+    per_symbol_arrow_string_format_default = [ArrowOutputStringFormat.LARGE_STRING, None]
+    per_symbol_arrow_string_format_per_column = [
+        None,  # First item will use the global arrow_string_format_per_column
+        {"col_2": ArrowOutputStringFormat.CATEGORICAL},
+    ]
+    batch_result = lib.batch_read(
+        [sym_1, sym_2],
+        arrow_string_format_default=arrow_string_format_default,
+        arrow_string_format_per_column=arrow_string_format_per_column,
+        per_symbol_arrow_string_format_default=per_symbol_arrow_string_format_default,
+        per_symbol_arrow_string_format_per_column=per_symbol_arrow_string_format_per_column,
+    )
+    table_1 = batch_result[sym_1].data
+    assert table_1.schema.field(0).type == pa.dictionary(pa.int32(), pa.large_string())  # global per_column
+    assert table_1.schema.field(1).type == pa.large_string()  # per symbol default
+    assert_frame_equal_with_arrow(table_1, df_1)
+    table_2 = batch_result[sym_2].data
+    assert table_2.schema.field(0).type == pa.string()  # global default for all symbols
+    assert table_2.schema.field(1).type == pa.dictionary(pa.int32(), pa.large_string())  # per_column override
+    assert_frame_equal_with_arrow(table_2, df_2)

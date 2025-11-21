@@ -240,7 +240,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
+            std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
             std::any& handler_data
     );
 
@@ -253,7 +253,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const ReadOptions& read_options
+            const BatchReadOptions& batch_read_options
     );
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version_internal(
@@ -269,7 +269,7 @@ class LocalVersionedEngine : public VersionedEngine {
     std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>>
     batch_read_metadata_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const ReadOptions& read_options
+            const BatchReadOptions& batch_read_options
     );
 
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(
