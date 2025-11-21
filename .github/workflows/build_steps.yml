@@ -113,6 +113,14 @@ jobs:
           # Show sccache stats
           sccache --show-stats
 
+      - name: Set CMAKE_OSX_ARCHITECTURES for Python 3.8 on macOS
+        if: matrix.os == 'macos' && inputs.python3 == 8
+        run: |
+          # Audit wheels requires `CMAKE_OSX_ARCHITECTURES` to be set for this configuration.
+          # TODO: come-up with preset for this and use it instead of setting the environment variable.
+          # E.g., see: https://github.com/man-group/ArcticDB/pull/2771
+          echo "CMAKE_OSX_ARCHITECTURES=$(uname -m)" >> $GITHUB_ENV
+
       - name: Windows Pagefile
         if: matrix.os == 'windows'
         uses: al-cheb/configure-pagefile-action@v1.3
