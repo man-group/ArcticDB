@@ -81,16 +81,12 @@ class Arctic:
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
         output_format: Union[OutputFormat, str], default = OutputFormat.PANDAS
-            Controls the default output format of all operations returning a dataframe.
-            The default behavior (OutputFormat.PANDAS) is to return `pandas.DataFrame`s or `pandas.Series` backed by
-            numpy arrays.
-            OutputFormat.EXPERIMENTAL_ARROW will return all dataframes as `pyarrow.Table`s. The arrow API is still
-            experimental and the arrow layout might change in a minor release.
-            Accepts the OutputFormat as either OutputFormat enum values or as case-insensitive strings like "pandas"
-            and "experimental_arrow".
+            Controls the default output format of all operations returning a dataframe on libraries from this `Arctic`
+            instance.
+            See documentation of `OutputFormat` for more information on the different options.
 
         arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"] = ArrowOutputStringFormat.LARGE_STRING
-            Controls the default string format used for `OutputFormat.EXPERIMENTAL_ARROW`.
+            Controls the default string format used for `ARROW` or `POLARS` output format.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
 
         Examples
@@ -197,13 +193,13 @@ class Arctic:
 
         output_format: Optional[Union[OutputFormat, str]], default = None
             Controls the default output format of all operations on the library returning a dataframe.
-            For more information see documentation of `Arctic.__init__`.
-            If `None` uses the output format from the Arctic instance.
+            See documentation of `OutputFormat` for more information on the different options.
+            If `None` uses the output format from the `Arctic` instance.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            Controls the default string format used for `ARROW` or `POLARS` output format.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            If `None` uses the default arrow_string_format from the `Library` instance.
+            If `None` uses the `arrow_string_format_default` from the `Arctic` instance.
 
         Examples
         --------
@@ -269,13 +265,13 @@ class Arctic:
 
         output_format: Optional[Union[OutputFormat, str]], default = None
             Controls the default output format of all operations on the library returning a dataframe.
-            For more information see documentation of `Arctic.__init__`.
-            If `None` uses the output format from the Arctic instance.
+            See documentation of `OutputFormat` for more information on the different options.
+            If `None` uses the output format from the `Arctic` instance.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            Controls the default string format used for `ARROW` or `POLARS` output format.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            If `None` uses the default arrow_string_format from the `Library` instance.
+            If `None` uses the `arrow_string_format_default` from the `Arctic` instance.
 
         Examples
         --------

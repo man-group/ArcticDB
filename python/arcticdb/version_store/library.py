@@ -1979,13 +1979,13 @@ class Library:
 
         output_format: Optional[Union[OutputFormat, str]], default=None
             Controls the output format of the result dataframe.
-            For more information see documentation of `Arctic.__init__`.
-            If `None` uses the default output format from the `Library` instance.
+            See documentation of `OutputFormat` for more information on the different options.
+            If `None` uses the output format from the `Library` instance.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            Controls the default string format used for `ARROW` or `POLARS` output format.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            If `None` uses the default arrow_string_format from the `Library` instance.
+            If `None` uses the `arrow_string_format_default` from the `Library` instance.
 
         arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None
             Provides per column name overrides for `arrow_string_format_default`
@@ -2081,11 +2081,11 @@ class Library:
 
         output_format: Optional[Union[OutputFormat, str]], default=None
             Controls the output format of the result dataframes.
-            For more information see documentation of `Arctic.__init__`.
-            If `None` uses the default output format from the `Library` instance.
+            See documentation of `OutputFormat` for more information on the different options.
+            If `None` uses the output format from the `Library` instance.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            Controls the default string format used for `ARROW` or `POLARS` output format.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
             It serves as the default for the entire batch. The string format settings inside the `ReadRequest`s will
             override this batch level setting.
@@ -2261,14 +2261,14 @@ class Library:
             individual dataframes, and will be applied to the joined data.
 
         output_format: Optional[Union[OutputFormat, str]], default=None
-            Controls the output format of the result dataframe.
-            For more information see documentation of `Arctic.__init__`.
-            If `None` uses the default output format from the `Library` instance.
+            Controls the output format of the result dataframes.
+            See documentation of `OutputFormat` for more information on the different options.
+            If `None` uses the output format from the `Library` instance.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            If using `output_format=EXPERIMENTAL_ARROW` it sets the output format of string columns for arrow.
+            Controls the default string format used for `ARROW` or `POLARS` output format.
             See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            If `None` uses the default arrow_string_format from the `Library` instance.
+            If `None` uses the `arrow_string_format_default` from the `Library` instance.
 
         arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None
             Provides per column name overrides for `arrow_string_format_default`
