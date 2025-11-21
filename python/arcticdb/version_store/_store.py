@@ -385,7 +385,7 @@ class NativeVersionStore:
 
     def _set_output_format_for_pipeline_tests(self, output_format):
         self.set_output_format(output_format)
-        if output_format == OutputFormat.EXPERIMENTAL_ARROW:
+        if output_format == OutputFormat.PYARROW:
             self._test_convert_arrow_back_to_pandas = True
 
     @classmethod
@@ -2699,7 +2699,7 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.EXPERIMENTAL_POLARS.lower():
+            if output_format.lower() == OutputFormat.POLARS.lower():
                 data = pl.from_arrow(data)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)

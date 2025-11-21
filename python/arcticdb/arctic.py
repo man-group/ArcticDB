@@ -81,13 +81,14 @@ class Arctic:
             Can be overridden by specifying the encoding version in the LibraryOptions argument to create_library.
 
         output_format: Union[OutputFormat, str], default = OutputFormat.PANDAS
-            Controls the default output format of all operations returning a dataframe on libraries from this `Arctic`
-            instance.
-            See documentation of `OutputFormat` for more information on the different options.
+            Default output format for all read operations on libraries created from this `Arctic` instance.
+            Can be overridden per library or per read operation.
+            See `OutputFormat` documentation for details on available formats.
 
-        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"] = ArrowOutputStringFormat.LARGE_STRING
-            Controls the default string format used for `ARROW` or `POLARS` output format.
-            See documentation of `ArrowOutputStringFormat` for more information on the different options.
+        arrow_string_format_default: Union[ArrowOutputStringFormat, "pa.DataType"], default = ArrowOutputStringFormat.LARGE_STRING
+            Default string column format when using `PYARROW` or `POLARS` output formats.
+            Can be overridden per library or per read operation.
+            See `ArrowOutputStringFormat` documentation for details on available string formats.
 
         Examples
         --------
@@ -192,14 +193,16 @@ class Arctic:
             Unused if create_if_missing is False.
 
         output_format: Optional[Union[OutputFormat, str]], default = None
-            Controls the default output format of all operations on the library returning a dataframe.
-            See documentation of `OutputFormat` for more information on the different options.
-            If `None` uses the output format from the `Arctic` instance.
+            Default output format for all read operations on this library.
+            If `None`, uses the output format from the `Arctic` instance.
+            Can be overridden per read operation.
+            See `OutputFormat` documentation for details on available formats.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            Controls the default string format used for `ARROW` or `POLARS` output format.
-            See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            If `None` uses the `arrow_string_format_default` from the `Arctic` instance.
+            Default string column format when using `PYARROW` or `POLARS` output formats on this library.
+            If `None`, uses the `arrow_string_format_default` from the `Arctic` instance.
+            Can be overridden per read operation.
+            See `ArrowOutputStringFormat` documentation for details on available string formats.
 
         Examples
         --------
@@ -264,14 +267,16 @@ class Arctic:
             EnterpriseLibraryOptions. These options are only relevant to ArcticDB enterprise users.
 
         output_format: Optional[Union[OutputFormat, str]], default = None
-            Controls the default output format of all operations on the library returning a dataframe.
-            See documentation of `OutputFormat` for more information on the different options.
-            If `None` uses the output format from the `Arctic` instance.
+            Default output format for all read operations on this library.
+            If `None`, uses the output format from the `Arctic` instance.
+            Can be overridden per read operation.
+            See `OutputFormat` documentation for details on available formats.
 
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            Controls the default string format used for `ARROW` or `POLARS` output format.
-            See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            If `None` uses the `arrow_string_format_default` from the `Arctic` instance.
+            Default string column format when using `PYARROW` or `POLARS` output formats on this library.
+            If `None`, uses the `arrow_string_format_default` from the `Arctic` instance.
+            Can be overridden per read operation.
+            See `ArrowOutputStringFormat` documentation for details on available string formats.
 
         Examples
         --------

@@ -25,7 +25,7 @@ def stringify_dictionary_encoded_columns(table, string_type=None):
 
 def convert_arrow_to_pandas_for_tests(table):
     """
-    Converts `pa.Table` outputted via `output_format=OutputFormat.EXPERIMENTAL_ARROW` to a `pd.DataFrame` so it would
+    Converts `pa.Table` outputted via `output_format=OutputFormat.PYARROW` to a `pd.DataFrame` so it would
     be identical to the one outputted via `output_format=OutputFormat.PANDAS`. This requires the following changes:
     - Replaces dictionary encoded string columns with regular string columns.
     - Fills null values in int columns with zeros.
