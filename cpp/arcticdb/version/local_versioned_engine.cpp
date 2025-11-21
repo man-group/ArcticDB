@@ -1327,7 +1327,7 @@ std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedE
                         .thenValue([this,
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
-                                    read_options,
+                                    read_options = batch_read_options.at(idx),
                                     &handler_data](ReadVersionOutput&& result) {
                             auto& keys = result.frame_and_descriptor_.keys_;
                             if (keys.empty()) {
