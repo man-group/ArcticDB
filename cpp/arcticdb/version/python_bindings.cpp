@@ -254,12 +254,19 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("set_incompletes", &ReadOptions::set_incompletes)
             .def("set_set_tz", &ReadOptions::set_set_tz)
             .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
-            .def("set_batch_throw_on_error", &ReadOptions::set_batch_throw_on_error)
             .def("set_output_format", &ReadOptions::set_output_format)
             .def("set_arrow_output_default_string_format", &ReadOptions::set_arrow_output_default_string_format)
             .def("set_arrow_output_per_column_string_format", &ReadOptions::set_arrow_output_per_column_string_format)
             .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
             .def_property_readonly("output_format", &ReadOptions::output_format);
+
+    py::class_<BatchReadOptions>(version, "PythonVersionStoreBatchReadOptions")
+            .def(py::init([](bool batch_throw_on_error) { return BatchReadOptions(batch_throw_on_error); }))
+            .def("set_read_options", &BatchReadOptions::set_read_options)
+            .def("set_read_options_per_symbol", &BatchReadOptions::set_read_options_per_symbol)
+            .def("set_output_format", &BatchReadOptions::set_output_format)
+            .def("set_batch_throw_on_error", &BatchReadOptions::set_batch_throw_on_error)
+            .def("at", &BatchReadOptions::at);
 
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
     version.def(
@@ -975,11 +982,13 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const std::vector<StreamId>& stream_ids,
                         const std::vector<VersionQuery>& version_queries,
                         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-                        const ReadOptions& read_options) {
+                        const BatchReadOptions& batch_read_options) {
                         auto handler_data =
-                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                                TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format());
                         return python_util::adapt_read_dfs(
-                                v.batch_read(stream_ids, version_queries, read_queries, read_options, handler_data),
+                                v.batch_read(
+                                        stream_ids, version_queries, read_queries, batch_read_options, handler_data
+                                ),
                                 &handler_data
                         );
                     },

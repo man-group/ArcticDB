@@ -899,19 +899,20 @@ std::unordered_map<VersionId, bool> PythonVersionStore::get_all_tombstoned_versi
 
 std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options, std::any& handler_data
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
+        std::any& handler_data
 ) {
 
     auto read_versions_or_errors =
-            batch_read_internal(stream_ids, version_queries, read_queries, read_options, handler_data);
+            batch_read_internal(stream_ids, version_queries, read_queries, batch_read_options, handler_data);
     std::vector<std::variant<ReadResult, DataError>> res;
     for (auto&& [idx, read_version_or_error] : folly::enumerate(read_versions_or_errors)) {
         util::variant_match(
                 read_version_or_error,
-                [&res, &read_options](ReadVersionOutput& read_version) {
+                [&res, &batch_read_options](ReadVersionOutput& read_version) {
                     res.emplace_back(create_python_read_result(
                             read_version.versioned_item_,
-                            read_options.output_format(),
+                            batch_read_options.output_format(),
                             std::move(read_version.frame_and_descriptor_)
                     ));
                 },
@@ -1292,10 +1293,10 @@ std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> PythonVersionStore::
 
 std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> PythonVersionStore::batch_read_metadata(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        const ReadOptions& read_options
+        const BatchReadOptions& batch_read_options
 ) {
     ARCTICDB_SAMPLE(BatchReadMetadata, 0)
-    auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, read_options);
+    auto metadatas_or_errors = batch_read_metadata_internal(stream_ids, version_queries, batch_read_options);
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> results;
     for (auto& metadata_or_error : metadatas_or_errors) {
@@ -1321,10 +1322,10 @@ DescriptorItem PythonVersionStore::read_descriptor(const StreamId& stream_id, co
 
 std::vector<std::variant<DescriptorItem, DataError>> PythonVersionStore::batch_read_descriptor(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        const ReadOptions& read_options
+        const BatchReadOptions& batch_read_options
 ) {
 
-    return batch_read_descriptor_internal(stream_ids, version_queries, read_options);
+    return batch_read_descriptor_internal(stream_ids, version_queries, batch_read_options);
 }
 
 ReadResult PythonVersionStore::read_index(

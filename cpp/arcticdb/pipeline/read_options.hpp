@@ -10,6 +10,7 @@
 
 #include <arcticdb/entity/output_format.hpp>
 #include <arcticdb/util/optional_defaults.hpp>
+#include <arcticdb/util/variant.hpp>
 #include <arcticdb/arrow/arrow_output_options.hpp>
 
 namespace arcticdb {
@@ -22,7 +23,6 @@ struct ReadOptionsData {
     std::optional<bool> allow_sparse_;
     std::optional<bool> set_tz_;
     std::optional<bool> optimise_string_memory_;
-    std::optional<bool> batch_throw_on_error_;
     OutputFormat output_format_ = OutputFormat::PANDAS;
     ArrowOutputConfig arrow_output_config_ = ArrowOutputConfig{};
 };
@@ -60,10 +60,6 @@ struct ReadOptions {
 
     [[nodiscard]] const std::optional<bool>& incompletes() const { return data_->incompletes_; }
 
-    [[nodiscard]] const std::optional<bool>& batch_throw_on_error() const { return data_->batch_throw_on_error_; }
-
-    void set_batch_throw_on_error(bool batch_throw_on_error) { data_->batch_throw_on_error_ = batch_throw_on_error; }
-
     void set_output_format(OutputFormat output_format) { data_->output_format_ = output_format; }
 
     [[nodiscard]] OutputFormat output_format() const { return data_->output_format_; }
@@ -99,4 +95,45 @@ struct ReadOptions {
 
     [[nodiscard]] ReadOptions clone() const { return ReadOptions(std::make_shared<ReadOptionsData>(*data_)); }
 };
+
+using ReadOptionsPerSymbol = std::variant<ReadOptions, std::vector<ReadOptions>>;
+
+struct BatchReadOptionsData {
+    ReadOptionsPerSymbol read_options_per_symbol_;
+    bool batch_throw_on_error_;
+    OutputFormat output_format_ = OutputFormat::PANDAS;
+
+    BatchReadOptionsData(bool batch_throw_on_error) : batch_throw_on_error_(batch_throw_on_error) {}
+};
+
+struct BatchReadOptions {
+    std::shared_ptr<BatchReadOptionsData> data_;
+
+    BatchReadOptions(bool batch_throw_on_error) {
+        data_ = std::make_shared<BatchReadOptionsData>(batch_throw_on_error);
+    }
+
+    void set_read_options(const ReadOptions& read_options) { data_->read_options_per_symbol_ = read_options; }
+
+    void set_read_options_per_symbol(const std::vector<ReadOptions>& read_options_per_symbol) {
+        data_->read_options_per_symbol_ = read_options_per_symbol;
+    }
+
+    [[nodiscard]] ReadOptions at(size_t idx) const {
+        return util::variant_match(
+                data_->read_options_per_symbol_,
+                [&](const std::vector<ReadOptions>& read_options) { return read_options.at(idx); },
+                [&](ReadOptions read_options) { return read_options; }
+        );
+    }
+
+    void set_batch_throw_on_error(bool batch_throw_on_error) { data_->batch_throw_on_error_ = batch_throw_on_error; }
+
+    [[nodiscard]] bool batch_throw_on_error() const { return data_->batch_throw_on_error_; }
+
+    void set_output_format(OutputFormat output_format) { data_->output_format_ = output_format; }
+
+    [[nodiscard]] OutputFormat output_format() const { return data_->output_format_; }
+};
+
 } // namespace arcticdb
