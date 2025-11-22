@@ -155,6 +155,9 @@ void LibraryManager::modify_library_option(
                 case ModifiableLibraryOption::COLUMNS_PER_SEGMENT:
                     mutable_write_options->set_column_group_size(get_positive_int(new_value));
                     break;
+                case ModifiableLibraryOption::RECURSIVE_NORMALIZERS:
+                    mutable_write_options->set_recursive_normalizers(get_bool(new_value));
+                    break;
                 default:
                     throw UnsupportedLibraryOptionValue(fmt::format("Invalid library option: {}", option));
                 }

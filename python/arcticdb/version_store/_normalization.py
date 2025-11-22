@@ -14,6 +14,7 @@ import sys
 if sys.version_info >= (3, 9):
     import zoneinfo
 from datetime import timedelta
+from functools import partial
 import math
 import json
 
@@ -1347,7 +1348,8 @@ class MsgPackNormalizer(Normalizer):
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
     def normalize(self, obj, **kwargs):
-        packed, nbytes = self._msgpack_padded_packb(obj)
+        disallow_pickle = kwargs.get("disallow_pickle", None)
+        packed, nbytes = self._msgpack_padded_packb(obj, disallow_pickle=disallow_pickle)
 
         norm_meta = NormalizationMetadata()
         norm_meta.msg_pack_frame.version = 1
@@ -1381,7 +1383,7 @@ class MsgPackNormalizer(Normalizer):
         col_data = np_arr.view(np.uint8)[:sb]
         return self._msgpack_unpackb(memoryview(col_data))
 
-    def _custom_pack(self, obj):
+    def _custom_pack(self, obj, disallow_pickle=None):
         if isinstance(obj, pd.Timestamp):
             tz = _ensure_str_timezone(get_timezone(obj.tz)) if obj.tz is not None else None
             return ExtType(MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz]))
@@ -1392,8 +1394,8 @@ class MsgPackNormalizer(Normalizer):
         if isinstance(obj, datetime.timedelta):
             return ExtType(MsgPackSerialization.PY_TIMEDELTA, packb(pd.Timedelta(obj).value))
 
-        if self.strict_mode:
-            raise TypeError("Normalisation is running in strict mode, writing pickled data is disabled.")
+        if disallow_pickle:
+            raise TypeError("Normalizing data by pickling has been disabled.")
         else:
             return ExtType(MsgPackSerialization.PY_PICKLE_3, packb(Pickler.write(obj)))
 
@@ -1425,11 +1427,20 @@ class MsgPackNormalizer(Normalizer):
 
         return ExtType(code, data)
 
-    def _msgpack_packb(self, obj):
-        return packb(obj, default=self._custom_pack)
+    def _should_disallow_pickle(self, disallow_pickle):
+        # `disallow_pickle` set by function parameter, has priority
+        # Otherwise fallback to library option `strict_mode`
+        return self.strict_mode if disallow_pickle is None else disallow_pickle
 
-    def _msgpack_padded_packb(self, obj):
-        return padded_packb(obj, default=self._custom_pack)
+    def _msgpack_packb(self, obj, disallow_pickle=None):
+        return packb(
+            obj, default=partial(self._custom_pack, disallow_pickle=self._should_disallow_pickle(disallow_pickle))
+        )
+
+    def _msgpack_padded_packb(self, obj, disallow_pickle=None):
+        return padded_packb(
+            obj, default=partial(self._custom_pack, disallow_pickle=self._should_disallow_pickle(disallow_pickle))
+        )
 
     def _msgpack_unpackb(self, buff, raw=False):
         return unpackb(buff, raw=raw, ext_hook=self._ext_hook)

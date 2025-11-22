@@ -31,30 +31,38 @@ def install_tools():
     return black or clang
 
 
-def lint_python(in_place: bool):
+def lint_python(in_place: bool, specific_file: str = None):
     try:
         import black
         assert black.__version__ == black_version
     except ImportError:
         raise RuntimeError("black not installed. Run this script with --install-tools then try again")
 
-    if in_place:
-        return subprocess.run(["black", "-l", "120", "python/"]).returncode
+    if specific_file:
+        path = specific_file
     else:
-        return subprocess.run(["black", "-l", "120", "--check", "python/"]).returncode
+        path = "python/"
+
+    if in_place:
+        return subprocess.run(["black", "-l", "120", path]).returncode
+    else:
+        return subprocess.run(["black", "-l", "120", "--check", path]).returncode
 
 
-def lint_cpp(in_place: bool):
+def lint_cpp(in_place: bool, specific_file: str = None):
     try:
         import clang_format
     except ImportError:
         raise RuntimeError("clang-format not installed. Run this script with --install-tools then try again")
 
     files = []
-    root = pathlib.Path("cpp", "arcticdb")
-    for e in ("*.cpp", "*.hpp"):
-        for f in root.rglob(e):
-            files.append(str(f))
+    if specific_file:
+        files.append(specific_file)
+    else:
+        root = pathlib.Path("cpp", "arcticdb")
+        for e in ("*.cpp", "*.hpp"):
+            for f in root.rglob(e):
+                files.append(str(f))
 
     args = ["clang-format"]
     if in_place:
@@ -69,11 +77,11 @@ def lint_cpp(in_place: bool):
     return subprocess.run(args).returncode
 
 
-def main(type: str, in_place: bool):
+def main(type: str, in_place: bool, specific_file: str):
     if type == "python":
-        return lint_python(in_place)
+        return lint_python(in_place, specific_file)
     elif type == "cpp":
-        return lint_cpp(in_place)
+        return lint_cpp(in_place, specific_file)
     else:
         return lint_python(in_place) or lint_cpp(in_place)
 
@@ -105,6 +113,11 @@ if __name__ == "__main__":
         action='store_true',
         help="Apply linting rules to your working copy. Changes files."
     )
+    parser.add_argument(
+        "-f", 
+        "--file", 
+        help="Apply linting rules to a specific file."
+    )
     args = parser.parse_args()
 
     if args.install_tools:
@@ -122,6 +135,7 @@ if __name__ == "__main__":
     return_code = main(
         type=args.type,
         in_place=args.in_place,
+        specific_file=args.file,
     )
 
     sys.exit(return_code)

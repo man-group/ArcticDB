@@ -248,6 +248,21 @@ def test_modify_options_cols_per_segment(lmdb_storage, lib_name):
     assert proto_options.column_group_size == 200
 
 
+def test_modify_options_recursive_normalizers(lmdb_storage, lib_name):
+    ac = lmdb_storage.create_arctic()
+    lib = ac.create_library(lib_name)
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert proto_options.recursive_normalizers
+
+    ac.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, False)
+
+    proto_options = lib._nvs.lib_cfg().lib_desc.version.write_options
+    assert not proto_options.recursive_normalizers
+
+
 def test_modify_options_replication(lmdb_storage, lib_name):
     ac = lmdb_storage.create_arctic()
     lib = ac.create_library(lib_name)
