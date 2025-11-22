@@ -224,6 +224,16 @@ class PyTimestampRange {
     timestamp end_;
 };
 
+inline py::list node_results_to_python_list(std::vector<NodeReadResult>&& node_results) {
+    py::list node_results_list;
+    for (auto& node_result : node_results) {
+        node_results_list.append(py::make_tuple(
+                node_result.symbol_, std::move(node_result.frame_data_), pb_to_python(node_result.norm_meta_)
+        ));
+    }
+    return node_results_list;
+}
+
 inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&& r, std::any* const handler) {
     auto ret = std::move(r);
     py::list lst;
@@ -232,22 +242,22 @@ inline py::list adapt_read_dfs(std::vector<std::variant<ReadResult, DataError>>&
         util::variant_match(
                 res,
                 [&lst, &output_format](ReadResult& read_result) {
-                    auto pynorm = python_util::pb_to_python(read_result.norm_meta);
+                    auto pynorm = pb_to_python(read_result.norm_meta);
                     util::check(
                             std::holds_alternative<proto::descriptors::UserDefinedMetadata>(read_result.user_meta),
                             "Expected single user metadata in adapt_read_dfs, received vector"
                     );
-                    auto pyuser_meta = python_util::pb_to_python(
-                            std::get<proto::descriptors::UserDefinedMetadata>(read_result.user_meta)
-                    );
-                    auto multi_key_meta = python_util::pb_to_python(read_result.multi_key_meta);
+                    auto pyuser_meta =
+                            pb_to_python(std::get<proto::descriptors::UserDefinedMetadata>(read_result.user_meta));
+                    auto multi_key_meta = pb_to_python(read_result.multi_key_meta);
+                    auto node_results = node_results_to_python_list(std::move(read_result.node_results));
                     lst.append(py::make_tuple(
                             read_result.item,
                             std::move(read_result.frame_data),
                             pynorm,
                             pyuser_meta,
                             multi_key_meta,
-                            read_result.multi_keys
+                            std::move(node_results)
                     ));
                     util::check(
                             !output_format.has_value() || output_format.value() == read_result.output_format,
