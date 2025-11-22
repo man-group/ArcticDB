@@ -909,11 +909,13 @@ std::vector<std::variant<ReadResult, DataError>> PythonVersionStore::batch_read(
     for (auto&& [idx, read_version_or_error] : folly::enumerate(read_versions_or_errors)) {
         util::variant_match(
                 read_version_or_error,
-                [&res, &batch_read_options](ReadVersionOutput& read_version) {
+                [&res, &batch_read_options](ReadVersionWithNodesOutput& read_version) {
                     res.emplace_back(create_python_read_result(
-                            read_version.versioned_item_,
+                            read_version.root_.versioned_item_,
                             batch_read_options.output_format(),
-                            std::move(read_version.frame_and_descriptor_)
+                            std::move(read_version.root_.frame_and_descriptor_),
+                            std::nullopt,
+                            std::move(read_version.nodes_)
                     ));
                 },
                 [&res](DataError& data_error) { res.emplace_back(std::move(data_error)); }
@@ -996,9 +998,11 @@ ReadResult PythonVersionStore::read_dataframe_version(
     auto opt_version_and_frame =
             read_dataframe_version_internal(stream_id, version_query, read_query, read_options, handler_data);
     return create_python_read_result(
-            opt_version_and_frame.versioned_item_,
+            opt_version_and_frame.root_.versioned_item_,
             read_options.output_format(),
-            std::move(opt_version_and_frame.frame_and_descriptor_)
+            std::move(opt_version_and_frame.root_.frame_and_descriptor_),
+            std::nullopt,
+            std::move(opt_version_and_frame.nodes_)
     );
 }
 
