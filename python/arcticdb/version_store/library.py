@@ -975,6 +975,7 @@ class Library:
         staged=False,
         validate_index=True,
         index_column: Optional[str] = None,
+        recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
         Write ``data`` to the specified ``symbol``. If ``symbol`` already exists then a new version will be created to
@@ -1023,6 +1024,21 @@ class Library:
         index_column: Optional[str], default=None
             Optional specification of timeseries index column if data is an Arrow table. Ignored if data is not an Arrow
             table.
+        recursive_normalizers: bool, default None
+            Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
+            If None, falls back to the corresponding setting in the library configuration. For libraries created with < v6.4.0,
+            the default library configuration is True, otherwise it is False.
+            The library configuration can be modified via Arctic.modify_library_option(). Please refer to
+            https://docs.arcticdb.io/latest/api/arctic/#arcticdb.Arctic.modify_library_option for more details.
+            The data structure can be nested or a mix of lists, dictionaries and tuples.
+            Example:
+                data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+                lib.write(symbol, data, recursive_normalizers=False) # ArcticUnsupportedDataTypeException will be thrown
+                lib.write(symbol, data, recursive_normalizers=True) # The data will be successfully written
+                ac.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
+                lib.write(symbol, data) # The data will be successfully written
+            Please refer to https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers for more details
+            of this feature.
 
         Returns
         -------
@@ -1051,11 +1067,20 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
+        is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
+            **{"recursive_normalizers": recursive_normalizers}
+        )
         if not self._allowed_input_type(data):
-            raise ArcticUnsupportedDataTypeException(
-                "data is of a type that cannot be normalized. Consider using "
-                f"write_pickle instead. type(data)=[{type(data)}]"
-            )
+            if is_recursive_normalizers_enabled:
+                if staged:
+                    raise ArcticUnsupportedDataTypeException(
+                        "Staged data cannot be natively normalized. The recursive normalizer is enabled but is not allowed to work on staged data."
+                    )
+            else:
+                raise ArcticUnsupportedDataTypeException(
+                    "Data is of a type that cannot be normalized. Consider using "
+                    f"write_pickle instead. type(data)=[{type(data)}]"
+                )
 
         return self._nvs.write(
             symbol=symbol,
@@ -1068,10 +1093,18 @@ class Library:
             index_column=index_column,
             norm_failure_options_msg="Using write_pickle will allow the object to be written. However, many operations "
             "(such as date_range filtering and column selection) will not work on pickled data.",
+            recursive_normalizers=recursive_normalizers,
+            recursive_normalize_msgpack_no_pickle_fallback=True,
         )
 
     def write_pickle(
-        self, symbol: str, data: Any, metadata: Any = None, prune_previous_versions: bool = False, staged=False
+        self,
+        symbol: str,
+        data: Any,
+        metadata: Any = None,
+        prune_previous_versions: bool = False,
+        staged=False,
+        recursive_normalizers: bool = None,
     ) -> VersionedItem:
         """
         See `write`. This method differs from `write` only in that ``data`` can be of any type that is serialisable via
@@ -1093,6 +1126,19 @@ class Library:
             See documentation on `write`.
         staged
             See documentation on `write`.
+        recursive_normalizers: bool, default None
+            See documentation on `write`.
+            If enabled, attempts to recursively normalize data before falling back to pickling.
+            If the leaf nodes cannot be natively normalized, they will be pickled,
+            resulting in the overall data being recursively normalized and partially pickled.
+            Example:
+                data = {"a": np.arange(5), "b": ABC()} # ABC is some custom class that cannot be natively normalized
+                # Exception will be thrown, as the leaf node requires pickling to normalize
+                lib.write(symbol, data, recursive_normalizers=True)
+                # The data will be successfully written by partially pickling the leaf node
+                lib.write_pickle(symbol, data, recursive_normalizers=True)
+                # The data will be successfully written by pickling the whole object
+                lib.write_pickle(symbol, data)
 
         Returns
         -------
@@ -1117,6 +1163,8 @@ class Library:
             prune_previous_version=prune_previous_versions,
             pickle_on_failure=True,
             parallel=staged,
+            recursive_normalizers=recursive_normalizers,
+            recursive_normalize_msgpack_no_pickle_fallback=False,
         )
 
     @staticmethod

@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 import numpy as np
 import arcticdb
-from arcticdb import QueryBuilder
+from arcticdb import QueryBuilder, LibraryOptions
 from arcticdb.util.test import equals
 from arcticdb.flattener import Flattener
 from arcticdb.version_store._custom_normalizers import CustomNormalizer, register_normalizer
@@ -20,7 +20,8 @@ from arcticdb.exceptions import (
     UnsupportedKeyInDictionary,
     ArcticException as ArcticNativeException,
 )
-from arcticdb_ext.storage import KeyType
+from arcticdb.version_store.library import ArcticUnsupportedDataTypeException
+from arcticdb_ext.storage import KeyType, ModifiableLibraryOption
 from arcticdb_ext.version_store import NoSuchVersionException
 import arcticdb_ext.stream as adb_stream
 import arcticdb_ext
@@ -55,6 +56,61 @@ def assert_vit_equals_except_data(left, right):
     assert left.metadata == right.metadata
     assert left.host == right.host
     assert left.timestamp == right.timestamp
+
+
+@pytest.mark.parametrize("staged", (True, False, None))
+@pytest.mark.parametrize("lib_option", (True, False, None))
+@pytest.mark.parametrize("recursive_normalizers", (True, False, None))
+def test_v2_api(
+    arctic_client_lmdb_v1_only, sym, recursive_normalizers, clear_query_stats, lib_name, lib_option, staged
+):
+    if lib_option is None:
+        lib = arctic_client_lmdb_v1_only.create_library(lib_name)
+    else:
+        lib = arctic_client_lmdb_v1_only.create_library(lib_name, LibraryOptions(recursive_normalizers=lib_option))
+    lt = lib._nvs.library_tool()
+    data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+    if staged is not True and (
+        (lib_option is True and recursive_normalizers is not False) or recursive_normalizers is True
+    ):
+        lib.write(sym, data, recursive_normalizers=recursive_normalizers, staged=staged)
+        assert len(lt.find_keys(KeyType.MULTI_KEY)) > 0
+    else:
+        with pytest.raises(ArcticUnsupportedDataTypeException) as e:
+            lib.write(sym, data, recursive_normalizers=recursive_normalizers, staged=staged)
+
+    if lib_option is not True:
+        arctic_client_lmdb_v1_only.modify_library_option(lib, ModifiableLibraryOption.RECURSIVE_NORMALIZERS, True)
+        lib.write(sym, data)
+
+
+partial_pickle_required_data = {
+    "a": [1, 2, 3],
+    "b": {"c": np.arange(24)},
+    "d": [AlmostAListNormalizer()],  # A random item that will be pickled
+}
+
+
+@pytest.mark.parametrize("recursive_normalizers", (True, False, None))
+def test_v2_api_pickle(arctic_library_lmdb_v1_only, sym, recursive_normalizers):
+    lib = arctic_library_lmdb_v1_only
+    lt = lib._nvs.library_tool()
+    lib.write_pickle(sym, partial_pickle_required_data, recursive_normalizers=recursive_normalizers)
+    keys = lt.find_keys(KeyType.MULTI_KEY)
+    if recursive_normalizers is True:
+        assert len(keys) > 0
+    else:
+        assert len(keys) == 0
+        assert lib._nvs.is_symbol_pickled(sym) == True
+
+
+@pytest.mark.parametrize("recursive_normalizers", (True, False, None))
+def test_v2_api_write_partial_pickle(arctic_library_lmdb_v1_only, sym, recursive_normalizers):
+    lib = arctic_library_lmdb_v1_only
+    # Pending v7 release to have more exact exception
+    # https://man312219.monday.com/boards/7852509418/pulses/18038782559
+    with pytest.raises(ArcticNativeException) as e:
+        lib.write(sym, partial_pickle_required_data, recursive_normalizers=recursive_normalizers)
 
 
 @pytest.mark.parametrize("read", (lambda lib, sym: lib.batch_read([sym])[sym], lambda lib, sym: lib.read(sym)))
