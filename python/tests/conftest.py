@@ -1106,6 +1106,9 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     return store
 
 
+# Explicitly not including `OutputFormat.EXPERIMENTAL_POLARS` as `polars.to_pandas()` is not index aware, so all
+# `assert_frame_equal_with_arrow` would not work. Also POLARS is just a thin wrapper on top of pyarrow, so testing
+# just one is sufficent.
 @pytest.fixture(
     params=[OutputFormat.PANDAS, pytest.param(OutputFormat.EXPERIMENTAL_ARROW, marks=PYARROW_POST_PROCESSING)]
 )

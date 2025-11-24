@@ -31,9 +31,7 @@ def _import_optional_dependency(module_name: str) -> Tuple[ModuleType, bool]:
 
 
 pyarrow, _PYARROW_AVAILABLE = _import_optional_dependency("pyarrow")
+polars, _POLARS_AVAILABLE = _import_optional_dependency("polars")
 
 
-__all__ = [
-    "pyarrow",
-    "_PYARROW_AVAILABLE",
-]
+__all__ = ["pyarrow", "_PYARROW_AVAILABLE", "polars", "_POLARS_AVAILABLE"]

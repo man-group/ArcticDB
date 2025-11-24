@@ -65,6 +65,13 @@ jobs:
       mongodb:
         image: mongo:4.4
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false # Time-consuming but doesn't save that much space (4GB)
+          docker-images: false  # We're using docker images we don't want to clear
+
       - uses: actions/checkout@v3.3.0
         # DONT use recursive submodules checkout to simulate conda feedstock build
         # with:
