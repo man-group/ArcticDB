@@ -45,7 +45,7 @@ def test_basic_with_index(lmdb_version_store_arrow):
 
 def test_basic_small_slices(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame({"x": np.arange(10)})
     lib.write("arrow", df)
     table = lib.read("arrow").data
@@ -54,7 +54,7 @@ def test_basic_small_slices(lmdb_version_store_tiny_segment):
 
 def test_basic_small_slices_with_index(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame({"x": np.arange(10)}, index=pd.date_range(pd.Timestamp(0), periods=10))
     lib.write("arrow", df)
     table = lib.read("arrow").data
@@ -137,7 +137,7 @@ def test_strings_basic(lmdb_version_store_arrow, dynamic_strings, any_arrow_stri
 @pytest.mark.parametrize("row_range", [None, (2, 3), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6)])
 def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range, any_arrow_string_format):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
     # lmdb_version_store_tiny_segment has 2 rows per segment
     # This column is constructed so that every 2-element permutation of strings, Nones, and NaNs are tested
@@ -214,7 +214,7 @@ def test_strings_multiple_segments_and_columns(
     lmdb_version_store_tiny_segment, dynamic_strings, any_arrow_string_format
 ):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     lib.set_arrow_string_format_default(any_arrow_string_format)
     df = pd.DataFrame(
         {
@@ -245,7 +245,7 @@ def test_date_range_corner_cases(version_store_factory, date_range_start, date_r
     lib = version_store_factory(
         segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
     )
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         data={
             "col1": np.arange(7),
@@ -281,7 +281,7 @@ def test_date_range_corner_cases(version_store_factory, date_range_start, date_r
 )
 def test_date_range_between_index_values(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         data={
             "col1": np.arange(2),
@@ -316,7 +316,7 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
     lib = version_store_factory(
         segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
     )
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         data={
             "col1": np.arange(7),
@@ -349,7 +349,7 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
 @pytest.mark.parametrize(
     "output_format",
     [
-        OutputFormat.EXPERIMENTAL_ARROW,
+        OutputFormat.PYARROW,
         pytest.param(
             OutputFormat.PANDAS,
             marks=pytest.mark.skipif(IS_PANDAS_ONE, reason="Monday ref: 18013444785"),
@@ -473,7 +473,7 @@ def test_row_range_corner_cases(version_store_factory, row_range_start, row_rang
     lib = version_store_factory(
         segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
     )
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         data={
             "col1": np.arange(7),
@@ -511,7 +511,7 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
     lib = version_store_factory(
         segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
     )
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     df = pd.DataFrame(
         data={
             "col1": np.arange(7),
@@ -541,7 +541,7 @@ def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_
 @pytest.mark.parametrize(
     "output_format",
     [
-        OutputFormat.EXPERIMENTAL_ARROW,
+        OutputFormat.PYARROW,
         pytest.param(
             OutputFormat.PANDAS,
             marks=pytest.mark.skipif(IS_PANDAS_ONE, reason="Monday ref: 18013444785"),
@@ -620,7 +620,7 @@ def test_with_querybuilder(lmdb_version_store_arrow):
 
 def test_arrow_layout(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     lib_tool = lib.library_tool()
     num_rows = 100
     df = pd.DataFrame(
@@ -706,7 +706,7 @@ def test_arrow_dynamic_schema_missing_columns_numeric(version_store_factory, row
     if rows_per_column == 100_000 and segment_row_size != 100_000:
         pytest.skip("Slow to write and doesn't tell us anything the other variants do not")
     lib = version_store_factory(segment_row_size=segment_row_size, dynamic_schema=True)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     sym = "test_arrow_dynamic_schema_missing_columns_numeric"
     write_table = pa.table({"col1": pa.array([1] * rows_per_column, pa.int64())})
     append_table = pa.table({"col2": pa.array([2] * rows_per_column, pa.int32())})
@@ -814,7 +814,7 @@ def test_arrow_dynamic_schema_missing_columns_hypothesis(
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_arrow_sparse_floats_basic(version_store_factory, type, dynamic_schema):
     lib = version_store_factory(dynamic_schema=dynamic_schema)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     sym = "test_arrow_sparse_floats_basic"
     table = pa.table({"col": pa.array([1, None, None, 2, None], type)})
     assert table.column("col").null_count == 3
@@ -829,7 +829,7 @@ def test_arrow_sparse_floats_basic(version_store_factory, type, dynamic_schema):
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_arrow_sparse_floats_row_sliced(version_store_factory, type, dynamic_schema):
     lib = version_store_factory(segment_row_size=2, dynamic_schema=dynamic_schema)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     sym = "test_arrow_sparse_floats_row_sliced"
     table_0 = pa.table({"col": pa.array([1, None], type)})
     table_1 = pa.table({"col": pa.array([2, 3], type)})
@@ -850,7 +850,7 @@ def test_arrow_sparse_floats_row_sliced(version_store_factory, type, dynamic_sch
 @pytest.mark.parametrize("date_range_width", list(range(0, 15)))
 def test_arrow_sparse_floats_date_range(version_store_factory, dynamic_schema, date_range_start, date_range_width):
     lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     sym = "test_arrow_sparse_floats_date_range"
     table_0 = pa.table({"col": pa.array([1, None, 2, None, 3], pa.float64())})
     table_1 = pa.table({"col": pa.array([4, None, None, None, None], pa.float64())})
@@ -874,7 +874,7 @@ def test_arrow_sparse_floats_date_range(version_store_factory, dynamic_schema, d
 @pytest.mark.parametrize("row_range_width", list(range(0, 15)))
 def test_arrow_sparse_floats_row_range(version_store_factory, dynamic_schema, row_range_start, row_range_width):
     lib = version_store_factory(segment_row_size=5, dynamic_schema=dynamic_schema)
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     sym = "test_arrow_sparse_floats_row_range"
     table_0 = pa.table({"col": pa.array([1, None, 2, None, 3], pa.float64())})
     table_1 = pa.table({"col": pa.array([4, None, None, None, None], pa.float64())})
@@ -955,7 +955,7 @@ def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_
 
 def test_project_dynamic_schema(lmdb_version_store_dynamic_schema_arrow):
     lib = lmdb_version_store_dynamic_schema_arrow
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_output_format(OutputFormat.PYARROW)
     sym = "sym"
     table_1 = pa.table({"a": pa.array([1, 2])})
     table_2 = pa.table({"a": pa.array([3, 4]), "b": pa.array([1, 2])})
@@ -1161,7 +1161,7 @@ def test_arrow_read_batch_with_strings(lmdb_version_store_arrow):
 
 def test_polars_basic(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
-    lib.set_output_format(OutputFormat.EXPERIMENTAL_POLARS)
+    lib.set_output_format(OutputFormat.POLARS)
     sym = "polars"
     df = pd.DataFrame(
         {

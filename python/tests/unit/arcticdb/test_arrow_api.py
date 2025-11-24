@@ -16,18 +16,18 @@ all_output_format_args = [
     OutputFormat.PANDAS,
     "PANDAS",
     "pandas",
-    OutputFormat.EXPERIMENTAL_ARROW,
-    "EXPERIMENTAL_ARROW",
-    "experimental_arrow",
-    OutputFormat.EXPERIMENTAL_POLARS,
-    "EXPERIMENTAL_POLARS",
-    "experimental_polars",
+    OutputFormat.PYARROW,
+    "PYARROW",
+    "pyarrow",
+    OutputFormat.POLARS,
+    "POLARS",
+    "polars",
 ]
 no_str_output_format_args = [
     None,
     OutputFormat.PANDAS,
-    OutputFormat.EXPERIMENTAL_ARROW,
-    OutputFormat.EXPERIMENTAL_POLARS,
+    OutputFormat.PYARROW,
+    OutputFormat.POLARS,
 ]
 
 
@@ -37,9 +37,9 @@ def expected_output_type(arctic_output_format, library_output_format, output_for
     )
     if expected_output_format.lower() == OutputFormat.PANDAS.lower():
         return pd.DataFrame
-    if expected_output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
+    if expected_output_format.lower() == OutputFormat.PYARROW.lower():
         return pa.Table
-    if expected_output_format.lower() == OutputFormat.EXPERIMENTAL_POLARS.lower():
+    if expected_output_format.lower() == OutputFormat.POLARS.lower():
         return pl.DataFrame
     raise ValueError("Unexpected format")
 
@@ -177,7 +177,7 @@ def test_basic_modifications(lmdb_library, allow_arrow_input):
         lib.write(sym, write_table, index_column="ts")
         lib.append(sym, append_table, index_column="ts")
         lib.update(sym, update_table, index_column="ts")
-        received = lib.read(sym, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
+        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
         expected = pa.table(
             {
                 "col": pa.array([1, 5, 6, 4], pa.int64()),
@@ -222,7 +222,7 @@ def test_batch_modifications(lmdb_library, allow_arrow_input):
         lib.write_batch([WritePayload(sym, write_table, index_column="ts")])
         lib.append_batch([WritePayload(sym, append_table, index_column="ts")])
         lib.update_batch([UpdatePayload(sym, update_table, index_column="ts")])
-        received = lib.read(sym, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
+        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
         expected = pa.table(
             {
                 "col": pa.array([1, 5, 6, 4], pa.int64()),
@@ -258,7 +258,7 @@ def test_write_pickle(lmdb_library, batch, allow_arrow_input):
         lib.write_pickle(sym, table)
     if allow_arrow_input:
         assert not lib._nvs.is_symbol_pickled(sym)
-        received = lib.read(sym, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
+        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
         assert table.equals(received)
     else:
         assert lib._nvs.is_symbol_pickled(sym)
@@ -288,7 +288,7 @@ def test_stage(lmdb_library, allow_arrow_input):
         lib.stage(sym, table_0, index_column="ts")
         lib.stage(sym, table_1, index_column="ts")
         lib.finalize_staged_data(sym)
-        received = lib.read(sym, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
+        received = lib.read(sym, output_format=OutputFormat.PYARROW).data
         expected = pa.table(
             {
                 "col": pa.array([1, 2, 3, 4], pa.int64()),
@@ -312,9 +312,7 @@ arrow_string_formats_with_none = arrow_string_formats + [None]
 def test_read_arctic_strings(
     lmdb_storage, lib_name, arctic_str_format, library_str_format, read_str_format_default, read_str_format_per_column
 ):
-    ac = lmdb_storage.create_arctic(
-        output_format=OutputFormat.EXPERIMENTAL_ARROW, arrow_string_format_default=arctic_str_format
-    )
+    ac = lmdb_storage.create_arctic(output_format=OutputFormat.PYARROW, arrow_string_format_default=arctic_str_format)
     lib = ac.create_library(lib_name, arrow_string_format_default=library_str_format)
     sym = "sym"
     df = pd.DataFrame({"col": ["some", "strings", "in", "this", "column"]})
@@ -345,7 +343,7 @@ def test_read_arctic_strings(
 @pytest.mark.parametrize("lazy", [True, False])
 @pytest.mark.parametrize("batch_default", [ArrowOutputStringFormat.SMALL_STRING, None])
 def test_read_batch_strings(lmdb_storage, lib_name, lazy, batch_default):
-    ac = lmdb_storage.create_arctic(output_format=OutputFormat.EXPERIMENTAL_ARROW)
+    ac = lmdb_storage.create_arctic(output_format=OutputFormat.PYARROW)
     lib = ac.create_library(lib_name)
     sym_1, sym_2 = "sym_1", "sym_2"
     df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})
@@ -380,7 +378,7 @@ def test_read_batch_strings(lmdb_storage, lib_name, lazy, batch_default):
 @pytest.mark.parametrize("default", [None, ArrowOutputStringFormat.SMALL_STRING])
 @pytest.mark.parametrize("per_column", [None, ArrowOutputStringFormat.CATEGORICAL])
 def test_read_batch_and_join_strings(lmdb_storage, lib_name, default, per_column):
-    ac = lmdb_storage.create_arctic(output_format=OutputFormat.EXPERIMENTAL_ARROW)
+    ac = lmdb_storage.create_arctic(output_format=OutputFormat.PYARROW)
     lib = ac.create_library(lib_name, library_options=LibraryOptions(dynamic_schema=True))
     sym_1, sym_2 = "sym_1", "sym_2"
     df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})

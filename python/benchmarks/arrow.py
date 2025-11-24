@@ -41,7 +41,7 @@ class ArrowNumeric:
         self.logger.info(f"SETUP_CACHE TIME: {time.time() - start}")
 
     def _setup_cache(self):
-        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         num_rows, date_ranges = self.params
         num_cols = 9  # 10 including the index column
         self.ac.delete_library(self.lib_name_prewritten)
@@ -63,7 +63,7 @@ class ArrowNumeric:
         del self.ac
 
     def setup(self, rows, date_range):
-        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
         self.lib._nvs._set_allow_arrow_input()
         if date_range is None:
@@ -126,7 +126,7 @@ class ArrowStrings:
         return pa.Table.from_pandas(df)
 
     def _setup_cache(self):
-        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         num_rows, date_ranges, unique_string_counts, arrow_string_format = self.params
         self.ac.delete_library(self.lib_name_prewritten)
         self.ac.create_library(self.lib_name_prewritten)
@@ -145,7 +145,7 @@ class ArrowStrings:
         del self.ac
 
     def setup(self, rows, date_range, unique_string_count, arrow_string_format):
-        self.ac = Arctic(self.connection_string, output_format=OutputFormat.EXPERIMENTAL_ARROW)
+        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)
         self.lib = self.ac.get_library(self.lib_name_prewritten)
         self.lib._nvs._set_allow_arrow_input()
         if date_range is None:

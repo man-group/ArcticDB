@@ -1101,7 +1101,7 @@ def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore
 @pytest.fixture
 def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     store = lmdb_version_store_v1
-    store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    store.set_output_format(OutputFormat.PYARROW)
     store._set_allow_arrow_input()
     return store
 
@@ -1109,9 +1109,7 @@ def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
 # Explicitly not including `OutputFormat.EXPERIMENTAL_POLARS` as `polars.to_pandas()` is not index aware, so all
 # `assert_frame_equal_with_arrow` would not work. Also POLARS is just a thin wrapper on top of pyarrow, so testing
 # just one is sufficent.
-@pytest.fixture(
-    params=[OutputFormat.PANDAS, pytest.param(OutputFormat.EXPERIMENTAL_ARROW, marks=PYARROW_POST_PROCESSING)]
-)
+@pytest.fixture(params=[OutputFormat.PANDAS, pytest.param(OutputFormat.PYARROW, marks=PYARROW_POST_PROCESSING)])
 def any_output_format(request) -> OutputFormat:
     return request.param
 
@@ -1186,7 +1184,7 @@ def lmdb_version_store_dynamic_schema(
 @pytest.fixture
 def lmdb_version_store_dynamic_schema_arrow(lmdb_version_store_dynamic_schema_v1) -> NativeVersionStore:
     store = lmdb_version_store_dynamic_schema_v1
-    store.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    store.set_output_format(OutputFormat.PYARROW)
     store._set_allow_arrow_input()
     return store
 
