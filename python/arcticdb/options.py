@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import Optional, Union
 from enum import Enum
 
-from arcticdb.dependencies import _PYARROW_AVAILABLE
+from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE
 from arcticdb.dependencies import pyarrow as pa
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
@@ -171,6 +171,7 @@ class LibraryOptions:
 class OutputFormat(str, Enum):
     PANDAS = "PANDAS"
     EXPERIMENTAL_ARROW = "EXPERIMENTAL_ARROW"
+    EXPERIMENTAL_POLARS = "EXPERIMENTAL_POLARS"
 
 
 def output_format_to_internal(output_format: Union[OutputFormat, str]) -> InternalOutputFormat:
@@ -180,6 +181,12 @@ def output_format_to_internal(output_format: Union[OutputFormat, str]) -> Intern
         if not _PYARROW_AVAILABLE:
             raise ModuleNotFoundError(
                 "ArcticDB's pyarrow optional dependency missing but is required to use arrow output format."
+            )
+        return InternalOutputFormat.ARROW
+    elif output_format.lower() == OutputFormat.EXPERIMENTAL_POLARS.lower():
+        if not _PYARROW_AVAILABLE or not _POLARS_AVAILABLE:
+            raise ModuleNotFoundError(
+                "ArcticDB's pyarrow or polars optional dependencies are missing but are required to use polars output format."
             )
         return InternalOutputFormat.ARROW
     else:

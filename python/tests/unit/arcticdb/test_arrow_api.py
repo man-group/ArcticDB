@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pyarrow as pa
+import polars as pl
 import pytest
 
 from arcticdb import LazyDataFrame, DataError, concat
@@ -18,15 +19,29 @@ all_output_format_args = [
     OutputFormat.EXPERIMENTAL_ARROW,
     "EXPERIMENTAL_ARROW",
     "experimental_arrow",
+    OutputFormat.EXPERIMENTAL_POLARS,
+    "EXPERIMENTAL_POLARS",
+    "experimental_polars",
 ]
-no_str_output_format_args = [None, OutputFormat.PANDAS, OutputFormat.EXPERIMENTAL_ARROW]
+no_str_output_format_args = [
+    None,
+    OutputFormat.PANDAS,
+    OutputFormat.EXPERIMENTAL_ARROW,
+    OutputFormat.EXPERIMENTAL_POLARS,
+]
 
 
 def expected_output_type(arctic_output_format, library_output_format, output_format_override):
     expected_output_format = (
         output_format_override or library_output_format or arctic_output_format or OutputFormat.PANDAS
     )
-    return pa.Table if expected_output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower() else pd.DataFrame
+    if expected_output_format.lower() == OutputFormat.PANDAS.lower():
+        return pd.DataFrame
+    if expected_output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
+        return pa.Table
+    if expected_output_format.lower() == OutputFormat.EXPERIMENTAL_POLARS.lower():
+        return pl.DataFrame
+    raise ValueError("Unexpected format")
 
 
 @pytest.mark.parametrize("arctic_output_format", no_str_output_format_args)
