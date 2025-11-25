@@ -25,12 +25,11 @@ class logger final : public mongocxx::logger {
         // These are harmless intermittent warnings that occur during interpreter exits. The issue persists even when
         // the resource cleanup order follows the driver's manual. Thus it is suppressed.
         // https://jira.mongodb.org/browse/CXX-3379
-        if (level == mongocxx::log_level::k_warning && 
-            domain == "client" &&
+        if (level == mongocxx::log_level::k_warning && domain == "client" &&
             message.find("Couldn't send \"endSessions\"") != bsoncxx::stdx::string_view::npos) {
             level = mongocxx::log_level::k_debug;
         }
-        
+
         spdlog::level::level_enum spdlog_level;
         switch (level) {
         case mongocxx::log_level::k_error:
