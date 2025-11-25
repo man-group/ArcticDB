@@ -88,7 +88,7 @@ inline auto end_index_generator(T end_index) { // works for both rawtype and raw
 }
 
 inline auto get_partial_key_gen(std::shared_ptr<InputFrame> frame, const TypedStreamVersion& key) {
-    using PartialKey = stream::StreamSink::PartialKey;
+    using PartialKey = stream::PartialKey;
 
     return [frame = std::move(frame), &key](const FrameSlice& s) {
         if (frame->has_index()) {
@@ -96,7 +96,7 @@ inline auto get_partial_key_gen(std::shared_ptr<InputFrame> frame, const TypedSt
             // search for the relevant block. An alternative would be to look at the segment that was just generated in
             // WriteToSegmentTask and similar methods, but this is unlikely to be a bottleneck
             auto start = frame->index_value_at(slice_begin_pos(s, *frame));
-            auto end = frame->index_value_at(slice_end_pos(s, *frame));
+            const auto end = frame->index_value_at(slice_end_pos(s, *frame));
             return PartialKey{key.type, key.version_id, key.id, start, end_index_generator(end)};
         } else {
             return PartialKey{
@@ -110,10 +110,10 @@ inline auto get_partial_key_gen(std::shared_ptr<InputFrame> frame, const TypedSt
     };
 }
 
-inline stream::StreamSink::PartialKey get_partial_key_for_segment_slice(
+inline stream::PartialKey get_partial_key_for_segment_slice(
         const IndexDescriptorImpl& index, const TypedStreamVersion& key, const SegmentInMemory& slice
 ) {
-    using PartialKey = stream::StreamSink::PartialKey;
+    using PartialKey = stream::PartialKey;
 
     if (index.field_count() != 0) {
         util::check(

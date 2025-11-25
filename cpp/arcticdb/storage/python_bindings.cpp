@@ -148,7 +148,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
      )pbdoc")
             .value("DEDUP", ModifiableLibraryOption::DEDUP)
             .value("ROWS_PER_SEGMENT", ModifiableLibraryOption::ROWS_PER_SEGMENT)
-            .value("COLUMNS_PER_SEGMENT", ModifiableLibraryOption::COLUMNS_PER_SEGMENT);
+            .value("COLUMNS_PER_SEGMENT", ModifiableLibraryOption::COLUMNS_PER_SEGMENT)
+            .value("RECURSIVE_NORMALIZERS", ModifiableLibraryOption::RECURSIVE_NORMALIZERS);
 
     py::enum_<ModifiableEnterpriseLibraryOption>(storage, "ModifiableEnterpriseLibraryOption", R"pbdoc(
          Enterprise library options that can be modified after library creation.

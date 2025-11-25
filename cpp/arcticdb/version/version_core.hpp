@@ -21,48 +21,13 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/entity/read_result.hpp>
 #include <string>
 
 namespace arcticdb::version_store {
 
 using namespace entity;
 using namespace pipelines;
-
-struct SymbolProcessingResult {
-    VersionedItem versioned_item_;
-    proto::descriptors::UserDefinedMetadata metadata_;
-    OutputSchema output_schema_;
-    std::vector<EntityId> entity_ids_;
-};
-
-struct ReadVersionOutput {
-    ReadVersionOutput() = delete;
-    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor) :
-        versioned_item_(std::move(versioned_item)),
-        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
-
-    VersionedItem versioned_item_;
-    FrameAndDescriptor frame_and_descriptor_;
-};
-
-struct MultiSymbolReadOutput {
-    MultiSymbolReadOutput() = delete;
-    MultiSymbolReadOutput(
-            std::vector<VersionedItem>&& versioned_items,
-            std::vector<proto::descriptors::UserDefinedMetadata>&& metadatas, FrameAndDescriptor&& frame_and_descriptor
-    ) :
-        versioned_items_(std::move(versioned_items)),
-        metadatas_(std::move(metadatas)),
-        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
-
-    std::vector<VersionedItem> versioned_items_;
-    std::vector<proto::descriptors::UserDefinedMetadata> metadatas_;
-    FrameAndDescriptor frame_and_descriptor_;
-};
 
 VersionedItem write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
@@ -217,6 +182,18 @@ folly::Future<SegmentInMemory> prepare_output_frame(
         const std::shared_ptr<Store>& store, const ReadOptions& read_options, std::any& handler_data
 );
 
+VersionedItem read_modify_write_impl(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+);
+
+std::shared_ptr<PipelineContext> setup_pipeline_context(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        ReadQuery& read_query, const ReadOptions& read_options
+);
+
 } // namespace arcticdb::version_store
 
 namespace arcticdb {
@@ -261,7 +238,7 @@ template<
             [&write_futures, &store, &pipeline_context, &semaphore](SegmentInMemory&& segment) {
                 auto local_index_start = IndexType::start_value_for_segment(segment);
                 auto local_index_end = pipelines::end_index_generator(IndexType::end_value_for_segment(segment));
-                stream::StreamSink::PartialKey pk{
+                const PartialKey pk{
                         KeyType::TABLE_DATA,
                         pipeline_context->version_id_,
                         pipeline_context->stream_id_,

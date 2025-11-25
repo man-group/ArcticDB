@@ -79,11 +79,9 @@ TimeseriesDescriptor index_descriptor_from_frame(
     );
 }
 
-void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
-    using namespace arcticdb::pipelines;
-    auto& slice_and_keys = pipeline_context->slice_and_keys_;
+size_t adjust_slice_ranges(std::span<pipelines::SliceAndKey> slice_and_keys) {
     if (slice_and_keys.empty())
-        return;
+        return 0;
     // Row and Col ranges input can be disjoint, "compress" them into the top left corner
     // e.g.
     //    1 3  6 9
@@ -119,16 +117,21 @@ void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipe
         } else {
             increment_row_slice = true;
         }
-        slice.row_range = RowRange(row_offset, row_offset + slice.rows().diff());
-        slice.col_range = ColRange(col_offset, col_offset + slice.columns().diff());
+        slice.row_range = pipelines::RowRange(row_offset, row_offset + slice.rows().diff());
+        slice.col_range = pipelines::ColRange(col_offset, col_offset + slice.columns().diff());
         col_offset += slice.columns().diff();
         if (increment_row_slice) {
             row_offset += slice.rows().diff();
             col_offset = 0;
         }
     }
+    return row_offset;
+}
 
-    pipeline_context->total_rows_ = row_offset;
+void adjust_slice_ranges(const std::shared_ptr<pipelines::PipelineContext>& pipeline_context) {
+    using namespace arcticdb::pipelines;
+    auto& slice_and_keys = pipeline_context->slice_and_keys_;
+    pipeline_context->total_rows_ = adjust_slice_ranges(slice_and_keys);
 }
 
 size_t adjust_slice_rowcounts(std::vector<pipelines::SliceAndKey>& slice_and_keys) {

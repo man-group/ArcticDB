@@ -14,6 +14,7 @@ import sys
 if sys.version_info >= (3, 9):
     import zoneinfo
 from datetime import timedelta
+from functools import partial
 import math
 import json
 
@@ -674,9 +675,9 @@ class ArrowTableNormalizer(Normalizer):
         column_index = {
             "name": None,
             "field_name": None,
-            "pandas_type": "unicode",
+            "pandas_type": "mixed",
             "numpy_type": "object",
-            "metadata": {"encoding": "UTF-8"},
+            "metadata": None,
         }
         renames_to_ints = len(
             [new_name for new_name in op.renames_for_pandas_metadata.values() if isinstance(new_name, int)]
@@ -697,7 +698,7 @@ class ArrowTableNormalizer(Normalizer):
             len(op.renames_for_table) == 0
             and len(op.timezones) == 0
             and op.range_index is None
-            and op.pandas_indexes is None
+            and op.pandas_indexes == 0
             and len(op.renames_for_pandas_metadata) == 0
         ):
             return table
@@ -745,6 +746,46 @@ class ArrowTableNormalizer(Normalizer):
 
     def denormalize(self, item, norm_meta):
         # type: (pa.Table, NormalizationMetadata) -> pa.Table
+        def num_pandas_index_cols(pandas_meta):
+            index_type = pandas_meta.WhichOneof("index_type")
+            if index_type == "index":
+                index_meta = pandas_meta.index
+                # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
+                is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
+                if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
+                    return 1
+                else:
+                    return 0
+            else:
+                return pandas_meta.multi_index.field_count + 1
+
+        def generate_original_column_names():
+            res = set()
+            if pandas_indexes == 1:
+                index_meta = pandas_meta.index
+                if not index_meta.fake_name:
+                    res.add(index_meta.name)
+            elif pandas_indexes > 1:
+                multi_index_meta = pandas_meta.multi_index
+                fake_field_pos = set(multi_index_meta.fake_field_pos)
+                for index_col_idx in range(pandas_indexes):
+                    if index_col_idx not in fake_field_pos:
+                        if index_col_idx == 0:
+                            res.add(multi_index_meta.name)
+                        else:
+                            res.add(item.column_names[index_col_idx][_IDX_PREFIX_LEN:])
+
+            # Non-index columns
+            for col in item.column_names[pandas_indexes:]:
+                if col in pandas_meta.col_names:
+                    col_data = pandas_meta.col_names[col]
+                    if col_data.original_name != col:
+                        res.add(col_data.original_name)
+                    else:
+                        res.add(col)
+                else:
+                    res.add(col)
+            return res
 
         input_type = norm_meta.WhichOneof("input_type")
         if input_type == "df":
@@ -770,25 +811,37 @@ class ArrowTableNormalizer(Normalizer):
         renames_for_table = {}
         timezones = {}
         range_index = None
-        pandas_indexes = None
+        pandas_indexes = num_pandas_index_cols(pandas_meta)
         renames_for_pandas_metadata = {}
+
+        # This is needed so that we can give unnamed indexes new names that do not clash with existing column names
+        original_column_names = generate_original_column_names()
+
+        # Track which column names we have used so far. When a clash is found, prepend and append underscore characters
+        # until the column name is unique
+        taken_col_names = set()
 
         index_type = pandas_meta.WhichOneof("index_type")
         if index_type == "index":
             index_meta = pandas_meta.index
-            # Empty tables don't have `is_physically_stored=True` but we still output them with an empty DateTimeIndex.
-            is_empty_table_with_datetime_index = len(item) == 0 and not index_meta.step
-            if index_meta.is_physically_stored or is_empty_table_with_datetime_index:
-                pandas_indexes = 1
+            # Old arcticc tick streaming data does not populate `is_physically_stored` field and considers an index
+            # physically stored if `step==0`
+            if index_meta.is_physically_stored or not index_meta.step:
                 if index_meta.tz and len(item.columns) > 0 and pa.types.is_timestamp(item.columns[0].type):
                     # We apply timezone metadata only when the first column is a timestamp column.
                     # This matches the behavior and is required to handle `groupby`s which can change index type.
                     # TODO: This is still not correct if grouping by a timestamp column. Monday ref: 18197986461
                     timezones[0] = index_meta.tz
-                if index_meta.name:
-                    renames_for_table[0] = index_meta.name
                 if index_meta.fake_name:
                     renames_for_pandas_metadata[0] = None
+                    new_name = "__index__"
+                    while new_name in original_column_names:
+                        new_name = f"_{new_name}_"
+                    taken_col_names.add(new_name)
+                    renames_for_table[0] = new_name
+                else:
+                    renames_for_table[0] = index_meta.name
+                    taken_col_names.add(index_meta.name)
             else:
                 index_name = index_meta.name if index_meta.name else None
                 range_index = {
@@ -799,7 +852,6 @@ class ArrowTableNormalizer(Normalizer):
                 }
         else:
             multi_index_meta = pandas_meta.multi_index
-            pandas_indexes = multi_index_meta.field_count + 1
             fake_field_pos = set(multi_index_meta.fake_field_pos)
             for index_col_idx in range(pandas_indexes):
                 if index_col_idx == 0:
@@ -811,30 +863,45 @@ class ArrowTableNormalizer(Normalizer):
 
                 if index_col_idx in fake_field_pos:
                     renames_for_pandas_metadata[index_col_idx] = None
+                    new_name = f"__index_level_{index_col_idx}__"
+                    while new_name in original_column_names:
+                        new_name = f"_{new_name}_"
+                    taken_col_names.add(new_name)
+                    renames_for_table[index_col_idx] = new_name
                 elif index_col_idx == 0:
                     renames_for_table[0] = multi_index_meta.name
+                    taken_col_names.add(multi_index_meta.name)
                 else:
                     new_name = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
-                    if new_name == renames_for_table.get(0, item.column_names[0]):
-                        # If the new_name would collide with the first index name we only want to apply the new name
-                        # to the pandas metadata.
-                        # TODO: Something similar needs to be done when we support multiple pandas indices with
-                        # equal names (Monday ref: 9714233101)
-                        renames_for_pandas_metadata[index_col_idx] = new_name
-                    else:
-                        renames_for_table[index_col_idx] = new_name
+                    while new_name in taken_col_names:
+                        new_name = f"_{new_name}_"
+                    taken_col_names.add(new_name)
+                    renames_for_pandas_metadata[index_col_idx] = item.column_names[index_col_idx][_IDX_PREFIX_LEN:]
+                    renames_for_table[index_col_idx] = new_name
 
-        for i, col in enumerate(item.column_names):
+        for i, col in enumerate(item.column_names[pandas_indexes:]):
+            i += pandas_indexes
             if col in pandas_meta.col_names:
                 col_data = pandas_meta.col_names[col]
                 if col_data.is_none:
                     renames_for_pandas_metadata[i] = None
+                    new_name = "None"
                 elif col_data.is_empty:
                     renames_for_pandas_metadata[i] = ""
+                    new_name = ""
                 elif col_data.is_int:
-                    renames_for_pandas_metadata[i] = int(col)
+                    renames_for_pandas_metadata[i] = int(col_data.original_name)
+                    new_name = col_data.original_name
                 elif col_data.original_name != col:
                     renames_for_pandas_metadata[i] = col_data.original_name
+                    new_name = col_data.original_name
+                else:
+                    renames_for_pandas_metadata[i] = col
+                    new_name = col
+                while new_name in taken_col_names:
+                    new_name = f"_{new_name}_"
+                taken_col_names.add(new_name)
+                renames_for_table[i] = new_name
 
         op = ArrowNormalizationOperations(
             renames_for_table, timezones, range_index, pandas_indexes, renames_for_pandas_metadata
@@ -1281,7 +1348,8 @@ class MsgPackNormalizer(Normalizer):
         self.strict_mode = cfg.strict_mode if cfg is not None else False
 
     def normalize(self, obj, **kwargs):
-        packed, nbytes = self._msgpack_padded_packb(obj)
+        disallow_pickle = kwargs.get("disallow_pickle", None)
+        packed, nbytes = self._msgpack_padded_packb(obj, disallow_pickle=disallow_pickle)
 
         norm_meta = NormalizationMetadata()
         norm_meta.msg_pack_frame.version = 1
@@ -1315,7 +1383,7 @@ class MsgPackNormalizer(Normalizer):
         col_data = np_arr.view(np.uint8)[:sb]
         return self._msgpack_unpackb(memoryview(col_data))
 
-    def _custom_pack(self, obj):
+    def _custom_pack(self, obj, disallow_pickle=None):
         if isinstance(obj, pd.Timestamp):
             tz = _ensure_str_timezone(get_timezone(obj.tz)) if obj.tz is not None else None
             return ExtType(MsgPackSerialization.PD_TIMESTAMP, packb([obj.value, tz]))
@@ -1326,8 +1394,8 @@ class MsgPackNormalizer(Normalizer):
         if isinstance(obj, datetime.timedelta):
             return ExtType(MsgPackSerialization.PY_TIMEDELTA, packb(pd.Timedelta(obj).value))
 
-        if self.strict_mode:
-            raise TypeError("Normalisation is running in strict mode, writing pickled data is disabled.")
+        if disallow_pickle:
+            raise TypeError("Normalizing data by pickling has been disabled.")
         else:
             return ExtType(MsgPackSerialization.PY_PICKLE_3, packb(Pickler.write(obj)))
 
@@ -1359,11 +1427,20 @@ class MsgPackNormalizer(Normalizer):
 
         return ExtType(code, data)
 
-    def _msgpack_packb(self, obj):
-        return packb(obj, default=self._custom_pack)
+    def _should_disallow_pickle(self, disallow_pickle):
+        # `disallow_pickle` set by function parameter, has priority
+        # Otherwise fallback to library option `strict_mode`
+        return self.strict_mode if disallow_pickle is None else disallow_pickle
 
-    def _msgpack_padded_packb(self, obj):
-        return padded_packb(obj, default=self._custom_pack)
+    def _msgpack_packb(self, obj, disallow_pickle=None):
+        return packb(
+            obj, default=partial(self._custom_pack, disallow_pickle=self._should_disallow_pickle(disallow_pickle))
+        )
+
+    def _msgpack_padded_packb(self, obj, disallow_pickle=None):
+        return padded_packb(
+            obj, default=partial(self._custom_pack, disallow_pickle=self._should_disallow_pickle(disallow_pickle))
+        )
 
     def _msgpack_unpackb(self, buff, raw=False):
         return unpackb(buff, raw=raw, ext_hook=self._ext_hook)

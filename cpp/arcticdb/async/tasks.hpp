@@ -34,7 +34,7 @@ using AtomKey = entity::AtomKey;
 using IndexValue = entity::IndexValue;
 
 struct EncodeAtomTask : BaseTask {
-    using PartialKey = stream::StreamSink::PartialKey;
+    using PartialKey = stream::PartialKey;
     PartialKey partial_key_;
     timestamp creation_ts_;
     SegmentInMemory segment_;

@@ -27,7 +27,7 @@
 namespace arcticdb {
 
 size_t max_data_size(
-        const std::vector<std::tuple<stream::StreamSink::PartialKey, SegmentInMemory, FrameSlice>>& items,
+        const std::vector<std::tuple<PartialKey, SegmentInMemory, FrameSlice>>& items,
         const arcticdb::proto::encoding::VariantCodec& codec_opts, EncodingVersion encoding_version
 ) {
     auto max_file_size = 0UL;

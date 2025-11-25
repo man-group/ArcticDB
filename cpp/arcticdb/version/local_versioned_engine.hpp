@@ -111,9 +111,15 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::optional<VersionedItem> get_version_to_read(const StreamId& stream_id, const VersionQuery& version_query);
 
-    ReadVersionOutput read_dataframe_version_internal(
+    ReadVersionWithNodesOutput read_dataframe_version_internal(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
             const ReadOptions& read_options, std::any& handler_data
+    ) override;
+
+    VersionedItem read_modify_write_internal(
+            const StreamId& stream_id, const StreamId& target_stream, const py::object& user_meta,
+            const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
+            const ReadOptions& read_options, bool prune_previous_versions
     ) override;
 
     DescriptorItem read_descriptor_internal(const StreamId& stream_id, const VersionQuery& version_query);
@@ -228,13 +234,9 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<UpdateQuery>& update_queries, bool prune_previous_versions, bool upsert
     );
 
-    std::vector<ReadVersionOutput> batch_read_keys(
-            const std::vector<AtomKey>& keys, const ReadOptions& read_options, std::any& handler_data
-    );
-
-    std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
+    std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> batch_read_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
+            std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
             std::any& handler_data
     );
 
@@ -247,7 +249,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const ReadOptions& read_options
+            const BatchReadOptions& batch_read_options
     );
 
     std::vector<std::pair<VersionedItem, TimeseriesDescriptor>> batch_restore_version_internal(
@@ -263,7 +265,7 @@ class LocalVersionedEngine : public VersionedEngine {
     std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>>
     batch_read_metadata_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const ReadOptions& read_options
+            const BatchReadOptions& batch_read_options
     );
 
     std::pair<std::optional<VariantKey>, std::optional<google::protobuf::Any>> read_metadata_internal(

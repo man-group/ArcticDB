@@ -36,6 +36,7 @@
 #include <arcticdb/entity/merge_descriptors.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/util/format_date.hpp>
+#include <arcticdb/version/version_tasks.hpp>
 #include <iterator>
 
 namespace arcticdb::version_store {
@@ -143,6 +144,35 @@ IndexDescriptorImpl check_index_match(const arcticdb::stream::Index& index, cons
         );
 
     return desc;
+}
+
+/// When segments are produced by the processing pipeline, some rows might be missing. Imagine a filter with the middle
+/// rows filtered out. These slices cannot be put in an index key as the row slices in the index key must be contiguous.
+/// This function adjusts the row slices so that there are no gaps.
+/// @note This expects the slices to be sorted by colum slice i.e., first are all row in the first column slice, then
+///     are the row slices in the second column slice, etc... It also expects that there are no missing columns. The
+///     difference between this and adjust_slice_ranges is that this will not change the column slices. While
+///     adjust_slice_ranges will change the column slices, making the first slice start from 0 even for timestamp-index
+///     dataframes (which should have column range starting from 1 when being written to disk).
+[[maybe_unused]] void compact_row_slices(std::span<SliceAndKey> slices) {
+    size_t current_compacted_row = 0;
+    size_t previous_uncompacted_end = slices.empty() ? 0 : slices.front().slice().row_range.end();
+    size_t previous_col_slice_end = slices.empty() ? 0 : slices.front().slice().col_range.end();
+    for (SliceAndKey& slice : slices) {
+        // Aggregation clause performs aggregations in parallel for each group. Thus, it can produce several slices with
+        // the exact row_range and column_range. The ordering doesn't matter, but this must be taken into account so
+        // that the row slices are always increasing. The second condition in the "if" takes care of this scenario.
+        if (slice.slice().row_range.start() < previous_uncompacted_end &&
+            slice.slice().col_range.start() > previous_col_slice_end) {
+            current_compacted_row = 0;
+        }
+        previous_uncompacted_end = slice.slice().row_range.end();
+        const size_t rows_in_slice = slice.slice().row_range.diff();
+        slice.slice().row_range.first = current_compacted_row;
+        slice.slice().row_range.second = current_compacted_row + rows_in_slice;
+        current_compacted_row += rows_in_slice;
+        previous_col_slice_end = slice.slice().col_range.end();
+    }
 }
 } // namespace
 
@@ -1074,13 +1104,13 @@ static OutputSchema create_initial_output_schema(PipelineContext& pipeline_conte
     return OutputSchema{generate_initial_output_schema_descriptor(pipeline_context), *pipeline_context.norm_meta_};
 }
 
-static OutputSchema generate_output_schema(PipelineContext& pipeline_context, std::shared_ptr<ReadQuery> read_query) {
+static OutputSchema generate_output_schema(PipelineContext& pipeline_context, const ReadQuery& read_query) {
     OutputSchema output_schema = create_initial_output_schema(pipeline_context);
-    for (const auto& clause : read_query->clauses_) {
+    for (const auto& clause : read_query.clauses_) {
         output_schema = clause->modify_schema(std::move(output_schema));
     }
-    if (read_query->columns) {
-        std::unordered_set<std::string_view> selected_columns(read_query->columns->begin(), read_query->columns->end());
+    if (read_query.columns) {
+        std::unordered_set<std::string_view> selected_columns(read_query.columns->begin(), read_query.columns->end());
         FieldCollection fields_to_use;
         if (!pipeline_context.filter_columns_) {
             pipeline_context.filter_columns_ = std::make_shared<FieldCollection>();
@@ -1102,12 +1132,24 @@ static OutputSchema generate_output_schema(PipelineContext& pipeline_context, st
     return output_schema;
 }
 
+static void generate_output_schema_and_save_to_pipeline(
+        PipelineContext& pipeline_context, const ReadQuery& read_query
+) {
+    OutputSchema schema = generate_output_schema(pipeline_context, read_query);
+    auto&& [descriptor, norm_meta, default_values] = schema.release();
+    pipeline_context.set_descriptor(std::forward<StreamDescriptor>(descriptor));
+    pipeline_context.norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
+            std::forward<proto::descriptors::NormalizationMetadata>(norm_meta)
+    );
+    pipeline_context.default_values_ = std::forward<decltype(default_values)>(default_values);
+}
+
 folly::Future<std::vector<EntityId>> read_and_schedule_processing(
         const std::shared_ptr<Store>& store, const std::shared_ptr<PipelineContext>& pipeline_context,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
         std::shared_ptr<ComponentManager> component_manager
 ) {
-    ProcessingConfig processing_config{
+    const ProcessingConfig processing_config{
             opt_false(read_options.dynamic_schema()),
             pipeline_context->rows_,
             pipeline_context->descriptor().index().type()
@@ -1160,13 +1202,7 @@ folly::Future<std::vector<SliceAndKey>> read_process_and_collect(
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
             .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
-                OutputSchema schema = generate_output_schema(*pipeline_context, std::move(read_query));
-                auto&& [descriptor, norm_meta, default_values] = schema.release();
-                pipeline_context->set_descriptor(std::forward<StreamDescriptor>(descriptor));
-                pipeline_context->norm_meta_ = std::make_shared<proto::descriptors::NormalizationMetadata>(
-                        std::forward<proto::descriptors::NormalizationMetadata>(norm_meta)
-                );
-                pipeline_context->default_values_ = std::forward<decltype(default_values)>(default_values);
+                generate_output_schema_and_save_to_pipeline(*pipeline_context, *read_query);
                 auto proc = gather_entities<
                         std::shared_ptr<SegmentInMemory>,
                         std::shared_ptr<RowRange>,
@@ -1247,15 +1283,17 @@ void check_multi_key_is_not_index_only(const PipelineContext& pipeline_context, 
     );
 }
 
-void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query) {
+void check_can_perform_processing(
+        const std::shared_ptr<PipelineContext>& pipeline_context, const ReadQuery& read_query
+) {
     // To remain backward compatibility, pending new major release to merge into below section
     // Ticket: 18038782559
-    bool is_pickled = pipeline_context->norm_meta_ && pipeline_context->is_pickled();
+    const bool is_pickled = pipeline_context->norm_meta_ && pipeline_context->is_pickled();
     util::check(
             !is_pickled ||
                     (!read_query.columns.has_value() && std::holds_alternative<std::monostate>(read_query.row_filter)),
-            "The data for this symbol is pickled and does not support column stats, date_range, row_range, or column "
-            "queries"
+            "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+            "etc.. on pickled data"
     );
     if (pipeline_context->multi_key_) {
         check_multi_key_is_not_index_only(*pipeline_context, read_query);
@@ -1268,27 +1306,30 @@ void check_can_be_filtered(const std::shared_ptr<PipelineContext>& pipeline_cont
                         !std::holds_alternative<IndexRange>(read_query.row_filter),
                 "Cannot apply date range filter to symbol with non-timestamp index"
         );
-        auto sorted_value = pipeline_context->descriptor().sorted();
+        const auto sorted_value = pipeline_context->descriptor().sorted();
         sorting::check<ErrorCode::E_UNSORTED_DATA>(
                 sorted_value == SortedValue::UNKNOWN || sorted_value == SortedValue::ASCENDING ||
                         !std::holds_alternative<IndexRange>(read_query.row_filter),
                 "When filtering data using date_range, the symbol must be sorted in ascending order. ArcticDB believes "
-                "it "
-                "is not sorted in ascending order and cannot therefore filter the data using date_range."
+                "it is not sorted in ascending order and cannot therefore filter the data using date_range."
         );
     }
-    bool is_query_empty =
+    const bool is_query_empty =
             (!read_query.columns && !read_query.row_range &&
              std::holds_alternative<std::monostate>(read_query.row_filter) && read_query.clauses_.empty());
-    bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
+    const bool is_numpy_array = pipeline_context->norm_meta_ && pipeline_context->norm_meta_->has_np();
     if (!is_query_empty) {
         // Exception for filterig pickled data is skipped for now for backward compatibility
         if (pipeline_context->multi_key_) {
             schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_RECURSIVE_NORMALIZED_DATA>(
-                    "Cannot filter recursively normalized data"
+                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+                    "etc.. on recursively normalized data"
             );
         } else if (is_numpy_array) {
-            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>("Cannot filter numpy array");
+            schema::raise<ErrorCode::E_OPERATION_NOT_SUPPORTED_WITH_NUMPY_ARRAY>(
+                    "Cannot perform processing such as row/column filtering, projection, aggregation, resampling, "
+                    "etc.. on recursively numpy array"
+            );
         }
     }
 }
@@ -1326,7 +1367,7 @@ static void read_indexed_keys_to_pipeline(
             std::move(*index_segment_reader.mutable_tsd().mutable_proto().mutable_user_meta())
     );
     pipeline_context->bucketize_dynamic_ = bucketize_dynamic;
-    check_can_be_filtered(pipeline_context, read_query);
+    check_can_perform_processing(pipeline_context, read_query);
     ARCTICDB_DEBUG(
             log::version(),
             "read_indexed_keys_to_pipeline: Symbol {} Found {} keys with {} total rows",
@@ -2022,7 +2063,7 @@ folly::Future<SegmentInMemory> do_direct_read_or_process(
         ARCTICDB_SAMPLE(RunPipelineAndOutput, 0)
         util::check_rte(!pipeline_context->is_pickled(), "Cannot filter pickled data");
         return read_process_and_collect(store, pipeline_context, read_query, read_options)
-                .thenValue([store, pipeline_context, &read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
+                .thenValue([store, pipeline_context, read_options, &handler_data](std::vector<SliceAndKey>&& segs) {
                     return prepare_output_frame(std::move(segs), pipeline_context, store, read_options, handler_data);
                 });
     } else {
@@ -2286,7 +2327,7 @@ std::variant<VersionedItem, CompactionError> sort_merge_impl(
                                 [pipeline_context, &fut_vec, &store, &semaphore](SegmentInMemory&& segment) {
                                     const auto local_index_start = TimeseriesIndex::start_value_for_segment(segment);
                                     const auto local_index_end = TimeseriesIndex::end_value_for_segment(segment);
-                                    stream::StreamSink::PartialKey pk{
+                                    const PartialKey pk{
                                             KeyType::TABLE_DATA,
                                             pipeline_context->version_id_,
                                             pipeline_context->stream_id_,
@@ -2665,46 +2706,108 @@ VersionedItem generate_result_versioned_item(const std::variant<VersionedItem, S
     return versioned_item;
 }
 
-// This is the main user-facing read method that either returns all or
-// part of a dataframe as-is, or transforms it via a processing pipeline
 folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 ) {
-    auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
-    auto res_versioned_item = generate_result_versioned_item(version_info);
-
-    if (pipeline_context->multi_key_) {
-        if (read_query) {
-            check_can_be_filtered(pipeline_context, *read_query);
-        }
-        return read_multi_key(
-                store, read_options, *pipeline_context->multi_key_, handler_data, std::move(res_versioned_item.key_)
-        );
-    }
-    ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
-    DecodePathData shared_data;
-    return do_direct_read_or_process(store, read_query, read_options, pipeline_context, shared_data, handler_data)
-            .thenValue([res_versioned_item, pipeline_context, read_options, &handler_data, read_query, shared_data](
-                               auto&& frame
-                       ) mutable {
-                ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
-                return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
-                        .via(&async::cpu_executor())
-                        .thenValue(
-                                [res_versioned_item, pipeline_context, frame, read_query, shared_data](auto&&) mutable {
-                                    set_row_id_if_index_only(*pipeline_context, frame, *read_query);
-                                    return ReadVersionOutput{
-                                            std::move(res_versioned_item),
-                                            {frame,
-                                             timeseries_descriptor_from_pipeline_context(
-                                                     pipeline_context, {}, pipeline_context->bucketize_dynamic_
-                                             ),
-                                             {}}
-                                    };
-                                }
-                        );
+    return async::submit_io_task(SetupPipelineContextTask{store, version_info, read_query, read_options})
+            .thenValue([store, read_query, read_options, version_info, &handler_data](auto&& pipeline_context) {
+                auto res_versioned_item = generate_result_versioned_item(version_info);
+                if (pipeline_context->multi_key_) {
+                    if (read_query) {
+                        check_can_perform_processing(pipeline_context, *read_query);
+                    }
+                    return read_multi_key(
+                            store,
+                            read_options,
+                            *pipeline_context->multi_key_,
+                            handler_data,
+                            std::move(res_versioned_item.key_)
+                    );
+                }
+                ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
+                DecodePathData shared_data;
+                return do_direct_read_or_process(
+                               store, read_query, read_options, pipeline_context, shared_data, handler_data
+                )
+                        .thenValue([res_versioned_item = std::move(res_versioned_item),
+                                    pipeline_context,
+                                    read_options,
+                                    &handler_data,
+                                    read_query,
+                                    shared_data](auto&& frame) mutable {
+                            ARCTICDB_DEBUG(log::version(), "Reduce and fix columns");
+                            return reduce_and_fix_columns(pipeline_context, frame, read_options, handler_data)
+                                    .via(&async::cpu_executor())
+                                    .thenValue([res_versioned_item,
+                                                pipeline_context,
+                                                frame,
+                                                read_query,
+                                                shared_data](auto&&) mutable {
+                                        set_row_id_if_index_only(*pipeline_context, frame, *read_query);
+                                        return ReadVersionOutput{
+                                                std::move(res_versioned_item),
+                                                {frame,
+                                                 timeseries_descriptor_from_pipeline_context(
+                                                         pipeline_context, {}, pipeline_context->bucketize_dynamic_
+                                                 ),
+                                                 {}}
+                                        };
+                                    });
+                        });
             });
+}
+
+VersionedItem read_modify_write_impl(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& source_version_info,
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+) {
+
+    read_query->clauses_.push_back(std::make_shared<Clause>(
+            WriteClause(write_options, target_partial_index_key, std::make_shared<DeDupMap>(), store)
+    ));
+    const auto pipeline_context = setup_pipeline_context(store, source_version_info, *read_query, read_options);
+    check_can_perform_processing(pipeline_context, *read_query);
+
+    auto component_manager = std::make_shared<ComponentManager>();
+    return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
+            .thenValue([component_manager, pipeline_context, read_query](std::vector<EntityId>&& processed_entity_ids) {
+                generate_output_schema_and_save_to_pipeline(*pipeline_context, *read_query);
+                std::vector<folly::Future<SliceAndKey>> write_segments_futures;
+                ranges::transform(
+                        std::get<0>(component_manager->get_entities<std::shared_ptr<folly::Future<SliceAndKey>>>(
+                                processed_entity_ids
+                        )),
+                        std::back_inserter(write_segments_futures),
+                        [](const std::shared_ptr<folly::Future<SliceAndKey>>& fut) { return std::move(*fut); }
+                );
+                return folly::collect(std::move(write_segments_futures));
+            })
+            .thenValue([&](std::vector<SliceAndKey>&& slices) {
+                ranges::sort(slices);
+                compact_row_slices(slices);
+                const size_t row_count =
+                        slices.empty() ? 0 : slices.back().slice().row_range.second - slices[0].slice().row_range.first;
+                const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+                        row_count,
+                        pipeline_context->descriptor(),
+                        std::move(*pipeline_context->norm_meta_),
+                        user_meta ? std::make_optional(*std::move(user_meta)) : std::nullopt,
+                        std::nullopt,
+                        std::nullopt,
+                        write_options.bucketize_dynamic
+                );
+                return index::write_index(
+                        index_type_from_descriptor(pipeline_context->descriptor()),
+                        tsd,
+                        std::move(slices),
+                        target_partial_index_key,
+                        store
+                );
+            })
+            .get();
 }
 
 folly::Future<SymbolProcessingResult> read_and_process(
@@ -2727,15 +2830,15 @@ folly::Future<SymbolProcessingResult> read_and_process(
             !pipeline_context->is_pickled(), "Cannot perform multi-symbol join on pickled data"
     );
 
-    OutputSchema output_schema = generate_output_schema(*pipeline_context, read_query);
+    OutputSchema output_schema = generate_output_schema(*pipeline_context, *read_query);
     ARCTICDB_DEBUG(log::version(), "Fetching data to frame");
 
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, std::move(component_manager))
             .thenValueInline([res_versioned_item = std::move(res_versioned_item),
                               pipeline_context,
                               output_schema = std::move(output_schema)](auto&& entity_ids) mutable {
-                // Pipeline context user metadata is not populated in the case that only incomplete segments exist for a
-                // symbol, no indexed versions
+                // Pipeline context user metadata is not populated in the case that only incomplete segments exist
+                // for a symbol, no indexed versions
                 return SymbolProcessingResult{
                         std::move(res_versioned_item),
                         pipeline_context->user_meta_ ? std::move(*pipeline_context->user_meta_)

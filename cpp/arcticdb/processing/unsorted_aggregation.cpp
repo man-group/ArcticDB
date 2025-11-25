@@ -544,7 +544,7 @@ SegmentInMemory CountAggregatorData::finalize(const ColumnName& output_column_na
                 create_output_column(make_scalar_type(get_output_data_type()), std::move(sparse_map_), unique_values);
         if (!col->opt_sparse_map().has_value()) {
             // If all values are set we use memcpy for efficiency
-            auto ptr = reinterpret_cast<uint64_t*>(col->ptr());
+            const auto ptr = reinterpret_cast<uint64_t*>(col->ptr());
             memcpy(ptr, aggregated_.data(), sizeof(uint64_t) * unique_values);
         } else {
             using OutputTypeDescriptor = typename ScalarTypeInfo<DataTypeTag<DataType::UINT64>>::TDT;

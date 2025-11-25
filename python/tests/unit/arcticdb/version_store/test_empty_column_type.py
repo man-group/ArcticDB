@@ -15,7 +15,6 @@ import pytest
 from packaging.version import Version
 from arcticdb.util._versions import PANDAS_VERSION
 from arcticdb_ext.exceptions import NormalizationException
-from tests.util.mark import MACOS
 
 
 class DtypeGenerator:
@@ -554,9 +553,6 @@ class TestCanUpdateWithNone:
         )
 
 
-@pytest.mark.skipif(
-    MACOS, reason="Skipping because flaky on MACOS builds, https://github.com/man-group/ArcticDB/issues/TODO"
-)
 class TestCanAppendToEmptyColumn:
     """
     Tests that it's possible to append to a column which contains no rows. The type of the columns, including the index
