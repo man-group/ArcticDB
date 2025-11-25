@@ -109,7 +109,7 @@ def test_dict_record_keys():
     assert sub_keys[3]["symbol"] == f"sym__{'e' * 95}"
 
 
-def test_pandas_series(lmdb_version_store):
+def test_pandas_series(lmdb_version_store, recursive_normalizer_meta_structure_v2):
     test_data = [pd.Series(["hello", "good morning"])]
     meta, flattened = fl.create_meta_structure(test_data, "sym")
 
@@ -120,7 +120,7 @@ def test_pandas_series(lmdb_version_store):
     assert_series_equal(lib.read("sym").data[0], test_data[0])
 
 
-def test_multiindex_recursive_normalizer(lmdb_version_store):
+def test_multiindex_recursive_normalizer(lmdb_version_store, recursive_normalizer_meta_structure_v2):
     dtidx = pd.date_range(pd.Timestamp("2016-01-01"), periods=2)
     vals = ["a", "b", "c"]
     df = pd.DataFrame(data=np.arange(6), index=pd.MultiIndex.from_product([dtidx, vals], names=["a", "b"]))

@@ -731,7 +731,7 @@ def test_staging_with_sorting_strings(version_store_factory):
     assert expected.equals(received)
 
 
-def test_recursive_normalizers(lmdb_version_store_arrow):
+def test_recursive_normalizers(lmdb_version_store_arrow, recursive_normalizer_meta_structure_v2):
     lib = lmdb_version_store_arrow
     sym = "test_recursive_normalizers"
     table_0 = pa.table({"col0": pa.array(["hello", "there"], pa.string())})

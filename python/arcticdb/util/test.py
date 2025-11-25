@@ -396,6 +396,45 @@ class TestCustomNormalizer(CustomNormalizer):
         return CustomThing(custom_index=item.index, custom_columns=item.columns, custom_values=item.values)
 
 
+class CustomClassSeparatorInStr:
+    def __init__(self, n):
+        self.n = n
+
+    def __str__(self):
+        return "CustomClass__str"
+
+    def __repr__(self):
+        return "CustomClass__repr"
+
+    def __hash__(self):
+        return self.n % 10
+
+    def __eq__(self, other):
+        return self.n == other.n
+
+
+class CustomArray:
+    def __init__(self, x, y, z):
+        self._x = x
+        self._y = y
+        self._z = z
+
+    def __eq__(self, other):
+        return self._x == other._x and self._y == other._y and self._z == other._z
+
+
+class CustomArrayNormalizer(CustomNormalizer):
+    NESTED_STRUCTURE = True
+
+    def normalize(self, item, **kwargs):
+        if not isinstance(item, CustomArray):
+            return None
+        return [item._x, item._y, item._z], NormalizationMetadata.CustomNormalizerMeta()
+
+    def denormalize(self, item, norm_meta):
+        return CustomArray(*item)
+
+
 class CustomDict(dict):
     pass
 
