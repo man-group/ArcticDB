@@ -104,6 +104,26 @@ Values:
 * 0: Disable
 * 1: Enable (Default)
 
+### VersionStore.RecursiveNormalizerMetastructureV2
+
+Controls whether the recursive normalizer will use meta structure V2
+
+**Read Compatibility:**
+
+| Meta Structure Version | Read Support |
+|------------------------|--------------|
+| V1 | All existing and future ArcticDB releases |
+| V2 | ArcticDB v6.6.0 and later |
+
+**V1 meta structure phase-out plan:**
+
+| Version | Change |
+|---------|--------|
+| >= v6.6.0 | Deprecation warning when writing V1 meta structure; V2 meta structure can be enabled optionally |
+| >= v7.0.0 | V2 meta structure will be enabled by default |
+
+Values: * 0: Disable (Default) * 1: Enable
+
 ## Logging configuration
 
 ArcticDB has multiple log streams, and the verbosity of each can be configured independently. 

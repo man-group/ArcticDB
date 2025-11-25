@@ -146,7 +146,9 @@ def assert_dicts_of_dfs_equal(dict1, dict2):
         pd.testing.assert_frame_equal(dict1[key], dict2[key], obj=f"DataFrame at key '{key}'")
 
 
-def test_recursive_normalizers_blns(lmdb_version_store_v1, any_arrow_string_format):
+def test_recursive_normalizers_blns(
+    lmdb_version_store_v1, any_arrow_string_format, recursive_normalizer_meta_structure_v2
+):
     lib = lmdb_version_store_v1
     lib.set_arrow_string_format_default(any_arrow_string_format)
     strings = read_big_list_of_naughty_strings()
@@ -170,7 +172,7 @@ def test_recursive_normalizers_blns(lmdb_version_store_v1, any_arrow_string_form
 
 
 @pytest.mark.skip(reason="These do not roundtrip properly. Monday: 9256783357")
-def test_recursive_normalizers_blns_in_keys(lmdb_version_store):
+def test_recursive_normalizers_blns_in_keys(lmdb_version_store, recursive_normalizer_meta_structure_v2):
     lib = lmdb_version_store
     strings = read_big_list_of_naughty_strings()
     symbol = "blnd_recursive_in_keys"
