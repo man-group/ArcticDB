@@ -24,6 +24,38 @@ TestTensorFrame write_version_frame_with_three_segments(
     return frame;
 }
 
+void write_version_frame_with_three_segments_rec_norm(
+        version_store::PythonVersionStore& store, const StreamId& stream_id
+) {
+    std::vector<StreamId> rec_norm_ids;
+    std::vector<TestTensorFrame> frames;
+    std::vector<std::shared_ptr<InputFrame>> internal_frames;
+    std::string stream_id_str = std::get<std::string>(stream_id);
+    constexpr auto size = 2;
+    std::vector<VersionId> version_ids(size, 0);
+    for (size_t i = 0; i < size; ++i) {
+        rec_norm_ids.emplace_back(stream_id_str + "__" + std::to_string(i));
+        auto frame = get_test_timeseries_frame(stream_id, 30, 0);
+        internal_frames.emplace_back(frame.frame_);
+        // Need to keep the TestTensorFrames as they own the memory used in the internal_frames
+        frames.emplace_back(std::move(frame));
+    }
+
+    std::vector<std::shared_ptr<DeDupMap>> de_dup_maps(size, nullptr);
+    store.batch_write_internal(std::move(version_ids), rec_norm_ids, std::move(internal_frames), de_dup_maps, false)
+            .get();
+}
+
+void write_version_frame_with_three_segments(
+        version_store::PythonVersionStore& store, const StreamId& stream_id, bool use_rec_norm
+) {
+    if (use_rec_norm) {
+        write_version_frame_with_three_segments_rec_norm(store, stream_id);
+    } else {
+        write_version_frame_with_three_segments(store, stream_id);
+    }
+}
+
 auto get_keys(version_store::PythonVersionStore& store) {
     auto mock_store = store._test_get_store();
     std::unordered_set<RefKey> version_ref_keys;
@@ -94,7 +126,7 @@ static StorageFailureSimulator::ParamActionSequence make_fault_sequence(const st
     return seq;
 }
 
-enum class Operation { WRITE, UPDATE, APPEND };
+enum class Operation { WRITE, WRITE_REC_NORM, UPDATE, APPEND };
 
 struct TestScenario {
     std::string name;
@@ -245,6 +277,77 @@ const auto TEST_DATA_WRITE = {
         }
 };
 
+const auto TEST_DATA_WRITE_REC_NORM = {
+        TestScenario{
+                .name = "Every_second_write_fails",
+                .write_failures = make_fault_sequence({NONE, QUOTA, NONE, QUOTA, NONE, QUOTA}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_expected_outcome = {QUOTA},
+                .operation = Operation::WRITE_REC_NORM
+        },
+        TestScenario{
+                .name = "All_writes_fail",
+                .write_failures = make_fault_sequence({QUOTA}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_expected_outcome = {QUOTA},
+                .operation = Operation::WRITE_REC_NORM
+        },
+        TestScenario{
+                .name = "Only_third_segment_write_fails",
+                .write_failures = make_fault_sequence({NONE, NONE, QUOTA, NONE, NONE, NONE}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .expected_written_data_keys = 0,
+                .num_writes = 1,
+                .write_expected_outcome = {QUOTA},
+                .operation = Operation::WRITE_REC_NORM
+        },
+        TestScenario{
+                .name = "All_succeed",
+                .write_failures = make_fault_sequence({NONE}),
+                .expected_written_ref_keys = 0, // The rec norm test uses batch_write which only writes data and index
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 2,
+                .expected_written_data_keys = 6,
+                .num_writes = 1,
+                .write_expected_outcome = {NONE},
+                .operation = Operation::WRITE_REC_NORM
+        },
+        TestScenario{
+                .name = "Write_triggers_both_quota_and_other_exception",
+                .write_failures = make_fault_sequence({NONE, OTHER, NONE, NONE, QUOTA, NONE}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys =
+                        0, // Index should not be written as now that is done after all the data keys are written
+                .check_data_keys = false,
+                .num_writes = 1,
+                .write_expected_outcome = {OTHER},
+                .operation = Operation::WRITE_REC_NORM
+        },
+        TestScenario{
+                .name = "Write_triggers_rollback_but_then_delete_fails",
+                .write_failures = make_fault_sequence({NONE, QUOTA, NONE, NONE, NONE, NONE}),
+                .delete_failures = make_fault_sequence({OTHER}),
+                .expected_written_ref_keys = 0,
+                .expected_written_version_keys = 0,
+                .expected_written_index_keys = 0,
+                .check_data_keys = true,
+                .expected_written_data_keys = 5,
+                .num_writes = 1,
+                .write_expected_outcome = {OTHER},
+                .operation = Operation::WRITE_REC_NORM
+        }
+};
 const auto TEST_DATA_WRITE_SINGLE_THREAD = get_test_scenarios_single_thread(TEST_DATA_WRITE);
 
 const auto TEST_DATA_UPDATE = {
@@ -379,22 +482,34 @@ INSTANTIATE_TEST_SUITE_P(
         [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
 );
 
+INSTANTIATE_TEST_SUITE_P(
+        WriteRecNorm, RollbackOnQuotaExceeded, ::testing::ValuesIn(TEST_DATA_WRITE_REC_NORM),
+        [](const testing::TestParamInfo<TestScenario>& info) { return info.param.name; }
+);
+
 TEST_P(RollbackOnQuotaExceeded, BasicWrite) {
     const auto& scenario = GetParam();
+
+    const bool use_rec_norm = scenario.operation == Operation::WRITE_REC_NORM;
 
     for (size_t i = 0; i < scenario.num_writes; ++i) {
         switch (scenario.write_expected_outcome[i]) {
         case Outcome::NONE:
-            EXPECT_NO_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_));
+            EXPECT_NO_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_, use_rec_norm));
             break;
         case Outcome::OTHER:
-            EXPECT_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_), StorageException);
+            EXPECT_THROW(
+                    write_version_frame_with_three_segments(*version_store_, stream_id_, use_rec_norm), StorageException
+            );
             break;
         case Outcome::QUOTA:
-            EXPECT_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_), QuotaExceededException);
+            EXPECT_THROW(
+                    write_version_frame_with_three_segments(*version_store_, stream_id_, use_rec_norm),
+                    QuotaExceededException
+            );
             break;
         case Outcome::UNKNOWN_EXCEPTION:
-            EXPECT_ANY_THROW(update_with_three_segments(*version_store_, stream_id_));
+            EXPECT_ANY_THROW(write_version_frame_with_three_segments(*version_store_, stream_id_, use_rec_norm));
             break;
         }
     }

@@ -101,7 +101,7 @@
     { "name": "gflags", "version": "2.2.2#5" },
     { "name": "glog", "version": "0.6.0#2" },
     { "name": "gtest", "version": "1.12.1" },
-    { "name": "libbson", "version": "1.28.0" },
+    { "name": "libbson", "version": "1.30.3" },
     { "name": "libevent", "version": "2.1.12#7" },
     { "name": "libiconv", "version": "1.17#0" },
     { "name": "libsodium", "version": "1.0.18#8" },
@@ -114,7 +114,7 @@
     { "name": "s2n", "version": "1.3.5" },
     { "name": "spdlog", "version": "1.13.0" },
     { "name": "xxhash", "version": "0.8.2" },
-    { "name": "zlib", "version": "1.2.13" },
+    { "name": "zlib", "version": "1.3.1" },
     { "name": "zstd", "version": "1.5.2" }
   ],
   "vcpkg-configuration": {

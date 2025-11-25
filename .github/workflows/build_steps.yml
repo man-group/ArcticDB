@@ -17,6 +17,7 @@ on:
       DEBUG_LOGGING_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
       DEBUG_ENABLED: {default: "0", type: string, required: false, description: 'Enable debug logging "1" (disabled "0")'}
       cmake_extra_args:  {default: "", type: string, required: false, description: 'Additional CMake arguments to pass during configuration'}
+      ref: {default: "", type: string, required: false, description: 'The git ref (branch or tag) that is being built'}
 jobs:
   compile:
     strategy:
@@ -81,6 +82,7 @@ jobs:
         with:
           submodules: recursive
           fetch-depth: 0
+          ref: ${{ inputs.ref }}
 
       - name: Convert to Full Clone
         run: |
@@ -173,7 +175,6 @@ jobs:
       - name: Install sanitizer runtime libraries
         if: matrix.os == 'linux' && env.ARCTICDB_USE_SANITIZER != ''
         run: |
-          yum install -y compiler-rt clang lld
           ldconfig
           find /usr -name "libclang_rt.asan*.so*" 2>/dev/null || echo "ASan library not found in standard locations"
 
@@ -389,6 +390,13 @@ jobs:
           CIBW_MANYLINUX_X86_64_IMAGE: ${{inputs.cibw_image_tag}}
           CIBW_MACOSX_DEPLOYMENT_TARGET: "15.0"
           CIBW_ARCHS_MACOS: "arm64"
+          # Ensure macOS builds use sccache as the compiler launcher
+          CIBW_ENVIRONMENT_MACOS: |
+            CMAKE_C_COMPILER_LAUNCHER=sccache
+            CMAKE_CXX_COMPILER_LAUNCHER=sccache
+            SCCACHE_DIR=${{env.SCCACHE_DIR || ''}}
+          C_COMPILER_LAUNCHER: sccache
+          CXX_COMPILER_LAUNCHER: sccache
           SCCACHE_DIR: ${{env.SCCACHE_DIR || ''}}
 
       - name: Store wheel artifact

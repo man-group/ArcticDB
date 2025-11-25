@@ -157,7 +157,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("type", [](const AtomKey& self) { return self.type(); })
             .def(pybind11::self == pybind11::self)
             .def(pybind11::self != pybind11::self)
-            .def("__repr__", &AtomKey::view)
+            .def("__repr__", &AtomKey::view_human)
             .def(py::self < py::self)
             .def(py::pickle(
                     [](const AtomKey& key) {
@@ -241,6 +241,11 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .value("PANDAS", OutputFormat::PANDAS)
             .value("ARROW", OutputFormat::ARROW);
 
+    py::enum_<ArrowOutputStringFormat>(version, "InternalArrowOutputStringFormat")
+            .value("CATEGORICAL", ArrowOutputStringFormat::CATEGORICAL)
+            .value("LARGE_STRING", ArrowOutputStringFormat::LARGE_STRING)
+            .value("SMALL_STRING", ArrowOutputStringFormat::SMALL_STRING);
+
     py::class_<ReadOptions>(version, "PythonVersionStoreReadOptions")
             .def(py::init())
             .def("set_force_strings_to_object", &ReadOptions::set_force_strings_to_object)
@@ -249,10 +254,19 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def("set_incompletes", &ReadOptions::set_incompletes)
             .def("set_set_tz", &ReadOptions::set_set_tz)
             .def("set_optimise_string_memory", &ReadOptions::set_optimise_string_memory)
-            .def("set_batch_throw_on_error", &ReadOptions::set_batch_throw_on_error)
             .def("set_output_format", &ReadOptions::set_output_format)
+            .def("set_arrow_output_default_string_format", &ReadOptions::set_arrow_output_default_string_format)
+            .def("set_arrow_output_per_column_string_format", &ReadOptions::set_arrow_output_per_column_string_format)
             .def_property_readonly("incompletes", &ReadOptions::get_incompletes)
             .def_property_readonly("output_format", &ReadOptions::output_format);
+
+    py::class_<BatchReadOptions>(version, "PythonVersionStoreBatchReadOptions")
+            .def(py::init([](bool batch_throw_on_error) { return BatchReadOptions(batch_throw_on_error); }))
+            .def("set_read_options", &BatchReadOptions::set_read_options)
+            .def("set_read_options_per_symbol", &BatchReadOptions::set_read_options_per_symbol)
+            .def("set_output_format", &BatchReadOptions::set_output_format)
+            .def("set_batch_throw_on_error", &BatchReadOptions::set_batch_throw_on_error)
+            .def("at", &BatchReadOptions::at);
 
     version.def("write_dataframe_to_file", &write_dataframe_to_file);
     version.def(
@@ -368,9 +382,19 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
             .def_property_readonly("creation_ts", &DescriptorItem::creation_ts)
             .def_property_readonly("timeseries_descriptor", &DescriptorItem::timeseries_descriptor);
 
-    py::class_<StageResult>(version, "StageResult")
+    py::class_<StageResult>(version, "StageResult", R"pbdoc(
+        Result returned by the stage method containing information about staged segments.
+        
+        StageResult objects can be passed to finalization methods to specify which staged data to finalize.
+        This enables selective finalization of staged data when multiple stage operations have been performed.
+        
+        Attributes
+        ----------
+        staged_segments : List[AtomKey]
+)pbdoc")
             .def(py::init([]() { return StageResult({}); }))
             .def_property_readonly("staged_segments", [](const StageResult& self) { return self.staged_segments; })
+            .def("__repr__", &StageResult::view)
             .def(py::pickle(
                     [](const StageResult& s) {
                         constexpr int serialization_version = 0;
@@ -912,7 +936,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                 tsd_proto.normalization(),
                                 tsd_proto.user_meta(),
                                 tsd_proto.multi_key_meta(),
-                                std::vector<entity::AtomKey>{}
                         };
                         return adapt_read_df(std::move(res), nullptr);
                     },
@@ -962,11 +985,13 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                         const std::vector<StreamId>& stream_ids,
                         const std::vector<VersionQuery>& version_queries,
                         std::vector<std::shared_ptr<ReadQuery>>& read_queries,
-                        const ReadOptions& read_options) {
+                        const BatchReadOptions& batch_read_options) {
                         auto handler_data =
-                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
+                                TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format());
                         return python_util::adapt_read_dfs(
-                                v.batch_read(stream_ids, version_queries, read_queries, read_options, handler_data),
+                                v.batch_read(
+                                        stream_ids, version_queries, read_queries, batch_read_options, handler_data
+                                ),
                                 &handler_data
                         );
                     },
@@ -1025,21 +1050,6 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     py::call_guard<SingleThreadMutexHolder>(),
                     "Join multiple symbols from the store"
             )
-            .def(
-                    "batch_read_keys",
-                    [&](PythonVersionStore& v, std::vector<AtomKey> atom_keys, const ReadOptions& read_options) {
-                        auto handler_data =
-                                TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-                        return python_util::adapt_read_dfs(
-                                frame_to_read_result(
-                                        v.batch_read_keys(atom_keys, read_options, handler_data), read_options
-                                ),
-                                &handler_data
-                        );
-                    },
-                    py::call_guard<SingleThreadMutexHolder>(),
-                    "Read a specific version of a dataframe from the store"
-            )
             .def("batch_write",
                  &PythonVersionStore::batch_write,
                  py::call_guard<SingleThreadMutexHolder>(),
@@ -1077,8 +1087,7 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                                     read_options.output_format(),
                                     tsd_proto.normalization(),
                                     tsd_proto.user_meta(),
-                                    tsd_proto.multi_key_meta(),
-                                    std::vector<entity::AtomKey>{}
+                                    tsd_proto.multi_key_meta()
                             };
                             output.emplace_back(std::move(res));
                         }
@@ -1092,10 +1101,8 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
                     [](PythonVersionStore& v,
                        const std::optional<StreamId>& s_id,
                        const std::optional<SnapshotId>& snap_id,
-                       const std::optional<bool>& latest,
-                       const std::optional<bool>& skip_snapshots) {
-                        return v.list_versions(s_id, snap_id, latest, skip_snapshots);
-                    },
+                       bool latest_only,
+                       bool skip_snapshots) { return v.list_versions(s_id, snap_id, latest_only, skip_snapshots); },
                     py::call_guard<SingleThreadMutexHolder>(),
                     "List all the version ids for this store."
             )

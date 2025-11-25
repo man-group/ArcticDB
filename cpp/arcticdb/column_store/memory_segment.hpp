@@ -25,19 +25,20 @@ class SegmentInMemory {
     using Row = SegmentInMemoryImpl::Row;
     using iterator = SegmentInMemoryImpl::iterator;
     using const_iterator = SegmentInMemoryImpl::const_iterator;
+    using ExtraBytesPerColumn = SegmentInMemoryImpl::ExtraBytesPerColumn;
 
     SegmentInMemory();
 
     explicit SegmentInMemory(
             const StreamDescriptor& tsd, size_t expected_column_size = 0,
-            AllocationType presize = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
-            OutputFormat output_format = OutputFormat::NATIVE, DataTypeMode mode = DataTypeMode::INTERNAL
+            AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
+            const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
     );
 
     explicit SegmentInMemory(
-            StreamDescriptor&& tsd, size_t expected_column_size = 0, AllocationType presize = AllocationType::DYNAMIC,
-            Sparsity allow_sparse = Sparsity::NOT_PERMITTED, OutputFormat output_format = OutputFormat::NATIVE,
-            DataTypeMode mode = DataTypeMode::INTERNAL
+            StreamDescriptor&& tsd, size_t expected_column_size = 0,
+            AllocationType allocation_type = AllocationType::DYNAMIC, Sparsity allow_sparse = Sparsity::NOT_PERMITTED,
+            const ExtraBytesPerColumn& extra_bytes_per_column = std::nullopt
     );
 
     friend void swap(SegmentInMemory& left, SegmentInMemory& right) noexcept;
@@ -62,9 +63,9 @@ class SegmentInMemory {
         const size_t expected_column_size = columns.begin()->first.size();
         constexpr static AllocationType allocation_type = AllocationType::PRESIZED;
         constexpr static Sparsity sparsity = Sparsity::NOT_PERMITTED;
-        auto result = SegmentInMemory{
-                std::make_shared<SegmentInMemoryImpl>(descriptor, expected_column_size, allocation_type, sparsity)
-        };
+        auto result = SegmentInMemory{std::make_shared<SegmentInMemoryImpl>(
+                descriptor, expected_column_size, allocation_type, sparsity, std::nullopt
+        )};
         for (auto const& [column_index, column_data] : folly::enumerate(columns)) {
             const size_t row_count = std::ranges::size(column_data);
             internal::check<ErrorCode::E_ASSERTION_FAILURE>(
@@ -98,9 +99,9 @@ class SegmentInMemory {
         }(columns...);
         constexpr static AllocationType allocation_type = AllocationType::PRESIZED;
         constexpr static Sparsity sparsity = Sparsity::NOT_PERMITTED;
-        auto result = SegmentInMemory{
-                std::make_shared<SegmentInMemoryImpl>(descriptor, expected_column_size, allocation_type, sparsity)
-        };
+        auto result = SegmentInMemory{std::make_shared<SegmentInMemoryImpl>(
+                descriptor, expected_column_size, allocation_type, sparsity, std::nullopt
+        )};
         util::enumerate(
                 [&result, expected_column_size](size_t column_index, const auto& column_data) {
                     const size_t row_count = std::ranges::size(column_data);

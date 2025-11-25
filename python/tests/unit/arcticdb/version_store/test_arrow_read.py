@@ -6,11 +6,11 @@ from hypothesis import assume, given, settings, strategies as st
 from hypothesis.extra.numpy import unsigned_integer_dtypes, integer_dtypes, floating_dtypes
 from hypothesis.extra.pandas import columns, data_frames
 
-from arcticdb.util.arrow import stringify_dictionary_encoded_columns
+from arcticdb.util.arrow import cast_string_columns
 from arcticdb.util.test import assert_frame_equal, assert_frame_equal_with_arrow
 from arcticdb.exceptions import SchemaException
 from arcticdb.version_store.processing import QueryBuilder, where
-from arcticdb.options import OutputFormat
+from arcticdb.options import OutputFormat, ArrowOutputStringFormat
 import pyarrow as pa
 import pyarrow.compute as pc
 from arcticdb.util.hypothesis import (
@@ -20,6 +20,7 @@ from arcticdb.util.hypothesis import (
     dataframe_strategy,
     column_strategy,
 )
+import polars as pl
 from arcticdb.util.test import get_sample_dataframe, make_dynamic
 from arcticdb.util._versions import IS_PANDAS_ONE
 from arcticdb_ext.storage import KeyType
@@ -85,7 +86,7 @@ def test_read_empty(lmdb_version_store_arrow):
     expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
     # During normalization when doing the write we attach an empty DateTimeIndex to the DataFrame. We correctly see it
     # in arrow
-    assert table.column_names == ["index"]
+    assert table.column_names == ["__index__"]
     assert table.shape == (0, 1)
     # arcticdb read(output_format=PANDAS) produces `pd.RangeIndex(start=0, stop=0, step=1)` column index if no columns
     # pyarrow to_pandas produces `pd.Index([])` if no columns.
@@ -101,7 +102,7 @@ def test_read_empty_with_columns(lmdb_version_store_arrow):
     lib.write(sym, df)
     table = lib.read(sym).data
     expected = lib.read(sym, output_format=OutputFormat.PANDAS).data
-    assert table.column_names == ["index", "col_int", "col_float"]
+    assert table.column_names == ["__index__", "col_int", "col_float"]
     assert table.shape == (0, 3)
     assert_frame_equal_with_arrow(table, expected)
 
@@ -117,20 +118,27 @@ def test_column_filtering(lmdb_version_store_arrow):
 
 @pytest.mark.parametrize(
     "dynamic_strings",
-    [True, pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))],
+    [
+        True,
+        pytest.param(
+            False, marks=pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
+        ),
+    ],
 )
-def test_strings_basic(lmdb_version_store_arrow, dynamic_strings):
+def test_strings_basic(lmdb_version_store_arrow, dynamic_strings, any_arrow_string_format):
     lib = lmdb_version_store_arrow
-    df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin"]})
+    lib.set_arrow_string_format_default(any_arrow_string_format)
+    df = pd.DataFrame({"x": ["mene", "mene", "tekel", "upharsin", ""]})
     lib.write("arrow", df, dynamic_strings=dynamic_strings)
     table = lib.read("arrow").data
     assert_frame_equal_with_arrow(table, df)
 
 
 @pytest.mark.parametrize("row_range", [None, (2, 3), (2, 4), (2, 5), (2, 6), (3, 4), (3, 5), (3, 6)])
-def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range):
+def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range, any_arrow_string_format):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     # lmdb_version_store_tiny_segment has 2 rows per segment
     # This column is constructed so that every 2-element permutation of strings, Nones, and NaNs are tested
     df = pd.DataFrame(
@@ -163,24 +171,51 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range)
     assert_frame_equal_with_arrow(table, expected)
 
 
-@pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
-def test_fixed_width_strings(lmdb_version_store_arrow):
+@pytest.mark.skip(reason="Monday ref: 18352299908")
+def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_format):
     lib = lmdb_version_store_arrow
-    sym = "test_fixed_width_strings"
-    df0 = pd.DataFrame({"my_column": ["hello", "goodbye"]})
-    lib.write(sym, df0, dynamic_strings=False)
-    with pytest.raises(SchemaException) as e:
-        lib.read(sym)
-    assert "my_column" in str(e.value) and "Arrow" in str(e.value)
+    df = pd.DataFrame(
+        {"x": ["hello", "world", "!"]},
+        index=[
+            ["first", "index", "column"],
+            ["yet", "another", "index"],
+        ],
+    )
+    df.index.names = ["index1", "index2"]
+    arrow_string_format_per_column = {
+        "index1": any_arrow_string_format,
+        "index2": any_arrow_string_format,
+        "x": any_arrow_string_format,
+    }
+    lib.write("arrow", df, dynamic_strings=True)
+    table = lib.read("arrow", arrow_string_format_per_column=arrow_string_format_per_column).data
+    if any_arrow_string_format == ArrowOutputStringFormat.LARGE_STRING:
+        expected_type = pa.large_string()
+    elif any_arrow_string_format == ArrowOutputStringFormat.SMALL_STRING:
+        expected_type = pa.string()
+    else:
+        expected_type = pa.dictionary(pa.int32(), pa.large_string())
+    assert table.field("index1").type == expected_type
+    assert table.field("index2").type == expected_type
+    assert table.field("x").type == expected_type
+    assert_frame_equal_with_arrow(table, df)
 
 
 @pytest.mark.parametrize(
     "dynamic_strings",
-    [True, pytest.param(False, marks=pytest.mark.xfail(reason="Arrow fixed strings are not normalized correctly"))],
+    [
+        True,
+        pytest.param(
+            False, marks=pytest.mark.skipif(WINDOWS, reason="Fixed-width string columns not supported on Windows")
+        ),
+    ],
 )
-def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, dynamic_strings):
+def test_strings_multiple_segments_and_columns(
+    lmdb_version_store_tiny_segment, dynamic_strings, any_arrow_string_format
+):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     df = pd.DataFrame(
         {
             "x": [f"x_{i//2}" for i in range(100)],
@@ -194,8 +229,6 @@ def test_strings_multiple_segments_and_columns(lmdb_version_store_tiny_segment, 
     assert_frame_equal_with_arrow(table, df)
 
 
-# TODO: Fix unicode strings on windows
-@pytest.mark.skipif(WINDOWS, reason="Unicode arrow strings fail on windows")
 def test_all_types(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     # sample dataframe contains all dtypes + unicode strings
@@ -209,12 +242,26 @@ def test_all_types(lmdb_version_store_arrow):
 @pytest.mark.parametrize("date_range_width", [0, 1, 2, 3])
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 def test_date_range_corner_cases(version_store_factory, date_range_start, date_range_width, dynamic_schema):
-    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    lib = version_store_factory(
+        segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
+    )
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
-        data={"col1": np.arange(7), "col2": np.arange(7), "col3": np.arange(7)},
+        data={
+            "col1": np.arange(7),
+            "col2": np.arange(7),
+            "col3": np.arange(7),
+            "col_str_cat": [f"{i}" for i in range(7)],
+            "col_str_large": [f"{i}" for i in range(7)],
+            "col_str_small": [f"{i}" for i in range(7)],
+        },
         index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7),
     )
+    arrow_string_format_per_column = {
+        "col_str_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "col_str_large": ArrowOutputStringFormat.LARGE_STRING,
+        "col_str_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
     sym = "test_date_range_corner_cases"
     lib.write(sym, df)
 
@@ -223,32 +270,68 @@ def test_date_range_corner_cases(version_store_factory, date_range_start, date_r
 
     date_range = (query_start_ts, query_end_ts)
     expected_df = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, date_range=date_range).data
+    data_closed_table = lib.read(
+        sym, date_range=date_range, arrow_string_format_per_column=arrow_string_format_per_column
+    ).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
+@pytest.mark.skipif(
+    IS_PANDAS_ONE, reason="For pandas 1.x with OutputFormat.PANDAS we return empty string columns as float64"
+)
 def test_date_range_between_index_values(lmdb_version_store_tiny_segment):
     lib = lmdb_version_store_tiny_segment
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
-    df = pd.DataFrame(data={"col1": np.arange(2)}, index=[pd.Timestamp(0), pd.Timestamp(10)])
+    df = pd.DataFrame(
+        data={
+            "col1": np.arange(2),
+            "col_str_cat": ["a", "bb"],
+            "col_str_large": ["a", "bb"],
+            "col_str_small": ["a", "bb"],
+        },
+        index=[pd.Timestamp(0), pd.Timestamp(10)],
+    )
+    arrow_string_format_per_column = {
+        "col_str_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "col_str_large": ArrowOutputStringFormat.LARGE_STRING,
+        "col_str_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
     sym = "test_date_range_between_index_values"
-    lib.write(sym, df)
+    lib.write(sym, df, dynamic_strings=True)
 
     date_range = (pd.Timestamp(4), pd.Timestamp(5))
     expected_df = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, date_range=date_range).data
+    data_closed_table = lib.read(
+        sym, date_range=date_range, arrow_string_format_per_column=arrow_string_format_per_column
+    ).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
 @pytest.mark.parametrize("date_range_start", [-5, 10])
 @pytest.mark.parametrize("dynamic_schema", [True, False])
+@pytest.mark.skipif(
+    IS_PANDAS_ONE, reason="For pandas 1.x with OutputFormat.PANDAS we return empty string columns as float64"
+)
 def test_date_range_empty_result(version_store_factory, date_range_start, dynamic_schema):
-    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    lib = version_store_factory(
+        segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
+    )
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
-        data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]},
+        data={
+            "col1": np.arange(7),
+            "col2": np.arange(7),
+            "col_str_cat": [f"{i}" for i in range(7)],
+            "col_str_large": [f"{i}" for i in range(7)],
+            "col_str_small": [f"{i}" for i in range(7)],
+        },
         index=pd.date_range(pd.Timestamp(0), freq="ns", periods=7),
     )
+    arrow_string_format_per_column = {
+        "col_str_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "col_str_large": ArrowOutputStringFormat.LARGE_STRING,
+        "col_str_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
     sym = "test_date_range_empty_result"
     lib.write(sym, df)
 
@@ -257,7 +340,9 @@ def test_date_range_empty_result(version_store_factory, date_range_start, dynami
 
     date_range = (query_start_ts, query_end_ts)
     expected_df = lib.read(sym, date_range=date_range, output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, date_range=date_range).data
+    data_closed_table = lib.read(
+        sym, date_range=date_range, arrow_string_format_per_column=arrow_string_format_per_column
+    ).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
@@ -300,9 +385,19 @@ def test_date_range(
     lib.set_output_format(output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
-        {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
+        {
+            "numeric": np.arange(100),
+            "col_str_cat": [f"{i}" for i in range(100)],
+            "col_str_large": [f"{i}" for i in range(100)],
+            "col_str_small": [f"{i}" for i in range(100)],
+        },
         index=pd.date_range(initial_timestamp, periods=100),
     )
+    arrow_string_format_per_column = {
+        "col_str_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "col_str_large": ArrowOutputStringFormat.LARGE_STRING,
+        "col_str_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
     sym = "arrow_date_test"
     lib.write(sym, df)
 
@@ -316,9 +411,11 @@ def test_date_range(
     date_range = (query_start_ts, query_end_ts)
     if use_query_builder:
         q = QueryBuilder().date_range(date_range)
-        result = lib.read(sym, query_builder=q).data
+        result = lib.read(sym, query_builder=q, arrow_string_format_per_column=arrow_string_format_per_column).data
     else:
-        result = lib.read(sym, date_range=date_range).data
+        result = lib.read(
+            sym, date_range=date_range, arrow_string_format_per_column=arrow_string_format_per_column
+        ).data
 
     assert_frame_equal_with_arrow(expected_df, result)
 
@@ -373,33 +470,71 @@ def test_date_range_with_duplicates(
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("index", [None, pd.date_range(pd.Timestamp(0), freq="ns", periods=7)])
 def test_row_range_corner_cases(version_store_factory, row_range_start, row_range_width, dynamic_schema, index):
-    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    lib = version_store_factory(
+        segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
+    )
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
-    df = pd.DataFrame(data={"col1": np.arange(7), "col2": np.arange(7), "col3": np.arange(7)}, index=index)
+    df = pd.DataFrame(
+        data={
+            "col1": np.arange(7),
+            "col2": np.arange(7),
+            "col3": np.arange(7),
+            "col_str_cat": [f"{i}" for i in range(7)],
+            "col_str_large": [f"{i}" for i in range(7)],
+            "col_str_small": [f"{i}" for i in range(7)],
+        },
+        index=index,
+    )
+    arrow_string_format_per_column = {
+        "col_str_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "col_str_large": ArrowOutputStringFormat.LARGE_STRING,
+        "col_str_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
     sym = "test_row_range_corner_cases"
     lib.write(sym, df)
 
     row_range = (row_range_start, row_range_start + row_range_width + 1)
     expected_df = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, row_range=row_range).data
+    data_closed_table = lib.read(
+        sym, row_range=row_range, arrow_string_format_per_column=arrow_string_format_per_column
+    ).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
 @pytest.mark.parametrize("row_range_start", [-10, 10])
 @pytest.mark.parametrize("dynamic_schema", [True, False])
 @pytest.mark.parametrize("index", [None, pd.date_range(pd.Timestamp(0), freq="ns", periods=7)])
+@pytest.mark.skipif(
+    IS_PANDAS_ONE, reason="For pandas 1.x with OutputFormat.PANDAS we return empty string columns as float64"
+)
 def test_row_range_empty_result(version_store_factory, row_range_start, dynamic_schema, index):
-    lib = version_store_factory(segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema)
+    lib = version_store_factory(
+        segment_row_size=2, column_group_size=2, dynamic_schema=dynamic_schema, dynamic_strings=True
+    )
     lib.set_output_format(OutputFormat.EXPERIMENTAL_ARROW)
     df = pd.DataFrame(
-        data={"col1": np.arange(7), "col2": np.arange(7), "col3": [f"{i}" for i in range(7)]}, index=index
+        data={
+            "col1": np.arange(7),
+            "col2": np.arange(7),
+            "col_str_cat": [f"{i}" for i in range(7)],
+            "col_str_large": [f"{i}" for i in range(7)],
+            "col_str_small": [f"{i}" for i in range(7)],
+        },
+        index=index,
     )
+    arrow_string_format_per_column = {
+        "col_str_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "col_str_large": ArrowOutputStringFormat.LARGE_STRING,
+        "col_str_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
     sym = "test_row_range_empty_result"
     lib.write(sym, df)
 
     row_range = (row_range_start, row_range_start + 1)
     expected_df = lib.read(sym, row_range=row_range, output_format=OutputFormat.PANDAS).data
-    data_closed_table = lib.read(sym, row_range=row_range).data
+    data_closed_table = lib.read(
+        sym, row_range=row_range, arrow_string_format_per_column=arrow_string_format_per_column
+    ).data
     assert_frame_equal_with_arrow(expected_df, data_closed_table)
 
 
@@ -444,19 +579,30 @@ def test_row_range(version_store_factory, segment_row_size, start_offset, end_of
     lib.set_output_format(output_format)
     initial_timestamp = pd.Timestamp("2019-01-01")
     df = pd.DataFrame(
-        {"numeric": np.arange(100), "strings": [f"{i}" for i in range(100)]},
+        {
+            "numeric": np.arange(100),
+            "strings_cat": [f"{i}" for i in range(100)],
+            "strings_large": [f"{i}" for i in range(100)],
+            "strings_small": [f"{i}" for i in range(100)],
+        },
         index=pd.date_range(initial_timestamp, periods=100),
     )
+    arrow_string_format_per_column = {
+        "strings_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "strings_large": ArrowOutputStringFormat.LARGE_STRING,
+        "strings_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
     sym = "arrow_row_test"
+
     lib.write(sym, df)
 
     row_range = (start_offset, end_offset)
     expected_df = df.iloc[start_offset:end_offset]
     if use_query_builder:
         q = QueryBuilder().row_range(row_range)
-        result = lib.read(sym, query_builder=q).data
+        result = lib.read(sym, query_builder=q, arrow_string_format_per_column=arrow_string_format_per_column).data
     else:
-        result = lib.read(sym, row_range=row_range).data
+        result = lib.read(sym, row_range=row_range, arrow_string_format_per_column=arrow_string_format_per_column).data
 
     assert_frame_equal_with_arrow(expected_df, result)
 
@@ -478,21 +624,33 @@ def test_arrow_layout(lmdb_version_store_tiny_segment):
     lib_tool = lib.library_tool()
     num_rows = 100
     df = pd.DataFrame(
-        data={"int": np.arange(num_rows, dtype=np.int64), "str": [f"x_{i//3}" for i in range(num_rows)]},
+        data={
+            "int": np.arange(num_rows, dtype=np.int64),
+            "str_cat": [f"x_{i//3}" for i in range(num_rows)],
+            "str_large": [f"x_{i//3}" for i in range(num_rows)],
+            "str_small": [f"x_{i//3}" for i in range(num_rows)],
+        },
         index=pd.date_range(pd.Timestamp(0), periods=num_rows),
     )
     lib.write("sym", df, dynamic_strings=True)
     data_keys = lib_tool.find_keys_for_symbol(KeyType.TABLE_DATA, "sym")
-    assert len(data_keys) == num_rows // 2
+    assert len(data_keys) == (num_rows // 2) * (len(df.columns) // 2)
 
-    arrow_table = lib.read("sym").data
+    arrow_string_format_per_column = {
+        "str_cat": ArrowOutputStringFormat.CATEGORICAL,
+        "str_large": ArrowOutputStringFormat.LARGE_STRING,
+        "str_small": ArrowOutputStringFormat.SMALL_STRING,
+    }
+    arrow_table = lib.read("sym", arrow_string_format_per_column=arrow_string_format_per_column).data
     batches = arrow_table.to_batches()
     assert len(batches) == num_rows // 2
     for record_batch in batches:
-        index_arr, int_arr, str_arr = record_batch.columns
+        index_arr, int_arr, str_cat_arr, str_large_arr, str_small_arr = record_batch.columns
         assert index_arr.type == pa.timestamp("ns")
         assert int_arr.type == pa.int64()
-        assert str_arr.type == pa.dictionary(pa.int32(), pa.large_string())
+        assert str_cat_arr.type == pa.dictionary(pa.int32(), pa.large_string())
+        assert str_large_arr.type == pa.large_string()
+        assert str_small_arr.type == pa.string()
 
 
 @pytest.mark.parametrize(
@@ -561,8 +719,11 @@ def test_arrow_dynamic_schema_missing_columns_numeric(version_store_factory, row
 
 
 @pytest.mark.parametrize("rows_per_column", [1, 7, 8, 9, 100_000])
-def test_arrow_dynamic_schema_missing_columns_strings(lmdb_version_store_dynamic_schema_arrow, rows_per_column):
+def test_arrow_dynamic_schema_missing_columns_strings(
+    lmdb_version_store_dynamic_schema_arrow, rows_per_column, any_arrow_string_format
+):
     lib = lmdb_version_store_dynamic_schema_arrow
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     sym = "test_arrow_dynamic_schema_missing_columns_strings"
     write_table = pa.table({"col1": pa.array(["hello"] * rows_per_column, pa.string())})
     append_table = pa.table({"col2": pa.array(["goodbye"] * rows_per_column, pa.string())})
@@ -571,7 +732,7 @@ def test_arrow_dynamic_schema_missing_columns_strings(lmdb_version_store_dynamic
     lib.append(sym, append_table.to_pandas())
     expected = pa.concat_tables([write_table, append_table], promote_options="permissive")
     received = lib.read(sym).data
-    received = stringify_dictionary_encoded_columns(received, string_type=pa.string())
+    received = cast_string_columns(received, string_type=pa.string())
     assert expected.equals(received)
 
 
@@ -644,7 +805,7 @@ def test_arrow_dynamic_schema_missing_columns_hypothesis(
         promote_options="permissive",
     )
     received = lib.read(sym).data
-    received = stringify_dictionary_encoded_columns(received, string_type=pa.string())
+    received = cast_string_columns(received, string_type=pa.string())
     assert expected.equals(received)
 
 
@@ -788,7 +949,7 @@ def test_arrow_dynamic_schema_filtered_column(lmdb_version_store_dynamic_schema_
     expected = expected.filter(pa.compute.field("col") < 5)
     q = QueryBuilder()
     q = q[q["col"] < 5]
-    received = stringify_dictionary_encoded_columns(lib.read(sym, query_builder=q).data)
+    received = lib.read(sym, query_builder=q).data
     assert expected.equals(received)
 
 
@@ -930,8 +1091,9 @@ def test_resample_empty_slices(lmdb_version_store_dynamic_schema_arrow):
     assert_frame_equal_with_arrow(table, expected)
 
 
-def test_sparse_strings_from_processing_pipeline(lmdb_version_store_dynamic_schema_arrow):
+def test_sparse_strings_from_processing_pipeline(lmdb_version_store_dynamic_schema_arrow, any_arrow_string_format):
     lib = lmdb_version_store_dynamic_schema_arrow
+    lib.set_arrow_string_format_default(any_arrow_string_format)
     sym = "test_sparse_strings_from_processing_pipeline"
     df_1 = pd.DataFrame(
         {
@@ -964,3 +1126,59 @@ def test_sparse_strings_from_processing_pipeline(lmdb_version_store_dynamic_sche
     expected["new_col"] = np.where(expected["condition"].to_numpy(), expected["col_1"], expected["col_2"])
     expected.reset_index(drop=True, inplace=True)
     assert_frame_equal_with_arrow(table, expected)
+
+
+def test_arrow_read_batch_with_strings(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym_1, sym_2 = "sym_1", "sym_2"
+    df_1 = pd.DataFrame({"col_1": ["a", "a", "bb"], "col_2": ["x", "y", "z"]})
+    df_2 = pd.DataFrame({"col_1": ["a", "aa", "aaa"], "col_2": ["a", "a", "a"]})
+    lib.batch_write([sym_1, sym_2], [df_1, df_2])
+
+    arrow_string_format_default = ArrowOutputStringFormat.SMALL_STRING
+    arrow_string_format_per_column = {"col_1": ArrowOutputStringFormat.CATEGORICAL}
+    per_symbol_arrow_string_format_default = [ArrowOutputStringFormat.LARGE_STRING, None]
+    per_symbol_arrow_string_format_per_column = [
+        None,  # First item will use the global arrow_string_format_per_column
+        {"col_2": ArrowOutputStringFormat.CATEGORICAL},
+    ]
+    batch_result = lib.batch_read(
+        [sym_1, sym_2],
+        arrow_string_format_default=arrow_string_format_default,
+        arrow_string_format_per_column=arrow_string_format_per_column,
+        per_symbol_arrow_string_format_default=per_symbol_arrow_string_format_default,
+        per_symbol_arrow_string_format_per_column=per_symbol_arrow_string_format_per_column,
+    )
+    table_1 = batch_result[sym_1].data
+    assert table_1.schema.field(0).type == pa.dictionary(pa.int32(), pa.large_string())  # global per_column
+    assert table_1.schema.field(1).type == pa.large_string()  # per symbol default
+    assert_frame_equal_with_arrow(table_1, df_1)
+    table_2 = batch_result[sym_2].data
+    assert table_2.schema.field(0).type == pa.string()  # global default for all symbols
+    assert table_2.schema.field(1).type == pa.dictionary(pa.int32(), pa.large_string())  # per_column override
+    assert_frame_equal_with_arrow(table_2, df_2)
+
+
+def test_polars_basic(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    lib.set_output_format(OutputFormat.EXPERIMENTAL_POLARS)
+    sym = "polars"
+    df = pd.DataFrame(
+        {
+            "col_int": np.arange(10, dtype=np.int64),
+            "col_float": np.arange(10, dtype=np.float32),
+            "col_bool": [i % 2 == 0 for i in range(10)],
+            "col_str": ["x" * (i + 1) for i in range(10)],
+            "col_cat": [f"str_{i%3}" for i in range(10)],
+        },
+        index=pd.date_range(pd.Timestamp(2025, 1, 1), periods=10),
+    )
+    lib.write(sym, df)
+    result = lib.read(sym, arrow_string_format_per_column={"col_cat": ArrowOutputStringFormat.CATEGORICAL}).data
+    df.index.name = "__index__"
+    expected = pl.from_pandas(df.reset_index())
+    expected = expected.with_columns(pl.col("col_cat").cast(pl.Categorical))
+    expected.columns[0] = "__index__"
+    assert result.columns == ["__index__", "col_int", "col_float", "col_bool", "col_str", "col_cat"]
+    assert result.dtypes == [pl.Datetime("ns"), pl.Int64, pl.Float32, pl.Boolean, pl.String, pl.Categorical]
+    assert result.equals(expected)

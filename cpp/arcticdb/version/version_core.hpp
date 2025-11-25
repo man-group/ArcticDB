@@ -22,19 +22,13 @@
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
 #include <arcticdb/version/merge_options.hpp>
+#include <arcticdb/entity/read_result.hpp>
 #include <string>
 
 namespace arcticdb::version_store {
 
 using namespace entity;
 using namespace pipelines;
-
-struct SymbolProcessingResult {
-    VersionedItem versioned_item_;
-    proto::descriptors::UserDefinedMetadata metadata_;
-    OutputSchema output_schema_;
-    std::vector<EntityId> entity_ids_;
-};
 
 enum class ReadModifyWriteIndexStrategy {
     /// The index key for the new version will contain only the data produced by the processing query.
@@ -47,39 +41,14 @@ enum class ReadModifyWriteIndexStrategy {
     MERGE_INDEX
 };
 
-struct ReadVersionOutput {
-    ReadVersionOutput() = delete;
-    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor) :
-        versioned_item_(std::move(versioned_item)),
-        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
-
-    VersionedItem versioned_item_;
-    FrameAndDescriptor frame_and_descriptor_;
-};
-
-struct MultiSymbolReadOutput {
-    MultiSymbolReadOutput() = delete;
-    MultiSymbolReadOutput(
-            std::vector<VersionedItem>&& versioned_items,
-            std::vector<proto::descriptors::UserDefinedMetadata>&& metadatas, FrameAndDescriptor&& frame_and_descriptor
-    ) :
-        versioned_items_(std::move(versioned_items)),
-        metadatas_(std::move(metadatas)),
-        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
-
-    std::vector<VersionedItem> versioned_items_;
-    std::vector<proto::descriptors::UserDefinedMetadata> metadatas_;
-    FrameAndDescriptor frame_and_descriptor_;
-};
-
 VersionedItem write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
         const WriteOptions& options, const std::shared_ptr<DeDupMap>& de_dup_map = std::make_shared<DeDupMap>(),
         bool allow_sparse = false, bool validate_index = false
+);
+
+std::tuple<IndexPartialKey, SlicingPolicy> get_partial_key_and_slicing_policy(
+        const WriteOptions& options, const InputFrame& frame, VersionId version_id, bool validate_index
 );
 
 folly::Future<entity::AtomKey> async_write_dataframe_impl(
@@ -238,6 +207,11 @@ VersionedItem merge_update_impl(
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
         std::vector<std::string>&& on, bool match_on_timeseries_index, const MergeStrategy& strategy,
         const std::shared_ptr<InputFrame>& source
+);
+
+std::shared_ptr<PipelineContext> setup_pipeline_context(
+        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
+        ReadQuery& read_query, const ReadOptions& read_options
 );
 } // namespace arcticdb::version_store
 

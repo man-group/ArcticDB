@@ -497,7 +497,7 @@ TEST_F(VersionStoreTest, StressBatchWrite) {
         frames.push_back(wrapper.frame_);
     }
 
-    folly::collect(test_store_->batch_write_internal(version_ids, symbols, std::move(frames), dedup_maps, false)).get();
+    test_store_->batch_write_internal(std::move(version_ids), symbols, std::move(frames), dedup_maps, false).get();
 }
 
 TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
@@ -522,13 +522,13 @@ TEST_F(VersionStoreTest, StressBatchReadUncompressed) {
     }
 
     std::vector<std::shared_ptr<ReadQuery>> read_queries;
-    ReadOptions read_options;
-    read_options.set_batch_throw_on_error(true);
-    read_options.set_output_format(OutputFormat::NATIVE);
+    BatchReadOptions batch_read_options(true);
+    batch_read_options.set_output_format(OutputFormat::NATIVE);
     register_native_handler_data_factory();
-    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(read_options.output_format());
-    auto latest_versions =
-            test_store_->batch_read(symbols, std::vector<VersionQuery>(10), read_queries, read_options, handler_data);
+    auto handler_data = TypeHandlerRegistry::instance()->get_handler_data(batch_read_options.output_format());
+    auto latest_versions = test_store_->batch_read(
+            symbols, std::vector<VersionQuery>(10), read_queries, batch_read_options, handler_data
+    );
     for (auto&& [idx, version] : folly::enumerate(latest_versions)) {
         auto expected =
                 get_test_simple_frame(std::get<VersionedItem>(std::get<ReadResult>(version).item).symbol(), 10, idx);
@@ -724,7 +724,7 @@ TEST(VersionStore, UpdateWithin) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = read_result.frame_and_descriptor_.frame_;
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows; ++i) {
         const uint8_t expected = update_range.contains(i) ? i + update_val : i;
@@ -768,7 +768,7 @@ TEST(VersionStore, UpdateBefore) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = read_result.frame_and_descriptor_.frame_;
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -812,7 +812,7 @@ TEST(VersionStore, UpdateAfter) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = read_result.frame_and_descriptor_.frame_;
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + update_range.diff(); ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -856,7 +856,7 @@ TEST(VersionStore, UpdateIntersectBefore) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = read_result.frame_and_descriptor_.frame_;
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -900,7 +900,7 @@ TEST(VersionStore, UpdateIntersectAfter) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, ReadOptions{}, handler_data
     );
-    const auto& seg = read_result.frame_and_descriptor_.frame_;
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows + 5; ++i) {
         const auto expected = update_range.contains(i) ? i + update_val : i;
@@ -954,7 +954,7 @@ TEST(VersionStore, UpdateWithinSchemaChange) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
-    const auto& seg = read_result.frame_and_descriptor_.frame_;
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = update_range.contains(i) ? i + update_val : i;
@@ -1018,7 +1018,7 @@ TEST(VersionStore, UpdateWithinTypeAndSchemaChange) {
     auto read_result = version_store.read_dataframe_version_internal(
             symbol, VersionQuery{}, read_query, read_options, handler_data
     );
-    const auto& seg = read_result.frame_and_descriptor_.frame_;
+    const auto& seg = read_result.root_.frame_and_descriptor_.frame_;
 
     for (auto i = 0u; i < num_rows; ++i) {
         auto expected = update_range.contains(i) ? i + update_val : i;

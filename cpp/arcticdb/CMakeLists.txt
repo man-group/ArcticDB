@@ -181,6 +181,7 @@ set(arcticdb_srcs
         # header files
         arrow/arrow_handlers.hpp
         arrow/arrow_output_frame.hpp
+        arrow/arrow_output_options.hpp
         arrow/arrow_utils.hpp
         async/async_store.hpp
         async/batch_read_args.hpp
@@ -227,6 +228,7 @@ set(arcticdb_srcs
         entity/ref_key.hpp
         entity/serialized_key.hpp
         entity/stage_result.hpp
+        entity/stage_result.cpp
         entity/type_conversion.hpp
         entity/types.hpp
         entity/type_utils.hpp
@@ -553,6 +555,7 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
+        version/version_tasks.cpp
         storage/s3/ec2_utils.cpp
 )
 
@@ -938,6 +941,7 @@ if(${TEST})
 
     set(unit_test_srcs
             arrow/test/arrow_test_utils.hpp
+            arrow/test/arrow_test_utils.cpp
             arrow/test/test_arrow_read.cpp
             arrow/test/test_arrow_write.cpp
             async/test/test_async.cpp
@@ -1108,6 +1112,7 @@ if(${TEST})
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
             arrow/test/arrow_test_utils.hpp
+            arrow/test/arrow_test_utils.cpp
             arrow/test/benchmark_arrow_reads.cpp
             arrow/test/benchmark_arrow_writes.cpp
             column_store/test/benchmark_column.cpp

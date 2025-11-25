@@ -9,10 +9,11 @@ As of the Change Date specified in that file, in accordance with the Business So
 from typing import Optional, Union
 from enum import Enum
 
-from arcticdb.dependencies import _PYARROW_AVAILABLE
+from arcticdb.dependencies import _PYARROW_AVAILABLE, _POLARS_AVAILABLE
+from arcticdb.dependencies import pyarrow as pa
 from arcticdb.encoding_version import EncodingVersion
 from arcticdb_ext.storage import ModifiableLibraryOption, ModifiableEnterpriseLibraryOption
-from arcticdb_ext.version_store import InternalOutputFormat
+from arcticdb_ext.version_store import InternalOutputFormat, InternalArrowOutputStringFormat
 
 
 DEFAULT_ENCODING_VERSION = EncodingVersion.V1
@@ -33,6 +34,8 @@ class LibraryOptions:
         See `__init__` for details.
     columns_per_segment: int
         See `__init__` for details.
+    recursive_normalizers: bool
+        See `__init__` for details.
     """
 
     def __init__(
@@ -43,6 +46,7 @@ class LibraryOptions:
         rows_per_segment: int = 100_000,
         columns_per_segment: int = 127,
         encoding_version: Optional[EncodingVersion] = None,
+        recursive_normalizers: bool = False,
     ):
         """
         Parameters
@@ -124,12 +128,25 @@ class LibraryOptions:
         encoding_version: Optional[EncodingVersion], default None
             The encoding version to use when writing data to storage.
             v2 is faster, but still experimental, so use with caution.
+
+        recursive_normalizers: bool, default False
+            Whether to recursively normalize nested data structures when writing sequence-like or dict-like data.
+            The data structure can be nested or a mix of lists and dictionaries.
+            Note: If the leaf nodes cannot be natively normalized and must be written using write_pickle, those leaf nodes
+            will be pickled, resulting in the overall data being only partially normalized and partially pickled.
+            Example:
+                data = {"a": np.arange(5), "b": pd.DataFrame({"col": [1, 2, 3]})}
+                lib = ac.create_library(lib_name)
+                lib.write(symbol, data) # ArcticUnsupportedDataTypeException will be thrown by default
+                lib2 = ac.create_library(lib_name, LibraryOptions(recursive_normalizers=True))
+                lib2.write(symbol, data) # data will be successfully written
         """
         self.dynamic_schema = dynamic_schema
         self.dedup = dedup
         self.rows_per_segment = rows_per_segment
         self.columns_per_segment = columns_per_segment
         self.encoding_version = encoding_version
+        self.recursive_normalizers = recursive_normalizers
 
     def __eq__(self, right):
         return (
@@ -138,13 +155,15 @@ class LibraryOptions:
             and self.rows_per_segment == right.rows_per_segment
             and self.columns_per_segment == right.columns_per_segment
             and self.encoding_version == right.encoding_version
+            and self.recursive_normalizers == right.recursive_normalizers
         )
 
     def __repr__(self):
         return (
             f"LibraryOptions(dynamic_schema={self.dynamic_schema}, dedup={self.dedup},"
             f" rows_per_segment={self.rows_per_segment}, columns_per_segment={self.columns_per_segment},"
-            f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'})"
+            f" encoding_version={self.encoding_version if self.encoding_version is not None else 'Default'},"
+            f" recursive_normalizers={self.recursive_normalizers})"
         )
 
 
@@ -152,6 +171,7 @@ class LibraryOptions:
 class OutputFormat(str, Enum):
     PANDAS = "PANDAS"
     EXPERIMENTAL_ARROW = "EXPERIMENTAL_ARROW"
+    EXPERIMENTAL_POLARS = "EXPERIMENTAL_POLARS"
 
 
 def output_format_to_internal(output_format: Union[OutputFormat, str]) -> InternalOutputFormat:
@@ -163,8 +183,68 @@ def output_format_to_internal(output_format: Union[OutputFormat, str]) -> Intern
                 "ArcticDB's pyarrow optional dependency missing but is required to use arrow output format."
             )
         return InternalOutputFormat.ARROW
+    elif output_format.lower() == OutputFormat.EXPERIMENTAL_POLARS.lower():
+        if not _PYARROW_AVAILABLE or not _POLARS_AVAILABLE:
+            raise ModuleNotFoundError(
+                "ArcticDB's pyarrow or polars optional dependencies are missing but are required to use polars output format."
+            )
+        return InternalOutputFormat.ARROW
     else:
         raise ValueError(f"Unknown OutputFormat: {output_format}")
+
+
+class ArrowOutputStringFormat(str, Enum):
+    """
+    Used to specify string format when output_format=OutputFormat.EXPERIMENTAL_ARROW.
+    Arguments allow specifying either the enum value or the corresponding pyarrow.DataType
+
+    LARGE_STRING (default):
+    Produces string columns with type `pa.large_string()`. Total length of strings must fit in a 64-bit integer.
+    Does not deduplicate strings, so has better performance for columns with many unique strings.
+
+    SMALL_STRING:
+    Produces string columns with type `pa.string()`. Total length of strings must fit in a 32-bit integer.
+    Does not deduplicate strings, so has better performance for columns with many unique strings.
+    Slightly faster than `LARGE_STRING` but does not work with very long strings.
+
+    CATEGORICAL and DICTIONARY_ENCODED:
+    Both are different aliases for the same string format. Produces string columns with type
+    `pa.dictionary(pa.int32(), pa.large_string())`. Total length of strings must fit in a 64-bit integer.  Splitting in
+    record batches guarantees that 32-bit dictionary keys are sufficient.
+    Does deduplicate strings, so has better performance for columns with few unique strings.
+
+    """
+
+    CATEGORICAL = "CATEGORICAL"
+    DICTIONARY_ENCODED = "DICTIONARY_ENCODED"
+    LARGE_STRING = "LARGE_STRING"
+    SMALL_STRING = "SMALL_STRING"
+
+
+def arrow_output_string_format_to_internal(
+    arrow_string_format: Union[ArrowOutputStringFormat, "pa.DataType"],
+) -> InternalArrowOutputStringFormat:
+    if (
+        arrow_string_format == ArrowOutputStringFormat.CATEGORICAL
+        or arrow_string_format == ArrowOutputStringFormat.DICTIONARY_ENCODED
+        or _PYARROW_AVAILABLE
+        and arrow_string_format == pa.dictionary(pa.int32(), pa.large_string())
+    ):
+        return InternalArrowOutputStringFormat.CATEGORICAL
+    elif (
+        arrow_string_format == ArrowOutputStringFormat.LARGE_STRING
+        or _PYARROW_AVAILABLE
+        and arrow_string_format == pa.large_string()
+    ):
+        return InternalArrowOutputStringFormat.LARGE_STRING
+    elif (
+        arrow_string_format == ArrowOutputStringFormat.SMALL_STRING
+        or _PYARROW_AVAILABLE
+        and arrow_string_format == pa.string()
+    ):
+        return InternalArrowOutputStringFormat.SMALL_STRING
+    else:
+        raise ValueError(f"Unkown ArrowOutputStringFormat: {arrow_string_format}")
 
 
 class RuntimeOptions:
@@ -172,11 +252,16 @@ class RuntimeOptions:
         self,
         *,
         output_format: Union[OutputFormat, str] = OutputFormat.PANDAS,
+        arrow_string_format_default: ArrowOutputStringFormat = ArrowOutputStringFormat.LARGE_STRING,
     ):
         self.output_format = output_format
+        self.arrow_string_format_default = arrow_string_format_default
 
     def set_output_format(self, output_format: Union[OutputFormat, str]):
         self.output_format = output_format
+
+    def set_arrow_string_format_default(self, arrow_string_format_default: ArrowOutputStringFormat):
+        self.arrow_string_format_default = arrow_string_format_default
 
 
 class EnterpriseLibraryOptions:

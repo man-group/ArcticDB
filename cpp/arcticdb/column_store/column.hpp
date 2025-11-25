@@ -225,10 +225,8 @@ class Column {
 
     Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffer, Buffer&& shapes);
 
-    Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse);
-
-    Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse,
-           OutputFormat output_format, DataTypeMode mode);
+    Column(TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
+           size_t extra_bytes_per_block = 0);
 
     template<typename Input>
     requires std::ranges::contiguous_range<Input>

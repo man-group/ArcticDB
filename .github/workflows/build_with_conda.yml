@@ -65,6 +65,13 @@ jobs:
       mongodb:
         image: mongo:4.4
     steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false # Time-consuming but doesn't save that much space (4GB)
+          docker-images: false  # We're using docker images we don't want to clear
+
       - uses: actions/checkout@v3.3.0
         # DONT use recursive submodules checkout to simulate conda feedstock build
         # with:
@@ -216,7 +223,7 @@ jobs:
         if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
-          cd cpp/out/darwin-conda-release-build/
+          cd cpp/out/macos-conda-release-build/
           make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
@@ -224,7 +231,7 @@ jobs:
         if: ${{ inputs.run_cpp_tests == true|| github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
-          cd cpp/out/darwin-conda-release-build/
+          cd cpp/out/macos-conda-release-build/
           CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm

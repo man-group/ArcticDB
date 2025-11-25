@@ -210,7 +210,7 @@ class StorageLock {
         if (auto read_ts = read_timestamp(store)) {
             // check TTL
             auto ttl = ConfigsMap::instance()->get_int("StorageLock.TTL", DEFAULT_TTL_INTERVAL);
-            if (ClockType::coarse_nanos_since_epoch() - *read_ts < ttl) {
+            if (ClockType::nanos_since_epoch() - *read_ts < ttl) {
                 return true;
             }
             log::lock().warn(

@@ -33,7 +33,7 @@ py::tuple extract_numpy_arrays(PandasOutputFrame& pandas_output_frame) {
     index_column_names.reserve(index_field_count);
     column_names.reserve(field_count - index_field_count);
     for (std::size_t c = 0; c < field_count; ++c) {
-        arrays.emplace_back(arcticdb::detail::array_at(frame, c, OutputFormat::PANDAS));
+        arrays.emplace_back(arcticdb::detail::array_at(frame, c));
         if (c < index_field_count) {
             index_column_names.emplace_back(frame.field(c).name());
         } else {

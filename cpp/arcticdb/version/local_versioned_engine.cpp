@@ -408,14 +408,35 @@ std::variant<VersionedItem, StreamId> get_version_identifier(
     return *version;
 }
 
-ReadVersionOutput LocalVersionedEngine::read_dataframe_version_internal(
+ReadVersionWithNodesOutput LocalVersionedEngine::read_dataframe_version_internal(
         const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
         const ReadOptions& read_options, std::any& handler_data
 ) {
     py::gil_scoped_release release_gil;
     auto version = get_version_to_read(stream_id, version_query);
     const auto identifier = get_version_identifier(stream_id, version_query, read_options, version);
-    return read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+
+    auto root_result = read_frame_for_version(store(), identifier, read_query, read_options, handler_data).get();
+    auto& keys = root_result.frame_and_descriptor_.keys_;
+    if (keys.empty()) {
+        return {std::move(root_result), {}};
+    } else {
+        std::vector<folly::Future<ReadVersionOutput>> node_futures;
+        node_futures.reserve(keys.size());
+        for (const auto& key : keys) {
+            node_futures.emplace_back(read_frame_for_version(store(), key, read_query, read_options, handler_data));
+        }
+        auto node_trys = folly::collectAll(node_futures).get();
+        std::vector<ReadVersionOutput> node_results;
+        node_results.reserve(node_trys.size());
+        std::transform(
+                std::make_move_iterator(node_trys.begin()),
+                std::make_move_iterator(node_trys.end()),
+                std::back_inserter(node_results),
+                [](auto&& try_result) { return std::move(try_result).value(); }
+        );
+        return {std::move(root_result), std::move(node_results)};
+    }
 }
 
 VersionedItem LocalVersionedEngine::read_modify_write_internal(
@@ -538,14 +559,8 @@ DescriptorItem LocalVersionedEngine::read_descriptor_internal(
 
 std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch_read_descriptor_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        const ReadOptions& read_options
+        const BatchReadOptions& batch_read_options
 ) {
-
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            read_options.batch_throw_on_error().has_value(),
-            "ReadOptions::batch_throw_on_error_ should always be set here"
-    );
-
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<DescriptorItem>> descriptor_futures;
     for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
@@ -555,7 +570,7 @@ std::vector<std::variant<DescriptorItem, DataError>> LocalVersionedEngine::batch
     }
     auto descriptors = folly::collectAll(descriptor_futures).get();
     TransformBatchResultsFlags flags;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(descriptors), stream_ids, flags, version_queries);
 }
 
@@ -1272,37 +1287,21 @@ VersionedItem LocalVersionedEngine::defragment_symbol_data(
     return versioned_item;
 }
 
-std::vector<ReadVersionOutput> LocalVersionedEngine::batch_read_keys(
-        const std::vector<AtomKey>& keys, const ReadOptions& read_options, std::any& handler_data
-) {
-    std::vector<folly::Future<ReadVersionOutput>> res;
-    res.reserve(keys.size());
-    py::gil_scoped_release release_gil;
-    for (const auto& index_key : keys) {
-        res.emplace_back(
-                read_frame_for_version(store(), {index_key}, std::make_shared<ReadQuery>(), read_options, handler_data)
-        );
-    }
-    Allocator::instance()->trim();
-    return folly::collect(res).get();
-}
-
-std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::batch_read_internal(
+std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> LocalVersionedEngine::batch_read_internal(
         const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options, std::any& handler_data
+        std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
+        std::any& handler_data
 ) {
     py::gil_scoped_release release_gil;
-    // This read option should always be set when calling batch_read
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            read_options.batch_throw_on_error().has_value(),
-            "ReadOptions::batch_throw_on_error_ should always be set here"
-    );
+    if (stream_ids.empty()) {
+        return {};
+    }
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
-    std::vector<folly::Future<ReadVersionOutput>> read_versions_futs;
+    std::vector<folly::Future<ReadVersionWithNodesOutput>> read_versions_futs;
 
     const auto max_batch_size = ConfigsMap::instance()->get_int("BatchRead.MaxConcurrency", 50);
     ARCTICDB_RUNTIME_DEBUG(log::inmem(), "Running batch read with a maximum concurrency of {}", max_batch_size);
-    std::vector<folly::Try<ReadVersionOutput>> all_results;
+    std::vector<folly::Try<ReadVersionWithNodesOutput>> all_results;
     all_results.reserve(opt_index_key_futs.size());
     size_t batch_count = 0UL;
     for (auto idx = 0UL; idx < opt_index_key_futs.size(); ++idx) {
@@ -1314,7 +1313,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                     &version_queries,
                                     read_query =
                                             read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
-                                    &read_options,
+                                    read_options = batch_read_options.at(idx),
                                     &handler_data](auto&& opt_index_key) {
                             auto version_info = get_version_identifier(
                                     stream_ids[idx],
@@ -1325,6 +1324,36 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
                                             : std::nullopt
                             );
                             return read_frame_for_version(store, version_info, read_query, read_options, handler_data);
+                        })
+                        .thenValue([this,
+                                    read_query =
+                                            read_queries.empty() ? std::make_shared<ReadQuery>() : read_queries[idx],
+                                    read_options = batch_read_options.at(idx),
+                                    &handler_data](ReadVersionOutput&& result) {
+                            auto& keys = result.frame_and_descriptor_.keys_;
+                            if (keys.empty()) {
+                                return folly::makeFuture(ReadVersionWithNodesOutput{std::move(result), {}});
+                            } else {
+                                std::vector<folly::Future<ReadVersionOutput>> node_futures;
+                                node_futures.reserve(keys.size());
+                                for (const auto& key : keys) {
+                                    node_futures.emplace_back(
+                                            read_frame_for_version(store(), key, read_query, read_options, handler_data)
+                                    );
+                                }
+                                return folly::collectAll(std::move(node_futures))
+                                        .via(&async::cpu_executor())
+                                        .thenValue([result = std::move(result)](auto&& node_tries) mutable {
+                                            std::vector<ReadVersionOutput> node_results;
+                                            node_results.reserve(node_tries.size());
+                                            for (auto& try_result : node_tries) {
+                                                node_results.push_back(std::move(try_result).value());
+                                            }
+                                            return ReadVersionWithNodesOutput{
+                                                    std::move(result), std::move(node_results)
+                                            };
+                                        });
+                            }
                         })
         );
         if (++batch_count == static_cast<size_t>(max_batch_size)) {
@@ -1350,7 +1379,7 @@ std::vector<std::variant<ReadVersionOutput, DataError>> LocalVersionedEngine::ba
 
     TransformBatchResultsFlags flags;
     flags.convert_no_data_found_to_key_not_found_ = true;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(all_results), stream_ids, flags, version_queries);
 }
 
@@ -1535,26 +1564,43 @@ folly::Future<VersionedItem> LocalVersionedEngine::write_index_key_to_version_ma
     });
 }
 
-std::vector<folly::Future<AtomKey>> LocalVersionedEngine::batch_write_internal(
-        const std::vector<VersionId>& version_ids, const std::vector<StreamId>& stream_ids,
+folly::Future<std::vector<AtomKey>> LocalVersionedEngine::batch_write_internal(
+        std::vector<VersionId>&& version_ids, const std::vector<StreamId>& stream_ids,
         std::vector<std::shared_ptr<pipelines::InputFrame>>&& frames,
         const std::vector<std::shared_ptr<DeDupMap>>& de_dup_maps, bool validate_index
 ) {
     ARCTICDB_SAMPLE(WriteDataFrame, 0)
     ARCTICDB_DEBUG(log::version(), "Batch writing {} dataframes", stream_ids.size());
-    std::vector<folly::Future<entity::AtomKey>> results_fut;
+    std::vector<folly::Future<std::vector<SliceAndKey>>> batch_futures;
     for (size_t idx = 0; idx < stream_ids.size(); idx++) {
-        results_fut.emplace_back(async_write_dataframe_impl(
-                store(),
-                version_ids[idx],
-                std::move(frames[idx]),
-                get_write_options(),
-                de_dup_maps[idx],
-                false,
-                validate_index
-        ));
+        auto& frame = frames[idx];
+        auto version_id = version_ids[idx];
+        auto write_options = get_write_options();
+        frame->set_bucketize_dynamic(write_options.bucketize_dynamic);
+        auto [partial_key, slicing_policy] =
+                get_partial_key_and_slicing_policy(write_options, *frame, version_id, validate_index);
+        auto fut_slice_keys =
+                slice_and_write(frame, slicing_policy, std::move(partial_key), store(), de_dup_maps[idx], false);
+        batch_futures.emplace_back(std::move(fut_slice_keys));
     }
-    return results_fut;
+
+    return folly::collectAll(batch_futures)
+            .via(&async::cpu_executor())
+            .thenValue([store = store()](std::vector<folly::Try<std::vector<SliceAndKey>>>&& batches) {
+                return rollback_batches_on_quota_exceeded(std::move(batches), store);
+            })
+            .thenValue([store = store(),
+                        frames = std::move(frames),
+                        version_ids = std::move(version_ids)](std::vector<std::vector<SliceAndKey>>&& succeeded) {
+                std::vector<folly::Future<AtomKey>> res;
+                for (auto&& [idx, slice_keys] : folly::enumerate(std::move(succeeded))) {
+                    const auto& frame = frames[idx];
+                    auto partial_key = IndexPartialKey{frame->desc().id(), version_ids[idx]};
+                    res.emplace_back(index::write_index(frame, std::move(slice_keys), partial_key, store));
+                }
+
+                return folly::collect(std::move(res));
+            });
 }
 
 VersionIdAndDedupMapInfo LocalVersionedEngine::create_version_id_and_dedup_map(
@@ -2063,13 +2109,8 @@ folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>> Local
 std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::Any>>, DataError>> LocalVersionedEngine::
         batch_read_metadata_internal(
                 const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-                const ReadOptions& read_options
+                const BatchReadOptions& batch_read_options
         ) {
-    // This read option should always be set when calling batch_read_metadata
-    internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-            read_options.batch_throw_on_error().has_value(),
-            "ReadOptions::batch_throw_on_error_ should always be set here"
-    );
     auto opt_index_key_futs = batch_get_versions_async(store(), version_map(), stream_ids, version_queries);
     std::vector<folly::Future<std::pair<VariantKey, std::optional<google::protobuf::Any>>>> metadata_futures;
     for (auto&& [idx, opt_index_key_fut] : folly::enumerate(opt_index_key_futs)) {
@@ -2082,7 +2123,7 @@ std::vector<std::variant<std::pair<VariantKey, std::optional<google::protobuf::A
     // For legacy reason read_metadata_batch is not throwing if the symbol is missing
     TransformBatchResultsFlags flags;
     flags.throw_on_missing_symbol_ = false;
-    flags.throw_on_error_ = *read_options.batch_throw_on_error();
+    flags.throw_on_error_ = batch_read_options.batch_throw_on_error();
     return transform_batch_items_or_throw(std::move(metadatas), stream_ids, flags, version_queries);
 }
 

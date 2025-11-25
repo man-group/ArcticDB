@@ -14,7 +14,7 @@ from arcticdb import col, concat, LazyDataFrame, LazyDataFrameCollection, QueryB
 from arcticdb.exceptions import NoSuchVersionException, SchemaException
 from arcticdb.options import LibraryOptions
 from arcticdb.util.test import assert_frame_equal, assert_series_equal
-from tests.util.mark import MACOS_WHEEL_BUILD, WINDOWS
+from tests.util.mark import WINDOWS
 
 pytestmark = pytest.mark.pipeline
 

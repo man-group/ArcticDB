@@ -104,8 +104,6 @@ enum class ValueType : uint8_t {
           // enum
 };
 
-enum class DataTypeMode : uint8_t { INTERNAL = 0, EXTERNAL = 1 };
-
 enum class AllocationType : uint8_t { DYNAMIC = 0, PRESIZED = 1, DETACHABLE = 2 };
 
 enum class Sparsity : uint8_t { NOT_PERMITTED = 0, PERMITTED = 1 };
@@ -470,9 +468,7 @@ constexpr bool is_arrow_output_only_type(TypeDescriptor td) { return is_arrow_ou
 
 inline void set_data_type(DataType data_type, TypeDescriptor& type_desc) { type_desc.data_type_ = data_type; }
 
-std::size_t internal_data_type_size(const TypeDescriptor& td);
-
-std::size_t data_type_size(const TypeDescriptor& td, OutputFormat output_format, DataTypeMode mode);
+std::size_t data_type_size(const TypeDescriptor& td);
 
 inline TypeDescriptor make_scalar_type(DataType dt) { return TypeDescriptor{dt, Dimension::Dim0}; }
 

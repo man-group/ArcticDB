@@ -140,7 +140,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::variant<DescriptorItem, DataError>> batch_read_descriptor(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const ReadOptions& read_options
+            const BatchReadOptions& batch_read_options
     );
 
     DescriptorItem read_descriptor(const StreamId& stream_id, const VersionQuery& version_query);
@@ -202,8 +202,8 @@ class PythonVersionStore : public LocalVersionedEngine {
     );
 
     std::vector<std::tuple<StreamId, VersionId, timestamp, std::vector<SnapshotId>, bool>> list_versions(
-            const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name,
-            const std::optional<bool>& latest_only, const std::optional<bool>& skip_snapshots
+            const std::optional<StreamId>& stream_id, const std::optional<SnapshotId>& snap_name, bool latest_only,
+            bool skip_snapshots
     );
 
     // Batch methods
@@ -230,7 +230,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::variant<ReadResult, DataError>> batch_read(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            std::vector<std::shared_ptr<ReadQuery>>& read_queries, const ReadOptions& read_options,
+            std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
             std::any& handler_data
     );
 
@@ -249,7 +249,7 @@ class PythonVersionStore : public LocalVersionedEngine {
 
     std::vector<std::variant<std::pair<VersionedItem, py::object>, DataError>> batch_read_metadata(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
-            const ReadOptions& read_options
+            const BatchReadOptions& batch_read_options
     );
 
     std::set<StreamId> list_streams(
@@ -307,20 +307,5 @@ struct ManualClockVersionStore : PythonVersionStore {
     ManualClockVersionStore(const std::shared_ptr<storage::Library>& library) :
         PythonVersionStore(library, util::ManualClock{}) {}
 };
-
-inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(
-        std::vector<ReadVersionOutput>&& keys_frame_and_descriptors, const ReadOptions& read_options
-) {
-    std::vector<std::variant<ReadResult, DataError>> read_results;
-    read_results.reserve(keys_frame_and_descriptors.size());
-    for (auto& read_version_output : keys_frame_and_descriptors) {
-        read_results.emplace_back(create_python_read_result(
-                read_version_output.versioned_item_,
-                read_options.output_format(),
-                std::move(read_version_output.frame_and_descriptor_)
-        ));
-    }
-    return read_results;
-}
 
 } // namespace arcticdb::version_store

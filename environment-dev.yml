@@ -33,7 +33,8 @@ dependencies:
   - prometheus-cpp
   - libprotobuf <7
   - openssl
-  - libcurl
+  # TODO: understand failures with libcurl>=8.17
+  - libcurl <8.17
   - bitmagic
   - sparrow-devel==1.3.0
   - spdlog
@@ -78,6 +79,7 @@ dependencies:
   - pytest-timeout
   - azure-storage-blob
   - azure-identity
+  - polars
   - pyarrow
   - asv
   - pymongo

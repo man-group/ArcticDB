@@ -216,18 +216,11 @@ Column::Column(TypeDescriptor type, Sparsity allow_sparse, ChunkedBuffer&& buffe
     type_(type),
     allow_sparse_(allow_sparse) {}
 
-Column::Column(TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse) :
-    data_(expected_rows * entity::internal_data_type_size(type), presize),
-    type_(type),
-    allow_sparse_(allow_sparse) {
-    ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
-}
-
 Column::Column(
-        TypeDescriptor type, size_t expected_rows, AllocationType presize, Sparsity allow_sparse,
-        OutputFormat output_format, DataTypeMode mode
+        TypeDescriptor type, size_t expected_rows, AllocationType allocation_type, Sparsity allow_sparse,
+        size_t extra_bytes_per_block
 ) :
-    data_(expected_rows * entity::data_type_size(type, output_format, mode), presize),
+    data_(expected_rows * entity::data_type_size(type), allocation_type, extra_bytes_per_block),
     type_(type),
     allow_sparse_(allow_sparse) {
     ARCTICDB_TRACE(log::inmem(), "Creating column with descriptor {}", type);
@@ -880,33 +873,30 @@ std::vector<std::shared_ptr<Column>> Column::split(const std::shared_ptr<Column>
 }
 
 void Column::truncate_first_block(size_t start_row) {
-    if (!is_sparse()) {
-        auto bytes = start_row * data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
-        data_.buffer().truncate_first_block(bytes);
-    }
+    util::check(!is_sparse(), "Truncation should only happen for dense columns.");
+    auto bytes = start_row * data_type_size(type_);
+    data_.buffer().truncate_first_block(bytes);
 }
 
 void Column::truncate_last_block(size_t end_row) {
-    if (!is_sparse()) {
-        const auto column_row_count = row_count();
-        util::check(
-                column_row_count >= static_cast<int64_t>(end_row),
-                "Cannot truncate column of length {} to row {}",
-                column_row_count,
-                end_row
-        );
-        auto bytes = (column_row_count - end_row) * data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
-        data_.buffer().truncate_last_block(bytes);
-    }
+    util::check(!is_sparse(), "Truncation should only happen for dense columns.");
+    const auto column_row_count = row_count();
+    util::check(
+            column_row_count >= static_cast<int64_t>(end_row),
+            "Cannot truncate column of length {} to row {}",
+            column_row_count,
+            end_row
+    );
+    auto bytes = (column_row_count - end_row) * data_type_size(type_);
+    data_.buffer().truncate_last_block(bytes);
 }
 
 void Column::truncate_single_block(size_t start_row, size_t end_row) {
-    if (!is_sparse()) { // TODO: We need to also do truncation on sparse data
-        const auto type_size = data_type_size(type_, OutputFormat::NATIVE, DataTypeMode::INTERNAL);
-        auto start_offset = type_size * start_row;
-        auto end_offset = type_size * end_row;
-        data_.buffer().truncate_single_block(start_offset, end_offset);
-    }
+    util::check(!is_sparse(), "Truncation should only happen for dense columns.");
+    const auto type_size = data_type_size(type_);
+    auto start_offset = type_size * start_row;
+    auto end_offset = type_size * end_row;
+    data_.buffer().truncate_single_block(start_offset, end_offset);
 }
 
 /// Bytes from the underlying chunked buffer to include when truncating. Inclusive of start_byte, exclusive of end_byte
