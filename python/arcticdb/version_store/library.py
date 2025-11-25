@@ -26,7 +26,7 @@ from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.version_store.processing import ExpressionNode, QueryBuilder
 from arcticdb.version_store._store import NativeVersionStore, VersionedItem, VersionedItemWithJoin, VersionQueryInput
 from arcticdb_ext.exceptions import ArcticException
-from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo
+from arcticdb_ext.version_store import DataError, StageResult, KeyNotFoundInStageResultInfo, MergeAction
 
 import pandas as pd
 import numpy as np
@@ -423,6 +423,11 @@ class UpdatePayload:
         res += f", index_column={self.index_column}" if self.index_column is not None else ""
         res += ")"
         return res
+
+
+class MergeStrategy(NamedTuple):
+    matched: Union[MergeAction, str] = MergeAction.UPDATE
+    not_matched_by_target: Union[MergeAction, str] = MergeAction.INSERT
 
 
 class LazyDataFrame(QueryBuilder):
@@ -1995,7 +2000,7 @@ class Library:
             DateRange to restrict read data to.
 
             Applicable only for time-indexed Pandas dataframes or series. Returns only the
-            part of the data that falls withing the given range (inclusive). None on either end leaves that part of the
+            part of the data that falls within the given range (inclusive). None on either end leaves that part of the
             range open-ended. Hence specifying ``(None, datetime(2025, 1, 1)`` declares that you wish to read all data up
             to and including 20250101.
             The same effect can be achieved by using the date_range clause of the QueryBuilder class, which will be
@@ -3232,11 +3237,50 @@ class Library:
         self,
         symbol: str,
         data: NormalizableType,
+        strategy: MergeStrategy,
         on: Optional[List[str]] = None,
         metadata: Any = None,
         prune_previous_versions: bool = False,
+        upsert: bool = False,
     ):
-        pass
+        strategy = MergeStrategy(
+            matched=Library._normalize_merge_action(strategy.matched),
+            not_matched_by_target=Library._normalize_merge_action(strategy.not_matched_by_target),
+        )
+        udm, item, norm_meta = self._nvs._try_normalize(
+            symbol,
+            data,
+            metadata,
+            pickle_on_failure=False,
+            dynamic_strings=True,
+            coerce_columns=None,
+            norm_failure_options_msg="Source data must be normalizable in order to merge it into existing dataframe",
+        )
+        on_timeseries_index = True
+        on = [] if on is None else on
+        vit = self._nvs.version_store.merge(
+            symbol, item, norm_meta, udm, prune_previous_versions, strategy, on, on_timeseries_index
+        )
+        return self._nvs._convert_thin_cxx_item_to_python(vit, metadata)
+
+    @staticmethod
+    def _normalize_merge_action(action: Union[MergeAction, str]) -> MergeAction:
+        if isinstance(action, MergeAction):
+            return action
+
+        if isinstance(action, str):
+            action = action.lower()
+
+        if action == "update":
+            return MergeAction.UPDATE
+        elif action == "insert":
+            return MergeAction.INSERT
+        elif action == "do_nothing":
+            return MergeAction.DO_NOTHING
+        else:
+            raise ArcticInvalidApiUsageException(
+                f"Invalid MergeAction: {action}. Must be one of: update, insert, do_nothing."
+            )
 
     @property
     def name(self) -> str:

@@ -843,6 +843,11 @@ struct WriteClause {
     stream::PartialKey create_partial_key(const SegmentInMemory& segment) const;
 };
 
+/// This clause will perform update values or insert values based on strategy_ in a segment. The source of new values is
+/// the source_ member. Source and target must have the same index type. There are two actions
+/// UPDATE: For a particular row in the segment if there's  a row source_ for which all values in the columns listed in
+/// on and the index (only in case if timeseries) match update will be performed.
+/// INSERT: Each row in source_ not matched by the target will be inserted
 struct MergeUpdateClause {
     ClauseInfo clause_info_;
     std::shared_ptr<ComponentManager> component_manager_;
@@ -883,12 +888,12 @@ struct MergeUpdateClause {
     update_and_insert(const T&, const StreamDescriptor&, const ProcessingUnit&, std::span<const std::vector<size_t>>)
             const;
 
-    /// @return Vector of size equal to the number of source data rows that are withing the row slice being processed.
+    /// @return Vector of size equal to the number of source data rows that are within the row slice being processed.
     /// Each element is a vector of the rows from the target data that has the same index as the corresponding source
     /// row
     std::vector<std::vector<size_t>> filter_index_match(const ProcessingUnit& proc) const;
 
     /// For each row range stores the first and last row in the source that overlaps with the row range
-    ankerl::unordered_dense::map<RowRange, std::pair<size_t, size_t>, RowRange::Hasher> source_start_for_row_range_;
+    ankerl::unordered_dense::map<RowRange, std::pair<size_t, size_t>, RowRange::Hasher> source_start_end_for_row_range_;
 };
 } // namespace arcticdb

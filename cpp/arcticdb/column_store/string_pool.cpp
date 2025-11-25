@@ -10,6 +10,7 @@
 #include <arcticdb/util/offset_string.hpp>
 #include <arcticdb/column_store/segment_utils.hpp>
 #include <arcticdb/util/regex_filter.hpp>
+#include <arcticdb/column_store/column_algorithms.hpp>
 #include <ankerl/unordered_dense.h>
 
 namespace arcticdb {

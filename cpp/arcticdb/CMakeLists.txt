@@ -213,6 +213,7 @@ set(arcticdb_srcs
         column_store/memory_segment_impl.hpp
         column_store/row_ref.hpp
         column_store/string_pool.hpp
+        column_store/segment_utils.hpp
         entity/atom_key.hpp
         entity/frame_and_descriptor.hpp
         entity/index_range.hpp
@@ -250,6 +251,7 @@ set(arcticdb_srcs
         pipeline/index_utils.hpp
         pipeline/index_writer.hpp
         pipeline/input_frame.hpp
+        pipeline/input_frame_utils.hpp
         pipeline/pandas_output_frame.hpp
         pipeline/pipeline_common.hpp
         pipeline/pipeline_utils.hpp
@@ -438,6 +440,7 @@ set(arcticdb_srcs
         column_store/memory_segment.cpp
         column_store/memory_segment_impl.cpp
         column_store/memory_segment_impl.cpp
+        column_store/segment_utils.cpp
         column_store/statistics.hpp
         column_store/string_pool.cpp
         entity/data_error.cpp

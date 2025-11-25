@@ -147,7 +147,7 @@ class VersionedEngine {
     virtual void flush_version_map() = 0;
 
     virtual VersionedItem merge_internal(
-            const StreamId& stream_id, const std::shared_ptr<InputFrame>& source, const py::object& user_meta,
+            const StreamId& stream_id, std::shared_ptr<InputFrame> source, const py::object& user_meta,
             bool prune_previous_versions, const MergeStrategy& strategy, std::vector<std::string>&& on,
             bool match_on_timeseries_index
     ) = 0;

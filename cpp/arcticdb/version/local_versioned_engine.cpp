@@ -471,13 +471,13 @@ VersionedItem LocalVersionedEngine::read_modify_write_internal(
     }
     VersionedItem versioned_item = read_modify_write_impl(
             store(),
-            identifier,
             std::move(user_meta_proto),
             read_query,
             read_options,
             write_options,
             IndexPartialKey{target_stream, target_version},
-            ReadModifyWriteIndexStrategy::REWRITE_INDEX
+            ReadModifyWriteIndexStrategy::REWRITE_INDEX,
+            setup_pipeline_context(store(), identifier, *read_query, read_options)
     );
     if (cfg().symbol_list())
         symbol_list().add_symbol(store(), target_stream, versioned_item.key_.version_id());
@@ -2321,11 +2321,26 @@ std::shared_ptr<VersionMap> LocalVersionedEngine::_test_get_version_map() { retu
 void LocalVersionedEngine::_test_set_store(std::shared_ptr<Store> store) { set_store(std::move(store)); }
 
 VersionedItem LocalVersionedEngine::merge_internal(
-        const StreamId& stream_id, const std::shared_ptr<InputFrame>& source, const py::object& user_meta,
+        const StreamId& stream_id, std::shared_ptr<InputFrame> source, const py::object& user_meta,
         const bool prune_previous_versions, const MergeStrategy& strategy, std::vector<std::string>&& on,
         const bool match_on_timeseries_index
 ) {
-    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: merge");
+    ARCTICDB_RUNTIME_DEBUG(log::version(), "Command: merge_update");
+    sorting::check<ErrorCode::E_UNSORTED_DATA>(
+            index_is_not_timeseries_or_is_sorted_ascending(*source),
+            "If the source data is timeseries indexed it must be sorted in ascending order."
+    );
+    // TODO: read_modify_write uses the same piece of code. Move it to a function.
+    std::unique_ptr<proto::descriptors::UserDefinedMetadata> user_meta_proto{
+            [](const py::object& user_meta) -> proto::descriptors::UserDefinedMetadata* {
+                if (user_meta.is_none()) {
+                    return nullptr;
+                }
+                const auto user_meta_proto = new proto::descriptors::UserDefinedMetadata();
+                python_util::pb_from_python(user_meta, *user_meta_proto);
+                return user_meta_proto;
+            }(user_meta)
+    };
     py::gil_scoped_release release_gil;
     const UpdateInfo update_info = get_latest_undeleted_version_and_next_version_id(store(), version_map(), stream_id);
     if (update_info.previous_index_key_.has_value()) {
@@ -2342,17 +2357,6 @@ VersionedItem LocalVersionedEngine::merge_internal(
         const ReadOptions read_options;
         const auto source_version = get_version_to_read(stream_id, version_query);
         const auto identifier = get_version_identifier(stream_id, version_query, read_options, source_version);
-        // TODO: read_modify_write uses the same piece of code. Move it to a function.
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata> user_meta_proto{
-                [](const py::object& user_meta) -> proto::descriptors::UserDefinedMetadata* {
-                    if (user_meta.is_none()) {
-                        return nullptr;
-                    }
-                    const auto user_meta_proto = new proto::descriptors::UserDefinedMetadata();
-                    python_util::pb_from_python(user_meta, *user_meta_proto);
-                    return user_meta_proto;
-                }(user_meta)
-        };
         auto [maybe_prev, deleted] = ::arcticdb::get_latest_version(store(), version_map(), stream_id);
         const auto target_version = get_next_version_from_key(maybe_prev);
         if (target_version == 0) {
@@ -2371,7 +2375,7 @@ VersionedItem LocalVersionedEngine::merge_internal(
                 std::move(on),
                 match_on_timeseries_index,
                 strategy,
-                source
+                std::move(source)
         );
         write_version_and_prune_previous(prune_previous_versions, versioned_item.key_, update_info.previous_index_key_);
         return versioned_item;

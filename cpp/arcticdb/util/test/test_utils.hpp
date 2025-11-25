@@ -259,3 +259,20 @@ class StorageGenerator {
     const std::string storage_;
     inline static const fs::path TEST_DATABASES_PATH = "./test_databases";
 };
+
+template<typename TagType, std::ranges::sized_range Input>
+requires requires(Input in) {
+    requires util::instantiation_of<TagType, TypeDescriptorTag>;
+    requires std::same_as<typename TagType::DataTypeTag::raw_type, std::ranges::range_value_t<Input>>;
+}
+Column create_dense_column(const Input& data) {
+    constexpr static size_t element_size = sizeof(std::ranges::range_value_t<Input>);
+    Column result(TagType::type_descriptor(), data.size(), AllocationType::PRESIZED, Sparsity::NOT_PERMITTED);
+    if constexpr (std::ranges::contiguous_range<Input>) {
+        std::memcpy(result.ptr(), data.data(), data.size() * element_size);
+    } else {
+        std::ranges::copy(data, data.data());
+    }
+    result.set_row_data(data.size());
+    return result;
+}

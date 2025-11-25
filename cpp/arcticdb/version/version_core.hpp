@@ -195,10 +195,10 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 );
 
 VersionedItem read_modify_write_impl(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, std::shared_ptr<ReadQuery> read_query,
-        const ReadOptions& read_options, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy
+        const std::shared_ptr<Store>& store, std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy,
+        std::shared_ptr<PipelineContext> pipeline_context
 );
 
 VersionedItem merge_update_impl(
@@ -206,7 +206,7 @@ VersionedItem merge_update_impl(
         std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
         std::vector<std::string>&& on, bool match_on_timeseries_index, const MergeStrategy& strategy,
-        const std::shared_ptr<InputFrame>& source
+        std::shared_ptr<InputFrame> source
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(

@@ -225,6 +225,12 @@ void register_bindings(py::module& version, py::exception<arcticdb::ArcticExcept
     version.def("Value", &construct_value<double>);
     version.def("Value", &construct_string_value);
 
+    py::enum_<MergeAction>(version, "MergeAction")
+            .value("DO_NOTHING", MergeAction::DO_NOTHING)
+            .value("UPDATE", MergeAction::UPDATE)
+            .value("INSERT", MergeAction::INSERT)
+            .export_values();
+
     py::class_<ValueSet, std::shared_ptr<ValueSet>>(version, "ValueSet")
             .def(py::init([](std::vector<std::string>&& value_list) {
                 return std::make_shared<ValueSet>(std::move(value_list));

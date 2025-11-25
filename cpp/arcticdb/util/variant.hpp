@@ -47,11 +47,4 @@ auto variant_match(Variant&& v, Ts&&... ts) {
         return std::visit(overload{std::forward<Ts>(ts)...}, std::forward<Variant>(v));
 }
 
-template<typename InputFun, typename... Elements>
-void enumerate(InputFun&& callback, Elements&&... elements) {
-    [&callback, &elements...]<size_t... Is_>(std::index_sequence<Is_...>) {
-        (callback(Is_, std::forward<Elements>(elements)), ...);
-    }(std::index_sequence_for<Elements...>{});
-}
-
 } // namespace arcticdb::util

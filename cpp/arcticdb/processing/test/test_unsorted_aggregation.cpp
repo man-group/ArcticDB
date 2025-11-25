@@ -142,9 +142,7 @@ TEST_P(AggregationResult, Mean) {
             } else {
                 ASSERT_EQ(data.size(), 0);
             }
-            const ColumnWithStrings input(
-                    Column::create_dense_column(data, InputDataTypeTag::type_descriptor()), nullptr, "input"
-            );
+            const ColumnWithStrings input(create_dense_column<InputDataTypeTag>(data), nullptr, "input");
             aggregator_data.aggregate(input, groups, group_count);
             const SegmentInMemory result = aggregator_data.finalize(ColumnName{"output"}, false, group_count);
             ASSERT_EQ(result.field(0).type(), make_scalar_type(OutputDataTypeTag::data_type()));

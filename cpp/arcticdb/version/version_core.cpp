@@ -38,6 +38,7 @@
 #include <arcticdb/util/format_date.hpp>
 #include <arcticdb/version/version_tasks.hpp>
 #include <iterator>
+#include <aws/core/utils/stream/ResponseStream.h>
 
 namespace arcticdb::version_store {
 
@@ -200,6 +201,46 @@ folly::Future<AtomKey> rewrite_index_for_read_modify_write(
             target_partial_index_key,
             store
     );
+}
+
+folly::Future<AtomKey> merge_index_key_for_read_modify_write(
+        PipelineContext& pipeline_context, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, const std::shared_ptr<Store>& store,
+        std::vector<SliceAndKey>&& new_slices, std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta
+) {
+    ranges::sort(new_slices, [](const SliceAndKey& a, const SliceAndKey& b) {
+        return std::tie(a.slice_.col_range, a.slice_.row_range) < std::tie(b.slice_.col_range, b.slice_.row_range);
+    });
+    std::vector<SliceAndKey> merged_ranges_and_keys;
+    auto new_slice = new_slices.begin();
+    for (SliceAndKey& slice : pipeline_context.slice_and_keys_) {
+        if (new_slice != new_slices.end() && new_slice->slice_ == slice.slice_) {
+            merged_ranges_and_keys.push_back(std::move(*new_slice));
+            ++new_slice;
+        } else {
+            merged_ranges_and_keys.push_back(std::move(slice));
+        }
+    }
+    const size_t row_count = merged_ranges_and_keys.empty() ? 0
+                                                            : merged_ranges_and_keys.back().slice().row_range.second -
+                                                                      merged_ranges_and_keys[0].slice().row_range.first;
+    const TimeseriesDescriptor tsd = make_timeseries_descriptor(
+            row_count,
+            pipeline_context.descriptor(),
+            std::move(*pipeline_context.norm_meta_),
+            user_meta ? std::make_optional(*std::move(user_meta)) : std::nullopt,
+            std::nullopt,
+            std::nullopt,
+            write_options.bucketize_dynamic
+    );
+    return index::write_index(
+            index_type_from_descriptor(pipeline_context.descriptor()),
+            tsd,
+            std::move(merged_ranges_and_keys),
+            target_partial_index_key,
+            store
+    );
+    pipeline_context.slice_and_keys_.clear();
 }
 } // namespace
 
@@ -2786,17 +2827,14 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
 }
 
 VersionedItem read_modify_write_impl(
-        const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, std::shared_ptr<ReadQuery> read_query,
-        const ReadOptions& read_options, const WriteOptions& write_options,
-        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy
+        const std::shared_ptr<Store>& store, std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy,
+        std::shared_ptr<PipelineContext> pipeline_context
 ) {
-
     read_query->clauses_.push_back(std::make_shared<Clause>(
             WriteClause(write_options, target_partial_index_key, std::make_shared<DeDupMap>(), store)
     ));
-    const auto pipeline_context = setup_pipeline_context(store, version_info, *read_query, read_options);
-    check_can_perform_processing(pipeline_context, *read_query);
 
     auto component_manager = std::make_shared<ComponentManager>();
     return read_and_schedule_processing(store, pipeline_context, read_query, read_options, component_manager)
@@ -2824,8 +2862,20 @@ VersionedItem read_modify_write_impl(
                             std::move(slices),
                             std::move(user_meta)
                     );
+                } else if (index_strategy == ReadModifyWriteIndexStrategy::MERGE_INDEX) {
+                    return merge_index_key_for_read_modify_write(
+                            *pipeline_context,
+                            write_options,
+                            target_partial_index_key,
+                            store,
+                            std::move(slices),
+                            std::move(user_meta)
+                    );
                 } else {
-                    return folly::Future<AtomKey>(AtomKey{});
+                    internal::raise<ErrorCode::E_ASSERTION_FAILURE>(
+                            "Unknown read-modify-write index write strategy: {}",
+                            static_cast<std::underlying_type_t<ReadModifyWriteIndexStrategy>>(index_strategy)
+                    );
                 }
             })
             .get();
@@ -2836,24 +2886,34 @@ VersionedItem merge_update_impl(
         std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
         const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
         std::vector<std::string>&& on, const bool match_on_timeseries_index, const MergeStrategy& strategy,
-        const std::shared_ptr<InputFrame>& source
+        std::shared_ptr<InputFrame> source
 ) {
     auto read_query = std::make_shared<ReadQuery>();
-    read_query->clauses_.push_back(
-            std::make_shared<Clause>(MergeUpdateClause(std::move(on), strategy, source, match_on_timeseries_index))
-    );
     if (source->has_index()) {
         read_query->row_filter = source->index_range;
     }
+    const StreamDescriptor& source_descriptor = source->desc();
+    read_query->clauses_.push_back(std::make_shared<Clause>(
+            MergeUpdateClause(std::move(on), strategy, std::move(source), match_on_timeseries_index)
+    ));
+    std::shared_ptr<PipelineContext> pipeline_context =
+            setup_pipeline_context(store, version_info, *read_query, read_options);
+    schema::check<ErrorCode::E_DESCRIPTOR_MISMATCH>(
+            columns_match(pipeline_context->descriptor(), source_descriptor),
+            "Cannot perform merge update when the source and target schema are not the same.\nSource schema: "
+            "{}\nTarget schema: {}",
+            source_descriptor,
+            pipeline_context->descriptor()
+    );
     return read_modify_write_impl(
             store,
-            version_info,
             std::move(user_meta),
             std::move(read_query),
             read_options,
             write_options,
             target_partial_index_key,
-            ReadModifyWriteIndexStrategy::MERGE_INDEX
+            ReadModifyWriteIndexStrategy::MERGE_INDEX,
+            std::move(pipeline_context)
     );
 }
 
