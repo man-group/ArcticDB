@@ -302,7 +302,6 @@ class TestMergeTimeseries:
         assert len(lt.find_keys_for_symbol(KeyType.TABLE_INDEX, "sym")) == 2
         assert len(lt.find_keys_for_symbol(KeyType.VERSION, "sym")) == 2
 
-    @pytest.mark.skip(reason="Not implemented")
     def test_merge_update_on_index_and_column(self, lmdb_library, monkeypatch):
         lib = lmdb_library
         target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
@@ -328,8 +327,7 @@ class TestMergeTimeseries:
 
         assert_frame_equal(received, expected)
 
-    @pytest.mark.skip(reason="String columns not implemented")
-    def test_merge_update_on_multiple_columns(self, lmdb_library, monkeypatch):
+    def test_merge_update_multiple_columns(self, lmdb_library, monkeypatch):
         lib = lmdb_library
         target = pd.DataFrame(
             {
@@ -399,6 +397,7 @@ class TestMergeTimeseries:
                 [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02")]
             ),
         )
+
         received = lib.read("sym").data
         assert_frame_equal(received, expected)
 
@@ -449,7 +448,6 @@ class TestMergeTimeseries:
                 ]
             ),
         )
-
         with pytest.raises(UserInputException):
             lib.merge("sym", source, strategy=strategy)
 
@@ -480,8 +478,8 @@ class TestMergeTimeseries:
             pd.DataFrame({"a": [1]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-01")])),
         ),
     )
-    @pytest.mark.parametrize("upsert", (pytest.param(True, marks=pytest.mark.xfail(reason="Not implemented")), False))
-    def test_update_on_match_target_symbol_does_not_exist(self, lmdb_library, source, upsert):
+    @pytest.mark.parametrize("upsert", (True, False))
+    def test_update_on_match_target_symbol_does_not_exist(self, lmdb_library, monkeypatch, source, upsert):
         # Model non-existing target after Library.update
         # There is an upsert parameter to control whether to create the index. If upsert=False exception is thrown.
         # Since we're doing a merge on non-existing data, I think it's logical to assume that nothing matches. If
@@ -489,15 +487,46 @@ class TestMergeTimeseries:
         lib = lmdb_library
 
         if not upsert:
+            monkeypatch.setattr(lib.__class__, "merge", raise_wrapper(StorageException), raising=False)
             with pytest.raises(StorageException):
                 lib.merge(
                     "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING), upsert=upsert
                 )
         else:
+            import datetime
+
+            monkeypatch.setattr(
+                lib.__class__,
+                "merge",
+                lambda *args, **kwargs: VersionedItem(
+                    symbol="sym",
+                    library=lmdb_library.name,
+                    data=None,
+                    version=0,
+                    metadata=None,
+                    host=lmdb_library._nvs.env,
+                    timestamp=pd.Timestamp(datetime.datetime.now()),
+                ),
+                raising=False,
+            )
             merge_vit = lib.merge(
                 "sym", source, strategy=MergeStrategy(MergeAction.UPDATE, MergeAction.DO_NOTHING), upsert=upsert
             )
             expected = pd.DataFrame({"a": []}, index=pd.DatetimeIndex([]))
+
+            monkeypatch.setattr(
+                lib,
+                "read",
+                lambda *args, **kwargs: VersionedItem(
+                    symbol=merge_vit.symbol,
+                    library=merge_vit.library,
+                    data=expected,
+                    version=merge_vit.version,
+                    metadata=merge_vit.metadata,
+                    host=merge_vit.host,
+                    timestamp=merge_vit.timestamp,
+                ),
+            )
             read_vit = lib.read("sym")
             assert_vit_equals_except_data(merge_vit, read_vit)
             assert_frame_equal(read_vit.data, expected)

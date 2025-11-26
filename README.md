@@ -49,7 +49,7 @@ ArcticDB is designed from the outset to be resilient; there is no single point o
 | --------------------- | - | - |
 | Linux (Intel/AMD)     | ✔️ | ✔️ |
 | Windows (Intel/AMD)   | ✔️ | ➖ |
-| MacOS                 | Beta | Beta️ |
+| MacOS                 | ✔️ | ✔️ |
 
 For conda-forge see the [release-info](https://github.com/conda-forge/arcticdb-feedstock/?tab=readme-ov-file#current-release-info).
 
@@ -59,7 +59,7 @@ For conda-forge see the [release-info](https://github.com/conda-forge/arcticdb-f
 | --------------------- | - | - | - |
 | S3                 | ✔️ | ✔️ | ✔️ |
 | LMDB               | ✔️ | ✔️ | ✔️ |
-| Azure Blob Storage | ✔️ | ✔️ | ➖ |
+| Azure Blob Storage | ✔️ | ✔️ | ✔️ |
 
 We have tested against the following S3 backends:
 - AWS S3
