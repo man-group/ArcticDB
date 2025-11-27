@@ -1027,6 +1027,8 @@ if(${TEST})
             util/test/test_string_pool.cpp
             util/test/test_string_utils.cpp
             util/test/test_tracing_allocator.cpp
+            util/test/gtest_custom_formatters.hpp
+            util/test/gtest_utils.hpp
             version/test/test_append.cpp
             version/test/test_key_block.cpp
             version/test/test_sort_index.cpp
@@ -1111,10 +1113,10 @@ if(${TEST})
     endif()
 
     # In order for the custom formatting to work the ODR must be satisfied and every TU that uses gtest must include
-    # the gtest_utils.hpp https://github.com/google/googletest/issues/1149
+    # the gtest_custom_formatters.hpp https://github.com/google/googletest/issues/1149
     target_compile_options(test_unit_arcticdb PRIVATE
-            $<$<CXX_COMPILER_ID:MSVC>:/FIutil/test/gtest_utils.hpp>
-            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-include util/test/gtest_utils.hpp>
+            $<$<CXX_COMPILER_ID:MSVC>:/FIutil/test/gtest_custom_formatters.hpp>
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-include util/test/gtest_custom_formatters.hpp>
     )
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 

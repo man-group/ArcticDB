@@ -7,7 +7,6 @@
  */
 
 #include <gtest/gtest.h>
-#include <arcticdb/util/test/gtest_utils.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/s3/s3_api.hpp>
 #include <arcticdb/storage/s3/s3_storage.hpp>
@@ -17,6 +16,7 @@
 #include <arcticdb/entity/protobufs.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/test/common.hpp>
+#include <arcticdb/util/test/gtest_utils.hpp>
 
 #include <aws/core/Aws.h>
 
