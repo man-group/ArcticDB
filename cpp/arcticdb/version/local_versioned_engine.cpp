@@ -2353,7 +2353,7 @@ VersionedItem LocalVersionedEngine::merge_internal(
             );
             return VersionedItem{*std::move(update_info.previous_index_key_)};
         }
-        constexpr static VersionQuery version_query;
+        const VersionQuery version_query;
         const ReadOptions read_options;
         const auto source_version = get_version_to_read(stream_id, version_query);
         const auto identifier = get_version_identifier(stream_id, version_query, read_options, source_version);

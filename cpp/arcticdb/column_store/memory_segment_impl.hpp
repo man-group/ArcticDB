@@ -16,8 +16,6 @@
 #include <arcticdb/util/magic_num.hpp>
 #include <arcticdb/util/constructors.hpp>
 #include <boost/iterator/iterator_facade.hpp>
-#include <google/protobuf/extension_set.h>
-#include <folly/container/Enumerate.h>
 
 namespace arcticdb {
 
