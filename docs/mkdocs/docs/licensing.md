@@ -6,7 +6,7 @@ ArcticDB is licensed under the [Business Source License 1.1 (BSL)](https://githu
 
 Free Usage: ArcticDB is available at no cost for non-commercial, personal, or academic use.
 
-For BSL versions of ArcticDB, a commercial agreement is required for any business use. That includes use in research or dev environments, or where any economic benefit is being derived. Please contact [info@arcticdb.io](http://arcticdb.io) for any additional information.
+For BSL versions of ArcticDB, a commercial agreement is required for any business use. That includes use in research or dev environments, or where any economic benefit is being derived. Please [contact us](https://arcticdb.io/contact-us/) for any additional information.
 
 For pricing queries please email us at info@arcticdb.io
 
