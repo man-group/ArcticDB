@@ -5,9 +5,6 @@
  * As of the Change Date specified in that file, in accordance with the Business Source License, use of this software
  * will be governed by the Apache License, version 2.0.
  */
-
-#include "util/ranges_from_future.hpp"
-
 #include <gtest/gtest.h>
 #include <arcticdb/processing/clause.hpp>
 #include <stream/test/stream_test_common.hpp>

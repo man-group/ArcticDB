@@ -10,13 +10,12 @@
 
 #include <fmt/ostream.h>
 #include <arcticdb/entity/variant_key.hpp>
+#include <arcticdb/pipeline/frame_slice.hpp>
+#include <arcticdb/entity/ref_key.hpp>
 
 #define MAKE_GTEST_FMT(our_type, fstr)                                                                                 \
     namespace testing::internal {                                                                                      \
-    template<>                                                                                                         \
-    inline void PrintTo(const our_type& val, ::std::ostream* os) {                                                     \
-        fmt::print(*os, fstr, val);                                                                                    \
-    }                                                                                                                  \
+    inline void PrintTo(const our_type& val, ::std::ostream* os) { fmt::print(*os, fstr, val); }                       \
     }
 
 // For the most common types, format them by default:
@@ -24,6 +23,9 @@ MAKE_GTEST_FMT(arcticdb::entity::RefKey, "{}")
 MAKE_GTEST_FMT(arcticdb::entity::AtomKeyImpl, "{}")
 MAKE_GTEST_FMT(arcticdb::entity::VariantKey, "VariantKey({})")
 MAKE_GTEST_FMT(arcticdb::VariantId, "VariantId({})")
+MAKE_GTEST_FMT(arcticdb::SegmentInMemory, "{}")
+MAKE_GTEST_FMT(arcticdb::pipelines::RowRange, "{}")
+MAKE_GTEST_FMT(arcticdb::pipelines::ColRange, "{}")
 
 // FUTURE (C++20): with capabilities, we can write a generic PrintTo that covers all fmt::format-able types that is
 // not ambiguous with the built-in

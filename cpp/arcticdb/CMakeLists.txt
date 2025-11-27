@@ -1110,6 +1110,12 @@ if(${TEST})
                 )
     endif()
 
+    # In order for the custom formatting to work the ODR must be satisfied and every TU that uses gtest must include
+    # the gtest_utils.hpp https://github.com/google/googletest/issues/1149
+    target_compile_options(test_unit_arcticdb PRIVATE
+            $<$<CXX_COMPILER_ID:MSVC>:/FIutil/test/gtest_utils.hpp>
+            $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-include util/test/gtest_utils.hpp>
+    )
     gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(benchmark_srcs

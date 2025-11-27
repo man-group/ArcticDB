@@ -267,33 +267,3 @@ slice_data_into_segments(
     return std::make_tuple(std::move(segments), std::move(col_ranges), std::move(row_ranges));
 }
 } // namespace arcticdb
-
-namespace fmt {
-template<>
-struct formatter<arcticdb::SegmentInMemory> {
-    template<typename ParseContext>
-    constexpr auto parse(ParseContext& ctx) {
-        return ctx.begin();
-    }
-
-    template<typename FormatContext>
-    constexpr auto format(const arcticdb::SegmentInMemory& segment, FormatContext& ctx) const {
-        const StreamDescriptor& desc = segment.descriptor();
-        fmt::format_to(ctx.out(), "Segment\n");
-        for (unsigned i = 0; i < desc.field_count(); ++i) {
-            fmt::format_to(ctx.out(), "\nColumn[{}]: {}\n", i, desc.field(i));
-            visit_field(desc.field(i), [&](auto tdt) {
-                using TDT = decltype(tdt);
-                arcticdb::ColumnData cd = segment.column_data(i);
-                for (auto it = cd.begin<TDT>(); it != cd.end<TDT>(); ++it) {
-                    if constexpr (std::same_as<typename TDT::DataTypeTag::raw_type, int8_t>) {
-                        fmt::format_to(ctx.out(), "{} ", i, int(*it));
-                    } else {
-                        fmt::format_to(ctx.out(), "{} ", i, *it);
-                    }
-                }
-            });
-        }
-    }
-};
-} // namespace fmt
