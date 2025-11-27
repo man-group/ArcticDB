@@ -75,7 +75,7 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
         PyObject* obj, std::optional<ScopedGILLock>& scoped_gil_lock
 );
 
-NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types);
+NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::string_view> column_name = std::nullopt);
 
 std::shared_ptr<pipelines::InputFrame> py_ndf_to_frame(
         const StreamId& stream_name, const InputItem& item, const py::object& norm_meta, const py::object& user_meta,
