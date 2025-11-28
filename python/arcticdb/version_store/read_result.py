@@ -10,17 +10,8 @@ from arcticdb_ext.version_store import PandasOutputFrame
 from arcticdb.version_store._normalization import FrameData
 
 
-class NodeReadResult:
-    def __init__(self, sym, frame_data, norm):
-        self.sym = sym
-        self.frame_data = (
-            FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
-        )
-        self.norm = norm
-
-
 class ReadResult:
-    def __init__(self, version, frame_data, norm, udm, mmeta, node_read_results):
+    def __init__(self, version, frame_data, norm, udm, mmeta, keys):
         self.version = version
         self.frame_data = (
             FrameData(*frame_data.extract_numpy_arrays()) if isinstance(frame_data, PandasOutputFrame) else frame_data
@@ -28,8 +19,4 @@ class ReadResult:
         self.norm = norm
         self.udm = udm
         self.mmeta = mmeta
-        self.node_read_results = (
-            [NodeReadResult(*node_read_result) for node_read_result in node_read_results]
-            if node_read_results is not None
-            else []
-        )
+        self.keys = keys

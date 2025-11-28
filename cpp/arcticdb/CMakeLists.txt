@@ -555,7 +555,6 @@ set(arcticdb_srcs
         version/version_utils.cpp
         version/symbol_list.cpp
         version/version_map_batch_methods.cpp
-        version/version_tasks.cpp
         storage/s3/ec2_utils.cpp
 )
 
