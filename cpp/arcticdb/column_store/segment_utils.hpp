@@ -166,11 +166,11 @@ template<
         std::ranges::sized_range... RestCols>
 requires(
         util::instantiation_of<ColumnSlice, std::tuple> &&
-        []<size_t... Is>(std::index_sequence<Is...>) {
-            return (std::ranges::sized_range<std::tuple_element_t<Is, ColumnSlice>> && ...);
-        }(std::make_index_sequence<std::tuple_size_v<ColumnSlice>>{})
+        []<typename... TupEls>(std::tuple<TupEls...>*) {
+            return (std::ranges::sized_range<TupEls> && ...);
+        }(static_cast<ColumnSlice*>(nullptr))
 )
-void slice_data_into_segments(
+void slice_data_into_segments_helper(
         const std::span<const StreamDescriptor> descriptors, const size_t rows_per_segment,
         const size_t cols_per_segment, pipelines::ColRange col_range, std::vector<SegmentInMemory>& segments,
         std::vector<pipelines::ColRange>& col_ranges, std::vector<pipelines::RowRange>& row_ranges,
@@ -206,7 +206,7 @@ void slice_data_into_segments(
         );
         col_range.first = col_range.second;
         col_range.second = std::min(col_range.first + cols_per_segment, col_range.first + sizeof...(RestCols));
-        slice_data_into_segments(
+        slice_data_into_segments_helper(
                 descriptors.last(descriptors.size() - 1),
                 rows_per_segment,
                 cols_per_segment,
@@ -219,7 +219,7 @@ void slice_data_into_segments(
                 std::forward<RestCols>(data)...
         );
     } else {
-        slice_data_into_segments(
+        slice_data_into_segments_helper(
                 descriptors,
                 rows_per_segment,
                 cols_per_segment,
@@ -247,7 +247,7 @@ slice_data_into_segments(
     auto [index_columns, data_columns] = split_pack<index::field_count()>(std::forward<Data>(data)...);
     std::apply(
             [&]<typename... Cols>(Cols&&... cols) {
-                slice_data_into_segments(
+                slice_data_into_segments_helper(
                         descriptors,
                         rows_per_segment,
                         cols_per_segment,
