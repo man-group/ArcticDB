@@ -221,6 +221,7 @@ folly::Future<AtomKey> merge_index_key_for_read_modify_write(
             merged_ranges_and_keys.push_back(std::move(slice));
         }
     }
+    pipeline_context.slice_and_keys_.clear();
     const size_t row_count = merged_ranges_and_keys.empty() ? 0
                                                             : merged_ranges_and_keys.back().slice().row_range.second -
                                                                       merged_ranges_and_keys[0].slice().row_range.first;
@@ -240,7 +241,6 @@ folly::Future<AtomKey> merge_index_key_for_read_modify_write(
             target_partial_index_key,
             store
     );
-    pipeline_context.slice_and_keys_.clear();
 }
 } // namespace
 
