@@ -24,21 +24,6 @@ namespace arcticdb {
 
 using OutputFrame = std::variant<pipelines::PandasOutputFrame, ArrowOutputFrame>;
 
-struct ARCTICDB_VISIBILITY_HIDDEN NodeReadResult {
-    NodeReadResult(
-            const StreamId& symbol, OutputFrame&& frame_data,
-            arcticdb::proto::descriptors::NormalizationMetadata&& norm_meta
-    ) :
-        symbol_(symbol),
-        frame_data_(std::move(frame_data)),
-        norm_meta_(std::move(norm_meta)) {};
-    StreamId symbol_;
-    OutputFrame frame_data_;
-    arcticdb::proto::descriptors::NormalizationMetadata norm_meta_;
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(NodeReadResult)
-};
-
 struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
     ReadResult(
             const std::variant<VersionedItem, std::vector<VersionedItem>>& versioned_item, OutputFrame&& frame_data,
@@ -47,7 +32,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
                     arcticdb::proto::descriptors::UserDefinedMetadata,
                     std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>& user_meta,
             const arcticdb::proto::descriptors::UserDefinedMetadata& multi_key_meta,
-            std::vector<NodeReadResult>&& node_results = {}
+            std::vector<entity::AtomKey>&& multi_keys
     ) :
         item(versioned_item),
         frame_data(std::move(frame_data)),
@@ -55,7 +40,7 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
         norm_meta(norm_meta),
         user_meta(user_meta),
         multi_key_meta(multi_key_meta),
-        node_results(std::move(node_results)) {}
+        multi_keys(std::move(multi_keys)) {}
     std::variant<VersionedItem, std::vector<VersionedItem>> item;
     OutputFrame frame_data;
     OutputFormat output_format;
@@ -65,53 +50,71 @@ struct ARCTICDB_VISIBILITY_HIDDEN ReadResult {
             std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>
             user_meta;
     arcticdb::proto::descriptors::UserDefinedMetadata multi_key_meta;
-    std::vector<NodeReadResult> node_results;
+    std::vector<entity::AtomKey> multi_keys;
 
     ARCTICDB_MOVE_ONLY_DEFAULT(ReadResult)
 };
 
-namespace version_store {
+inline ReadResult create_python_read_result(
+        const std::variant<VersionedItem, std::vector<VersionedItem>>& version, OutputFormat output_format,
+        FrameAndDescriptor&& fd,
+        std::optional<std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>&& user_meta = std::nullopt
+) {
+    auto result = std::move(fd);
 
-struct SymbolProcessingResult {
-    VersionedItem versioned_item_;
-    proto::descriptors::UserDefinedMetadata metadata_;
-    OutputSchema output_schema_;
-    std::vector<EntityId> entity_ids_;
-};
+    // If version is a vector then this was a multi-symbol join, so the user_meta vector should have a value
+    // Otherwise, there is a single piece of metadata on the frame descriptor
+    util::check(
+            std::holds_alternative<VersionedItem>(version) ^ user_meta.has_value(),
+            "Unexpected argument combination to create_python_read_result"
+    );
 
-struct ReadVersionOutput {
-    ReadVersionOutput() = delete;
-    ReadVersionOutput(VersionedItem&& versioned_item, FrameAndDescriptor&& frame_and_descriptor) :
-        versioned_item_(std::move(versioned_item)),
-        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
+    // Very old (pre Nov-2020) PandasIndex protobuf messages had no "start" or "step" fields. If is_physically_stored
+    // (renamed from is_not_range_index) was false, the index was always RangeIndex(num_rows, 1)
+    // This used to be handled in the Python layer by passing None to the DataFrame index parameter, which would then
+    // default to RangeIndex(num_rows, 1). However, the empty index also has is_physically_stored as false, and because
+    // integer protobuf fields default to zero if they are not present on the wire, it is impossible to tell from
+    // the normalization metadata alone if the data was written with an empty index, or with a very old range index.
+    // We therefore patch the normalization metadata here in this case
+    auto norm_meta = result.desc_.mutable_proto().mutable_normalization();
+    if (norm_meta->has_df() || norm_meta->has_series()) {
+        auto common = norm_meta->has_df() ? norm_meta->mutable_df()->mutable_common()
+                                          : norm_meta->mutable_series()->mutable_common();
+        if (common->has_index()) {
+            auto index = common->mutable_index();
+            if (result.desc_.index().type() == IndexDescriptor::Type::ROWCOUNT && !index->is_physically_stored() &&
+                index->start() == 0 && index->step() == 0) {
+                index->set_step(1);
+            }
+        }
+    }
 
-    ARCTICDB_MOVE_ONLY_DEFAULT(ReadVersionOutput)
+    auto python_frame = [&]() -> OutputFrame {
+        if (output_format == OutputFormat::ARROW) {
+            return ArrowOutputFrame{segment_to_arrow_data(result.frame_)};
+        } else {
+            return pipelines::PandasOutputFrame{result.frame_};
+        }
+    }();
+    util::print_total_mem_usage(__FILE__, __LINE__, __FUNCTION__);
 
-    VersionedItem versioned_item_;
-    FrameAndDescriptor frame_and_descriptor_;
-};
-
-struct ReadVersionWithNodesOutput {
-    ReadVersionOutput root_;
-    std::vector<ReadVersionOutput> nodes_;
-};
-
-struct MultiSymbolReadOutput {
-    MultiSymbolReadOutput() = delete;
-    MultiSymbolReadOutput(
-            std::vector<VersionedItem>&& versioned_items,
-            std::vector<proto::descriptors::UserDefinedMetadata>&& metadatas, FrameAndDescriptor&& frame_and_descriptor
-    ) :
-        versioned_items_(std::move(versioned_items)),
-        metadatas_(std::move(metadatas)),
-        frame_and_descriptor_(std::move(frame_and_descriptor)) {}
-
-    ARCTICDB_MOVE_ONLY_DEFAULT(MultiSymbolReadOutput)
-
-    std::vector<VersionedItem> versioned_items_;
-    std::vector<proto::descriptors::UserDefinedMetadata> metadatas_;
-    FrameAndDescriptor frame_and_descriptor_;
-};
-} // namespace version_store
+    const auto& desc_proto = result.desc_.proto();
+    std::variant<
+            arcticdb::proto::descriptors::UserDefinedMetadata,
+            std::vector<arcticdb::proto::descriptors::UserDefinedMetadata>>
+            metadata;
+    if (user_meta.has_value()) {
+        metadata = std::move(*user_meta);
+    } else {
+        metadata = std::move(desc_proto.user_meta());
+    }
+    return {version,
+            std::move(python_frame),
+            output_format,
+            desc_proto.normalization(),
+            metadata,
+            desc_proto.multi_key_meta(),
+            std::move(result.keys_)};
+}
 
 } // namespace arcticdb

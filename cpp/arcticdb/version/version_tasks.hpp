@@ -12,8 +12,6 @@
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/pipeline/index_utils.hpp>
 #include <arcticdb/version/version_store_objects.hpp>
-#include <arcticdb/version/version_map.hpp>
-#include <arcticdb/util/key_utils.hpp>
 
 namespace arcticdb {
 
@@ -135,24 +133,6 @@ struct CheckReloadTask : async::BaseTask {
     std::shared_ptr<VersionMapEntry> operator()() const {
         return version_map_->check_reload(store_, stream_id_, load_strategy_, __FUNCTION__);
     }
-};
-
-struct SetupPipelineContextTask : async::BaseTask {
-    const std::shared_ptr<Store> store_;
-    const std::variant<VersionedItem, StreamId> version_info_;
-    const std::shared_ptr<ReadQuery> read_query_;
-    const ReadOptions read_options_;
-
-    SetupPipelineContextTask(
-            std::shared_ptr<Store> store, std::variant<VersionedItem, StreamId> version_info,
-            std::shared_ptr<ReadQuery> read_query, ReadOptions read_options
-    ) :
-        store_(std::move(store)),
-        version_info_(std::move(version_info)),
-        read_query_(std::move(read_query)),
-        read_options_(std::move(read_options)) {}
-
-    std::shared_ptr<pipelines::PipelineContext> operator()() const;
 };
 
 struct WriteVersionTask : async::BaseTask {

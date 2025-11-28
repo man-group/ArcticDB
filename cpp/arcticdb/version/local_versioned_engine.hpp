@@ -111,7 +111,7 @@ class LocalVersionedEngine : public VersionedEngine {
 
     std::optional<VersionedItem> get_version_to_read(const StreamId& stream_id, const VersionQuery& version_query);
 
-    ReadVersionWithNodesOutput read_dataframe_version_internal(
+    ReadVersionOutput read_dataframe_version_internal(
             const StreamId& stream_id, const VersionQuery& version_query, const std::shared_ptr<ReadQuery>& read_query,
             const ReadOptions& read_options, std::any& handler_data
     ) override;
@@ -234,7 +234,11 @@ class LocalVersionedEngine : public VersionedEngine {
             const std::vector<UpdateQuery>& update_queries, bool prune_previous_versions, bool upsert
     );
 
-    std::vector<std::variant<ReadVersionWithNodesOutput, DataError>> batch_read_internal(
+    std::vector<ReadVersionOutput> batch_read_keys(
+            const std::vector<AtomKey>& keys, const ReadOptions& read_options, std::any& handler_data
+    );
+
+    std::vector<std::variant<ReadVersionOutput, DataError>> batch_read_internal(
             const std::vector<StreamId>& stream_ids, const std::vector<VersionQuery>& version_queries,
             std::vector<std::shared_ptr<ReadQuery>>& read_queries, const BatchReadOptions& batch_read_options,
             std::any& handler_data
