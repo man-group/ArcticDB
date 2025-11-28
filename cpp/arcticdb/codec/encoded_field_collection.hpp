@@ -107,8 +107,8 @@ class EncodedFieldCollection {
 
     void write_data_to(uint8_t*& dst) const {
         for (auto block : data_.blocks()) {
-            memcpy(dst, block->data(), block->bytes());
-            dst += block->bytes();
+            memcpy(dst, block->data(), block->physical_bytes());
+            dst += block->physical_bytes();
         }
     }
 

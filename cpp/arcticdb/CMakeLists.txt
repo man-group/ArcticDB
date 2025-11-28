@@ -430,6 +430,7 @@ set(arcticdb_srcs
         codec/protobuf_mappings.cpp
         codec/segment.cpp
         codec/segment_header.cpp
+        column_store/block.cpp
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
