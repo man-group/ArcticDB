@@ -17,6 +17,8 @@
 #include <arcticdb/util/constructors.hpp>
 #include <boost/iterator/iterator_facade.hpp>
 
+namespace py = pybind11;
+
 namespace arcticdb {
 
 class ColumnMap;

@@ -7,7 +7,7 @@
  */
 
 #include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 
 namespace arcticdb {
@@ -123,4 +123,47 @@ size_t StaticColumnMappingIterator::dest_col() const { return dst_col_; }
 size_t StaticColumnMappingIterator::field_count() const { return field_count_; }
 
 size_t StaticColumnMappingIterator::index_fieldcount() const { return index_fieldcount_; }
+
+void handle_truncation(Column& dest_column, const ColumnTruncation& truncate) {
+    if (dest_column.num_blocks() == 1 && truncate.start_ && truncate.end_) {
+        dest_column.truncate_single_block(*truncate.start_, *truncate.end_);
+    } else {
+        if (truncate.start_)
+            dest_column.truncate_first_block(*truncate.start_);
+        if (truncate.end_)
+            dest_column.truncate_last_block(*truncate.end_);
+    }
+}
+
+void handle_truncation(Column& dest_column, const ColumnMapping& mapping) {
+    handle_truncation(dest_column, mapping.truncate_);
+}
+
+void handle_truncation(util::BitSet& bv, const ColumnTruncation& truncate) {
+    if (truncate.start_) {
+        bv = util::truncate_sparse_map(bv, *truncate.start_, truncate.end_.value_or(bv.size()));
+    } else if (truncate.end_) {
+        // More efficient than util::truncate_sparse_map as it avoids a copy
+        bv.resize(*truncate.end_);
+    }
+}
+
+void create_dense_bitmap(
+        size_t offset, const util::BitSet& sparse_map, Column& dest_column, AllocationType allocation_type
+) {
+    auto& sparse_buffer = dest_column.create_extra_buffer(
+            offset, ExtraBufferType::BITMAP, bitset_packed_size_bytes(sparse_map.size()), allocation_type
+    );
+
+    bitset_to_packed_bits(sparse_map, sparse_buffer.data());
+}
+
+void create_dense_bitmap_all_zeros(
+        size_t offset, size_t num_bits, Column& dest_column, AllocationType allocation_type
+) {
+    auto num_bytes = bitset_packed_size_bytes(num_bits);
+    auto& sparse_buffer = dest_column.create_extra_buffer(offset, ExtraBufferType::BITMAP, num_bytes, allocation_type);
+    std::memset(sparse_buffer.data(), 0, num_bytes);
+}
+
 } // namespace arcticdb

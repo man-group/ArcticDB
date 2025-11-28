@@ -11,7 +11,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/test/rapidcheck.hpp>
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 
 inline rc::Gen<arcticdb::entity::DataType> gen_numeric_datatype() {

@@ -7,7 +7,6 @@
  */
 
 #include <arcticdb/column_store/python_bindings.hpp>
-
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_data.hpp>
 #include <arcticdb/column_store/string_pool.hpp>

@@ -8,11 +8,9 @@
 
 #pragma once
 
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <ankerl/unordered_dense.h>
 #include <arcticdb/util/configs_map.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb {
 

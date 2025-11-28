@@ -8,8 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/input_frame.hpp>
 #include <arcticdb/stream/aggregator.hpp>
 #include <arcticdb/version/version_store_api.hpp>

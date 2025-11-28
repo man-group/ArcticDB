@@ -13,7 +13,6 @@
 #include <stack>
 #include <arcticdb/pipeline/pipeline_context.hpp>
 #include <arcticdb/pipeline/processors.hpp>
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/entity/type_utils.hpp>
 #include <folly/Poly.h>
 

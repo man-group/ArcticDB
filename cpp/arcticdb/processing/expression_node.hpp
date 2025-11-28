@@ -50,28 +50,17 @@ struct ColumnWithStrings {
     const std::shared_ptr<StringPool> string_pool_;
     std::string column_name_;
 
-    ColumnWithStrings(std::unique_ptr<Column>&& col, std::string_view col_name) :
-        column_(std::move(col)),
-        column_name_(col_name) {}
+    ColumnWithStrings(std::unique_ptr<Column>&& col, std::string_view col_name);
 
     ColumnWithStrings(
             std::unique_ptr<Column> column, std::shared_ptr<StringPool> string_pool, std::string_view col_name
-    ) :
-        column_(std::move(column)),
-        string_pool_(std::move(string_pool)),
-        column_name_(col_name) {}
+    );
 
-    ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name) :
-        column_(std::make_shared<Column>(std::move(col))),
-        string_pool_(std::move(string_pool)),
-        column_name_(col_name) {}
+    ColumnWithStrings(Column&& col, std::shared_ptr<StringPool> string_pool, std::string_view col_name);
 
     ColumnWithStrings(
             std::shared_ptr<Column> column, const std::shared_ptr<StringPool>& string_pool, std::string_view col_name
-    ) :
-        column_(std::move(column)),
-        string_pool_(string_pool),
-        column_name_(col_name) {}
+    );
 
     [[nodiscard]] std::optional<std::string_view> string_at_offset(
             entity::position_t offset, bool strip_fixed_width_trailing_nulls = false

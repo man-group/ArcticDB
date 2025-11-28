@@ -7,8 +7,8 @@
  */
 
 #include <arcticdb/arrow/arrow_utils.hpp>
+#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/memory_segment.hpp>
-
 #include <sparrow/layout/primitive_data_access.hpp>
 #include <sparrow/record_batch.hpp>
 

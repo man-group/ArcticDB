@@ -7,7 +7,6 @@
  */
 
 #pragma once
-
 #include <arcticdb/column_store/column.hpp>
 
 namespace arcticdb {

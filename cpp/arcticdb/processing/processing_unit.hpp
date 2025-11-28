@@ -11,7 +11,6 @@
 #include <fmt/core.h>
 #include <arcticdb/async/task_scheduler.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/component_manager.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>

@@ -7,6 +7,7 @@
  */
 
 #include <arcticdb/processing/test/benchmark_common.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
 
 namespace arcticdb {
 

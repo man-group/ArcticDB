@@ -10,7 +10,6 @@
 
 #include <arcticdb/stream/index.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/types.hpp>
 
 #include <folly/Function.h>

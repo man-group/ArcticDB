@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/storage/storage.hpp>
 #include <arcticdb/storage/storage_options.hpp>
 #include <arcticdb/storage/storage_exceptions.hpp>

@@ -9,7 +9,6 @@
 #include <gtest/gtest.h>
 
 #include <folly/futures/Future.h>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <unordered_map>
 #include <string>

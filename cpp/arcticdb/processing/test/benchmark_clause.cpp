@@ -12,7 +12,6 @@
 
 #include <arcticdb/processing/clause.hpp>
 #include <arcticdb/util/test/generators.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/processing/grouper.hpp>
 
 using namespace arcticdb;

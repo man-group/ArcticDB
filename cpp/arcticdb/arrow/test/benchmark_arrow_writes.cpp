@@ -7,7 +7,6 @@
  */
 
 #include <benchmark/benchmark.h>
-#include <fmt/format.h>
 
 #include <arcticdb/arrow/test/arrow_test_utils.hpp>
 #include <arcticdb/arrow/arrow_utils.hpp>

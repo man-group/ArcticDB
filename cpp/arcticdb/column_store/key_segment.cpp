@@ -7,6 +7,9 @@
  */
 
 #include <arcticdb/column_store/key_segment.hpp>
+#include <arcticdb/column_store/memory_segment.hpp>
+#include <arcticdb/entity/index_range.hpp>
+#include <arcticdb/entity/atom_key.hpp>
 #include <arcticdb/pipeline/index_fields.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 
@@ -73,7 +76,7 @@ KeySegment::KeySegment(SegmentInMemory&& segment, SymbolStructure symbol_structu
     }
 }
 
-std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> KeySegment::materialise() const {
+std::variant<std::vector<entity::AtomKeyPacked>, std::vector<entity::AtomKey>> KeySegment::materialise() const {
     auto version_data = version_ids_->data();
     auto creation_ts_data = creation_timestamps_->data();
     auto content_hash_data = content_hashes_->data();

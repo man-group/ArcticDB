@@ -8,7 +8,6 @@
 
 #include <gtest/gtest.h>
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/test/test_utils.hpp>
 #include <arcticdb/stream/test/stream_test_common.hpp>
 #include <arcticdb/util/test/generators.hpp>

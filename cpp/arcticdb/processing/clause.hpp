@@ -10,7 +10,6 @@
 
 #include <arcticdb/pipeline/write_options.hpp>
 
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice.hpp>
 #include <arcticdb/processing/expression_context.hpp>
 #include <arcticdb/processing/expression_node.hpp>

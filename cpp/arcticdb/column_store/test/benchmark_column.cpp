@@ -10,7 +10,6 @@
 #include <random>
 
 #include <benchmark/benchmark.h>
-
 #include <arcticdb/column_store/column.hpp>
 
 using namespace arcticdb;
