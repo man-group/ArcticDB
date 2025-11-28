@@ -2155,12 +2155,13 @@ class NativeVersionStore:
                         proto_cfg,
                         global_default=ArrowOutputStringFormat.LARGE_STRING,
                         **kwargs,
-                    )
+                    ),
+                    output_format,
                 )
             )
             read_options.set_arrow_output_per_column_string_format(
                 {
-                    key: arrow_output_string_format_to_internal(value)
+                    key: arrow_output_string_format_to_internal(value, output_format)
                     for key, value in resolve_defaults(
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()

@@ -1182,3 +1182,17 @@ def test_polars_basic(lmdb_version_store_arrow):
     assert result.columns == ["__index__", "col_int", "col_float", "col_bool", "col_str", "col_cat"]
     assert result.dtypes == [pl.Datetime("ns"), pl.Int64, pl.Float32, pl.Boolean, pl.String, pl.Categorical]
     assert result.equals(expected)
+
+
+def test_polars_unsupported_small_string(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    lib.set_output_format(OutputFormat.POLARS)
+    sym = "polars"
+    df = pd.DataFrame({"col": ["a", "bb"]})
+    lib.write(sym, df)
+
+    with pytest.raises(ValueError):
+        lib.read(sym, arrow_string_format_default=pa.string())
+
+    with pytest.raises(ValueError):
+        lib.read(sym, arrow_string_format_per_column={"col": ArrowOutputStringFormat.SMALL_STRING}).data

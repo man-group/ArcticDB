@@ -277,6 +277,7 @@ class Arctic:
             If `None`, uses the `arrow_string_format_default` from the `Arctic` instance.
             Can be overridden per read operation.
             See `ArrowOutputStringFormat` documentation for details on available string formats.
+            Note that this setting is only applied to the runtime `Library` instance and is not stored as part of the library configuration.
 
         Examples
         --------

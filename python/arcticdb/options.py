@@ -225,8 +225,9 @@ class ArrowOutputStringFormat(str, Enum):
 
     SMALL_STRING:
         Uses 32-bit variable-size encoding.
-        PyArrow: `pa.string()`, Polars: `pl.String`
+        PyArrow: `pa.string()`, Polars: Not supported
         Supports up to 2³¹-1 bytes total string length per Arrow array.
+        Only supported with PyArrow because Polars does not support small strings.
         Slightly more memory efficient than `LARGE_STRING` when string data is known to be small.
 
     CATEGORICAL and DICTIONARY_ENCODED:
@@ -247,7 +248,7 @@ class ArrowOutputStringFormat(str, Enum):
 
 
 def arrow_output_string_format_to_internal(
-    arrow_string_format: Union[ArrowOutputStringFormat, "pa.DataType"],
+    arrow_string_format: Union[ArrowOutputStringFormat, "pa.DataType"], output_format: Union[OutputFormat, str]
 ) -> InternalArrowOutputStringFormat:
     if (
         arrow_string_format == ArrowOutputStringFormat.CATEGORICAL
@@ -267,6 +268,10 @@ def arrow_output_string_format_to_internal(
         or _PYARROW_AVAILABLE
         and arrow_string_format == pa.string()
     ):
+        if output_format.lower() == OutputFormat.POLARS.lower():
+            raise ValueError(
+                "SMALL_STRING is not supported with POLARS output format. Please use LARGE_STRING instead."
+            )
         return InternalArrowOutputStringFormat.SMALL_STRING
     else:
         raise ValueError(f"Unkown ArrowOutputStringFormat: {arrow_string_format}")
