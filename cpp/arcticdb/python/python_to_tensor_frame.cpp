@@ -97,6 +97,47 @@ static std::tuple<char, int> parse_array_descriptor(PyObject* obj) {
     return {ValueType::EMPTY, 8, 2};
 }
 
+struct PyArrayDescriptor {
+    PyArrayDescriptor(PyObject* ptr, bool empty_types) {
+        auto& api = pybind11::detail::npy_api::get();
+        util::check(api.PyArray_Check_(ptr), "Expected Python array");
+        arr_ = pybind11::detail::array_proxy(ptr);
+        std::tie(kind_, elsize_) = parse_array_descriptor(arr_->descr);
+        ndim_ = arr_->nd;
+        size_ = ndim_ == 1 ? arr_->dimensions[0] : arr_->dimensions[0] * arr_->dimensions[1];
+        // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
+        // The Normalizer in Python cast empty `"float"` series to `"object"` so `EMPTY` is used here.
+        // See: https://github.com/man-group/ArcticDB/pull/1049
+        val_type_ = size_ == 0 && empty_types ? ValueType::EMPTY : get_value_type(kind_);
+        val_bytes_ = static_cast<uint8_t>(elsize_);
+        element_count_ =
+                ndim_ == 1 ? int64_t(arr_->dimensions[0]) : int64_t(arr_->dimensions[0]) * int64_t(arr_->dimensions[1]);
+        c_style_ = arr_->strides[0] == val_bytes_;
+    }
+    pybind11::detail::PyArray_Proxy* arr_;
+    int64_t size_;
+    int64_t element_count_;
+    int elsize_;
+    int ndim_;
+    char kind_;
+    ValueType val_type_;
+    uint8_t val_bytes_;
+    bool c_style_;
+};
+
+static std::string column_info(const PyArrayDescriptor& desc) {
+    return fmt::format(
+            "Kind: {}, ArcticDB ValueType: {}, Element size in bytes: {}, Column dimension: {}, Element count: {}, "
+            "Element stride: {}",
+            desc.kind_,
+            desc.val_type_,
+            desc.elsize_,
+            desc.ndim_,
+            desc.element_count_,
+            desc.arr_->strides[0]
+    );
+}
+
 std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
         PyObject* obj, std::optional<ScopedGILLock>& scoped_gil_lock
 ) {
@@ -135,31 +176,17 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
     }
 }
 
-NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types) {
-    auto& api = pybind11::detail::npy_api::get();
-    util::check(api.PyArray_Check_(ptr), "Expected Python array");
-    const auto arr = pybind11::detail::array_proxy(ptr);
-    const auto [kind, elsize] = parse_array_descriptor(arr->descr);
-    auto ndim = arr->nd;
-    const ssize_t size = ndim == 1 ? arr->dimensions[0] : arr->dimensions[0] * arr->dimensions[1];
-    // In Pandas < 2, empty series dtype is `"float"`, but as of Pandas 2.0, empty series dtype is `"object"`
-    // The Normalizer in Python cast empty `"float"` series to `"object"` so `EMPTY` is used here.
-    // See: https://github.com/man-group/ArcticDB/pull/1049
-    auto val_type = size == 0 && empty_types ? ValueType::EMPTY : get_value_type(kind);
-    auto val_bytes = static_cast<uint8_t>(elsize);
-    const int64_t element_count =
-            ndim == 1 ? int64_t(arr->dimensions[0]) : int64_t(arr->dimensions[0]) * int64_t(arr->dimensions[1]);
-    const auto c_style = arr->strides[0] == val_bytes;
-
-    if (is_empty_type(val_type)) {
-        val_bytes = 8;
-        val_type = ValueType::EMPTY;
-    } else if (is_sequence_type(val_type)) {
+NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::string_view> column_name) {
+    PyArrayDescriptor desc(ptr, empty_types);
+    if (is_empty_type(desc.val_type_)) {
+        desc.val_bytes_ = 8;
+        desc.val_type_ = ValueType::EMPTY;
+    } else if (is_sequence_type(desc.val_type_)) {
         // wide type always is 64bits
-        val_bytes = 8;
+        desc.val_bytes_ = 8;
 
-        if (!is_fixed_string_type(val_type) && element_count > 0) {
-            auto obj = reinterpret_cast<PyObject**>(arr->data);
+        if (!is_fixed_string_type(desc.val_type_) && desc.element_count_ > 0) {
+            auto obj = reinterpret_cast<PyObject**>(desc.arr_->data);
             bool empty_string_placeholder = false;
             PyObject* sample = *obj;
             PyObject** current_object = obj;
@@ -174,8 +201,15 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types) {
             // we're not expected to enter that branch.
             if (is_py_none(sample) || is_py_nan(sample)) {
                 empty_string_placeholder = true;
-                util::check(c_style, "Non contiguous columns with first element as None not supported yet.");
-                const auto* end = obj + size;
+                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                        desc.c_style_,
+                        "Non contiguous column \"{}\" with first element as {} not supported yet. Are you passing "
+                        "row-major (Fortran styled data)? Column info: {}",
+                        column_name.value_or("<unknown>"),
+                        is_py_none(sample) ? "None" : "NaN",
+                        column_info(desc)
+                );
+                const auto* end = obj + desc.size_;
                 while (current_object < end) {
                     if (!(is_py_nan(*current_object) || is_py_none(*current_object))) {
                         empty_string_placeholder = false;
@@ -190,33 +224,33 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types) {
             // is assigned a string type if kind is float "f" the column is assigned a float type. This is done in
             // order to preserve a legacy behavior of ArcticDB allowing to use both NaN and None as a placeholder for
             // missing string values.
-            if (empty_string_placeholder && kind == 'O') {
-                val_type = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
+            if (empty_string_placeholder && desc.kind_ == 'O') {
+                desc.val_type_ = empty_types ? ValueType::EMPTY : ValueType::UTF_DYNAMIC;
             } else if (is_unicode(sample)) {
-                val_type = ValueType::UTF_DYNAMIC;
+                desc.val_type_ = ValueType::UTF_DYNAMIC;
             } else if (PYBIND11_BYTES_CHECK(sample)) {
-                val_type = ValueType::ASCII_DYNAMIC;
+                desc.val_type_ = ValueType::ASCII_DYNAMIC;
             } else if (is_py_array(sample)) {
                 normalization::raise<ErrorCode::E_UNIMPLEMENTED_INPUT_TYPE>(
                         "Array types are not supported at the moment"
                 );
-                std::tie(val_type, val_bytes, ndim) =
-                        determine_python_array_type(current_object, current_object + element_count);
+                std::tie(desc.val_type_, desc.val_bytes_, desc.ndim_) =
+                        determine_python_array_type(current_object, current_object + desc.element_count_);
             } else {
-                std::tie(val_type, val_bytes, ndim) = determine_python_object_type(sample);
+                std::tie(desc.val_type_, desc.val_bytes_, desc.ndim_) = determine_python_object_type(sample);
             }
         }
     }
 
     // When processing empty collections, the size bits have to be `SizeBits::S64`,
     // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
-    const SizeBits size_bits = is_empty_type(val_type) ? SizeBits::S64 : get_size_bits(val_bytes);
-    const auto dt = combine_data_type(val_type, size_bits);
-    const int64_t nbytes = element_count * elsize;
-    const void* data = nbytes ? arr->data : nullptr;
-    const std::array<stride_t, 2> strides = {arr->strides[0], arr->nd > 1 ? arr->strides[1] : 0};
-    const std::array<shape_t, 2> shapes = {arr->dimensions[0], arr->nd > 1 ? arr->dimensions[1] : 0};
-    return {nbytes, arr->nd, strides.data(), shapes.data(), dt, elsize, data, ndim};
+    const SizeBits size_bits = is_empty_type(desc.val_type_) ? SizeBits::S64 : get_size_bits(desc.val_bytes_);
+    const auto dt = combine_data_type(desc.val_type_, size_bits);
+    const int64_t nbytes = desc.element_count_ * desc.elsize_;
+    const void* data = nbytes ? desc.arr_->data : nullptr;
+    const std::array<stride_t, 2> strides = {desc.arr_->strides[0], desc.arr_->nd > 1 ? desc.arr_->strides[1] : 0};
+    const std::array<shape_t, 2> shapes = {desc.arr_->dimensions[0], desc.arr_->nd > 1 ? desc.arr_->dimensions[1] : 0};
+    return {nbytes, desc.arr_->nd, strides.data(), shapes.data(), dt, desc.elsize_, data, desc.ndim_};
 }
 
 void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame& frame) {
@@ -263,7 +297,31 @@ void tensors_to_frame(const py::tuple& tuple, const bool empty_types, InputFrame
     auto sorted = tuple[4].cast<SortedValue>();
 
     for (auto i = 0u; i < col_vals.size(); ++i) {
-        auto tensor = obj_to_tensor(col_vals[i].ptr(), empty_types);
+        auto tensor = [&] {
+            try {
+                return obj_to_tensor(col_vals[i].ptr(), empty_types, col_names[i]);
+            } catch (...) {
+                log::storage().debug(
+                        "ArcticDB encountered error when parsing the input data in column[{}]: \"{}\".Printing column "
+                        "info for all columns in the input:\n{}",
+                        i,
+                        col_names[i],
+                        [&] {
+                            std::string all_column_info;
+                            for (size_t col = 0; col < col_names.size(); ++col) {
+                                all_column_info += fmt::format(
+                                        "Column [{}] \"{}\": {}\n",
+                                        col,
+                                        col_names[col],
+                                        column_info(PyArrayDescriptor(col_vals[col].ptr(), empty_types))
+                                );
+                            }
+                            return all_column_info;
+                        }()
+                );
+                throw;
+            }
+        }();
         frame.num_rows = std::max(frame.num_rows, static_cast<size_t>(tensor.shape(0)));
         if (tensor.expanded_dim() == 1) {
             desc.add_field(scalar_field(tensor.data_type(), col_names[i]));

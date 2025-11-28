@@ -9,7 +9,7 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb_ext.exceptions import SortingException, ArcticException as ArcticNativeException
+from arcticdb_ext.exceptions import SortingException, ArcticException as ArcticNativeException, UserInputException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 from pandas import MultiIndex
@@ -209,3 +209,11 @@ def test_write_bool_named_multi_index(lmdb_version_store, idx, idx_names):
     df.index.names = [str(n) for n in idx_names]
 
     assert_frame_equal(lmdb_version_store.read(symbol).data, df)
+
+
+def test_write_fortran_style_data_starting_with_none_throws(lmdb_version_store_v1):
+    lib = lmdb_version_store_v1
+    data = np.array([[None, "string"], ["aaa", "bbb"]])
+    df = pd.DataFrame(data, columns=["a", "b"])
+    with pytest.raises(UserInputException, match=r".*Fortran.*"):
+        lib.write("fortran_style", df)

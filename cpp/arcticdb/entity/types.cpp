@@ -48,6 +48,30 @@ std::string_view datatype_to_str(const DataType dt) {
     }
 }
 
+std::string_view value_type_to_str(const ValueType vt) {
+    switch (vt) {
+#define TO_STR(ARG)                                                                                                    \
+    case ValueType::ARG:                                                                                               \
+        return std::string_view(#ARG);
+        TO_STR(UNKNOWN_VALUE_TYPE)
+        TO_STR(UINT)
+        TO_STR(INT)
+        TO_STR(FLOAT)
+        TO_STR(BOOL)
+        TO_STR(NANOSECONDS_UTC)
+        TO_STR(ASCII_FIXED)
+        TO_STR(UTF8_FIXED)
+        TO_STR(BYTES)
+        TO_STR(UTF_DYNAMIC)
+        TO_STR(ASCII_DYNAMIC)
+        TO_STR(EMPTY)
+        TO_STR(BOOL_OBJECT)
+#undef TO_STR
+    default:
+        return std::string_view("UNKNOWN");
+    }
+}
+
 std::size_t data_type_size(const TypeDescriptor& td) { return get_type_size(td.data_type()); }
 
 } // namespace arcticdb::entity
