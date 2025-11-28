@@ -22,7 +22,7 @@ from benchmarks.common import *
 WIDE_DF_ROWS = 5_000
 WIDE_DF_COLS = 30_000
 # We use larger dataframes for non-batch methods
-PARAMS = [1_000_000, 1_500_000]
+PARAMS = [1_000_000, 1_500_000, 200_000_000]
 PARAM_NAMES = ["rows"]
 BATCH_PARAMS = ([25_000, 50_000], [500, 1000])
 BATCH_PARAM_NAMES = ["rows", "num_symbols"]
@@ -60,7 +60,7 @@ class BasicFunctions:
             self.ac.delete_library(lib)
             self.ac.create_library(lib)
             lib = self.ac[lib]
-            lib.write(f"sym", self.dfs[rows])
+            lib.write(f"sym{rows}", self.dfs[rows])
 
         lib_name = get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)
         self.ac.delete_library(lib_name)
@@ -100,10 +100,10 @@ class BasicFunctions:
         return self.ac.create_library("fresh_lib")
 
     def time_write(self, rows):
-        self.fresh_lib.write(f"sym", self.df)
+        self.fresh_lib.write(f"sym{rows}", self.df)
 
     def peakmem_write(self, rows):
-        self.fresh_lib.write(f"sym", self.df)
+        self.fresh_lib.write(f"sym{rows}", self.df)
 
     def time_write_short_wide(self, rows):
         self.fresh_lib.write("short_wide_sym", self.df_short_wide)
@@ -112,10 +112,10 @@ class BasicFunctions:
         self.fresh_lib.write("short_wide_sym", self.df_short_wide)
 
     def time_read(self, rows):
-        self.lib.read(f"sym").data
+        self.lib.read(f"sym{rows}").data
 
     def peakmem_read(self, rows):
-        self.lib.read(f"sym").data
+        self.lib.read(f"sym{rows}").data
 
     def time_read_short_wide(self, rows):
         lib = self.ac[get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)]

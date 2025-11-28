@@ -2711,6 +2711,7 @@ folly::Future<ReadVersionOutput> read_frame_for_version(
         const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options, std::any& handler_data
 ) {
     return async::submit_io_task(SetupPipelineContextTask{store, version_info, read_query, read_options})
+            .via(&async::cpu_executor())
             .thenValue([store, read_query, read_options, version_info, &handler_data](auto&& pipeline_context) {
                 auto res_versioned_item = generate_result_versioned_item(version_info);
                 if (pipeline_context->multi_key_) {
