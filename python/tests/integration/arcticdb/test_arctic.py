@@ -242,6 +242,20 @@ def test_s3_sts_auth_store(real_s3_sts_version_store):
     assert_frame_equal(lib.read("sym").data, df)
 
 
+@pytest.mark.parametrize("prefix", ["s3", "gcpxml"])
+def test_colon_in_query_parameters(prefix):
+    ac = Arctic(f"{prefix}://10.0.0.3:tabulardata?access=with_a:colon&secret=with_another:colon&port=8010")
+    lib_adapter = ac._library_adapter
+    assert lib_adapter._bucket == "tabulardata"
+    assert lib_adapter._endpoint == "10.0.0.3:8010"
+    if prefix == "s3":
+        assert lib_adapter._query_params.access == "with_a:colon"
+        assert lib_adapter._query_params.secret == "with_another:colon"
+    else:
+        assert lib_adapter._access == "with_a:colon"
+        assert lib_adapter._secret == "with_another:colon"
+
+
 @AZURE_TESTS_MARK
 @pytest.mark.parametrize("client_cert_file", no_ssl_parameter_display_status)
 @pytest.mark.parametrize("client_cert_dir", no_ssl_parameter_display_status)

@@ -66,7 +66,7 @@ class ParsedQuery:
 
 
 class S3LibraryAdapter(ArcticLibraryAdapter):
-    REGEX = r"s3(s)?://(?P<endpoint>.*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
+    REGEX = r"s3(s)?://(?P<endpoint>[^:]*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
 
     @staticmethod
     def supports_uri(uri: str) -> bool:

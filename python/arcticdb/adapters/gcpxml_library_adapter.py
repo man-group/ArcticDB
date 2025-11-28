@@ -84,7 +84,7 @@ def _parse_query(query: str) -> ParsedQuery:
 
 
 class GCPXMLLibraryAdapter(ArcticLibraryAdapter):
-    REGEX = r"gcpxml(s)?://(?P<endpoint>.*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
+    REGEX = r"gcpxml(s)?://(?P<endpoint>[^:]*):(?P<bucket>[-_a-zA-Z0-9.]+)(?P<query>\?.*)?"
 
     @staticmethod
     def supports_uri(uri: str) -> bool:
