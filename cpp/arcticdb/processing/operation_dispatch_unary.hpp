@@ -10,7 +10,6 @@
 #pragma once
 
 #include <arcticdb/pipeline/value.hpp>
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
 #include <arcticdb/util/variant.hpp>
 #include <arcticdb/entity/types.hpp>

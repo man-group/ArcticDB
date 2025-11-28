@@ -433,6 +433,7 @@ set(arcticdb_srcs
         column_store/chunked_buffer.cpp
         column_store/column.cpp
         column_store/column_data.cpp
+        column_store/column_utils.cpp
         column_store/column_data_random_accessor.cpp
         column_store/key_segment.cpp
         column_store/memory_segment.cpp
@@ -472,6 +473,7 @@ set(arcticdb_srcs
         python/normalization_checks.cpp
         python/python_strings.cpp
         python/python_utils.cpp
+        python/numpy_buffer_holder.cpp
         processing/processing_unit.cpp
         processing/aggregation_utils.cpp
         processing/clause.cpp
@@ -525,6 +527,7 @@ set(arcticdb_srcs
         stream/index.cpp
         stream/piloted_clock.cpp
         stream/protobuf_mappings.cpp
+        stream/schema.cpp
         toolbox/library_tool.cpp
         toolbox/query_stats.cpp
         util/allocator.cpp

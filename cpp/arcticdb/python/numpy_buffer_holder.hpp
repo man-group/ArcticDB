@@ -13,49 +13,14 @@
 namespace arcticdb {
 
 struct NumpyBufferHolder {
-    TypeDescriptor type_{make_scalar_type(DataType::UNKNOWN)};
+    entity::TypeDescriptor type_{make_scalar_type(entity::DataType::UNKNOWN)};
     uint8_t* ptr_{nullptr};
     size_t row_count_{0};
     size_t allocated_bytes_{0};
 
-    NumpyBufferHolder(TypeDescriptor type, uint8_t* ptr, size_t row_count, size_t allocated_bytes) :
-        type_(type),
-        ptr_(ptr),
-        row_count_(row_count),
-        allocated_bytes_(allocated_bytes) {}
-
-    explicit NumpyBufferHolder(NumpyBufferHolder&& other) :
-        type_(other.type_),
-        ptr_(other.ptr_),
-        row_count_(other.row_count_),
-        allocated_bytes_(other.allocated_bytes_) {
-        other.type_ = make_scalar_type(DataType::UNKNOWN);
-        other.ptr_ = nullptr;
-        other.row_count_ = 0;
-        other.allocated_bytes_ = 0;
-    }
-
-    ~NumpyBufferHolder() {
-        if (ptr_) {
-            if (is_dynamic_string_type(type_.data_type())) {
-                if (is_arrow_output_only_type(type_)) {
-                    log::version().error("Unexpected arrow output format seen in NumpyBufferHolder");
-                } else {
-                    // pybind11 has taken the GIL for us so this is safe
-                    auto py_ptr = reinterpret_cast<PyObject**>(ptr_);
-                    for (size_t idx = 0; idx < row_count_; ++idx, ++py_ptr) {
-                        if (*py_ptr != nullptr) {
-                            Py_DECREF(*py_ptr);
-                        } else {
-                            log::version().error("Unexpected nullptr to DecRef in NumpyBufferHolder destructor");
-                        }
-                    }
-                }
-            }
-            // See comment on allocate_detachable_memory declaration for why this cannot just be a call to delete[]
-            free_detachable_memory(ptr_, allocated_bytes_);
-        }
-    }
+    NumpyBufferHolder(entity::TypeDescriptor type, uint8_t* ptr, size_t row_count, size_t allocated_bytes);
+    explicit NumpyBufferHolder(NumpyBufferHolder&& other);
+    ~NumpyBufferHolder();
 };
 
 } // namespace arcticdb

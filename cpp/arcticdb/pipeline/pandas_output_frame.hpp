@@ -10,7 +10,6 @@
 
 #include <pybind11/pybind11.h>
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/util/global_lifetimes.hpp>
 

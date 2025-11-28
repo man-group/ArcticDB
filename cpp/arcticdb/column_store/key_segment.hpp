@@ -10,11 +10,17 @@
 
 #include <memory>
 
-#include <arcticdb/column_store/memory_segment.hpp>
-#include <arcticdb/entity/atom_key.hpp>
+#include <arcticdb/entity/types.hpp>
 
 namespace arcticdb {
-
+class SegmentInMemory;
+class Column;
+class StringPool;
+namespace entity {
+class AtomKeyImpl;
+using AtomKey = AtomKeyImpl;
+struct AtomKeyPacked;
+} // namespace entity
 enum class SymbolStructure : uint8_t {
     UNKNOWN,
     SAME,  // e.g. in index keys
@@ -50,7 +56,7 @@ class KeySegment {
     ARCTICDB_NO_MOVE_OR_COPY(KeySegment)
 
     // Returns AtomKeyPacked vector for SymbolStructure::SAME keys with numeric indexes, and AtomKey vector otherwise
-    [[nodiscard]] std::variant<std::vector<AtomKeyPacked>, std::vector<AtomKey>> materialise() const;
+    [[nodiscard]] std::variant<std::vector<entity::AtomKeyPacked>, std::vector<entity::AtomKey>> materialise() const;
 
   private:
     [[nodiscard]] bool check_symbols_all_same() const;
@@ -67,9 +73,9 @@ class KeySegment {
     std::shared_ptr<Column> end_indexes_;
     std::shared_ptr<Column> key_types_;
 
-    using uint8_TDT = ScalarTagType<DataTypeTag<DataType::UINT8>>;
-    using uint64_TDT = ScalarTagType<DataTypeTag<DataType::UINT64>>;
-    using int64_TDT = ScalarTagType<DataTypeTag<DataType::INT64>>;
+    using uint8_TDT = entity::ScalarTagType<entity::DataTypeTag<entity::DataType::UINT8>>;
+    using uint64_TDT = entity::ScalarTagType<entity::DataTypeTag<entity::DataType::UINT64>>;
+    using int64_TDT = entity::ScalarTagType<entity::DataTypeTag<entity::DataType::INT64>>;
 
     SymbolStructure symbol_structure_{SymbolStructure::UNKNOWN};
     // If all the keys in this segment have the same symbol, stored here. std::nullopt otherwise

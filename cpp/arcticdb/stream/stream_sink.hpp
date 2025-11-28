@@ -8,7 +8,6 @@
 
 #pragma once
 
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/index_range.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/storage/storage.hpp>

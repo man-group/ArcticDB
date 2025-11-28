@@ -7,7 +7,6 @@
  */
 
 #include <arcticdb/column_store/column.hpp>
-
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/util/offset_string.hpp>
 
