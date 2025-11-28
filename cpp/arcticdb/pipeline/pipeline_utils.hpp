@@ -14,7 +14,6 @@
 #include <arcticdb/pipeline/read_options.hpp>
 #include <arcticdb/pipeline/read_pipeline.hpp>
 #include <arcticdb/pipeline/column_mapping.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/type_handler.hpp>
 #include <arcticdb/python/python_handler_data.hpp>
 

@@ -7,12 +7,10 @@
  */
 #pragma once
 
-#include <memory>
 #include <random>
 
 #include <benchmark/benchmark.h>
 
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/processing/expression_node.hpp>
 

@@ -10,7 +10,6 @@
 #include <arcticdb/codec/codec.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/column_data.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/python/python_utils.hpp>
 #include <arcticdb/util/cursored_buffer.hpp>
 #include <arcticdb/util/preconditions.hpp>

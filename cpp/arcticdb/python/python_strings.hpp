@@ -7,7 +7,6 @@
  */
 
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/string_pool_utils.hpp>
 #include <arcticdb/util/decode_path_data.hpp>
 #include <arcticdb/python/python_utils.hpp>

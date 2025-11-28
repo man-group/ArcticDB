@@ -3,7 +3,6 @@
 #include <arcticdb/util/encoding_conversion.hpp>
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/entity/types.hpp>
-#include <arcticdb/column_store/column.hpp>
 #include <arcticdb/pipeline/frame_slice_map.hpp>
 #include <arcticdb/pipeline/frame_utils.hpp>
 #include <arcticdb/pipeline/pipeline_context.hpp>

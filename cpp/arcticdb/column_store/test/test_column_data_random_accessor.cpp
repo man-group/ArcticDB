@@ -7,7 +7,6 @@
  */
 
 #include <gtest/gtest.h>
-
 #include <arcticdb/column_store/column.hpp>
 #include <arcticdb/column_store/column_data_random_accessor.hpp>
 

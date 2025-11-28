@@ -2,7 +2,6 @@
 
 #include <arcticdb/column_store/chunked_buffer.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/util/memory_tracing.hpp>
 
 #include <arcticdb/pipeline/string_pool_utils.hpp>

@@ -17,7 +17,6 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/stream/stream_utils.hpp>
 #include <arcticdb/stream/stream_source.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/entity/variant_key.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/async/base_task.hpp>

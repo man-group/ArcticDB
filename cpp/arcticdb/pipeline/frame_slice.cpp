@@ -7,7 +7,6 @@
  */
 
 #include <arcticdb/pipeline/frame_slice.hpp>
-#include <arcticdb/column_store/memory_segment.hpp>
 #include <arcticdb/pipeline/read_frame.hpp>
 #include <arcticdb/storage/store.hpp>
 
