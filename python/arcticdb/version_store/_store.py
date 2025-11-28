@@ -1231,10 +1231,10 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
 
-    def _batch_read_keys(self, atom_keys, read_options):
+    def _batch_read_keys(self, atom_keys, read_options, output_format):
         for result in self.version_store.batch_read_keys(atom_keys, read_options):
             read_result = ReadResult(*result)
-            vitem = self._adapt_read_res(read_result)
+            vitem = self._adapt_read_res(read_result, output_format)
             yield vitem
 
     def trim(self) -> None:
@@ -2489,7 +2489,7 @@ class NativeVersionStore:
         if len(read_result.keys) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
 
-            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys, read_options)}
+            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys, read_options, output_format)}
             original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
 
             return VersionedItem(
