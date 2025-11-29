@@ -10,34 +10,16 @@
 #include <arcticdb/pipeline/input_frame.hpp>
 namespace arcticdb::pipelines {
 
-template<typename H, typename... T>
-requires std::ranges::sized_range<H> && (std::ranges::sized_range<T> && ...)
-auto materialize_ranges(H&& head, T&&... tail) {
-    if constexpr (sizeof...(T) == 0) {
-        if constexpr (!std::ranges::contiguous_range<H>) {
-            return std::forward_as_tuple(std::vector<std::ranges::range_value_t<H>>(std::forward<H>(head)));
-        } else {
-            return std::forward_as_tuple(std::forward<H>(head));
-        }
-    } else {
-        if constexpr (!std::ranges::contiguous_range<H>) {
-            return std::tuple_cat(
-                    std::forward_as_tuple(std::vector<std::ranges::range_value_t<H>>(std::forward<H>(head))),
-                    materialize_ranges(std::forward<T>(tail)...)
-            );
-        } else {
-            return std::tuple_cat(
-                    std::forward_as_tuple(std::forward<H>(head)), materialize_ranges(std::forward<T>(tail)...)
-            );
-        }
-    }
-}
-
 template<ValidIndex Index, typename... T>
 requires((Index::field_count() == 0 || Index::field_count() == 1) && (std::ranges::sized_range<T> && ...))
 auto input_frame_from_tensors(const StreamDescriptor& desc, T&&... input) {
     constexpr static size_t data_columns = sizeof...(T) - Index::field_count();
-    auto materialized_input = materialize_ranges(std::forward<T>(input)...);
+    std::tuple materialized_input{std::vector<std::conditional_t<
+            std::same_as<std::ranges::range_value_t<T>, bool>,
+            uint8_t,
+            std::ranges::range_value_t<T>>>(
+            std::make_move_iterator(std::begin(input)), std::make_move_iterator(std::end(input))
+    )...};
     [&]<size_t... Is>(std::index_sequence<Is...>) {
         const size_t first_row_count = std::get<0>(materialized_input).size();
         util::check(
