@@ -94,6 +94,20 @@ def test_read_empty(lmdb_version_store_arrow):
     assert_frame_equal_with_arrow(table, expected)
 
 
+def test_read_empty_column_filter(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "sym"
+    df = pd.DataFrame({"col": [1, 2, 3]})
+    lib.write(sym, df)
+    # Table has no rows (because it has no columns)
+    table = lib.read(sym, columns=[], implement_read_index=True).data
+    assert table.column_names == []
+    assert table.shape == (0, 0)
+    # However in pandas we can have 3 rows even when no columns because pandas includes the row range index
+    pandas_df = lib.read(sym, columns=[], implement_read_index=True, output_format=OutputFormat.PANDAS).data
+    assert pandas_df.shape == (3, 0)
+
+
 @pytest.mark.skipif(IS_PANDAS_ONE, reason="Different empty frame handling in pandas 1.x")
 def test_read_empty_with_columns(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
