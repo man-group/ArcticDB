@@ -14,6 +14,7 @@
 #include <arcticdb/pipeline/column_mapping.hpp>
 #include <arcticdb/column_store/string_pool.hpp>
 #include <arcticdb/column_store/column_algorithms.hpp>
+#include <arcticdb/stream/index.hpp>
 
 namespace arcticdb {
 ArrowOutputStringFormat ArrowStringHandler::output_string_format(
@@ -23,6 +24,22 @@ ArrowOutputStringFormat ArrowStringHandler::output_string_format(
     if (auto it = arrow_config.per_column_string_format_.find(std::string{column_name});
         it != arrow_config.per_column_string_format_.end()) {
         return it->second;
+    } else {
+        // This could give the incorrect return type if:
+        //  - The user has explicitly named a column "__idx__blah"
+        //  - The user has NOT specified a string return type for column "__idx__blah"
+        //  - The user HAS specified a string return type for column "blah"
+        // This seems vanishingly unlikely, and to fix would require pushing knowledge of Pandas multiindex field counts
+        // and fake field positions deep into the decoding pipeline, which is architecturally undesirable if it can be
+        // avoided.
+        // See test_explicit_string_format__idx__prefix and issue 10679807500
+        auto multiindex_column_name = stream::demangled_name(column_name);
+        if (multiindex_column_name.has_value()) {
+            if (auto multiindex_it = arrow_config.per_column_string_format_.find(std::string(*multiindex_column_name));
+                multiindex_it != arrow_config.per_column_string_format_.end()) {
+                return multiindex_it->second;
+            }
+        }
     }
     return arrow_config.default_string_format_;
 }
