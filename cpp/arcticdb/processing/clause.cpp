@@ -1993,9 +1993,9 @@ void MergeUpdateClause::update_and_insert(
                 auto target_data_it = target_segments[segment_idx]->column(column_idx).data().begin<TDT>();
                 // TODO: Implement operator+= because std::advance is linear
                 std::advance(target_data_it, target_data_row);
-                const size_t source_column = [&]() {
+                const size_t source_column = [&] {
                     if constexpr (std::same_as<T, SegmentInMemory>) {
-                        return col_ranges[segment_idx]->first;
+                        return col_ranges[segment_idx]->first + column_idx;
                     } else if constexpr (std::same_as<T, std::vector<NativeTensor>>) {
                         // If the source frame is a list of tensors, the index frame is kept separately, so the first
                         // non-index column will be at index 0. If there's an index the first ColRange will start from
