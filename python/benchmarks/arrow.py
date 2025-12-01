@@ -26,7 +26,7 @@ class ArrowNumeric:
     connection_string = "lmdb://arrow_numeric?map_size=20GB"
     lib_name_prewritten = "arrow_numeric_prewritten"
     lib_name_fresh = "arrow_numeric_fresh"
-    params = ([100_000, 100_000_000], [None, "middle"])
+    params = ([100_000, 10_000_000], [None, "middle"])
     param_names = ["rows", "date_range"]
 
     def symbol_name(self, num_rows: int):
