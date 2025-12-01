@@ -2058,17 +2058,17 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const Pro
     while (target_index_it != target_index_end && source_row < source_row_end) {
         const timestamp source_ts = source_->index_value_at(source_row);
         // TODO: Profile and compare to linear or adaptive (linear below some threshold) search
-        auto lower_bound = std::lower_bound(target_index_it, target_index_end, source_ts);
-        if (lower_bound == target_index_end) {
+        auto target_match_it = std::lower_bound(target_index_it, target_index_end, source_ts);
+        if (target_match_it == target_index_end) {
             break;
         }
-        target_row += std::distance(target_index_it, lower_bound);
-        while (*lower_bound == source_ts) {
+        target_row += std::distance(target_index_it, target_match_it);
+        while (target_match_it != target_index_end && *target_match_it == source_ts) {
             matched_rows[source_row - source_row_start].push_back(target_row);
-            ++lower_bound;
+            ++target_match_it;
             ++target_row;
         }
-        target_index_it = lower_bound;
+        target_index_it = target_match_it;
         source_row++;
     }
     return matched_rows;
