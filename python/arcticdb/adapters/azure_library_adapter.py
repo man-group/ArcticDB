@@ -93,7 +93,7 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             self._ca_cert_path = str(ca_cert_path_from_uri) if ca_cert_path_from_uri else ""
         else:
             self._ca_cert_path = str(self._query_params.CA_cert_path) if self._query_params.CA_cert_path else ""
-            
+
         if ca_cert_dir_found:
             self._ca_cert_dir = str(ca_cert_dir_from_uri) if ca_cert_dir_from_uri else ""
         else:

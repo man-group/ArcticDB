@@ -41,7 +41,9 @@ def test_azure_transport_selection(azurite_storage: AzureContainer):
         with pytest.raises(ValueError) as exc_info:
             # Create a new Arctic instance with the modified URI
             Arctic(uri)
-        assert "You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux." in str(exc_info.value)
+        assert "You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux." in str(
+            exc_info.value
+        )
     else:
         # On Linux, CA cert settings should be accepted
         ac = Arctic(uri)

@@ -35,15 +35,11 @@ TEST_F(AzureTransportTest, TestWindowsTransportSelection) {
 
     // Test that an exception is thrown when CA cert settings are provided
     config.set_ca_cert_path("/path/to/cert.pem");
-    ASSERT_THROW(
-            RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>
-    );
+    ASSERT_THROW(RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>);
 
     config.set_ca_cert_path("");
     config.set_ca_cert_dir("/path/to/certs");
-    ASSERT_THROW(
-            RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>
-    );
+    ASSERT_THROW(RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>);
 #endif
 }
 
@@ -55,15 +51,11 @@ TEST_F(AzureTransportTest, TestMacOSTransportSelection) {
 
     // Test that an exception is thrown when CA cert settings are provided
     config.set_ca_cert_path("/path/to/cert.pem");
-    ASSERT_THROW(
-            RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>
-    );
+    ASSERT_THROW(RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>);
 
     config.set_ca_cert_path("");
     config.set_ca_cert_dir("/path/to/certs");
-    ASSERT_THROW(
-            RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>
-    );
+    ASSERT_THROW(RealAzureClient::get_client_options(config), ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>);
 #endif
 }
 
