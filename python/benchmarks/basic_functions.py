@@ -135,25 +135,25 @@ class BasicFunctions:
 
     def time_read_with_columns(self, rows):
         COLS = ["value"]
-        self.lib.read(f"sym", columns=COLS).data
+        self.lib.read(f"sym{rows}", columns=COLS).data
 
     def peakmem_read_with_columns(self, rows):
         COLS = ["value"]
-        self.lib.read(f"sym", columns=COLS).data
+        self.lib.read(f"sym{rows}", columns=COLS).data
 
     def time_read_with_date_ranges(self, rows):
-        self.lib.read(f"sym", date_range=BasicFunctions.DATE_RANGE).data
+        self.lib.read(f"sym{rows}", date_range=BasicFunctions.DATE_RANGE).data
 
     def peakmem_read_with_date_ranges(self, rows):
-        self.lib.read(f"sym", date_range=BasicFunctions.DATE_RANGE).data
+        self.lib.read(f"sym{rows}", date_range=BasicFunctions.DATE_RANGE).data
 
     def time_read_with_date_ranges_query_builder(self, rows):
         q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)
-        self.lib.read(f"sym", query_builder=q).data
+        self.lib.read(f"sym{rows}", query_builder=q).data
 
     def peakmem_read_with_date_ranges_query_builder(self, rows):
         q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)
-        self.lib.read(f"sym", query_builder=q).data
+        self.lib.read(f"sym{rows}", query_builder=q).data
 
     def time_write_staged(self, rows):
         self.fresh_lib.write(f"sym", self.df, staged=True)
