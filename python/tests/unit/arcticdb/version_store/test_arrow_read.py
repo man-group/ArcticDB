@@ -185,7 +185,6 @@ def test_strings_with_nones_and_nans(lmdb_version_store_tiny_segment, row_range,
     assert_frame_equal_with_arrow(table, expected)
 
 
-@pytest.mark.skip(reason="Monday ref: 18352299908")
 def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_format):
     lib = lmdb_version_store_arrow
     df = pd.DataFrame(
@@ -213,6 +212,18 @@ def test_strings_in_multi_index(lmdb_version_store_arrow, any_arrow_string_forma
     assert table.field("index2").type == expected_type
     assert table.field("x").type == expected_type
     assert_frame_equal_with_arrow(table, df)
+
+
+@pytest.mark.xfail(reason="Monday issue 10679807500")
+def test_explicit_string_format__idx__prefix(lmdb_version_store_arrow):
+    lib = lmdb_version_store_arrow
+    sym = "test_explicit_string_format__idx__prefix"
+    df = pd.DataFrame({"__idx__blah": ["hello"], "blah": ["goodbye"]})
+    lib.write(sym, df)
+    arrow_string_format_per_column = {"blah": ArrowOutputStringFormat.SMALL_STRING}
+    table = lib.read(sym, arrow_string_format_per_column=arrow_string_format_per_column).data
+    assert table.field("blah").type == pa.string()
+    assert table.field("__idx__blah").type == pa.large_string()
 
 
 @pytest.mark.parametrize(

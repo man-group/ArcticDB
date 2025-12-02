@@ -242,4 +242,9 @@ template class BaseIndex<EmptyIndex>;
 
 std::string mangled_name(std::string_view name) { return fmt::format("__idx__{}", name); }
 
+std::optional<std::string_view> demangled_name(std::string_view name) {
+    const std::string prefix{"__idx__"};
+    return name.starts_with(prefix) ? name.substr(prefix.size()) : std::optional<std::string_view>();
+}
+
 } // namespace arcticdb::stream

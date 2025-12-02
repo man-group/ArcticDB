@@ -171,6 +171,7 @@ class EmptyIndex : public BaseIndex<EmptyIndex> {
 using Index = std::variant<stream::TimeseriesIndex, stream::RowCountIndex, stream::TableIndex, stream::EmptyIndex>;
 
 std::string mangled_name(std::string_view name);
+std::optional<std::string_view> demangled_name(std::string_view name);
 
 Index index_type_from_descriptor(const StreamDescriptor& desc);
 Index default_index_type_from_descriptor(const IndexDescriptorImpl& desc);
