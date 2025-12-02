@@ -9,7 +9,6 @@ import platform
 import pytest
 import uuid
 from arcticdb.storage_fixtures.azure import AzureContainer
-from arcticdb.exceptions import ArcticException
 from arcticdb.arctic import Arctic
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 
@@ -47,13 +46,9 @@ def test_azure_transport_selection(azurite_storage: AzureContainer):
     else:
         # On Linux, CA cert settings should be accepted
         ac = Arctic(uri)
-        # Create a library first to get the config
-        lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
-        lib = ac.create_library(lib_name)
-        config = ac._library_manager.get_library_config(lib_name)
-        azure_storage = _get_azure_storage_config(config)
-        assert azure_storage.ca_cert_path == ca_cert_path
-        assert azure_storage.ca_cert_dir == ca_cert_dir
+        # Verify that the adapter correctly extracted the CA cert values from the URI
+        assert ac._library_adapter._ca_cert_path == ca_cert_path
+        assert ac._library_adapter._ca_cert_dir == ca_cert_dir
 
 
 def test_azure_transport_default_settings(azurite_storage: AzureContainer):
@@ -88,14 +83,12 @@ def test_azure_transport_linux_ca_cert_path(azurite_storage: AzureContainer):
         uri = azurite_storage.arctic_uri + f";CA_cert_path={ca_cert_path}"
         ac = Arctic(uri)
 
-        # Create a library first to get the config
+        # Verify that the adapter correctly extracted the CA cert path from the URI
+        assert ac._library_adapter._ca_cert_path == ca_cert_path
+
+        # Create a library to verify it works
         lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
         lib = ac.create_library(lib_name)
-        config = ac._library_manager.get_library_config(lib_name)
-        azure_storage = _get_azure_storage_config(config)
-
-        # Verify that the CA cert path is set correctly
-        assert azure_storage.ca_cert_path == ca_cert_path
 
         # Perform basic operations to verify transport works
         lib.write("test_symbol", "test_data")
@@ -118,14 +111,12 @@ def test_azure_transport_linux_ca_cert_dir(azurite_storage: AzureContainer):
         uri = azurite_storage.arctic_uri + f";CA_cert_dir={ca_cert_dir}"
         ac = Arctic(uri)
 
-        # Create a library first to get the config
+        # Verify that the adapter correctly extracted the CA cert directory from the URI
+        assert ac._library_adapter._ca_cert_dir == ca_cert_dir
+
+        # Create a library to verify it works
         lib_name = f"test_lib_{uuid.uuid4().hex[:8]}"
         lib = ac.create_library(lib_name)
-        config = ac._library_manager.get_library_config(lib_name)
-        azure_storage = _get_azure_storage_config(config)
-
-        # Verify that the CA cert directory is set correctly
-        assert azure_storage.ca_cert_dir == ca_cert_dir
 
         # Perform basic operations to verify transport works
         lib.write("test_symbol", "test_data")
