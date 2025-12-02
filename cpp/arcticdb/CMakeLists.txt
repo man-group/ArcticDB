@@ -936,7 +936,7 @@ endif()
 if(${TEST})
     unset(Python_USE_STATIC_LIBS)
     find_package(Python 3 COMPONENTS Interpreter Development REQUIRED)
-    find_package(Arrow REQUIRED)
+    # find_package(Arrow REQUIRED)
     find_package(rapidcheck REQUIRED)
     find_package(benchmark REQUIRED)
 
@@ -1163,12 +1163,12 @@ if(${TEST})
 
     if(ARCTICDB_USING_CONDA)
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            Arrow::arrow_shared)
+            ${AWSSDK_LINK_LIBRARIES})
+            # Arrow::arrow_shared)
     else()
         set(RAPIDCHECK_PRIVATE_LIBRARIES
-            ${AWSSDK_LINK_LIBRARIES}
-            "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>")
+            ${AWSSDK_LINK_LIBRARIES})
+            # "$<IF:$<BOOL:${ARROW_BUILD_STATIC}>,Arrow::arrow_static,Arrow::arrow_shared>")
     endif()
 
     if(WIN32)
