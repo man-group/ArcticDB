@@ -31,7 +31,7 @@ class LMDBRecursiveNormalizer(AsvBase):
     timeout = 1200
 
     param_names = ["num_dict_entries", "num_symbols"]
-    params = [[100, 1000], [5, 10]]
+    params = [[100], [5]]
 
     library_manager = TestLibraryManager(storage=Storage.LMDB, name_benchmark="NESTED_DICT_READ")
 

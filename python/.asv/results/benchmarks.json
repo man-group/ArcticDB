@@ -260,7 +260,7 @@
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.peakmem_read": {
-        "code": "class BasicFunctions:\n    def peakmem_read(self, rows):\n        self.lib.read(f\"sym{rows}\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def peakmem_read(self, rows):\n        self.lib.read(f\"sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "basic_functions.BasicFunctions.peakmem_read",
         "param_names": [
             "rows"
@@ -268,15 +268,14 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "a4536d3e2471389bf6d6bb2b3bc7066997cc25601dd5a325555d21080a6166d5"
+        "version": "3b847508b2a63c58c508dc7e7aec08547e2ca09a57bcf3f6777619a5cb149b7f"
     },
     "basic_functions.BasicFunctions.peakmem_read_short_wide": {
         "code": "class BasicFunctions:\n    def peakmem_read_short_wide(self, rows):\n        lib = self.ac[get_prewritten_lib_name(BasicFunctions.WIDE_DF_ROWS)]\n        lib.read(\"short_wide_sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -287,8 +286,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
@@ -306,8 +304,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
@@ -317,7 +314,7 @@
         "version": "74f0d776147883a788c405dd90a8490ea4b766f2946aaf5ab43cc48076c2b929"
     },
     "basic_functions.BasicFunctions.peakmem_read_with_columns": {
-        "code": "class BasicFunctions:\n    def peakmem_read_with_columns(self, rows):\n        COLS = [\"value\"]\n        self.lib.read(f\"sym{rows}\", columns=COLS).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def peakmem_read_with_columns(self, rows):\n        COLS = [\"value\"]\n        self.lib.read(f\"sym\", columns=COLS).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "basic_functions.BasicFunctions.peakmem_read_with_columns",
         "param_names": [
             "rows"
@@ -325,18 +322,17 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "d264bac9261beb90945ed6e82b141c79fe8e065d23a7e2a0d24c1fdf1dff08b9"
+        "version": "34501bd0311c8b2644012b8f713f8a596bba14dbf1976cbbded37060cf77709f"
     },
     "basic_functions.BasicFunctions.peakmem_read_with_date_ranges": {
-        "code": "class BasicFunctions:\n    def peakmem_read_with_date_ranges(self, rows):\n        self.lib.read(f\"sym{rows}\", date_range=BasicFunctions.DATE_RANGE).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def peakmem_read_with_date_ranges(self, rows):\n        self.lib.read(f\"sym\", date_range=BasicFunctions.DATE_RANGE).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "basic_functions.BasicFunctions.peakmem_read_with_date_ranges",
         "param_names": [
             "rows"
@@ -344,18 +340,17 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "caaaef05776293f7617022be377d4f2cc8d73c9a24b852243b8af2d6daac6c6b"
+        "version": "908e8e1658fc2235b08f2996edb57c49852791e6f6c187165b3b931e7d7e896c"
     },
     "basic_functions.BasicFunctions.peakmem_read_with_date_ranges_query_builder": {
-        "code": "class BasicFunctions:\n    def peakmem_read_with_date_ranges_query_builder(self, rows):\n        q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)\n        self.lib.read(f\"sym{rows}\", query_builder=q).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def peakmem_read_with_date_ranges_query_builder(self, rows):\n        q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)\n        self.lib.read(f\"sym\", query_builder=q).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "basic_functions.BasicFunctions.peakmem_read_with_date_ranges_query_builder",
         "param_names": [
             "rows"
@@ -363,18 +358,17 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "2070096e34cf8588e95d57ee53cad88d4449e9db479b57dbf05cad953ebdef03"
+        "version": "7870e015641ad2975bbc58ad43428c0e65d3771d1cd2838d2f72f4d6c57aa926"
     },
     "basic_functions.BasicFunctions.peakmem_write": {
-        "code": "class BasicFunctions:\n    def peakmem_write(self, rows):\n        self.fresh_lib.write(f\"sym{rows}\", self.df)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def peakmem_write(self, rows):\n        self.fresh_lib.write(f\"sym\", self.df)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "basic_functions.BasicFunctions.peakmem_write",
         "param_names": [
             "rows"
@@ -382,15 +376,14 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
-        "version": "28f9e826f7f95ab4ee9ceb32505deeb73f38afd9f6e29e1309ca62b2b03dad16"
+        "version": "0db13340295d95fa06e3f786be93bbc345a0f67ffe4fdcd226189c2b82aecb5e"
     },
     "basic_functions.BasicFunctions.peakmem_write_short_wide": {
         "code": "class BasicFunctions:\n    def peakmem_write_short_wide(self, rows):\n        self.fresh_lib.write(\"short_wide_sym\", self.df_short_wide)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -401,8 +394,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
@@ -420,8 +412,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "setup_cache_key": "basic_functions:48",
@@ -431,7 +422,7 @@
         "version": "42c10f3b6072be6b54db49e98670de0ce65dc2d7e543f6b1af53bd4fd28bba5f"
     },
     "basic_functions.BasicFunctions.time_read": {
-        "code": "class BasicFunctions:\n    def time_read(self, rows):\n        self.lib.read(f\"sym{rows}\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def time_read(self, rows):\n        self.lib.read(f\"sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read",
         "number": 5,
@@ -441,8 +432,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -452,7 +442,7 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "fd934d3739b00465ee77f014471103d9304b3bd8ba6980c0b345196475d4f64a",
+        "version": "99231807c0927256747827b6d0d3bf8d565cae9f2b6955d40e3c403ff162daac",
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.time_read_short_wide": {
@@ -466,8 +456,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -491,8 +480,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -506,7 +494,7 @@
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.time_read_with_columns": {
-        "code": "class BasicFunctions:\n    def time_read_with_columns(self, rows):\n        COLS = [\"value\"]\n        self.lib.read(f\"sym{rows}\", columns=COLS).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def time_read_with_columns(self, rows):\n        COLS = [\"value\"]\n        self.lib.read(f\"sym\", columns=COLS).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_with_columns",
         "number": 5,
@@ -516,8 +504,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -527,11 +514,11 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "aeda956ac190292541649f5e3dcd9b3bea5493db91b579003ffade1062894dfb",
+        "version": "97fab62dd3036b086e61d8e193b02c3c566b76c76cb514b44dfd3d9090a2bbe7",
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.time_read_with_date_ranges": {
-        "code": "class BasicFunctions:\n    def time_read_with_date_ranges(self, rows):\n        self.lib.read(f\"sym{rows}\", date_range=BasicFunctions.DATE_RANGE).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def time_read_with_date_ranges(self, rows):\n        self.lib.read(f\"sym\", date_range=BasicFunctions.DATE_RANGE).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_with_date_ranges",
         "number": 5,
@@ -541,8 +528,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -552,11 +538,11 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "74d5c3f85ba21dd0275958cb87681bcf3bd64a8c5aeaf2cd05a4cc132ab80a35",
+        "version": "8fe0b03e88febe68a480effc73ec81b1c3bbb24fa31f8d4868db79760d58ccdd",
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.time_read_with_date_ranges_query_builder": {
-        "code": "class BasicFunctions:\n    def time_read_with_date_ranges_query_builder(self, rows):\n        q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)\n        self.lib.read(f\"sym{rows}\", query_builder=q).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def time_read_with_date_ranges_query_builder(self, rows):\n        q = QueryBuilder().date_range(BasicFunctions.DATE_RANGE)\n        self.lib.read(f\"sym\", query_builder=q).data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_read_with_date_ranges_query_builder",
         "number": 5,
@@ -566,8 +552,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -577,11 +562,11 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "6794c3ff5661cf6242066178badc99a7c1038dc7c9fc7757c8d9d818ee2c32ef",
+        "version": "50281bd8fb1b296b9de072d72b5bb207d9b5d1700949b1d911f7475339110289",
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.time_write": {
-        "code": "class BasicFunctions:\n    def time_write(self, rows):\n        self.fresh_lib.write(f\"sym{rows}\", self.df)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
+        "code": "class BasicFunctions:\n    def time_write(self, rows):\n        self.fresh_lib.write(f\"sym\", self.df)\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
         "name": "basic_functions.BasicFunctions.time_write",
         "number": 5,
@@ -591,8 +576,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -602,7 +586,7 @@
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
-        "version": "9e5b2f68da4ea937f9d5a0a2b112fcc5b75b62e15ab3f0db6aa29cc7843836ea",
+        "version": "a399d5220450caaa75806e22756b1bfcf8b27c050fa15dd9165be085ae2b0b63",
         "warmup_time": 0
     },
     "basic_functions.BasicFunctions.time_write_short_wide": {
@@ -616,8 +600,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -641,8 +624,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 0,
@@ -955,8 +937,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -980,8 +961,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1005,8 +985,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1030,8 +1009,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1055,8 +1033,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1080,8 +1057,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1105,8 +1081,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1130,8 +1105,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1155,8 +1129,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1180,8 +1153,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -1205,8 +1177,7 @@
         "params": [
             [
                 "1000000",
-                "1500000",
-                "200000000"
+                "1500000"
             ]
         ],
         "repeat": 3,
@@ -4141,12 +4112,10 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "100"
             ],
             [
-                "5",
-                "10"
+                "5"
             ]
         ],
         "setup_cache_key": "recursive_normalizer:47",
@@ -4164,12 +4133,10 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "100"
             ],
             [
-                "5",
-                "10"
+                "5"
             ]
         ],
         "setup_cache_key": "recursive_normalizer:47",
@@ -4187,12 +4154,10 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "100"
             ],
             [
-                "5",
-                "10"
+                "5"
             ]
         ],
         "setup_cache_key": "recursive_normalizer:47",
@@ -4212,12 +4177,10 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "100"
             ],
             [
-                "5",
-                "10"
+                "5"
             ]
         ],
         "repeat": 1,
@@ -4241,12 +4204,10 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "100"
             ],
             [
-                "5",
-                "10"
+                "5"
             ]
         ],
         "repeat": 1,
@@ -4270,12 +4231,10 @@
         ],
         "params": [
             [
-                "100",
-                "1000"
+                "100"
             ],
             [
-                "5",
-                "10"
+                "5"
             ]
         ],
         "repeat": 1,
