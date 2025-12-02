@@ -8,9 +8,12 @@ import os
 import platform
 import pytest
 import uuid
+import pandas as pd
+
 from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.arctic import Arctic
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
+from arcticdb.util.test import assert_frame_equal
 
 
 def _get_azure_storage_config(cfg):
@@ -66,8 +69,8 @@ def test_azure_transport_default_settings(azurite_storage: AzureContainer):
     assert azure_storage is not None
 
     # Perform basic operations to verify transport works
-    lib.write("test_symbol", "test_data")
-    assert lib.read("test_symbol").data == "test_data"
+    lib.write("test_symbol", pd.DataFrame({"a": [1, 2, 3]}))
+    assert_frame_equal(lib.read("test_symbol").data, pd.DataFrame({"a": [1, 2, 3]}))
 
 
 @pytest.mark.skipif(platform.system().lower() != "linux", reason="Test only runs on Linux")
@@ -91,8 +94,8 @@ def test_azure_transport_linux_ca_cert_path(azurite_storage: AzureContainer):
         lib = ac.create_library(lib_name)
 
         # Perform basic operations to verify transport works
-        lib.write("test_symbol", "test_data")
-        assert lib.read("test_symbol") == "test_data"
+        lib.write("test_symbol", pd.DataFrame({"a": [1, 2, 3]}))
+        assert_frame_equal(lib.read("test_symbol").data, pd.DataFrame({"a": [1, 2, 3]}))
     finally:
         # Clean up the temporary CA cert file
         if os.path.exists(ca_cert_path):
@@ -119,8 +122,8 @@ def test_azure_transport_linux_ca_cert_dir(azurite_storage: AzureContainer):
         lib = ac.create_library(lib_name)
 
         # Perform basic operations to verify transport works
-        lib.write("test_symbol", "test_data")
-        assert lib.read("test_symbol") == "test_data"
+        lib.write("test_symbol", pd.DataFrame({"a": [1, 2, 3]}))
+        assert_frame_equal(lib.read("test_symbol").data, pd.DataFrame({"a": [1, 2, 3]}))
     finally:
         # Clean up the temporary CA cert directory
         if os.path.exists(ca_cert_dir):

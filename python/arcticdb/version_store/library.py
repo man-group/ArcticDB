@@ -1045,18 +1045,6 @@ class Library:
         VersionedItem
             Structure containing metadata and version number of the written symbol in the store.
 
-        Examples
-        --------
-
-        >>> df = pd.DataFrame({'column': [5,6,7]})
-        >>> lib.write("symbol", df, metadata={'my_dictionary': 'is_great'})
-        >>> lib.read("symbol").data
-           column
-        0       5
-        1       6
-        2       7
-
-        WritePayload objects can be unpacked and used as parameters:
         Raises
         ------
         ArcticUnsupportedDataTypeException
@@ -1079,19 +1067,6 @@ class Library:
         >>> w = adb.WritePayload("symbol", df, metadata={'the': 'metadata'})
         >>> lib.write(*w, staged=True)
         """
-        # For simple scalar string data written via the high-level `Library` API, fall back to pickling.
-        # This keeps the public API convenient for basic usage (e.g. smoke tests) without relaxing the
-        # stricter normalisation rules for complex types that other tests rely on.
-        if isinstance(data, str):
-            return self.write_pickle(
-                symbol,
-                data,
-                metadata=metadata,
-                prune_previous_versions=prune_previous_versions,
-                staged=staged,
-                recursive_normalizers=recursive_normalizers,
-            )
-
         is_recursive_normalizers_enabled = self._nvs._is_recursive_normalizers_enabled(
             **{"recursive_normalizers": recursive_normalizers}
         )
