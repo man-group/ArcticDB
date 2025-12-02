@@ -168,7 +168,7 @@ def test_write_multiple_record_batches_indexed(lmdb_version_store_arrow):
 @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
 def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_write_sliced"
     table = pa.table(
@@ -200,7 +200,7 @@ def test_write_sliced(lmdb_version_store_tiny_segment, num_rows, num_cols):
 )
 def test_write_bools_sliced(lmdb_version_store_tiny_segment, data):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_write_bools_sliced"
     table = pa.table({"col": pa.array(data)})
@@ -213,7 +213,7 @@ def test_write_bools_sliced(lmdb_version_store_tiny_segment, data):
 @pytest.mark.parametrize("num_cols", [1, 2, 3, 4, 5])
 def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_cols):
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     lib_tool = lib.library_tool()
     sym = "test_write_sliced_with_index"
@@ -253,7 +253,7 @@ def test_write_sliced_with_index(lmdb_version_store_tiny_segment, num_rows, num_
 def test_many_record_batches_many_slices(version_store_factory, rows_per_slice):
     rng = np.random.default_rng()
     lib = version_store_factory(segment_row_size=rows_per_slice)
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_many_record_batches_many_slices"
     record_batch_sizes = [1, 2, 1, 15, 13, 2, 1, 10]
@@ -309,7 +309,7 @@ def test_write_view_strings(lmdb_version_store_arrow, type):
 def test_write_owned_and_non_owned_buffers(lmdb_version_store_tiny_segment):
     # This test is about our ChunkedBuffer holding mixes of owned and non-owned blocks, not Arrow views
     lib = lmdb_version_store_tiny_segment
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_write_owned_and_non_owned_buffers"
     rb0 = pa.RecordBatch.from_arrays([pa.array([0, 1, 2], pa.int32())], names=["col"])
@@ -628,7 +628,7 @@ def test_update_with_date_range_narrower_than_data(lmdb_version_store_arrow, dat
 def test_staging_without_sorting(version_store_factory, method):
     lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_staging_without_sorting"
     table_0 = pa.table(
@@ -672,7 +672,7 @@ def test_staging_without_sorting(version_store_factory, method):
 def test_staging_with_sorting(version_store_factory):
     lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_staging_with_sorting"
     table_0 = pa.table(
@@ -706,7 +706,7 @@ def test_staging_with_sorting(version_store_factory):
 def test_staging_with_sorting_strings(version_store_factory):
     lib = version_store_factory(segment_row_size=2, dynamic_schema=True)
     lib_tool = lib.library_tool()
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     sym = "test_staging_with_sorting_strings"
     table_0 = pa.table(
@@ -865,7 +865,7 @@ def test_arrow_writes_hypothesis(
     cols_per_slice = num_supported_types // max_col_slices
     lib.lib_cfg().lib_desc.version.write_options.segment_row_size = rows_per_slice
     lib.lib_cfg().lib_desc.version.write_options.column_group_size = cols_per_slice
-    lib.set_output_format("experimental_arrow")
+    lib.set_output_format("pyarrow")
     lib._set_allow_arrow_input()
     naughty_strings = read_big_list_of_naughty_strings()
     data = {}

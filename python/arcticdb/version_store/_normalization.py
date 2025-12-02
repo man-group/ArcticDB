@@ -792,7 +792,6 @@ class ArrowTableNormalizer(Normalizer):
             pandas_meta = norm_meta.df.common
         elif input_type == "series":
             # For pandas series we always return a dataframe (to not lose the index information).
-            # TODO: Return a `pyarrow.Array` if index is not physically stored (Monday ref: 9360502457)
             pandas_meta = norm_meta.series.common
         elif input_type == "experimental_arrow":
             if norm_meta.experimental_arrow.has_index:
