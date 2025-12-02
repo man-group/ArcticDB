@@ -33,9 +33,7 @@ def test_fixed_width_blns(lmdb_version_store, any_arrow_string_format):
     vit = lib.read(symbol)
     assert_frame_equal(df, vit.data)
     # Arrow
-    received = cast_string_columns(
-        lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string()
-    ).to_pandas()
+    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string()).to_pandas()
     assert_frame_equal(df, received)
 
 
@@ -53,7 +51,7 @@ def test_write_blns(lmdb_version_store, any_arrow_string_format):
     lib._set_allow_arrow_input()
     table = pa.Table.from_pandas(df)
     lib.write(symbol, table, index_column="ts")
-    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string())
+    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
     assert table.equals(received)
 
 
@@ -77,7 +75,7 @@ def test_append_blns(lmdb_version_store, any_arrow_string_format):
     table_second_half = pa.Table.from_pandas(df_second_half)
     lib.write(symbol, table_first_half, index_column="ts")
     lib.append(symbol, table_second_half, index_column="ts")
-    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string())
+    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
     expected = pa.Table.from_pandas(df)
     assert expected.equals(received)
 
@@ -105,7 +103,7 @@ def test_update_blns(lmdb_version_store, any_arrow_string_format):
     table_middle_half = pa.Table.from_pandas(df_middle_half)
     lib.write(symbol, table_removed_middle, index_column="ts")
     lib.update(symbol, table_middle_half, index_column="ts")
-    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data, pa.string())
+    received = cast_string_columns(lib.read(symbol, output_format=OutputFormat.PYARROW).data, pa.string())
     expected = pa.Table.from_pandas(df)
     assert expected.equals(received)
 
@@ -132,7 +130,7 @@ def test_batch_read_blns(lmdb_version_store, any_arrow_string_format):
     lib._set_allow_arrow_input()
     tables = [pa.Table.from_pandas(df) for df in dfs]
     lib.batch_write(symbols, tables, index_column_vector=["ts"] * num_symbols)
-    res = lib.batch_read(symbols, query_builder=qbs, output_format=OutputFormat.EXPERIMENTAL_ARROW)
+    res = lib.batch_read(symbols, query_builder=qbs, output_format=OutputFormat.PYARROW)
     expr = pa.compute.field("ints") > 50
     for idx, sym in enumerate(symbols):
         expected = tables[idx]
@@ -165,7 +163,7 @@ def test_recursive_normalizers_blns(lmdb_version_store_v1, any_arrow_string_form
     table = pa.Table.from_pandas(df)
     dict_data = {s: table for s in keys}
     lib.write(symbol, dict_data, recursive_normalizers=True)
-    received = lib.read(symbol, output_format=OutputFormat.EXPERIMENTAL_ARROW).data
+    received = lib.read(symbol, output_format=OutputFormat.PYARROW).data
     for key in keys:
         assert key in received.keys()
         assert table.equals(cast_string_columns(received[key], pa.string()))

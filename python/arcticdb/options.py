@@ -169,21 +169,40 @@ class LibraryOptions:
 
 # TODO: Use enum.StrEnum when we no longer need to support python 3.9
 class OutputFormat(str, Enum):
+    """
+    Controls the output format of operations which return dataframes. All APIs which take an `output_format` argument
+    accept the enum values and case-insensitive strings. E.g. all of `OutputFormat.PYARROW`, `"PYARROW"`, `"pyarrow"`
+    will be interpreted as `OutputFormat.PYARROW`.
+
+    PANDAS (default):
+        Dataframes are returned as `pandas.DataFrame` or `pandas.Series` objects backed by numpy arrays.
+
+    PYARROW:
+        Dataframes are returned as `pyarrow.Table` objects using Apache Arrow's columnar memory format.
+        Provides better performance than `PANDAS`, especially for dataframes containing many string columns.
+        String format can be customized via `ArrowOutputStringFormat`.
+
+    POLARS:
+        Dataframes are returned as `polars.DataFrame` objects using Apache Arrow's columnar memory format.
+        Provides better performance than `PANDAS`, especially for dataframes containing many string columns.
+        String format can be customized via `ArrowOutputStringFormat`.
+    """
+
     PANDAS = "PANDAS"
-    EXPERIMENTAL_ARROW = "EXPERIMENTAL_ARROW"
-    EXPERIMENTAL_POLARS = "EXPERIMENTAL_POLARS"
+    PYARROW = "PYARROW"
+    POLARS = "POLARS"
 
 
 def output_format_to_internal(output_format: Union[OutputFormat, str]) -> InternalOutputFormat:
     if output_format.lower() == OutputFormat.PANDAS.lower():
         return InternalOutputFormat.PANDAS
-    elif output_format.lower() == OutputFormat.EXPERIMENTAL_ARROW.lower():
+    elif output_format.lower() == OutputFormat.PYARROW.lower():
         if not _PYARROW_AVAILABLE:
             raise ModuleNotFoundError(
                 "ArcticDB's pyarrow optional dependency missing but is required to use arrow output format."
             )
         return InternalOutputFormat.ARROW
-    elif output_format.lower() == OutputFormat.EXPERIMENTAL_POLARS.lower():
+    elif output_format.lower() == OutputFormat.POLARS.lower():
         if not _PYARROW_AVAILABLE or not _POLARS_AVAILABLE:
             raise ModuleNotFoundError(
                 "ArcticDB's pyarrow or polars optional dependencies are missing but are required to use polars output format."
@@ -195,24 +214,31 @@ def output_format_to_internal(output_format: Union[OutputFormat, str]) -> Intern
 
 class ArrowOutputStringFormat(str, Enum):
     """
-    Used to specify string format when output_format=OutputFormat.EXPERIMENTAL_ARROW.
-    Arguments allow specifying either the enum value or the corresponding pyarrow.DataType
+    Controls the string column format when using `PYARROW` or `POLARS` output formats.
+    Accepts either the enum value or the corresponding `pyarrow.DataType`.
 
     LARGE_STRING (default):
-    Produces string columns with type `pa.large_string()`. Total length of strings must fit in a 64-bit integer.
-    Does not deduplicate strings, so has better performance for columns with many unique strings.
+        Uses 64-bit variable-size encoding.
+        PyArrow: `pa.large_string()`, Polars: `pl.String`
+        Supports up to 2⁶³-1 bytes total string length per Arrow array.
+        Best for general-purpose use and when working with large string data.
 
     SMALL_STRING:
-    Produces string columns with type `pa.string()`. Total length of strings must fit in a 32-bit integer.
-    Does not deduplicate strings, so has better performance for columns with many unique strings.
-    Slightly faster than `LARGE_STRING` but does not work with very long strings.
+        Uses 32-bit variable-size encoding.
+        PyArrow: `pa.string()`, Polars: Not supported
+        Supports up to 2³¹-1 bytes total string length per Arrow array.
+        Only supported with PyArrow because Polars does not support small strings.
+        Slightly more memory efficient than `LARGE_STRING` when string data is known to be small.
 
     CATEGORICAL and DICTIONARY_ENCODED:
-    Both are different aliases for the same string format. Produces string columns with type
-    `pa.dictionary(pa.int32(), pa.large_string())`. Total length of strings must fit in a 64-bit integer.  Splitting in
-    record batches guarantees that 32-bit dictionary keys are sufficient.
-    Does deduplicate strings, so has better performance for columns with few unique strings.
+        Both are aliases for dictionary-encoded strings with int32 indices.
+        PyArrow: `pa.dictionary(pa.int32(), pa.large_string())`, Polars: `pl.Categorical`
+        Best for columns with low cardinality (few unique values repeated many times).
+        Deduplicates strings, reducing memory usage and improving performance when the number of
+        unique values is much smaller than the total number of rows.
 
+    For more details on physical layouts, see the Apache Arrow specification:
+    https://arrow.apache.org/docs/format/Columnar.html
     """
 
     CATEGORICAL = "CATEGORICAL"
@@ -222,7 +248,7 @@ class ArrowOutputStringFormat(str, Enum):
 
 
 def arrow_output_string_format_to_internal(
-    arrow_string_format: Union[ArrowOutputStringFormat, "pa.DataType"],
+    arrow_string_format: Union[ArrowOutputStringFormat, "pa.DataType"], output_format: Union[OutputFormat, str]
 ) -> InternalArrowOutputStringFormat:
     if (
         arrow_string_format == ArrowOutputStringFormat.CATEGORICAL
@@ -242,6 +268,10 @@ def arrow_output_string_format_to_internal(
         or _PYARROW_AVAILABLE
         and arrow_string_format == pa.string()
     ):
+        if output_format.lower() == OutputFormat.POLARS.lower():
+            raise ValueError(
+                "SMALL_STRING is not supported with POLARS output format. Please use LARGE_STRING instead."
+            )
         return InternalArrowOutputStringFormat.SMALL_STRING
     else:
         raise ValueError(f"Unkown ArrowOutputStringFormat: {arrow_string_format}")

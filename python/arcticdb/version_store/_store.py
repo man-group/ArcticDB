@@ -385,7 +385,7 @@ class NativeVersionStore:
 
     def _set_output_format_for_pipeline_tests(self, output_format):
         self.set_output_format(output_format)
-        if output_format == OutputFormat.EXPERIMENTAL_ARROW:
+        if output_format == OutputFormat.PYARROW:
             self._test_convert_arrow_back_to_pandas = True
 
     @classmethod
@@ -1290,21 +1290,17 @@ class NativeVersionStore:
             For more information see the documentation for the QueryBuilder class.
             i-th entry corresponds to i-th element of `symbols`.
         arrow_string_format_default: Optional[Union[ArrowOutputStringFormat, "pa.DataType"]], default=None
-            Controls the default string format used for `ARROW` or `POLARS` output format.
-            See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            It serves as the default for the entire batch.
-        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None,
-            Controls the string format per column used for `ARROW` or `POLARS` output format.
-            See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            It is applied to all symbols which don't have a `per_symbol_arrow_string_format_per_column` set.
-        per_symbol_arrow_string_format_default: Optional[List[Optional[Union[ArrowOutputStringFormat, "pa.DataType"]]]], default=None,
-            Controls the string format per column used for `ARROW` or `POLARS` output format.
-            See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            It serves as the default per symbol. It overrides the global `arrow_string_format_default` setting
-        per_symbol_arrow_string_format_per_column: Optional[List[Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]]]], default=None,
-            Controls the string format per column used for `ARROW` or `POLARS` output format.
-            See documentation of `ArrowOutputStringFormat` for more information on the different options.
-            It defines the setting per symbol and per column. It overrides all other string format settings.
+            String column format when using `PYARROW` or `POLARS` output formats. Serves as the default for the entire batch.
+            See `ArrowOutputStringFormat` documentation for details on available string formats.
+        arrow_string_format_per_column: Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]], default=None
+            Per-column overrides for `arrow_string_format_default`. Keys are column names.
+            Applied to all symbols without a `per_symbol_arrow_string_format_per_column` set.
+        per_symbol_arrow_string_format_default: Optional[List[Optional[Union[ArrowOutputStringFormat, "pa.DataType"]]]], default=None
+            Per-symbol override for `arrow_string_format_default`. Overrides the batch-level default.
+            i-th entry corresponds to i-th element of `symbols`.
+        per_symbol_arrow_string_format_per_column: Optional[List[Optional[Dict[str, Union[ArrowOutputStringFormat, "pa.DataType"]]]]], default=None
+            Per-symbol, per-column overrides. Takes precedence over all other string format settings.
+            i-th entry corresponds to i-th element of `symbols`.
 
         Examples
         --------
@@ -2165,12 +2161,13 @@ class NativeVersionStore:
                         proto_cfg,
                         global_default=ArrowOutputStringFormat.LARGE_STRING,
                         **kwargs,
-                    )
+                    ),
+                    output_format,
                 )
             )
             read_options.set_arrow_output_per_column_string_format(
                 {
-                    key: arrow_output_string_format_to_internal(value)
+                    key: arrow_output_string_format_to_internal(value, output_format)
                     for key, value in resolve_defaults(
                         "arrow_string_format_per_column", proto_cfg, global_default={}, **kwargs
                     ).items()
@@ -2733,8 +2730,8 @@ class NativeVersionStore:
                 )
             if self._test_convert_arrow_back_to_pandas:
                 data = convert_arrow_to_pandas_for_tests(data)
-            if output_format.lower() == OutputFormat.EXPERIMENTAL_POLARS.lower():
-                data = pl.from_arrow(data)
+            if output_format.lower() == OutputFormat.POLARS.lower():
+                data = pl.from_arrow(data, rechunk=False)
         else:
             data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
             if read_result.norm.HasField("custom"):
