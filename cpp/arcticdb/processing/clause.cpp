@@ -32,6 +32,7 @@
 #include <ranges>
 
 namespace {
+using namespace arcticdb;
 /// Removes inplace all elements from vec whose indexes are not in indexes_to_keep.
 /// @param indexes_to_keep Must be sorted
 template<typename T>
@@ -78,21 +79,162 @@ void filter_selected_ranges_and_keys_and_reindex_entities(
     ranges_and_keys.erase(ranges_and_keys.begin() + new_entity_id, ranges_and_keys.end());
 }
 
+/// Helper class used to iterate over elements inside InputFrame uniformly.
+///
+/// It has two template specialisations for each way an InputFrame can store its data. It's supposed to be used only to
+/// perform forward iteration.
+template<typename TDT, typename T>
+class SourceView {};
+
+template<typename TDT, typename T>
+requires(std::same_as<T, Column> && util::instantiation_of<TDT, TypeDescriptorTag>)
+class SourceView<TDT, T> {
+    using Iterator = decltype(std::declval<T>().data().template begin<TDT>());
+
+  public:
+    SourceView(const T& source, size_t source_data_row) :
+        it_(source.data().template begin<TDT>()),
+        source_data_row_(source_data_row) {
+        std::advance(it_, source_data_row);
+    }
+
+    void set_row(const size_t new_row) {
+        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+                new_row >= source_data_row_, "Cannot move SourceColumnIterator backwards"
+        );
+        // TODO: Implement operator+= because std::advance is linear
+        std::advance(it_, new_row - source_data_row_);
+        source_data_row_ = new_row;
+    }
+
+    size_t row() const { return source_data_row_; }
+
+    const TDT::DataTypeTag::raw_type& operator*() const { return *it_; }
+
+  private:
+    Iterator it_;
+    size_t source_data_row_;
+};
+
+template<typename TDT, typename T>
+requires std::same_as<T, NativeTensor> && util::instantiation_of<TDT, TypeDescriptorTag>
+class SourceView<TDT, T> {
+    using Iterator = const TDT::DataTypeTag::raw_type*;
+
+  public:
+    SourceView(const T& source, const size_t source_data_row) : source_(source), source_data_row_(source_data_row) {}
+    void set_row(const size_t new_row) { source_data_row_ = new_row; }
+    const TDT::DataTypeTag::raw_type& operator*() const { return source_.at(source_data_row_); }
+    size_t row() const { return source_data_row_; }
+
+  private:
+    TypedTensor<typename TDT::DataTypeTag::raw_type> source_;
+    size_t source_data_row_;
+};
+
+template<typename TDT, typename T>
+requires util::any_of<T, SegmentInMemory, std::vector<NativeTensor>> && util::instantiation_of<TDT, TypeDescriptorTag>
+auto get_source_column_iterator(const T& source, size_t column_index) {
+    if constexpr (std::is_same_v<T, SegmentInMemory>) {
+        return SourceView<TDT, Column>(source.column(column_index), 0);
+    } else if constexpr (std::is_same_v<T, std::vector<NativeTensor>>) {
+        return SourceView<TDT, NativeTensor>(source[column_index], 0);
+    } else {
+        static_assert(sizeof(T) == 0, "Invalid type");
+    }
+}
+
 template<typename Source>
-requires arcticdb::util::any_of<Source, arcticdb::SegmentInMemory, std::vector<arcticdb::NativeTensor>>
+requires arcticdb::util::any_of<Source, SegmentInMemory, std::vector<NativeTensor>>
 size_t source_column_index(
-        const arcticdb::ColRange& col_range, const size_t index_in_range,
-        [[maybe_unused]] const uint32_t index_field_count
+        const ColRange& col_range, const size_t index_in_range, [[maybe_unused]] const uint32_t index_field_count
 ) {
     if constexpr (std::same_as<Source, arcticdb::SegmentInMemory>) {
         return col_range.first + index_in_range;
-    } else if constexpr (std::same_as<Source, std::vector<arcticdb::NativeTensor>>) {
+    } else if constexpr (std::same_as<Source, std::vector<NativeTensor>>) {
         // If the source frame is a list of tensors, the index frame is kept separately, so the first
         // non-index column will be at index 0. If there's an index the first ColRange will start from
         // 1 and the first column of each segment will contain the index
         return col_range.first + index_in_range - 2 * index_field_count;
     } else {
         static_assert(sizeof(Source) == 0, "Invalid source type");
+    }
+}
+
+template<typename TDT>
+requires util::instantiation_of<TDT, TypeDescriptorTag>
+position_t write_py_string_to_pool_or_throw(
+        PyObject* const py_string_object, const size_t row_in_segment, const RowRange& row_range,
+        std::optional<ScopedGILLock>& gil_lock, StringPool& new_string_pool, const std::string_view column_name
+) {
+    position_t new_value;
+    std::optional<convert::StringEncodingError> maybe_error =
+            read_py_string_to_buffer<TDT::data_type()>(py_string_object, new_value, gil_lock, new_string_pool);
+    if (maybe_error) {
+        maybe_error->row_index_in_slice_ = row_in_segment;
+        maybe_error->raise(column_name, row_range.first);
+    }
+    return new_value;
+}
+
+template<typename TDT, typename SourceType>
+requires(util::instantiation_of<TDT, TypeDescriptorTag> && util::any_of<SourceType, Column, NativeTensor>)
+Column merge_update_string_column(
+        const Column& target_column, const std::span<const std::vector<size_t>> rows_to_update,
+        const Field& target_field, const RowRange& row_range, const size_t source_row_start,
+        const size_t source_row_end, const StringPool& target_string_pool, StringPool& new_string_pool,
+        SourceView<TDT, SourceType>& source_column_view
+) {
+    if constexpr (is_fixed_string_type(TDT::data_type())) {
+        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "Fixed string sequences are not supported for merge update"
+        );
+    } else if constexpr (is_dynamic_string_type(TDT::data_type())) {
+        std::optional<ScopedGILLock> gil_lock;
+        // TODO: size must take into account rows that are going to be inserted
+        Column new_string_column(
+                target_column.type(),
+                target_column.row_count(),
+                AllocationType::PRESIZED,
+                target_column.is_sparse() ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED
+        );
+        size_t source_row = source_column_view.row();
+        ColumnData new_column_data = new_string_column.data();
+        auto new_column_data_it = new_column_data.begin<TDT>();
+        auto target_row_to_update_it = rows_to_update[source_row - source_row_start].cbegin();
+        arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
+            const bool current_target_row_is_matched =
+                    source_row < source_row_end && static_cast<size_t>(row.idx()) == *target_row_to_update_it;
+            if (current_target_row_is_matched) {
+                const auto py_string_object = reinterpret_cast<PyObject*>(*source_column_view);
+                *new_column_data_it = write_py_string_to_pool_or_throw<TDT>(
+                        py_string_object, row.idx(), row_range, gil_lock, new_string_pool, target_field.name()
+                );
+                // All target rows that match the current source row are updated. Find the next source
+                // row which matches something in the target. Since both the source and the target are
+                // ordered, it's guaranteed that the next matched target row will be larger than the
+                // current target row.
+                if (++target_row_to_update_it == rows_to_update[source_row - source_row_start].cend()) {
+                    do {
+                        ++source_row;
+                    } while (source_row < source_row_end && rows_to_update[source_row - source_row_start].empty());
+                    if (source_row < source_row_end) {
+                        target_row_to_update_it = rows_to_update[source_row - source_row_start].cbegin();
+                        source_column_view.set_row(source_row);
+                    }
+                }
+            } else {
+                if (is_a_string(row.value())) {
+                    const std::string_view string_in_target = target_string_pool.get_const_view(row.value());
+                    const OffsetString offset_in_new_pool = new_string_pool.get(string_in_target);
+                    *new_column_data_it = offset_in_new_pool.offset();
+                } else {
+                    *new_column_data_it = row.value();
+                }
+            }
+            ++new_column_data_it;
+        });
+        return new_string_column;
     }
 }
 } // namespace
@@ -1786,68 +1928,6 @@ OutputSchema WriteClause::join_schemas(std::vector<OutputSchema>&&) const {
 
 std::string WriteClause::to_string() const { return "Write"; }
 
-/// Helper class used to iterate over elements inside InputFrame uniformly.
-///
-/// It has two template specialisations for each way an InputFrame can store its data. It's supposed to be used only to
-/// perform forward iteration.
-template<typename TDT, typename T>
-class SourceView {};
-
-template<typename TDT, typename T>
-requires(std::same_as<T, Column> && util::instantiation_of<TDT, TypeDescriptorTag>)
-class SourceView<TDT, T> {
-    using Iterator = decltype(std::declval<T>().data().template begin<TDT>());
-
-  public:
-    SourceView(const T& source, size_t source_data_row) :
-        it_(source.data().template begin<TDT>()),
-        source_data_row_(source_data_row) {
-        std::advance(it_, source_data_row);
-    }
-
-    void set_row(const size_t new_row) {
-        debug::check<ErrorCode::E_ASSERTION_FAILURE>(
-                new_row >= source_data_row_, "Cannot move SourceColumnIterator backwards"
-        );
-        // TODO: Implement operator+= because std::advance is linear
-        std::advance(it_, new_row - source_data_row_);
-        source_data_row_ = new_row;
-    }
-
-    const TDT::DataTypeTag::raw_type& operator*() const { return *it_; }
-
-  private:
-    Iterator it_;
-    size_t source_data_row_;
-};
-
-template<typename TDT, typename T>
-requires std::same_as<T, NativeTensor> && util::instantiation_of<TDT, TypeDescriptorTag>
-class SourceView<TDT, T> {
-    using Iterator = const TDT::DataTypeTag::raw_type*;
-
-  public:
-    SourceView(const T& source, const size_t source_data_row) : source_(source), source_data_row_(source_data_row) {}
-    void set_row(const size_t new_row) { source_data_row_ = new_row; }
-    const TDT::DataTypeTag::raw_type& operator*() const { return source_.at(source_data_row_); }
-
-  private:
-    TypedTensor<typename TDT::DataTypeTag::raw_type> source_;
-    size_t source_data_row_;
-};
-
-template<typename TDT, typename T>
-requires util::any_of<T, SegmentInMemory, std::vector<NativeTensor>> && util::instantiation_of<TDT, TypeDescriptorTag>
-auto get_source_column_iterator(const T& source, size_t column_index) {
-    if constexpr (std::is_same_v<T, SegmentInMemory>) {
-        return SourceView<TDT, Column>(source.column(column_index), 0);
-    } else if constexpr (std::is_same_v<T, std::vector<NativeTensor>>) {
-        return SourceView<TDT, NativeTensor>(source[column_index], 0);
-    } else {
-        static_assert(sizeof(T) == 0, "Invalid type");
-    }
-}
-
 MergeUpdateClause::MergeUpdateClause(
         std::vector<std::string>&& on, MergeStrategy strategy, std::shared_ptr<InputFrame> source,
         bool match_on_timeseries_index
@@ -2019,75 +2099,34 @@ void MergeUpdateClause::update_and_insert(
                 const size_t source_column_position = source_column_index<T>(
                         *col_ranges[segment_idx], column_idx, source_descriptor.index().field_count()
                 );
+                if constexpr (std::same_as<T, NativeTensor>) {
+                    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                            util::is_cstyle_array<typename TDT::DataTypeTag::raw_type>(source),
+                            "Fortran-style arrays are not supported by merge update yet. Column \"{}\" has data "
+                            "type "
+                            "{} of size {} bytes but the stride is {} bytes",
+                            target_field.name(),
+                            target_field.type(),
+                            sizeof(TDT::DataTypeTag::raw_type),
+                            source.strides()[0]
+                    );
+                }
                 SourceView source_column_view = get_source_column_iterator<TDT>(source, source_column_position);
                 source_column_view.set_row(source_row);
                 if constexpr (is_sequence_type(tdt.data_type())) {
-                    if constexpr (is_fixed_string_type(tdt.data_type())) {
-                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                                "Fixed string sequences are not supported for merge update"
-                        );
-                    } else if constexpr (is_dynamic_string_type(tdt.data_type())) {
-                        segment_contains_string_column = true;
-                        std::optional<ScopedGILLock> gil_lock;
-                        // TODO: size must take into account rows that are going to be inserted
-                        Column new_string_column(
-                                target_column.type(),
-                                target_column.row_count(),
-                                AllocationType::PRESIZED,
-                                target_column.is_sparse() ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED
-                        );
-                        ColumnData new_column_data = new_string_column.data();
-                        auto new_column_data_it = new_column_data.begin<TDT>();
-                        auto target_row_to_update_it =
-                                std::make_optional(rows_to_update[source_row - source_row_start].cbegin());
-                        arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
-                            const bool current_target_row_is_matched =
-                                    target_row_to_update_it.has_value() &&
-                                    static_cast<size_t>(row.idx()) == *(*target_row_to_update_it);
-                            if (current_target_row_is_matched) {
-                                position_t new_value;
-                                const auto py_string_object = reinterpret_cast<PyObject*>(*source_column_view);
-                                std::optional<convert::StringEncodingError> maybe_error =
-                                        read_py_string_to_buffer<tdt.data_type()>(
-                                                py_string_object, new_value, gil_lock, new_string_pool
-                                        );
-                                if (maybe_error) {
-                                    maybe_error->row_index_in_slice_ = row.idx();
-                                    maybe_error->raise(target_field.name(), row_ranges[segment_idx]->first);
-                                }
-                                *new_column_data_it = new_value;
-                                // All target rows that match the current source row are updated. Find the next source
-                                // row which matches something in the target. Since both the source and the target are
-                                // ordered, it's guaranteed that the next matched target row will be larger than the
-                                // current target row.
-                                if (++(*target_row_to_update_it) ==
-                                    rows_to_update[source_row - source_row_start].cend()) {
-                                    do {
-                                        ++source_row;
-                                    } while (source_row < source_row_end &&
-                                             rows_to_update[source_row - source_row_start].empty());
-                                    if (source_row < source_row_end) {
-                                        target_row_to_update_it =
-                                                rows_to_update[source_row - source_row_start].cbegin();
-                                        source_column_view.set_row(source_row);
-                                    } else {
-                                        target_row_to_update_it = std::nullopt;
-                                    }
-                                }
-                            } else {
-                                if (is_a_string(row.value())) {
-                                    const std::string_view string_in_target =
-                                            target_segment.const_string_pool().get_const_view(row.value());
-                                    const OffsetString offset_in_new_pool = new_string_pool.get(string_in_target);
-                                    *new_column_data_it = offset_in_new_pool.offset();
-                                } else {
-                                    *new_column_data_it = row.value();
-                                }
-                            }
-                            ++new_column_data_it;
-                        });
-                        target_segment.column(column_idx) = std::move(new_string_column);
-                    }
+                    segment_contains_string_column = true;
+                    Column new_string_column = merge_update_string_column<TDT>(
+                            target_column,
+                            rows_to_update,
+                            target_field,
+                            *row_ranges[segment_idx],
+                            source_row_start,
+                            source_row_end,
+                            target_segment.string_pool(),
+                            new_string_pool,
+                            source_column_view
+                    );
+                    target_segment.column(column_idx) = std::move(new_string_column);
                 } else {
                     auto target_data_row_to_update = rows_to_update[source_row - source_row_start].front();
                     // TODO: Implement operator+= because std::advance is linear
@@ -2124,14 +2163,14 @@ template void MergeUpdateClause::
         update_and_insert(const std::vector<NativeTensor>&, const StreamDescriptor&, const ProcessingUnit&, std::span<const std::vector<size_t>>)
                 const;
 
-/// For each row of source that falls in the row slice in proc find all rows whose index matches the source index value.
-/// The matching rows will be sorted in increasing order. Since both source and target are timestamp indexed and
-/// ordered, only forward iteration on both source and target is needed and binary search can be used to check if a
-/// source index value exists in the target index. At the end some vectors in the output can be empty which means that
-/// that particular row in source did not match anything in the target. It is allowed for one row in target to be
-/// matched by multiple rows in source only if MergeUpdateClause::on_ is not empty. If MergeUpdateClause::on_ is not
-/// empty there will be further filtering which might remove some matches. Otherwise, one row will be updated multiple
-/// times which is not allowed.
+/// For each row of source that falls in the row slice in proc find all rows whose index matches the source index
+/// value. The matching rows will be sorted in increasing order. Since both source and target are timestamp indexed
+/// and ordered, only forward iteration on both source and target is needed and binary search can be used to check
+/// if a source index value exists in the target index. At the end some vectors in the output can be empty which
+/// means that that particular row in source did not match anything in the target. It is allowed for one row in
+/// target to be matched by multiple rows in source only if MergeUpdateClause::on_ is not empty. If
+/// MergeUpdateClause::on_ is not empty there will be further filtering which might remove some matches. Otherwise,
+/// one row will be updated multiple times which is not allowed.
 std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const ProcessingUnit& proc) const {
     using IndexType = ScalarTagType<DataTypeTag<DataType::NANOSECONDS_UTC64>>;
     const std::span<const std::shared_ptr<SegmentInMemory>> target_segments{*proc.segments_};
