@@ -1,104 +1,4 @@
 {
-    "arrow.ArrowNumeric.time_read": {
-        "code": "class ArrowNumeric:\n    def time_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "arrow.ArrowNumeric.time_read",
-        "number": 20,
-        "param_names": [
-            "rows",
-            "date_range"
-        ],
-        "params": [
-            [
-                "100000",
-                "10000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "arrow:39",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "aaf529494b84152ccaca0f605f0f2a9bfad037367e50e96ae5d906ce6b26741c",
-        "warmup_time": 0
-    },
-    "arrow.ArrowNumeric.time_write": {
-        "code": "class ArrowNumeric:\n    def time_write(self, rows, date_range):\n        self.fresh_lib.write(f\"sym_{rows}\", self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "arrow.ArrowNumeric.time_write",
-        "number": 20,
-        "param_names": [
-            "rows",
-            "date_range"
-        ],
-        "params": [
-            [
-                "100000",
-                "10000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "arrow:39",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "3511ddd99480aff7cc0c4c13d2809e213c523fdbe74137ce79f7483297e5686f",
-        "warmup_time": 0
-    },
-    "arrow.ArrowStrings.time_write": {
-        "code": "class ArrowStrings:\n    def time_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "arrow.ArrowStrings.time_write",
-        "number": 20,
-        "param_names": [
-            "rows",
-            "date_range",
-            "unique_string_count",
-            "arrow_string_format"
-        ],
-        "params": [
-            [
-                "10000",
-                "1000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ],
-            [
-                "1",
-                "100",
-                "100000"
-            ],
-            [
-                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
-                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
-                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "arrow:116",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "13495c9c867964a946faa9f0877d374bafcae7e1a524eacefb708a7f8fa10e92",
-        "warmup_time": 0
-    },
     "basic_functions.BasicFunctions.peakmem_read": {
         "code": "class BasicFunctions:\n    def peakmem_read(self, rows):\n        self.lib.read(f\"sym\").data\n\n    def setup(self, rows):\n        self.ac = Arctic(BasicFunctions.CONNECTION_STRING)\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.df_short_wide = generate_random_floats_dataframe(BasicFunctions.WIDE_DF_ROWS, BasicFunctions.WIDE_DF_COLS)\n    \n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "name": "basic_functions.BasicFunctions.peakmem_read",
@@ -111,7 +11,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -129,7 +29,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -147,7 +47,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -165,7 +65,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -183,7 +83,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -201,7 +101,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -219,7 +119,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -237,7 +137,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -255,7 +155,7 @@
                 "1500000"
             ]
         ],
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -278,7 +178,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -302,7 +202,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -326,7 +226,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -350,7 +250,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -374,7 +274,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -398,7 +298,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -422,7 +322,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -446,7 +346,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -470,7 +370,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:48",
+        "setup_cache_key": "basic_functions:49",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -494,7 +394,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -517,7 +417,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -540,34 +440,11 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
         "version": "114711c1c4ebf66c64ab33fb81f5f8cc73ce78984e2472f492d0c80f96f331d8"
-    },
-    "basic_functions.BatchBasicFunctions.peakmem_update_batch": {
-        "code": "class BatchBasicFunctions:\n    def peakmem_update_batch(self, rows, num_symbols):\n        payloads = [UpdatePayload(f\"{sym}_sym\", self.update_df) for sym in range(num_symbols)]\n        results = self.lib.update_batch(payloads)\n        assert results[0].version >= 1\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "basic_functions.BatchBasicFunctions.peakmem_update_batch",
-        "param_names": [
-            "rows",
-            "num_symbols"
-        ],
-        "params": [
-            [
-                "25000",
-                "50000"
-            ],
-            [
-                "500",
-                "1000"
-            ]
-        ],
-        "setup_cache_key": "basic_functions:181",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "11bde9a31b891ee985296085ae2b9f7805556601060b2e993f257d8ed4a2144d"
     },
     "basic_functions.BatchBasicFunctions.peakmem_write_batch": {
         "code": "class BatchBasicFunctions:\n    def peakmem_write_batch(self, rows, num_symbols):\n        payloads = [WritePayload(f\"{sym}_sym\", self.df) for sym in range(num_symbols)]\n        self.fresh_lib.write_batch(payloads)\n\n    def setup(self, rows, num_symbols):\n        self.ac = Arctic(BatchBasicFunctions.CONNECTION_STRING)\n        self.read_reqs = [ReadRequest(f\"{sym}_sym\") for sym in range(num_symbols)]\n    \n        self.df = generate_pseudo_random_dataframe(rows)\n        self.update_df = generate_pseudo_random_dataframe(rows // 2)\n        self.lib = self.ac[get_prewritten_lib_name(rows)]\n        self.fresh_lib = self.get_fresh_lib()\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
@@ -586,7 +463,7 @@
                 "1000"
             ]
         ],
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "peakmemory",
         "unit": "bytes",
@@ -614,7 +491,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -643,7 +520,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -672,7 +549,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -701,7 +578,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -730,7 +607,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -759,7 +636,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:181",
+        "setup_cache_key": "basic_functions:182",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -783,7 +660,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -807,7 +684,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -831,7 +708,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -855,7 +732,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -879,7 +756,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -903,7 +780,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -927,7 +804,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -951,7 +828,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -975,7 +852,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -999,7 +876,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -1023,7 +900,7 @@
         "repeat": 3,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "basic_functions:339",
+        "setup_cache_key": "basic_functions:341",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
