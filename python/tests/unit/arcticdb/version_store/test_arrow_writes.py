@@ -275,6 +275,33 @@ def test_many_record_batches_many_slices(version_store_factory, rows_per_slice):
     assert table.equals(received)
 
 
+@pytest.mark.parametrize("rows_per_slice", [1, 2, 3, 5, 7])
+@pytest.mark.parametrize("rows_per_record_batch", [1, 2, 3, 5, 7])
+def test_many_record_batches_edge_cases(version_store_factory, rows_per_slice, rows_per_record_batch):
+    rng = np.random.default_rng()
+    lib = version_store_factory(segment_row_size=rows_per_slice)
+    lib.set_output_format("pyarrow")
+    lib._set_allow_arrow_input()
+    sym = "test_many_record_batches_same_size"
+    num_batches = 10
+    tables = []
+    for i in range(num_batches):
+        tables.append(
+            pa.table(
+                {
+                    "int32": pa.array(rng.integers(0, 1_000_000, rows_per_record_batch, dtype=np.int32), pa.int32()),
+                    "float64": pa.array(rng.random(rows_per_record_batch), pa.float64()),
+                    "bool": pa.array(rng.choice([True, False], rows_per_record_batch), pa.bool_()),
+                    "string": pa.array([f"{i}" for i in range(rows_per_record_batch)], pa.string()),
+                }
+            )
+        )
+    table = pa.concat_tables(tables)
+    lib.write(sym, table)
+    received = lib.read(sym, arrow_string_format_default=ArrowOutputStringFormat.SMALL_STRING).data
+    assert table.equals(received)
+
+
 def test_write_view(lmdb_version_store_arrow):
     lib = lmdb_version_store_arrow
     sym = "test_write_view"
