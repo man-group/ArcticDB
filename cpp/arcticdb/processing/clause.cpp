@@ -27,6 +27,7 @@
 #include <arcticdb/storage/store.hpp>
 #include <arcticdb/stream/stream_sink.hpp>
 #include <arcticdb/version/schema_checks.hpp>
+#include <arcticdb/pipeline/frame_utils.hpp>
 
 #include <ranges>
 
@@ -75,6 +76,24 @@ void filter_selected_ranges_and_keys_and_reindex_entities(
         }
     }
     ranges_and_keys.erase(ranges_and_keys.begin() + new_entity_id, ranges_and_keys.end());
+}
+
+template<typename Source>
+requires arcticdb::util::any_of<Source, arcticdb::SegmentInMemory, std::vector<arcticdb::NativeTensor>>
+size_t source_column_index(
+        const arcticdb::ColRange& col_range, const size_t index_in_range,
+        [[maybe_unused]] const uint32_t index_field_count
+) {
+    if constexpr (std::same_as<Source, arcticdb::SegmentInMemory>) {
+        return col_range.first + index_in_range;
+    } else if constexpr (std::same_as<Source, std::vector<arcticdb::NativeTensor>>) {
+        // If the source frame is a list of tensors, the index frame is kept separately, so the first
+        // non-index column will be at index 0. If there's an index the first ColRange will start from
+        // 1 and the first column of each segment will contain the index
+        return col_range.first + index_in_range - 2 * index_field_count;
+    } else {
+        static_assert(sizeof(Source) == 0, "Invalid source type");
+    }
 }
 } // namespace
 
@@ -1962,6 +1981,9 @@ void MergeUpdateClause::update_and_insert(
         const T& source, const StreamDescriptor& source_descriptor, const ProcessingUnit& proc,
         const std::span<const std::vector<size_t>> rows_to_update
 ) const {
+    user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
+            std::same_as<T, std::vector<NativeTensor>>, "Arrow format is not supported for merge updates yet"
+    );
     const std::span<const std::shared_ptr<SegmentInMemory>> target_segments = *proc.segments_;
     const std::span<const std::shared_ptr<RowRange>> row_ranges = *proc.row_ranges_;
     const std::span<const std::shared_ptr<ColRange>> col_ranges = *proc.col_ranges_;
@@ -1969,15 +1991,19 @@ void MergeUpdateClause::update_and_insert(
     // Update one column at a time to increase cache coherency and to avoid calling visit_field for each row being
     // updated
     for (size_t segment_idx = 0; segment_idx < target_segments.size(); ++segment_idx) {
-        const size_t columns_in_range = target_segments[segment_idx]->num_columns();
+        // TODO: Implement equivalent QueryBuilder.optimise_for_speed. Initial implementation will always drop the
+        //  current string pool and recreate it from scratch taking account the new string data from source. This is
+        //  equivalent to QueryBuilder.optimise_for_memory.
+        StringPool new_string_pool;
+        bool segment_contains_string_column = false;
+        SegmentInMemory& target_segment = *target_segments[segment_idx];
+        const size_t columns_in_range = target_segment.num_columns();
         for (size_t column_idx = source_descriptor.index().field_count(); column_idx < columns_in_range; ++column_idx) {
-            entity::visit_field(target_segments[segment_idx]->descriptor().field(column_idx), [&](auto tdt) {
-                internal::check<ErrorCode::E_ASSERTION_FAILURE>(
-                        !is_sequence_type(tdt.data_type()), "String columns are not supported in merge update yet"
-                );
+            const Field& target_field = target_segment.descriptor().field(column_idx);
+            entity::visit_field(target_field, [&](auto tdt) {
                 using TDT = decltype(tdt);
-
                 size_t source_row = source_row_start;
+                // TODO: Handle insert
                 while (source_row < source_row_end && rows_to_update[source_row - source_row_start].empty()) {
                     ++source_row;
                 };
@@ -1988,43 +2014,106 @@ void MergeUpdateClause::update_and_insert(
                 if (source_row >= source_row_end) {
                     return;
                 }
-                size_t target_data_row = rows_to_update[source_row - source_row_start].front();
-
-                auto target_data_it = target_segments[segment_idx]->column(column_idx).data().begin<TDT>();
-                // TODO: Implement operator+= because std::advance is linear
-                std::advance(target_data_it, target_data_row);
-                const size_t source_column = [&] {
-                    if constexpr (std::same_as<T, SegmentInMemory>) {
-                        return col_ranges[segment_idx]->first + column_idx;
-                    } else if constexpr (std::same_as<T, std::vector<NativeTensor>>) {
-                        // If the source frame is a list of tensors, the index frame is kept separately, so the first
-                        // non-index column will be at index 0. If there's an index the first ColRange will start from
-                        // 1 and the first column of each segment will contain the index
-                        return col_ranges[segment_idx]->first + column_idx -
-                               2 * source_descriptor.index().field_count();
-                    } else {
-                        static_assert(sizeof(T) == 0, "Invalid type");
+                Column& target_column = target_segment.column(column_idx);
+                auto target_data_it = target_column.data().begin<TDT>();
+                const size_t source_column_position = source_column_index<T>(
+                        *col_ranges[segment_idx], column_idx, source_descriptor.index().field_count()
+                );
+                SourceView source_column_view = get_source_column_iterator<TDT>(source, source_column_position);
+                source_column_view.set_row(source_row);
+                if constexpr (is_sequence_type(tdt.data_type())) {
+                    if constexpr (is_fixed_string_type(tdt.data_type())) {
+                        user_input::raise<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                                "Fixed string sequences are not supported for merge update"
+                        );
+                    } else if constexpr (is_dynamic_string_type(tdt.data_type())) {
+                        segment_contains_string_column = true;
+                        std::optional<ScopedGILLock> gil_lock;
+                        // TODO: size must take into account rows that are going to be inserted
+                        Column new_string_column(
+                                target_column.type(),
+                                target_column.row_count(),
+                                AllocationType::PRESIZED,
+                                target_column.is_sparse() ? Sparsity::PERMITTED : Sparsity::NOT_PERMITTED
+                        );
+                        ColumnData new_column_data = new_string_column.data();
+                        auto new_column_data_it = new_column_data.begin<TDT>();
+                        auto target_row_to_update_it =
+                                std::make_optional(rows_to_update[source_row - source_row_start].cbegin());
+                        arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
+                            const bool current_target_row_is_matched =
+                                    target_row_to_update_it.has_value() &&
+                                    static_cast<size_t>(row.idx()) == *(*target_row_to_update_it);
+                            if (current_target_row_is_matched) {
+                                position_t new_value;
+                                const auto py_string_object = reinterpret_cast<PyObject*>(*source_column_view);
+                                std::optional<convert::StringEncodingError> maybe_error =
+                                        read_py_string_to_buffer<tdt.data_type()>(
+                                                py_string_object, new_value, gil_lock, new_string_pool
+                                        );
+                                if (maybe_error) {
+                                    maybe_error->row_index_in_slice_ = row.idx();
+                                    maybe_error->raise(target_field.name(), row_ranges[segment_idx]->first);
+                                }
+                                *new_column_data_it = new_value;
+                                // All target rows that match the current source row are updated. Find the next source
+                                // row which matches something in the target. Since both the source and the target are
+                                // ordered, it's guaranteed that the next matched target row will be larger than the
+                                // current target row.
+                                if (++(*target_row_to_update_it) ==
+                                    rows_to_update[source_row - source_row_start].cend()) {
+                                    do {
+                                        ++source_row;
+                                    } while (source_row < source_row_end &&
+                                             rows_to_update[source_row - source_row_start].empty());
+                                    if (source_row < source_row_end) {
+                                        target_row_to_update_it =
+                                                rows_to_update[source_row - source_row_start].cbegin();
+                                        source_column_view.set_row(source_row);
+                                    } else {
+                                        target_row_to_update_it = std::nullopt;
+                                    }
+                                }
+                            } else {
+                                if (is_a_string(row.value())) {
+                                    const std::string_view string_in_target =
+                                            target_segment.const_string_pool().get_const_view(row.value());
+                                    const OffsetString offset_in_new_pool = new_string_pool.get(string_in_target);
+                                    *new_column_data_it = offset_in_new_pool.offset();
+                                } else {
+                                    *new_column_data_it = row.value();
+                                }
+                            }
+                            ++new_column_data_it;
+                        });
+                        target_segment.column(column_idx) = std::move(new_string_column);
                     }
-                }();
-                SourceView source_column_view = get_source_column_iterator<TDT>(source, source_column);
-                while (source_row < source_row_end) {
-                    std::span<const size_t> rows_to_update_for_source_row =
-                            rows_to_update[source_row - source_row_start];
-                    if (rows_to_update_for_source_row.empty()) {
+                } else {
+                    auto target_data_row_to_update = rows_to_update[source_row - source_row_start].front();
+                    // TODO: Implement operator+= because std::advance is linear
+                    std::advance(target_data_it, target_data_row_to_update);
+                    while (source_row < source_row_end) {
+                        std::span<const size_t> rows_to_update_for_source_row =
+                                rows_to_update[source_row - source_row_start];
+                        if (rows_to_update_for_source_row.empty()) {
+                            ++source_row;
+                            continue;
+                        }
+                        source_column_view.set_row(source_row);
+                        const auto& source_row_value = *source_column_view;
+                        for (const size_t target_row_to_update : rows_to_update_for_source_row) {
+                            // TODO: Implement operator+= because std::advance is linear
+                            std::advance(target_data_it, target_row_to_update - target_data_row_to_update);
+                            *target_data_it = source_row_value;
+                            target_data_row_to_update = target_row_to_update;
+                        }
                         ++source_row;
-                        continue;
                     }
-                    source_column_view.set_row(source_row);
-                    const auto& source_row_value = *source_column_view;
-                    for (const size_t target_row_to_update : rows_to_update_for_source_row) {
-                        // TODO: Implement operator+= because std::advance is linear
-                        std::advance(target_data_it, target_row_to_update - target_data_row);
-                        *target_data_it = source_row_value;
-                        target_data_row = target_row_to_update;
-                    }
-                    ++source_row;
                 }
             });
+        }
+        if (segment_contains_string_column) {
+            target_segment.set_string_pool(std::make_shared<StringPool>(std::move(new_string_pool)));
         }
     }
 }

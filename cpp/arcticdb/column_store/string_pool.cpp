@@ -78,15 +78,6 @@ std::shared_ptr<StringPool> StringPool::clone() const {
     return output;
 }
 
-StringPool& StringPool::operator=(StringPool&& that) noexcept {
-    if (this != &that) {
-        block_ = std::move(that.block_);
-        map_ = std::move(that.map_);
-        shapes_ = std::move(that.shapes_);
-    }
-    return *this;
-}
-
 ColumnData StringPool::column_data() const {
     return {&block_.buffer(), &shapes_.buffer(), string_pool_descriptor().type(), nullptr};
 }

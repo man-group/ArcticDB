@@ -204,11 +204,13 @@ class TestMergeTimeseries:
     def test_merge_update(self, lmdb_library, strategy):
         lib = lmdb_library
 
-        target = pd.DataFrame({"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        target = pd.DataFrame(
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]}, index=pd.date_range("2024-01-01", periods=3)
+        )
         write_vit = lib.write("sym", target)
 
         source = pd.DataFrame(
-            {"a": [4, 5, 6], "b": [7.0, 8.0, 9.0]},
+            {"a": [4, 5, 6], "b": [7.0, 8.0, 9.0], "c": ["A", "B", "C"]},
             # Only the second row: "2024-01-02" matches
             index=pd.DatetimeIndex(["2024-01-01 10:00:00", "2024-01-02", "2024-01-04"]),
         )
@@ -223,7 +225,9 @@ class TestMergeTimeseries:
         assert merge_vit.data is None
 
         # Only the second row: "2024-01-02" is updated
-        expected = pd.DataFrame({"a": [1, 5, 3], "b": [1.0, 8.0, 3.0]}, index=pd.date_range("2024-01-01", periods=3))
+        expected = pd.DataFrame(
+            {"a": [1, 5, 3], "b": [1.0, 8.0, 3.0], "c": ["a", "B", "c"]}, index=pd.date_range("2024-01-01", periods=3)
+        )
 
         read_vit = lib.read("sym")
         assert_vit_equals_except_data(merge_vit, read_vit)
@@ -265,19 +269,29 @@ class TestMergeTimeseries:
     def test_merge_update_row_slicing(self, lmdb_library_factory, slicing_policy):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(**slicing_policy))
         target = pd.DataFrame(
-            {"a": [1, 2, 3, 4, 5], "b": [1.0, 2.0, 3.0, 4.0, 5.0], "c": [True, False, True, False, True]},
+            {
+                "a": [1, 2, 3, 4, 5],
+                "b": [1.0, 2.0, 3.0, 4.0, 5.0],
+                "c": [True, False, True, False, True],
+                "d": ["a", "b", "c", "d", "e"],
+            },
             index=pd.date_range("2024-01-01", periods=5),
         )
         lib.write("sym", target)
 
         source = pd.DataFrame(
-            {"a": [30, 50], "b": [30.1, 50.1], "c": [False, False]},
+            {"a": [30, 50], "b": [30.1, 50.1], "c": [False, False], "d": ["C", "E"]},
             index=pd.DatetimeIndex([pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-05")]),
         )
         lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
 
         expected = pd.DataFrame(
-            {"a": [1, 2, 30, 4, 50], "b": [1.0, 2.0, 30.1, 4.0, 50.1], "c": [True, False, False, False, False]},
+            {
+                "a": [1, 2, 30, 4, 50],
+                "b": [1.0, 2.0, 30.1, 4.0, 50.1],
+                "c": [True, False, False, False, False],
+                "d": ["a", "b", "C", "d", "E"],
+            },
             index=pd.date_range("2024-01-01", periods=5),
         )
         received = lib.read("sym").data
@@ -406,16 +420,16 @@ class TestMergeTimeseries:
     ):
         lib = lmdb_library_factory(arcticdb.LibraryOptions(rows_per_segment=2))
         target = pd.DataFrame(
-            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0]},
+            {"a": [1, 2, 3], "b": [1.0, 2.0, 3.0], "c": ["a", "b", "c"]},
             index=pd.DatetimeIndex(
                 [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")]
             ),
         )
         lib.write("sym", target)
-        source = pd.DataFrame({"a": [5], "b": [20.0]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
+        source = pd.DataFrame({"a": [5], "b": [20.0], "c": ["B"]}, index=pd.DatetimeIndex([pd.Timestamp("2024-01-02")]))
         lib.merge("sym", source, strategy=MergeStrategy(not_matched_by_target=MergeAction.DO_NOTHING))
         expected = pd.DataFrame(
-            {"a": [1, 5, 5], "b": [1.0, 20.0, 20.0]},
+            {"a": [1, 5, 5], "b": [1.0, 20.0, 20.0], "c": ["a", "B", "B"]},
             index=pd.DatetimeIndex(
                 [pd.Timestamp("2024-01-01"), pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-02")]
             ),
