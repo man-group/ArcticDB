@@ -302,19 +302,4 @@ struct ManualClockVersionStore : PythonVersionStore {
         PythonVersionStore(library, util::ManualClock{}) {}
 };
 
-inline std::vector<std::variant<ReadResult, DataError>> frame_to_read_result(
-        std::vector<ReadVersionOutput>&& keys_frame_and_descriptors, const ReadOptions& read_options
-) {
-    std::vector<std::variant<ReadResult, DataError>> read_results;
-    read_results.reserve(keys_frame_and_descriptors.size());
-    for (auto& read_version_output : keys_frame_and_descriptors) {
-        read_results.emplace_back(create_python_read_result(
-                read_version_output.versioned_item_,
-                read_options.output_format(),
-                std::move(read_version_output.frame_and_descriptor_)
-        ));
-    }
-    return read_results;
-}
-
 } // namespace arcticdb::version_store
