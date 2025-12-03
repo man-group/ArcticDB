@@ -11,6 +11,7 @@
 #include <arcticdb/entity/types.hpp>
 #include <arcticdb/util/preconditions.hpp>
 #include <arcticdb/util/magic_num.hpp>
+#include <arcticdb/util/type_traits.hpp>
 
 // for std::accumulate
 #include <numeric>
@@ -66,6 +67,15 @@ struct NativeTensor {
         }
     }
 
+    template<std::ranges::contiguous_range T>
+    static NativeTensor one_dimensional_tensor(const T& data, const DataType data_type) {
+        using ValueType = std::decay_t<std::ranges::range_value_t<T>>;
+        constexpr static size_t element_size = sizeof(ValueType);
+        constexpr shape_t shapes = 1;
+        const int64_t byte_size = data.size() * element_size;
+        return NativeTensor{byte_size, 1, nullptr, &shapes, data_type, element_size, std::ranges::data(data), 1};
+    }
+
     NativeTensor(const NativeTensor& other) :
         nbytes_(other.nbytes_),
         ndim_(other.ndim_),
@@ -116,7 +126,7 @@ struct NativeTensor {
     [[nodiscard]] auto extent(ssize_t dim) const { return shapes_[dim] * strides_[dim]; }
     [[nodiscard]] auto expanded_dim() const { return expanded_dim_; }
     template<typename T>
-    const T* ptr_cast(size_t pos) const {
+    const T* ptr_cast(const size_t pos) const {
         util::check(ptr != nullptr, "Unexpected null ptr in NativeTensor");
         const bool dimension_condition = ndim() == 1;
         const bool elsize_condition = elsize_ != 0;
@@ -171,7 +181,9 @@ ssize_t byte_offset_impl(const stride_t* strides, ssize_t i, Ix... index) {
 // TODO is the conversion to a typed tensor really necessary for the codec part?
 template<typename T>
 struct TypedTensor : public NativeTensor {
-    static size_t itemsize() { return sizeof(T); }
+    using raw_type = T;
+
+    constexpr static size_t itemsize() { return sizeof(T); }
 
     std::array<stride_t, 2> f_style_strides() {
         std::array<stride_t, 2> strides = {};

@@ -21,6 +21,7 @@
 #include <arcticdb/version/version_store_objects.hpp>
 #include <arcticdb/version/schema_checks.hpp>
 #include <arcticdb/pipeline/slicing.hpp>
+#include <arcticdb/version/merge_options.hpp>
 #include <arcticdb/entity/read_result.hpp>
 #include <string>
 
@@ -28,6 +29,17 @@ namespace arcticdb::version_store {
 
 using namespace entity;
 using namespace pipelines;
+
+enum class ReadModifyWriteIndexStrategy {
+    /// The index key for the new version will contain only the data produced by the processing query.
+    /// E.g. Running a filter query will produce a new version containing only the filtered data.
+    REWRITE_INDEX,
+    /// The index key will be a merge of the current index key and the new data.
+    /// E.g. Running merge_update with 3 segments where only the middle segment is matched will keep the first and the
+    /// third segment in the index and add a new segment in the middle. If REWRITE_INDEX was used it would only keep the
+    /// new (middle segment)
+    MERGE_INDEX
+};
 
 VersionedItem write_dataframe_impl(
         const std::shared_ptr<Store>& store, VersionId version_id, const std::shared_ptr<InputFrame>& frame,
@@ -183,17 +195,24 @@ folly::Future<SegmentInMemory> prepare_output_frame(
 );
 
 VersionedItem read_modify_write_impl(
+        const std::shared_ptr<Store>& store, std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
+        std::shared_ptr<ReadQuery> read_query, const ReadOptions& read_options, const WriteOptions& write_options,
+        const IndexPartialKey& target_partial_index_key, ReadModifyWriteIndexStrategy index_strategy,
+        std::shared_ptr<PipelineContext> pipeline_context
+);
+
+VersionedItem merge_update_impl(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
-        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta,
-        const std::shared_ptr<ReadQuery>& read_query, const ReadOptions& read_options,
-        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key
+        std::unique_ptr<proto::descriptors::UserDefinedMetadata>&& user_meta, const ReadOptions& read_options,
+        const WriteOptions& write_options, const IndexPartialKey& target_partial_index_key,
+        std::vector<std::string>&& on, bool match_on_timeseries_index, const MergeStrategy& strategy,
+        std::shared_ptr<InputFrame> source
 );
 
 std::shared_ptr<PipelineContext> setup_pipeline_context(
         const std::shared_ptr<Store>& store, const std::variant<VersionedItem, StreamId>& version_info,
         ReadQuery& read_query, const ReadOptions& read_options
 );
-
 } // namespace arcticdb::version_store
 
 namespace arcticdb {

@@ -299,3 +299,34 @@ class SegmentInMemory {
 };
 
 } // namespace arcticdb
+
+namespace fmt {
+template<>
+struct formatter<arcticdb::SegmentInMemory> {
+    template<typename ParseContext>
+    constexpr auto parse(ParseContext& ctx) {
+        return ctx.begin();
+    }
+
+    template<typename FormatContext>
+    constexpr auto format(const arcticdb::SegmentInMemory& segment, FormatContext& ctx) const {
+        const StreamDescriptor& desc = segment.descriptor();
+        auto out = fmt::format_to(ctx.out(), "Segment\n");
+        for (unsigned i = 0; i < desc.field_count(); ++i) {
+            out = fmt::format_to(out, "\nColumn[{}]: {}\n", i, desc.field(i));
+            visit_field(desc.field(i), [&](auto tdt) {
+                using TDT = decltype(tdt);
+                arcticdb::ColumnData cd = segment.column_data(i);
+                for (auto it = cd.begin<TDT>(); it != cd.end<TDT>(); ++it) {
+                    if constexpr (std::same_as<typename TDT::DataTypeTag::raw_type, int8_t>) {
+                        out = fmt::format_to(out, "{} ", i, int(*it));
+                    } else {
+                        out = fmt::format_to(out, "{} ", i, *it);
+                    }
+                }
+            });
+        }
+        return out;
+    }
+};
+} // namespace fmt

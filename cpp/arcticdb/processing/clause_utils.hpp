@@ -160,6 +160,10 @@ std::vector<std::vector<EntityId>> structure_by_row_slice(
         ComponentManager& component_manager, std::vector<std::vector<EntityId>>&& entity_ids_vec
 );
 
+std::vector<std::vector<EntityId>> structure_by_row_slice(
+        ComponentManager& component_manager, std::vector<EntityId>&& entity_ids_vec
+);
+
 std::vector<std::vector<EntityId>> offsets_to_entity_ids(
         const std::vector<std::vector<size_t>>& offsets, const std::vector<RangesAndEntity>& ranges_and_entities
 );
