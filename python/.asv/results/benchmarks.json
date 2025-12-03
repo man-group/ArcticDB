@@ -1,50 +1,4 @@
 {
-    "arrow.ArrowNumeric.peakmem_read": {
-        "code": "class ArrowNumeric:\n    def peakmem_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "arrow.ArrowNumeric.peakmem_read",
-        "param_names": [
-            "rows",
-            "date_range"
-        ],
-        "params": [
-            [
-                "100000",
-                "10000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ]
-        ],
-        "setup_cache_key": "arrow:38",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "aee945c1358b8a4c2dd274815ceb80a3cfaa085451149386f6674020b904feed"
-    },
-    "arrow.ArrowNumeric.peakmem_write": {
-        "code": "class ArrowNumeric:\n    def peakmem_write(self, rows, date_range):\n        self.fresh_lib.write(f\"sym_{rows}\", self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "arrow.ArrowNumeric.peakmem_write",
-        "param_names": [
-            "rows",
-            "date_range"
-        ],
-        "params": [
-            [
-                "100000",
-                "10000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ]
-        ],
-        "setup_cache_key": "arrow:38",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "87b2ccbc5cf2ef33d45f934f653aa03f853a30fbadfa4710abb2018124b53386"
-    },
     "arrow.ArrowNumeric.time_read": {
         "code": "class ArrowNumeric:\n    def time_read(self, rows, date_range):\n        self.lib.read(self.symbol_name(rows), date_range=self.date_range)\n\n    def setup(self, rows, date_range):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = pa.Table.from_pandas(generate_pseudo_random_dataframe(rows))\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
         "min_run_count": 2,
@@ -67,7 +21,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:38",
+        "setup_cache_key": "arrow:39",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -96,125 +50,11 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:38",
+        "setup_cache_key": "arrow:39",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
         "version": "3511ddd99480aff7cc0c4c13d2809e213c523fdbe74137ce79f7483297e5686f",
-        "warmup_time": 0
-    },
-    "arrow.ArrowStrings.peakmem_read": {
-        "code": "class ArrowStrings:\n    def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "arrow.ArrowStrings.peakmem_read",
-        "param_names": [
-            "rows",
-            "date_range",
-            "unique_string_count",
-            "arrow_string_format"
-        ],
-        "params": [
-            [
-                "10000",
-                "1000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ],
-            [
-                "1",
-                "100",
-                "100000"
-            ],
-            [
-                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
-                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
-                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
-            ]
-        ],
-        "setup_cache_key": "arrow:113",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "5bd5060492fc565ecb99ad5215bf454d71ca4cfedcd6f970efd61e04bec1fb7d"
-    },
-    "arrow.ArrowStrings.peakmem_write": {
-        "code": "class ArrowStrings:\n    def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):\n        # No point in running with all read time options\n        if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:\n            self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column=\"ts\")\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "arrow.ArrowStrings.peakmem_write",
-        "param_names": [
-            "rows",
-            "date_range",
-            "unique_string_count",
-            "arrow_string_format"
-        ],
-        "params": [
-            [
-                "10000",
-                "1000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ],
-            [
-                "1",
-                "100",
-                "100000"
-            ],
-            [
-                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
-                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
-                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
-            ]
-        ],
-        "setup_cache_key": "arrow:113",
-        "timeout": 6000,
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "d473ffa788d420e51973cdce360a1537aee61660dd9e06937a494ac93cc88597"
-    },
-    "arrow.ArrowStrings.time_read": {
-        "code": "class ArrowStrings:\n    def time_read(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.lib.read(\n            self.symbol_name(rows, unique_string_count),\n            date_range=self.date_range,\n            arrow_string_format_default=arrow_string_format,\n        )\n\n    def setup(self, rows, date_range, unique_string_count, arrow_string_format):\n        self.ac = Arctic(self.connection_string, output_format=OutputFormat.PYARROW)\n        self.lib = self.ac.get_library(self.lib_name_prewritten)\n        self.lib._nvs._set_allow_arrow_input()\n        if date_range is None:\n            self.date_range = None\n        else:\n            # Create a date range that excludes the first and last 10 rows of the data only\n            self.date_range = (pd.Timestamp(10), pd.Timestamp(rows - 10))\n        self.fresh_lib = self.get_fresh_lib()\n        self.fresh_lib._nvs._set_allow_arrow_input()\n        self.table = self._generate_table(rows, self.num_cols, unique_string_count)\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "arrow.ArrowStrings.time_read",
-        "number": 20,
-        "param_names": [
-            "rows",
-            "date_range",
-            "unique_string_count",
-            "arrow_string_format"
-        ],
-        "params": [
-            [
-                "10000",
-                "1000000"
-            ],
-            [
-                "None",
-                "'middle'"
-            ],
-            [
-                "1",
-                "100",
-                "100000"
-            ],
-            [
-                "<ArrowOutputStringFormat.CATEGORICAL: 'CATEGORICAL'>",
-                "<ArrowOutputStringFormat.DICTIONARY_ENCODED: 'DICTIONARY_ENCODED'>",
-                "<ArrowOutputStringFormat.LARGE_STRING: 'LARGE_STRING'>",
-                "<ArrowOutputStringFormat.SMALL_STRING: 'SMALL_STRING'>"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 2,
-        "sample_time": 0.01,
-        "setup_cache_key": "arrow:113",
-        "timeout": 6000,
-        "type": "time",
-        "unit": "seconds",
-        "version": "b1977c6215c99d47d950dc30637270fadbf49c504f388ef9360eba4ea558a0ab",
         "warmup_time": 0
     },
     "arrow.ArrowStrings.time_write": {
@@ -252,7 +92,7 @@
         "repeat": 0,
         "rounds": 2,
         "sample_time": 0.01,
-        "setup_cache_key": "arrow:113",
+        "setup_cache_key": "arrow:116",
         "timeout": 6000,
         "type": "time",
         "unit": "seconds",
@@ -4247,100 +4087,12 @@
         "version": "d4e54b4dfdcbb8375d1c5065f88e58ba53e2613eabe92ee833b8f9230f597120",
         "warmup_time": 0
     },
-    "resample.Resample.peakmem_resample": {
-        "code": "class Resample:\n    def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "name": "resample.Resample.peakmem_resample",
-        "param_names": [
-            "num_rows",
-            "downsampling_factor",
-            "col_type",
-            "aggregation"
-        ],
-        "params": [
-            [
-                "1000000",
-                "10000000"
-            ],
-            [
-                "10",
-                "100",
-                "100000"
-            ],
-            [
-                "'bool'",
-                "'int'",
-                "'float'",
-                "'datetime'",
-                "'str'"
-            ],
-            [
-                "'sum'",
-                "'mean'",
-                "'min'",
-                "'max'",
-                "'first'",
-                "'last'",
-                "'count'"
-            ]
-        ],
-        "setup_cache_key": "resample:45",
-        "type": "peakmemory",
-        "unit": "bytes",
-        "version": "99c6acb45f29b2d72d54020d96990507084b8fd1c9918c594e9fa09670dec465"
-    },
-    "resample.Resample.time_resample": {
-        "code": "class Resample:\n    def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):\n        if (\n            col_type == \"datetime\"\n            and aggregation == \"sum\"\n            or col_type == \"str\"\n            and aggregation in [\"sum\", \"mean\", \"min\", \"max\"]\n        ):\n            pass\n            # Use this when upgrading to ASV 0.6.0 or later\n            # raise SkipNotImplemented(f\"{aggregation} not supported on columns of type {col_type}\")\n        else:\n            self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)\n\n    def setup(self, num_rows, downsampling_factor, col_type, aggregation):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit=\"us\"))\n        self.query_builder = QueryBuilder().resample(f\"{downsampling_factor}us\").agg({\"col\": aggregation})\n\n    def setup_cache(self):\n        start = time.time()\n        self._setup_cache()\n        self.logger.info(f\"SETUP_CACHE TIME: {time.time() - start}\")",
-        "min_run_count": 2,
-        "name": "resample.Resample.time_resample",
-        "number": 7,
-        "param_names": [
-            "num_rows",
-            "downsampling_factor",
-            "col_type",
-            "aggregation"
-        ],
-        "params": [
-            [
-                "1000000",
-                "10000000"
-            ],
-            [
-                "10",
-                "100",
-                "100000"
-            ],
-            [
-                "'bool'",
-                "'int'",
-                "'float'",
-                "'datetime'",
-                "'str'"
-            ],
-            [
-                "'sum'",
-                "'mean'",
-                "'min'",
-                "'max'",
-                "'first'",
-                "'last'",
-                "'count'"
-            ]
-        ],
-        "repeat": 0,
-        "rounds": 1,
-        "sample_time": 0.01,
-        "setup_cache_key": "resample:45",
-        "type": "time",
-        "unit": "seconds",
-        "version": "1f835087b54bb1d48a11dcbdb503bbbc4c57d6c5f54b6f0f6cf22c68c2187a5c",
-        "warmup_time": -1
-    },
     "resample.ResampleWide.peakmem_resample_wide": {
         "code": "class ResampleWide:\n    def peakmem_resample_wide(self):\n        self.lib.read(self.SYM, query_builder=self.query_builder)\n\n    def setup(self):\n        self.ac = Arctic(self.CONNECTION_STRING)\n        self.lib = self.ac[self.LIB_NAME]\n        aggs = dict()\n        for col in self.COLS:\n            aggs[col] = \"last\"\n        self.query_builder = QueryBuilder().resample(\"30us\").agg(aggs)\n\n    def setup_cache(self):\n        ac = Arctic(self.CONNECTION_STRING)\n        ac.delete_library(self.LIB_NAME)\n        lib = ac.create_library(self.LIB_NAME)\n        rng = np.random.default_rng()\n        num_rows = 3000\n        index = pd.date_range(pd.Timestamp(0, unit=\"us\"), freq=\"us\", periods=num_rows)\n        data = dict()\n        for col in self.COLS:\n            data[col] = 100 * rng.random(num_rows, dtype=np.float64)\n        df = pd.DataFrame(data, index=index)\n        lib.write(self.SYM, df)",
         "name": "resample.ResampleWide.peakmem_resample_wide",
         "param_names": [],
         "params": [],
-        "setup_cache_key": "resample:131",
+        "setup_cache_key": "resample:134",
         "timeout": 1200,
         "type": "peakmemory",
         "unit": "bytes",
@@ -4356,7 +4108,7 @@
         "repeat": 0,
         "rounds": 1,
         "sample_time": 0.01,
-        "setup_cache_key": "resample:131",
+        "setup_cache_key": "resample:134",
         "timeout": 1200,
         "type": "time",
         "unit": "seconds",
