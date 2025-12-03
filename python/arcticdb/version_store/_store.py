@@ -1231,12 +1231,6 @@ class NativeVersionStore:
         version_query = self._get_version_query(as_of, **kwargs)
         return self.version_store.get_column_stats_info_version(symbol, version_query).to_map()
 
-    def _batch_read_keys(self, atom_keys, read_options, output_format):
-        for result in self.version_store.batch_read_keys(atom_keys, read_options):
-            read_result = ReadResult(*result)
-            vitem = self._adapt_read_res(read_result, output_format)
-            yield vitem
-
     def trim(self) -> None:
         """
         Calls trim on the allocator of the underlying version_store
@@ -2483,10 +2477,12 @@ class NativeVersionStore:
         vitem = self._adapt_read_res(read_result, output_format)
 
         # Handle custom normalized data
-        if len(read_result.keys) > 0:
+        if len(read_result.node_read_results) > 0:
             meta_struct = denormalize_user_metadata(read_result.mmeta)
-
-            key_map = {v.symbol: v.data for v in self._batch_read_keys(read_result.keys, read_options, output_format)}
+            key_map = {
+                v.sym: self._adapt_frame_data(v.frame_data, v.norm, output_format)
+                for v in read_result.node_read_results
+            }
             original_data = Flattener().create_original_obj_from_metastruct_new(meta_struct, key_map)
 
             return VersionedItem(
@@ -2712,9 +2708,8 @@ class NativeVersionStore:
 
         return index_columns
 
-    def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
-        if isinstance(read_result.frame_data, ArrowOutputFrame):
-            frame_data = read_result.frame_data
+    def _adapt_frame_data(self, frame_data, norm, output_format):
+        if isinstance(frame_data, ArrowOutputFrame):
             record_batches = []
             for record_batch in frame_data.extract_record_batches():
                 record_batches.append(pa.RecordBatch._import_from_c(record_batch.array(), record_batch.schema()))
@@ -2723,8 +2718,8 @@ class NativeVersionStore:
                 table = pa.Table.from_arrays([])
             else:
                 table = pa.Table.from_batches(record_batches)
-            data = self._normalizer.denormalize(table, read_result.norm)
-            if read_result.norm.HasField("custom"):
+            data = self._normalizer.denormalize(table, norm)
+            if norm.HasField("custom"):
                 raise ArcticDbNotYetImplemented(
                     "Denormalizing custom normalized data is not supported with Arrow output_format"
                 )
@@ -2733,9 +2728,14 @@ class NativeVersionStore:
             if output_format.lower() == OutputFormat.POLARS.lower():
                 data = pl.from_arrow(data, rechunk=False)
         else:
-            data = self._normalizer.denormalize(read_result.frame_data, read_result.norm)
-            if read_result.norm.HasField("custom"):
-                data = self._custom_normalizer.denormalize(data, read_result.norm.custom)
+            data = self._normalizer.denormalize(frame_data, norm)
+            if norm.HasField("custom"):
+                data = self._custom_normalizer.denormalize(data, norm.custom)
+
+        return data
+
+    def _adapt_read_res(self, read_result: ReadResult, output_format: OutputFormat) -> VersionedItem:
+        data = self._adapt_frame_data(read_result.frame_data, read_result.norm, output_format)
 
         if isinstance(read_result.version, list):
             versions = []

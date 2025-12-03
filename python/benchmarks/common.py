@@ -18,12 +18,14 @@ import urllib.request
 
 from arcticdb.util.environment_setup import TestLibraryManager, LibraryPopulationPolicy
 from arcticdb.util.logger import get_logger
+from arcticdb_ext import set_config_string
 
 ## You can now define SLOW ASV tests
 ## To run those tests also you have to set following OS variable
 ## Then you can use this variable along with asv_runner.benchmarks.mark.SkipNotImplemented exception
 ## (see finalized_staged_data.py)
 SLOW_TESTS = os.getenv("ARCTICDB_SLOW_TESTS") == "1"
+set_config_string("PickledMetadata.LogLevel", "debug")
 
 
 def generate_pseudo_random_dataframe(n, freq="s", end_timestamp="1/1/2023"):
