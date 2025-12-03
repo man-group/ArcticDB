@@ -86,6 +86,39 @@ Column WriteToSegmentTask::slice_column(
     const auto type_size = get_type_size(source_column.type().data_type());
     const auto first_byte = (slice_.rows().first - offset) * type_size;
     const auto bytes = ((slice_.rows().second - offset) * type_size) - first_byte;
+
+    if (is_bool_type(source_column.type().data_type())) {
+        // Bool columns from arrow come as packed bitsets and are stored in `MemBlockType::EXTERNAL_PACKED` memory.
+        // We need special handling to unpack them because our internal representation is unpacked.
+        // We do the unpacking inside `WriteToSegmentTask` so the CPU intensive unpacking can happen in parallel.
+        Column res(
+                make_scalar_type(DataType::BOOL8),
+                slice_.rows().diff(),
+                AllocationType::PRESIZED,
+                Sparsity::NOT_PERMITTED
+        );
+        res.set_row_data(slice_.rows().diff() - 1);
+        auto dest_ptr = res.data().buffer().data();
+
+        const auto& buffer = source_column.data().buffer();
+        auto [_, offset_in_block, block_index] = buffer.block_and_offset(first_byte);
+        auto pos_in_res = 0u;
+        while (pos_in_res < bytes) {
+            const auto block = buffer.blocks()[block_index++];
+            util::check(
+                    block->get_type() == MemBlockType::EXTERNAL_PACKED,
+                    "Expected to see a packed external block but got: {}",
+                    static_cast<int8_t>(block->get_type())
+            );
+            const auto packed_block = dynamic_cast<ExternalPackedMemBlock*>(block);
+            auto num_bits = std::min(packed_block->logical_bytes() - offset_in_block, bytes - pos_in_res);
+            auto offset_in_bits = packed_block->shift() + offset_in_block;
+            packed_bits_to_buffer(packed_block->data(), num_bits, offset_in_bits, dest_ptr + pos_in_res);
+            offset_in_block = 0;
+            pos_in_res += num_bits;
+        }
+        return res;
+    }
     // Note that this is O(log(n)) where n is the number of input record batches. We could amortize this across the
     // columns if it proves to be a bottleneck, as the block structure of all of the columns is the same up to
     // multiples of the type size
@@ -119,9 +152,8 @@ Column WriteToSegmentTask::slice_column(
                     auto num_elements = offset_ptr_and_size.second / sizeof(Rawtype);
                     for (size_t idx = 0; idx < num_elements; ++idx, ++offset_ptr) {
                         auto strings_buffer_offset = *offset_ptr;
-                        // Note that in arrow_data_to_segment we omitted the last value from the offsets buffer to keep
-                        // our indexing into the chunked buffer accurate. So when idx == size - 1, (ptr + 1) is still
-                        // within the memory owned by the input Arrow structure
+                        // Note that in arrow_data_to_segment we store the last value from the offsets buffer as extra
+                        // bytes. So when idx == size - 1, (ptr + 1) is still within the ExternalMemBlock.
                         auto string_length = *(offset_ptr + 1) - strings_buffer_offset;
                         std::string_view str(&string_data[strings_buffer_offset], string_length);
                         *col_it++ = string_pool.get(str).offset();
@@ -130,7 +162,7 @@ Column WriteToSegmentTask::slice_column(
             }
         });
         return res;
-    } else { // Numeric and bool types
+    } else { // Numeric types
         ChunkedBuffer chunked_buffer;
         if (byte_blocks_at.size() == 1) {
             // All required bytes lie within a single block, so we can avoid a copy by adding an external block
