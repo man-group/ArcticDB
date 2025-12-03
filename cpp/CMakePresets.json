@@ -89,7 +89,15 @@
     {
       "name": "windows-cl-conda-debug",
       "inherits": ["common_conda", "windows"],
-      "generator": "Ninja"
+      "generator": "Ninja",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_C_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER": "cl",
+        "CMAKE_CXX_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_C_COMPILER_LAUNCHER": "sccache",
+        "CMAKE_CXX_FLAGS": "/MP"
+      }
     },
     {
       "name": "windows-vs-2022",

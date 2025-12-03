@@ -21,7 +21,7 @@ on:
         description: 'Run C++ tests'
         type: boolean
         required: true
-        default: true
+        default: true        
       persistent_storage:
         description: "Run against what persistent storage type? (no is LMDB/default)"
         type: choice
@@ -35,22 +35,22 @@ on:
         type: boolean
         description: 'Run the build with debugging enabled'
         required: false
-        default: false
+        default: false                  
       run_enable_logging:
         description: 'Enabled debug logging'
         type: boolean
         required: false
-        default: false
+        default: false        
       run_commandline:
         description: 'Run custom commandline before tests, Like: export ARCTICDB_STORAGE_AZURE=1; ....'
         type: string
         required: false
-        default: ""
+        default: ""    
       run_custom_pytest_command:
         description: '*Run custom pytest command, instead of standard(Note: curdir is project root), or pass additional arguments to default command'
         type: string
         required: false
-        default: ""
+        default: ""        
 
 jobs:
 
@@ -135,8 +135,8 @@ jobs:
       - name: Check no arcticdb file depend on tests package
         shell: bash -l {0}
         run: |
-          build_tooling/checks.sh
-
+          build_tooling/checks.sh       
+          
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
         if: ${{ env.real_tests_storage_type != 'no' }}
@@ -151,12 +151,12 @@ jobs:
           persistent_storage: ${{ inputs.persistent_storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
-        if: ${{ inputs.run_enable_logging }}
+        if: ${{ inputs.run_enable_logging }}        
         uses: ./.github/actions/enable_logging
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.debug_enabled }}
+        if: ${{ inputs.debug_enabled }}        
 
       - name: Test with pytest
         shell: bash -l {0}
@@ -259,12 +259,12 @@ jobs:
           persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
 
       - name: Set ArcticDB Debug Logging
-        if: ${{ inputs.run_enable_logging }}
+        if: ${{ inputs.run_enable_logging }}        
         uses: ./.github/actions/enable_logging
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.debug_enabled }}
+        if: ${{ inputs.debug_enabled }}        
 
       - name: Test with pytest
         shell: bash -l {0}
@@ -323,11 +323,7 @@ jobs:
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
-          cmake ^
-            -DTEST=OFF ^
-            --preset windows-cl-conda-release ^
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          cmake -DTEST=OFF --preset windows-cl-conda-release
           cmake --build --preset windows-cl-conda-release --parallel
         env:
           ARCTICDB_USING_CONDA: 1
@@ -340,11 +336,7 @@ jobs:
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
-          cmake ^
-            -DTEST=ON ^
-            --preset windows-cl-conda-release ^
-            -DCMAKE_CXX_COMPILER_LAUNCHER=sccache ^
-            -DCMAKE_C_COMPILER_LAUNCHER=sccache
+          cmake -DTEST=ON --preset windows-cl-conda-release
           cmake --build --preset windows-cl-conda-release --parallel --target arcticdb_rapidcheck_tests
           cmake --build --preset windows-cl-conda-release --parallel --target test_unit_arcticdb
           cd out/windows-cl-conda-release-build/
