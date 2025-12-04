@@ -319,6 +319,8 @@ jobs:
 
       - name: Build ArcticDB C++ target (arcticdb_ext) for conda
         shell: cmd /C call {0}
+        # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+        # for Ninja to be used as a generator with MSVC.
         run: |
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
@@ -332,7 +334,9 @@ jobs:
 
       - name: Build and Run C++ Tests
         shell: cmd /C call {0}
-        run:
+        # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+        # for Ninja to be used as a generator with MSVC.
+        run: |
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
