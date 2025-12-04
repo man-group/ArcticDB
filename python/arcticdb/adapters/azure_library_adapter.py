@@ -12,7 +12,7 @@ import ssl
 import time
 from collections import namedtuple
 from dataclasses import dataclass, fields
-from typing import Optional, Tuple
+from typing import Optional
 
 from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
 from arcticdb.config import _DEFAULT_ENV
