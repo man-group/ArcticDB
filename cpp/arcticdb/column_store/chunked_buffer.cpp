@@ -30,9 +30,9 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
     auto block_num ARCTICDB_UNUSED = 0u;
     for (const auto block : input.blocks()) {
         ARCTICDB_DEBUG(log::version(), "## Block {}", block_num++);
-        util::check(block->bytes(), "Zero-sized block");
+        util::check(block->physical_bytes(), "Zero-sized block");
         auto source_pos = 0u;
-        auto source_bytes = block->bytes();
+        auto source_bytes = block->physical_bytes();
         while (source_bytes != 0) {
             if (!current_buf) {
                 remaining_current_bytes = std::min(nbytes, remaining_total_bytes);
@@ -40,7 +40,7 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
                 ARCTICDB_DEBUG(log::version(), "Creating new buffer with size {}", remaining_current_bytes);
                 target_block = current_buf->blocks().begin();
             }
-            const auto remaining_block_bytes = (*target_block)->bytes() - target_pos;
+            const auto remaining_block_bytes = (*target_block)->physical_bytes() - target_pos;
             const auto this_write = std::min({remaining_current_bytes, source_bytes, remaining_block_bytes});
             ARCTICDB_DEBUG(
                     log::version(),
@@ -71,8 +71,8 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
                     remaining_total_bytes
             );
 
-            if (static_cast<size_t>((*target_block)->bytes()) == nbytes ||
-                target_pos == static_cast<size_t>((*target_block)->bytes())) {
+            if (static_cast<size_t>((*target_block)->physical_bytes()) == nbytes ||
+                target_pos == static_cast<size_t>((*target_block)->physical_bytes())) {
                 ARCTICDB_DEBUG(log::version(), "Incrementing block as nbytes == target block bytes: {}", nbytes);
                 ++target_block;
                 target_pos = 0;
@@ -120,7 +120,7 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
     for (auto idx = start_idx; idx < end_idx; idx++) {
         auto input_block = input_blocks.at(idx);
         auto source_pos = idx == start_idx ? start_block_and_offset.offset_ : 0u;
-        auto source_bytes = std::min(remaining_bytes, input_block->bytes() - source_pos);
+        auto source_bytes = std::min(remaining_bytes, input_block->logical_bytes() - source_pos);
         while (source_bytes != 0) {
             const auto this_write = std::min(remaining_bytes, source_bytes);
             ARCTICDB_DEBUG(
