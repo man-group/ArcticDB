@@ -698,8 +698,10 @@ if (WIN32)
         arcticdb_core_object
         PRIVATE
             /W4
-            /external:I${CMAKE_SOURCE_DIR}/vcpkg
-            /external:I${CMAKE_SOURCE_DIR}/third_party
+            # The distribution on conda-forge only uses the source code of ArcticDB itself
+            # without submodules and dependencies from `vcpkg` or `third_party`.
+            $<$<NOT:$<BOOL:${ARCTICDB_USING_CONDA}>>:/external:I${CMAKE_SOURCE_DIR}/vcpkg>
+            $<$<NOT:$<BOOL:${ARCTICDB_USING_CONDA}>>:/external:I${CMAKE_SOURCE_DIR}/third_party>
             /Zc:__cplusplus #needed to get the correct __cplusplus macro value
     )
 endif()
