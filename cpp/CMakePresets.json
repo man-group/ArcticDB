@@ -89,7 +89,6 @@
     {
       "name": "windows-cl-conda-debug",
       "inherits": ["common_conda", "windows"],
-      "generator": "Ninja",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_C_COMPILER": "cl",
