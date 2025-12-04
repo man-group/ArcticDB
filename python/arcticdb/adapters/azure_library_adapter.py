@@ -61,43 +61,10 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
         )
         self._container = self._query_params.Container
 
-        # Extract CA certificate settings directly from the URI to be robust to any quirks
-        # in how the query string is built (e.g. duplicated keys).
-        # We parse the full URI to get the last occurrence of each parameter (in case of duplicates).
-        def _get_param_from_uri(key: str) -> Tuple[str, bool]:
-            """Returns (value, found) tuple where found indicates if the key was present in URI."""
-            query = uri[len("azure://") :]
-            value = ""
-            found = False
-            # Process segments in order, keeping the last occurrence (handles duplicates correctly)
-            for segment in query.split(";"):
-                segment = segment.strip()
-                if not segment:
-                    continue
-                # Use partition to handle cases where value might contain '='
-                k, sep, v = segment.partition("=")
-                if k == key and sep and v:
-                    # Keep the last occurrence (overwrites previous values if duplicates exist)
-                    # Only consider it found if the value is non-empty
-                    value = v
-                    found = True
-            return value, found
-
-        ca_cert_path_from_uri, ca_cert_path_found = _get_param_from_uri("CA_cert_path")
-        ca_cert_dir_from_uri, ca_cert_dir_found = _get_param_from_uri("CA_cert_dir")
-
-        # On Linux, prefer the values explicitly provided in the URI (if found),
-        # otherwise fall back to what was parsed into _query_params.
+        # Extract CA certificate settings from parsed query parameters
         # Ensure values are always strings (not None)
-        if ca_cert_path_found:
-            self._ca_cert_path = str(ca_cert_path_from_uri) if ca_cert_path_from_uri else ""
-        else:
-            self._ca_cert_path = str(self._query_params.CA_cert_path) if self._query_params.CA_cert_path else ""
-
-        if ca_cert_dir_found:
-            self._ca_cert_dir = str(ca_cert_dir_from_uri) if ca_cert_dir_from_uri else ""
-        else:
-            self._ca_cert_dir = str(self._query_params.CA_cert_dir) if self._query_params.CA_cert_dir else ""
+        self._ca_cert_path = str(self._query_params.CA_cert_path) if self._query_params.CA_cert_path else ""
+        self._ca_cert_dir = str(self._query_params.CA_cert_dir) if self._query_params.CA_cert_dir else ""
 
         if platform.system() != "Linux" and (self._ca_cert_path or self._ca_cert_dir):
             raise ValueError(
