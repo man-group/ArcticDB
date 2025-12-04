@@ -21,6 +21,15 @@ class logger final : public mongocxx::logger {
     void operator()(
             mongocxx::log_level level, bsoncxx::stdx::string_view domain, bsoncxx::stdx::string_view message
     ) noexcept override {
+        // Downgrade "Couldn't send endSessions" warning to debug level
+        // These are harmless intermittent warnings that occur during interpreter exits. The issue persists even when
+        // the resource cleanup order follows the driver's manual. Thus it is suppressed.
+        // https://jira.mongodb.org/browse/CXX-3379
+        if (level == mongocxx::log_level::k_warning && domain == "client" &&
+            message.find("Couldn't send \"endSessions\"") != bsoncxx::stdx::string_view::npos) {
+            level = mongocxx::log_level::k_debug;
+        }
+
         spdlog::level::level_enum spdlog_level;
         switch (level) {
         case mongocxx::log_level::k_error:
