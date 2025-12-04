@@ -7,6 +7,7 @@
 import os
 import platform
 import pytest
+import ssl
 import uuid
 import pandas as pd
 
@@ -14,6 +15,15 @@ from arcticdb.storage_fixtures.azure import AzureContainer
 from arcticdb.arctic import Arctic
 from arcticc.pb2.azure_storage_pb2 import Config as AzureConfig
 from arcticdb.util.test import assert_frame_equal
+from arcticdb.scripts.update_storage import run
+from tests.util.mark import AZURE_TESTS_MARK, SSL_TESTS_MARK, SSL_TEST_SUPPORTED
+from tests.scripts.test_update_storage import create_library_config
+from tests.integration.arcticdb.test_arctic import (
+    ParameterDisplayStatus,
+    parameter_display_status,
+    DefaultSetting,
+    edit_connection_string,
+)
 
 
 def _get_azure_storage_config(cfg):
@@ -128,3 +138,46 @@ def test_azure_transport_linux_ca_cert_dir(azurite_storage: AzureContainer):
         # Clean up the temporary CA cert directory
         if os.path.exists(ca_cert_dir):
             os.rmdir(ca_cert_dir)
+
+
+@AZURE_TESTS_MARK
+def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer, lib_name):
+    # Given
+    if SSL_TEST_SUPPORTED:
+        # azurite factory doesn't set client_cert_dir by default
+        azurite_storage.arctic_uri += f";CA_cert_dir={azurite_storage.factory.client_cert_dir}"
+    ac = azurite_storage.create_arctic()
+    create_library_config(ac, lib_name)
+
+    # When
+    run(uri=azurite_storage.arctic_uri, run=False)
+
+    # Then
+    config = ac._library_manager.get_library_config(lib_name)
+    azure_storage = _get_azure_storage_config(config)
+    assert azure_storage.ca_cert_path == azurite_storage.factory.client_cert_file
+    assert azure_storage.ca_cert_dir == azurite_storage.factory.client_cert_dir
+    assert azure_storage.container_name == azurite_storage.container
+    assert azurite_storage.factory.account_name in azure_storage.endpoint
+    assert azurite_storage.factory.account_key in azure_storage.endpoint
+    assert azure_storage.max_connections == 0
+    assert azure_storage.prefix.startswith(lib_name)
+
+
+@AZURE_TESTS_MARK
+@SSL_TESTS_MARK
+@pytest.mark.parametrize("client_cert_file", parameter_display_status)
+@pytest.mark.parametrize("client_cert_dir", parameter_display_status)
+def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_file, client_cert_dir, lib_name):
+    storage = azurite_ssl_storage
+    # Leaving ca file and ca dir unset will fallback to using os default setting,
+    # which is different from the test environment
+    default_setting = DefaultSetting(storage.factory)
+    monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
+    uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
+    ac = Arctic(uri)
+    try:
+        lib = ac.create_library(lib_name)
+        lib.write("sym", pd.DataFrame())
+    finally:
+        ac.delete_library(lib_name)
