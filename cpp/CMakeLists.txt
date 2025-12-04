@@ -81,7 +81,7 @@ endif()
 if(${ARCTICDB_USING_CONDA})
     # Required to be able to include headers from glog since glog 0.7
     # See: https://github.com/google/glog/pull/1030
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DGLOG_USE_GLOG_EXPORT")
+    add_compile_definitions(GLOG_USE_GLOG_EXPORT)
 endif()
 
 if(WIN32)
