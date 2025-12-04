@@ -72,7 +72,7 @@ void register_bindings(py::module& m, py::exception<arcticdb::ArcticException>& 
     // Reliable storage lock exposed for integration testing. It is intended for use in C++
     using namespace arcticdb::lock;
 
-    py::register_exception<LostReliableLock>(tools, "LostReliableLock", base_exception.ptr());
+    py::register_local_exception<LostReliableLock>(tools, "LostReliableLock", base_exception.ptr());
 
     py::class_<ReliableStorageLock<>>(tools, "ReliableStorageLock")
             .def(py::init<>([](std::string base_name, std::shared_ptr<Library> lib, timestamp timeout) {

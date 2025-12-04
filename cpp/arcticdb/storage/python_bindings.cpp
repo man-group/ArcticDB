@@ -161,8 +161,8 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
             .value("REPLICATION", ModifiableEnterpriseLibraryOption::REPLICATION)
             .value("BACKGROUND_DELETION", ModifiableEnterpriseLibraryOption::BACKGROUND_DELETION);
 
-    py::register_exception<UnknownLibraryOption>(storage, "UnknownLibraryOption", base_exception.ptr());
-    py::register_exception<UnsupportedLibraryOptionValue>(
+    py::register_local_exception<UnknownLibraryOption>(storage, "UnknownLibraryOption", base_exception.ptr());
+    py::register_local_exception<UnsupportedLibraryOptionValue>(
             storage, "UnsupportedLibraryOptionValue", base_exception.ptr()
     );
 
