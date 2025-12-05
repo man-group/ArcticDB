@@ -31,7 +31,10 @@ dependencies:
   - cyrus-sasl
   - aws-sdk-cpp >=1.11.405
   - prometheus-cpp
-  - libprotobuf <7
+    # We have to use the build of libprotobuf starting from this PR:
+    # https://github.com/conda-forge/libprotobuf-feedstock/pull/277
+  - sel(win): libprotobuf==5.29.3=h*_3
+  - sel(unix): libprotobuf <7
   - openssl
   # TODO: understand failures with libcurl>=8.17
   - libcurl <8.17
@@ -49,7 +52,9 @@ dependencies:
   # Versions must be kept in sync
   - xxhash==0.8.2
   - semimap
-  - rapidcheck
+  # Make sure to get builds with the static library on Windows
+  # https://github.com/conda-forge/rapidcheck-feedstock/pull/3/files
+  - rapidcheck>=2023.4.13=h*_3
   - msgpack-c
   - recycle
   # Matches the version of lmdb as vendored in its submodule.
@@ -87,5 +92,8 @@ dependencies:
   - retrying
   - trustme
   - psutil
+  # Use memray and pytest-memray only on Linux and MacOS
+  - sel(unix): memray
+  - sel(unix): pytest-memray
   # Use pytest-xdist only on Linux and MacOS
   - sel(unix): pytest-xdist
