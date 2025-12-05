@@ -337,8 +337,6 @@ jobs:
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
           cmake -DTEST=ON --preset windows-cl-conda-release
-          cmake --build --preset windows-cl-conda-release --parallel --target arcticdb_rapidcheck_tests
-          cmake --build --preset windows-cl-conda-release --parallel --target test_unit_arcticdb
           cd out/windows-cl-conda-release-build/
           CTEST_OUTPUT_ON_FAILURE=1 cmake --build . --target test
         env:
