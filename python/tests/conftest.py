@@ -52,9 +52,9 @@ from arcticdb.storage_fixtures.azure import real_azure_from_environment_variable
 from arcticdb.storage_fixtures.mongo import ManagedMongoDBServer, auto_detect_server
 from arcticdb.storage_fixtures.in_memory import InMemoryStorageFixture
 from arcticdb_ext.storage import NativeVariantStorage, AWSAuthMethod, S3Settings as NativeS3Settings
-from arcticdb_ext import set_config_int
+from arcticdb_ext import set_config_int, unset_config_int
 from arcticdb.version_store._normalization import MsgPackNormalizer
-from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer
+from arcticdb.util.test import create_df, CustomThing, TestCustomNormalizer, CustomArrayNormalizer
 from arcticdb.arctic import Arctic
 from tests.util.marking import Mark
 from .util.mark import (
@@ -1098,6 +1098,13 @@ def lmdb_version_store_v2(version_store_factory, lib_name) -> NativeVersionStore
     return version_store_factory(dynamic_strings=True, encoding_version=int(EncodingVersion.V2), name=library_name)
 
 
+@pytest.fixture(scope="function")
+def lmdb_version_store_custome_array_norm(version_store_factory):
+    register_normalizer(CustomArrayNormalizer())
+    yield version_store_factory()
+    clear_registered_normalizers()
+
+
 @pytest.fixture
 def lmdb_version_store_arrow(lmdb_version_store_v1) -> NativeVersionStore:
     store = lmdb_version_store_v1
@@ -1610,6 +1617,13 @@ def clear_query_stats():
     yield
     query_stats.disable()
     query_stats.reset_stats()
+
+
+@pytest.fixture(params=[1, 0])
+def recursive_normalizer_meta_structure_v2(request):
+    set_config_int("VersionStore.RecursiveNormalizerMetastructureV2", request.param)
+    yield
+    unset_config_int("VersionStore.RecursiveNormalizerMetastructureV2")
 
 
 # region Pytest special xfail handling
