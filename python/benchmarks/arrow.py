@@ -16,6 +16,7 @@ from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
 
 from benchmarks.common import generate_pseudo_random_dataframe
+from asv_runner.benchmarks.mark import skip_benchmark
 
 
 class ArrowNumeric:
@@ -79,15 +80,19 @@ class ArrowNumeric:
         self.ac.delete_library(self.lib_name_fresh)
         return self.ac.create_library(self.lib_name_fresh)
 
+    @skip_benchmark
     def time_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
+    @skip_benchmark
     def peakmem_write(self, rows, date_range):
         self.fresh_lib.write(f"sym_{rows}", self.table, index_column="ts")
 
+    @skip_benchmark
     def time_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
+    @skip_benchmark
     def peakmem_read(self, rows, date_range):
         self.lib.read(self.symbol_name(rows), date_range=self.date_range)
 
@@ -161,16 +166,19 @@ class ArrowStrings:
         self.ac.delete_library(self.lib_name_fresh)
         return self.ac.create_library(self.lib_name_fresh)
 
+    @skip_benchmark
     def time_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
 
+    @skip_benchmark
     def peakmem_write(self, rows, date_range, unique_string_count, arrow_string_format):
         # No point in running with all read time options
         if date_range is None and arrow_string_format == ArrowOutputStringFormat.CATEGORICAL:
             self.fresh_lib.write(self.symbol_name(rows, unique_string_count), self.table, index_column="ts")
 
+    @skip_benchmark
     def time_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self.lib.read(
             self.symbol_name(rows, unique_string_count),
@@ -178,6 +186,7 @@ class ArrowStrings:
             arrow_string_format_default=arrow_string_format,
         )
 
+    @skip_benchmark
     def peakmem_read(self, rows, date_range, unique_string_count, arrow_string_format):
         self.lib.read(
             self.symbol_name(rows, unique_string_count),

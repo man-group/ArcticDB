@@ -12,6 +12,7 @@ from arcticdb import Arctic, QueryBuilder
 from arcticdb.version_store.library import UpdatePayload, WritePayload, ReadRequest
 from arcticdb.util.test import config_context
 from arcticdb_ext.version_store import DataError
+from asv_runner.benchmarks.mark import skip_benchmark
 
 import pandas as pd
 
@@ -232,6 +233,7 @@ class BatchBasicFunctions:
         assert results[0].version >= 1
         assert results[-1].version >= 1
 
+    @skip_benchmark
     def peakmem_update_batch(self, rows, num_symbols):
         payloads = [UpdatePayload(f"{sym}_sym", self.update_df) for sym in range(num_symbols)]
         results = self.lib.update_batch(payloads)
