@@ -430,8 +430,10 @@ def get_azure_proto(
             azure.prefix = f"{lib_name}{time.time() * 1e9:.0f}"
     else:
         azure.prefix = lib_name
-    azure.ca_cert_path = ca_cert_path if ca_cert_path else ""
-    azure.ca_cert_dir = ca_cert_dir if ca_cert_dir else ""
+    # Always set the values explicitly to ensure they're stored in the config
+    # Convert None to empty string, but preserve non-empty strings
+    azure.ca_cert_path = str(ca_cert_path) if ca_cert_path is not None else ""
+    azure.ca_cert_dir = str(ca_cert_dir) if ca_cert_dir is not None else ""
 
     sid, storage = get_storage_for_lib_name(azure.prefix, env)
     storage.config.Pack(azure, type_url_prefix="cxx.arctic.org")

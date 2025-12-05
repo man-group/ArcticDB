@@ -6,21 +6,22 @@ Use of this software is governed by the Business Source License 1.1 included in 
 As of the Change Date specified in that file, in accordance with the Business Source License, use of this software will be governed by the Apache License, version 2.0.
 """
 
-import re
-import time
-from typing import Optional
-import ssl
 import platform
-
-from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
-from arcticdb.version_store.helper import add_azure_library_to_env
-from arcticdb.config import _DEFAULT_ENV
-from arcticdb.version_store._store import NativeVersionStore
-from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
-from arcticdb_ext.storage import StorageOverride, AzureOverride, CONFIG_LIBRARY_NAME
-from arcticdb.encoding_version import EncodingVersion
+import re
+import ssl
+import time
 from collections import namedtuple
 from dataclasses import dataclass, fields
+from typing import Optional
+
+from arcticc.pb2.storage_pb2 import EnvironmentConfigsMap, LibraryConfig
+from arcticdb.config import _DEFAULT_ENV
+from arcticdb.encoding_version import EncodingVersion
+from arcticdb.exceptions import ArcticException
+from arcticdb.version_store._store import NativeVersionStore
+from arcticdb.version_store.helper import add_azure_library_to_env
+from arcticdb.adapters.arctic_library_adapter import ArcticLibraryAdapter, set_library_options
+from arcticdb_ext.storage import StorageOverride, AzureOverride, CONFIG_LIBRARY_NAME
 
 PARSED_QUERY = namedtuple("PARSED_QUERY", ["region"])
 
@@ -59,13 +60,18 @@ class AzureLibraryAdapter(ArcticLibraryAdapter):
             ]
         )
         self._container = self._query_params.Container
-        if platform.system() != "Linux" and (self._query_params.CA_cert_path or self._query_params.CA_cert_dir):
+
+        # Extract CA certificate settings from parsed query parameters
+        # Ensure values are always strings (not None)
+        self._ca_cert_path = str(self._query_params.CA_cert_path) if self._query_params.CA_cert_path else ""
+        self._ca_cert_dir = str(self._query_params.CA_cert_dir) if self._query_params.CA_cert_dir else ""
+
+        if platform.system() != "Linux" and (self._ca_cert_path or self._ca_cert_dir):
             raise ValueError(
                 "You have provided `ca_cert_path` or `ca_cert_dir` in the URI which is only supported on Linux. "
                 "Remove the setting in the connection URI and use your operating system defaults."
             )
-        self._ca_cert_path = self._query_params.CA_cert_path
-        self._ca_cert_dir = self._query_params.CA_cert_dir
+
         if not self._ca_cert_path and not self._ca_cert_dir and platform.system() == "Linux":
             if ssl.get_default_verify_paths().cafile is not None:
                 self._ca_cert_path = ssl.get_default_verify_paths().cafile

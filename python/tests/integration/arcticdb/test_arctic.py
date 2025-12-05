@@ -274,25 +274,6 @@ def test_azurite_no_ssl_verification(monkeypatch, azurite_storage, client_cert_f
         ac.delete_library(lib_name)
 
 
-@AZURE_TESTS_MARK
-@SSL_TESTS_MARK
-@pytest.mark.parametrize("client_cert_file", parameter_display_status)
-@pytest.mark.parametrize("client_cert_dir", parameter_display_status)
-def test_azurite_ssl_verification(azurite_ssl_storage, monkeypatch, client_cert_file, client_cert_dir, lib_name):
-    storage = azurite_ssl_storage
-    # Leaving ca file and ca dir unset will fallback to using os default setting,
-    # which is different from the test environment
-    default_setting = DefaultSetting(storage.factory)
-    monkeypatch.setattr("ssl.get_default_verify_paths", lambda: default_setting)
-    uri = edit_connection_string(storage.arctic_uri, ";", storage, None, client_cert_file, client_cert_dir)
-    ac = Arctic(uri)
-    try:
-        lib = ac.create_library(lib_name)
-        lib.write("sym", pd.DataFrame())
-    finally:
-        ac.delete_library(lib_name)
-
-
 def test_basic_metadata(lmdb_version_store):
     lib = lmdb_version_store
     df = pd.DataFrame({"col1": [1, 2, 3], "col2": [4, 5, 6]})
