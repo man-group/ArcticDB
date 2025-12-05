@@ -341,6 +341,10 @@ jobs:
           cmake --build --preset windows-cl-conda-release --parallel --target test_unit_arcticdb
           cd out/windows-cl-conda-release-build/
           CTEST_OUTPUT_ON_FAILURE=1 cmake --build . --target test
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Build Python target for conda
         shell: cmd /C call {0}
