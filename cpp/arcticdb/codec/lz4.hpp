@@ -74,7 +74,7 @@ struct Lz4Decoder {
         const int decompressed_size = LZ4_decompress_safe(
                 reinterpret_cast<const char*>(in), reinterpret_cast<char*>(t_out), int(in_bytes), int(out_bytes)
         );
-        util::check_arg(
+        codec::check<ErrorCode::E_DECODE_ERROR>(
                 decompressed_size >= 0,
                 "Error while decoding with lz4 at address {:x} with size {}. Code {}",
                 uintptr_t(in),
@@ -82,7 +82,7 @@ struct Lz4Decoder {
                 decompressed_size
         );
 
-        util::check_arg(
+        codec::check<ErrorCode::E_DECODE_ERROR>(
                 std::size_t(decompressed_size) == out_bytes,
                 "expected out_bytes == lz4 decompressed bytes, actual {} != {}",
                 out_bytes,
