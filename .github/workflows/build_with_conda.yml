@@ -288,3 +288,82 @@ jobs:
           COMMANDLINE: ${{ inputs.run_commandline }}
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
           NODE_OPTIONS: --openssl-legacy-provider
+
+  windows:
+    runs-on: windows-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
+    steps:
+      - uses: actions/checkout@v3.3.0
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.4
+        with:
+          environment-file: environment-dev.yml
+          init-shell: bash cmd.exe
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Build ArcticDB C++ target (arcticdb_ext) for conda
+        shell: cmd /C call {0}
+        # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+        # for Ninja to be used as a generator with MSVC.
+        run: |
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
+          cd cpp
+          cmake -DTEST=OFF --preset windows-cl-conda-release
+          cmake --build --preset windows-cl-conda-release --parallel
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
+
+      - name: Build and Run C++ Tests
+        shell: cmd /C call {0}
+        # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+        # for Ninja to be used as a generator with MSVC.
+        run: |
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
+          cd cpp
+          cmake -DTEST=ON --preset windows-cl-conda-release
+          cmake --build --preset windows-cl-conda-release --parallel --target arcticdb_rapidcheck_tests
+          cmake --build --preset windows-cl-conda-release --parallel --target test_unit_arcticdb
+          cd out/windows-cl-conda-release-build/
+          CTEST_OUTPUT_ON_FAILURE=1 cmake --build . --target test
+
+      - name: Build Python target for conda
+        shell: cmd /C call {0}
+        run: |
+          python -m pip install --no-build-isolation --no-deps -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
+
+      - name: Install npm
+        uses: actions/setup-node@v3.3.0
+        with:
+          node-version: '16'
+
+      - name: Install azurite
+        shell: bash -elo pipefail {0}
+        run: |
+          npm install -g azurite
+
+      - name: Run Python Tests
+        shell: bash -elo pipefail {0}
+        run: |
+          cd python
+          export ARCTICDB_RAND_SEED=$RANDOM
+          python -m pytest --timeout=3600
