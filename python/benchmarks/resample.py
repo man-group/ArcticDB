@@ -16,6 +16,7 @@ from arcticdb import Arctic
 from arcticdb import QueryBuilder
 from arcticdb.util.logger import get_logger
 from arcticdb.util.test import random_strings_of_length
+from asv_runner.benchmarks.mark import skip_benchmark
 
 
 class Resample:
@@ -89,6 +90,7 @@ class Resample:
         self.date_range = (pd.Timestamp(0), pd.Timestamp(num_rows, unit="us"))
         self.query_builder = QueryBuilder().resample(f"{downsampling_factor}us").agg({"col": aggregation})
 
+    @skip_benchmark
     def time_resample(self, num_rows, downsampling_factor, col_type, aggregation):
         if (
             col_type == "datetime"
@@ -102,6 +104,7 @@ class Resample:
         else:
             self.lib.read(col_type, date_range=self.date_range, query_builder=self.query_builder)
 
+    @skip_benchmark
     def peakmem_resample(self, num_rows, downsampling_factor, col_type, aggregation):
         if (
             col_type == "datetime"
