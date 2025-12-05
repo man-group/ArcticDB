@@ -10,6 +10,9 @@
 #include <arcticdb/util/test/rapidcheck.hpp>
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
 #include <arcticdb/util/decimal.hpp>
+/* Skipped until arrow dependency in vcpkg can be re-added
+ * Broken by https://github.com/microsoft/vcpkg/pull/44653
+ * We don't seem to be the only people affected https://github.com/microsoft/vcpkg/issues/48496
 #include <arrow/util/decimal.h>
 
 RC_GTEST_PROP(Decimal, BinaryCompatibleWithArrow, ()) {
@@ -27,3 +30,4 @@ RC_GTEST_PROP(Decimal, BinaryCompatibleWithArrow, ()) {
             ) == 0
     );
 }
+ */
