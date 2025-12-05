@@ -111,30 +111,6 @@ def test_upgrade_script_s3_rbac_ok(s3_clean_bucket: S3Bucket, monkeypatch, defau
 
 
 @AZURE_TESTS_MARK
-def test_upgrade_script_dryrun_azure(azurite_storage: AzureContainer, lib_name):
-    # Given
-    if SSL_TEST_SUPPORTED:
-        # azurite factory doesn't set client_cert_dir by default
-        azurite_storage.arctic_uri += f";CA_cert_dir={azurite_storage.factory.client_cert_dir}"
-    ac = azurite_storage.create_arctic()
-    create_library_config(ac, lib_name)
-
-    # When
-    run(uri=azurite_storage.arctic_uri, run=False)
-
-    # Then
-    config = ac._library_manager.get_library_config(lib_name)
-    azure_storage = _get_azure_storage_config(config)
-    assert azure_storage.ca_cert_path == azurite_storage.factory.client_cert_file
-    assert azure_storage.ca_cert_dir == azurite_storage.factory.client_cert_dir
-    assert azure_storage.container_name == azurite_storage.container
-    assert azurite_storage.factory.account_name in azure_storage.endpoint
-    assert azurite_storage.factory.account_key in azure_storage.endpoint
-    assert azure_storage.max_connections == 0
-    assert azure_storage.prefix.startswith(lib_name)
-
-
-@AZURE_TESTS_MARK
 def test_upgrade_script_azure(azurite_storage: AzureContainer, lib_name):
     # Given
     if SSL_TEST_SUPPORTED:

@@ -6,11 +6,52 @@
  * will be governed by the Apache License, version 2.0.
  */
 
+/**
+ * Azure Transport Selection:
+ *
+ * This file implements platform-specific HTTP transport selection for Azure storage operations:
+ *
+ * - On Windows (_WIN32):
+ *   - Always uses WinHTTP (native Windows HTTP client)
+ *   - CA certificate settings are not supported as WinHTTP uses Windows certificate store
+ *   - Custom CA certificates must be installed via Windows Certificate Manager (certmgr.msc)
+ *   - This provides better performance and integration with Windows security
+ *
+ * - On macOS (__APPLE__):
+ *   - Always uses libcurl as the HTTP transport
+ *   - CA certificate settings are not supported
+ *   - Custom CA certificates must be installed via Keychain Access
+ *
+ * - On Linux:
+ *   - Always uses libcurl as the HTTP transport
+ *   - Supports custom CA certificate configuration via ca_cert_path and ca_cert_dir
+ *
+ * The selection is done at compile time via preprocessor directives to ensure
+ * optimal performance and minimal runtime overhead. The appropriate transport
+ * header is included based on the platform, and the transport is configured
+ * in get_client_options().
+ *
+ * Note, for conda-forge's builds, the distribution of `libcurl` uses CA certificates
+ * provided by the `ca-certificates` package originated from the certifi python package.
+ *
+ * See:
+ * https://github.com/conda-forge/ca-certificates-feedstock/blob/d13d63b3192ec707b514637930fd215d0776c604/recipe/meta.yaml#L8
+ * https://github.com/conda-forge/curl-feedstock/blob/c6144ac9941ab00393a5a76954ddc19fab8005d1/recipe/build.sh#L19
+ */
+
+#if defined(_WIN32)
+#include <azure/core/http/win_http_transport.hpp>
+#else
 #include <azure/core/http/curl_transport.hpp>
+#endif
+
+#include <azure/core.hpp>
+#include <azure/storage/blobs.hpp>
 
 #include <arcticdb/storage/azure/azure_client_impl.hpp>
 #include <arcticdb/storage/azure/azure_client_interface.hpp>
 #include <arcticdb/storage/object_store_utils.hpp>
+#include <arcticdb/util/error_code.hpp>
 
 namespace arcticdb::storage {
 using namespace object_store_utils;
@@ -31,18 +72,54 @@ RealAzureClient::RealAzureClient(const Config& conf) :
 
 Azure::Storage::Blobs::BlobClientOptions RealAzureClient::get_client_options(const Config& conf) {
     BlobClientOptions client_options;
-    if (!conf.ca_cert_path().empty() ||
-        !conf.ca_cert_dir().empty()) { // WARNING: Setting ca_cert_path or ca_cert_dir will force Azure sdk uses libcurl
-                                       // as backend support, instead of winhttp
-        Azure::Core::Http::CurlTransportOptions curl_transport_options;
-        if (!conf.ca_cert_path().empty()) {
-            curl_transport_options.CAInfo = conf.ca_cert_path();
-        }
-        if (!conf.ca_cert_dir().empty()) {
-            curl_transport_options.CAPath = conf.ca_cert_dir();
-        }
-        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+
+#if defined(_WIN32)
+    // On Windows, always use WinHTTP
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using WinHTTP transport");
+    if (conf.ca_cert_path().empty() && conf.ca_cert_dir().empty()) {
+        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::WinHttpTransport>();
+    } else {
+        throw ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "CA certificate settings are not supported on Windows. "
+                "Please use Windows Certificate Manager (certmgr.msc) to manage certificates:\n"
+                "1. Open Certificate Manager (certmgr.msc)\n"
+                "2. Navigate to 'Trusted Root Certification Authorities'\n"
+                "3. Right-click and select 'All Tasks > Import'\n"
+                "4. Select your certificate file and follow the import wizard\n"
+                "5. Ensure 'Place all certificates in the following store' is selected\n"
+                "6. Complete the import by clicking 'Next' and 'Finish'"
+        );
     }
+#elif defined(__APPLE__)
+    // On macOS, always use libcurl but ignore CA cert paths
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using libcurl transport");
+    if (conf.ca_cert_path().empty() && conf.ca_cert_dir().empty()) {
+        client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>();
+    } else {
+        throw ArcticSpecificException<ErrorCode::E_INVALID_USER_ARGUMENT>(
+                "CA certificate settings are not supported on macOS. "
+                "Please use Keychain Access to manage certificates:\n"
+                "1. Open Keychain Access (Applications > Utilities > Keychain Access)\n"
+                "2. Select 'System' keychain from the left sidebar\n"
+                "3. Click File > Import Items\n"
+                "4. Select your certificate file\n"
+                "5. Enter your keychain password if prompted\n"
+                "6. The certificate will be added to the System keychain"
+        );
+    }
+#else
+    // On Linux, use libcurl with CA cert configuration
+    ARCTICDB_RUNTIME_DEBUG(log::storage(), "Using libcurl transport");
+    Azure::Core::Http::CurlTransportOptions curl_transport_options;
+    if (!conf.ca_cert_path().empty()) {
+        curl_transport_options.CAInfo = conf.ca_cert_path();
+    }
+    if (!conf.ca_cert_dir().empty()) {
+        curl_transport_options.CAPath = conf.ca_cert_dir();
+    }
+    client_options.Transport.Transport = std::make_shared<Azure::Core::Http::CurlTransport>(curl_transport_options);
+#endif
+
     return client_options;
 }
 
