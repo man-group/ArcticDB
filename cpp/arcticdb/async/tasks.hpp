@@ -422,17 +422,23 @@ struct DecodeSegmentTask : BaseTask {
 
     DecodeSegmentTask() = default;
 
-    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair&& ks) const {
+    std::pair<VariantKey, SegmentInMemory> operator()(storage::KeySegmentPair&& key_segment) const {
         ARCTICDB_SAMPLE(DecodeAtomTask, 0)
 
-        auto key_seg = std::move(ks);
         ARCTICDB_DEBUG(
                 log::storage(),
                 "ReadAndDecodeAtomTask decoding segment with key {}",
-                variant_key_view(key_seg.variant_key())
+                variant_key_view(key_segment.variant_key())
         );
 
-        return {key_seg.variant_key(), decode_segment(*key_seg.segment_ptr())};
+        try {
+            auto decoded_segment = decode_segment(*key_segment.segment_ptr());
+            return {std::move(key_segment).variant_key(), std::move(decoded_segment)};
+        } catch (const std::exception& e) {
+            codec::raise<ErrorCode::E_DECODE_ERROR>(
+                    "DecodeSegmentTask failed for key {}: {}", variant_key_view(key_segment.variant_key()), e.what()
+            );
+        }
     }
 };
 
