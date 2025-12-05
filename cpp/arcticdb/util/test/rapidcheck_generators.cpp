@@ -8,6 +8,9 @@
 
 #include <gtest/gtest.h>
 #include <arcticdb/util/test/rapidcheck_generators.hpp>
+/* Skipped until arrow dependency in vcpkg can be re-added
+ * Broken by https://github.com/microsoft/vcpkg/pull/44653
+ * We don't seem to be the only people affected https://github.com/microsoft/vcpkg/issues/48496
 #include <arrow/util/decimal.h>
 
 rc::Gen<arrow::Decimal128> rc::Arbitrary<arrow::Decimal128>::arbitrary() {
@@ -29,3 +32,4 @@ rc::Gen<std::string> gen_arrow_decimal128_string() {
         });
     });
 }
+ */

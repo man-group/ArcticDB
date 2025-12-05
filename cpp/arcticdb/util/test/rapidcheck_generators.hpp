@@ -232,6 +232,9 @@ inline bool check_test_frame(
     return check_read_frame(data_frame, stream_reader, errors);
 }
 
+/* Skipped until arrow dependency in vcpkg can be re-added
+ * Broken by https://github.com/microsoft/vcpkg/pull/44653
+ * We don't seem to be the only people affected https://github.com/microsoft/vcpkg/issues/48496
 namespace arrow {
 class Decimal128;
 }
@@ -242,5 +245,6 @@ struct Arbitrary<arrow::Decimal128> {
     static Gen<arrow::Decimal128> arbitrary();
 };
 } // namespace rc
+ */
 
-rc::Gen<std::string> gen_arrow_decimal128_string();
+// rc::Gen<std::string> gen_arrow_decimal128_string();
