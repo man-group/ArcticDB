@@ -185,6 +185,14 @@ class Library {
         auto lib_name = storages_->name();
         return lib_name;
     }
+    
+    [[nodiscard]] const auto& get_storage_configs() const {
+        return storages_->get_storage_configs();
+    }
+    
+    [[nodiscard]] const NativeVariantStorage& get_native_config() const {
+        return storages_->get_native_config();
+    }
 
   private:
     LibraryPath library_path_;

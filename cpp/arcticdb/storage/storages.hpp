@@ -38,8 +38,15 @@ class Storages {
     Storages& operator=(Storages&&) = delete;
 
     using StorageVector = std::vector<std::shared_ptr<Storage>>;
+    using StorageConfigMap = std::map<std::string, arcticdb::proto::storage::VariantStorage>;
 
     Storages(StorageVector&& storages, OpenMode mode) : storages_(std::move(storages)), mode_(mode) {}
+    
+    Storages(StorageVector&& storages, OpenMode mode, StorageConfigMap storage_configs) 
+        : storages_(std::move(storages)), mode_(mode), storage_configs_(std::move(storage_configs)) {}
+    
+    Storages(StorageVector&& storages, OpenMode mode, StorageConfigMap storage_configs, NativeVariantStorage native_cfg) 
+        : storages_(std::move(storages)), mode_(mode), storage_configs_(std::move(storage_configs)), native_cfg_(std::move(native_cfg)) {}
 
     void write(KeySegmentPair& key_seg) {
         ARCTICDB_SAMPLE(StoragesWrite, 0)
@@ -238,6 +245,10 @@ class Storages {
         }
     }
     [[nodiscard]] std::string name() const { return primary().name(); }
+    
+    [[nodiscard]] const StorageConfigMap& get_storage_configs() const { return storage_configs_; }
+    
+    [[nodiscard]] const NativeVariantStorage& get_native_config() const { return native_cfg_; }
 
   private:
     Storage& primary() {
@@ -252,6 +263,9 @@ class Storages {
 
     std::vector<std::shared_ptr<Storage>> storages_;
     OpenMode mode_;
+    // Depended by other repo to reconstruct library
+    StorageConfigMap storage_configs_;
+    NativeVariantStorage native_cfg_;
 };
 
 inline std::shared_ptr<Storages> create_storages(
@@ -260,7 +274,9 @@ inline std::shared_ptr<Storages> create_storages(
         const NativeVariantStorage& native_storage_config
 ) {
     Storages::StorageVector storages;
+    Storages::StorageConfigMap storage_configs_map;
     for (const auto& [storage_id, storage_config] : storage_configs) {
+        storage_configs_map[storage_id] = storage_config;
         util::variant_match(
                 native_storage_config.variant(),
                 [&storage_config, &storages, &library_path, mode](const s3::S3Settings& settings) {
@@ -288,7 +304,7 @@ inline std::shared_ptr<Storages> create_storages(
                 }
         );
     }
-    return std::make_shared<Storages>(std::move(storages), mode);
+    return std::make_shared<Storages>(std::move(storages), mode, std::move(storage_configs_map), native_storage_config);
 }
 
 inline std::shared_ptr<Storages> create_storages(

@@ -303,7 +303,13 @@ void register_metrics(py::module&& m) {
                     const std::string&,
                     const std::string&,
                     const std::string&,
-                    const arcticdb::MetricsConfig::Model>());
+                    const arcticdb::MetricsConfig::Model>())
+            .def_property_readonly("host", [](const arcticdb::MetricsConfig& cfg) { return cfg.host; })
+            .def_property_readonly("port", [](const arcticdb::MetricsConfig& cfg) { return cfg.port; })
+            .def_property_readonly("job_name", [](const arcticdb::MetricsConfig& cfg) { return cfg.job_name; })
+            .def_property_readonly("instance", [](const arcticdb::MetricsConfig& cfg) { return cfg.instance; })
+            .def_property_readonly("prometheus_env", [](const arcticdb::MetricsConfig& cfg) { return cfg.prometheus_env; })
+            .def_property_readonly("model", [](const arcticdb::MetricsConfig& cfg) { return cfg.model_; });
 
     py::enum_<arcticdb::MetricsConfig::Model>(prometheus, "MetricsConfigModel")
             .value("NO_INIT", arcticdb::MetricsConfig::Model::NO_INIT)

@@ -270,7 +270,15 @@ void register_bindings(py::module& storage, py::exception<arcticdb::ArcticExcept
                         [](const arcticdb::proto::storage::VersionStoreConfig& cfg) { return pb_to_python(cfg); },
                         [](const std::monostate&) -> py::object { return py::none{}; }
                 );
-            });
+            })
+            .def("get_storage_configs", [](const Library& library) {
+                py::dict result;
+                for (const auto& [key, value] : library.get_storage_configs()) {
+                    result[py::str(key)] = pb_to_python(value);
+                }
+                return result;
+            })
+            .def("get_native_config", &Library::get_native_config);
 
     py::class_<S3Override>(storage, "S3Override")
             .def(py::init<>())
