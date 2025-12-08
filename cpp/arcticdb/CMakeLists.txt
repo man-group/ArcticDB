@@ -484,15 +484,49 @@ set(arcticdb_srcs
         processing/operation_dispatch_unary.cpp
         processing/operation_dispatch_binary.cpp
         processing/operation_dispatch_binary_eq.cpp
+        processing/operation_dispatch_binary_eq_col_col.cpp
+        processing/operation_dispatch_binary_eq_col_val.cpp
+        processing/operation_dispatch_binary_eq_val_col.cpp
         processing/operation_dispatch_binary_neq.cpp
-        processing/operation_dispatch_binary_gt.cpp
-        processing/operation_dispatch_binary_gte.cpp
+        processing/operation_dispatch_binary_neq_col_col.cpp
+        processing/operation_dispatch_binary_neq_col_val.cpp
+        processing/operation_dispatch_binary_neq_val_col.cpp
         processing/operation_dispatch_binary_lt.cpp
+        processing/operation_dispatch_binary_lt_col_col.cpp
+        processing/operation_dispatch_binary_lt_col_val.cpp
+        processing/operation_dispatch_binary_lt_val_col.cpp
         processing/operation_dispatch_binary_lte.cpp
+        processing/operation_dispatch_binary_lte_col_col.cpp
+        processing/operation_dispatch_binary_lte_col_val.cpp
+        processing/operation_dispatch_binary_lte_val_col.cpp
+        processing/operation_dispatch_binary_gt.cpp
+        processing/operation_dispatch_binary_gt_col_col.cpp
+        processing/operation_dispatch_binary_gt_col_val.cpp
+        processing/operation_dispatch_binary_gt_val_col.cpp
+        processing/operation_dispatch_binary_gte.cpp
+        processing/operation_dispatch_binary_gte_col_col.cpp
+        processing/operation_dispatch_binary_gte_col_val.cpp
+        processing/operation_dispatch_binary_gte_val_col.cpp
         processing/operation_dispatch_binary_operator_plus.cpp
+        processing/operation_dispatch_binary_operator_plus_col_col.cpp
+        processing/operation_dispatch_binary_operator_plus_col_val.cpp
+        processing/operation_dispatch_binary_operator_plus_val_col.cpp
+        processing/operation_dispatch_binary_operator_plus_val_val.cpp
         processing/operation_dispatch_binary_operator_minus.cpp
+        processing/operation_dispatch_binary_operator_minus_col_col.cpp
+        processing/operation_dispatch_binary_operator_minus_col_val.cpp
+        processing/operation_dispatch_binary_operator_minus_val_col.cpp
+        processing/operation_dispatch_binary_operator_minus_val_val.cpp
         processing/operation_dispatch_binary_operator_times.cpp
+        processing/operation_dispatch_binary_operator_times_col_col.cpp
+        processing/operation_dispatch_binary_operator_times_col_val.cpp
+        processing/operation_dispatch_binary_operator_times_val_col.cpp
+        processing/operation_dispatch_binary_operator_times_val_val.cpp
         processing/operation_dispatch_binary_operator_divide.cpp
+        processing/operation_dispatch_binary_operator_divide_col_col.cpp
+        processing/operation_dispatch_binary_operator_divide_col_val.cpp
+        processing/operation_dispatch_binary_operator_divide_val_col.cpp
+        processing/operation_dispatch_binary_operator_divide_val_val.cpp
         processing/operation_dispatch_ternary.cpp
         processing/query_planner.cpp
         processing/sorted_aggregation.cpp

@@ -618,28 +618,169 @@ VariantData visit_binary_operator(const VariantData& left, const VariantData& ri
 
 VariantData dispatch_binary(const VariantData& left, const VariantData& right, OperationType operation);
 
-// instantiated in operation_dispatch_binary_operator.cpp to reduce compilation memory use
+// Explicit instantiations of underlying binary_operator functions, split by overload type
+// to reduce compilation memory use and enable parallel compilation
+
+// PlusOperator instantiations
+extern template VariantData binary_operator<PlusOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, PlusOperator&&);
+extern template VariantData binary_operator<PlusOperator>(
+        const ColumnWithStrings&, const Value&, PlusOperator&&);
+extern template VariantData binary_operator<PlusOperator, true>(
+        const ColumnWithStrings&, const Value&, PlusOperator&&);
+extern template VariantData binary_operator<PlusOperator>(
+        const Value&, const Value&, PlusOperator&&);
+
+// MinusOperator instantiations
+extern template VariantData binary_operator<MinusOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, MinusOperator&&);
+extern template VariantData binary_operator<MinusOperator>(
+        const ColumnWithStrings&, const Value&, MinusOperator&&);
+extern template VariantData binary_operator<MinusOperator, true>(
+        const ColumnWithStrings&, const Value&, MinusOperator&&);
+extern template VariantData binary_operator<MinusOperator>(
+        const Value&, const Value&, MinusOperator&&);
+
+// TimesOperator instantiations
+extern template VariantData binary_operator<TimesOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, TimesOperator&&);
+extern template VariantData binary_operator<TimesOperator>(
+        const ColumnWithStrings&, const Value&, TimesOperator&&);
+extern template VariantData binary_operator<TimesOperator, true>(
+        const ColumnWithStrings&, const Value&, TimesOperator&&);
+extern template VariantData binary_operator<TimesOperator>(
+        const Value&, const Value&, TimesOperator&&);
+
+// DivideOperator instantiations
+extern template VariantData binary_operator<DivideOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, DivideOperator&&);
+extern template VariantData binary_operator<DivideOperator>(
+        const ColumnWithStrings&, const Value&, DivideOperator&&);
+extern template VariantData binary_operator<DivideOperator, true>(
+        const ColumnWithStrings&, const Value&, DivideOperator&&);
+extern template VariantData binary_operator<DivideOperator>(
+        const Value&, const Value&, DivideOperator&&);
+
+// Explicit instantiations of underlying binary_comparator functions, split by overload type
+// to reduce compilation memory use and enable parallel compilation
+
+// EqualsOperator instantiations
+extern template VariantData binary_comparator<EqualsOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, EqualsOperator&&);
+extern template VariantData binary_comparator<EqualsOperator>(
+        const ColumnWithStrings&, const Value&, EqualsOperator&&);
+extern template VariantData binary_comparator<EqualsOperator, true>(
+        const ColumnWithStrings&, const Value&, EqualsOperator&&);
+
+// NotEqualsOperator instantiations
+extern template VariantData binary_comparator<NotEqualsOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, NotEqualsOperator&&);
+extern template VariantData binary_comparator<NotEqualsOperator>(
+        const ColumnWithStrings&, const Value&, NotEqualsOperator&&);
+extern template VariantData binary_comparator<NotEqualsOperator, true>(
+        const ColumnWithStrings&, const Value&, NotEqualsOperator&&);
+
+// LessThanOperator instantiations
+extern template VariantData binary_comparator<LessThanOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, LessThanOperator&&);
+extern template VariantData binary_comparator<LessThanOperator>(
+        const ColumnWithStrings&, const Value&, LessThanOperator&&);
+extern template VariantData binary_comparator<LessThanOperator, true>(
+        const ColumnWithStrings&, const Value&, LessThanOperator&&);
+
+// LessThanEqualsOperator instantiations
+extern template VariantData binary_comparator<LessThanEqualsOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, LessThanEqualsOperator&&);
+extern template VariantData binary_comparator<LessThanEqualsOperator>(
+        const ColumnWithStrings&, const Value&, LessThanEqualsOperator&&);
+extern template VariantData binary_comparator<LessThanEqualsOperator, true>(
+        const ColumnWithStrings&, const Value&, LessThanEqualsOperator&&);
+
+// GreaterThanOperator instantiations
+extern template VariantData binary_comparator<GreaterThanOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, GreaterThanOperator&&);
+extern template VariantData binary_comparator<GreaterThanOperator>(
+        const ColumnWithStrings&, const Value&, GreaterThanOperator&&);
+extern template VariantData binary_comparator<GreaterThanOperator, true>(
+        const ColumnWithStrings&, const Value&, GreaterThanOperator&&);
+
+// GreaterThanEqualsOperator instantiations
+extern template VariantData binary_comparator<GreaterThanEqualsOperator>(
+        const ColumnWithStrings&, const ColumnWithStrings&, GreaterThanEqualsOperator&&);
+extern template VariantData binary_comparator<GreaterThanEqualsOperator>(
+        const ColumnWithStrings&, const Value&, GreaterThanEqualsOperator&&);
+extern template VariantData binary_comparator<GreaterThanEqualsOperator, true>(
+        const ColumnWithStrings&, const Value&, GreaterThanEqualsOperator&&);
+
+// instantiated in separate files to reduce compilation memory use and enable parallel compilation
 extern template VariantData visit_binary_operator<
         arcticdb::PlusOperator>(const VariantData&, const VariantData&, PlusOperator&&);
+// instantiated in operation_dispatch_binary_operator_plus.cpp
+// underlying binary_operator instantiations split across:
+//   operation_dispatch_binary_operator_plus_col_col.cpp, operation_dispatch_binary_operator_plus_col_val.cpp,
+//   operation_dispatch_binary_operator_plus_val_col.cpp, operation_dispatch_binary_operator_plus_val_val.cpp
+
 extern template VariantData visit_binary_operator<
         arcticdb::MinusOperator>(const VariantData&, const VariantData&, MinusOperator&&);
+// instantiated in operation_dispatch_binary_operator_minus.cpp
+// underlying binary_operator instantiations split across:
+//   operation_dispatch_binary_operator_minus_col_col.cpp, operation_dispatch_binary_operator_minus_col_val.cpp,
+//   operation_dispatch_binary_operator_minus_val_col.cpp, operation_dispatch_binary_operator_minus_val_val.cpp
+
 extern template VariantData visit_binary_operator<
         arcticdb::TimesOperator>(const VariantData&, const VariantData&, TimesOperator&&);
+// instantiated in operation_dispatch_binary_operator_times.cpp
+// underlying binary_operator instantiations split across:
+//   operation_dispatch_binary_operator_times_col_col.cpp, operation_dispatch_binary_operator_times_col_val.cpp,
+//   operation_dispatch_binary_operator_times_val_col.cpp, operation_dispatch_binary_operator_times_val_val.cpp
+
 extern template VariantData visit_binary_operator<
         arcticdb::DivideOperator>(const VariantData&, const VariantData&, DivideOperator&&);
+// instantiated in operation_dispatch_binary_operator_divide.cpp
+// underlying binary_operator instantiations split across:
+//   operation_dispatch_binary_operator_divide_col_col.cpp, operation_dispatch_binary_operator_divide_col_val.cpp,
+//   operation_dispatch_binary_operator_divide_val_col.cpp, operation_dispatch_binary_operator_divide_val_val.cpp
 
-// instantiated in operation_dispatch_binary_comparator.cpp to reduce compilation memory use
 extern template VariantData visit_binary_comparator<
         EqualsOperator>(const VariantData&, const VariantData&, EqualsOperator&&);
+// instantiated in operation_dispatch_binary_eq.cpp
+// underlying binary_comparator instantiations split across:
+//   operation_dispatch_binary_eq_col_col.cpp, operation_dispatch_binary_eq_col_val.cpp,
+//   operation_dispatch_binary_eq_val_col.cpp
+
 extern template VariantData visit_binary_comparator<
         NotEqualsOperator>(const VariantData&, const VariantData&, NotEqualsOperator&&);
+// instantiated in operation_dispatch_binary_neq.cpp
+// underlying binary_comparator instantiations split across:
+//   operation_dispatch_binary_neq_col_col.cpp, operation_dispatch_binary_neq_col_val.cpp,
+//   operation_dispatch_binary_neq_val_col.cpp
+
 extern template VariantData visit_binary_comparator<
         LessThanOperator>(const VariantData&, const VariantData&, LessThanOperator&&);
+// instantiated in operation_dispatch_binary_lt.cpp
+// underlying binary_comparator instantiations split across:
+//   operation_dispatch_binary_lt_col_col.cpp, operation_dispatch_binary_lt_col_val.cpp,
+//   operation_dispatch_binary_lt_val_col.cpp
+
 extern template VariantData visit_binary_comparator<
         LessThanEqualsOperator>(const VariantData&, const VariantData&, LessThanEqualsOperator&&);
+// instantiated in operation_dispatch_binary_lte.cpp
+// underlying binary_comparator instantiations split across:
+//   operation_dispatch_binary_lte_col_col.cpp, operation_dispatch_binary_lte_col_val.cpp,
+//   operation_dispatch_binary_lte_val_col.cpp
+
 extern template VariantData visit_binary_comparator<
         GreaterThanOperator>(const VariantData&, const VariantData&, GreaterThanOperator&&);
+// instantiated in operation_dispatch_binary_gt.cpp
+// underlying binary_comparator instantiations split across:
+//   operation_dispatch_binary_gt_col_col.cpp, operation_dispatch_binary_gt_col_val.cpp,
+//   operation_dispatch_binary_gt_val_col.cpp
+
 extern template VariantData visit_binary_comparator<
         GreaterThanEqualsOperator>(const VariantData&, const VariantData&, GreaterThanEqualsOperator&&);
+// instantiated in operation_dispatch_binary_gte.cpp
+// underlying binary_comparator instantiations split across:
+//   operation_dispatch_binary_gte_col_col.cpp, operation_dispatch_binary_gte_col_val.cpp,
+//   operation_dispatch_binary_gte_val_col.cpp
 
 } // namespace arcticdb
