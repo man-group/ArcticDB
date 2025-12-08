@@ -338,8 +338,9 @@ jobs:
           cd cpp
           cmake -DTEST=ON --preset windows-cl-conda-release
           cd out/windows-cl-conda-release-build/
-          CTEST_OUTPUT_ON_FAILURE=1 cmake --build . --target test
+          cmake --build . --target test
         env:
+          CTEST_OUTPUT_ON_FAILURE: 1
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
