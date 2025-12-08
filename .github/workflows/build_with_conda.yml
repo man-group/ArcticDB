@@ -174,7 +174,7 @@ jobs:
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -v tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
@@ -318,19 +318,23 @@ jobs:
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: cmd /C call {0}
         run: |
+          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+          REM for Ninja to be used as a generator with MSVC.
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
           REM Protocol buffers compilation require not using build isolation.
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Build and Run C++ Tests
         shell: cmd /C call {0}
         if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
-        # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
-        # for Ninja to be used as a generator with MSVC.
-        # Build both test targets in a single command to reuse artifacts from previous step
         run: |
+          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+          REM for Ninja to be used as a generator with MSVC.
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp/out/windows-cl-conda-release-build/
@@ -386,7 +390,7 @@ jobs:
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -v tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
