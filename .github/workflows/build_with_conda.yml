@@ -1,4 +1,6 @@
 name: Build with conda
+permissions:
+  contents: read
 on:
   push:
     branches:
