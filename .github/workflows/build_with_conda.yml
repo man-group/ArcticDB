@@ -332,13 +332,11 @@ jobs:
         shell: cmd /C call {0}
         # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
         # for Ninja to be used as a generator with MSVC.
-        # Build rapidcheck library first (if not already built), then test targets
         # Build both test targets in a single command to reuse artifacts from previous step
         run: |
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp/out/windows-cl-conda-release-build/
-          cmake --build . --target rapidcheck rapidcheck_gtest --parallel || echo "rapidcheck targets may not exist, continuing..."
           cmake --build . --target arcticdb_rapidcheck_tests test_unit_arcticdb --parallel
           ctest --output-on-failure
         env:
