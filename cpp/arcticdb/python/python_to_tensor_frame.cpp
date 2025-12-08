@@ -110,13 +110,10 @@ struct PyArrayDescriptor {
         // See: https://github.com/man-group/ArcticDB/pull/1049
         val_type_ = size_ == 0 && empty_types ? ValueType::EMPTY : get_value_type(kind_);
         val_bytes_ = static_cast<uint8_t>(elsize_);
-        element_count_ =
-                ndim_ == 1 ? int64_t(arr_->dimensions[0]) : int64_t(arr_->dimensions[0]) * int64_t(arr_->dimensions[1]);
         c_style_ = arr_->strides[0] == val_bytes_;
     }
     pybind11::detail::PyArray_Proxy* arr_;
     int64_t size_;
-    int64_t element_count_;
     int elsize_;
     int ndim_;
     char kind_;
@@ -133,7 +130,7 @@ static std::string column_info(const PyArrayDescriptor& desc) {
             desc.val_type_,
             desc.elsize_,
             desc.ndim_,
-            desc.element_count_,
+            desc.size_,
             desc.arr_->strides[0]
     );
 }
@@ -176,7 +173,7 @@ std::variant<StringEncodingError, PyStringWrapper> py_unicode_to_buffer(
     }
 }
 
-NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::string_view> column_name) {
+NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::string_view>) {
     PyArrayDescriptor desc(ptr, empty_types);
     if (is_empty_type(desc.val_type_)) {
         desc.val_bytes_ = 8;
@@ -185,7 +182,7 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
         // wide type always is 64bits
         desc.val_bytes_ = 8;
 
-        if (!is_fixed_string_type(desc.val_type_) && desc.element_count_ > 0) {
+        if (!is_fixed_string_type(desc.val_type_) && desc.size_ > 0) {
             auto obj = reinterpret_cast<PyObject**>(desc.arr_->data);
             bool empty_string_placeholder = false;
             PyObject* sample = *obj;
@@ -201,24 +198,14 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
             // we're not expected to enter that branch.
             if (is_py_none(sample) || is_py_nan(sample)) {
                 empty_string_placeholder = true;
-                user_input::check<ErrorCode::E_INVALID_USER_ARGUMENT>(
-                        desc.c_style_,
-                        "Non contiguous column \"{}\" with first element as {} not supported yet. Are you passing "
-                        "row-major (Fortran styled data)? Column info: {}",
-                        column_name.value_or("<unknown>"),
-                        is_py_none(sample) ? "None" : "NaN",
-                        column_info(desc)
-                );
-                const auto* end = obj + desc.size_;
-                while (current_object < end) {
+                for (ssize_t i = 0; i < desc.size_; ++i) {
+                    current_object = reinterpret_cast<PyObject**>(desc.arr_->data + i * desc.arr_->strides[0]);
                     if (!(is_py_nan(*current_object) || is_py_none(*current_object))) {
                         empty_string_placeholder = false;
+                        sample = *current_object;
                         break;
                     }
-                    ++current_object;
                 }
-                if (current_object != end)
-                    sample = *current_object;
             }
             // Column full of NaN values is interpreted differently based on the kind. If kind is object "O" the column
             // is assigned a string type if kind is float "f" the column is assigned a float type. This is done in
@@ -235,7 +222,7 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
                         "Array types are not supported at the moment"
                 );
                 std::tie(desc.val_type_, desc.val_bytes_, desc.ndim_) =
-                        determine_python_array_type(current_object, current_object + desc.element_count_);
+                        determine_python_array_type(current_object, current_object + desc.size_);
             } else {
                 std::tie(desc.val_type_, desc.val_bytes_, desc.ndim_) = determine_python_object_type(sample);
             }
@@ -246,7 +233,7 @@ NativeTensor obj_to_tensor(PyObject* ptr, bool empty_types, std::optional<std::s
     // and we can't use `val_bytes` to get this information since some dtype have another `elsize` than 8.
     const SizeBits size_bits = is_empty_type(desc.val_type_) ? SizeBits::S64 : get_size_bits(desc.val_bytes_);
     const auto dt = combine_data_type(desc.val_type_, size_bits);
-    const int64_t nbytes = desc.element_count_ * desc.elsize_;
+    const int64_t nbytes = desc.size_ * desc.elsize_;
     const void* data = nbytes ? desc.arr_->data : nullptr;
     const std::array<stride_t, 2> strides = {desc.arr_->strides[0], desc.arr_->nd > 1 ? desc.arr_->strides[1] : 0};
     const std::array<shape_t, 2> shapes = {desc.arr_->dimensions[0], desc.arr_->nd > 1 ? desc.arr_->dimensions[1] : 0};
