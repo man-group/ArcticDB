@@ -540,6 +540,17 @@ bool do_iterate_type_impl(
             continuation_token = output.next_continuation_token;
         } else {
             const auto& error = list_objects_result.get_error();
+            if (error.GetErrorType() == Aws::S3::S3Errors::INVALID_REQUEST && !path_info.key_prefix_.ends_with('/')) {
+                // S3 express only supports ListObjectsV2 requests ending in / characters
+                const IterateTypePredicate func = [&v = visitor, prefix = prefix](VariantKey&& k) {
+                    if (prefix.empty() || variant_key_view(k).find(prefix) != std::string::npos) {
+                        return v(std::move(k));
+                    } else {
+                        return false;
+                    }
+                };
+                return do_iterate_type_impl(key_type, func, root_folder, bucket_name, s3_client, bucketizer, prefix_handler);
+            }
             log::storage().warn(
                     "Failed to iterate key type with key '{}' {}: {}",
                     key_type,
