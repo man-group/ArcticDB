@@ -313,20 +313,14 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
 
-      - name: Build ArcticDB C++ target (arcticdb_ext) for conda
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: cmd /C call {0}
-        # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
-        # for Ninja to be used as a generator with MSVC.
         run: |
-          set CMAKE_GENERATOR_PLATFORM=
-          set CMAKE_GENERATOR_TOOLSET=
-          cd cpp
-          cmake -DTEST=ON --preset windows-cl-conda-release
-          cmake --build --preset windows-cl-conda-release --parallel
+          REM Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Build and Run C++ Tests
         shell: cmd /C call {0}
@@ -346,15 +340,6 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
-      - name: Build Python target for conda
-        shell: cmd /C call {0}
-        run: |
-          python -m pip install --no-build-isolation --no-deps -v -e .
-        env:
-          ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
-
       - name: Install npm
         uses: actions/setup-node@v3.3.0
         with:
@@ -365,9 +350,44 @@ jobs:
         run: |
           npm install -g azurite
 
-      - name: Run Python Tests
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
+          persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
+
+      - name: Set ArcticDB Debug Logging
+        if: ${{ inputs.run_enable_logging }}        
+        uses: ./.github/actions/enable_logging
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.debug_enabled }}        
+
+      - name: Test with pytest
         shell: bash -elo pipefail {0}
         run: |
-          cd python
+          echo "Run commandline: $COMMANDLINE"
+          eval "$COMMANDLINE"
           export ARCTICDB_RAND_SEED=$RANDOM
-          python -m pytest --timeout=3600
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS -v"
+            echo "Run custom pytest command: $command"
+            python -m pip  install --retries 3 --timeout 240 pytest-repeat
+            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
+            eval "$command"
+          else
+            cd python
+            python -m pytest --timeout=3600 -v -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+          fi
+        env:
+          ARCTICDB_USING_CONDA: 1
+          COMMANDLINE: ${{ inputs.run_commandline }}
+          ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          NODE_OPTIONS: --openssl-legacy-provider
