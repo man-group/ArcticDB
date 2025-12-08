@@ -321,24 +321,33 @@ jobs:
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp
-          cmake -DTEST=OFF --preset windows-cl-conda-release
+          cmake -DTEST=ON --preset windows-cl-conda-release
           cmake --build --preset windows-cl-conda-release --parallel
         env:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
-      - name: Build and Run C++ Tests
+      - name: Build C++ Tests
         shell: cmd /C call {0}
         # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
         # for Ninja to be used as a generator with MSVC.
         run: |
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
-          cd cpp
-          cmake -DTEST=ON --preset windows-cl-conda-release
-          cd out/windows-cl-conda-release-build/
-          cmake --build . --target test
+          cd cpp/out/windows-cl-conda-release-build/
+          cmake --build . --target arcticdb_rapidcheck_tests --parallel
+          cmake --build . --target test_unit_arcticdb --parallel
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
+
+      - name: Run C++ Tests
+        shell: cmd /C call {0}
+        run: |
+          cd cpp/out/windows-cl-conda-release-build/
+          ctest --output-on-failure
         env:
           CTEST_OUTPUT_ON_FAILURE: 1
           ARCTICDB_USING_CONDA: 1
