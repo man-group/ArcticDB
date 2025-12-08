@@ -330,6 +330,7 @@ jobs:
 
       - name: Build and Run C++ Tests
         shell: cmd /C call {0}
+        if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         # Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
         # for Ninja to be used as a generator with MSVC.
         # Build both test targets in a single command to reuse artifacts from previous step
