@@ -297,7 +297,7 @@ jobs:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
       SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     steps:
-      - uses: actions/checkout@v3.3.0
+      - uses: actions/checkout@v6.0.1
         # DONT use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
@@ -308,7 +308,7 @@ jobs:
           sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.4
+        uses: mamba-org/setup-micromamba@v2.0.6
         with:
           environment-file: environment-dev.yml
           init-shell: bash cmd.exe
@@ -347,7 +347,7 @@ jobs:
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Install npm
-        uses: actions/setup-node@v3.3.0
+        uses: actions/setup-node@v6.1.0
         with:
           node-version: '16'
 
