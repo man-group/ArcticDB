@@ -1,13 +1,13 @@
 name: Build with conda
 
+permissions:
+  contents: read
+
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 
 concurrency:
   group: ${{github.ref}}-${{github.workflow}}
   cancel-in-progress: true
-
-permissions:
-  contents: read
 
 on:
   push:
@@ -64,17 +64,22 @@ on:
 
 jobs:
 
-  linux:
+  compile_linux:
     if: |
       always() &&
       !cancelled()
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-    services:
-      mongodb:
-        image: mongo:4.4
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
         with:
@@ -82,6 +87,52 @@ jobs:
           large-packages: false # Time-consuming but doesn't save that much space (4GB)
           docker-images: false  # We're using docker images we don't want to clear
 
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          # We should always retry due to unstable nature of connections and environments
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-linux
+          retention-days: 7
+          path: |
+            cpp/out/linux-conda-release-build/
+            python/arcticdb_ext*
+            python/**/*.so
+            python/**/*.pyd
+
+  compile_macos:
+    if: |
+      always() &&
+      !cancelled()
+    runs-on: macos-14
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
       - uses: actions/checkout@v6.0.1
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
@@ -102,7 +153,6 @@ jobs:
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
-        shell: bash -l {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
           # We should always retry due to unstable nature of connections and environments
@@ -111,20 +161,167 @@ jobs:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
 
-      - name: Build C++ Tests
-        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/linux-conda-release-build/
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-macos
+          retention-days: 7
+          path: |
+            cpp/out/macos-conda-release-build/
+            python/arcticdb_ext*
+            python/**/*.so
+            python/**/*.pyd
 
-      - name: Run C++ Tests
-        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
+  cpp_tests_linux:
+    if: |
+      always() &&
+      !cancelled() &&
+      (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
+    needs: [compile_linux]
+    runs-on: ubuntu-22.04
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    defaults:
+      run:
         shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false # Time-consuming but doesn't save that much space (4GB)
+          docker-images: false  # We're using docker images we don't want to clear
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux
+          path: .
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Configure, Build and Run C++ Tests
         run: |
-          cd cpp/out/linux-conda-release-build/
-          CTEST_OUTPUT_ON_FAILURE=1 make test
+          cd cpp
+          cmake --preset linux-conda-release -DTEST=ON
+          cmake --build --preset linux-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
+          cmake --build --preset linux-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
+          ctest --preset linux-conda-release --output-on-failure
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+  cpp_tests_macos:
+    if: |
+      always() &&
+      !cancelled() &&
+      (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
+    needs: [compile_macos]
+    runs-on: macos-14
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos
+          path: .
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Configure, Build and Run C++ Tests
+        run: |
+          cd cpp
+          cmake --preset macos-conda-release -DTEST=ON
+          cmake --build --preset macos-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
+          cmake --build --preset macos-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
+          ctest --preset macos-conda-release --output-on-failure
+        env:
+          ARCTICDB_USING_CONDA: 1
+
+  python_tests_linux:
+    if: |
+      always() &&
+      !cancelled()
+    needs: [compile_linux]
+    runs-on: ubuntu-22.04
+    env:
+      ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    services:
+      mongodb:
+        image: mongo:4.4
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@v1.3.1
+        with:
+          tool-cache: false
+          large-packages: false # Time-consuming but doesn't save that much space (4GB)
+          docker-images: false  # We're using docker images we don't want to clear
+
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-linux
+          path: .
+
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          environment-name: arcticdb
+          init-shell: >-
+            bash
+          cache-environment: true
+          post-cleanup: 'all'
 
       # Note: mongo tests are skipped in the macos workflow
       - name: Install MongoDB
@@ -144,7 +341,6 @@ jobs:
           command: npm install -g azurite
 
       - name: Check no arcticdb file depend on tests package
-        shell: bash -l {0}
         run: |
           build_tooling/checks.sh
 
@@ -170,46 +366,61 @@ jobs:
         if: ${{ inputs.debug_enabled }}
 
       - name: Install pytest-repeat
-        shell: bash -l {0}
         run: |
           python -m pip --retries 3 --timeout 180 install pytest-repeat
 
       - name: Test with pytest
-        shell: bash -l {0}
         run: |
+          # find ssl directory where cacerts are (for Azure)
+          openssl version -d
+          # list file descriptors and other limits of the runner
+          ulimit -a
           echo "Run commandline: $COMMANDLINE"
           eval "$COMMANDLINE"
-          export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
-          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
-            command="python -m $ARCTICDB_PYTEST_ARGS"
-            echo "Run custom pytest command: $command"
-            eval "$command"
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+            python -m pip install pytest-repeat setuptools wheel
+            python setup.py protoc --build-lib python
+            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
+            eval "$ARCTICDB_PYTEST_ARGS"
           else
-            cd python
-            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            build_tooling/parallel_test.sh tests
           fi
         env:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{ inputs.run_commandline }}
           # Use the Mongo created in the service container above to test against
           CI_MONGO_HOST: mongodb
+          HYPOTHESIS_PROFILE: ci_linux
+          PYTEST_XDIST_MODE: -n logical --dist worksteal
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          TEST_OUTPUT_DIR: ${{runner.temp}}
+          STORAGE_TYPE: ${{ inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage }}
+          group: conda-linux
           NODE_OPTIONS: --openssl-legacy-provider
 
-
-  macos:
+  python_tests_macos:
     if: |
       always() &&
       !cancelled()
+    needs: [compile_macos]
     runs-on: macos-14
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+    defaults:
+      run:
+        shell: bash -l {0}
     steps:
       - uses: actions/checkout@v6.0.1
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-macos
+          path: .
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -225,31 +436,6 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
 
-      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
-        shell: bash -l {0}
-        run: |
-          # Protocol buffers compilation require not using build isolation.
-          # We should always retry due to unstable nature of connections and environments
-          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
-        env:
-          ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
-
-      - name: Build C++ Tests
-        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/macos-conda-release-build/
-          make -j ${{ steps.cpu-cores.outputs.count }} arcticdb_rapidcheck_tests
-          make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
-
-      - name: Run C++ Tests
-        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
-        shell: bash -l {0}
-        run: |
-          cd cpp/out/macos-conda-release-build/
-          CTEST_OUTPUT_ON_FAILURE=1 make test
-
       - name: Install npm
         uses: actions/setup-node@v6.1.0
         with:
@@ -264,7 +450,6 @@ jobs:
           command: npm install -g azurite
 
       - name: Check no arcticdb file depend on tests package
-        shell: bash -l {0}
         run: |
           build_tooling/checks.sh
 
@@ -290,29 +475,35 @@ jobs:
         if: ${{ inputs.debug_enabled }}
 
       - name: Install pytest-repeat
-        shell: bash -l {0}
         run: |
           python -m pip --retries 3 --timeout 180 install pytest-repeat
 
       - name: Test with pytest
-        shell: bash -l {0}
         run: |
+          # find ssl directory where cacerts are (for Azure)
+          openssl version -d
+          # list file descriptors and other limits of the runner
+          ulimit -a
           echo "Run commandline: $COMMANDLINE"
           eval "$COMMANDLINE"
-          export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
-          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
-            command="python -m $ARCTICDB_PYTEST_ARGS"
-            echo "Run custom pytest command: $command"
-            eval "$command"
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+            python -m pip install pytest-repeat setuptools wheel
+            python setup.py protoc --build-lib python
+            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
+            eval "$ARCTICDB_PYTEST_ARGS"
           else
-            cd python
-            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            build_tooling/parallel_test.sh tests
           fi
         env:
           ARCTICDB_USING_CONDA: 1
           COMMANDLINE: ${{ inputs.run_commandline }}
+          HYPOTHESIS_PROFILE: ci_macos
+          PYTEST_XDIST_MODE: -n logical --dist worksteal
           ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          TEST_OUTPUT_DIR: ${{runner.temp}}
+          STORAGE_TYPE: ${{ inputs.persistent_storage == 'no' && 'LMDB' || inputs.persistent_storage }}
+          group: conda-macos
           NODE_OPTIONS: --openssl-legacy-provider
 
   windows:
