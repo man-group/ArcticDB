@@ -243,7 +243,14 @@ bool NfsBackedStorage::do_iterate_type_until_match(
     };
 
     return s3::detail::do_iterate_type_impl(
-            key_type, func, root_folder_, bucket_name_, *s3_client_, NfsBucketizer::bucketize_length(key_type), iter_prefix_handler, prefix
+            key_type,
+            func,
+            root_folder_,
+            bucket_name_,
+            *s3_client_,
+            NfsBucketizer::bucketize_length(key_type),
+            iter_prefix_handler,
+            prefix
     );
 }
 

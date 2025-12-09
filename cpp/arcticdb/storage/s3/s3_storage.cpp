@@ -129,9 +129,15 @@ bool S3Storage::do_iterate_type_until_match(
                 return !prefix.empty() ? fmt::format("{}/{}*{}", key_type_dir, key_descriptor, prefix) : key_type_dir;
             };
 
-    auto path_info = calculate_path_info
-    return detail::do_iterate_type_impl(
-            key_type, visitor, root_folder_, bucket_name_, client(), FlatBucketizer::bucketize_length(key_type), prefix_handler, prefix
+    auto path_info = calculate_path_info return detail::do_iterate_type_impl(
+            key_type,
+            visitor,
+            root_folder_,
+            bucket_name_,
+            client(),
+            FlatBucketizer::bucketize_length(key_type),
+            prefix_handler,
+            prefix
     );
 }
 
