@@ -355,6 +355,22 @@ jobs:
         shell: bash -elo pipefail {0}
         run: |
           npm install -g azurite
+          # Ensure npm global bin is in PATH for subsequent steps
+          # On Windows, npm global installs go to %APPDATA%\npm which may not be in PATH
+          npm_config_prefix=$(npm config get prefix)
+          echo "npm prefix: $npm_config_prefix"
+          # Add npm global bin to PATH (works for both Unix and Windows paths in bash)
+          npm_bin_dir="$npm_config_prefix"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            # Convert Windows path to Unix-style for bash (C:\Users\... -> /c/Users/...)
+            npm_bin_dir=$(echo "$npm_bin_dir" | sed 's|^\([A-Z]\):|/\1|' | tr '[:upper:]' '[:lower:]' | sed 's|\\|/|g')
+          fi
+          npm_bin_dir="${npm_bin_dir}/bin"
+          echo "$npm_bin_dir" >> $GITHUB_PATH
+          export PATH="$npm_bin_dir:$PATH"
+          # Verify azurite is accessible
+          echo "PATH includes: $npm_bin_dir"
+          which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
 
       - name: Set persistent storage variables
         uses: ./.github/actions/set_persistent_storage_env_vars
