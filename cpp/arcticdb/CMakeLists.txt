@@ -1119,7 +1119,7 @@ if(${TEST})
                 )
     endif()
 
-    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60 DISCOVERY_MODE PRE_TEST)
+    gtest_discover_tests(test_unit_arcticdb PROPERTIES DISCOVERY_TIMEOUT 60)
 
     set(benchmark_srcs
             stream/test/stream_test_common.cpp
@@ -1218,7 +1218,7 @@ if(${TEST})
             )
     endif()
 
-    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60 DISCOVERY_MODE PRE_TEST)
+    gtest_discover_tests(arcticdb_rapidcheck_tests PROPERTIES DISCOVERY_TIMEOUT 60)
     if(${ARCTICDB_USE_PCH})
         message(STATUS "Using precompiled headers for target test_unit_arcticdb")
         target_precompile_headers(
