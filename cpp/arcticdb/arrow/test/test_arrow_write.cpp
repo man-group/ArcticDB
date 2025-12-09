@@ -173,11 +173,12 @@ TYPED_TEST(ArrowDataToSegmentNumeric, MultipleRecordBatches) {
         ASSERT_EQ(buffer.block_offsets().size(), rows_per_batch.size() + 1);
         size_t bytes{0};
         for (size_t idx = 0; idx < rows_per_batch.size(); ++idx) {
-            ASSERT_TRUE(buffer.blocks()[idx]->is_external());
-            ASSERT_EQ(buffer.blocks()[idx]->bytes(), rows_per_batch[idx] * sizeof(TypeParam));
-            ASSERT_EQ(buffer.blocks()[idx]->offset_, bytes);
+            ASSERT_EQ(buffer.blocks()[idx]->get_type(), MemBlockType::EXTERNAL_WITH_EXTRA_BYTES);
+            ASSERT_EQ(buffer.blocks()[idx]->physical_bytes(), rows_per_batch[idx] * sizeof(TypeParam));
+            ASSERT_EQ(buffer.blocks()[idx]->logical_size(), rows_per_batch[idx] * sizeof(TypeParam));
+            ASSERT_EQ(buffer.blocks()[idx]->offset(), bytes);
             ASSERT_EQ(buffer.block_offsets()[idx], bytes);
-            bytes += buffer.blocks()[idx]->bytes();
+            bytes += buffer.blocks()[idx]->physical_bytes();
         }
         ASSERT_EQ(buffer.block_offsets().back(), bytes);
     }
