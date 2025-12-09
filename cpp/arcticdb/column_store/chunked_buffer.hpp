@@ -70,7 +70,7 @@ class ChunkedBufferImpl {
         void next() {
             pos_ += type_size_;
 
-            if (pos_ >= block_->logical_bytes()) {
+            if (pos_ >= block_->logical_size()) {
                 if (block_num_ + 1 >= parent_->blocks_.size()) {
                     end_ = true;
                     return;
@@ -131,9 +131,12 @@ class ChunkedBufferImpl {
         output.extra_bytes_per_block_ = extra_bytes_per_block_;
 
         for (auto block : blocks_) {
+            util::check(
+                    block->get_type() == MemBlockType::DYNAMIC, "clone should be called only with DYNAMIC block types"
+            );
             output.add_block(block->capacity(), block->offset());
-            (*output.blocks_.rbegin())->resize(block->physical_bytes());
-            (*output.blocks_.rbegin())->copy_from(block->data(), block->physical_bytes(), 0);
+            output.blocks_.back()->resize(block->physical_bytes());
+            output.blocks_.back()->copy_from(block->data(), block->physical_bytes(), 0);
         }
 
         output.block_offsets_ = block_offsets_;
@@ -413,7 +416,7 @@ class ChunkedBufferImpl {
         auto [block, pos, block_index] = block_and_offset(pos_bytes);
         while (required_bytes > 0) {
             block = blocks_[block_index];
-            const auto size_to_write = std::min(required_bytes, block->logical_bytes() - pos);
+            const auto size_to_write = std::min(required_bytes, block->logical_size() - pos);
             result.push_back({block->ptr(pos), size_to_write});
             required_bytes -= size_to_write;
             ++block_index;
@@ -532,7 +535,7 @@ class ChunkedBufferImpl {
         );
         util::check(blocks_.size() == 1, "Truncate single block expects buffer with only one block");
         auto [block, offset, ts] = block_and_offset(start_offset);
-        auto block_bytes = block->logical_bytes();
+        auto block_bytes = block->logical_size();
         const auto removed_bytes = block_bytes - (end_offset - start_offset);
         util::check(
                 removed_bytes <= block_bytes, "Can't truncate {} bytes from a {} byte block", removed_bytes, block_bytes
@@ -551,13 +554,13 @@ class ChunkedBufferImpl {
     void truncate_first_block(size_t bytes) {
         util::check(blocks_.size() > 0, "Truncate first block expected at least one block");
         auto block = blocks_[0];
-        auto block_bytes = block->logical_bytes();
+        auto block_bytes = block->logical_size();
         util::check(block == *blocks_.begin(), "Truncate first block position {} not within initial block", bytes);
         // bytes is the number of bytes to remove, and is asserted to be in the first block of the buffer
         // An old bug in update caused us to store a larger end_index value in the index key than needed. Thus, if
         // date_range.start > table_data_key.last_ts && date_range.start < table_data_key.end_index we will load
         // the first data key even if it has no rows within the range. So, we allow clearing the entire first block
-        // (i.e. bytes == block->logical_bytes())
+        // (i.e. bytes == block->logical_size())
         util::check(bytes <= block_bytes, "Can't truncate {} bytes from a {} byte block", bytes, block_bytes);
         auto remaining = block_bytes - bytes;
         auto new_block = copy_subset_to_block(block, bytes, remaining);
@@ -568,7 +571,7 @@ class ChunkedBufferImpl {
     void truncate_last_block(size_t bytes) {
         // bytes is the number of bytes to remove, and is asserted to be in the last block of the buffer
         auto [block, offset, ts] = block_and_offset(bytes_ - bytes);
-        auto block_bytes = block->logical_bytes();
+        auto block_bytes = block->logical_size();
         util::check(block == *blocks_.rbegin(), "Truncate last block position {} not within last block", bytes);
         util::check(bytes < block_bytes, "Can't truncate {} bytes from a {} byte block", bytes, block_bytes);
         auto remaining = block_bytes - bytes;

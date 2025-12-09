@@ -22,7 +22,7 @@ static void BM_chunked_buffer_allocate_with_ensure(benchmark::State& state) {
     for (auto _ : state) {
         ChunkedBuffer buffer(allocation_type);
         for (auto i = 0; i < num_chunks; ++i) {
-            buffer.ensure((i+1)*chunk_size, is_alligned);
+            buffer.ensure((i + 1) * chunk_size, is_alligned);
         }
     }
 }
@@ -34,7 +34,7 @@ static void BM_chunked_buffer_random_access(benchmark::State& state) {
     auto allocation_type = static_cast<entity::AllocationType>(state.range(3));
     ChunkedBuffer buffer(allocation_type);
     for (auto i = 0; i < num_chunks; ++i) {
-        buffer.ensure((i+1)*chunk_size, is_alligned);
+        buffer.ensure((i + 1) * chunk_size, is_alligned);
     }
     static std::mt19937 gen(42);
     std::uniform_int_distribution<size_t> dis(0, num_chunks * chunk_size - 1);
@@ -45,17 +45,17 @@ static void BM_chunked_buffer_random_access(benchmark::State& state) {
 }
 
 BENCHMARK(BM_chunked_buffer_allocate_with_ensure)
-    ->Args({100'000, 203, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
-    ->Args({10'000, 2003, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)});
+        ->Args({100'000, 203, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
+        ->Args({10'000, 2003, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)});
 
 BENCHMARK(BM_chunked_buffer_random_access)
-    ->Args({100'000, 203, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
-    ->Args({10'000, 2003, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
-    ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)});
+        ->Args({100'000, 203, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({100'000, 203, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)})
+        ->Args({10'000, 2003, true, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DYNAMIC)})
+        ->Args({10'000, 2003, false, static_cast<int8_t>(entity::AllocationType::DETACHABLE)});

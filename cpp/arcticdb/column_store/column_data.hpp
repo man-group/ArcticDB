@@ -396,12 +396,12 @@ struct ColumnData {
 
         constexpr auto dim = TDT::DimensionTag::value;
         if constexpr (dim == Dimension::Dim0) {
-            auto logical_bytes = block->logical_bytes();
-            num_elements = logical_bytes / get_type_size(type_.data_type());
+            auto logical_size = block->logical_size();
+            num_elements = logical_size / get_type_size(type_.data_type());
         } else {
             util::check(!buffer().has_extra_bytes_per_block(), "Can't have `extra_bytes_per_block` when using dim > 0");
             if (shapes_->empty()) {
-                num_elements = block->logical_bytes() / get_type_size(type_.data_type());
+                num_elements = block->logical_size() / get_type_size(type_.data_type());
             } else {
                 shape_ptr = shapes_->ptr_cast<shape_t>(shape_pos_, sizeof(shape_t));
                 size_t size = 0;
@@ -414,7 +414,7 @@ struct ColumnData {
                 // conditions are satisfied:
                 // i) The processed size becomes equal to the block size
                 // ii) All zero-sized shapes are parsed (i.e. the shape of the current tensor is not 0)
-                while (current_tensor_is_empty() || size < block->logical_bytes()) {
+                while (current_tensor_is_empty() || size < block->logical_size()) {
                     if constexpr (dim == Dimension::Dim1) {
                         size += next_shape() * raw_type_sz;
                     } else {
@@ -429,10 +429,10 @@ struct ColumnData {
                     ++num_elements;
                 }
                 util::check(
-                        size == block->logical_bytes(),
+                        size == block->logical_size(),
                         "Element size vs block size overrun: {} > {}",
                         size,
-                        block->logical_bytes()
+                        block->logical_size()
                 );
             }
         }

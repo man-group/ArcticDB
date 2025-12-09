@@ -119,8 +119,12 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
     auto remaining_bytes = output_size;
     for (auto idx = start_idx; idx < end_idx; idx++) {
         auto input_block = input_blocks.at(idx);
+        util::check(
+                input_block->get_type() == MemBlockType::DYNAMIC,
+                "truncate should be called only with DYNAMIC block types"
+        );
         auto source_pos = idx == start_idx ? start_block_and_offset.offset_ : 0u;
-        auto source_bytes = std::min(remaining_bytes, input_block->logical_bytes() - source_pos);
+        auto source_bytes = std::min(remaining_bytes, input_block->physical_bytes() - source_pos);
         while (source_bytes != 0) {
             const auto this_write = std::min(remaining_bytes, source_bytes);
             ARCTICDB_DEBUG(
