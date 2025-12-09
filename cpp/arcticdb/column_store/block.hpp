@@ -25,20 +25,23 @@ class IMemBlock {
     // Abstract methods
     [[nodiscard]] virtual MemBlockType get_type() const = 0;
     [[nodiscard]] virtual size_t physical_bytes() const = 0;
-    [[nodiscard]] virtual size_t logical_bytes() const = 0;
+    [[nodiscard]] virtual size_t logical_size() const = 0;
     [[nodiscard]] virtual size_t capacity() const = 0;
     [[nodiscard]] virtual size_t offset() const = 0;
     [[nodiscard]] virtual entity::timestamp timestamp() const = 0;
     [[nodiscard]] virtual const uint8_t* data() const = 0;
     [[nodiscard]] virtual uint8_t* data() = 0;
+
+    virtual ~IMemBlock() = default;
+
+    // The below methods make sense only for specific memory block types. Decided to put them in the interface for
+    // performance reasons (i.e. calling them would be a single vtable lookup vs using `get_type` + `dynamic_cast`).
     // Dynamic block specific methods
     virtual void resize(size_t bytes) = 0;
     virtual void check_magic() const = 0;
     // External block specific methods
     [[nodiscard]] virtual uint8_t* release() = 0;
     virtual void abandon() = 0;
-
-    virtual ~IMemBlock() = default;
 
     // Implemented methods
     [[nodiscard]] bool empty() const;
@@ -73,7 +76,7 @@ class DynamicMemBlock : public IMemBlock {
     static constexpr size_t raw_size(size_t total_size) noexcept { return total_size - HeaderSize; }
 
     [[nodiscard]] size_t physical_bytes() const override;
-    [[nodiscard]] size_t logical_bytes() const override;
+    [[nodiscard]] size_t logical_size() const override;
     [[nodiscard]] size_t capacity() const override;
     [[nodiscard]] size_t offset() const override;
     [[nodiscard]] entity::timestamp timestamp() const override;
@@ -117,7 +120,7 @@ class ExternalMemBlock : public IMemBlock {
     [[nodiscard]] uint8_t* release() override;
     void abandon() override;
     [[nodiscard]] size_t physical_bytes() const override;
-    [[nodiscard]] size_t logical_bytes() const override;
+    [[nodiscard]] size_t logical_size() const override;
     [[nodiscard]] size_t capacity() const override;
     [[nodiscard]] size_t offset() const override;
     [[nodiscard]] entity::timestamp timestamp() const override;
@@ -145,7 +148,7 @@ class ExternalPackedMemBlock : public ExternalMemBlock {
     ExternalPackedMemBlock(uint8_t* data, size_t size, size_t shift, size_t offset, entity::timestamp ts, bool owning);
 
     MemBlockType get_type() const override;
-    [[nodiscard]] size_t logical_bytes() const override;
+    [[nodiscard]] size_t logical_size() const override;
     [[nodiscard]] uint8_t& operator[](size_t pos) override;
     [[nodiscard]] size_t shift() const;
 

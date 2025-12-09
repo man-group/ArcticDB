@@ -60,7 +60,7 @@ MemBlockType DynamicMemBlock::get_type() const { return MemBlockType::DYNAMIC; }
 
 size_t DynamicMemBlock::physical_bytes() const { return bytes_; }
 
-size_t DynamicMemBlock::logical_bytes() const { return bytes_; }
+size_t DynamicMemBlock::logical_size() const { return bytes_; }
 
 size_t DynamicMemBlock::capacity() const { return capacity_; }
 
@@ -132,7 +132,7 @@ void ExternalMemBlock::abandon() {
 
 size_t ExternalMemBlock::physical_bytes() const { return bytes_ + extra_bytes_; }
 
-size_t ExternalMemBlock::logical_bytes() const { return bytes_; }
+size_t ExternalMemBlock::logical_size() const { return bytes_; }
 
 size_t ExternalMemBlock::capacity() const { return physical_bytes(); }
 
@@ -165,7 +165,7 @@ ExternalPackedMemBlock::ExternalPackedMemBlock(
 
 MemBlockType ExternalPackedMemBlock::get_type() const { return MemBlockType::EXTERNAL_PACKED; }
 
-size_t ExternalPackedMemBlock::logical_bytes() const { return logical_size_; }
+size_t ExternalPackedMemBlock::logical_size() const { return logical_size_; }
 
 uint8_t& ExternalPackedMemBlock::operator[](size_t pos) {
     util::raise_rte("Accessing position {} for a packed mem block is not supported", pos);
