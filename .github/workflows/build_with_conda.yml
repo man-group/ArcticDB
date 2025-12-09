@@ -399,16 +399,14 @@ jobs:
           export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            # Only run tests that depend on azurite for Windows workflow
-            command="python -m $ARCTICDB_PYTEST_ARGS -k azurite -v"
+            command="python -m $ARCTICDB_PYTEST_ARGS -v"
             echo "Run custom pytest command: $command"
             python -m pip  install --retries 3 --timeout 240 pytest-repeat
             echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$command"
           else
             cd python
-            # Only run tests that depend on azurite for Windows workflow
-            python -m pytest --timeout=3600 -v -k azurite tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -v tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
