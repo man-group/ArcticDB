@@ -1117,6 +1117,7 @@ if(${TEST})
             arrow/test/arrow_test_utils.cpp
             arrow/test/benchmark_arrow_reads.cpp
             arrow/test/benchmark_arrow_writes.cpp
+            column_store/test/benchmark_chunked_buffer.cpp
             column_store/test/benchmark_column.cpp
             column_store/test/benchmark_memory_segment.cpp
             processing/test/benchmark_binary.cpp
