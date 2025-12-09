@@ -349,7 +349,7 @@ jobs:
       - name: Install npm
         uses: actions/setup-node@v6.1.0
         with:
-          node-version: '16'
+          node-version: '24'
 
       - name: Install azurite
         shell: bash -elo pipefail {0}
