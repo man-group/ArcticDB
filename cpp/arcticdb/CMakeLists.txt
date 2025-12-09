@@ -1067,7 +1067,6 @@ if(${TEST})
                 GTest::gtest
                 GTest::gmock
                 arcticdb_core_static
-                Python::Python  # Explicitly link Python so TARGET_RUNTIME_DLLS can detect Python DLLs
         )
 
         # Fix gtest/folly unistd conflict until one of them fixes it. There's another copy for rapidcheck
@@ -1191,7 +1190,6 @@ if(${TEST})
                 GTest::gmock
                 rapidcheck
                 rapidcheck_gtest
-                Python::Python  # Explicitly link Python so TARGET_RUNTIME_DLLS can detect Python DLLs
                 ${RAPIDCHECK_PRIVATE_LIBRARIES}
         )
         # gtest_discover_tests runs the exe in order to dynamically list all tests. In case the executable depends on a DLL
