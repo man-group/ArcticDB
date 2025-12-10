@@ -87,6 +87,11 @@ if(WIN32)
         "$<$<CONFIG:Debug>:DEBUG_BUILD>"
     )
     if(${ARCTICDB_USING_CONDA})
+        # Some packages on conda-forge would need to be rebuilt for Windows with a patch on their feedstock to perform work
+        # which have done been performed upstrem (adding those compile definitions with CMake config or etc.).
+        #
+        # The maintenance cost of all those patch and the complexity involved to pick the resulting new builds would be
+        # much higher that setting those compile definitions here.
         add_compile_definitions(
             # Required to link against zstd.dll
             # See: https://github.com/facebook/zstd/blob/dev/lib/zstd.h#L47-L53

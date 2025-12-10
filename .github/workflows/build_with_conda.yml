@@ -331,6 +331,7 @@ jobs:
 
       - name: Build and Run C++ Tests
         shell: cmd /C call {0}
+        # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
         if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         run: |
           REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
@@ -393,6 +394,10 @@ jobs:
 
       - name: Test with pytest
         shell: bash -elo pipefail {0}
+        # The test suite on Windows takes around 6 hours to complete successfully for now
+        # for reasons we need to understand (it might be that a dependency is not properly build
+        # or optimized on conda-forge for Windows yet). Thus we disable it for now.
+        if: false
         run: |
           echo "Run commandline: $COMMANDLINE"
           eval "$COMMANDLINE"
