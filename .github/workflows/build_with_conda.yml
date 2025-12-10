@@ -341,8 +341,11 @@ jobs:
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: cmd /C call {0}
         run: |
-          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
-          REM for Ninja to be used as a generator with MSVC.
+          REM Some `CMAKE_*` variables (in particular CMAKE_GENERATOR_{PLATFORM,TOOLSET}) are set by mamba / micromamba / conda
+          REM when the environment is activated.
+          REM See: https://github.com/conda-forge/vc-feedstock/blob/c6bb71096319ff21ac8b75f7d91183be914c3d6b/recipe/activate.bat#L87-L131
+          REM The values which are chosen prevent Ninja to be used as a generator with MSVC.
+          REM We override those values so that we can.
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           REM Protocol buffers compilation require not using build isolation.
@@ -358,8 +361,11 @@ jobs:
         # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
         if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         run: |
-          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
-          REM for Ninja to be used as a generator with MSVC.
+          REM Some `CMAKE_*` variables (in particular CMAKE_GENERATOR_{PLATFORM,TOOLSET}) are set by mamba / micromamba / conda
+          REM when the environment is activated.
+          REM See: https://github.com/conda-forge/vc-feedstock/blob/c6bb71096319ff21ac8b75f7d91183be914c3d6b/recipe/activate.bat#L87-L131
+          REM The values which are chosen prevent Ninja to be used as a generator with MSVC.
+          REM We override those values so that we can.
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp/out/windows-cl-conda-release-build/
