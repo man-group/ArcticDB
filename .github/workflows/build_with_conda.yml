@@ -346,6 +346,7 @@ jobs:
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           REM Protocol buffers compilation require not using build isolation.
+          REM We should always retry due to unstable nature of connections and environments
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -396,7 +397,14 @@ jobs:
           echo "PATH includes: $npm_bin_dir"
           which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
 
+      - name: Check no arcticdb file depend on tests package
+        shell: bash -elo pipefail {0}
+        run: |
+          build_tooling/checks.sh
+
       - name: Set persistent storage variables
+        # Should be executed for all persistent storages but not for LMDB
+        if: ${{ inputs.persistent_storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -405,7 +413,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
+          persistent_storage: ${{ inputs.persistent_storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}
@@ -414,6 +422,11 @@ jobs:
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
         if: ${{ inputs.debug_enabled }}
+
+      - name: Install pytest-repeat
+        shell: bash -elo pipefail {0}
+        run: |
+          python -m pip --retries 3 --timeout 180 install pytest-repeat
 
       - name: Test with pytest
         shell: bash -elo pipefail {0}
@@ -426,15 +439,13 @@ jobs:
           eval "$COMMANDLINE"
           export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
-          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            command="python -m $ARCTICDB_PYTEST_ARGS -v"
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS"
             echo "Run custom pytest command: $command"
-            python -m pip  install --retries 3 --timeout 240 pytest-repeat
-            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1

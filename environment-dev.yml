@@ -92,8 +92,7 @@ dependencies:
   - retrying
   - trustme
   - psutil
+  - pytest-xdist
   # Use memray and pytest-memray only on Linux and MacOS
   - sel(unix): memray
   - sel(unix): pytest-memray
-  # Use pytest-xdist only on Linux and MacOS
-  - sel(unix): pytest-xdist
