@@ -447,7 +447,8 @@ jobs:
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            # Skip LMDB tests on Windows because those tests fill the disk entirely and makes the test suite fail.
+            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal -m "not lmdb" tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
