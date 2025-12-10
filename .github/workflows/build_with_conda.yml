@@ -1,10 +1,12 @@
 name: Build with conda
-
 run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
 
 concurrency:
   group: ${{github.ref}}-${{github.workflow}}
   cancel-in-progress: true
+
+permissions:
+  contents: read
 
 on:
   push:
@@ -305,6 +307,134 @@ jobs:
           else
             cd python
             python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+          fi
+        env:
+          ARCTICDB_USING_CONDA: 1
+          COMMANDLINE: ${{ inputs.run_commandline }}
+          ARCTICDB_PYTEST_ARGS: ${{ inputs.run_custom_pytest_command }}
+          NODE_OPTIONS: --openssl-legacy-provider
+
+  windows:
+    runs-on: windows-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          init-shell: bash cmd.exe
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
+        shell: cmd /C call {0}
+        run: |
+          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+          REM for Ninja to be used as a generator with MSVC.
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
+          REM Protocol buffers compilation require not using build isolation.
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
+
+      - name: Build and Run C++ Tests
+        shell: cmd /C call {0}
+        # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
+        if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
+        run: |
+          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
+          REM for Ninja to be used as a generator with MSVC.
+          set CMAKE_GENERATOR_PLATFORM=
+          set CMAKE_GENERATOR_TOOLSET=
+          cd cpp/out/windows-cl-conda-release-build/
+          cmake --build . --target arcticdb_rapidcheck_tests test_unit_arcticdb --parallel
+          ctest --output-on-failure
+        env:
+          CTEST_OUTPUT_ON_FAILURE: 1
+          ARCTICDB_USING_CONDA: 1
+          ARCTICDB_BUILD_CPP_TESTS: 1
+          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
+
+      - name: Install npm
+        uses: actions/setup-node@v6.1.0
+        with:
+          node-version: '24'
+
+      - name: Install azurite
+        shell: bash -elo pipefail {0}
+        run: |
+          npm install -g azurite
+          # Ensure npm global bin is in PATH for subsequent steps
+          # On Windows, npm global installs go to %APPDATA%\npm which may not be in PATH
+          npm_config_prefix=$(npm config get prefix)
+          echo "npm prefix: $npm_config_prefix"
+          # Add npm global bin to PATH (works for both Unix and Windows paths in bash)
+          npm_bin_dir="$npm_config_prefix"
+          if [[ "$RUNNER_OS" == "Windows" ]]; then
+            # Convert Windows path to Unix-style for bash (C:\Users\... -> /c/Users/...)
+            npm_bin_dir=$(echo "$npm_bin_dir" | sed 's|^\([A-Z]\):|/\1|' | tr '[:upper:]' '[:lower:]' | sed 's|\\|/|g')
+          fi
+          npm_bin_dir="${npm_bin_dir}/bin"
+          echo "$npm_bin_dir" >> $GITHUB_PATH
+          export PATH="$npm_bin_dir:$PATH"
+          # Verify azurite is accessible
+          echo "PATH includes: $npm_bin_dir"
+          which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
+
+      - name: Set persistent storage variables
+        uses: ./.github/actions/set_persistent_storage_env_vars
+        with:
+          aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
+          aws_secret_key: "${{ secrets.AWS_S3_SECRET_KEY }}"
+          gcp_access_key: "${{ secrets.GCP_S3_ACCESS_KEY }}"
+          gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
+          azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
+          azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
+          persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
+
+      - name: Set ArcticDB Debug Logging
+        if: ${{ inputs.run_enable_logging }}
+        uses: ./.github/actions/enable_logging
+
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
+        if: ${{ inputs.debug_enabled }}
+
+      - name: Test with pytest
+        shell: bash -elo pipefail {0}
+        # The test suite on Windows takes around 6 hours to complete successfully for now
+        # for reasons we need to understand (it might be that a dependency is not properly build
+        # or optimized on conda-forge for Windows yet). Thus we disable it for now.
+        if: false
+        run: |
+          echo "Run commandline: $COMMANDLINE"
+          eval "$COMMANDLINE"
+          export ARCTICDB_RAND_SEED=$RANDOM
+          export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS -v"
+            echo "Run custom pytest command: $command"
+            python -m pip  install --retries 3 --timeout 240 pytest-repeat
+            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
+            eval "$command"
+          else
+            cd python
+            python -m pytest --timeout=3600 -v tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1

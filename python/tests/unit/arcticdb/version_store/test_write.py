@@ -9,11 +9,10 @@ As of the Change Date specified in that file, in accordance with the Business So
 import numpy as np
 import pandas as pd
 import pytest
-from arcticdb_ext.exceptions import SortingException, ArcticException as ArcticNativeException, UserInputException
+from arcticdb_ext.exceptions import SortingException, ArcticException as ArcticNativeException
 from arcticdb.util._versions import IS_PANDAS_TWO
 from arcticdb.util.test import assert_frame_equal
 from pandas import MultiIndex
-from arcticdb.util.test import assert_frame_equal
 
 
 def test_write_numpy_array(lmdb_version_store):
@@ -211,9 +210,24 @@ def test_write_bool_named_multi_index(lmdb_version_store, idx, idx_names):
     assert_frame_equal(lmdb_version_store.read(symbol).data, df)
 
 
-def test_write_fortran_style_data_starting_with_none_throws(lmdb_version_store_v1):
+@pytest.mark.parametrize("first", [None, np.nan])
+def test_write_fortran_style_data_starting_with_none(lmdb_version_store_v1, first):
     lib = lmdb_version_store_v1
-    data = np.array([[None, "string"], ["aaa", "bbb"]])
-    df = pd.DataFrame(data, columns=["a", "b"])
-    with pytest.raises(UserInputException, match=r".*Fortran.*"):
-        lib.write("fortran_style", df)
+    data = np.array([[first, "string"], ["aaa", "bbb"], ["ccc", "ddd"]])
+    df0 = pd.DataFrame(data, columns=["a", "b"], index=pd.date_range("2025-01-01", periods=3))
+    lib.write("fortran_style", df0)
+    assert_frame_equal(lib.read("fortran_style").data, df0)
+
+    df1 = pd.DataFrame(data, columns=["a", "b"], index=pd.date_range("2025-01-04", periods=3))
+    lib.append("fortran_style", df1)
+    assert_frame_equal(lib.read("fortran_style").data, pd.concat([df0, df1]))
+
+    data_update = np.array([[first, "string"], ["aaa", "bbb"]])
+    df2 = pd.DataFrame(data_update, columns=["a", "b"], index=pd.date_range("2025-01-02", periods=2))
+    lib.update("fortran_style", df2)
+
+    res_data = np.array(
+        [[first, "string"], [first, "string"], ["aaa", "bbb"], [first, "string"], ["aaa", "bbb"], ["ccc", "ddd"]],
+    )
+    res = pd.DataFrame(res_data, columns=["a", "b"], index=pd.date_range("2025-01-01", periods=6))
+    assert_frame_equal(lib.read("fortran_style").data, res)
