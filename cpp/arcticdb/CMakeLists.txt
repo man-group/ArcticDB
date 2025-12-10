@@ -168,11 +168,19 @@ if (NOT MSVC)
     add_compile_options("-fno-omit-frame-pointer")
 else()
     add_compile_options(
-        /WX
         /wd4250 # Suppress inherits via dominance warning
-        /we4189 # Unused local variable is an error
         /we4100 # Unused function parameter is an error
     )
+    if(NOT ${ARCTICDB_USING_CONDA})
+        # Some of the warnings are due to the protobuf library,
+        # observed for the conda-forge builds.
+        # For now, we do not want to treat warnings as errors for those builds.
+        # See: https://github.com/protocolbuffers/protobuf/pull/20840
+        add_compile_options(
+            /WX
+            /we4189 # Unused local variable is an error
+        )
+    endif()
 endif ()
 
 ## Core library without python bindings ##
@@ -692,8 +700,10 @@ if (WIN32)
         arcticdb_core_object
         PRIVATE
             /W4
-            /external:I${CMAKE_SOURCE_DIR}/vcpkg
-            /external:I${CMAKE_SOURCE_DIR}/third_party
+            # The distribution on conda-forge only uses the source code of ArcticDB itself
+            # without submodules and dependencies from `vcpkg` or `third_party`.
+            $<$<NOT:$<BOOL:${ARCTICDB_USING_CONDA}>>:/external:I${CMAKE_SOURCE_DIR}/vcpkg>
+            $<$<NOT:$<BOOL:${ARCTICDB_USING_CONDA}>>:/external:I${CMAKE_SOURCE_DIR}/third_party>
             /Zc:__cplusplus #needed to get the correct __cplusplus macro value
     )
 endif()
