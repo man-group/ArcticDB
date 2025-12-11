@@ -35,8 +35,6 @@ void IMemBlock::copy_from(const uint8_t* src, size_t bytes, size_t pos) {
     memcpy(ptr(pos), src, bytes);
 }
 
-uint8_t& IMemBlock::operator[](size_t pos) { return const_cast<uint8_t*>(data())[pos]; }
-
 const uint8_t* IMemBlock::ptr(size_t pos) const { return data() + pos; }
 
 uint8_t* IMemBlock::ptr(size_t pos) { return data() + pos; }
@@ -53,8 +51,6 @@ DynamicMemBlock::DynamicMemBlock(size_t capacity, size_t offset, entity::timesta
     memset(data_, 'c', capacity_); // For identifying unwritten-to block portions
 #endif
 }
-
-DynamicMemBlock::~DynamicMemBlock() { magic_.check(true); }
 
 MemBlockType DynamicMemBlock::get_type() const { return MemBlockType::DYNAMIC; }
 
@@ -79,30 +75,18 @@ void DynamicMemBlock::resize(size_t size) {
     bytes_ = size;
 }
 
-void DynamicMemBlock::check_magic() const { magic_.check(); }
-
 uint8_t* DynamicMemBlock::release() { util::raise_rte("Can't release a dynamic block"); }
 
 void DynamicMemBlock::abandon() { util::raise_rte("Can't abandon a dynamic block"); }
 
 // ExternalMemBlock implementation
 ExternalMemBlock::ExternalMemBlock(
-        const uint8_t* data, size_t size, size_t offset, entity::timestamp ts, bool owning, size_t extra_bytes
+        const uint8_t* data, size_t logical_size, size_t offset, entity::timestamp ts, bool owning, size_t extra_bytes
 ) :
-    bytes_(size),
+    bytes_(logical_size),
     offset_(offset),
     timestamp_(ts),
     external_data_(const_cast<uint8_t*>(data)),
-    owns_external_data_(owning),
-    extra_bytes_(extra_bytes) {}
-
-ExternalMemBlock::ExternalMemBlock(
-        uint8_t* data, size_t size, size_t offset, entity::timestamp ts, bool owning, size_t extra_bytes
-) :
-    bytes_(size),
-    offset_(offset),
-    timestamp_(ts),
-    external_data_(data),
     owns_external_data_(owning),
     extra_bytes_(extra_bytes) {}
 
@@ -125,9 +109,11 @@ uint8_t* ExternalMemBlock::release() {
 }
 
 void ExternalMemBlock::abandon() {
-    free_detachable_memory(external_data_, physical_bytes());
-    external_data_ = nullptr;
-    owns_external_data_ = false;
+    if (owns_external_data_) {
+        free_detachable_memory(external_data_, physical_bytes());
+        external_data_ = nullptr;
+        owns_external_data_ = false;
+    }
 }
 
 size_t ExternalMemBlock::physical_bytes() const { return bytes_ + extra_bytes_; }
@@ -146,28 +132,22 @@ uint8_t* ExternalMemBlock::data() { return external_data_; }
 
 void ExternalMemBlock::resize(size_t bytes) { util::raise_rte("Can't resize a non dynamic block. Bytes: {}", bytes); }
 
-void ExternalMemBlock::check_magic() const {}
-
 // ExternalPackedMemBlock implementation
 ExternalPackedMemBlock::ExternalPackedMemBlock(
-        const uint8_t* data, size_t size, size_t shift, size_t offset, entity::timestamp ts, bool owning
+        const uint8_t* data, size_t logical_size, size_t shift, size_t offset, entity::timestamp ts, bool owning
 ) :
-    ExternalMemBlock(data, (size + shift - 1) / 8 + 1, offset, ts, owning),
-    logical_size_(size),
-    shift_(shift) {}
-
-ExternalPackedMemBlock::ExternalPackedMemBlock(
-        uint8_t* data, size_t size, size_t shift, size_t offset, entity::timestamp ts, bool owning
-) :
-    ExternalMemBlock(data, (size + shift - 1) / 8 + 1, offset, ts, owning),
-    logical_size_(size),
+    ExternalMemBlock(data, (logical_size + shift - 1) / 8 + 1, offset, ts, owning),
+    logical_size_(logical_size),
     shift_(shift) {}
 
 MemBlockType ExternalPackedMemBlock::get_type() const { return MemBlockType::EXTERNAL_PACKED; }
 
 size_t ExternalPackedMemBlock::logical_size() const { return logical_size_; }
 
-uint8_t& ExternalPackedMemBlock::operator[](size_t pos) {
+uint8_t* ExternalPackedMemBlock::ptr(size_t pos) {
+    util::raise_rte("Accessing position {} for a packed mem block is not supported", pos);
+}
+const uint8_t* ExternalPackedMemBlock::ptr(size_t pos) const {
     util::raise_rte("Accessing position {} for a packed mem block is not supported", pos);
 }
 

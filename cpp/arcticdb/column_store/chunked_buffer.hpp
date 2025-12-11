@@ -40,7 +40,6 @@ class ChunkedBufferImpl {
 
     using BlockType = IMemBlock;
 
-    static_assert(sizeof(DynamicMemBlock) == DynamicMemBlock::Align + DynamicMemBlock::MinSize);
     static_assert(DefaultBlockSize >= DynamicMemBlock::MinSize);
 
   public:
@@ -65,7 +64,7 @@ class ChunkedBufferImpl {
 
         [[nodiscard]] bool finished() const { return end_; }
 
-        [[nodiscard]] uint8_t* value() const { return &(*block_)[pos_]; }
+        [[nodiscard]] uint8_t* value() const { return block_->ptr(pos_); }
 
         void next() {
             pos_ += type_size_;
@@ -132,7 +131,8 @@ class ChunkedBufferImpl {
 
         for (auto block : blocks_) {
             util::check(
-                    block->get_type() == MemBlockType::DYNAMIC, "clone should be called only with DYNAMIC block types"
+                    block->physical_bytes() == block->logical_size(),
+                    "clone should be called only for DYNAMIC and EXTERNAL blocks with no extra bytes"
             );
             output.add_block(block->capacity(), block->offset());
             output.blocks_.back()->resize(block->physical_bytes());
@@ -313,7 +313,6 @@ class ChunkedBufferImpl {
                     pos_bytes % DefaultBlockSize
             );
             BlockType* block = blocks_[block_offset];
-            block->check_magic();
             return BlockAndOffset(block, pos_bytes % DefaultBlockSize, block_offset);
         }
 
@@ -349,7 +348,7 @@ class ChunkedBufferImpl {
                 pos + required,
                 block->physical_bytes()
         );
-        return &(*block)[pos];
+        return block->ptr(pos);
     }
 
     const uint8_t* bytes_at(size_t pos_bytes, size_t required) const {
@@ -364,7 +363,7 @@ class ChunkedBufferImpl {
                 pos,
                 block->physical_bytes()
         );
-        return (*block)[pos];
+        return *(block->ptr(pos));
     }
 
     const uint8_t& operator[](size_t pos_bytes) const {
@@ -385,7 +384,6 @@ class ChunkedBufferImpl {
         internal::check<ErrorCode::E_ASSERTION_FAILURE>(
                 blocks_.size() == 1, "Taking a pointer to the beginning of a non-contiguous buffer"
         );
-        blocks_[0]->check_magic();
         return blocks_[0]->data();
     }
 
@@ -591,7 +589,7 @@ class ChunkedBufferImpl {
             case MemBlockType::EXTERNAL_PACKED:
                 util::raise_rte("Copying subsets of packed buffers is not supported");
             default:
-                util::raise_rte("Unknown memory block type: {}", static_cast<int8_t>(source->get_type()));
+                util::raise_rte("Unknown memory block type: {}", source->get_type());
             }
         }();
         result->copy_from(source->ptr(pos), result->physical_bytes(), 0);

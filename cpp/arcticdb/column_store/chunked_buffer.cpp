@@ -54,7 +54,7 @@ std::vector<ChunkedBufferImpl<BlockSize>> split(const ChunkedBufferImpl<BlockSiz
             ARCTICDB_DEBUG(
                     log::version(), "Copying {} bytes from pos {} to pos {}", this_write, source_pos, target_pos
             );
-            (*target_block)->copy_from(&(*block)[source_pos], this_write, target_pos);
+            (*target_block)->copy_from(block->ptr(source_pos), this_write, target_pos);
             source_pos += this_write;
             source_bytes -= this_write;
             target_pos += this_write;
@@ -120,8 +120,8 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
     for (auto idx = start_idx; idx < end_idx; idx++) {
         auto input_block = input_blocks.at(idx);
         util::check(
-                input_block->get_type() == MemBlockType::DYNAMIC,
-                "truncate should be called only with DYNAMIC block types"
+                input_block->physical_bytes() == input_block->logical_size(),
+                "truncate should be called only for DYNAMIC and EXTERNAL blocks with no extra bytes"
         );
         auto source_pos = idx == start_idx ? start_block_and_offset.offset_ : 0u;
         auto source_bytes = std::min(remaining_bytes, input_block->physical_bytes() - source_pos);
@@ -133,7 +133,7 @@ ChunkedBufferImpl<BlockSize> truncate(const ChunkedBufferImpl<BlockSize>& input,
             ARCTICDB_DEBUG(
                     log::version(), "Copying {} bytes from pos {} to pos {}", this_write, source_pos, target_pos
             );
-            target_block->copy_from(&(*input_block)[source_pos], this_write, target_pos);
+            target_block->copy_from(input_block->ptr(source_pos), this_write, target_pos);
             source_pos += this_write;
             source_bytes -= this_write;
             target_pos += this_write;
