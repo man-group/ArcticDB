@@ -329,11 +329,15 @@ jobs:
           ARCTICDB_USING_CONDA: 1
 
   python_tests_linux:
-    name: Python Tests (linux_64)
+    name: Python Tests (linux_64) - ${{matrix.type}}
     if: |
       always() &&
       !cancelled()
     needs: [compile_linux]
+    strategy:
+      fail-fast: false
+      matrix:
+        type: [unit, integration, hypothesis, stress, compat, enduser]
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -453,7 +457,7 @@ jobs:
             eval "$ARCTICDB_PYTEST_ARGS"
           else
             cd python
-            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
@@ -466,11 +470,15 @@ jobs:
           NODE_OPTIONS: --openssl-legacy-provider
 
   python_tests_macos:
-    name: Python Tests (osx_arm64)
+    name: Python Tests (osx_arm64) - ${{matrix.type}}
     if: |
       always() &&
       !cancelled()
     needs: [compile_macos]
+    strategy:
+      fail-fast: false
+      matrix:
+        type: [unit, integration, hypothesis, stress, compat, enduser]
     runs-on: macos-14
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
@@ -576,7 +584,7 @@ jobs:
             eval "$ARCTICDB_PYTEST_ARGS"
           else
             cd python
-            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
@@ -735,11 +743,15 @@ jobs:
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
   python_tests_windows:
-    name: Python Tests (win_64)
+    name: Python Tests (win_64) - ${{matrix.type}}
     if: |
       always() &&
       !cancelled()
     needs: [compile_windows]
+    strategy:
+      fail-fast: false
+      matrix:
+        type: [unit, integration, hypothesis, stress, compat, enduser]
     runs-on: windows-latest
     env:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
@@ -850,7 +862,7 @@ jobs:
           else
             cd python
             # Skip LMDB tests on Windows because those tests fill the disk entirely and makes the test suite fail.
-            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal -m "not lmdb" tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal -m "not lmdb" tests/${{matrix.type}} $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
