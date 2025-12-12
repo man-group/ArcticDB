@@ -1718,8 +1718,17 @@ def normalize_metadata(metadata: Any) -> UserDefinedMetadata:
 
 
 def normalize_recursive_metastruct(metastruct: Dict[Any, Any]) -> UserDefinedMetadata:
+    from arcticdb.flattener import Flattener
+
+    meta_structure_v2 = Flattener().meta_structure_v2
+    if meta_structure_v2 is not True:
+        log.warn(
+            "Recursive metastruct normalization in use (V1) is going to be deprecated after ArcticDB v7.0.0 release. "
+            "Please refer to https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructurev2 for more details."
+        )
+
     # Prevent arbitrary large object serialization, as it is indicative of a poor data layout
-    packed = _msgpack_metadata._msgpack_packb(metastruct)
+    packed = _msgpack_metadata._msgpack_packb(metastruct, disallow_pickle=True if meta_structure_v2 else None)
     size = len(packed)
     if size > _MAX_RECURSIVE_METASTRUCT:
         raise ArcticDbNotYetImplemented(

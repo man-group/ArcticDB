@@ -1039,6 +1039,8 @@ class Library:
                 lib.write(symbol, data) # The data will be successfully written
             Please refer to https://docs.arcticdb.io/latest/notebooks/arcticdb_demo_recursive_normalizers for more details
             of this feature.
+            Please check https://docs.arcticdb.io/latest/runtime_config/#versionstorerecursivenormalizermetastructurev2 for the plan of
+            introducing meta structure v2
 
         Returns
         -------
