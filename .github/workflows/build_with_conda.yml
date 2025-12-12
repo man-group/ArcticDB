@@ -65,6 +65,7 @@ on:
 jobs:
 
   compile_linux:
+    name: Compile (linux_64)
     if: |
       always() &&
       !cancelled()
@@ -123,6 +124,7 @@ jobs:
             python/**/*.pyd
 
   compile_macos:
+    name: Compile (osx_arm64)
     if: |
       always() &&
       !cancelled()
@@ -174,6 +176,7 @@ jobs:
             python/**/*.pyd
 
   cpp_tests_linux:
+    name: C++ Tests (linux_64)
     if: |
       always() &&
       !cancelled() &&
@@ -218,14 +221,14 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
 
-      - name: Configure C++ Tests
+      - name: Configure C++ Tests (linux_64)
         run: |
           cd cpp
           cmake --preset linux-conda-release -DTEST=ON
         env:
           ARCTICDB_USING_CONDA: 1
 
-      - name: Build C++ Tests
+      - name: Build C++ Tests (linux_64)
         run: |
           cd cpp
           cmake --build --preset linux-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
@@ -233,7 +236,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
-      - name: Run C++ Tests
+      - name: Run C++ Tests (linux_64)
         run: |
           cd cpp
           ctest --preset linux-conda-release --output-on-failure
@@ -241,6 +244,7 @@ jobs:
           ARCTICDB_USING_CONDA: 1
 
   cpp_tests_macos:
+    name: C++ Tests (osx_arm64)
     if: |
       always() &&
       !cancelled() &&
@@ -278,14 +282,14 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
 
-      - name: Configure C++ Tests
+      - name: Configure C++ Tests (osx_arm64)
         run: |
           cd cpp
           cmake --preset macos-conda-release -DTEST=ON
         env:
           ARCTICDB_USING_CONDA: 1
 
-      - name: Build C++ Tests
+      - name: Build C++ Tests (osx_arm64)
         run: |
           cd cpp
           cmake --build --preset macos-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
@@ -293,7 +297,7 @@ jobs:
         env:
           ARCTICDB_USING_CONDA: 1
 
-      - name: Run C++ Tests
+      - name: Run C++ Tests (osx_arm64)
         run: |
           cd cpp
           ctest --preset macos-conda-release --output-on-failure
@@ -301,6 +305,7 @@ jobs:
           ARCTICDB_USING_CONDA: 1
 
   python_tests_linux:
+    name: Python Tests (linux_64)
     if: |
       always() &&
       !cancelled()
@@ -433,6 +438,7 @@ jobs:
           NODE_OPTIONS: --openssl-legacy-provider
 
   python_tests_macos:
+    name: Python Tests (osx_arm64)
     if: |
       always() &&
       !cancelled()
@@ -548,7 +554,11 @@ jobs:
           group: conda-macos
           NODE_OPTIONS: --openssl-legacy-provider
 
-  windows:
+  compile_windows:
+    name: Compile (win_64)
+    if: |
+      always() &&
+      !cancelled()
     runs-on: windows-latest
     env:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
@@ -590,7 +600,55 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
-      - name: Configure C++ Tests
+      - name: Archive build artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: build-windows
+          retention-days: 7
+          path: |
+            cpp/out/windows-cl-conda-release-build/
+            python/arcticdb_ext*
+            python/**/*.so
+            python/**/*.pyd
+
+  cpp_tests_windows:
+    name: C++ Tests (win_64)
+    if: |
+      always() &&
+      !cancelled() &&
+      (inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch')
+    needs: [compile_windows]
+    runs-on: windows-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-windows
+          path: .
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          init-shell: bash cmd.exe
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Configure C++ Tests (win_64)
         shell: cmd /C call {0}
         # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
         if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
@@ -609,7 +667,7 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
-      - name: Build C++ Tests
+      - name: Build C++ Tests (win_64)
         shell: cmd /C call {0}
         # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
         if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
@@ -628,7 +686,7 @@ jobs:
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
-      - name: Run C++ Tests
+      - name: Run C++ Tests (win_64)
         shell: cmd /C call {0}
         # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
         if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
@@ -640,6 +698,45 @@ jobs:
           ARCTICDB_USING_CONDA: 1
           ARCTICDB_BUILD_CPP_TESTS: 1
           ARCTIC_CMAKE_PRESET: windows-cl-conda-release
+
+  python_tests_windows:
+    name: Python Tests (win_64)
+    if: |
+      always() &&
+      !cancelled()
+    needs: [compile_windows]
+    runs-on: windows-latest
+    env:
+      ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+    steps:
+      - uses: actions/checkout@v6.0.1
+        # DONT use recursive submodules checkout to simulate conda feedstock build
+        # with:
+        #   submodules: recursive
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-windows
+          path: .
+
+      - name: Install Conda environment from environment-dev.yml
+        uses: mamba-org/setup-micromamba@v2.0.6
+        with:
+          environment-file: environment-dev.yml
+          init-shell: bash cmd.exe
+          cache-environment: true
+          post-cleanup: 'all'
+
+      - name: Install ArcticDB from artifacts
+        shell: cmd /C call {0}
+        run: |
+          REM Protocol buffers compilation require not using build isolation.
+          REM We should always retry due to unstable nature of connections and environments
+          REM This reuses the build artifacts from the compile_windows step and make ArcticDB available for testing.
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
 
       - name: Install npm
         uses: actions/setup-node@v6.1.0
