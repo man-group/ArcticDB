@@ -34,12 +34,12 @@
 namespace {
 using namespace arcticdb;
 /// Removes inplace all elements from vec whose indexes are not in indexes_to_keep.
-/// @param indexes_to_keep Must be sorted
+/// @param indexes_to_keep Elements must be sorted and unique
 template<typename T>
 void select(std::span<const size_t> indexes_to_keep, std::vector<T>& vec) {
-    arcticdb::debug::check<arcticdb::ErrorCode::E_ASSERTION_FAILURE>(
-            std::ranges::is_sorted(indexes_to_keep),
-            "Bulk selection of elements from vector requires the indexes of the elements to be sorted"
+    arcticdb::debug::check<ErrorCode::E_ASSERTION_FAILURE>(
+            std::ranges::adjacent_find(indexes_to_keep, std::greater_equal<size_t>{}) == indexes_to_keep.end(),
+            "Bulk selection of elements from vector requires the indexes of the elements to be sorted and unique"
     );
     if (indexes_to_keep.size() == vec.size()) {
         return;
@@ -58,7 +58,7 @@ void select(std::span<const size_t> indexes_to_keep, std::vector<T>& vec) {
 }
 
 /// Remove all row slice entities and ranges and keys whose indexes do not appear in row_slices_to_keep
-/// @param row_slices_to_keep Must be sorted
+/// @param row_slices_to_keep Must be sorted and unique
 /// @param offsets Must be structured by row slice with ranges and keys
 /// @param ranges_and_keys Must be structured by row slice with offsets
 void filter_selected_ranges_and_keys_and_reindex_entities(
@@ -202,6 +202,7 @@ Column merge_update_string_column(
         ColumnData new_column_data = new_string_column.data();
         auto new_column_data_it = new_column_data.begin<TDT>();
         auto target_row_to_update_it = rows_to_update[source_row - source_row_start].cbegin();
+        // TODO: Handle sparse target columns Monday 10756321294
         arcticdb::for_each_enumerated<TDT>(target_column, [&](auto row) {
             const bool current_target_row_is_matched =
                     source_row < source_row_end && static_cast<size_t>(row.idx()) == *target_row_to_update_it;
@@ -1963,7 +1964,9 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
     std::vector<size_t> row_slices_to_keep;
     size_t source_row = 0;
     auto first_col_slice_in_row = ranges_and_keys.begin();
-    for (size_t row_slice_idx = 0; row_slice_idx < offsets.size() && source_row < source_->num_rows; ++row_slice_idx) {
+    const size_t row_slice_count = offsets.size();
+    size_t row_slice_idx = 0;
+    while (row_slice_idx < row_slice_count && source_row < source_->num_rows) {
         const TimestampRange time_range = first_col_slice_in_row->key_.time_range();
         timestamp source_ts = source_->index_value_at(source_row);
         // TODO: Add logic for insertion. If we're skipping source rows and strategy.not_matched_by_target is INSERT
@@ -2002,20 +2005,41 @@ std::vector<std::vector<size_t>> MergeUpdateClause::structure_for_processing(std
             source_start_end_for_row_range_.emplace(
                     first_col_slice_in_row->row_range(), std::pair{first_source_row_in_row_slice, source_row}
             );
-            // The last value of the current row range can be the same as the first value of the next segment. Start
-            // iterating the source from the first occurrence of that index value
-            if (row_slice_idx + 1 < ranges_and_keys.size()) {
-                const TimestampRange next_segment_range = ranges_and_keys[row_slice_idx + 1].key_.time_range();
-                const bool index_value_spans_two_segments = next_segment_range.first + 1 == time_range.second;
-                const bool next_segment_starts_with_last_used_source_index =
-                        next_segment_range.first == source_->index_value_at(last_value_first_occurrence);
-                if (index_value_spans_two_segments && next_segment_starts_with_last_used_source_index) {
-                    source_row = last_value_first_occurrence;
+            if (row_slice_idx + 1 < row_slice_count) {
+                // There might be multiple row slices which contain the same index value. All of them must have the same
+                // value in source_start_end_for_row_range_. Add the values and skip the rows containing a single
+                // repeated index value
+                size_t row_slice_next_different_index = row_slice_idx + 1;
+                auto col_slice = first_col_slice_in_row + offsets[row_slice_next_different_index].size();
+                while (row_slice_next_different_index < row_slice_count && col_slice->key_.time_range() == time_range) {
+                    source_start_end_for_row_range_.emplace(col_slice->row_range(), std::pair{source_row, source_row});
+                    col_slice += offsets[row_slice_next_different_index].size();
+                    ++row_slice_next_different_index;
                 }
+
+                // The last value of the current row range can be the same as the first value of the next segment.
+                // Start iterating the source from the first occurrence of that index value
+                if (row_slice_next_different_index < row_slice_count) {
+                    const auto [next_start, _] = col_slice->key_.time_range();
+                    const bool index_value_spans_two_segments = next_start + 1 == time_range.second;
+                    const bool next_segment_starts_with_last_used_source_index =
+                            next_start == source_->index_value_at(last_value_first_occurrence);
+                    if (index_value_spans_two_segments && next_segment_starts_with_last_used_source_index) {
+                        source_row = last_value_first_occurrence;
+                    }
+                }
+                row_slice_idx = row_slice_next_different_index;
+                first_col_slice_in_row = col_slice;
+            } else {
+                const size_t col_slice_count = offsets[row_slice_idx].size();
+                first_col_slice_in_row += col_slice_count;
+                ++row_slice_idx;
             }
+        } else {
+            const size_t col_slice_count = offsets[row_slice_idx].size();
+            first_col_slice_in_row += col_slice_count;
+            ++row_slice_idx;
         }
-        const size_t col_slice_count = offsets[row_slice_idx].size();
-        first_col_slice_in_row += col_slice_count;
     }
     filter_selected_ranges_and_keys_and_reindex_entities(row_slices_to_keep, offsets, ranges_and_keys);
     return offsets;
@@ -2074,6 +2098,7 @@ void MergeUpdateClause::update_and_insert(
         // TODO: Implement equivalent QueryBuilder.optimise_for_speed. Initial implementation will always drop the
         //  current string pool and recreate it from scratch taking account the new string data from source. This is
         //  equivalent to QueryBuilder.optimise_for_memory.
+        //  Monday 10754806837
         StringPool new_string_pool;
         bool segment_contains_string_column = false;
         SegmentInMemory& target_segment = *target_segments[segment_idx];
@@ -2129,7 +2154,7 @@ void MergeUpdateClause::update_and_insert(
                     target_segment.column(column_idx) = std::move(new_string_column);
                 } else {
                     auto target_data_row_to_update = rows_to_update[source_row - source_row_start].front();
-                    // TODO: Implement operator+= because std::advance is linear
+                    // TODO: Implement operator+= because std::advance is linear. Monday 10754574651
                     std::advance(target_data_it, target_data_row_to_update);
                     while (source_row < source_row_end) {
                         std::span<const size_t> rows_to_update_for_source_row =
@@ -2141,7 +2166,7 @@ void MergeUpdateClause::update_and_insert(
                         source_column_view.set_row(source_row);
                         const auto& source_row_value = *source_column_view;
                         for (const size_t target_row_to_update : rows_to_update_for_source_row) {
-                            // TODO: Implement operator+= because std::advance is linear
+                            // TODO: Implement operator+= because std::advance is linear. Monday 10754574651
                             std::advance(target_data_it, target_row_to_update - target_data_row_to_update);
                             *target_data_it = source_row_value;
                             target_data_row_to_update = target_row_to_update;
@@ -2185,7 +2210,7 @@ std::vector<std::vector<size_t>> MergeUpdateClause::filter_index_match(const Pro
     const auto target_index_end = target_index.cend<IndexType>();
     while (target_index_it != target_index_end && source_row < source_row_end) {
         const timestamp source_ts = source_->index_value_at(source_row);
-        // TODO: Profile and compare to linear or adaptive (linear below some threshold) search
+        // TODO: Profile performance and try different optimizations. See Monday 10655963947
         auto target_match_it = std::lower_bound(target_index_it, target_index_end, source_ts);
         if (target_match_it == target_index_end) {
             break;
