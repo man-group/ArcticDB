@@ -610,6 +610,10 @@ jobs:
         with:
           sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
+      - name: Get number of CPU cores
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
+        id: cpu-cores
+
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
         with:
@@ -715,12 +719,11 @@ jobs:
           REM We override those values so that we can.
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
-          cd cpp/out/windows-cl-conda-release-build/
-          cmake --build . --target arcticdb_rapidcheck_tests test_unit_arcticdb --parallel
+          cd cpp
+          cmake --build --preset windows-cl-conda-release --target arcticdb_rapidcheck_tests -j ${{ steps.cpu-cores.outputs.count }}
+          cmake --build --preset windows-cl-conda-release --target test_unit_arcticdb -j ${{ steps.cpu-cores.outputs.count }}
         env:
           ARCTICDB_USING_CONDA: 1
-          ARCTICDB_BUILD_CPP_TESTS: 1
-          ARCTIC_CMAKE_PRESET: windows-cl-conda-release
 
       - name: Run C++ Tests (win_64)
         shell: cmd /C call {0}
