@@ -1,6 +1,13 @@
 name: Build with conda
+run-name: Building ${{github.ref_name}} on ${{github.event_name}} by ${{github.actor}}
+
+concurrency:
+  group: ${{github.ref}}-${{github.workflow}}
+  cancel-in-progress: true
+
 permissions:
   contents: read
+
 on:
   push:
     branches:
@@ -23,7 +30,7 @@ on:
         description: 'Run C++ tests'
         type: boolean
         required: true
-        default: true        
+        default: true
       persistent_storage:
         description: "Run against what persistent storage type? (no is LMDB/default)"
         type: choice
@@ -37,22 +44,22 @@ on:
         type: boolean
         description: 'Run the build with debugging enabled'
         required: false
-        default: false                  
+        default: false
       run_enable_logging:
         description: 'Enabled debug logging'
         type: boolean
         required: false
-        default: false        
+        default: false
       run_commandline:
         description: 'Run custom commandline before tests, Like: export ARCTICDB_STORAGE_AZURE=1; ....'
         type: string
         required: false
-        default: ""    
+        default: ""
       run_custom_pytest_command:
         description: '*Run custom pytest command, instead of standard(Note: curdir is project root), or pass additional arguments to default command'
         type: string
         required: false
-        default: ""        
+        default: ""
 
 jobs:
 
@@ -74,19 +81,20 @@ jobs:
           large-packages: false # Time-consuming but doesn't save that much space (4GB)
           docker-images: false  # We're using docker images we don't want to clear
 
-      - uses: actions/checkout@v3.3.0
-        # DONT use recursive submodules checkout to simulate conda feedstock build
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
 
       - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1.1.0
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
         id: cpu-cores
 
       - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.0
+        uses: mamba-org/setup-micromamba@v2.0.6
         with:
           environment-file: environment-dev.yml
+          environment-name: arcticdb
           init-shell: >-
             bash
           cache-environment: true
@@ -96,7 +104,7 @@ jobs:
         shell: bash -l {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
-          # We should always retry due to instable nature of connections and environments
+          # We should always retry due to unstable nature of connections and environments
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -122,26 +130,26 @@ jobs:
         uses: ./.github/actions/install_mongodb
 
       - name: Install npm # Linux github runner image does not come with npm
-        uses: actions/setup-node@v3.3.0
+        uses: actions/setup-node@v6.1.0
         with:
           node-version: '24'
 
       - name: Install Azurite
         uses: nick-fields/retry@v3
         with:
+          # We should always retry due to unstable nature of connections and environments
           timeout_minutes: 10
-          # We should always retry due to instable nature of connections and environments
           max_attempts: 3
           command: npm install -g azurite
 
       - name: Check no arcticdb file depend on tests package
         shell: bash -l {0}
         run: |
-          build_tooling/checks.sh       
-          
+          build_tooling/checks.sh
+
       - name: Set persistent storage variables
         # Should be executed for all persistent storages but not for LMDB
-        if: ${{ env.real_tests_storage_type != 'no' }}
+        if: ${{ inputs.persistent_storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -153,12 +161,17 @@ jobs:
           persistent_storage: ${{ inputs.persistent_storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
-        if: ${{ inputs.run_enable_logging }}        
+        if: ${{ inputs.run_enable_logging }}
         uses: ./.github/actions/enable_logging
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.debug_enabled }}        
+        if: ${{ inputs.debug_enabled }}
+
+      - name: Install pytest-repeat
+        shell: bash -l {0}
+        run: |
+          python -m pip --retries 3 --timeout 180 install pytest-repeat
 
       - name: Test with pytest
         shell: bash -l {0}
@@ -169,12 +182,11 @@ jobs:
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
           if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
-            python -m pip  --retries 3 --timeout 180 install pytest-repeat
             echo "Run custom pytest command: $command"
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
@@ -193,17 +205,17 @@ jobs:
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
     steps:
-      - uses: actions/checkout@v3.3.0
-        # DONT use recursive submodules checkout to simulate conda feedstock build
+      - uses: actions/checkout@v6.0.1
+        # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
 
       - name: Get number of CPU cores
-        uses: SimenB/github-actions-cpu-cores@v1.1.0
+        uses: SimenB/github-actions-cpu-cores@v2.0.0
         id: cpu-cores
 
       - name: Install Conda environment from environment-dev.yml
-        uses: mamba-org/setup-micromamba@v2.0.0
+        uses: mamba-org/setup-micromamba@v2.0.6
         with:
           environment-file: environment-dev.yml
           environment-name: arcticdb
@@ -216,6 +228,7 @@ jobs:
         shell: bash -l {0}
         run: |
           # Protocol buffers compilation require not using build isolation.
+          # We should always retry due to unstable nature of connections and environments
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -230,26 +243,33 @@ jobs:
           make -j ${{ steps.cpu-cores.outputs.count }} test_unit_arcticdb
 
       - name: Run C++ Tests
-        if: ${{ inputs.run_cpp_tests == true|| github.event_name != 'workflow_dispatch' }}
+        if: ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         shell: bash -l {0}
         run: |
           cd cpp/out/macos-conda-release-build/
           CTEST_OUTPUT_ON_FAILURE=1 make test
 
       - name: Install npm
-        uses: actions/setup-node@v3.3.0
+        uses: actions/setup-node@v6.1.0
         with:
           node-version: '24'
 
       - name: Install Azurite
         uses: nick-fields/retry@v3
         with:
-          # We should always retry due to instable nature of connections and environments
+          # We should always retry due to unstable nature of connections and environments
           timeout_minutes: 10
           max_attempts: 3
           command: npm install -g azurite
 
+      - name: Check no arcticdb file depend on tests package
+        shell: bash -l {0}
+        run: |
+          build_tooling/checks.sh
+
       - name: Set persistent storage variables
+        # Should be executed for all persistent storages but not for LMDB
+        if: ${{ inputs.persistent_storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -261,12 +281,17 @@ jobs:
           persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
 
       - name: Set ArcticDB Debug Logging
-        if: ${{ inputs.run_enable_logging }}        
+        if: ${{ inputs.run_enable_logging }}
         uses: ./.github/actions/enable_logging
 
       - name: Setup tmate session
         uses: mxschmitt/action-tmate@v3
-        if: ${{ inputs.debug_enabled }}        
+        if: ${{ inputs.debug_enabled }}
+
+      - name: Install pytest-repeat
+        shell: bash -l {0}
+        run: |
+          python -m pip --retries 3 --timeout 180 install pytest-repeat
 
       - name: Test with pytest
         shell: bash -l {0}
@@ -275,15 +300,13 @@ jobs:
           eval "$COMMANDLINE"
           export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
-          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
             command="python -m $ARCTICDB_PYTEST_ARGS"
             echo "Run custom pytest command: $command"
-            python -m pip  install --retries 3 --timeout 240 pytest-repeat
-            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
@@ -318,11 +341,15 @@ jobs:
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
         shell: cmd /C call {0}
         run: |
-          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
-          REM for Ninja to be used as a generator with MSVC.
+          REM Some `CMAKE_*` variables (in particular CMAKE_GENERATOR_{PLATFORM,TOOLSET}) are set by mamba / micromamba / conda
+          REM when the environment is activated.
+          REM See: https://github.com/conda-forge/vc-feedstock/blob/c6bb71096319ff21ac8b75f7d91183be914c3d6b/recipe/activate.bat#L87-L131
+          REM The values which are chosen prevent Ninja to be used as a generator with MSVC.
+          REM We override those values so that we can.
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           REM Protocol buffers compilation require not using build isolation.
+          REM We should always retry due to unstable nature of connections and environments
           python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
         env:
           ARCTICDB_USING_CONDA: 1
@@ -334,8 +361,11 @@ jobs:
         # Rapidcheck tests are currently disabled on Windows due to a linking issue we need to investigate.
         if: false # ${{ inputs.run_cpp_tests == true || github.event_name != 'workflow_dispatch' }}
         run: |
-          REM Empty values for `CMAKE_GENERATOR_{PLATFORM,TOOLSET}` is necessary
-          REM for Ninja to be used as a generator with MSVC.
+          REM Some `CMAKE_*` variables (in particular CMAKE_GENERATOR_{PLATFORM,TOOLSET}) are set by mamba / micromamba / conda
+          REM when the environment is activated.
+          REM See: https://github.com/conda-forge/vc-feedstock/blob/c6bb71096319ff21ac8b75f7d91183be914c3d6b/recipe/activate.bat#L87-L131
+          REM The values which are chosen prevent Ninja to be used as a generator with MSVC.
+          REM We override those values so that we can.
           set CMAKE_GENERATOR_PLATFORM=
           set CMAKE_GENERATOR_TOOLSET=
           cd cpp/out/windows-cl-conda-release-build/
@@ -373,7 +403,14 @@ jobs:
           echo "PATH includes: $npm_bin_dir"
           which azurite && echo "Azurite found: $(which azurite)" || echo "Warning: azurite not found in PATH"
 
+      - name: Check no arcticdb file depend on tests package
+        shell: bash -elo pipefail {0}
+        run: |
+          build_tooling/checks.sh
+
       - name: Set persistent storage variables
+        # Should be executed for all persistent storages but not for LMDB
+        if: ${{ inputs.persistent_storage != 'no' }}
         uses: ./.github/actions/set_persistent_storage_env_vars
         with:
           aws_access_key: "${{ secrets.AWS_S3_ACCESS_KEY }}"
@@ -382,7 +419,7 @@ jobs:
           gcp_secret_key: "${{ secrets.GCP_S3_SECRET_KEY }}"
           azure_container: "githubblob" # DEFAULT BUCKET FOR AZURE
           azure_connection_string: "${{ secrets.AZURE_CONNECTION_STRING }}"
-          persistent_storage: ${{ inputs.persistent_storage  || 'no' }}
+          persistent_storage: ${{ inputs.persistent_storage || 'no' }}
 
       - name: Set ArcticDB Debug Logging
         if: ${{ inputs.run_enable_logging }}
@@ -392,26 +429,26 @@ jobs:
         uses: mxschmitt/action-tmate@v3
         if: ${{ inputs.debug_enabled }}
 
+      - name: Install pytest-repeat
+        shell: bash -elo pipefail {0}
+        run: |
+          python -m pip --retries 3 --timeout 180 install pytest-repeat
+
       - name: Test with pytest
         shell: bash -elo pipefail {0}
-        # The test suite on Windows takes around 6 hours to complete successfully for now
-        # for reasons we need to understand (it might be that a dependency is not properly build
-        # or optimized on conda-forge for Windows yet). Thus we disable it for now.
-        if: false
         run: |
           echo "Run commandline: $COMMANDLINE"
           eval "$COMMANDLINE"
           export ARCTICDB_RAND_SEED=$RANDOM
           export ARCTICDB_WARN_ON_WRITING_EMPTY_DATAFRAME=0
-          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == pytest* ]]; then
-            command="python -m $ARCTICDB_PYTEST_ARGS -v"
+          if [[ "$(echo "$ARCTICDB_PYTEST_ARGS" | xargs)" == *pytest* ]]; then
+            command="python -m $ARCTICDB_PYTEST_ARGS"
             echo "Run custom pytest command: $command"
-            python -m pip  install --retries 3 --timeout 240 pytest-repeat
-            echo "Run custom pytest command: $ARCTICDB_PYTEST_ARGS"
             eval "$command"
           else
             cd python
-            python -m pytest --timeout=3600 -v tests $ARCTICDB_PYTEST_ARGS
+            # Skip LMDB tests on Windows because those tests fill the disk entirely and makes the test suite fail.
+            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal -m "not lmdb" tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
