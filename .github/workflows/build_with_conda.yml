@@ -854,7 +854,7 @@ jobs:
           else
             cd python
             # Skip LMDB tests on Windows because those tests fill the disk entirely and makes the test suite fail.
-            python -m pytest --timeout=3600 -vv -s --tb=short -n logical --dist worksteal -m "not lmdb" tests $ARCTICDB_PYTEST_ARGS
+            python -m pytest --timeout=3600 -v --tb=line -n logical --dist worksteal -m "not lmdb" tests $ARCTICDB_PYTEST_ARGS
           fi
         env:
           ARCTICDB_USING_CONDA: 1
