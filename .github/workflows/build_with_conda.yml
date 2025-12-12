@@ -106,6 +106,7 @@ jobs:
           init-shell: >-
             bash
           cache-environment: true
+          cache-environment-key: conda-env-linux-64
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
@@ -164,6 +165,7 @@ jobs:
           init-shell: >-
             bash
           cache-environment: true
+          cache-environment-key: conda-env-osx-arm64
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
@@ -237,6 +239,7 @@ jobs:
           init-shell: >-
             bash
           cache-environment: true
+          cache-environment-key: conda-env-linux-64
           post-cleanup: 'all'
 
       - name: Configure C++ Tests (linux_64)
@@ -304,6 +307,7 @@ jobs:
           init-shell: >-
             bash
           cache-environment: true
+          cache-environment-key: conda-env-osx-arm64
           post-cleanup: 'all'
 
       - name: Configure C++ Tests (osx_arm64)
@@ -384,6 +388,7 @@ jobs:
           init-shell: >-
             bash
           cache-environment: true
+          cache-environment-key: conda-env-linux-64
           post-cleanup: 'all'
 
       - name: Install ArcticDB from artifacts
@@ -515,6 +520,7 @@ jobs:
           init-shell: >-
             bash
           cache-environment: true
+          cache-environment-key: conda-env-osx-arm64
           post-cleanup: 'all'
 
       - name: Install ArcticDB from artifacts
@@ -624,6 +630,7 @@ jobs:
           environment-file: environment-dev.yml
           init-shell: bash cmd.exe
           cache-environment: true
+          cache-environment-key: conda-env-win-64
           post-cleanup: 'all'
 
       - name: Build ArcticDB with conda (ARCTICDB_USING_CONDA=1)
@@ -690,6 +697,7 @@ jobs:
           environment-file: environment-dev.yml
           init-shell: bash cmd.exe
           cache-environment: true
+          cache-environment-key: conda-env-win-64
           post-cleanup: 'all'
 
       - name: Configure C++ Tests (win_64)
@@ -779,6 +787,7 @@ jobs:
           environment-file: environment-dev.yml
           init-shell: bash cmd.exe
           cache-environment: true
+          cache-environment-key: conda-env-win-64
           post-cleanup: 'all'
 
       - name: Install ArcticDB from artifacts
