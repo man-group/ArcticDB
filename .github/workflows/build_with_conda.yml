@@ -347,6 +347,15 @@ jobs:
           cache-environment: true
           post-cleanup: 'all'
 
+      - name: Install ArcticDB from artifacts
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          # We should always retry due to unstable nature of connections and environments
+          # This reuses the build artifacts from the compile_linux step and make ArcticDB available for testing.
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
+
       # Note: mongo tests are skipped in the macos workflow
       - name: Install MongoDB
         uses: ./.github/actions/install_mongodb
@@ -459,6 +468,15 @@ jobs:
             bash
           cache-environment: true
           post-cleanup: 'all'
+
+      - name: Install ArcticDB from artifacts
+        run: |
+          # Protocol buffers compilation require not using build isolation.
+          # We should always retry due to unstable nature of connections and environments
+          # This reuses the build artifacts from the compile_macos step and make ArcticDB available for testing.
+          python -m pip install --no-build-isolation --no-deps --retries 3 --timeout 400 -v -e .
+        env:
+          ARCTICDB_USING_CONDA: 1
 
       - name: Install npm
         uses: actions/setup-node@v6.1.0
