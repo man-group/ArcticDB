@@ -72,6 +72,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     defaults:
       run:
         shell: bash -l {0}
@@ -80,6 +81,11 @@ jobs:
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -131,6 +137,7 @@ jobs:
     runs-on: macos-14
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     defaults:
       run:
         shell: bash -l {0}
@@ -139,6 +146,11 @@ jobs:
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Get number of CPU cores
         uses: SimenB/github-actions-cpu-cores@v2.0.0
@@ -185,6 +197,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     defaults:
       run:
         shell: bash -l {0}
@@ -193,6 +206,11 @@ jobs:
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@v1.3.1
@@ -253,6 +271,7 @@ jobs:
     runs-on: macos-14
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     defaults:
       run:
         shell: bash -l {0}
@@ -261,6 +280,11 @@ jobs:
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -313,6 +337,7 @@ jobs:
     runs-on: ubuntu-22.04
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     services:
       mongodb:
         image: mongo:4.4
@@ -331,6 +356,11 @@ jobs:
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -446,6 +476,7 @@ jobs:
     runs-on: macos-14
     env:
       ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     defaults:
       run:
         shell: bash -l {0}
@@ -454,6 +485,11 @@ jobs:
         # Do not use recursive submodules checkout to simulate conda feedstock build
         # with:
         #   submodules: recursive
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Download build artifacts
         uses: actions/download-artifact@v4
@@ -708,6 +744,7 @@ jobs:
     runs-on: windows-latest
     env:
       ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+      SCCACHE_GHA_VERSION: ${{vars.SCCACHE_GHA_VERSION || 1}}
     steps:
       - uses: actions/checkout@v6.0.1
         # DONT use recursive submodules checkout to simulate conda feedstock build
@@ -719,6 +756,11 @@ jobs:
         with:
           name: build-windows
           path: .
+
+      - name: Configure sccache
+        uses: mozilla-actions/sccache-action@v0.0.9
+        with:
+          sccache-version: ${{vars.SCCACHE_GHA_VERSION || 1}}
 
       - name: Install Conda environment from environment-dev.yml
         uses: mamba-org/setup-micromamba@v2.0.6
